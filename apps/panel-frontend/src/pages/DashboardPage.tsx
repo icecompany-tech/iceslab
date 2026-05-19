@@ -675,7 +675,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
             minute: '2-digit',
             second: '2-digit',
           }).toUpperCase()}
-          {' '}MSK · V1.0.0-RC.2
+          {' '}MSK · v{__APP_VERSION__}
         </Text>
       </Group>
     </Stack>

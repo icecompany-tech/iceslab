@@ -329,7 +329,7 @@ export function AppLayout() {
                   letterSpacing: '0.1em',
                 }}
               >
-                v0.9
+                v{__APP_VERSION__}
               </Text>
             </Box>
 
