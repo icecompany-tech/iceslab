@@ -193,6 +193,7 @@ export default {
       onlineHint: '{{today}} today · {{week}} this week',
       trafficToday: 'Traffic today',
       trafficVsYesterday: '{{delta}} vs yesterday',
+      trafficNoData: 'no data yet',
       activeUsers: 'Active users',
       ofTotal: 'of {{total}} total',
       nodesOnline: 'Nodes online',
@@ -713,6 +714,7 @@ export default {
     dashboardFooterNeverOnlinePlural:
       '{{count}} users never online · Review provisioning',
     dashboardFooterAllProvisioned: 'All users provisioned',
+    dashboardFooterNoUsers: 'No users yet',
     hostSystemSubtitle: 'panel server',
     uptimeLabel: 'Uptime',
     sampledLabel: 'Sampled',

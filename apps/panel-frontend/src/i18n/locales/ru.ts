@@ -195,6 +195,7 @@ export default {
       onlineHint: '{{today}} за сегодня · {{week}} за неделю',
       trafficToday: 'Трафик сегодня',
       trafficVsYesterday: '{{delta}} ко вчерашнему',
+      trafficNoData: 'нет данных за вчера',
       activeUsers: 'Активных пользователей',
       ofTotal: 'из {{total}} всего',
       nodesOnline: 'Ноды онлайн',
@@ -216,10 +217,10 @@ export default {
     userStatus: {
       title: 'Пользователи по статусу',
       total: 'Всего',
-      active: 'Active',
-      expired: 'Expired',
-      limited: 'Limited',
-      disabled: 'Disabled',
+      active: 'Активных',
+      expired: 'Истёкших',
+      limited: 'Лимит',
+      disabled: 'Отключён',
     },
     health: {
       title: 'Состояние панели',
@@ -717,6 +718,7 @@ export default {
     dashboardFooterNeverOnlinePlural:
       '{{count}} пользователей ни разу не были онлайн · Проверь provisioning',
     dashboardFooterAllProvisioned: 'Все пользователи подняты',
+    dashboardFooterNoUsers: 'Пользователей пока нет',
     hostSystemSubtitle: 'хост-сервер',
     uptimeLabel: 'Uptime',
     sampledLabel: 'Sampled',
