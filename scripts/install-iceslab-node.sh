@@ -105,12 +105,57 @@ warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
 
+INSTALL_START_TS=$(date +%s)
+LAST_STEP_TS=$INSTALL_START_TS
+LAST_STEP_LABEL="(pre-flight)"
+
+fmt_duration() {
+  local total=$1
+  local m=$((total / 60))
+  local s=$((total % 60))
+  if [[ "$m" -gt 0 ]]; then
+    printf '%dm%02ds' "$m" "$s"
+  else
+    printf '%ds' "$s"
+  fi
+}
+elapsed_total() { fmt_duration "$(( $(date +%s) - INSTALL_START_TS ))"; }
+elapsed_step()  { fmt_duration "$(( $(date +%s) - LAST_STEP_TS ))"; }
+
 STEP_N=0
 STEP_TOTAL=8
 step() {
+  if [[ "$STEP_N" -gt 0 ]]; then
+    printf '\033[2m       step %d done in %s\033[0m\n' "$STEP_N" "$(elapsed_step)"
+  fi
   STEP_N=$((STEP_N + 1))
-  printf '\n\033[1;36m[%d/%d]\033[0m \033[1m%s\033[0m\n' "$STEP_N" "$STEP_TOTAL" "$*"
+  LAST_STEP_TS=$(date +%s)
+  LAST_STEP_LABEL="$*"
+  printf '\n\033[1;36m[%d/%d]\033[0m \033[1m%s\033[0m  \033[2m(+%s total)\033[0m\n' \
+    "$STEP_N" "$STEP_TOTAL" "$*" "$(elapsed_total)"
 }
+
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  local cmd=$2
+  printf '\n\033[1;31m✗ install-iceslab-node.sh failed\033[0m\n' >&2
+  printf '  Step:    [%d/%d] %s\n' "$STEP_N" "$STEP_TOTAL" "$LAST_STEP_LABEL" >&2
+  printf '  Where:   %s line %d\n' "${BASH_SOURCE[0]:-script}" "$line_no" >&2
+  printf '  Command: %s\n' "$cmd" >&2
+  printf '  Exit:    %d\n' "$exit_code" >&2
+  printf '  Step time:  %s\n' "$(elapsed_step)" >&2
+  printf '  Total time: %s\n' "$(elapsed_total)" >&2
+  printf '\n' >&2
+  if [[ -r /tmp/install-node.log ]]; then
+    printf '  Last 30 log lines (/tmp/install-node.log):\n' >&2
+    tail -30 /tmp/install-node.log | sed "s/^/    /" >&2
+    printf '\n' >&2
+  fi
+  printf '  Re-run with the same flags — install is idempotent.\n' >&2
+  exit "$exit_code"
+}
+trap 'on_error $LINENO "$BASH_COMMAND"' ERR
 
 banner() {
   printf '\n'
@@ -538,6 +583,31 @@ case "${ID:-}" in
   *) fail "Only Ubuntu/Debian supported here" ;;
 esac
 ok "$PRETTY_NAME · protocol=$PROTOCOL"
+
+# RAM / swap check — same insurance as install-iceslab.sh. Go build itself is
+# light, but the protocol bootstrap scripts (xcaddy compile for Naive, DKMS
+# build for AmneziaWG) can spike past 1 GB. Tiny VPS without swap gets killed.
+TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
+CURRENT_SWAP_MB=$(free -m | awk '/^Swap:/ {print $2}')
+ok "RAM: ${TOTAL_RAM_MB} MB · swap: ${CURRENT_SWAP_MB} MB"
+
+if [[ "$TOTAL_RAM_MB" -lt 1500 && "$CURRENT_SWAP_MB" -lt 500 ]]; then
+  if [[ "${SKIP_SWAP:-0}" == "1" ]]; then
+    warn "RAM=${TOTAL_RAM_MB} MB, no swap; protocol bootstrap may OOM (Naive xcaddy especially)."
+  else
+    SWAP_SIZE=${SWAP_SIZE_MB:-2048}
+    log "Creating ${SWAP_SIZE} MB swap at /swapfile"
+    if ! fallocate -l "${SWAP_SIZE}M" /swapfile 2>/dev/null; then
+      dd if=/dev/zero of=/swapfile bs=1M count="${SWAP_SIZE}" status=none
+    fi
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q "^/swapfile" /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=10 >/dev/null
+    ok "swap online: $(free -h | awk '/^Swap:/ {print $2}')"
+  fi
+fi
 
 # ───── 2a. OS upgrade ─────
 # Pull pending security + package updates before laying down node-agent.
@@ -1222,9 +1292,12 @@ fi
 
 PUBLIC_IP=$(curl -fsSL https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 
+# Final per-step duration (last step doesn't get one from the next step() call).
+printf '\033[2m       step %d done in %s\033[0m\n' "$STEP_N" "$(elapsed_step)"
+
 printf '\n'
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
-printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m\n'
+printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m  \033[2m(total %s)\033[0m\n' "$(elapsed_total)"
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
 printf '  Protocol     %s\n' "$PROTOCOL"

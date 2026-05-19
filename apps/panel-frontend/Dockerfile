@@ -14,7 +14,15 @@ ARG NGINX_VERSION=1.27-alpine
 
 # ───── Build stage ─────
 FROM node:${NODE_VERSION} AS builder
-ENV CI=true
+# NODE_OPTIONS caps V8 heap for Vite build — without it Rollup can climb past
+# 2 GB during the bundle phase and OOM on small VPS. 1536 MB matches backend.
+# NPM_CONFIG_FETCH_* retries on flaky networks instead of hanging.
+ENV CI=true \
+    NODE_OPTIONS=--max-old-space-size=1536 \
+    NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000
 RUN corepack enable
 WORKDIR /repo
 
@@ -30,7 +38,7 @@ COPY apps/panel-frontend/package.json apps/panel-frontend/
 COPY packages/shared/package.json packages/shared/
 
 RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
-    pnpm install --frozen-lockfile --filter "@iceslab/panel-frontend..."
+    pnpm install --frozen-lockfile --prefer-offline --filter "@iceslab/panel-frontend..."
 
 COPY apps/panel-frontend apps/panel-frontend
 COPY packages/shared packages/shared

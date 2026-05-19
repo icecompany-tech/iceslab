@@ -35,12 +35,76 @@ warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
 
+# Time tracking. Captured once at script start so step() and the final
+# summary block can report total install duration. Helps the operator
+# distinguish "stuck" from "slow" without staring at a stopwatch.
+INSTALL_START_TS=$(date +%s)
+LAST_STEP_TS=$INSTALL_START_TS
+LAST_STEP_LABEL="(pre-flight)"
+
+fmt_duration() {
+  # Pretty-prints seconds as Xm SSs (e.g. "3m07s") or just SSs if < 60.
+  local total=$1
+  local m=$((total / 60))
+  local s=$((total % 60))
+  if [[ "$m" -gt 0 ]]; then
+    printf '%dm%02ds' "$m" "$s"
+  else
+    printf '%ds' "$s"
+  fi
+}
+
+elapsed_total() {
+  fmt_duration "$(( $(date +%s) - INSTALL_START_TS ))"
+}
+
+elapsed_step() {
+  fmt_duration "$(( $(date +%s) - LAST_STEP_TS ))"
+}
+
 STEP_N=0
 STEP_TOTAL=8
 step() {
+  # Print previous step's wall-clock duration before moving on (skipped on the
+  # very first step where LAST_STEP_LABEL is the placeholder).
+  if [[ "$STEP_N" -gt 0 ]]; then
+    printf '\033[2m       step %d done in %s\033[0m\n' "$STEP_N" "$(elapsed_step)"
+  fi
   STEP_N=$((STEP_N + 1))
-  printf '\n\033[1;36m[%d/%d]\033[0m \033[1m%s\033[0m\n' "$STEP_N" "$STEP_TOTAL" "$*"
+  LAST_STEP_TS=$(date +%s)
+  LAST_STEP_LABEL="$*"
+  printf '\n\033[1;36m[%d/%d]\033[0m \033[1m%s\033[0m  \033[2m(+%s total)\033[0m\n' \
+    "$STEP_N" "$STEP_TOTAL" "$*" "$(elapsed_total)"
 }
+
+# ERR trap — fires when any unguarded command exits non-zero under `set -e`.
+# Prints the failing line, the command, the step we were on, and a tail of
+# the install log if the operator was teeing into one. Replaces the silent
+# `set -e` exit which leaves operators staring at a half-baked terminal.
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  local cmd=$2
+  printf '\n\033[1;31m✗ install-iceslab.sh failed\033[0m\n' >&2
+  printf '  Step:    [%d/%d] %s\n' "$STEP_N" "$STEP_TOTAL" "$LAST_STEP_LABEL" >&2
+  printf '  Where:   %s line %d\n' "${BASH_SOURCE[0]:-script}" "$line_no" >&2
+  printf '  Command: %s\n' "$cmd" >&2
+  printf '  Exit:    %d\n' "$exit_code" >&2
+  printf '  Step time:  %s\n' "$(elapsed_step)" >&2
+  printf '  Total time: %s\n' "$(elapsed_total)" >&2
+  printf '\n' >&2
+  # If the operator used the recommended `tee /tmp/install-panel.log`, show
+  # the tail so they don't have to scroll terminal history.
+  if [[ -r /tmp/install-panel.log ]]; then
+    printf '  Last 30 log lines (/tmp/install-panel.log):\n' >&2
+    tail -30 /tmp/install-panel.log | sed "s/^/    /" >&2
+    printf '\n' >&2
+  fi
+  printf '  Re-run is idempotent — fix the cause above, then run the same\n' >&2
+  printf '  install command again. State from previous attempts is reused.\n' >&2
+  exit "$exit_code"
+}
+trap 'on_error $LINENO "$BASH_COMMAND"' ERR
 
 banner() {
   printf '\n'
@@ -193,6 +257,34 @@ case "${ID:-}" in
   *) fail "Only Ubuntu/Debian are supported. Detected ID=${ID:-unknown}." ;;
 esac
 ok "$PRETTY_NAME"
+
+# RAM / swap check — Docker build of panel-backend (Prisma + native modules)
+# regularly OOMs on 2 GB VPS without swap. Cycle-1 smoke test (2026-05-19,
+# Hetzner CX22 2 GB no swap) confirmed: pnpm install hangs forever, BuildKit
+# context dies. Auto-create a 4 GB swap file unless the operator opted out.
+TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
+CURRENT_SWAP_MB=$(free -m | awk '/^Swap:/ {print $2}')
+ok "RAM: ${TOTAL_RAM_MB} MB · swap: ${CURRENT_SWAP_MB} MB"
+
+if [[ "$TOTAL_RAM_MB" -lt 3500 && "$CURRENT_SWAP_MB" -lt 1000 ]]; then
+  if [[ "${SKIP_SWAP:-0}" == "1" ]]; then
+    warn "RAM=${TOTAL_RAM_MB} MB and swap is empty; Docker build will likely OOM."
+    warn "SKIP_SWAP=1 was set, not creating swap. Build may hang or be killed."
+  else
+    SWAP_SIZE=${SWAP_SIZE_MB:-4096}
+    log "Creating ${SWAP_SIZE} MB swap at /swapfile (small-RAM VPS insurance)"
+    if ! fallocate -l "${SWAP_SIZE}M" /swapfile 2>/dev/null; then
+      log "fallocate not supported on this FS, falling back to dd (slower)"
+      dd if=/dev/zero of=/swapfile bs=1M count="${SWAP_SIZE}" status=none
+    fi
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q "^/swapfile" /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=10 >/dev/null
+    ok "swap online: $(free -h | awk '/^Swap:/ {print $2}') (persisted via /etc/fstab)"
+  fi
+fi
 
 # ───── 2a. OS upgrade (idempotent) ─────
 # Apply pending security + package updates before installing anything heavy.
@@ -350,8 +442,27 @@ EOF
   chmod 600 "$ENV_FILE"
 fi
 
+step "Pre-pull base images"
+# Pulling these in parallel BEFORE build means the docker build stages don't
+# compete for bandwidth and there's less variance in build time. Also gives
+# the operator visible progress instead of a silent first-run delay.
+log "Caching postgres:16-alpine, redis:7-alpine, nginx:1.27-alpine, node:22-alpine, golang:1.23-alpine"
+docker pull postgres:16-alpine >/dev/null 2>&1 &
+docker pull redis:7-alpine >/dev/null 2>&1 &
+docker pull nginx:1.27-alpine >/dev/null 2>&1 &
+docker pull node:22-alpine >/dev/null 2>&1 &
+docker pull golang:1.23-alpine >/dev/null 2>&1 &
+wait
+ok "base images cached locally"
+
 step "Build images (first run ≈ 5-10 min)"
-docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" build
+# --progress=plain shows real-time build output instead of a collapsing summary.
+# Critical for low-RAM VPS where operators can't tell stuck-vs-slow without it.
+# COMPOSE_PARALLEL_LIMIT=1 forces backend and frontend to build sequentially,
+# halving peak memory pressure (backend builder + frontend builder otherwise
+# both run pnpm install at the same time = 2× RAM spike).
+COMPOSE_PARALLEL_LIMIT=1 DOCKER_BUILDKIT=1 \
+  docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" build --progress=plain
 
 step "Database migrations"
 docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" run --rm migrate
@@ -406,9 +517,12 @@ else
   SPA_URL="http://${PUBLIC_IP}:${FRONTEND_PORT}"
 fi
 
+# Final per-step duration (last step doesn't get one from the next step() call).
+printf '\033[2m       step %d done in %s\033[0m\n' "$STEP_N" "$(elapsed_step)"
+
 printf '\n'
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
-printf '\033[1;32m  ✓ Iceslab is up\033[0m\n'
+printf '\033[1;32m  ✓ Iceslab is up\033[0m  \033[2m(total %s)\033[0m\n' "$(elapsed_total)"
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
 printf '  SPA          %s\n' "$SPA_URL"

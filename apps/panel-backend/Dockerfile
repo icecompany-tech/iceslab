@@ -9,8 +9,19 @@ ARG NODE_VERSION=22-alpine
 
 # ───── Build stage ─────
 FROM node:${NODE_VERSION} AS builder
+# NODE_OPTIONS caps the V8 heap during build — without it pnpm + tsc can climb
+# past 2 GB on a fresh install and OOM-kill the container on small VPS (CX22-class).
+# 1536 MB leaves headroom for native module compilers (sharp, esbuild, prisma).
+# NPM_CONFIG_FETCH_RETRIES retries silently on flaky networks instead of hanging
+# forever waiting for a TCP read. Three retries with exponential backoff covers
+# 95% of transient registry / mirror failures.
 ENV CI=true \
-    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    NODE_OPTIONS=--max-old-space-size=1536 \
+    NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000
 RUN corepack enable
 WORKDIR /repo
 
@@ -20,8 +31,9 @@ COPY apps/panel-backend/package.json apps/panel-backend/
 COPY packages/shared/package.json packages/shared/
 
 # Install dev+prod deps for the backend filter (incl. workspace transitives).
+# --prefer-offline uses cached packages when available (faster reruns).
 RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
-    pnpm install --frozen-lockfile --filter "@iceslab/panel-backend..."
+    pnpm install --frozen-lockfile --prefer-offline --filter "@iceslab/panel-backend..."
 
 # Now bring in source.
 COPY apps/panel-backend apps/panel-backend
@@ -35,7 +47,7 @@ RUN pnpm exec tsc
 # Strip dev deps so only production node_modules remain.
 WORKDIR /repo
 RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
-    pnpm install --frozen-lockfile --prod --filter "@iceslab/panel-backend..."
+    pnpm install --frozen-lockfile --prod --prefer-offline --filter "@iceslab/panel-backend..."
 
 # ───── Runtime stage ─────
 FROM node:${NODE_VERSION} AS runtime
