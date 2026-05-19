@@ -125,10 +125,14 @@ services:
       # on first boot. Backend's own /health pings Postgres+Redis and returns
       # {"status":"ok"}. (Note: /healthz is the node-agent endpoint, not panel.)
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 5s
+      # interval was 5s — that's 12 health pings/min just for liveness,
+      # each one pings Postgres + Redis. On small VPS the load isn't
+      # worth the faster failure detection. 15s catches dead backend
+      # within 30s (2 retries × 15s) which is fine for an admin panel.
+      interval: 15s
       timeout: 3s
-      retries: 12
-      start_period: 20s
+      retries: 4
+      start_period: 30s
 
   frontend:
     build:
