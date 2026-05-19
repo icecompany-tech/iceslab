@@ -771,11 +771,11 @@ function SystemHealth({ host }: { host: DashboardOverview['host'] }) {
           icon={<IconActivity size={16} />}
           color={VIOLET}
           label={t('dashboard.health.processMem')}
-          percent={(host.process.heapUsedBytes / Math.max(1, host.process.heapTotalBytes)) * 100}
+          percent={(host.process.heapUsedBytes / Math.max(1, host.process.heapLimitBytes)) * 100}
           primary={`RSS ${formatBytes(host.process.rssBytes)}`}
           secondary={t('dashboard.health.processSecondary', {
             used: formatBytes(host.process.heapUsedBytes),
-            total: formatBytes(host.process.heapTotalBytes),
+            total: formatBytes(host.process.heapLimitBytes),
           })}
         />
       </SimpleGrid>

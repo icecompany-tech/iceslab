@@ -949,7 +949,7 @@ export interface DashboardOverview {
     process: {
       rssBytes: number;
       heapUsedBytes: number;
-      heapTotalBytes: number;
+      heapLimitBytes: number;
       uptimeSeconds: number;
     };
   };

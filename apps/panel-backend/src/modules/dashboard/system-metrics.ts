@@ -1,5 +1,6 @@
 import { cpus, freemem, loadavg, totalmem } from 'node:os';
 import { statfs } from 'node:fs/promises';
+import { getHeapStatistics } from 'node:v8';
 
 export interface SystemMetrics {
   cpu: {
@@ -32,7 +33,12 @@ export interface SystemMetrics {
     rssBytes: number;
     /** Heap used by V8. */
     heapUsedBytes: number;
-    heapTotalBytes: number;
+    /** V8 heap_size_limit — the real cap (set by --max-old-space-size). Use
+     *  this as the denominator for "how close to OOM are we" percentages.
+     *  Do NOT use heapTotal from process.memoryUsage(): that's V8's lazily-
+     *  grown current allocation, which sits just above heapUsed and produces
+     *  a meaningless ~95% even when the real cap leaves gigabytes of room. */
+    heapLimitBytes: number;
     /** Seconds since the panel started. */
     uptimeSeconds: number;
   };
@@ -100,6 +106,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   }
 
   const mem = process.memoryUsage();
+  const heap = getHeapStatistics();
 
   return {
     cpu: {
@@ -117,7 +124,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
     process: {
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
-      heapTotalBytes: mem.heapTotal,
+      heapLimitBytes: heap.heap_size_limit,
       uptimeSeconds: Math.round(process.uptime()),
     },
   };
