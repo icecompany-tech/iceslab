@@ -417,6 +417,10 @@ export default {
       descriptionPlaceholder: 'Internal note',
       squadsDesc:
         '"All" is a system-managed fallback (auto-added only if no other squad is selected).',
+      squadsBothAllAndOther:
+        'User is in "All" AND another squad: profiles may double-count on dashboards. Uncheck "All" if you want only the custom set.',
+      squadsEmptyFallbackHint:
+        'No squad picked: the backend will auto-attach "All" on save so the subscription is not empty.',
       devicesTitle: 'Registered devices ({{count}})',
       devicesEmpty: 'No HWID-aware client has connected yet, or no limit is set.',
       deviceDelete: 'Free this slot - user can log in from a different device',

@@ -398,7 +398,6 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                 </Text>
                 <Stack gap={6}>
                   {(squadsQuery.data?.squads ?? []).map((s) => {
-                    const isAll = s.id === ALL_SQUAD_ID;
                     const checked = form.values.groupIds.includes(s.id);
                     return (
                       <SquadRow
@@ -407,9 +406,13 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                         userCount={s.memberCount}
                         profileCount={s.profileIds.length}
                         checked={checked}
-                        disabled={isAll}
+                        // Earlier the All-row was disabled — operators couldn't
+                        // remove a user from All even when they wanted to and
+                        // pre-checking on edit was confusing. Now any squad
+                        // (incl. All) is freely toggleable; if the admin clears
+                        // every squad the backend re-applies the All-fallback
+                        // at save time so the user is never dead-on-arrival.
                         onToggle={() => {
-                          if (isAll) return;
                           const cur = form.values.groupIds;
                           form.setFieldValue(
                             'groupIds',
@@ -420,6 +423,20 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                     );
                   })}
                 </Stack>
+                {/* Visible nudge when admin has both All and another squad
+                    picked — used to silently double-count profiles on the
+                    dashboard and surprise admins. Now they at least see it. */}
+                {form.values.groupIds.includes(ALL_SQUAD_ID) &&
+                  form.values.groupIds.length > 1 && (
+                    <Text size="xs" c="yellow.4" mt="xs">
+                      {t('users.form.squadsBothAllAndOther')}
+                    </Text>
+                  )}
+                {form.values.groupIds.length === 0 && (
+                  <Text size="xs" c="dimmed" mt="xs">
+                    {t('users.form.squadsEmptyFallbackHint')}
+                  </Text>
+                )}
               </SectionCard>
             </Stack>
           </SimpleGrid>
