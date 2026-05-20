@@ -20,9 +20,10 @@ const ProfileIdParam = z.object({ id: z.uuid() });
  * client→public-internet path.
  */
 export async function testConnectRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
-  app.post('/api/profiles/:id/test-connect', async (req, reply) => {
+  app.post('/api/profiles/:id/test-connect', auth, async (req, reply) => {
     const { id } = ProfileIdParam.parse(req.params);
     try {
       const results = await testProfileConnect(id);

@@ -31,9 +31,10 @@ function regionToDto(r: { id: string; name: string; code: string; createdAt: Dat
 }
 
 export async function regionsRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
-  app.get('/api/regions', async (_req, reply) => {
+  app.get('/api/regions', auth, async (_req, reply) => {
     const rows = await prisma.region.findMany({
       orderBy: [{ name: 'asc' }],
       include: { _count: { select: { nodes: true } } },
@@ -43,7 +44,7 @@ export async function regionsRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post('/api/regions', async (req, reply) => {
+  app.post('/api/regions', auth, async (req, reply) => {
     const input = CreateRegion.parse(req.body);
     try {
       const created = await prisma.region.create({ data: input });
@@ -59,7 +60,7 @@ export async function regionsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/regions/:id', async (req, reply) => {
+  app.put('/api/regions/:id', auth, async (req, reply) => {
     const { id } = RegionIdParam.parse(req.params);
     const input = UpdateRegion.parse(req.body);
     try {
@@ -81,7 +82,7 @@ export async function regionsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/regions/:id', async (req, reply) => {
+  app.delete('/api/regions/:id', auth, async (req, reply) => {
     const { id } = RegionIdParam.parse(req.params);
     // Foreign-key on `nodes.region_id` is ON DELETE SET NULL — we don't
     // need to clear nodes manually; they just become "regionless" again.

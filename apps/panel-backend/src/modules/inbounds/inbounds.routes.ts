@@ -15,19 +15,20 @@ import {
 import * as inboundsService from './inbounds.service.js';
 
 export async function inboundsRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
   // Generate a curve25519 keypair for REALITY (Xray) or AmneziaWG. Same
   // crypto, different alphabet: REALITY needs base64url, AmneziaWG needs
   // standard base64. Pass `?protocol=xray` for the REALITY form. Default
   // is `amneziawg` to keep the original SPA call site working.
-  app.post('/api/inbounds/generate-keypair', async (request, reply) => {
+  app.post('/api/inbounds/generate-keypair', auth, async (request, reply) => {
     const { protocol } = KeypairQuery.parse(request.query);
     const pair = protocol === 'xray' ? generateRealityKeyPair() : generateWireguardKeyPair();
     return reply.send(pair);
   });
 
-  app.post('/api/inbounds', async (request, reply) => {
+  app.post('/api/inbounds', auth, async (request, reply) => {
     const input = CreateInboundSchema.parse(request.body);
     try {
       const inbound = await inboundsService.createInbound(input);
@@ -43,12 +44,12 @@ export async function inboundsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get('/api/inbounds', async (request, reply) => {
+  app.get('/api/inbounds', auth, async (request, reply) => {
     const query = ListInboundsQuerySchema.parse(request.query);
     return reply.send({ inbounds: await inboundsService.listInbounds(query) });
   });
 
-  app.get('/api/inbounds/:id', async (request, reply) => {
+  app.get('/api/inbounds/:id', auth, async (request, reply) => {
     const params = InboundIdParamSchema.parse(request.params);
     try {
       return reply.send(await inboundsService.getInboundById(params.id));
@@ -60,7 +61,7 @@ export async function inboundsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/inbounds/:id', async (request, reply) => {
+  app.put('/api/inbounds/:id', auth, async (request, reply) => {
     const params = InboundIdParamSchema.parse(request.params);
     const input = UpdateInboundSchema.parse(request.body);
     try {
@@ -76,7 +77,7 @@ export async function inboundsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/inbounds/:id', async (request, reply) => {
+  app.delete('/api/inbounds/:id', auth, async (request, reply) => {
     const params = InboundIdParamSchema.parse(request.params);
     try {
       await inboundsService.deleteInbound(params.id);

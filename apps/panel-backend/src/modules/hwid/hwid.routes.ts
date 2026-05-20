@@ -12,9 +12,10 @@ const DeviceIdParam = z.object({ id: z.uuid() });
  * intervene when a user complains "I lost my phone, please reset".
  */
 export async function hwidRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
-  app.get('/api/users/:userId/hwid-devices', async (req, reply) => {
+  app.get('/api/users/:userId/hwid-devices', auth, async (req, reply) => {
     const { userId } = UserIdParam.parse(req.params);
     const devices = await svc.listUserDevices(userId);
     return reply.send({
@@ -29,7 +30,7 @@ export async function hwidRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.delete('/api/hwid-devices/:id', async (req, reply) => {
+  app.delete('/api/hwid-devices/:id', auth, async (req, reply) => {
     const { id } = DeviceIdParam.parse(req.params);
     await svc.deleteDevice(id);
     return reply.code(204).send();
