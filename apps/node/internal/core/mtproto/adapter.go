@@ -141,10 +141,13 @@ type inboundCfgWire struct {
 
 // ApplyInbound updates the masquerade domain and secret. Both can change
 // simultaneously (panel rotates the secret on domain change).
+//
+// Wave-14 C1: port now flows from the panel binding into mtg's bind-to.
+// Pre-wave port was install-time only (MTG_PORT env, typically 443) and
+// admin port changes from the UI were silently dropped. Fallback chain:
+//   panel-pushed port → install-time ListenPort → 443 (mtg historic default
+//   applied by withDefaults at render).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	// TODO(slice 50, wave-13 audit): wire `port` into the mtg config —
-	// install-time MTG_PORT (typically 443) stays authoritative for now.
-	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("mtproto ApplyInbound: parse cfg: %w", err)
@@ -159,15 +162,24 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.cfg.Inbound.Domain == wire.Domain && a.cfg.Inbound.Secret == wire.Secret {
+	effectivePort := port
+	if effectivePort == 0 {
+		effectivePort = a.cfg.Inbound.ListenPort
+	}
+	if a.cfg.Inbound.Domain == wire.Domain &&
+		a.cfg.Inbound.Secret == wire.Secret &&
+		a.cfg.Inbound.ListenPort == effectivePort {
 		a.logger.Info("mtproto ApplyInbound: config unchanged, skipping")
 		return nil
 	}
 
 	a.cfg.Inbound.Domain = wire.Domain
 	a.cfg.Inbound.Secret = wire.Secret
+	if effectivePort != 0 {
+		a.cfg.Inbound.ListenPort = effectivePort
+	}
 	a.logger.Info("mtproto ApplyInbound: config changed, regenerating + restarting",
-		"domain", wire.Domain)
+		"domain", wire.Domain, "port", a.cfg.Inbound.ListenPort)
 	return a.regenerateAndRestartLocked(context.Background())
 }
 
