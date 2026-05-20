@@ -21,8 +21,9 @@ React 19 + Vite 8 SPA for the Iceslab admin UI.
 | `/nodes` | NodesPage | CRUD + one-time mTLS payload modal at create (admin must save it — panel never re-emits) |
 | `/profiles` | ProfilesPage | Per-protocol form (Hysteria / Xray / AmneziaWG / Naive / SS / MTProto / Mieru) — Xray network selector (raw/xhttp/ws/grpc) + Generate-keypair button |
 | `/squads` | SquadsPage | ACL groups — which profile is visible to which user group |
-| `/srr` | SrrPage | Subscription Response Rules CRUD + Test-against-UA panel |
-| `/settings` | SettingsPage | Brand name, geo-block, Telegram bot, honey-user tokens |
+| `/subscription/metadata` | SubscriptionMetadataPage | Profile-Title / Update-Interval / Support-URL / Announce template headers emitted on `/sub/:token` |
+| `/subscription/routing` | SrrPage | Subscription Response Rules CRUD + Test-against-UA panel (legacy `/srr` redirects here) |
+| `/settings` | SettingsPage | Brand name, API tokens, regions |
 
 ## Develop
 
