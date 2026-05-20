@@ -14,6 +14,7 @@ import {
   IconHourglass,
   IconSettings,
   IconSearch,
+  IconRss,
   type Icon,
 } from '@tabler/icons-react';
 import { useAuth } from '../stores/auth';
@@ -164,7 +165,8 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   '/profiles': 'breadcrumb.profiles',
   '/squads': 'breadcrumb.squads',
   '/nodes': 'breadcrumb.nodes',
-  '/srr': 'breadcrumb.srr',
+  '/subscription/metadata': 'breadcrumb.subscriptionMetadata',
+  '/subscription/routing': 'breadcrumb.subscriptionRouting',
   '/settings': 'breadcrumb.settings',
 };
 
@@ -369,7 +371,7 @@ export function AppLayout() {
               </Box>
             </Box>
 
-            {/* Workspace label */}
+            {/* Workspace group — core resources operators manage daily */}
             <Text style={{ ...MONO_LABEL, padding: '0 28px 8px' }}>{t('sidebar.workspace')}</Text>
 
             <Stack gap={2} px={8}>
@@ -404,7 +406,31 @@ export function AppLayout() {
                 }
                 countDot={nodesTotal !== undefined}
               />
-              <NavItem to="/srr" label={t('sidebar.srr')} icon={IconFilter} />
+            </Stack>
+
+            {/* Subscription group — everything that shapes the client-facing
+                subscription URL: per-instance metadata + UA-routing rules. */}
+            <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
+              {t('sidebar.subscriptionGroup')}
+            </Text>
+            <Stack gap={2} px={8}>
+              <NavItem
+                to="/subscription/metadata"
+                label={t('sidebar.subscriptionMetadata')}
+                icon={IconRss}
+              />
+              <NavItem
+                to="/subscription/routing"
+                label={t('sidebar.subscriptionRouting')}
+                icon={IconFilter}
+              />
+            </Stack>
+
+            {/* System group — observability + panel-wide config */}
+            <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
+              {t('sidebar.systemGroup')}
+            </Text>
+            <Stack gap={2} px={8}>
               <NavItem
                 href="/admin/queues"
                 label={t('sidebar.queues')}

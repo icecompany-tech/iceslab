@@ -9,13 +9,9 @@ import {
   Code,
   Group,
   Modal,
-  NumberInput,
   Paper,
-  SimpleGrid,
   Stack,
-  Switch,
   Text,
-  Textarea,
   TextInput,
   ThemeIcon,
   Tooltip,
@@ -26,20 +22,14 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  IconBrandGithub,
-  IconBrandTelegram,
   IconCheck,
   IconCopy,
   IconKey,
-  IconLock,
   IconPalette,
   IconPlus,
   IconRefresh,
   IconWorld,
-  IconRss,
-  IconShield,
   IconTrash,
-  IconUserCircle,
 } from '@tabler/icons-react';
 import { copyToClipboard } from '../lib/clipboard';
 import {
@@ -65,145 +55,11 @@ export function SettingsPage() {
         title={t('settings.title')}
         subtitle={t('settings.subtitle')}
       />
-      <Stack gap={2} style={{ display: 'none' }}>
-        <Text c="dimmed" size="sm">
-          {t('settings.subtitle')}
-        </Text>
-      </Stack>
-
-      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
-        <AuthMethodsCard />
-        <ApiTokensCard />
-      </SimpleGrid>
 
       <CustomizationCard />
-      <SubscriptionMetadataCard />
+      <ApiTokensCard />
       <RegionsCard />
     </Stack>
-  );
-}
-
-// ───── Auth methods ─────
-
-interface AuthMethod {
-  id: string;
-  // Stable label-key - picks up settings.auth.<key> from i18n. The id
-  // and key are usually the same; only `oauth2` diverges (genericOauth).
-  labelKey: string;
-  icon: React.ReactNode;
-  enabled: boolean;
-  comingSoon?: boolean;
-  hintKey?: string;
-}
-
-const AUTH_METHODS: AuthMethod[] = [
-  {
-    id: 'password',
-    labelKey: 'password',
-    icon: <IconLock size={16} />,
-    enabled: true,
-    hintKey: 'passwordHint',
-  },
-  {
-    id: 'passkey',
-    labelKey: 'passkey',
-    icon: <IconKey size={16} />,
-    enabled: false,
-    comingSoon: true,
-    hintKey: 'passkeyHint',
-  },
-  {
-    id: 'telegram',
-    labelKey: 'telegram',
-    icon: <IconBrandTelegram size={16} />,
-    enabled: false,
-    comingSoon: true,
-    hintKey: 'telegramHint',
-  },
-  {
-    id: 'github',
-    labelKey: 'github',
-    icon: <IconBrandGithub size={16} />,
-    enabled: false,
-    comingSoon: true,
-  },
-  {
-    id: 'oauth2',
-    labelKey: 'genericOauth',
-    icon: <IconShield size={16} />,
-    enabled: false,
-    comingSoon: true,
-  },
-];
-
-function AuthMethodsCard() {
-  const { t } = useTranslation();
-  return (
-    <Card withBorder padding="lg" radius="md">
-      <Group gap="sm" mb="md">
-        <ThemeIcon size={32} radius="md" variant="light" color="blue">
-          <IconUserCircle size={18} />
-        </ThemeIcon>
-        <Stack gap={0}>
-          <Text fw={600}>{t('settings.auth.title')}</Text>
-          <Text size="xs" c="dimmed">
-            {t('settings.auth.description')}
-          </Text>
-        </Stack>
-      </Group>
-
-      <Stack gap="xs">
-        {AUTH_METHODS.map((m) => {
-          // GitHub doesn't get a translated label/hint - it's a brand
-          // name, same in both locales.
-          const label = m.id === 'github' ? 'GitHub' : t(`settings.auth.${m.labelKey}`);
-          const hint = m.hintKey ? t(`settings.auth.${m.hintKey}`) : undefined;
-          return (
-            <Paper key={m.id} withBorder p="sm" radius="sm">
-              <Group justify="space-between" wrap="nowrap">
-                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                  <ThemeIcon
-                    size="sm"
-                    variant="light"
-                    color={m.enabled ? 'teal' : 'gray'}
-                  >
-                    {m.icon}
-                  </ThemeIcon>
-                  <Stack gap={0} style={{ minWidth: 0 }}>
-                    <Group gap={6}>
-                      <Text size="sm" fw={500}>
-                        {label}
-                      </Text>
-                      {m.comingSoon && (
-                        <Badge size="xs" variant="light" color="gray">
-                          {t('settings.auth.soonBadge')}
-                        </Badge>
-                      )}
-                    </Group>
-                    {hint && (
-                      <Text size="xs" c="dimmed">
-                        {hint}
-                      </Text>
-                    )}
-                  </Stack>
-                </Group>
-                <Tooltip
-                  label={
-                    m.id === 'password'
-                      ? t('settings.auth.passwordDisabledTooltip')
-                      : m.comingSoon
-                        ? t('settings.auth.comingSoonTooltip')
-                        : ''
-                  }
-                >
-                  <Switch checked={m.enabled} disabled readOnly />
-                </Tooltip>
-              </Group>
-            </Paper>
-          );
-        })}
-      </Stack>
-    </Card>
   );
 }
 
@@ -534,133 +390,6 @@ function CustomizationCard() {
           value={brandName}
           onChange={(e) => setBrandName(e.currentTarget.value)}
           placeholder="Iceslab"
-        />
-        <Group justify="flex-end">
-          <Button
-            onClick={save}
-            loading={saveMutation.isPending}
-            disabled={settingsQuery.isLoading}
-            leftSection={<IconCheck size={14} />}
-          >
-            {t('common.save')}
-          </Button>
-        </Group>
-      </Stack>
-    </Card>
-  );
-}
-
-// ───── Subscription metadata (slice S1) ─────
-
-/**
- * Admin-facing editor for the headers `/sub/:token` emits to client apps -
- * Profile-Title (display name), Profile-Update-Interval (refresh cadence),
- * Support-URL, and an Announce template with `{{TRAFFIC_LEFT}}`,
- * `{{DAYS_LEFT}}`, `{{SUPPORT_URL}}` placeholders rendered per request.
- *
- * Subscription-Userinfo (quota gauge) is auto-emitted from user state -
- * not configurable here.
- */
-function SubscriptionMetadataCard() {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const settingsQuery = useQuery({
-    queryKey: ['settings', 'all'],
-    queryFn: getSettings,
-  });
-
-  const [profileTitle, setProfileTitle] = useState('');
-  const [intervalHours, setIntervalHours] = useState<number | ''>(24);
-  const [supportUrl, setSupportUrl] = useState('');
-  const [announceTemplate, setAnnounceTemplate] = useState('');
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    if (!hydrated && settingsQuery.data) {
-      setProfileTitle(settingsQuery.data.subscriptionProfileTitle ?? '');
-      setIntervalHours(settingsQuery.data.subscriptionUpdateIntervalHours ?? 24);
-      setSupportUrl(settingsQuery.data.subscriptionSupportUrl ?? '');
-      setAnnounceTemplate(settingsQuery.data.subscriptionAnnounceTemplate ?? '');
-      setHydrated(true);
-    }
-  }, [settingsQuery.data, hydrated]);
-
-  const saveMutation = useMutation({
-    mutationFn: updateSettings,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings'] });
-      notifications.show({
-        color: 'green',
-        message: t('settings.subscription.saved'),
-      });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.saveError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
-
-  function save() {
-    saveMutation.mutate({
-      // Empty strings clear the override (NULL in DB → header omitted).
-      subscriptionProfileTitle: profileTitle.trim() || null,
-      subscriptionUpdateIntervalHours:
-        typeof intervalHours === 'number' ? intervalHours : 24,
-      subscriptionSupportUrl: supportUrl.trim() || null,
-      subscriptionAnnounceTemplate: announceTemplate.trim() || null,
-    });
-  }
-
-  return (
-    <Card withBorder padding="lg" radius="md">
-      <Group gap="sm" mb="md">
-        <ThemeIcon size={32} radius="md" variant="light" color="blue">
-          <IconRss size={18} />
-        </ThemeIcon>
-        <Stack gap={0}>
-          <Text fw={600}>{t('settings.subscription.title')}</Text>
-          <Text size="xs" c="dimmed">
-            {t('settings.subscription.description')}
-          </Text>
-        </Stack>
-      </Group>
-
-      <Stack gap="sm" maw={620}>
-        <TextInput
-          label={t('settings.subscription.profileTitle')}
-          description={t('settings.subscription.profileTitleDesc')}
-          value={profileTitle}
-          onChange={(e) => setProfileTitle(e.currentTarget.value)}
-          placeholder="Iceslab"
-        />
-        <Group grow align="flex-start">
-          <NumberInput
-            label={t('settings.subscription.updateInterval')}
-            description={t('settings.subscription.updateIntervalDesc')}
-            min={1}
-            max={168}
-            value={intervalHours}
-            onChange={(v) => setIntervalHours(typeof v === 'number' ? v : '')}
-          />
-          <TextInput
-            label={t('settings.subscription.supportUrl')}
-            description={t('settings.subscription.supportUrlDesc')}
-            value={supportUrl}
-            onChange={(e) => setSupportUrl(e.currentTarget.value)}
-            placeholder="https://t.me/your_support"
-          />
-        </Group>
-        <Textarea
-          label={t('settings.subscription.announce')}
-          description={t('settings.subscription.announceDesc')}
-          value={announceTemplate}
-          onChange={(e) => setAnnounceTemplate(e.currentTarget.value)}
-          placeholder="Traffic left: {{TRAFFIC_LEFT}} · {{DAYS_LEFT}} days remaining · support {{SUPPORT_URL}}"
-          autosize
-          minRows={2}
-          maxRows={5}
         />
         <Group justify="flex-end">
           <Button

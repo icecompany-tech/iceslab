@@ -9,6 +9,7 @@ import { SrrPage } from './pages/SrrPage';
 import { ProfilesPage } from './pages/ProfilesPage';
 import { SquadsPage } from './pages/SquadsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SubscriptionMetadataPage } from './pages/SubscriptionMetadataPage';
 
 export default function App() {
   return (
@@ -26,7 +27,11 @@ export default function App() {
           <Route path="/inbounds" element={<Navigate to="/profiles" replace />} />
           <Route path="/squads" element={<SquadsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/srr" element={<SrrPage />} />
+          <Route path="/subscription/metadata" element={<SubscriptionMetadataPage />} />
+          <Route path="/subscription/routing" element={<SrrPage />} />
+          {/* Pre-v0.1.1 the routing-rules page lived at /srr (jargon). Keep
+              the redirect so any bookmark from the alpha still works. */}
+          <Route path="/srr" element={<Navigate to="/subscription/routing" replace />} />
         </Route>
       </Route>
 
