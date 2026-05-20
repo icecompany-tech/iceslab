@@ -110,11 +110,26 @@ func TestApplyInbound_MTUChange(t *testing.T) {
 func TestApplyInbound_NoOpOnSameMTU(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"mtu": 1400})
-	if err := a.ApplyInbound(443, body); err != nil {
+	// Wave-14 C1: port participates in idempotency. Pass install-time port
+	// (2012 from newConfigOnlyAdapter) for true no-op.
+	if err := a.ApplyInbound(2012, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {
 		t.Errorf("same-MTU apply should not have started in config-only mode")
+	}
+}
+
+// Wave-14 C1 regression: panel-pushed port change triggers reload + updates
+// ListenPort so portBindings in the next render carry the new port.
+func TestApplyInbound_PortChangeRegenerates(t *testing.T) {
+	a := newConfigOnlyAdapter(t)
+	body, _ := json.Marshal(map[string]any{"mtu": 1400})
+	if err := a.ApplyInbound(9012, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 9012 {
+		t.Errorf("port not updated, got %d want 9012", a.cfg.Inbound.ListenPort)
 	}
 }
 

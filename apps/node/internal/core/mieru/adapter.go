@@ -128,13 +128,15 @@ type inboundCfgWire struct {
 	MTU int `json:"mtu"`
 }
 
-// ApplyInbound updates the inbound settings (currently just MTU). MTU
-// change is non-disruptive — existing sessions keep their negotiated
-// MTU until reconnect.
+// ApplyInbound updates the inbound settings (MTU + port). MTU change is
+// non-disruptive — existing sessions keep their negotiated MTU until
+// reconnect. Port change DOES restart the listener (new socket bind).
+//
+// Wave-14 C1: port now flows from the panel binding to mieru's portBindings.
+// Pre-wave port was install-time only and admin port changes from the UI
+// were silently dropped. Fallback chain:
+//   panel-pushed port → install-time ListenPort → 2012 (mieru default).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	// TODO(slice 50, wave-13 audit): wire `port` into mieru config — until
-	// then install-time port is authoritative for this adapter.
-	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("mieru ApplyInbound: parse cfg: %w", err)
@@ -143,12 +145,20 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.cfg.Inbound.MTU == wire.MTU {
-		a.logger.Info("mieru ApplyInbound: MTU unchanged, skipping")
+	effectivePort := port
+	if effectivePort == 0 {
+		effectivePort = a.cfg.Inbound.ListenPort
+	}
+	if a.cfg.Inbound.MTU == wire.MTU && a.cfg.Inbound.ListenPort == effectivePort {
+		a.logger.Info("mieru ApplyInbound: config unchanged, skipping")
 		return nil
 	}
 	a.cfg.Inbound.MTU = wire.MTU
-	a.logger.Info("mieru ApplyInbound: MTU changed", "mtu", wire.MTU)
+	if effectivePort != 0 {
+		a.cfg.Inbound.ListenPort = effectivePort
+	}
+	a.logger.Info("mieru ApplyInbound: config changed",
+		"mtu", wire.MTU, "port", a.cfg.Inbound.ListenPort)
 	return a.regenerateAndReloadLocked(context.Background())
 }
 
