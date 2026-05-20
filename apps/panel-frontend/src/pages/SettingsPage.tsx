@@ -10,12 +10,14 @@ import {
   Group,
   Modal,
   Paper,
+  SimpleGrid,
   Stack,
   Text,
   TextInput,
   ThemeIcon,
   Tooltip,
 } from '@mantine/core';
+import { PrimaryButton } from '../components/PrimaryButton';
 import { PageHero } from '../components/PageHero';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -56,8 +58,14 @@ export function SettingsPage() {
         subtitle={t('settings.subtitle')}
       />
 
-      <CustomizationCard />
-      <ApiTokensCard />
+      {/* Two compact cards top — Customization is one field; API tokens
+          starts empty. Side-by-side fills the 1920px viewport instead of
+          stacking with empty space. Regions has a 3-column inline form so
+          it gets the full row. */}
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+        <CustomizationCard />
+        <ApiTokensCard />
+      </SimpleGrid>
       <RegionsCard />
     </Stack>
   );
@@ -201,15 +209,14 @@ function ApiTokensCard() {
         </Stack>
       )}
 
-      <Button
+      <PrimaryButton
         mt="md"
-        variant="light"
         leftSection={<IconPlus size={14} />}
         onClick={openCreate}
         fullWidth
       >
         {t('settings.tokens.createButton')}
-      </Button>
+      </PrimaryButton>
 
       <CreateApiTokenModal
         opened={createOpen}
@@ -392,14 +399,14 @@ function CustomizationCard() {
           placeholder="Iceslab"
         />
         <Group justify="flex-end">
-          <Button
+          <PrimaryButton
             onClick={save}
             loading={saveMutation.isPending}
             disabled={settingsQuery.isLoading}
             leftSection={<IconCheck size={14} />}
           >
             {t('common.save')}
-          </Button>
+          </PrimaryButton>
         </Group>
       </Stack>
     </Card>
@@ -575,7 +582,7 @@ function RegionsCard() {
             style={{ flex: 1 }}
             maxLength={16}
           />
-          <Button
+          <PrimaryButton
             leftSection={<IconPlus size={14} />}
             disabled={!name.trim() || !code.trim()}
             loading={createMutation.isPending}
@@ -584,7 +591,7 @@ function RegionsCard() {
             }
           >
             {t('regions.add')}
-          </Button>
+          </PrimaryButton>
         </Group>
       </Stack>
     </Card>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Button,
   Card,
   Group,
   NumberInput,
@@ -15,6 +14,7 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconCheck, IconRss } from '@tabler/icons-react';
 import { PageHero } from '../components/PageHero';
+import { PrimaryButton } from '../components/PrimaryButton';
 import { getSettings, updateSettings } from '../lib/api';
 
 /**
@@ -135,14 +135,14 @@ export function SubscriptionMetadataPage() {
             maxRows={5}
           />
           <Group justify="flex-end">
-            <Button
+            <PrimaryButton
               onClick={save}
               loading={saveMutation.isPending}
               disabled={settingsQuery.isLoading}
               leftSection={<IconCheck size={14} />}
             >
               {t('common.save')}
-            </Button>
+            </PrimaryButton>
           </Group>
         </Stack>
       </Card>
