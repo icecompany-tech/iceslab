@@ -113,8 +113,8 @@ func wirePayload(t *testing.T, mut func(m map[string]any)) []byte {
 	t.Helper()
 	body := map[string]any{
 		"subnet":           "10.0.0.0/24",
-		"serverPrivateKey": "k1",
-		"serverPublicKey":  "pub-ignored",
+		"serverPrivateKey": testWGPrivKey,
+		"serverPublicKey":  testWGPubKeyA,
 		"obfuscation": map[string]any{
 			"jc": 4, "jmin": 40, "jmax": 70,
 			"s1": 72, "s2": 56, "s3": 32, "s4": 16,
@@ -139,7 +139,7 @@ func newApplyAdapter(t *testing.T, runner *recordingRunner) *Adapter {
 		Inbound: InboundConfig{
 			Interface:  "awg0",
 			ListenPort: 51820,
-			PrivateKey: "k0",
+			PrivateKey: testWGPrivKey,
 			Address:    "10.0.0.1/24",
 			Jc:         4, Jmin: 40, Jmax: 70,
 			S1: 72, S2: 56, S3: 32, S4: 16,
@@ -158,7 +158,7 @@ func TestApplyInbound_NoOpOnIdentical(t *testing.T) {
 	a := newApplyAdapter(t, runner)
 
 	if err := a.ApplyInbound(51820, wirePayload(t, func(m map[string]any) {
-		m["serverPrivateKey"] = "k0" // matches initial cfg
+		m["serverPrivateKey"] = testWGPrivKey // matches initial cfg
 	})); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestApplyInbound_RestartPathOnS1(t *testing.T) {
 	// the amneziawg fork doesn't apply junk/magic-size changes via syncconf
 	// on a running interface — frozen at init time.
 	body := wirePayload(t, func(m map[string]any) {
-		m["serverPrivateKey"] = "k0"
+		m["serverPrivateKey"] = testWGPrivKey
 		m["obfuscation"].(map[string]any)["s1"] = 88
 	})
 	if err := a.ApplyInbound(51820, body); err != nil {
@@ -204,7 +204,7 @@ func TestApplyInbound_RestartPathOnH1(t *testing.T) {
 	a := newApplyAdapter(t, runner)
 
 	body := wirePayload(t, func(m map[string]any) {
-		m["serverPrivateKey"] = "k0"
+		m["serverPrivateKey"] = testWGPrivKey
 		m["obfuscation"].(map[string]any)["h1"] = 9001
 	})
 	if err := a.ApplyInbound(51820, body); err != nil {
@@ -230,8 +230,8 @@ func TestApplyInbound_RejectsSubnetChangeWithPeers(t *testing.T) {
 	// Allocate a peer first so subnet change must be rejected.
 	if err := a.AddUser(core.User{
 		UserID:             "u1",
-		AmneziaWGPublicKey: "peer-pub",
-		AmneziaWGAllowedIP: "10.0.0.5",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
 	}); err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestApplyInbound_RejectsSubnetChangeWithPeers(t *testing.T) {
 
 	body := wirePayload(t, func(m map[string]any) {
 		m["subnet"] = "172.16.0.0/24" // different subnet
-		m["serverPrivateKey"] = "k0"
+		m["serverPrivateKey"] = testWGPrivKey
 	})
 	err := a.ApplyInbound(51820, body)
 	if err == nil {
@@ -259,7 +259,7 @@ func TestApplyInbound_AcceptsSubnetChangeWithoutPeers(t *testing.T) {
 
 	body := wirePayload(t, func(m map[string]any) {
 		m["subnet"] = "172.16.0.0/24"
-		m["serverPrivateKey"] = "k0"
+		m["serverPrivateKey"] = testWGPrivKey
 	})
 	if err := a.ApplyInbound(51820, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
@@ -288,7 +288,7 @@ func TestApplyInbound_RejectsBadSubnet(t *testing.T) {
 
 	body := wirePayload(t, func(m map[string]any) {
 		m["subnet"] = "garbage"
-		m["serverPrivateKey"] = "k0"
+		m["serverPrivateKey"] = testWGPrivKey
 	})
 	if err := a.ApplyInbound(51820, body); err == nil {
 		t.Errorf("expected subnet parse error")

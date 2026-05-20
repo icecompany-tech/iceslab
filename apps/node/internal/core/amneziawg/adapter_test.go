@@ -72,7 +72,7 @@ func TestAdapter_AddRemoveUser(t *testing.T) {
 
 	user := core.User{
 		UserID:             "u-alice",
-		AmneziaWGPublicKey: "pub-alice",
+		AmneziaWGPublicKey: testWGPubKeyA,
 		AmneziaWGAllowedIP: "10.0.0.42",
 	}
 	if err := a.AddUser(user); err != nil {
@@ -82,7 +82,7 @@ func TestAdapter_AddRemoveUser(t *testing.T) {
 		t.Errorf("expected 1 peer, got %d", len(a.peers))
 	}
 	blob, _ := os.ReadFile(cfgPath)
-	if !strings.Contains(string(blob), "PublicKey = pub-alice") ||
+	if !strings.Contains(string(blob), "PublicKey = "+testWGPubKeyA) ||
 		!strings.Contains(string(blob), "AllowedIPs = 10.0.0.42/32") {
 		t.Errorf("config missing alice peer: %s", blob)
 	}
@@ -115,7 +115,7 @@ func TestAdapter_AddUserWithCIDRIP(t *testing.T) {
 	}
 	if err := a.AddUser(core.User{
 		UserID:             "u",
-		AmneziaWGPublicKey: "pk",
+		AmneziaWGPublicKey: testWGPubKeyA,
 		AmneziaWGAllowedIP: "10.0.0.5/32",
 	}); err != nil {
 		t.Fatalf("AddUser: %v", err)
@@ -134,8 +134,8 @@ func TestAdapter_GetStats(t *testing.T) {
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	a.AddUser(core.User{UserID: "u1", AmneziaWGPublicKey: "p1", AmneziaWGAllowedIP: "10.0.0.2"})
-	a.AddUser(core.User{UserID: "u2", AmneziaWGPublicKey: "p2", AmneziaWGAllowedIP: "10.0.0.3"})
+	a.AddUser(core.User{UserID: "u1", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.0.0.2/32"})
+	a.AddUser(core.User{UserID: "u2", AmneziaWGPublicKey: testWGPubKeyB, AmneziaWGAllowedIP: "10.0.0.3/32"})
 	stats, err := a.GetStats()
 	if err != nil {
 		t.Fatalf("GetStats: %v", err)
@@ -149,8 +149,8 @@ func TestAdapter_GetStats(t *testing.T) {
 // first line is the interface, peer lines follow. Two peers, one with
 // non-zero traffic, one untouched.
 const fakeAwgDump = `srv-priv	srv-pub	1234	off	6	64	256	48	64	0	0	92327638	69242219	322809981	1135808409
-peer-pub-a	psk-a	1.2.3.4:54321	10.66.66.2/32	1778646563	24390	348	25
-peer-pub-b	(none)	(none)	10.66.66.3/32	0	0	0	off
+BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=	psk-a	1.2.3.4:54321	10.66.66.2/32	1778646563	24390	348	25
+CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=	(none)	(none)	10.66.66.3/32	0	0	0	off
 `
 
 func TestAdapter_GetStats_ParsesDumpAndMapsToUsers(t *testing.T) {
@@ -172,8 +172,8 @@ func TestAdapter_GetStats_ParsesDumpAndMapsToUsers(t *testing.T) {
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	a.AddUser(core.User{UserID: "alice", AmneziaWGPublicKey: "peer-pub-a", AmneziaWGAllowedIP: "10.66.66.2"})
-	a.AddUser(core.User{UserID: "bob", AmneziaWGPublicKey: "peer-pub-b", AmneziaWGAllowedIP: "10.66.66.3"})
+	a.AddUser(core.User{UserID: "alice", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.66.66.2/32"})
+	a.AddUser(core.User{UserID: "bob", AmneziaWGPublicKey: testWGPubKeyB, AmneziaWGAllowedIP: "10.66.66.3/32"})
 
 	stats, err := a.GetStats()
 	if err != nil {
@@ -211,7 +211,7 @@ func TestAdapter_GetStats_AwgFailureReturnsZeros(t *testing.T) {
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	a.AddUser(core.User{UserID: "u1", AmneziaWGPublicKey: "p1", AmneziaWGAllowedIP: "10.66.66.2"})
+	a.AddUser(core.User{UserID: "u1", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.66.66.2/32"})
 	stats, err := a.GetStats()
 	if err != nil {
 		t.Fatalf("GetStats should fall back, not error: %v", err)
@@ -223,8 +223,8 @@ func TestAdapter_GetStats_AwgFailureReturnsZeros(t *testing.T) {
 
 func TestParseAwgDump_SkipsMalformed(t *testing.T) {
 	rx, tx := parseAwgDump(fakeAwgDump + "garbage line with too few\n")
-	if rx["peer-pub-a"] != 24390 || tx["peer-pub-a"] != 348 {
-		t.Errorf("peer-pub-a: rx=%d tx=%d", rx["peer-pub-a"], tx["peer-pub-a"])
+	if rx["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="] != 24390 || tx["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="] != 348 {
+		t.Errorf("BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=: rx=%d tx=%d", rx["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="], tx["BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="])
 	}
 	if _, ok := rx["garbage"]; ok {
 		t.Errorf("malformed line should not produce entries")
@@ -295,8 +295,8 @@ func TestAdapter_SyncconfFallbackToSystemctl(t *testing.T) {
 	}
 	if err := a.AddUser(core.User{
 		UserID:             "u1",
-		AmneziaWGPublicKey: "pk",
-		AmneziaWGAllowedIP: "10.0.0.5",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
 	}); err != nil {
 		t.Fatalf("AddUser: %v (expected fallback to succeed)", err)
 	}
