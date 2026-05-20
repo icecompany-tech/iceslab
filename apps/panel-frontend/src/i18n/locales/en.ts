@@ -54,6 +54,7 @@ export default {
     subscriptionMetadata: 'Metadata',
     subscriptionRouting: 'Routing',
     systemGroup: 'System',
+    searchPlaceholder: 'Search anything',
   },
 
   breadcrumb: {
