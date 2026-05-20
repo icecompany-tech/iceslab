@@ -426,12 +426,12 @@ func (a *Adapter) Healthy() bool {
 //
 // When ConfigPath is empty, the adapter logs and returns nil without writing
 // — useful for callback-only nodes (config managed by hand).
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("hysteria ApplyInbound: parse cfg: %w", err)
 	}
-	newInbound := wire.toInboundConfig()
+	newInbound := wire.toInboundConfig(port)
 
 	a.mu.Lock()
 	defer a.mu.Unlock()

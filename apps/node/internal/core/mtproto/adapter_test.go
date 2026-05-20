@@ -59,7 +59,7 @@ func TestRemoveUser_BookkeepingOnly(t *testing.T) {
 func TestApplyInbound_RejectsMissingDomain(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"secret": "ee01"})
-	if err := a.ApplyInbound(body); err == nil || !strings.Contains(err.Error(), "domain is required") {
+	if err := a.ApplyInbound(443, body); err == nil || !strings.Contains(err.Error(), "domain is required") {
 		t.Errorf("expected domain-required error, got %v", err)
 	}
 }
@@ -67,14 +67,14 @@ func TestApplyInbound_RejectsMissingDomain(t *testing.T) {
 func TestApplyInbound_RejectsMissingSecret(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"domain": "www.cloudflare.com"})
-	if err := a.ApplyInbound(body); err == nil || !strings.Contains(err.Error(), "secret is required") {
+	if err := a.ApplyInbound(443, body); err == nil || !strings.Contains(err.Error(), "secret is required") {
 		t.Errorf("expected secret-required error, got %v", err)
 	}
 }
 
 func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(443, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error")
 	}
 }
@@ -87,7 +87,7 @@ func TestApplyInbound_DomainAndSecretChangeUpdatesAdapter(t *testing.T) {
 		"domain": newDomain,
 		"secret": newSecret,
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.cfg.Inbound.Domain != newDomain {
@@ -106,7 +106,7 @@ func TestApplyInbound_NoOpOnIdenticalConfig(t *testing.T) {
 	domain := a.cfg.Inbound.Domain
 	secret := a.cfg.Inbound.Secret
 	body, _ := json.Marshal(map[string]any{"domain": domain, "secret": secret})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {

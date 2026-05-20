@@ -99,7 +99,7 @@ func TestRemoveUser(t *testing.T) {
 func TestApplyInbound_MTUChange(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"mtu": 1280})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.cfg.Inbound.MTU != 1280 {
@@ -110,7 +110,7 @@ func TestApplyInbound_MTUChange(t *testing.T) {
 func TestApplyInbound_NoOpOnSameMTU(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"mtu": 1400})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {
@@ -120,7 +120,7 @@ func TestApplyInbound_NoOpOnSameMTU(t *testing.T) {
 
 func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(443, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error")
 	}
 }

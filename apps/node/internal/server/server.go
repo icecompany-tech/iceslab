@@ -339,7 +339,7 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 				"protocol", ib.Protocol)
 			continue
 		}
-		if err := matched.ApplyInbound(ib.Config); err != nil {
+		if err := matched.ApplyInbound(ib.Port, ib.Config); err != nil {
 			s.logger.Error("adapter ApplyInbound failed",
 				"core", matched.Name(), "inboundId", ib.ID, "err", err)
 			failed++

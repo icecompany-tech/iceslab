@@ -103,7 +103,7 @@ func TestApplyInbound_NoOpOnIdentical(t *testing.T) {
 	runner := &recordingRunner{}
 	a := newApplyAdapter(t, runner)
 
-	if err := a.ApplyInbound(wirePayload(t, nil)); err != nil {
+	if err := a.ApplyInbound(443, wirePayload(t, nil)); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 0 {
@@ -118,7 +118,7 @@ func TestApplyInbound_HostnameChange_TriggersReload(t *testing.T) {
 	body := wirePayload(t, func(m map[string]any) {
 		m["hostname"] = "new-host.example.com"
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 
@@ -138,7 +138,7 @@ func TestApplyInbound_MasqueradeRootChange_TriggersReload(t *testing.T) {
 	body := wirePayload(t, func(m map[string]any) {
 		m["masqueradeRoot"] = "/var/www/different"
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 1 {
@@ -153,7 +153,7 @@ func TestApplyInbound_TLSEmailChange_TriggersReload(t *testing.T) {
 	body := wirePayload(t, func(m map[string]any) {
 		m["tlsEmail"] = "new@admin.io"
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 1 {
@@ -165,7 +165,7 @@ func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	runner := &recordingRunner{}
 	a := newApplyAdapter(t, runner)
 
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(443, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error")
 	}
 	if len(runner.calls) != 0 {
@@ -192,7 +192,7 @@ func TestApplyInbound_ConfigOnlyMode_WritesNoReload(t *testing.T) {
 	body := wirePayload(t, func(m map[string]any) {
 		m["hostname"] = "new.example.com"
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 0 {

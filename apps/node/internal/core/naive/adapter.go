@@ -216,7 +216,11 @@ func (a *Adapter) Healthy() bool {
 // FQDN. The adapter doesn't enforce that — UI should warn admins. If the
 // limit is hit, `caddy reload` succeeds but new TLS handshakes fail until
 // the cooldown.
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
+	// TODO(slice 50, wave-13 audit): wire `port` into the Caddyfile so naive
+	// can change ports via panel UI. Until then install-time port (typically
+	// 443, ACME-bound) is authoritative.
+	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("naive ApplyInbound: parse cfg: %w", err)

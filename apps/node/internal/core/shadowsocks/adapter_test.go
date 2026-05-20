@@ -87,7 +87,7 @@ func TestApplyInbound_NoOpOnIdenticalConfig(t *testing.T) {
 		"method":    "2022-blake3-aes-256-gcm",
 		"serverPsk": "BASE64-FAKE-SERVER-PSK==",
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {
@@ -101,7 +101,7 @@ func TestApplyInbound_MethodChangeRegenerates(t *testing.T) {
 		"method":    "chacha20-ietf-poly1305",
 		"serverPsk": "BASE64-FAKE-SERVER-PSK==",
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.cfg.Inbound.Method != "chacha20-ietf-poly1305" {
@@ -115,7 +115,7 @@ func TestApplyInbound_MethodChangeRegenerates(t *testing.T) {
 func TestApplyInbound_RejectsMissingServerPsk(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{"method": "2022-blake3-aes-256-gcm"})
-	if err := a.ApplyInbound(body); err == nil ||
+	if err := a.ApplyInbound(443, body); err == nil ||
 		!strings.Contains(err.Error(), "serverPsk is required") {
 		t.Errorf("expected serverPsk-required error, got %v", err)
 	}
@@ -124,14 +124,14 @@ func TestApplyInbound_RejectsMissingServerPsk(t *testing.T) {
 func TestApplyInbound_RejectsMissingMethod(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	body, _ := json.Marshal(map[string]any{})
-	if err := a.ApplyInbound(body); err == nil || !strings.Contains(err.Error(), "method is required") {
+	if err := a.ApplyInbound(443, body); err == nil || !strings.Contains(err.Error(), "method is required") {
 		t.Errorf("expected method-required error, got %v", err)
 	}
 }
 
 func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(443, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error")
 	}
 }

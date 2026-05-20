@@ -135,7 +135,11 @@ type inboundCfgWire struct {
 
 // ApplyInbound parses the panel-pushed SS config, swaps it into the live
 // adapter's InboundConfig, and regenerates+restarts xray. Idempotent.
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
+	// TODO(slice 50, wave-13 audit): wire `port` into the SS2022 inbound
+	// rendered inside xray-core config. Install-time port stays
+	// authoritative for now.
+	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("shadowsocks ApplyInbound: parse cfg: %w", err)

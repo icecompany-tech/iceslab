@@ -306,7 +306,7 @@ func (a *Adapter) Healthy() bool {
 // Background context for the reload — the inbound HTTP request that triggered
 // this may have a short deadline, but we want the interface to come back up
 // even if the caller times out (matches the xray adapter pattern).
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("amneziawg ApplyInbound: parse cfg: %w", err)
@@ -315,7 +315,14 @@ func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	newInbound, err := wire.toInboundConfig(a.cfg.Inbound.Interface, a.cfg.Inbound.ListenPort)
+	// Slice 50: prefer the panel-pushed port over install-time fallback.
+	// Pre-slice-50 panel paths still work because port=0 falls through to
+	// a.cfg.Inbound.ListenPort below.
+	listenPort := port
+	if listenPort == 0 {
+		listenPort = a.cfg.Inbound.ListenPort
+	}
+	newInbound, err := wire.toInboundConfig(a.cfg.Inbound.Interface, listenPort)
 	if err != nil {
 		return fmt.Errorf("amneziawg ApplyInbound: %w", err)
 	}

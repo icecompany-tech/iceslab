@@ -141,7 +141,10 @@ type inboundCfgWire struct {
 
 // ApplyInbound updates the masquerade domain and secret. Both can change
 // simultaneously (panel rotates the secret on domain change).
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
+	// TODO(slice 50, wave-13 audit): wire `port` into the mtg config —
+	// install-time MTG_PORT (typically 443) stays authoritative for now.
+	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("mtproto ApplyInbound: parse cfg: %w", err)

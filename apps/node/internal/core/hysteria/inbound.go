@@ -10,10 +10,16 @@ import (
 )
 
 // InboundConfig holds the panel-pushed runtime config that lands in
-// /etc/hysteria/config.yaml. Install-time settings (listen port, ACME
-// domain/email, auth callback URL) live on adapter.Config — those don't
-// flow over the wire because they're identity for the node, not per-inbound.
+// /etc/hysteria/config.yaml. Install-time settings (ACME domain/email,
+// auth callback URL) live on adapter.Config — those don't flow over the
+// wire because they're identity for the node, not per-inbound.
+//
+// Port was install-time only until 2026-05-20: admin couldn't change the
+// listen port through the panel UI because the wire didn't carry it and
+// renderConfig fell back to adapterCfg.ListenPort. Now Port is per-
+// inbound and the install-time ListenPort acts only as a fallback.
 type InboundConfig struct {
+	Port           int
 	ObfsPassword   string
 	MasqueradeURL  string
 	BrutalUpMbps   int
@@ -30,8 +36,9 @@ type inboundCfgWire struct {
 	BrutalDownMbps int    `json:"brutalDownMbps,omitempty"`
 }
 
-func (w inboundCfgWire) toInboundConfig() InboundConfig {
+func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 	return InboundConfig{
+		Port:           port,
 		ObfsPassword:   w.ObfsPassword,
 		MasqueradeURL:  w.MasqueradeURL,
 		BrutalUpMbps:   w.BrutalUpMbps,
@@ -40,7 +47,8 @@ func (w inboundCfgWire) toInboundConfig() InboundConfig {
 }
 
 func inboundEqual(a, b InboundConfig) bool {
-	return a.ObfsPassword == b.ObfsPassword &&
+	return a.Port == b.Port &&
+		a.ObfsPassword == b.ObfsPassword &&
 		a.MasqueradeURL == b.MasqueradeURL &&
 		a.BrutalUpMbps == b.BrutalUpMbps &&
 		a.BrutalDownMbps == b.BrutalDownMbps
@@ -62,7 +70,16 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	if adapterCfg.ACMEEmail == "" {
 		return nil, fmt.Errorf("hysteria render: ACMEEmail is required")
 	}
-	listenPort := adapterCfg.ListenPort
+	// Port selection priority (slice 50, 2026-05-20):
+	//   1. inbound.Port — what the panel actually pushed, the source of truth
+	//      now that admin can change ports via the UI
+	//   2. adapterCfg.ListenPort — install-time fallback (legacy, kept so a
+	//      pre-slice-50 panel that doesn't include port falls through)
+	//   3. 443 — last-resort default (matches install-iceslab-node.sh)
+	listenPort := inbound.Port
+	if listenPort == 0 {
+		listenPort = adapterCfg.ListenPort
+	}
 	if listenPort == 0 {
 		listenPort = 443
 	}

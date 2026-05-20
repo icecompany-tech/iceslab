@@ -157,7 +157,7 @@ func TestApplyInbound_NoOpOnIdentical(t *testing.T) {
 	runner := &recordingRunner{}
 	a := newApplyAdapter(t, runner)
 
-	if err := a.ApplyInbound(wirePayload(t, func(m map[string]any) {
+	if err := a.ApplyInbound(51820, wirePayload(t, func(m map[string]any) {
 		m["serverPrivateKey"] = "k0" // matches initial cfg
 	})); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
@@ -178,7 +178,7 @@ func TestApplyInbound_RestartPathOnS1(t *testing.T) {
 		m["serverPrivateKey"] = "k0"
 		m["obfuscation"].(map[string]any)["s1"] = 88
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(51820, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func TestApplyInbound_RestartPathOnH1(t *testing.T) {
 		m["serverPrivateKey"] = "k0"
 		m["obfuscation"].(map[string]any)["h1"] = 9001
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(51820, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 
@@ -241,7 +241,7 @@ func TestApplyInbound_RejectsSubnetChangeWithPeers(t *testing.T) {
 		m["subnet"] = "172.16.0.0/24" // different subnet
 		m["serverPrivateKey"] = "k0"
 	})
-	err := a.ApplyInbound(body)
+	err := a.ApplyInbound(51820, body)
 	if err == nil {
 		t.Fatalf("expected subnet-change rejection, got nil")
 	}
@@ -261,7 +261,7 @@ func TestApplyInbound_AcceptsSubnetChangeWithoutPeers(t *testing.T) {
 		m["subnet"] = "172.16.0.0/24"
 		m["serverPrivateKey"] = "k0"
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(51820, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	// Should restart (down + up) since no peers allocated.
@@ -274,7 +274,7 @@ func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	runner := &recordingRunner{}
 	a := newApplyAdapter(t, runner)
 
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(51820, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error")
 	}
 	if len(runner.calls) != 0 {
@@ -290,7 +290,7 @@ func TestApplyInbound_RejectsBadSubnet(t *testing.T) {
 		m["subnet"] = "garbage"
 		m["serverPrivateKey"] = "k0"
 	})
-	if err := a.ApplyInbound(body); err == nil {
+	if err := a.ApplyInbound(51820, body); err == nil {
 		t.Errorf("expected subnet parse error")
 	}
 }

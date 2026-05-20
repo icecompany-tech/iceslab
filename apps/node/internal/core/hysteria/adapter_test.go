@@ -179,7 +179,7 @@ func TestApplyInbound_WritesConfigAndRestartsService(t *testing.T) {
 		"obfsPassword":  "salt",
 		"masqueradeUrl": "https://www.bing.com",
 	})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 
@@ -211,10 +211,10 @@ func TestApplyInbound_IsIdempotent(t *testing.T) {
 	a, _ := newApplyInboundAdapter(t, runner)
 
 	body, _ := json.Marshal(map[string]any{"obfsPassword": "salt"})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("first ApplyInbound: %v", err)
 	}
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("second ApplyInbound: %v", err)
 	}
 	if got := len(runner.calls); got != 1 {
@@ -229,8 +229,8 @@ func TestApplyInbound_RestartFiresOnEveryRealChange(t *testing.T) {
 	first, _ := json.Marshal(map[string]any{"obfsPassword": "v1"})
 	second, _ := json.Marshal(map[string]any{"obfsPassword": "v2"})
 
-	_ = a.ApplyInbound(first)
-	_ = a.ApplyInbound(second)
+	_ = a.ApplyInbound(443, first)
+	_ = a.ApplyInbound(443, second)
 
 	if got := len(runner.calls); got != 2 {
 		t.Errorf("expected 2 restarts for differing applies, got %d", got)
@@ -243,7 +243,7 @@ func TestApplyInbound_NoConfigPath_AcceptsInMemory(t *testing.T) {
 	a := New(Config{RunCmd: runner.run}, logger) // no ConfigPath, no ServiceUnit
 
 	body, _ := json.Marshal(map[string]any{"obfsPassword": "x"})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 0 {
@@ -251,7 +251,7 @@ func TestApplyInbound_NoConfigPath_AcceptsInMemory(t *testing.T) {
 	}
 
 	// Same body again → diff says equal, no work either way
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("second ApplyInbound: %v", err)
 	}
 }
@@ -269,7 +269,7 @@ func TestApplyInbound_NoServiceUnit_WritesButNoRestart(t *testing.T) {
 	}, logger)
 
 	body, _ := json.Marshal(map[string]any{"obfsPassword": "x"})
-	if err := a.ApplyInbound(body); err != nil {
+	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if len(runner.calls) != 0 {
@@ -284,7 +284,7 @@ func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	runner := &recordingRunner{}
 	a, _ := newApplyInboundAdapter(t, runner)
 
-	if err := a.ApplyInbound([]byte("{not json")); err == nil {
+	if err := a.ApplyInbound(443, []byte("{not json")); err == nil {
 		t.Errorf("expected parse error on malformed JSON")
 	}
 	if len(runner.calls) != 0 {

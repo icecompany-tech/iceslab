@@ -131,7 +131,10 @@ type inboundCfgWire struct {
 // ApplyInbound updates the inbound settings (currently just MTU). MTU
 // change is non-disruptive — existing sessions keep their negotiated
 // MTU until reconnect.
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
+	// TODO(slice 50, wave-13 audit): wire `port` into mieru config — until
+	// then install-time port is authoritative for this adapter.
+	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("mieru ApplyInbound: parse cfg: %w", err)

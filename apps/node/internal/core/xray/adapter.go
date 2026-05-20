@@ -240,7 +240,12 @@ type xrayInboundCfgWire struct {
 // The wire shape is XrayInboundCfg in packages/shared/src/transport.ts. We
 // keep the parse local here so the adapter owns its protocol's contract —
 // the dispatcher in server.go only routes raw JSON by protocol name.
-func (a *Adapter) ApplyInbound(rawCfg json.RawMessage) error {
+func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
+	// TODO(slice 50, deferred to wave-13): wire `port` into the rendered xray
+	// inbound. Until then xray's listen port remains install-time only —
+	// matching pre-slice-50 behaviour for this adapter. Signature is in
+	// sync with the new CoreAdapter contract; per-protocol audit pending.
+	_ = port
 	var wire xrayInboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("xray ApplyInbound: parse cfg: %w", err)

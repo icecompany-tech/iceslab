@@ -49,13 +49,21 @@ type CoreAdapter interface {
 	// endpoint to derive overall node status.
 	Healthy() bool
 
-	// ApplyInbound takes the protocol-specific config as raw JSON (the same
-	// shape the panel pushes via /applyInbounds — see dto.InboundDto.Config).
-	// Implementations parse what they need, regenerate their config file, and
-	// reload/restart the underlying server.
+	// ApplyInbound takes the inbound port plus the protocol-specific config as
+	// raw JSON (the latter is the same shape the panel pushes via
+	// /applyInbounds — see dto.InboundDto.Config). Implementations parse what
+	// they need, regenerate their config file, and reload/restart the
+	// underlying server.
+	//
+	// Port was added (slice 50, 2026-05-20) because adapters used to read the
+	// listen port from install-time config only. Admin couldn't change a
+	// protocol's port through the panel UI: a port change in the binding
+	// landed in the outer InboundDto.Port but the adapter never saw it, so
+	// the rendered config (e.g. /etc/hysteria/config.yaml) kept the install-
+	// time port forever. Now port is first-class on every applyInbound call.
 	//
 	// Contract:
-	//   - Idempotent: re-applying the same config is a no-op (no restart).
+	//   - Idempotent: re-applying the same (port, config) is a no-op (no restart).
 	//   - Non-blocking on success: launches reload/restart asynchronously,
 	//     returns once the new config is on disk.
 	//   - Returns an error if the config JSON is malformed for this protocol
@@ -68,5 +76,5 @@ type CoreAdapter interface {
 	// Slice 24b — replaces the env-var-only inbound config workflow that
 	// admins had to hand-edit on every change. Panel auto-pushes via
 	// /applyInbounds, dispatcher fans out to the matching adapter.
-	ApplyInbound(cfg json.RawMessage) error
+	ApplyInbound(port int, cfg json.RawMessage) error
 }
