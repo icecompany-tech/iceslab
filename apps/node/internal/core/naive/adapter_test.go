@@ -3,6 +3,7 @@ package naive
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -205,6 +206,32 @@ func TestHealthy_BeforeStart(t *testing.T) {
 	a, _ := newConfigOnlyAdapter(t)
 	if a.Healthy() {
 		t.Errorf("Healthy must be false before Start")
+	}
+}
+
+// Wave-14 C1 regression: panel-pushed port lands in Caddyfile site
+// header. validInbound() leaves ListenPort=0 so install-time port is 443
+// after toInboundConfig's caddyfile.go withDefaults; a panel push of 8443
+// must update the rendered site line.
+func TestApplyInbound_PortChangeRegeneratesCaddyfile(t *testing.T) {
+	a, path := newConfigOnlyAdapter(t)
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"hostname":       "n1.example.com",
+		"tlsEmail":       "ops@example.com",
+		"masqueradeRoot": "",
+	})
+	if err := a.ApplyInbound(8443, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 8443 {
+		t.Errorf("ListenPort not updated, got %d want 8443", a.cfg.Inbound.ListenPort)
+	}
+	blob, _ := os.ReadFile(path)
+	if !bytes.Contains(blob, []byte(":8443, n1.example.com {")) {
+		t.Errorf("Caddyfile missing :8443 header, got:\n%s", blob)
 	}
 }
 
