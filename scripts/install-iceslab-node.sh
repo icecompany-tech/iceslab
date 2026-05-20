@@ -629,6 +629,14 @@ fi
 # tries to install it itself and fails with "Installation of unzip failed,
 # please check your network" on fresh Ubuntu 24.04 minimal images. Pulling
 # it eagerly here makes the xray bootstrap a no-op for the unzip dep.
+#
+# Force `apt-get update` first even when DO_OS_UPGRADE=0. Ubuntu cloud
+# images ship with a stale apt list (the cache from the image-build day),
+# and `apt install <new package>` fails with "Unable to locate package"
+# until the list is refreshed. Refresh is cheap (~3-5 sec on a fresh
+# Aeza/Hetzner VPS) so always-on is the right default.
+log "Refreshing apt package list"
+"${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" update -y
 log "Installing apt prereqs"
 "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y git curl ca-certificates ufw unzip
 
