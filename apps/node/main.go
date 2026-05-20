@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultPort                = "8443"
+	defaultPort                = "1337"
 	defaultHost                = "0.0.0.0"
 	defaultAuthCallbackPort    = 9000
 	defaultXrayPort            = 443

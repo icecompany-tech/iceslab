@@ -96,7 +96,7 @@ Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (н
 
 Эти протоколы не принимают флагов домена или cert при установке. Стартуют idle и ждут пока панель пушнёт inbound config через `applyInbounds`. Domain, email, masquerade и прочие protocol-specific поля живут в panel-side Profile (задаётся в UI один раз) и потом распространяются на все ноды куда профиль задеплоен. Naive требует A-запись (`hostname` в профиле); MTProto выбирает masquerade-домен там же; SS2022 и Mieru не требуют публичного домена.
 
-Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 8443 по умолчанию). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) — голый IP. Задавай правильно при создании ноды, потому что менять потом — только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
+Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 1337 по умолчанию начиная с v0.1.2; 8443 на pre-v0.1.2 установках). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) — голый IP. Задавай правильно при создании ноды, потому что менять потом — только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
 
 ## Протоколы
 

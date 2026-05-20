@@ -85,7 +85,7 @@ const ConfigSchema = z.object({
   RATE_LIMIT_HEARTBEAT_PER_MIN: z.coerce.number().int().min(1).default(120),
 
   // Slice S7 — public IP of the panel, baked into the node-install
-  // command as `--panel-ip`. Causes the agent's UFW to allow :8443/tcp
+  // command as `--panel-ip`. Causes the agent's UFW to allow :1337/tcp
   // ONLY from this IP. CRITICAL: must be the panel's *origin* IP, not
   // a Cloudflare edge IP. Optional — without it the install command
   // shows a `--panel-ip <YOUR_IP>` placeholder and admin fills manually.

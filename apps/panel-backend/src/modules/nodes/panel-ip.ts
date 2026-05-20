@@ -2,7 +2,7 @@ import { config } from '../../config.js';
 
 // Slice S7 — auto-detected outbound IP of the panel, used to inject the
 // `--panel-ip` flag into the node-install command so the agent's UFW
-// allows :8443/tcp ONLY from this address.
+// allows :1337/tcp ONLY from this address.
 //
 // Resolution order:
 //   1. PANEL_PUBLIC_IP env (operator override — wins always)

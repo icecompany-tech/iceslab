@@ -12,7 +12,7 @@ The agent reads the following environment variables.
 |---|---|---|
 | `NODE_PAYLOAD` | required | Base64url-encoded JSON blob issued by the panel on `POST /api/nodes`. Contains the agent's mTLS cert + key and the panel CA. |
 | `NODE_HOST` | `0.0.0.0` | Listen address for the panel-facing mTLS HTTPS server. |
-| `NODE_PORT` | `8443` | Listen port for the mTLS HTTPS server. |
+| `NODE_PORT` | `1337` | Listen port for the mTLS HTTPS server. |
 
 ### Hysteria
 

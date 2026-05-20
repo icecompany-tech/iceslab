@@ -257,7 +257,15 @@ pinned_fetch() {
   fi
 }
 NODE_HOST=${NODE_HOST:-0.0.0.0}
-NODE_PORT=${NODE_PORT:-8443}
+# 1337 since wave-13 (2026-05-21). Pre-wave default was 8443, which is the
+# canonical HTTPS-alt port and the first thing every bot probes after 443.
+# 1337 stays out of standard scanner profiles AND frees 8443 for actual
+# user-protocol bindings (xray-on-8443 is a common Cloudflare-friendly
+# fallback). Pre-wave installs are NOT migrated automatically — their
+# node.address in DB is still :8443 and the systemd unit is still :8443.
+# Operators on existing nodes can either leave as-is or re-bootstrap with
+# `--reset --port 1337` to align with the new default.
+NODE_PORT=${NODE_PORT:-1337}
 
 PROTOCOL=""
 PAYLOAD=""
