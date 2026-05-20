@@ -157,6 +157,46 @@ func TestHealthyConfigOnlyMode(t *testing.T) {
 	}
 }
 
+// Wave-14 C1 regression: panel-pushed port lands in xray's REALITY listen
+// port. Pre-wave the `port` arg was discarded with `_ = port` and admin
+// port changes from the UI were silently dropped. Fallback: panel=0 →
+// install-time ListenPort.
+func TestApplyInbound_PortChangeRegenerates(t *testing.T) {
+	a, _ := newTestAdapter(t)
+	body, _ := json.Marshal(map[string]any{
+		"realityDest":        "www.cloudflare.com:443",
+		"realityServerNames": []string{"www.cloudflare.com"},
+		"realityPrivateKey":  "fake-private-key-for-testing",
+		"realityShortIds":    []string{"abc123"},
+	})
+	if err := a.ApplyInbound(8443, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 8443 {
+		t.Errorf("ListenPort not updated, got %d want 8443", a.cfg.Inbound.ListenPort)
+	}
+}
+
+func TestApplyInbound_PortZeroFallsBackToInstallTime(t *testing.T) {
+	a, _ := newTestAdapter(t)
+	// Pre-seed install-time port (validInbound returns ListenPort=0; we
+	// simulate the post-install state where install-iceslab-node.sh wrote
+	// the env var that landed here).
+	a.cfg.Inbound.ListenPort = 11111
+	body, _ := json.Marshal(map[string]any{
+		"realityDest":        "www.cloudflare.com:443",
+		"realityServerNames": []string{"www.cloudflare.com"},
+		"realityPrivateKey":  "fake-private-key-for-testing",
+		"realityShortIds":    []string{"abc123"},
+	})
+	if err := a.ApplyInbound(0, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 11111 {
+		t.Errorf("port=0 should fall back to install-time 11111, got %d", a.cfg.Inbound.ListenPort)
+	}
+}
+
 func TestSortedClientsDeterministic(t *testing.T) {
 	users := map[string]xrayClient{
 		"c": {Email: "c"},
