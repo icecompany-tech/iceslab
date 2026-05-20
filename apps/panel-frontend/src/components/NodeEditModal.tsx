@@ -67,6 +67,19 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
 // create wizard. Edit modal lets admin tweak per-node.
 const DEFAULT_NODE_PORT = 8443;
 
+// Quick-deploy chip ports tried in order. 443 first (standard TLS), then common
+// Cloudflare-friendly TLS alternates. Pre-2026-05-21 the chip hardcoded 443
+// and any second binding fell over with 409 PORT_IN_USE.
+const QUICK_DEPLOY_PORT_CANDIDATES = [443, 8443, 2053, 2083, 2087, 2096];
+
+function pickFreeQuickDeployPort(occupied: number[]): number {
+  const taken = new Set(occupied);
+  for (const p of QUICK_DEPLOY_PORT_CANDIDATES) {
+    if (!taken.has(p)) return p;
+  }
+  return Math.max(...occupied, 443) + 1;
+}
+
 interface FormValues {
   name: string;
   // host + port - split for clearer UX (Remnawave-style). Recombined
@@ -252,13 +265,19 @@ export function NodeEditModal({
       p.protocol === form.values.protocol,
   );
   const addBindingMutation = useMutation({
-    mutationFn: (profileId: string) =>
-      createBinding({ profileId, nodeId: node!.id, port: 443 }),
-    onSuccess: () => {
+    mutationFn: (profileId: string) => {
+      const occupied = bindingsWithProfile.map((bp) => bp.binding.port);
+      const port = pickFreeQuickDeployPort(occupied);
+      return createBinding({ profileId, nodeId: node!.id, port });
+    },
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['bindings'] });
       qc.invalidateQueries({ queryKey: ['profiles'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
-      notifications.show({ color: 'green', message: t('nodes.edit.bindingAdded') });
+      notifications.show({
+        color: 'green',
+        message: t('nodes.edit.bindingAdded', { port: created.port }),
+      });
     },
     onError: (err) =>
       notifications.show({

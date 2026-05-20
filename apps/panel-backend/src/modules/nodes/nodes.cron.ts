@@ -42,7 +42,7 @@ export async function readCachedNodeMetrics(
 export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> {
   const nodes = await prisma.node.findMany({
     where: { deletedAt: null, status: { not: 'disabled' } },
-    select: { id: true, name: true, address: true, status: true },
+    select: { id: true, name: true, address: true, status: true, lastStatusMessage: true },
   });
 
   if (nodes.length === 0) return { ok: 0, down: 0 };
@@ -55,10 +55,15 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       const result = await checkOne(node);
       if (result.status === 'online') ok++;
       else down++;
-      // Only write to DB when the status string actually changes — keeps
-      // `lastStatusChange` meaningful and avoids row-write churn on every tick.
+      // Write to DB when status OR message changed since last tick. We also
+      // compare lastStatusMessage so that a "degraded → ok" transition
+      // actually clears the old degraded blurb from the UI. Pre-wave-13 the
+      // guard was `statusChanged || result.message` — which never re-wrote
+      // when the new message was null, leaving stale `degraded: {...}` in
+      // the row forever after the underlying subprocess came back.
       const statusChanged = result.status !== node.status;
-      if (statusChanged || result.message) {
+      const messageChanged = result.message !== node.lastStatusMessage;
+      if (statusChanged || messageChanged) {
         await prisma.node.update({
           where: { id: node.id },
           data: {

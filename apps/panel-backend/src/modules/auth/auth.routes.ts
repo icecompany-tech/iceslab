@@ -50,7 +50,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const input = LoginSchema.parse(request.body);
       const peerIp = request.ip;
       try {
-        const admin = await authService.login(input);
+        const admin = await authService.login(input, peerIp);
         const token = await reply.jwtSign({
           sub: admin.id,
           role: admin.role,

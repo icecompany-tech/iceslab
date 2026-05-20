@@ -35,8 +35,7 @@ describe('login', () => {
     vi.mocked(adminService.findAdminByUsername).mockResolvedValue(fakeAdmin);
     vi.mocked(adminService.verifyPassword).mockResolvedValue(true);
 
-    const result = await login({ username: 'admin', password: 'correct' });
-
+    const result = await login({ username: 'admin', password: 'correct' }, '1.2.3.4');
     expect(result).toBe(fakeAdmin);
     expect(adminService.findAdminByUsername).toHaveBeenCalledWith('admin');
     expect(adminService.verifyPassword).toHaveBeenCalledWith('correct', fakeAdmin.passwordHash);
@@ -45,7 +44,7 @@ describe('login', () => {
   it('throws InvalidCredentialsError when admin does not exist', async () => {
     vi.mocked(adminService.findAdminByUsername).mockResolvedValue(null);
 
-    await expect(login({ username: 'ghost', password: 'whatever' })).rejects.toBeInstanceOf(
+    await expect(login({ username: 'ghost', password: 'whatever' }, '1.2.3.4')).rejects.toBeInstanceOf(
       InvalidCredentialsError,
     );
     expect(adminService.verifyPassword).not.toHaveBeenCalled();
@@ -55,7 +54,7 @@ describe('login', () => {
     vi.mocked(adminService.findAdminByUsername).mockResolvedValue(fakeAdmin);
     vi.mocked(adminService.verifyPassword).mockResolvedValue(false);
 
-    await expect(login({ username: 'admin', password: 'wrong' })).rejects.toBeInstanceOf(
+    await expect(login({ username: 'admin', password: 'wrong' }, '1.2.3.4')).rejects.toBeInstanceOf(
       InvalidCredentialsError,
     );
   });

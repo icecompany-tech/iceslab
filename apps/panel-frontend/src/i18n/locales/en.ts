@@ -174,7 +174,7 @@ export default {
       deleteBtn: 'Delete node',
       cancel: 'Cancel',
       save: 'Save',
-      bindingAdded: 'Binding added',
+      bindingAdded: 'Binding added on port {{port}}',
       bindingRemoved: 'Binding removed',
       bindingFailed: 'Deploy failed',
       bindingRemoveFailed: 'Undeploy failed',

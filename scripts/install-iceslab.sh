@@ -206,7 +206,7 @@ if [[ -z "$PANEL_DOMAIN" && -r /dev/tty ]]; then
     PANEL_DOMAIN="${PANEL_DOMAIN#http://}"
     PANEL_DOMAIN="${PANEL_DOMAIN#https://}"
     PANEL_DOMAIN="${PANEL_DOMAIN%/}"
-    STEP_TOTAL=10
+    STEP_TOTAL=11
 
     # Quick sanity-check on the value before we commit to it. Catches
     # the typo case where the admin types a single word without a dot.
@@ -516,8 +516,16 @@ if [[ -n "$PANEL_DOMAIN" ]]; then
     "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" update -y
     "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y caddy
   fi
+  # Access log emitted to /var/log/caddy/access.log so fail2ban can read it
+  # (next step). JSON format keeps client_ip / status / uri reliably parsable
+  # for the iceslab-auth-bf and iceslab-probe-bf jails. /var/log/caddy is
+  # created by the caddy deb package; mode 0755 is its default.
   cat > /etc/caddy/Caddyfile <<EOF
 ${PANEL_DOMAIN} {
+  log {
+    output file /var/log/caddy/access.log
+    format json
+  }
   reverse_proxy 127.0.0.1:${FRONTEND_PORT}
 }
 
@@ -531,6 +539,59 @@ EOF
   systemctl enable --now caddy >/dev/null 2>&1 || true
   systemctl reload caddy || systemctl restart caddy
   ok "TLS will be issued by Let's Encrypt on first request"
+
+  # ── Wave-13 (2026-05-21): network-layer brute-force / probe defense.
+  # Application-layer Fastify rate limit + per-(IP+username) lockout handle
+  # the request-level cases; fail2ban kicks in earlier (drops packets at
+  # iptables/nft) so sustained bot traffic doesn't cost us CPU/IO. Caveat:
+  # iptables-level ban only works for direct connections — if Cloudflare or
+  # another reverse proxy fronts Caddy, fail2ban will see CF IPs in the log
+  # OR client_ip via the upstream-restored field but cannot block CF at the
+  # firewall. For CF deploys operators should add a CF WAF rule instead;
+  # documented in docs/SECURITY.md (TODO).
+  step "fail2ban (auth brute-force + probe scanner jails)"
+  "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y fail2ban
+  install -d -m 0755 /etc/fail2ban/filter.d /etc/fail2ban/jail.d
+  cat > /etc/fail2ban/filter.d/iceslab-auth-bf.conf <<'EOF'
+# Match 401/429 responses on /api/auth/login in Caddy's JSON access log.
+# <HOST> binds to client_ip so banned addr is the real upstream IP when
+# trusted_proxies is set; with direct (no proxy) traffic it's the same as
+# remote_ip. Order of "uri" vs "status" in JSON is stable inside one Caddy
+# release; .* between them tolerates field reordering across versions.
+[Definition]
+failregex = "client_ip":"<HOST>".*"uri":"/api/auth/login".*"status":(401|429)
+ignoreregex =
+EOF
+  cat > /etc/fail2ban/filter.d/iceslab-probe-bf.conf <<'EOF'
+# Match obvious probe scanners. We do NOT serve WordPress / phpMyAdmin /
+# .env / .git, so a single hit is high-signal: it's a scanner. 3-strike
+# threshold lets a hand-typed mistype through.
+[Definition]
+failregex = "client_ip":"<HOST>".*"uri":"/(wp-login\.php|wp-admin|\.env|\.git/config|phpmyadmin|xmlrpc\.php)
+ignoreregex =
+EOF
+  cat > /etc/fail2ban/jail.d/iceslab.local <<'EOF'
+[iceslab-auth-bf]
+enabled  = true
+filter   = iceslab-auth-bf
+logpath  = /var/log/caddy/access.log
+maxretry = 10
+findtime = 1h
+bantime  = 24h
+backend  = polling
+
+[iceslab-probe-bf]
+enabled  = true
+filter   = iceslab-probe-bf
+logpath  = /var/log/caddy/access.log
+maxretry = 3
+findtime = 1h
+bantime  = 7d
+backend  = polling
+EOF
+  systemctl enable --now fail2ban >/dev/null 2>&1 || true
+  systemctl restart fail2ban
+  ok "fail2ban active: iceslab-auth-bf (10/1h → 24h ban), iceslab-probe-bf (3/1h → 7d ban)"
 fi
 
 PUBLIC_IP=$(curl -fsSL https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')

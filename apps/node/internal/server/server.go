@@ -249,16 +249,30 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 		AmneziaWGAllowedIP: req.Credentials.AmneziaWGAllowedIP,
 	}
 
-	var failed []string
+	// Best-effort fanout. A failure on a dormant adapter (no ApplyInbound
+	// received yet, not Healthy()) is logged at WARN and ignored — adapters
+	// cache users in memory regardless of started state, so a "not ready"
+	// AddUser still lands in the cache and gets flushed on next ApplyInbound.
+	// Only failures from already-Healthy() adapters propagate as 500 — those
+	// are real (process up but rejected the user). Cycle #6 bug:
+	// pre-2026-05-21 ANY adapter error 500'd the request, which kept
+	// BullMQ retrying backfill against a fresh node where xray wasn't up yet
+	// but mtproto had already accepted the user.
+	var healthyFailed []string
 	for _, adapter := range s.cfg.Adapters {
+		isHealthy := adapter.Healthy()
 		if err := adapter.AddUser(coreUser); err != nil {
-			s.logger.Error("adapter addUser failed", "core", adapter.Name(), "err", err)
-			failed = append(failed, adapter.Name())
+			if isHealthy {
+				s.logger.Error("adapter addUser failed", "core", adapter.Name(), "err", err)
+				healthyFailed = append(healthyFailed, adapter.Name())
+			} else {
+				s.logger.Warn("adapter addUser failed (dormant — ignored)", "core", adapter.Name(), "err", err)
+			}
 		}
 	}
-	if len(failed) > 0 {
+	if len(healthyFailed) > 0 {
 		writeError(w, http.StatusInternalServerError, "ADAPTER_FAILED",
-			fmt.Sprintf("adapters failed: %s", strings.Join(failed, ", ")))
+			fmt.Sprintf("active adapters failed: %s", strings.Join(healthyFailed, ", ")))
 		return
 	}
 
@@ -276,16 +290,22 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var failed []string
+	// Same best-effort semantics as handleAddUser — see comment there.
+	var healthyFailed []string
 	for _, adapter := range s.cfg.Adapters {
+		isHealthy := adapter.Healthy()
 		if err := adapter.RemoveUser(req.UserID); err != nil {
-			s.logger.Error("adapter removeUser failed", "core", adapter.Name(), "err", err)
-			failed = append(failed, adapter.Name())
+			if isHealthy {
+				s.logger.Error("adapter removeUser failed", "core", adapter.Name(), "err", err)
+				healthyFailed = append(healthyFailed, adapter.Name())
+			} else {
+				s.logger.Warn("adapter removeUser failed (dormant — ignored)", "core", adapter.Name(), "err", err)
+			}
 		}
 	}
-	if len(failed) > 0 {
+	if len(healthyFailed) > 0 {
 		writeError(w, http.StatusInternalServerError, "ADAPTER_FAILED",
-			fmt.Sprintf("adapters failed: %s", strings.Join(failed, ", ")))
+			fmt.Sprintf("active adapters failed: %s", strings.Join(healthyFailed, ", ")))
 		return
 	}
 

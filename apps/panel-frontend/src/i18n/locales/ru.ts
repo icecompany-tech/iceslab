@@ -178,7 +178,7 @@ export default {
       deleteBtn: 'Удалить ноду',
       cancel: 'Отмена',
       save: 'Сохранить',
-      bindingAdded: 'Binding добавлен',
+      bindingAdded: 'Binding добавлен на порт {{port}}',
       bindingRemoved: 'Binding снят',
       bindingFailed: 'Не получилось задеплоить',
       bindingRemoveFailed: 'Не получилось снять',

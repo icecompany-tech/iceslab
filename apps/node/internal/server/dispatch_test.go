@@ -102,6 +102,29 @@ func TestAddUserReturns500WhenAdapterFails(t *testing.T) {
 	}
 }
 
+// Regression: wave-13 best-effort fanout. A failing adapter that's NOT
+// Healthy() (dormant — no ApplyInbound received yet) should be logged and
+// ignored, not 500'd. Otherwise BullMQ backfill against a fresh node loops
+// forever while one adapter is mid-init. fakeAdapter re-uses failOnStats as
+// "simulate unhealthy" — set both flags to model "dormant + buggy".
+func TestAddUserSucceedsWhenOnlyDormantAdapterFails(t *testing.T) {
+	dormantBuggy := &fakeAdapter{name: "xray", failOnAdd: true, failOnStats: true}
+	healthy := &fakeAdapter{name: "hysteria"}
+	srv := newServerWith(t, dormantBuggy, healthy)
+
+	body := `{"userId":"u-1","shortId":"s","username":"a","credentials":{"hysteriaPassword":"hp"}}`
+	req := httptest.NewRequest(http.MethodPost, "/addUser", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status: got %d want 200 (dormant failure should be ignored); body=%s", rr.Code, rr.Body.String())
+	}
+	if len(healthy.added) != 1 {
+		t.Errorf("healthy adapter should still have received AddUser: %+v", healthy.added)
+	}
+}
+
 func TestRemoveUserDispatchesToAllAdapters(t *testing.T) {
 	hys := &fakeAdapter{name: "hysteria"}
 	xry := &fakeAdapter{name: "xray"}
