@@ -624,8 +624,13 @@ if [[ "${DO_OS_UPGRADE:-0}" == "1" ]]; then
 fi
 
 # ───── 2b. Prereqs ─────
+# `unzip` is required by the XTLS/Xray-install bootstrap (step 4 for xray
+# and shadowsocks). When apt doesn't have unzip preinstalled, that script
+# tries to install it itself and fails with "Installation of unzip failed,
+# please check your network" on fresh Ubuntu 24.04 minimal images. Pulling
+# it eagerly here makes the xray bootstrap a no-op for the unzip dep.
 log "Installing apt prereqs"
-"${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y git curl ca-certificates ufw
+"${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y git curl ca-certificates ufw unzip
 
 # ───── 3. Go ─────
 NEED_GO=true
