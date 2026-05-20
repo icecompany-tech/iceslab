@@ -313,21 +313,21 @@ export default {
         salamanderObfsLabel: 'Пароль для obfs (Salamander)',
         salamanderObfsDesc: 'Опционально. Пусто, без обфускации.',
         masqueradeUrlLabel: 'URL для маскировки',
-        brutalUpLabel: 'Brutal CC — ↑ Mbps',
-        brutalDownLabel: 'Brutal CC — ↓ Mbps',
-        realityDestDesc: 'host:port — фронт для прикрытия',
+        brutalUpLabel: 'Brutal CC, ↑ Mbps',
+        brutalDownLabel: 'Brutal CC, ↓ Mbps',
+        realityDestDesc: 'host:port, фронт для прикрытия',
         realityServerNamesDesc: 'через запятую',
         realityShortIdsDesc: 'hex, через запятую',
         realityFingerprintDesc: 'TLS fingerprint клиента',
         realityPrivateKeyDesc: 'curve25519 base64. «Сгенерировать» или вставить из `xray x25519`.',
         realityPublicKeyDesc: 'вычисляется автоматически из private',
-        realitySubprotocolDesc: 'VLESS — поддерживает Vision. Trojan — авторизация по паролю.',
+        realitySubprotocolDesc: 'VLESS поддерживает Vision. Trojan, авторизация по паролю.',
         realitySubprotocolVless: 'VLESS (рекомендуется)',
         realitySubprotocolTrojan: 'Trojan (без Vision)',
         realityFlowDesc: 'Vision работает только с raw',
-        realityFlowNone: '(нет) — без flow',
+        realityFlowNone: '(нет), без flow',
         realityNetworkDesc: 'REALITY: только raw / xhttp / grpc',
-        realityNetworkRaw: 'raw (TCP) — совместим с Vision',
+        realityNetworkRaw: 'raw (TCP), совместим с Vision',
         xhttpPathDesc: 'HTTP path для транспорта xhttp',
         hostHeaderDesc: 'опционально, по умолчанию = SNI',
         grpcServiceNameDesc: 'имя gRPC-сервиса',
@@ -340,7 +340,7 @@ export default {
         awgJDesc: 'попарно уникален',
         awgHDesc: '> 4 и уникальны',
         awgHWarning:
-          'H1-H4 должны быть попарно уникальны — сейчас есть дубликаты. Жми «Re-roll» чтобы сгенерировать заново.',
+          'H1-H4 должны быть попарно уникальны, сейчас есть дубликаты. Жми «Re-roll» чтобы сгенерировать заново.',
         naiveHostnameLabel: 'Публичный хост',
         naiveTlsEmailLabel: 'Email для TLS-сертификата',
         naiveMasqueradeLabel: 'Корень маскировки',
@@ -349,7 +349,7 @@ export default {
           'Пароль на пользователя = его xrayUuid. Включи у юзера протокол shadowsocks в списке протоколов.',
         mtprotoDomain: 'Domain для маскировки',
         mtprotoDomainNote:
-          'Смена домена ротирует секреты ВСЕХ юзеров — старые подписки перестанут работать.',
+          'Смена домена ротирует секреты ВСЕХ юзеров, старые подписки перестанут работать.',
         mieruMtu: 'MTU',
       },
     },
@@ -421,7 +421,7 @@ export default {
       description: 'Описание',
       descriptionPlaceholder: 'Внутренняя заметка',
       squadsDesc:
-        'В какие сквады входит пользователь. «All» — системная группа по умолчанию (добавится автоматически, если не выбран ни один другой сквад).',
+        'В какие сквады входит пользователь. «All»: системная группа по умолчанию (добавится автоматически, если не выбран ни один другой сквад).',
       devicesTitle: 'Зарегистрированные устройства ({{count}})',
       devicesEmpty: 'Юзер ещё не подключался с HWID-aware клиента, либо лимит не задан.',
       deviceDelete: 'Сбросить слот, чтобы юзер мог подключиться с другого устройства',
@@ -473,7 +473,7 @@ export default {
       profilesSelectedBadge: 'Профилей выбрано',
       membersBadge: 'Участников',
       allAlert:
-        'All - системный сквад. Авто-привязывается к каждому новому профилю и каждому новому пользователю. Переименовать, изменить состав или удалить нельзя.',
+        'All: системный сквад. Привязывается автоматически к каждому новому профилю и каждому новому пользователю. Переименовать, изменить состав или удалить нельзя.',
     },
   },
   settings: {
@@ -895,10 +895,11 @@ export default {
   },
 
   squadForm: {
-    builtinSystemTooltip: 'Системный сквад - auto-tracks все inbound\'ы',
+    builtinSystemTooltip: 'Системный сквад: автоматически отслеживает все inbound-ы',
     selectAll: 'Выбрать все',
     deselectAll: 'Снять все',
     deployedTooltip: 'Развёрнут на нодах',
+    profileOffBadge: 'выкл.',
   },
 
   profileForm: {

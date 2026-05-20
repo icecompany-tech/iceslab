@@ -35,6 +35,7 @@ import {
   type Squad,
   type UpdateSquadInput,
 } from '../lib/api';
+import { protocolLabelCompact } from '../lib/protocols';
 
 const PROTOCOL_COLORS: Record<string, string> = {
   hysteria: 'blue',
@@ -425,7 +426,7 @@ function ProtocolGroup({
           <IconBolt size={14} />
         </ThemeIcon>
         <Text size="sm" fw={700} tt="uppercase" style={{ flex: 1, letterSpacing: 0.5 }}>
-          {protocol}
+          {protocolLabelCompact(protocol)}
         </Text>
         <Badge
           variant={allSelected ? 'filled' : 'light'}
@@ -506,7 +507,7 @@ function ProfileRow({
             </Text>
             {!profile.enabled && (
               <Badge variant="default" color="gray" size="xs">
-                off
+                {t('squadForm.profileOffBadge')}
               </Badge>
             )}
           </Group>

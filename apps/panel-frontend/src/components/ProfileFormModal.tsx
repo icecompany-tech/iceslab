@@ -31,6 +31,7 @@ import {
 } from '../lib/api';
 import { RecipePicker } from './RecipePicker';
 import { validateXrayConfig } from '../lib/recipes';
+import { PROTOCOL_OPTIONS, protocolLabel } from '../lib/protocols';
 
 type Mode = 'create' | 'edit';
 
@@ -125,22 +126,6 @@ interface FormValues {
 // obfuscation also remains active.
 const TSPU_PRESET = { jc: 4, jmin: 64, jmax: 128, s1: 32, s2: 56, s3: 0, s4: 0 };
 const MOBILE_PRESET = { jc: 3, jmin: 64, jmax: 100, s1: 32, s2: 56, s3: 0, s4: 0 };
-
-// Shared between the Protocol Select (top of form) and the Divider that
-// labels the protocol-specific section below. Previously the Divider
-// rendered the raw enum value ("hysteria", "amneziawg"); using this
-// table keeps both surfaces showing the same human label. Labels are
-// product/protocol names — kept in English on purpose; operators read
-// xray / hysteria / awg docs in English.
-const PROTOCOL_OPTIONS: { value: string; label: string }[] = [
-  { value: 'hysteria', label: 'Hysteria 2' },
-  { value: 'xray', label: 'Xray (VLESS / Trojan + REALITY)' },
-  { value: 'amneziawg', label: 'AmneziaWG' },
-  { value: 'naive', label: 'NaiveProxy' },
-  { value: 'shadowsocks', label: 'Shadowsocks 2022' },
-  { value: 'mtproto', label: 'MTProto (Telegram-only, mtg)' },
-  { value: 'mieru', label: 'Mieru (stealth proxy)' },
-];
 
 /**
  * AmneziaWG H1-H4 magic-header bytes. Spec says they must be:
@@ -594,13 +579,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
 
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
 
-          <Divider
-            label={
-              PROTOCOL_OPTIONS.find((p) => p.value === form.values.protocol)?.label ??
-              form.values.protocol
-            }
-            labelPosition="center"
-          />
+          <Divider label={protocolLabel(form.values.protocol)} labelPosition="center" />
 
           <RecipePicker
             protocol={form.values.protocol}
