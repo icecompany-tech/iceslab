@@ -143,6 +143,12 @@ cd apps/node && go test ./...                # node-agent
 pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 ```
 
+## Политики проекта
+
+- **Контрибуция** — см. [CONTRIBUTING.md](./CONTRIBUTING.md). PR принимаются под AGPL-3.0 inbound = outbound, коммиты squash'ятся при merge.
+- **Безопасность** — уязвимости на `learntoowork@outlook.com`. Детали и таймлайн раскрытия в [SECURITY.md](./SECURITY.md).
+- **Торговая марка** — имя "Iceslab" ограничено к использованию, политика в [TRADEMARK.md](./TRADEMARK.md). AGPL-права на код не затрагивает, форкай свободно, просто переименуй если шипишь публично.
+
 ## Лицензия
 
 Copyright (C) 2026 Icecompany. Распространяется под [AGPL-3.0-or-later](./LICENSE). Если запускаешь модифицированный Iceslab как сервис, обязан предоставить исходники своим пользователям.
