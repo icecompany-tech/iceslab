@@ -39,11 +39,11 @@ FROM gcr.io/distroless/static:${DISTROLESS_VERSION}
 COPY --from=builder /out/iceslab-node /usr/local/bin/iceslab-node
 
 ENV NODE_HOST=0.0.0.0
-ENV NODE_PORT=8443
+ENV NODE_PORT=1337
 ENV HYSTERIA_AUTH_HOST=127.0.0.1
 ENV HYSTERIA_AUTH_PORT=9000
 
-EXPOSE 8443
+EXPOSE 1337
 USER nonroot:nonroot
 
 ENTRYPOINT ["/usr/local/bin/iceslab-node"]

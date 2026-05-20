@@ -44,7 +44,12 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
 
 // Default mTLS port the node-agent listens on. Hard-coded in
 // install-iceslab-node.sh; admins can override per-node via the Port field.
-const DEFAULT_NODE_PORT = 8443;
+// Wave-13 (2026-05-21) bumped from 8443 to 1337: 8443 is the canonical
+// HTTPS-alt scanned by every bot the moment 443 closes, 1337 is rare-enough
+// that random probes pass us by AND frees 8443 for user-protocol bindings.
+// Existing nodes installed before the bump stay on 8443 — their address is
+// pinned in DB. Only fresh installs default to 1337.
+const DEFAULT_NODE_PORT = 1337;
 
 interface FormValues {
   name: string;
@@ -60,7 +65,7 @@ interface FormValues {
   consumptionMultiplier: number | '';
 }
 
-/** Split a stored `address` into host + port. Empty port → defaults to 8443. */
+/** Split a stored `address` into host + port. Empty port → DEFAULT_NODE_PORT. */
 function splitAddress(address: string): { host: string; port: number } {
   const idx = address.indexOf(':');
   if (idx === -1) {
@@ -303,7 +308,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
               />
             </Group>
             {/* Address split into host + port so admins see exactly what
-                port will be hit (default 8443, install-iceslab-node.sh hard-coded).
+                port will be hit (default 1337, install-iceslab-node.sh hard-coded).
                 Backend recombines into host:port via handleFinalSubmit.
                 align=flex-end keeps both inputs on the same baseline even
                 when description lines wrap differently between the two. */}

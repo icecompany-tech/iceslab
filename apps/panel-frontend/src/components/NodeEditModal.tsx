@@ -64,20 +64,33 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
 ];
 
 // Hard-coded mTLS port from install-iceslab-node.sh - also the default in the
-// create wizard. Edit modal lets admin tweak per-node.
-const DEFAULT_NODE_PORT = 8443;
+// create wizard. Edit modal lets admin tweak per-node. Wave-13 bumped from
+// 8443 to 1337 (see NodeFormModal.tsx for rationale).
+const DEFAULT_NODE_PORT = 1337;
 
 // Quick-deploy chip ports tried in order. 443 first (standard TLS), then common
 // Cloudflare-friendly TLS alternates. Pre-2026-05-21 the chip hardcoded 443
 // and any second binding fell over with 409 PORT_IN_USE.
 const QUICK_DEPLOY_PORT_CANDIDATES = [443, 8443, 2053, 2083, 2087, 2096];
 
-function pickFreeQuickDeployPort(occupied: number[]): number {
-  const taken = new Set(occupied);
+// node.address is "host:port" where port is the node-agent's mTLS listener
+// (default 8443, overridable via --port at install). Binding the node-agent
+// port to a user-protocol inbound causes EADDRINUSE at adapter start, surfacing
+// as a confusing 500 from applyInbounds. Exclude it from picker + warn inline.
+function parseNodeAgentPort(address: string | undefined | null): number | null {
+  if (!address) return null;
+  const idx = address.lastIndexOf(':');
+  if (idx === -1) return null;
+  const n = Number.parseInt(address.slice(idx + 1), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickFreeQuickDeployPort(occupied: number[], reserved: number[] = []): number {
+  const taken = new Set([...occupied, ...reserved]);
   for (const p of QUICK_DEPLOY_PORT_CANDIDATES) {
     if (!taken.has(p)) return p;
   }
-  return Math.max(...occupied, 443) + 1;
+  return Math.max(...occupied, ...reserved, 443) + 1;
 }
 
 interface FormValues {
@@ -264,10 +277,12 @@ export function NodeEditModal({
       !bindingsWithProfile.some((bp) => bp.binding.profileId === p.id) &&
       p.protocol === form.values.protocol,
   );
+  const nodeAgentPort = parseNodeAgentPort(node?.address);
   const addBindingMutation = useMutation({
     mutationFn: (profileId: string) => {
       const occupied = bindingsWithProfile.map((bp) => bp.binding.port);
-      const port = pickFreeQuickDeployPort(occupied);
+      const reserved = nodeAgentPort !== null ? [nodeAgentPort] : [];
+      const port = pickFreeQuickDeployPort(occupied, reserved);
       return createBinding({ profileId, nodeId: node!.id, port });
     },
     onSuccess: (created) => {
@@ -630,25 +645,39 @@ export function NodeEditModal({
                           {/* Inline port edit - admin types new port and clicks save.
                               Was the #1 UX pain point pre-cycle-6 (admins SQL'd the
                               port directly because UI had no edit affordance). */}
+                          {(() => {
+                            const draft = portDrafts[binding.id];
+                            const effectivePort = draft ?? binding.port;
+                            const conflictsWithAgent =
+                              nodeAgentPort !== null && effectivePort === nodeAgentPort;
+                            return (
                           <Group gap={2} wrap="nowrap">
                             <Text size="xs" c="dimmed" ff="monospace">:</Text>
-                            <NumberInput
-                              size="xs"
-                              w={72}
-                              min={1}
-                              max={65535}
-                              hideControls
-                              value={portDrafts[binding.id] ?? binding.port}
-                              onChange={(v) =>
-                                setPortDrafts((d) => ({
-                                  ...d,
-                                  [binding.id]: typeof v === 'number' ? v : Number(v) || binding.port,
-                                }))
-                              }
-                              styles={{ input: { fontFamily: 'monospace', textAlign: 'center' } }}
-                            />
+                            <Tooltip
+                              label={t('nodes.edit.bindingPortAgentConflict', { port: nodeAgentPort })}
+                              disabled={!conflictsWithAgent}
+                              color="red"
+                            >
+                              <NumberInput
+                                size="xs"
+                                w={72}
+                                min={1}
+                                max={65535}
+                                hideControls
+                                error={conflictsWithAgent}
+                                value={portDrafts[binding.id] ?? binding.port}
+                                onChange={(v) =>
+                                  setPortDrafts((d) => ({
+                                    ...d,
+                                    [binding.id]: typeof v === 'number' ? v : Number(v) || binding.port,
+                                  }))
+                                }
+                                styles={{ input: { fontFamily: 'monospace', textAlign: 'center' } }}
+                              />
+                            </Tooltip>
                             {portDrafts[binding.id] !== undefined &&
-                              portDrafts[binding.id] !== binding.port && (
+                              portDrafts[binding.id] !== binding.port &&
+                              !conflictsWithAgent && (
                                 <Tooltip label={t('nodes.edit.bindingPortSave')}>
                                   <ActionIcon
                                     size="sm"
@@ -680,6 +709,8 @@ export function NodeEditModal({
                                 </Tooltip>
                               )}
                           </Group>
+                            );
+                          })()}
                         </Group>
                         {binding.publicHost && (
                           <Text size="xs" c="dimmed" ff="monospace">

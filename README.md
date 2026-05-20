@@ -96,7 +96,7 @@ Bootstrap installs the upstream binary: xcaddy fork for Naive (needs 2 GB RAM), 
 
 These protocols take no install-time flags for domain or cert. They start idle and wait for the panel to push their inbound config via `applyInbounds`. Domain, email, masquerade and other protocol-specific fields live on the panel-side Profile (set once via UI), then propagate to every node the profile is deployed to. Naive needs an A-record (set in the profile's `hostname` field); MTProto picks its masquerade domain in the profile; SS2022 and Mieru don't need a public domain.
 
-A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 8443 by default). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node — changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
+A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default since v0.1.2; 8443 on pre-v0.1.2 installs). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node — changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
 
 ## Protocols
 
