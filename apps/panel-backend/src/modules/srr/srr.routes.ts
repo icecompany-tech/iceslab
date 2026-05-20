@@ -10,10 +10,11 @@ import {
 import { matchFormatForUserAgent } from './srr.service.js';
 
 export async function srrRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
   // GET /api/srr — list rules in evaluation order (priority ASC)
-  app.get('/api/srr', async (_request, reply) => {
+  app.get('/api/srr', auth, async (_request, reply) => {
     const rules = await prisma.subscriptionResponseRule.findMany({
       orderBy: { priority: 'asc' },
     });
@@ -21,7 +22,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/srr
-  app.post('/api/srr', async (request, reply) => {
+  app.post('/api/srr', auth, async (request, reply) => {
     const input = CreateSrrSchema.parse(request.body);
     try {
       const rule = await prisma.subscriptionResponseRule.create({
@@ -40,7 +41,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/srr/:id
-  app.put('/api/srr/:id', async (request, reply) => {
+  app.put('/api/srr/:id', auth, async (request, reply) => {
     const params = SrrIdParamSchema.parse(request.params);
     const input = UpdateSrrSchema.parse(request.body);
     try {
@@ -64,7 +65,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/srr/:id
-  app.delete('/api/srr/:id', async (request, reply) => {
+  app.delete('/api/srr/:id', auth, async (request, reply) => {
     const params = SrrIdParamSchema.parse(request.params);
     try {
       await prisma.subscriptionResponseRule.delete({
@@ -80,7 +81,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/srr/test — evaluate a UA against the current rule set
-  app.post('/api/srr/test', async (request, reply) => {
+  app.post('/api/srr/test', auth, async (request, reply) => {
     const input = TestSrrSchema.parse(request.body);
     const matched = await matchFormatForUserAgent(input.userAgent);
     return reply.send({ format: matched, userAgent: input.userAgent });

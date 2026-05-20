@@ -10,14 +10,15 @@ import {
 import * as svc from './hosts.service.js';
 
 export async function hostsRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
-  app.get('/api/hosts', async (req, reply) => {
+  app.get('/api/hosts', auth, async (req, reply) => {
     const q = ListHostsQuerySchema.parse(req.query);
     return reply.send({ hosts: await svc.listHosts(q) });
   });
 
-  app.get('/api/hosts/:id', async (req, reply) => {
+  app.get('/api/hosts/:id', auth, async (req, reply) => {
     const { id } = HostIdParamSchema.parse(req.params);
     try {
       return reply.send(await svc.getHostById(id));
@@ -29,7 +30,7 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/hosts', async (req, reply) => {
+  app.post('/api/hosts', auth, async (req, reply) => {
     const input = CreateHostSchema.parse(req.body);
     try {
       const h = await svc.createHost(input);
@@ -42,7 +43,7 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/hosts/:id', async (req, reply) => {
+  app.put('/api/hosts/:id', auth, async (req, reply) => {
     const { id } = HostIdParamSchema.parse(req.params);
     const input = UpdateHostSchema.parse(req.body);
     try {
@@ -55,7 +56,7 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/hosts/:id', async (req, reply) => {
+  app.delete('/api/hosts/:id', auth, async (req, reply) => {
     const { id } = HostIdParamSchema.parse(req.params);
     try {
       await svc.deleteHost(id);
@@ -68,7 +69,7 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/hosts/reorder', async (req, reply) => {
+  app.put('/api/hosts/reorder', auth, async (req, reply) => {
     const input = ReorderHostsSchema.parse(req.body);
     try {
       return reply.send({ hosts: await svc.reorderHosts(input) });

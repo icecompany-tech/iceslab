@@ -15,10 +15,13 @@ import {
 } from '../subscription/subscription.service.js';
 
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
-  // All /api/users/* require authenticated admin
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route onRequest instead of plugin-level addHook so a
+  // future public route added to this plugin doesn't silently inherit
+  // no-auth (Fastify v5 quirk — see feedback_fastify_auth memory). All
+  // current routes are still auth-gated; the change is structural.
+  const auth = { onRequest: [requireAuth] };
   // POST /api/users
-  app.post('/api/users', async (request, reply) => {
+  app.post('/api/users', auth, async (request, reply) => {
     const input = CreateUserSchema.parse(request.body);
     try {
       const user = await usersService.createUser(input);
@@ -32,14 +35,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/users
-  app.get('/api/users', async (request, reply) => {
+  app.get('/api/users', auth, async (request, reply) => {
     const query = ListUsersQuerySchema.parse(request.query);
     const result = await usersService.listUsers(query);
     return reply.send(result);
   });
 
   // GET /api/users/:id
-  app.get('/api/users/:id', async (request, reply) => {
+  app.get('/api/users/:id', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
     try {
       const user = await usersService.getUserById(params.id);
@@ -58,7 +61,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // nodeName, host, port, uri} entries the admin UI can render with copy
   // buttons. Added so admins don't have to fetch the public /sub endpoint
   // and decode formats by hand.
-  app.get('/api/users/:id/endpoints', async (request, reply) => {
+  app.get('/api/users/:id/endpoints', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
     const user = await prisma.user.findFirst({
       where: { id: params.id, deletedAt: null },
@@ -96,7 +99,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/users/:id
-  app.put('/api/users/:id', async (request, reply) => {
+  app.put('/api/users/:id', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
     const input  = UpdateUserSchema.parse(request.body);
     try {
@@ -111,7 +114,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/users/:id
-  app.delete('/api/users/:id', async (request, reply) => {
+  app.delete('/api/users/:id', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
     try {
       await usersService.deleteUser(params.id);
