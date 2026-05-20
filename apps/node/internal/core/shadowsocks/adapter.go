@@ -135,11 +135,13 @@ type inboundCfgWire struct {
 
 // ApplyInbound parses the panel-pushed SS config, swaps it into the live
 // adapter's InboundConfig, and regenerates+restarts xray. Idempotent.
+//
+// Wave-14 C1: port now flows from the panel binding through to the SS2022
+// listen port. Pre-wave port was install-time only and admin port changes
+// from the UI were silently dropped (TODO marker remained from slice 50).
+// Fallback chain: panel-pushed port → install-time ListenPort → 8388
+// (SS historic default, applied by withDefaults at render).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	// TODO(slice 50, wave-13 audit): wire `port` into the SS2022 inbound
-	// rendered inside xray-core config. Install-time port stays
-	// authoritative for now.
-	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("shadowsocks ApplyInbound: parse cfg: %w", err)
@@ -154,15 +156,24 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.cfg.Inbound.Method == wire.Method && a.cfg.Inbound.ServerPSK == wire.ServerPSK {
+	effectivePort := port
+	if effectivePort == 0 {
+		effectivePort = a.cfg.Inbound.ListenPort
+	}
+	if a.cfg.Inbound.Method == wire.Method &&
+		a.cfg.Inbound.ServerPSK == wire.ServerPSK &&
+		a.cfg.Inbound.ListenPort == effectivePort {
 		a.logger.Info("shadowsocks ApplyInbound: config unchanged, skipping restart")
 		return nil
 	}
 
 	a.cfg.Inbound.Method = wire.Method
 	a.cfg.Inbound.ServerPSK = wire.ServerPSK
+	if effectivePort != 0 {
+		a.cfg.Inbound.ListenPort = effectivePort
+	}
 	a.logger.Info("shadowsocks ApplyInbound: config changed, regenerating + restarting",
-		"method", wire.Method)
+		"method", wire.Method, "port", a.cfg.Inbound.ListenPort)
 	return a.regenerateAndRestartLocked(context.Background())
 }
 

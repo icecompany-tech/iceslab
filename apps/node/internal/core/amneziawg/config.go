@@ -15,13 +15,15 @@
 package amneziawg
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
-	"strings"
 )
 
 // allowedHookPrefixes is the strict whitelist of commands acceptable in
@@ -145,9 +147,42 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 	return out
 }
 
+// validateWGKey enforces "looks like a WireGuard key": exactly 44 chars
+// from the standard base64 alphabet, decodes to 32 bytes. Anything else
+// (notably newlines, '[', '=' in wrong place, shell metacharacters) is
+// rejected. Wave-14 #1: pre-wave panel-pushed PublicKey was written into
+// awg-quick INI via fmt.Fprintf with no validation, so a '\n' in the value
+// could close [Peer] and inject [Interface]/PostUp=sh -c ... → root RCE on
+// every interface bring-up. Whitelist input format here defeats it.
+func validateWGKey(s string) error {
+	if len(s) != 44 {
+		return fmt.Errorf("wg key must be 44 base64 chars (got %d)", len(s))
+	}
+	raw, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return fmt.Errorf("wg key not valid base64: %w", err)
+	}
+	if len(raw) != 32 {
+		return fmt.Errorf("wg key must decode to 32 bytes (got %d)", len(raw))
+	}
+	return nil
+}
+
+// validateAllowedIP enforces CIDR notation (e.g. "10.66.66.5/32"). Rejects
+// anything net/netip can't parse — same wave-14 #1 RCE class as validateWGKey.
+func validateAllowedIP(s string) error {
+	if _, err := netip.ParsePrefix(s); err != nil {
+		return fmt.Errorf("AllowedIP not a valid CIDR: %w", err)
+	}
+	return nil
+}
+
 func (c *InboundConfig) validate() error {
 	if c.PrivateKey == "" {
 		return errors.New("PrivateKey is required")
+	}
+	if err := validateWGKey(c.PrivateKey); err != nil {
+		return fmt.Errorf("PrivateKey: %w", err)
 	}
 	for _, h := range []struct {
 		name string
@@ -224,6 +259,12 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 	for _, p := range peers {
 		if p.PublicKey == "" || p.AllowedIP == "" {
 			return "", fmt.Errorf("peer with empty PublicKey or AllowedIP: %+v", p)
+		}
+		if err := validateWGKey(p.PublicKey); err != nil {
+			return "", fmt.Errorf("peer PublicKey: %w", err)
+		}
+		if err := validateAllowedIP(p.AllowedIP); err != nil {
+			return "", fmt.Errorf("peer AllowedIP: %w", err)
 		}
 		fmt.Fprintln(&b)
 		fmt.Fprintln(&b, "[Peer]")

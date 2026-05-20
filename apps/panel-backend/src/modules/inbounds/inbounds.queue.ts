@@ -249,12 +249,19 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   console.log(
     `[worker:inbound-sync] pushing ${users.length} user(s) to ${node.name}`,
   );
-  for (const u of users) {
-    let awgAllowedIp: string | undefined;
-    if (awgProfileId && awgSubnet && u.amneziawgPublicKey) {
+
+  // Wave-14 #13: pre-allocate AWG IPs serially (allocatePeer is racy under
+  // concurrency — IP slots aren't unique-indexed). Then fan out addUser in
+  // bounded-parallel chunks. Pre-wave a 1000-user install did 1000 serial
+  // mTLS round-trips (~50ms each) = ~50s of worker time blocked per node
+  // push, which compounds when multiple nodes need re-push at once.
+  const awgIpByUser = new Map<string, string>();
+  if (awgProfileId && awgSubnet) {
+    for (const u of users) {
+      if (!u.amneziawgPublicKey) continue;
       try {
         const peer = await allocatePeer(awgProfileId, u.id, awgSubnet);
-        awgAllowedIp = peer.ip;
+        awgIpByUser.set(u.id, peer.ip);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.log(
@@ -264,27 +271,46 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
         // node side, other protocols still work for this user.
       }
     }
+  }
 
-    try {
-      await transport.addUser({
-        userId: u.id,
-        shortId: u.shortId,
-        username: u.username,
-        credentials: {
-          xrayUuid: u.xrayUuid,
-          hysteriaPassword: u.hysteriaPassword,
-          amneziawgPublicKey: u.amneziawgPublicKey,
-          amneziawgAllowedIp: awgAllowedIp,
-          naivePassword: u.naivePassword,
-        },
-      });
-    } catch (err) {
-      // Log but don't throw — one failed user shouldn't block the rest.
-      const detail = err instanceof Error ? err.message : String(err);
-      console.log(`[worker:inbound-sync] addUser ${u.username} to ${node.name} FAILED: ${detail}`);
+  // Chunked parallel fanout. 25 is a balance between throughput and not
+  // hammering the node-agent's HTTP server (default Node http.Agent
+  // maxSockets = Infinity but the node-agent runs single-process Go,
+  // 25 concurrent in-flight is comfortably below typical default ulimits).
+  const ADD_USER_CHUNK = 25;
+  let chunkFailed = 0;
+  for (let i = 0; i < users.length; i += ADD_USER_CHUNK) {
+    const chunk = users.slice(i, i + ADD_USER_CHUNK);
+    const results = await Promise.allSettled(
+      chunk.map((u) =>
+        transport.addUser({
+          userId: u.id,
+          shortId: u.shortId,
+          username: u.username,
+          credentials: {
+            xrayUuid: u.xrayUuid,
+            hysteriaPassword: u.hysteriaPassword,
+            amneziawgPublicKey: u.amneziawgPublicKey,
+            amneziawgAllowedIp: awgIpByUser.get(u.id),
+            naivePassword: u.naivePassword,
+          },
+        }),
+      ),
+    );
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j]!;
+      if (r.status === 'rejected') {
+        chunkFailed++;
+        const detail = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        console.log(
+          `[worker:inbound-sync] addUser ${chunk[j]!.username} to ${node.name} FAILED: ${detail}`,
+        );
+      }
     }
   }
-  console.log(`[worker:inbound-sync] user sync to ${node.name} done`);
+  console.log(
+    `[worker:inbound-sync] user sync to ${node.name} done (${users.length - chunkFailed}/${users.length} ok)`,
+  );
 
   // End-of-job dirty check: if an admin edit landed during the push window,
   // the event handler re-SET the flag we cleared above. Re-enqueue so the

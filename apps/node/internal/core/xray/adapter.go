@@ -241,11 +241,6 @@ type xrayInboundCfgWire struct {
 // keep the parse local here so the adapter owns its protocol's contract —
 // the dispatcher in server.go only routes raw JSON by protocol name.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	// TODO(slice 50, deferred to wave-13): wire `port` into the rendered xray
-	// inbound. Until then xray's listen port remains install-time only —
-	// matching pre-slice-50 behaviour for this adapter. Signature is in
-	// sync with the new CoreAdapter contract; per-protocol audit pending.
-	_ = port
 	var wire xrayInboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("xray ApplyInbound: parse cfg: %w", err)
@@ -254,10 +249,19 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		return fmt.Errorf("xray ApplyInbound: realityPrivateKey is required")
 	}
 
+	// Wave-14 C1: port now flows from the panel binding into REALITY's
+	// listen port. Pre-wave port was install-time only and admin port
+	// changes from the UI were silently dropped. Fallback chain:
+	//   panel-pushed port → install-time ListenPort → 443 (withDefaults).
+	effectivePort := port
+	if effectivePort == 0 {
+		effectivePort = a.cfg.Inbound.ListenPort
+	}
+
 	newInbound := InboundConfig{
 		Tag:                a.cfg.Inbound.Tag,        // keep existing tag — not in wire
 		ListenHost:         a.cfg.Inbound.ListenHost, // install-time identity
-		ListenPort:         a.cfg.Inbound.ListenPort, // install-time identity
+		ListenPort:         effectivePort,            // panel-pushed wins, install-time fallback
 		ApiPort:            a.cfg.Inbound.ApiPort,    // install-time identity (slice 24c stats)
 		RealityDest:        wire.RealityDest,
 		RealityServerNames: wire.RealityServerNames,

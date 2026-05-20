@@ -87,7 +87,10 @@ func TestApplyInbound_NoOpOnIdenticalConfig(t *testing.T) {
 		"method":    "2022-blake3-aes-256-gcm",
 		"serverPsk": "BASE64-FAKE-SERVER-PSK==",
 	})
-	if err := a.ApplyInbound(443, body); err != nil {
+	// Wave-14 C1: port now participates in idempotency check; pass the
+	// install-time port (8388 from newConfigOnlyAdapter) so the apply is
+	// truly a no-op vs current state.
+	if err := a.ApplyInbound(8388, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {
@@ -109,6 +112,26 @@ func TestApplyInbound_MethodChangeRegenerates(t *testing.T) {
 	}
 	if !a.started {
 		t.Errorf("started should be true after regenerate")
+	}
+}
+
+// Wave-14 C1 regression: panel-pushed port change triggers regenerate +
+// updates InboundConfig.ListenPort so the next render emits the new port.
+func TestApplyInbound_PortChangeRegenerates(t *testing.T) {
+	a := newConfigOnlyAdapter(t)
+	body, _ := json.Marshal(map[string]any{
+		"method":    "2022-blake3-aes-256-gcm",
+		"serverPsk": "BASE64-FAKE-SERVER-PSK==",
+	})
+	// Same method/psk as install-time but different port → not a no-op.
+	if err := a.ApplyInbound(9999, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 9999 {
+		t.Errorf("port not updated, got %d want 9999", a.cfg.Inbound.ListenPort)
+	}
+	if !a.started {
+		t.Errorf("started should be true after port-driven regenerate")
 	}
 }
 

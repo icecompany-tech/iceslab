@@ -93,8 +93,14 @@ export async function findExpiredUsers(): Promise<number> {
   // userId to every node. So enqueueing while status is still 'active' is
   // safe — there is no "active-gate" downstream to silently skip. If that
   // ever changes, this ordering must change back to update-then-enqueue.
+  // Wave-14 #12: jobId dedupes parallel cron firings against the same
+  // userId. Pure `removeUser-${id}` is safe here: status flips active →
+  // expired exactly once per user (a re-activation that flips back through
+  // 'active' would re-enter this branch on the NEXT cron tick and the
+  // completed removeUser-${id} job will have been evicted from BullMQ's
+  // ring within the 1h removeOnComplete window).
   for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id });
+    await nodeUsersQueue.add('removeUser', { userId: id }, { jobId: `removeUser-${id}` });
   }
   await prisma.user.updateMany({
     where: { id: { in: ids } },
@@ -130,8 +136,9 @@ export async function findExceededTrafficUsers(): Promise<number> {
   const ids = rows.map((r) => r.id);
 
   // Same crash-safety argument as findExpiredUsers — enqueue before flip.
+  // Same jobId dedup rationale as findExpiredUsers (wave-14 #12).
   for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id });
+    await nodeUsersQueue.add('removeUser', { userId: id }, { jobId: `removeUser-${id}` });
   }
   await prisma.user.updateMany({
     where: { id: { in: ids } },
@@ -183,8 +190,19 @@ export async function reconcileOrphanNodeUsers(): Promise<number> {
 
   if (orphans.length === 0) return 0;
 
+  // Wave-14 #12: cron fires every ~10min so a stable orphan would be
+  // enqueued ~144 times/day per userId, each triggering a full mTLS fanout
+  // across every node. Daily-bucket jobId dedupes within a 24h window
+  // (matches the reconcile window above) but lets re-enqueue happen next
+  // day if the original failed and aged out. Picked daily over hourly to
+  // bound recovery latency at <=24h while keeping the cron self-healing.
+  const dayBucket = Math.floor(now / 86_400_000);
   for (const u of orphans) {
-    await nodeUsersQueue.add('removeUser', { userId: u.id });
+    await nodeUsersQueue.add(
+      'removeUser',
+      { userId: u.id },
+      { jobId: `removeUser-${u.id}-d${dayBucket}` },
+    );
   }
   return orphans.length;
 }

@@ -131,3 +131,18 @@ function _redactNormalizedIp(ip: string): string {
   }
   return '[redacted]';
 }
+
+// Wave-14 #7: Telegram login alerts used to ship the raw username, so a
+// compromise of the bot token (or anyone with read access to the alert
+// channel) got a continuous side-channel of attempted usernames being
+// probed. We keep enough characters to let the operator recognise their
+// own admin name at a glance but cut the rest so distributed scans against
+// "admin" / "root" / "administrator" / etc. only appear in the alert as
+// "ad***" / "ro***" — useful as "someone is brute-forcing", useless for
+// the attacker as enumeration confirmation.
+export function redactUsername(input: string): string {
+  if (!input) return '[redacted]';
+  const u = input.trim();
+  if (u.length <= 2) return '***';
+  return u.slice(0, 2) + '***';
+}

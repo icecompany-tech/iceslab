@@ -105,12 +105,32 @@ func TestApplyInbound_NoOpOnIdenticalConfig(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	domain := a.cfg.Inbound.Domain
 	secret := a.cfg.Inbound.Secret
+	// Wave-14 C1: port participates in idempotency. Pass the install-time
+	// port (443 from newConfigOnlyAdapter) for true no-op.
 	body, _ := json.Marshal(map[string]any{"domain": domain, "secret": secret})
 	if err := a.ApplyInbound(443, body); err != nil {
 		t.Fatalf("ApplyInbound: %v", err)
 	}
 	if a.started {
 		t.Errorf("identical apply should not have started")
+	}
+}
+
+// Wave-14 C1 regression: panel-pushed port change triggers regenerate +
+// updates InboundConfig.ListenPort so the next render emits the new port.
+func TestApplyInbound_PortChangeRegenerates(t *testing.T) {
+	a := newConfigOnlyAdapter(t)
+	domain := a.cfg.Inbound.Domain
+	secret := a.cfg.Inbound.Secret
+	body, _ := json.Marshal(map[string]any{"domain": domain, "secret": secret})
+	if err := a.ApplyInbound(8443, body); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.cfg.Inbound.ListenPort != 8443 {
+		t.Errorf("port not updated, got %d want 8443", a.cfg.Inbound.ListenPort)
+	}
+	if !a.started {
+		t.Errorf("started should be true after port-driven regenerate")
 	}
 }
 

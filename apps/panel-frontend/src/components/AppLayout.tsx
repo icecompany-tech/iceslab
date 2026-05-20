@@ -20,13 +20,7 @@ import {
 import { useAuth } from '../stores/auth';
 import { useBrandName } from '../hooks/useBrandName';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import {
-  getDashboardOverview,
-  listNodes,
-  listProfiles,
-  listSquads,
-  listUsers,
-} from '../lib/api';
+import { getDashboardOverview } from '../lib/api';
 
 const HAIRLINE = '#1C2A3D';
 const GROUND = '#08101A';
@@ -181,37 +175,24 @@ export function AppLayout() {
   const brandName = useBrandName();
   const { t } = useTranslation();
 
+  // Wave-14 #18: single dashQuery feeds every sidebar count. Pre-wave we
+  // fired 4 separate count queries (users/profiles/squads/nodes) each
+  // pulling full row payloads only to call .length on the client — on every
+  // page transition for every signed-in admin. The dashboard response now
+  // carries `inventory.{profileCount,squadCount}` alongside the existing
+  // users.total and system.{total,online}NodeCount, all from the same
+  // Redis-cached blob.
   const dashQuery = useQuery({
     queryKey: ['dashboard', 'overview'],
     queryFn: getDashboardOverview,
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
-  const usersQuery = useQuery({
-    queryKey: ['users', 'count'],
-    queryFn: () => listUsers({ page: 1, limit: 1 }),
-    staleTime: 60_000,
-  });
-  const profilesQuery = useQuery({
-    queryKey: ['profiles', 'count'],
-    queryFn: () => listProfiles(),
-    staleTime: 60_000,
-  });
-  const squadsQuery = useQuery({
-    queryKey: ['squads', 'count'],
-    queryFn: () => listSquads(),
-    staleTime: 60_000,
-  });
-  const nodesQuery = useQuery({
-    queryKey: ['nodes', 'count'],
-    queryFn: () => listNodes({ page: 1, limit: 100 }),
-    staleTime: 60_000,
-  });
 
-  const userCount = usersQuery.data?.total ?? dashQuery.data?.users.total;
-  const profileCount = profilesQuery.data?.profiles.length;
-  const squadCount = squadsQuery.data?.squads.length;
-  const nodesTotal = nodesQuery.data?.nodes.length ?? dashQuery.data?.system.totalNodeCount;
+  const userCount = dashQuery.data?.users.total;
+  const profileCount = dashQuery.data?.inventory.profileCount;
+  const squadCount = dashQuery.data?.inventory.squadCount;
+  const nodesTotal = dashQuery.data?.system.totalNodeCount;
   const nodesOnline = dashQuery.data?.system.onlineNodeCount ?? nodesTotal;
 
   function handleLogout() {
