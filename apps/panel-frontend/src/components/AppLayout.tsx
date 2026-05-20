@@ -257,7 +257,7 @@ export function AppLayout() {
         >
           <Text style={{ ...MONO_LABEL, flex: 1 }}>{breadcrumb}</Text>
           <TextInput
-            placeholder="Search anything"
+            placeholder={t('sidebar.searchPlaceholder')}
             leftSection={<IconSearch size={14} color={MIST} />}
             rightSection={
               <Box

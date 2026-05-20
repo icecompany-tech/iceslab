@@ -56,6 +56,7 @@ export default {
     subscriptionMetadata: 'Метаданные',
     subscriptionRouting: 'Маршрутизация',
     systemGroup: 'Система',
+    searchPlaceholder: 'Поиск…',
   },
 
   breadcrumb: {
@@ -369,7 +370,7 @@ export default {
       active: 'Активен',
       expired: 'Истёк',
       limited: 'Лимит',
-      disabled: 'Off',
+      disabled: 'Откл.',
     },
     deleteTitle: 'Удалить пользователя «{{name}}»?',
     deleteBody: 'Действие необратимо. Подписка станет недействительной, креденшалы аннулируются на всех нодах.',
@@ -697,7 +698,7 @@ export default {
     srrEyebrow: 'UA маршрутизация · {{count}} {{label}}',
     srrLabelOne: 'правило',
     srrLabelMany: 'правил',
-    srrTitle: 'Subscription Rules.',
+    srrTitle: 'Маршрутизация.',
     settingsEyebrow: 'Конфиг панели',
     subscriptionMetadataEyebrow: 'Подписка · заголовки для клиента',
     subscriptionMetadataTitle: 'Метаданные.',
