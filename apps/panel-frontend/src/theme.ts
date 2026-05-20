@@ -245,6 +245,20 @@ export const theme = createTheme({
     }),
     Button: Button.extend({
       defaultProps: { radius: 'md' },
+      // Mantine's default <Button variant="filled"> uses primaryColor for
+      // background and theme.white for text. We set primaryColor='cyan'
+      // (light) and white=SNOW (also light) — the pair renders unreadable
+      // cyan-on-snow CTAs ("I have saved it" in NodePayloadModal, etc).
+      // Override --button-color to GROUND for filled+default-color so every
+      // CTA is legible without per-call style overrides. Buttons that pass
+      // an explicit color (red/green/etc) keep Mantine's normal contrast.
+      vars: (_theme, props) => {
+        const filled = props.variant === 'filled' || props.variant === undefined;
+        if (filled && !props.color) {
+          return { root: { '--button-color': GROUND } };
+        }
+        return { root: {} };
+      },
     }),
     Badge: Badge.extend({
       defaultProps: { radius: 'sm' },
