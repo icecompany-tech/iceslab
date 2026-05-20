@@ -713,7 +713,12 @@ case "$PROTOCOL" in
         "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
         "$XR_TMP" \
         "$XRAY_INSTALLER_SHA"
-      bash "$XR_TMP" @ install
+      # XTLS/Xray-install's install-release.sh takes the operation as its
+      # first positional arg ('install', 'install-geodata', 'remove', etc).
+      # An earlier copy of this line had `@ install` — the stray `@` made
+      # the installer print "unknown option -- -" and abort. Just pass the
+      # operation directly.
+      bash "$XR_TMP" install
       rm -f "$XR_TMP"
     else
       log "xray already present: $(xray version | head -1)"
@@ -750,7 +755,12 @@ case "$PROTOCOL" in
         "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
         "$XR_TMP" \
         "$XRAY_INSTALLER_SHA"
-      bash "$XR_TMP" @ install
+      # XTLS/Xray-install's install-release.sh takes the operation as its
+      # first positional arg ('install', 'install-geodata', 'remove', etc).
+      # An earlier copy of this line had `@ install` — the stray `@` made
+      # the installer print "unknown option -- -" and abort. Just pass the
+      # operation directly.
+      bash "$XR_TMP" install
       rm -f "$XR_TMP"
     else
       log "xray already present: $(xray version | head -1)"
