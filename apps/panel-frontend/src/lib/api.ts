@@ -932,6 +932,10 @@ export interface DashboardOverview {
     onlineNodeCount: number;
     totalNodeCount: number;
   };
+  inventory: {
+    profileCount: number;
+    squadCount: number;
+  };
   host: {
     cpu: {
       loadPercent: number | null;

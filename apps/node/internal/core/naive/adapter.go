@@ -217,10 +217,6 @@ func (a *Adapter) Healthy() bool {
 // limit is hit, `caddy reload` succeeds but new TLS handshakes fail until
 // the cooldown.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	// TODO(slice 50, wave-13 audit): wire `port` into the Caddyfile so naive
-	// can change ports via panel UI. Until then install-time port (typically
-	// 443, ACME-bound) is authoritative.
-	_ = port
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("naive ApplyInbound: parse cfg: %w", err)
@@ -229,7 +225,17 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	newInbound := wire.toInboundConfig(a.cfg.Inbound.ListenPort)
+	// Wave-14 C1: port now flows from the panel binding into the Caddyfile
+	// site address. Pre-wave port was install-time only (ACME-bound, typically
+	// 443) and admin port changes from the UI were silently dropped. Fallback
+	// chain: panel-pushed port → install-time ListenPort. Note: changing the
+	// port forces caddy to re-ACME-challenge the new socket, which can take
+	// 10-30s during the cutover.
+	effectivePort := port
+	if effectivePort == 0 {
+		effectivePort = a.cfg.Inbound.ListenPort
+	}
+	newInbound := wire.toInboundConfig(effectivePort)
 	if inboundEqual(a.cfg.Inbound, newInbound) {
 		a.logger.Info("naive ApplyInbound: config unchanged, skipping reload")
 		return nil

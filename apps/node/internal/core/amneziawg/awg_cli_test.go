@@ -142,8 +142,8 @@ func TestCLI_AddUserPipelinesStripAndSyncconf(t *testing.T) {
 	}
 	if err := a.AddUser(core.User{
 		UserID:             "u",
-		AmneziaWGPublicKey: "pk",
-		AmneziaWGAllowedIP: "10.0.0.5",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
 	}); err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -190,8 +190,8 @@ func TestCLI_SyncconfTimeoutFallsBackToSystemctl(t *testing.T) {
 	}
 	if err := a.AddUser(core.User{
 		UserID:             "u",
-		AmneziaWGPublicKey: "pk",
-		AmneziaWGAllowedIP: "10.0.0.5",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
 	}); err != nil {
 		t.Fatalf("AddUser should fall back successfully, got: %v", err)
 	}
@@ -226,8 +226,8 @@ func TestCLI_SyncconfErrorWithoutSystemctlReturnsError(t *testing.T) {
 	}
 	err := a.AddUser(core.User{
 		UserID:             "u",
-		AmneziaWGPublicKey: "pk",
-		AmneziaWGAllowedIP: "10.0.0.5",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
 	})
 	if err == nil {
 		t.Fatalf("expected error when syncconf fails and no systemctl is configured")
@@ -269,7 +269,7 @@ func TestCLI_NoCLIInConfigOnlyMode(t *testing.T) {
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	a.AddUser(core.User{UserID: "u", AmneziaWGPublicKey: "pk", AmneziaWGAllowedIP: "10.0.0.5"})
+	a.AddUser(core.User{UserID: "u", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.0.0.5/32"})
 	if err := a.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}

@@ -84,6 +84,18 @@ func (c *InboundConfig) validate() error {
 	if !strings.HasPrefix(c.Secret, "ee") {
 		return fmt.Errorf("Secret must start with `ee` (Fake-TLS marker), got %q", c.Secret[:min(len(c.Secret), 4)])
 	}
+	// Wave-14 #11: Secret is fmt.Fprintf'd directly into TOML between
+	// double-quotes — a stray `"` (or anything TOML treats as escape)
+	// would break out of the string and let a hostile/buggy panel push
+	// inject arbitrary TOML directives (swap bind-to to loopback, point
+	// stats to attacker-controlled, etc). DeriveSecret produces pure hex
+	// so the strict alphabet [0-9a-f] is the right whitelist here.
+	for _, ch := range c.Secret {
+		isHex := (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
+		if !isHex {
+			return fmt.Errorf("Secret must be all hex chars (got %q in %q)", ch, c.Secret)
+		}
+	}
 	return nil
 }
 

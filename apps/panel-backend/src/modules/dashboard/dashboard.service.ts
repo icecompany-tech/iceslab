@@ -38,6 +38,15 @@ export interface DashboardOverview {
     onlineNodeCount: number;
     totalNodeCount: number;
   };
+  // Wave-14 #18: sidebar inventory counts so AppLayout doesn't fire 4 separate
+  // count queries (listUsers/listProfiles/listSquads/listNodes — each pulling
+  // full row payloads only to read .length on the client) on every page load.
+  // Computed cheap (4 × `prisma.X.count`) and ride the same Redis cache the
+  // rest of the overview does.
+  inventory: {
+    profileCount: number;
+    squadCount: number;
+  };
   host: SystemMetrics;
   nodes: {
     id: string;
@@ -373,7 +382,7 @@ export async function getOverview(): Promise<DashboardOverview> {
     }
   }
 
-  const [users, traffic, nodesAndSystem, byProtocol, topUsers, events, host] =
+  const [users, traffic, nodesAndSystem, byProtocol, topUsers, events, host, profileCount, squadCount] =
     await Promise.all([
       userMetrics(),
       trafficMetrics(),
@@ -382,12 +391,15 @@ export async function getOverview(): Promise<DashboardOverview> {
       topUsersToday(),
       recentEvents(),
       collectSystemMetrics(),
+      prisma.profile.count(),
+      prisma.group.count(),
     ]);
 
   const overview: DashboardOverview = {
     users,
     traffic,
     system: nodesAndSystem.system,
+    inventory: { profileCount, squadCount },
     host,
     nodes: nodesAndSystem.nodes,
     byProtocol,

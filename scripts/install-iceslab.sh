@@ -21,6 +21,8 @@
 #   ICESLAB_DIR        Install dir (default /opt/iceslab)
 #   ICESLAB_REPO       Git URL (default https://github.com/icecompany-tech/iceslab.git)
 #   ICESLAB_REF        Branch/tag/sha (default v0.1.0 — pinned for alpha)
+#   ICESLAB_REF_SHA    Optional commit SHA to verify after checkout. Defeats
+#                      upstream tag re-pointing attacks. Recommended for prod.
 #   FRONTEND_PORT        Host port the SPA listens on (default 8080)
 #   CORS_ORIGIN          Allowed origin for the API (default http://<vps-ip>:<FRONTEND_PORT>)
 #   PANEL_DOMAIN         If set (e.g. panel.example.com), install + configure Caddy
@@ -345,12 +347,33 @@ else
 fi
 
 step "Docker + Compose"
+# Wave-14 #3: previous flow used `curl -fsSL https://get.docker.com | sh`
+# (unpinned, executed as root). A compromise of get.docker.com — or a TLS
+# MITM at install time — gave attacker full root on every panel install.
+# Switched to Docker's official apt repository: the gpg key fetch is still
+# trust-on-first-use (same TOFU window as before), but every subsequent
+# `apt-get install` cryptographically verifies the .deb against this key,
+# so once the keyring is established, even a compromised mirror can't ship
+# rogue binaries.
 if ! command -v docker >/dev/null; then
-  log "Installing Docker (official get.docker.com installer)"
-  curl -fsSL https://get.docker.com | sh
+  log "Installing Docker via official apt-repo (signed-by /etc/apt/keyrings/docker.gpg)"
+  "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y ca-certificates curl gnupg
+  install -m 0755 -d /etc/apt/keyrings
+  if [[ ! -s /etc/apt/keyrings/docker.gpg ]]; then
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  fi
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu %s stable\n' \
+    "$(dpkg --print-architecture)" \
+    "$(. /etc/os-release && echo "$VERSION_CODENAME")" \
+    > /etc/apt/sources.list.d/docker.list
+  "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" update -y
+  "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y \
+    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
-# Compose plugin is bundled with modern Docker, but the convenience-script
-# image used by some clouds may ship without it.
+# Compose plugin should already be installed via docker-compose-plugin above,
+# but legacy installs from get.docker.com may not have it.
 if ! docker compose version >/dev/null 2>&1; then
   "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y docker-compose-plugin
 fi
@@ -392,6 +415,19 @@ else
   git -C "$ICESLAB_DIR" fetch --depth 1 origin "$ICESLAB_REF"
   git -C "$ICESLAB_DIR" checkout "$ICESLAB_REF"
   git -C "$ICESLAB_DIR" reset --hard "origin/$ICESLAB_REF" || true
+fi
+
+# Wave-14 #4: tags on GitHub are mutable — if the upstream repo or a
+# maintainer token is compromised, an attacker can re-point v0.1.0 to a
+# hostile commit. Operators who care can pin the expected commit SHA via
+# ICESLAB_REF_SHA env; we then verify the checkout matches and abort if
+# the tag was silently re-pointed since the SHA was published.
+if [[ -n "${ICESLAB_REF_SHA:-}" ]]; then
+  actual_sha=$(git -C "$ICESLAB_DIR" rev-parse HEAD)
+  if [[ "$actual_sha" != "$ICESLAB_REF_SHA" ]]; then
+    fail "ICESLAB_REF_SHA mismatch: tag $ICESLAB_REF resolved to $actual_sha, expected $ICESLAB_REF_SHA. Tag may have been re-pointed upstream — abort."
+  fi
+  ok "commit SHA verified ($actual_sha)"
 fi
 cd "$ICESLAB_DIR"
 

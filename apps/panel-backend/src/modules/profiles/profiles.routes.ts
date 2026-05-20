@@ -22,11 +22,12 @@ const KeypairQuery = z.object({
 });
 
 export async function profilesRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
+  // Wave-14 #15: per-route auth (see users.routes.ts header comment).
+  const auth = { onRequest: [requireAuth] };
 
   // curve25519 keypair for REALITY (xray) or AmneziaWG. Same crypto, the
   // alphabets differ — REALITY needs base64url, AWG needs standard base64.
-  app.post('/api/profiles/generate-keypair', async (req, reply) => {
+  app.post('/api/profiles/generate-keypair', auth, async (req, reply) => {
     const { protocol } = KeypairQuery.parse(req.query);
     const pair =
       protocol === 'xray' ? generateRealityKeyPair() : generateWireguardKeyPair();
@@ -35,7 +36,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
 
   // ───── Profiles ─────
 
-  app.post('/api/profiles', async (req, reply) => {
+  app.post('/api/profiles', auth, async (req, reply) => {
     const input = CreateProfileSchema.parse(req.body);
     try {
       const p = await svc.createProfile(input);
@@ -48,12 +49,12 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get('/api/profiles', async (req, reply) => {
+  app.get('/api/profiles', auth, async (req, reply) => {
     const q = ListProfilesQuerySchema.parse(req.query);
     return reply.send({ profiles: await svc.listProfiles(q) });
   });
 
-  app.get('/api/profiles/:id', async (req, reply) => {
+  app.get('/api/profiles/:id', auth, async (req, reply) => {
     const { id } = ProfileIdParamSchema.parse(req.params);
     try {
       return reply.send(await svc.getProfileById(id));
@@ -65,7 +66,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/profiles/:id', async (req, reply) => {
+  app.put('/api/profiles/:id', auth, async (req, reply) => {
     const { id } = ProfileIdParamSchema.parse(req.params);
     const input = UpdateProfileSchema.parse(req.body);
     try {
@@ -81,7 +82,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/profiles/:id', async (req, reply) => {
+  app.delete('/api/profiles/:id', auth, async (req, reply) => {
     const { id } = ProfileIdParamSchema.parse(req.params);
     try {
       await svc.deleteProfile(id);
@@ -96,7 +97,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
 
   // ───── Bindings ─────
 
-  app.post('/api/bindings', async (req, reply) => {
+  app.post('/api/bindings', auth, async (req, reply) => {
     const input = CreateBindingSchema.parse(req.body);
     try {
       const b = await svc.createBinding(input);
@@ -115,12 +116,12 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get('/api/bindings', async (req, reply) => {
+  app.get('/api/bindings', auth, async (req, reply) => {
     const q = ListBindingsQuerySchema.parse(req.query);
     return reply.send({ bindings: await svc.listBindings(q) });
   });
 
-  app.get('/api/bindings/:id', async (req, reply) => {
+  app.get('/api/bindings/:id', auth, async (req, reply) => {
     const { id } = BindingIdParamSchema.parse(req.params);
     try {
       return reply.send(await svc.getBindingById(id));
@@ -132,7 +133,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.put('/api/bindings/:id', async (req, reply) => {
+  app.put('/api/bindings/:id', auth, async (req, reply) => {
     const { id } = BindingIdParamSchema.parse(req.params);
     const input = UpdateBindingSchema.parse(req.body);
     try {
@@ -148,7 +149,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/bindings/:id', async (req, reply) => {
+  app.delete('/api/bindings/:id', auth, async (req, reply) => {
     const { id } = BindingIdParamSchema.parse(req.params);
     try {
       await svc.deleteBinding(id);

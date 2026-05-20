@@ -18,7 +18,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { copyToClipboard } from '../lib/clipboard';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -43,6 +43,8 @@ import {
 import {
   createUser,
   deleteUser,
+  fetchAuthStatus,
+  getDashboardOverview,
   listSquads,
   listUsers,
   subscriptionUrl,
@@ -211,58 +213,68 @@ export function UsersPage() {
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
+  // Wave-14 #17: server-side pagination + filter + search. Pre-wave we
+  // fetched limit:500 once and paged/filtered/searched in JS; this silently
+  // truncated installs >500 users and re-rendered the full table on every
+  // keystroke. Backend already supported `page/limit/status/search`; UI just
+  // wasn't passing them.
+  const [debouncedSearch] = useDebouncedValue(search, 250);
+  const serverStatus = statusFilter === 'all' ? undefined : statusFilter;
+  const serverSearch = debouncedSearch.trim() || undefined;
   const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers({ page: 1, limit: 500 }),
+    queryKey: ['users', { page, limit: rowsPerPage, status: serverStatus, search: serverSearch }],
+    queryFn: () =>
+      listUsers({ page, limit: rowsPerPage, status: serverStatus, search: serverSearch }),
+    placeholderData: (prev) => prev,
   });
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
+  // Wave-14 #16: subscriptionUrl(token) without a second arg falls back to
+  // API_BASE_URL, which defaults to http://localhost:3000 — so a prod SPA
+  // built without VITE_API_BASE_URL silently copies a localhost link to the
+  // operator's clipboard. Same panel-metadata source UserFormModal uses.
+  const authStatusQuery = useQuery({
+    queryKey: ['auth', 'status'],
+    queryFn: fetchAuthStatus,
+    staleTime: 5 * 60 * 1000,
+  });
+  // Wave-14 #17: full-install counters come from dashboard.users (cached
+  // server-side, ~ N/A cost) instead of computed from the current page slice
+  // — the slice doesn't reflect total install state under server pagination.
+  const dashQuery = useQuery({
+    queryKey: ['dashboard', 'overview'],
+    queryFn: getDashboardOverview,
+    staleTime: 10_000,
+  });
   const squadNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const s of squadsQuery.data?.squads ?? []) m.set(s.id, s.name);
     return m;
   }, [squadsQuery.data]);
 
-  const allUsers = usersQuery.data?.users ?? [];
+  const pagedUsers = usersQuery.data?.users ?? [];
+  const totalUsers = usersQuery.data?.total ?? 0;
 
   const stats = useMemo(() => {
-    const s = { total: allUsers.length, active: 0, expired: 0, limited: 0, disabled: 0 };
-    for (const u of allUsers) {
-      if (u.status === 'active') s.active++;
-      else if (u.status === 'expired') s.expired++;
-      else if (u.status === 'limited') s.limited++;
-      else if (u.status === 'disabled') s.disabled++;
-    }
-    return s;
-  }, [allUsers]);
+    const byStatus = dashQuery.data?.users.byStatus ?? {};
+    return {
+      total: dashQuery.data?.users.total ?? totalUsers,
+      active: byStatus.active ?? 0,
+      expired: byStatus.expired ?? 0,
+      limited: byStatus.limited ?? 0,
+      disabled: byStatus.disabled ?? 0,
+    };
+  }, [dashQuery.data, totalUsers]);
 
-  // Reset page whenever filter or search narrows the set, sticking on page
-  // 5 after filtering to 3 matches gives an empty table.
+  // Reset to page 1 whenever any server-filter input changes so a narrowed
+  // result set doesn't drop us into an empty page (page 5 of 1 page).
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, search, rowsPerPage]);
+  }, [statusFilter, debouncedSearch, rowsPerPage]);
 
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return allUsers.filter((u) => {
-      if (statusFilter !== 'all' && u.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        u.username.toLowerCase().includes(q) ||
-        u.shortId.toLowerCase().includes(q) ||
-        (u.tag?.toLowerCase().includes(q) ?? false) ||
-        (u.email?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [allUsers, search, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / rowsPerPage));
+  const totalPages = Math.max(1, Math.ceil(totalUsers / rowsPerPage));
   const safePage = Math.min(page, totalPages);
-  const pagedUsers = useMemo(
-    () => filteredUsers.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage),
-    [filteredUsers, safePage, rowsPerPage],
-  );
-  const rangeStart = filteredUsers.length === 0 ? 0 : (safePage - 1) * rowsPerPage + 1;
-  const rangeEnd = Math.min(safePage * rowsPerPage, filteredUsers.length);
+  const rangeStart = totalUsers === 0 ? 0 : (safePage - 1) * rowsPerPage + 1;
+  const rangeEnd = Math.min(safePage * rowsPerPage, totalUsers);
 
   const createMutation = useMutation({
     mutationFn: createUser,
@@ -484,7 +496,7 @@ export function UsersPage() {
                 const otherSquads = u.groupIds.filter(
                   (id) => id !== '00000000-0000-0000-0000-000000000001',
                 );
-                const subUrl = subscriptionUrl(u.subscriptionToken);
+                const subUrl = subscriptionUrl(u.subscriptionToken, authStatusQuery.data?.panel);
 
                 return (
                   <Table.Tr

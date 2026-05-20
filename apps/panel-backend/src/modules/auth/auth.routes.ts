@@ -5,7 +5,7 @@ import { LoginSchema, RegisterSchema } from './auth.schemas.js';
 import * as authService from './auth.service.js';
 import * as adminService from '../admin/admin.service.js';
 import { mapAdminToPublic } from '../admin/admin.mapper.js';
-import { notifyTelegramAsync, escapeMarkdown, redactIp } from '../../lib/telegram-notify.js';
+import { notifyTelegramAsync, escapeMarkdown, redactIp, redactUsername } from '../../lib/telegram-notify.js';
 import { loginAttempts } from '../../lib/metrics.js';
 import { config } from '../../config.js';
 
@@ -66,11 +66,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           sameSite: 'strict',
           path: '/',
           maxAge: 60 * 60 * 24, // 24h — matches default JWT_EXPIRES_IN.
-          secure: process.env.NODE_ENV === 'production',
+          // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
+          // from .env but the actual process.env is empty (e.g. dotenv-only
+          // setup with no shell-level export), this evaluated to false in
+          // prod and the auth cookie shipped without Secure → JWT over
+          // plain HTTP on MITM. Always read through config.
+          secure: config.NODE_ENV === 'production',
         });
         if (config.TELEGRAM_NOTIFY_LOGIN_EVENTS) {
           notifyTelegramAsync(
-            `🔓 *Admin login*\nuser: \`${escapeMarkdown(admin.username)}\`\nip: \`${escapeMarkdown(redactIp(peerIp))}\``,
+            `🔓 *Admin login*\nuser: \`${escapeMarkdown(redactUsername(admin.username))}\`\nip: \`${escapeMarkdown(redactIp(peerIp))}\``,
           );
         }
         loginAttempts.inc({ result: 'ok' });
@@ -87,7 +92,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           loginAttempts.inc({ result: 'locked' });
           if (config.TELEGRAM_NOTIFY_LOGIN_EVENTS) {
             notifyTelegramAsync(
-              `🔒 *Login locked out*\nuser: \`${escapeMarkdown(input.username)}\`\nip: \`${escapeMarkdown(redactIp(peerIp))}\`\nretry in: ${err.retryAfterSeconds}s`,
+              `🔒 *Login locked out*\nuser: \`${escapeMarkdown(redactUsername(input.username))}\`\nip: \`${escapeMarkdown(redactIp(peerIp))}\`\nretry in: ${err.retryAfterSeconds}s`,
             );
           }
           reply.header('Retry-After', err.retryAfterSeconds.toString());

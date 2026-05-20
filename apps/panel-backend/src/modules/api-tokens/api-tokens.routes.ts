@@ -33,14 +33,16 @@ async function blockApiTokenAccess(
 }
 
 export async function apiTokensRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('onRequest', requireAuth);
-  app.addHook('onRequest', blockApiTokenAccess);
+  // Wave-14 #15: per-route auth + blockApiTokenAccess (see users.routes.ts
+  // header comment). Both hooks must fire on every route — order matters,
+  // blockApiTokenAccess relies on requireAuth populating req.admin first.
+  const auth = { onRequest: [requireAuth, blockApiTokenAccess] };
 
-  app.get('/api/api-tokens', async (_req, reply) => {
+  app.get('/api/api-tokens', auth, async (_req, reply) => {
     return reply.send({ tokens: await svc.listTokens() });
   });
 
-  app.post('/api/api-tokens', async (req, reply) => {
+  app.post('/api/api-tokens', auth, async (req, reply) => {
     const input = CreateInput.parse(req.body);
     try {
       const { token, plaintext } = await svc.createToken(
@@ -57,7 +59,7 @@ export async function apiTokensRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.delete('/api/api-tokens/:id', async (req, reply) => {
+  app.delete('/api/api-tokens/:id', auth, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
     try {
       await svc.deleteToken(id);

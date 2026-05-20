@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
 )
 
 // InboundConfig is the static part of the SS inbound — generated once
@@ -184,20 +186,17 @@ func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
 	return json.MarshalIndent(doc, "", "  ")
 }
 
-// writeConfig atomically writes the config to disk. Mode 0o600 — file
-// contains all SS user passwords.
+// writeConfig atomically writes the config to disk via the shared
+// atomicfile helper (fsync(file) + fsync(dir) for power-loss durability).
+// Mode 0o600 — file contains all SS user passwords. Wave-14 #10: pre-wave
+// used a hand-rolled WriteFile+Rename with no fsync, contradicting every
+// other adapter's pattern and the atomicfile package's own docstring;
+// power-loss after rename could leave a torn config and dark SS users on
+// next boot.
 func writeConfig(path string, blob []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename %s -> %s: %w", tmp, path, err)
-	}
-	return nil
+	return atomicfile.Write(path, blob, 0o600)
 }

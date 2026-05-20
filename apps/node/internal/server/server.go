@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -125,7 +126,12 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		sum := sha256.Sum256(rawCerts[0])
 		gotFingerprint := hex.EncodeToString(sum[:])
-		if gotFingerprint != expectedFingerprint {
+		// Wave-14 #8: subtle.ConstantTimeCompare to remove timing oracle on
+		// the pinned panel cert. SHA-256 hex space is huge so practical
+		// exploit is limited, but pinning is the last line of defence
+		// against a stolen CA-signed peer-node cert — make the comparison
+		// not leak partial-match info via byte-by-byte short-circuiting.
+		if subtle.ConstantTimeCompare([]byte(gotFingerprint), []byte(expectedFingerprint)) != 1 {
 			return fmt.Errorf("panel-client cert fingerprint mismatch (got %s, expected %s)", gotFingerprint, expectedFingerprint)
 		}
 		return nil

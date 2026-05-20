@@ -94,6 +94,39 @@ func TestRenderConfig_RequiresACMEEmail(t *testing.T) {
 	}
 }
 
+// Wave-14 #2 regression: renderConfig must reject panel-pushed ObfsPassword
+// or MasqueradeURL containing YAML metacharacters (newline, ':', '{', '[',
+// '#') because they can break out of the scalar value and inject top-level
+// YAML — e.g., disabling cert validation in acme: or swapping auth: source.
+func TestRenderConfig_RejectsInjectedObfsAndMasquerade(t *testing.T) {
+	baseCfg := Config{Hostname: "h", ACMEEmail: "a@b", ListenPort: 443}
+	cases := []struct {
+		name    string
+		obfs    string
+		masq    string
+		wantSub string
+	}{
+		{"newline in ObfsPassword", "pw\nacme:\n  domains:\n    - evil.com", "https://www.bing.com", "ObfsPassword"},
+		{"colon in ObfsPassword", "key:value", "https://www.bing.com", "ObfsPassword"},
+		{"hash in ObfsPassword", "pw#comment", "https://www.bing.com", "ObfsPassword"},
+		{"newline in MasqueradeURL", "", "https://x.com\nfake:", "MasqueradeURL"},
+		{"non-URL MasqueradeURL", "", "not a url at all spaces", "MasqueradeURL"},
+		{"ftp scheme MasqueradeURL", "", "ftp://x.com", "MasqueradeURL"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := renderConfig(baseCfg, InboundConfig{ObfsPassword: tc.obfs, MasqueradeURL: tc.masq})
+			if err == nil {
+				t.Errorf("expected validation error for malicious %s", tc.wantSub)
+				return
+			}
+			if !strings.Contains(err.Error(), tc.wantSub) {
+				t.Errorf("error message %q should mention %q", err.Error(), tc.wantSub)
+			}
+		})
+	}
+}
+
 func TestRenderConfig_DefaultPortAndAuth(t *testing.T) {
 	// ListenPort=0, AuthCallbackHost="", AuthCallbackPort=0 → defaults applied
 	cfg := Config{Hostname: "h", ACMEEmail: "e@x"}

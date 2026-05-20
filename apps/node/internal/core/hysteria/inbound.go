@@ -3,11 +3,54 @@ package hysteria
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
 )
+
+// validateInboundYAMLSafe enforces "no character that could break out of a
+// single-line YAML scalar value" on the two panel-pushed strings that get
+// fmt.Fprintf'd into the hysteria YAML. Wave-14 #2: pre-wave a '\n' in
+// ObfsPassword closed the salamander: block and let a hostile/compromised
+// panel push smuggle top-level YAML (e.g. swap `acme:` to disable cert
+// validation, swap `auth:` source to local-file, etc).
+//
+// Rejected chars: \n \r (line break = scalar exit), ':' (would silently
+// become a new key in flow style), '{' '[' '#' (YAML metacharacters that
+// change parsing mode). Real obfs passwords and proxy URLs don't contain
+// any of these.
+func validateInboundYAMLSafe(field, value string) error {
+	for _, ch := range []string{"\n", "\r", ":", "{", "[", "#"} {
+		if strings.Contains(value, ch) {
+			return fmt.Errorf("hysteria %s: disallowed YAML-syntax char %q", field, ch)
+		}
+	}
+	return nil
+}
+
+// validateMasqueradeURL enforces URL-format validation. URLs legitimately
+// contain ':' so we can't apply validateInboundYAMLSafe wholesale — instead
+// we explicitly reject the YAML-scalar exit chars (\n \r) and then enforce
+// that what's left is actually a parsable http/https URL with a host.
+func validateMasqueradeURL(s string) error {
+	if strings.ContainsAny(s, "\n\r") {
+		return fmt.Errorf("hysteria MasqueradeURL: contains newline (would break YAML scalar)")
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return fmt.Errorf("hysteria MasqueradeURL: not a valid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("hysteria MasqueradeURL: scheme must be http or https, got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("hysteria MasqueradeURL: host is required")
+	}
+	return nil
+}
 
 // InboundConfig holds the panel-pushed runtime config that lands in
 // /etc/hysteria/config.yaml. Install-time settings (ACME domain/email,
@@ -110,6 +153,9 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	fmt.Fprintf(&b, "    url: http://%s:%d%s\n", authHost, authPort, authPath)
 
 	if inbound.ObfsPassword != "" {
+		if err := validateInboundYAMLSafe("ObfsPassword", inbound.ObfsPassword); err != nil {
+			return nil, err
+		}
 		b.WriteString("\n")
 		b.WriteString("obfs:\n")
 		b.WriteString("  type: salamander\n")
@@ -118,6 +164,9 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	}
 
 	if inbound.MasqueradeURL != "" {
+		if err := validateMasqueradeURL(inbound.MasqueradeURL); err != nil {
+			return nil, err
+		}
 		b.WriteString("\n")
 		b.WriteString("masquerade:\n")
 		b.WriteString("  type: proxy\n")
