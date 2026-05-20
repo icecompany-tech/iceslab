@@ -30,6 +30,12 @@
 # valid 15 min, single-use; if it expires, click "Refresh bootstrap" in
 # the panel UI to mint a new one.
 #
+# Security note: `--bootstrap <tok>` exposes the token in /proc/<pid>/cmdline
+# for the lifetime of the install (any local unprivileged process can read
+# it). For shared VPS or audit-logged hosts, write the token to a 0600 file
+# and pass `--bootstrap-file /path/to/token` instead — token never enters
+# argv. Convention matches --payload-file.
+#
 # === ONE-COMMAND PROTOCOL SETUP ===
 #
 # For a fully-configured node — node-agent + protocol server + systemd unit
@@ -377,13 +383,27 @@ resolve_payload() {
   fi
 }
 
+# Wave-14 #5: bootstrap token passed as `--bootstrap <tok>` ends up in
+# /proc/<pid>/cmdline for the lifetime of the install — any unprivileged
+# local process can grab it and (within the 15-min TTL) issue a full mTLS
+# keypair against the panel for this node. Reading from a file avoids the
+# argv exposure; same shape as resolve_payload's @file convention.
+resolve_bootstrap() {
+  local value="$1"
+  [[ -r "$value" ]] || fail "Cannot read bootstrap-file: $value"
+  tr -d '\n\r \t' < "$value"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --protocol)      PROTOCOL="$2"; shift 2 ;;
     --payload)       PAYLOAD=$(resolve_payload "$2"); shift 2 ;;
     --payload-file)  PAYLOAD=$(resolve_payload "@$2"); shift 2 ;;
     --panel-url)     PANEL_URL="${2%/}"; shift 2 ;;
-    --bootstrap)     BOOTSTRAP_TOKEN="$2"; shift 2 ;;
+    # --bootstrap exposes the token in /proc/cmdline; prefer --bootstrap-file
+    # in non-trusted environments (shared VPS, audit-logged hosts).
+    --bootstrap)         BOOTSTRAP_TOKEN="$2"; shift 2 ;;
+    --bootstrap-file)    BOOTSTRAP_TOKEN=$(resolve_bootstrap "$2"); shift 2 ;;
     --port)          NODE_PORT="$2"; shift 2 ;;
     # Hysteria 2 — auto-configure server (config.yaml + systemd unit)
     --hysteria-domain)         HY_DOMAIN="$2"; shift 2 ;;
@@ -696,6 +716,15 @@ else
   fi
   git -C "$ICESLAB_NODE_DIR" fetch --depth 1 origin "$ICESLAB_NODE_REF"
   git -C "$ICESLAB_NODE_DIR" reset --hard "origin/$ICESLAB_NODE_REF" || true
+fi
+
+# Wave-14 #4: see install-iceslab.sh for the threat model. Pin SHA for prod.
+if [[ -n "${ICESLAB_NODE_REF_SHA:-}" ]]; then
+  actual_sha=$(git -C "$ICESLAB_NODE_DIR" rev-parse HEAD)
+  if [[ "$actual_sha" != "$ICESLAB_NODE_REF_SHA" ]]; then
+    fail "ICESLAB_NODE_REF_SHA mismatch: tag $ICESLAB_NODE_REF resolved to $actual_sha, expected $ICESLAB_NODE_REF_SHA. Tag may have been re-pointed upstream — abort."
+  fi
+  ok "commit SHA verified ($actual_sha)"
 fi
 
 step "Build node-agent (Go, static)"
