@@ -341,7 +341,12 @@ export function recipesForProtocol(protocol: ProtocolName): Recipe[] {
 export interface ValidationIssue {
   level: 'error' | 'warning' | 'info';
   field?: string;
-  message: string;
+  // Locale-agnostic key + interpolation args. The caller resolves to a
+  // string via i18n t(). Earlier this carried a pre-rendered RU-only
+  // `message`, which leaked Russian into the EN locale. Forms render with
+  // t(issue.key, issue.args ?? {}).
+  key: string;
+  args?: Record<string, string>;
 }
 
 export function validateXrayConfig(values: {
@@ -358,7 +363,8 @@ export function validateXrayConfig(values: {
     issues.push({
       level: 'error',
       field: 'xrayNetwork',
-      message: `xray-core отвергнет config: REALITY supports only raw / xhttp / grpc, не "${values.xrayNetwork}"`,
+      key: 'validation.xray.networkInvalid',
+      args: { network: values.xrayNetwork },
     });
   }
 
@@ -367,7 +373,8 @@ export function validateXrayConfig(values: {
     issues.push({
       level: 'error',
       field: 'xrayFlow',
-      message: `Vision flow несовместим с ${values.xrayNetwork}. Поставь Flow = "(none)" или Network = "raw"`,
+      key: 'validation.xray.visionRequiresRaw',
+      args: { network: values.xrayNetwork },
     });
   }
 
@@ -376,7 +383,7 @@ export function validateXrayConfig(values: {
     issues.push({
       level: 'warning',
       field: 'xrayFlow',
-      message: 'Trojan не использует flow, поле будет проигнорировано на клиенте',
+      key: 'validation.xray.trojanIgnoresFlow',
     });
   }
 
@@ -384,8 +391,7 @@ export function validateXrayConfig(values: {
   if (values.xrayNetwork === 'raw' && values.xrayFlow === '') {
     issues.push({
       level: 'info',
-      message:
-        'Без Vision flow на raw transport теряется ~30% throughput из-за TLS-in-TLS. Рекомендуем добавить Vision если subprotocol=vless.',
+      key: 'validation.xray.rawWithoutVisionSlow',
     });
   }
 

@@ -126,6 +126,22 @@ interface FormValues {
 const TSPU_PRESET = { jc: 4, jmin: 64, jmax: 128, s1: 32, s2: 56, s3: 0, s4: 0 };
 const MOBILE_PRESET = { jc: 3, jmin: 64, jmax: 100, s1: 32, s2: 56, s3: 0, s4: 0 };
 
+// Shared between the Protocol Select (top of form) and the Divider that
+// labels the protocol-specific section below. Previously the Divider
+// rendered the raw enum value ("hysteria", "amneziawg"); using this
+// table keeps both surfaces showing the same human label. Labels are
+// product/protocol names — kept in English on purpose; operators read
+// xray / hysteria / awg docs in English.
+const PROTOCOL_OPTIONS: { value: string; label: string }[] = [
+  { value: 'hysteria', label: 'Hysteria 2' },
+  { value: 'xray', label: 'Xray (VLESS / Trojan + REALITY)' },
+  { value: 'amneziawg', label: 'AmneziaWG' },
+  { value: 'naive', label: 'NaiveProxy' },
+  { value: 'shadowsocks', label: 'Shadowsocks 2022' },
+  { value: 'mtproto', label: 'MTProto (Telegram-only, mtg)' },
+  { value: 'mieru', label: 'Mieru (stealth proxy)' },
+];
+
 /**
  * AmneziaWG H1-H4 magic-header bytes. Spec says they must be:
  *   - strictly > 4 (1-4 are reserved for actual WireGuard message types)
@@ -560,15 +576,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
             <Select
               label={t('profiles.form.protocol')}
               description={isEdit ? t('profiles.form.protocolEdit') : undefined}
-              data={[
-                { value: 'hysteria', label: 'Hysteria 2' },
-                { value: 'xray', label: 'Xray (VLESS / Trojan + REALITY)' },
-                { value: 'amneziawg', label: 'AmneziaWG' },
-                { value: 'naive', label: 'NaiveProxy' },
-                { value: 'shadowsocks', label: 'Shadowsocks 2022' },
-                { value: 'mtproto', label: 'MTProto (Telegram-only, mtg)' },
-                { value: 'mieru', label: 'Mieru (stealth proxy)' },
-              ]}
+              data={PROTOCOL_OPTIONS}
               disabled={isEdit}
               allowDeselect={false}
               {...form.getInputProps('protocol')}
@@ -586,7 +594,13 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
 
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
 
-          <Divider label={form.values.protocol} labelPosition="center" />
+          <Divider
+            label={
+              PROTOCOL_OPTIONS.find((p) => p.value === form.values.protocol)?.label ??
+              form.values.protocol
+            }
+            labelPosition="center"
+          />
 
           <RecipePicker
             protocol={form.values.protocol}
@@ -675,7 +689,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                     variant="light"
                     p="xs"
                   >
-                    <Text size="xs">{iss.message}</Text>
+                    <Text size="xs">{t(iss.key, iss.args ?? {})}</Text>
                   </Alert>
                 ))}
               </Stack>
@@ -685,18 +699,26 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           {form.values.protocol === 'hysteria' && (
             <Stack>
               <PasswordInput
-                label="Salamander obfs password"
+                label={t('profiles.form.cfg.salamanderObfsLabel')}
                 description={t('profiles.form.cfg.salamanderObfsDesc')}
                 {...form.getInputProps('hyObfsPassword')}
               />
               <TextInput
-                label="Masquerade URL"
+                label={t('profiles.form.cfg.masqueradeUrlLabel')}
                 placeholder="https://en.wikipedia.org"
                 {...form.getInputProps('hyMasqueradeUrl')}
               />
               <Group grow>
-                <NumberInput label="Brutal CC up Mbps" min={1} {...form.getInputProps('hyBrutalUp')} />
-                <NumberInput label="Brutal CC down Mbps" min={1} {...form.getInputProps('hyBrutalDown')} />
+                <NumberInput
+                  label={t('profiles.form.cfg.brutalUpLabel')}
+                  min={1}
+                  {...form.getInputProps('hyBrutalUp')}
+                />
+                <NumberInput
+                  label={t('profiles.form.cfg.brutalDownLabel')}
+                  min={1}
+                  {...form.getInputProps('hyBrutalDown')}
+                />
               </Group>
               <Group grow align="flex-end">
                 <NumberInput
@@ -862,7 +884,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 </Text>
               </Alert>
               <TextInput
-                label="Subnet (CIDR)"
+                label={t('profiles.form.cfg.awgSubnetLabel')}
                 placeholder="10.66.66.0/24"
                 required
                 {...form.getInputProps('awgSubnet')}
@@ -870,7 +892,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
               <Group align="end" wrap="nowrap" gap="xs">
                 <PasswordInput
                   flex={1}
-                  label="Server private key"
+                  label={t('profiles.form.cfg.awgServerPrivLabel')}
                   required
                   {...form.getInputProps('awgServerPriv')}
                 />
@@ -884,7 +906,11 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   {t('profiles.form.cfg.generate')}
                 </Button>
               </Group>
-              <TextInput label="Server public key" required {...form.getInputProps('awgServerPub')} />
+              <TextInput
+                label={t('profiles.form.cfg.awgServerPubLabel')}
+                required
+                {...form.getInputProps('awgServerPub')}
+              />
               <Stack gap={4}>
                 <Text size="sm" fw={500}>
                   Obfuscation preset
@@ -1017,19 +1043,19 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           {form.values.protocol === 'naive' && (
             <Stack>
               <TextInput
-                label="Public hostname"
+                label={t('profiles.form.cfg.naiveHostnameLabel')}
                 placeholder="n1.example.com"
                 required
                 {...form.getInputProps('naiveHostname')}
               />
               <TextInput
-                label="TLS contact email"
+                label={t('profiles.form.cfg.naiveTlsEmailLabel')}
                 placeholder="ops@example.com"
                 required
                 {...form.getInputProps('naiveTlsEmail')}
               />
               <TextInput
-                label="Masquerade root"
+                label={t('profiles.form.cfg.naiveMasqueradeLabel')}
                 placeholder="/var/www/html"
                 {...form.getInputProps('naiveMasquerade')}
               />
