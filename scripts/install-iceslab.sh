@@ -306,6 +306,14 @@ if [[ "${DO_OS_UPGRADE:-0}" == "1" ]]; then
   "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" update -y
   "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" dist-upgrade -y
   "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" autoremove -y
+else
+  # Even when skipping the full dist-upgrade, the apt package list itself
+  # must be fresh — Ubuntu cloud images ship with a stale cache from the
+  # image-build day, and `apt-get install <new package>` then fails with
+  # "Unable to locate package" until the list is refreshed. Cheap (~3-5s)
+  # so always-on when we're not doing the full upgrade.
+  log "Refreshing apt package list"
+  "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" update -y
 fi
 
 step "Firewall (ufw)"
