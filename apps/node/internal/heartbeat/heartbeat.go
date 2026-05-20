@@ -87,17 +87,40 @@ const (
 	defaultTimeout  = 10 * time.Second
 )
 
-// buildPinnedClient returns an http.Client whose TLS layer trusts ONLY
-// the CA from the bootstrap payload — no system trust store fallback.
-// Returns nil + nil if the PEM is empty (caller logs + falls back to
-// system trust); returns nil + error if the PEM is non-empty but
-// unparseable, so a corrupted payload doesn't silently demote us to
-// system trust.
-func buildPinnedClient(caPem string) (*http.Client, error) {
+// buildHybridClient returns an http.Client whose TLS pool is (system roots)
+// ∪ (panel CA from bootstrap payload).
+//
+// Wave-13 (2026-05-21) — pre-wave the client was strictly panel-CA-only.
+// In a typical production deploy the panel sits behind Caddy/nginx serving
+// a Let's Encrypt cert on a public hostname (e.g. iceslab.example.com), so
+// EVERY heartbeat hit `tls: certificate signed by unknown authority` and
+// the loop ran with `seenActive == false` forever — orphaning nodes that
+// admins thought they'd deleted in the UI. Strict pinning was defense in
+// depth, not the only defense: pollOnce + the seenActive gate already
+// block first-contact-410 MITM.
+//
+// MITM caveat (acknowledged): an attacker with a public-CA-issued cert
+// for the panel hostname plus a path to intercept node→panel traffic can,
+// over sustained MITM, walk the loop into honoring OnGone. The gate keeps
+// the bar at >1 forged "active" then `goneThreshold` consecutive forged
+// "gone" — order of 10+ minutes of sustained interception with no real
+// panel response leaking through. Acceptable risk vs. orphaned nodes.
+//
+// Returns nil + nil if the PEM is empty (caller refuses to run); returns
+// nil + error if the PEM is non-empty but unparseable, so a corrupted
+// payload doesn't silently demote us.
+func buildHybridClient(caPem string) (*http.Client, error) {
 	if caPem == "" {
 		return nil, nil
 	}
-	pool := x509.NewCertPool()
+	// Start from system roots so LE-served public panels (the common
+	// deployment) work without extra config. SystemCertPool returns
+	// nil + err on Windows pre-Go-1.18 — fall back to an empty pool
+	// there, the panel-CA append below still works.
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
 	if !pool.AppendCertsFromPEM([]byte(caPem)) {
 		return nil, errors.New("heartbeat: CACertPem in payload is not parseable as PEM")
 	}
@@ -130,22 +153,22 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 	}
 	client := cfg.HTTPClient
 	if client == nil {
-		pinned, err := buildPinnedClient(cfg.CACertPem)
+		hybrid, err := buildHybridClient(cfg.CACertPem)
 		switch {
 		case err != nil:
 			logger.Error("heartbeat: refusing to start, payload CA unparseable", "err", err)
 			return
-		case pinned != nil:
-			client = pinned
+		case hybrid != nil:
+			client = hybrid
 		default:
-			// Legacy payload without CACertPem. Falling back to system
-			// trust here would let a MITM with a public-CA cert for the
-			// panel hostname return 410 Gone and trigger fleet-wide
-			// self-destruct. Refuse to run the heartbeat in that mode —
-			// the agent itself keeps serving (mTLS, addUser/removeUser
-			// still work) so admin can re-bootstrap on their schedule.
+			// Legacy payload without CACertPem. We refuse to run with
+			// system-only trust because the seenActive + threshold gate
+			// alone, with no per-payload identity at all, gives a network
+			// MITM more room to walk the loop into OnGone. Operator path:
+			// re-bootstrap (admin clicks "Refresh bootstrap" + re-runs
+			// install with --reset) to get a CACertPem in the payload.
 			// To force-disable cleanly, set ICESLAB_NODE_DISABLE_HEARTBEAT=1.
-			logger.Error("heartbeat: CACertPem missing from payload — refusing to start (would be MITM-vulnerable). Re-bootstrap the node to enable pinning, or set ICESLAB_NODE_DISABLE_HEARTBEAT=1 to silence this.")
+			logger.Error("heartbeat: CACertPem missing from payload — refusing to start. Re-bootstrap the node, or set ICESLAB_NODE_DISABLE_HEARTBEAT=1 to silence this.")
 			return
 		}
 	}
@@ -155,7 +178,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 		"interval", interval.String(),
 		"goneThreshold", threshold,
 		"panelUrl", cfg.PanelURL,
-		"pinned", cfg.CACertPem != "",
+		"trust", "system+panelCA",
 	)
 
 	// Min-uptime gate: refuse to honor OnGone until we've seen at least
