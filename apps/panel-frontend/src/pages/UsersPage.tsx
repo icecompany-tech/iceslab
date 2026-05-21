@@ -456,7 +456,7 @@ export function UsersPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {filteredUsers.length === 0 && (
+              {pagedUsers.length === 0 && (
                 <Table.Tr>
                   <Table.Td colSpan={9}>
                     <Stack align="center" py="xl" gap="xs">
@@ -464,7 +464,7 @@ export function UsersPage() {
                         <IconUserOff size={22} />
                       </ThemeIcon>
                       <Text c="dimmed" size="sm">
-                        {allUsers.length === 0
+                        {stats.total === 0
                           ? t('users.empty')
                           : t('common.nothingFound')}
                       </Text>
@@ -701,7 +701,7 @@ export function UsersPage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
-        {filteredUsers.length > 0 && (
+        {totalUsers > 0 && (
           <Group
             justify="flex-end"
             gap="lg"
@@ -729,7 +729,7 @@ export function UsersPage() {
               />
             </Group>
             <Text style={{ ...MONO_LABEL, color: SNOW }}>
-              {rangeStart}-{rangeEnd} {t('usersTable.of')} {filteredUsers.length}
+              {rangeStart}-{rangeEnd} {t('usersTable.of')} {totalUsers}
             </Text>
             <Group gap={4}>
               <ActionIcon
