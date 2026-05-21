@@ -86,7 +86,7 @@ export async function allocatePeer(
         ),
         free AS (
           SELECT host((${firstIp}::inet) + gs) AS ip
-          FROM generate_series(0, (${lastIp}::inet - ${firstIp}::inet))::int AS gs
+          FROM generate_series(0, (${lastIp}::inet - ${firstIp}::inet)::int) AS gs
           WHERE NOT EXISTS (
             SELECT 1 FROM amneziawg_peers ap
             WHERE ap.profile_id = ${profileId}::uuid
