@@ -98,6 +98,27 @@ These protocols take no install-time flags for domain or cert. They start idle a
 
 A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default since v0.1.2; 8443 on pre-v0.1.2 installs). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node — changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
 
+### Running multiple protocols on one node
+
+One node-agent can host several protocols at once. The model is: a Profile carries one protocol + its config; a Binding deploys that profile onto a node at a specific port. To run, say, Xray + Hysteria + Shadowsocks on the same VPS:
+
+1. Install the node-agent once (any single `--protocol` flag, or none — it just bootstraps the agent + the binaries you ask for).
+2. Create one Profile per protocol in the panel (Profiles → Create).
+3. In Nodes → edit the node, deploy each profile as a binding. Each binding gets its own listen port; the quick-deploy chips auto-pick the first free port from `[443, 8443, 2053, 2083, 2087, 2096]`, or you can type one inline.
+
+Two bindings can't share a port (unique `(node, port)` constraint), and none of them may reuse the node-agent's own mTLS port (1337 by default). The UI flags a port collision before you save. There's no "one socket, N protocols" multiplexing — each protocol listens on its own port.
+
+### Installer knobs
+
+Both installers read env overrides. The ones people reach for most:
+
+| Env | Default | Effect |
+|---|---|---|
+| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.1.2` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
+| `SKIP_SWAP` | `0` | Set `1` to skip the auto 4 GB swapfile on small-RAM VPS. The build may OOM on <3.5 GB RAM without swap — only opt out if you manage swap yourself. |
+| `NODE_PORT` | `1337` | node-agent mTLS listen port. Change per-node to dodge port scanners. |
+| `FRONTEND_PORT` | `8080` | Panel SPA port in bare-IP mode (ignored when `PANEL_DOMAIN` is set, Caddy fronts 443). |
+
 ## Protocols
 
 | Protocol | What runs on the node | Native or Xray |
