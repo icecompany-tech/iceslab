@@ -6,6 +6,7 @@ import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
 import { buildWgQuickConf } from './formats/wgconf.js';
 import { buildXrayJson } from './formats/xrayjson.js';
+import { buildSubscriptionPage } from './formats/page.js';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {
   formatBytes,
@@ -194,6 +195,22 @@ async function resolveFormat(
   return 'plain';
 }
 
+// Wave-14 #6: a browser navigating to /sub/<token> should see a human page,
+// not a base64 dump. Trigger on Accept: text/html with no explicit ?format —
+// VPN clients send their own UA/Accept and never hit this. An explicit
+// ?format= always wins (so `?format=plain` in a browser still returns raw).
+function wantsHtmlPage(
+  query: z.infer<typeof QuerySchema>,
+  acceptHeader: string,
+): boolean {
+  if (query.format) return false;
+  return acceptHeader.toLowerCase().includes('text/html');
+}
+
+function pickLang(acceptLanguage: string | undefined): 'ru' | 'en' {
+  return (acceptLanguage ?? '').toLowerCase().includes('ru') ? 'ru' : 'en';
+}
+
 // Strip characters Content-Disposition can't legally carry to keep
 // browsers happy across OSes. Username comes from admin-controlled
 // input so paranoia is cheap; whitelist [a-zA-Z0-9._-], fold rest to
@@ -366,6 +383,25 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // support link, and announce banner. Done after generateSubscription
       // so we have the user's traffic/expire snapshot.
       await applySubscriptionHeaders(reply, result.json.user);
+
+      // Wave-14 #6: browser navigation → human-readable landing page instead
+      // of the base64 `plain` dump. Uses the same generated data; emits no
+      // config, just links + copy + per-format download buttons.
+      if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
+        const settings = await getSubscriptionSettings();
+        const subUrl = `${config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
+        const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
+        return reply.type('text/html; charset=utf-8').send(
+          buildSubscriptionPage({
+            brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
+            lang: pickLang(request.headers['accept-language'] as string | undefined),
+            subUrl,
+            supportUrl: settings.supportUrl,
+            user: result.json.user,
+            protocols,
+          }),
+        );
+      }
 
       switch (format) {
         case 'json':
