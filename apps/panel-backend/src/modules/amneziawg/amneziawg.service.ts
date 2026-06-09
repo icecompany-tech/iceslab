@@ -85,8 +85,20 @@ export async function allocatePeer(
           WHERE profile_id = ${profileId}::uuid AND user_id = ${userId}::uuid
         ),
         free AS (
+          -- Bug #6: bound the candidate scan to the peer count, not the whole
+          -- subnet. By pigeonhole the lowest free IP is always at index
+          -- <= count(peers) (N taken IPs cannot fill N+1 consecutive slots),
+          -- so scanning [0 .. LEAST(subnet_size, peer_count)] always finds the
+          -- lowest free address. This makes a /16 or /8 cost O(peers) instead
+          -- of materializing 65k / 16.7M generate_series rows per call.
           SELECT host((${firstIp}::inet) + gs) AS ip
-          FROM generate_series(0, (${lastIp}::inet - ${firstIp}::inet)::int) AS gs
+          FROM generate_series(
+            0,
+            LEAST(
+              (${lastIp}::inet - ${firstIp}::inet)::int,
+              (SELECT count(*)::int FROM amneziawg_peers WHERE profile_id = ${profileId}::uuid)
+            )
+          ) AS gs
           WHERE NOT EXISTS (
             SELECT 1 FROM amneziawg_peers ap
             WHERE ap.profile_id = ${profileId}::uuid

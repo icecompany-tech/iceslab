@@ -533,6 +533,24 @@ export async function generateSubscription(
     // Audit failure must not block the subscription response.
   }
 
+  // Bug #7: two hosts on the same binding with empty/"Default" remark produce
+  // endpoints with an identical nodeName, which the structured formatters turn
+  // into a duplicate outbound tag (`${nodeName}-${protocol}` in sing-box,
+  // `name` in Clash, `tag` in xray-json). Clash and sing-box/xray reject
+  // duplicate tags -> the client gets a parse error or a silently-dropped
+  // outbound. Disambiguate node names in place ("X", "X 2", "X 3", ...) so
+  // every derived tag is unique. First occurrence keeps the original name.
+  const usedNames = new Set<string>();
+  for (const e of endpoints) {
+    let name = e.nodeName;
+    let n = 2;
+    while (usedNames.has(name)) {
+      name = `${e.nodeName} ${n++}`;
+    }
+    usedNames.add(name);
+    e.nodeName = name;
+  }
+
   return {
     endpoints,
     textPlain: encodePlainList(endpoints.map((e) => e.uri)),

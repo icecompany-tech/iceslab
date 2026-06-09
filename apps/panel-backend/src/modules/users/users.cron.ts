@@ -93,14 +93,18 @@ export async function findExpiredUsers(): Promise<number> {
   // userId to every node. So enqueueing while status is still 'active' is
   // safe — there is no "active-gate" downstream to silently skip. If that
   // ever changes, this ordering must change back to update-then-enqueue.
-  // Wave-14 #12: jobId dedupes parallel cron firings against the same
-  // userId. Pure `removeUser-${id}` is safe here: status flips active →
-  // expired exactly once per user (a re-activation that flips back through
-  // 'active' would re-enter this branch on the NEXT cron tick and the
-  // completed removeUser-${id} job will have been evicted from BullMQ's
-  // ring within the 1h removeOnComplete window).
+  // Bug #8 fix (reverts wave-14 #12 jobId here): NO dedup jobId on the
+  // expiry path. A user transitions active -> expired exactly once (after the
+  // flip they're no longer 'active', so later ticks don't re-select them), so
+  // there is no repeated-enqueue load to dedup against. The `removeUser-${id}`
+  // jobId only created a bug: if the user was re-activated and re-expired
+  // within the 1h removeOnComplete window, the completed job still "owned" the
+  // jobId and the new enqueue was a silent no-op, leaving them connected.
+  // removeUser is idempotent on the node side, so an occasional duplicate
+  // (e.g. reconcile also enqueues) is harmless. (reconcile keeps its own
+  // day-bucket jobId because IT re-selects orphans every tick.)
   for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id }, { jobId: `removeUser-${id}` });
+    await nodeUsersQueue.add('removeUser', { userId: id });
   }
   await prisma.user.updateMany({
     where: { id: { in: ids } },
@@ -136,9 +140,11 @@ export async function findExceededTrafficUsers(): Promise<number> {
   const ids = rows.map((r) => r.id);
 
   // Same crash-safety argument as findExpiredUsers — enqueue before flip.
-  // Same jobId dedup rationale as findExpiredUsers (wave-14 #12).
+  // Bug #8: no dedup jobId here either (same one-time-transition reasoning;
+  // see findExpiredUsers). A limited user re-activated then re-limited within
+  // the hour must still get removed.
   for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id }, { jobId: `removeUser-${id}` });
+    await nodeUsersQueue.add('removeUser', { userId: id });
   }
   await prisma.user.updateMany({
     where: { id: { in: ids } },
