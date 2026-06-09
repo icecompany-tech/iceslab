@@ -533,21 +533,22 @@ export async function generateSubscription(
     // Audit failure must not block the subscription response.
   }
 
-  // Bug #7: two hosts on the same binding with empty/"Default" remark produce
-  // endpoints with an identical nodeName, which the structured formatters turn
-  // into a duplicate outbound tag (`${nodeName}-${protocol}` in sing-box,
-  // `name` in Clash, `tag` in xray-json). Clash and sing-box/xray reject
-  // duplicate tags -> the client gets a parse error or a silently-dropped
-  // outbound. Disambiguate node names in place ("X", "X 2", "X 3", ...) so
-  // every derived tag is unique. First occurrence keeps the original name.
-  const usedNames = new Set<string>();
+  // Bug #7: all three structured formatters derive their outbound tag as
+  // `${nodeName}-${protocol}` (sing-box tag, Clash name, xray-json tag). Two
+  // hosts on the SAME binding (same node, same protocol) with empty/"Default"
+  // remark collide on that tag, and Clash/sing-box/xray reject duplicate tags
+  // -> broken client config. Disambiguate on the (nodeName, protocol) PAIR so
+  // the same node under two different protocols keeps its name (the tags
+  // already differ); only a real same-name+same-protocol collision is renamed
+  // ("X", "X 2", ...). First occurrence keeps the original name.
+  const usedTags = new Set<string>();
   for (const e of endpoints) {
     let name = e.nodeName;
     let n = 2;
-    while (usedNames.has(name)) {
+    while (usedTags.has(`${name}-${e.protocol}`)) {
       name = `${e.nodeName} ${n++}`;
     }
-    usedNames.add(name);
+    usedTags.add(`${name}-${e.protocol}`);
     e.nodeName = name;
   }
 
