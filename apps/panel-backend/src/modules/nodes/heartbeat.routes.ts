@@ -3,7 +3,7 @@ import { prisma } from '../../prisma.js';
 import { verifyHeartbeatToken } from './heartbeat-token.js';
 import { config } from '../../config.js';
 import { redis } from '../../lib/redis.js';
-import { inboundSyncQueue } from '../inbounds/inbounds.queue.js';
+import { inboundSyncQueue, inboundDirtyKey } from '../inbounds/inbounds.queue.js';
 
 /**
  * Slice 38 follow-up — detect agent restart and re-issue applyInbounds.
@@ -44,12 +44,19 @@ async function trackAgentStart(nodeId: string, startTime: string): Promise<void>
   await redis.set(key, startTime, 'EX', AGENT_START_TTL_SECONDS);
   if (previous && previous !== startTime) {
     // Agent restarted (in-memory user map wiped). Re-push inbounds + users.
-    // `jobId` matches what other call sites in the inbound-sync flow use so
-    // BullMQ collapses overlapping requests into one push.
+    // Bug #3 fix (was `apply-${nodeId}-restart-${startTime}`): use the SAME
+    // `apply-${nodeId}` jobId as every other inbound-sync producer so BullMQ
+    // serializes pushes per node (the worker runs concurrency>1 and relies on
+    // "one jobId = one node at a time"). A divergent jobId let a restart-resync
+    // race a concurrent binding edit into two simultaneous protocol restarts on
+    // one host. Set the dirty flag BEFORE enqueuing (same pattern as
+    // inbounds.events.ts) so if a push is already active for this node, the
+    // worker re-enqueues at end instead of silently dropping this resync.
+    await redis.set(inboundDirtyKey(nodeId), '1').catch(() => null);
     await inboundSyncQueue.add(
       'applyNodeInbounds',
       { nodeId },
-      { jobId: `apply-${nodeId}-restart-${startTime}` },
+      { jobId: `apply-${nodeId}` },
     );
     console.log(
       `[heartbeat] node=${nodeId} agent restart detected (prev=${previous} new=${startTime}) — enqueued applyInbounds`,

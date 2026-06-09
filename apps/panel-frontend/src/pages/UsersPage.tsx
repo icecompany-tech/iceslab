@@ -276,6 +276,16 @@ export function UsersPage() {
   const rangeStart = totalUsers === 0 ? 0 : (safePage - 1) * rowsPerPage + 1;
   const rangeEnd = Math.min(safePage * rowsPerPage, totalUsers);
 
+  // Bug #4: the query fetches the raw `page`, but display clamps to `safePage`.
+  // If the result set shrinks for a non-filter reason (users deleted, larger
+  // rowsPerPage), `page` can exceed totalPages, so the query requests an empty
+  // out-of-range page while the footer shows a clamped range. Reconcile `page`
+  // back into range (single source of truth) so the fetch + Prev/Next stay
+  // correct. Filter-driven shrink is already handled by the reset-to-1 effect.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: () => {

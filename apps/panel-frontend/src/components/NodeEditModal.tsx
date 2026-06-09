@@ -63,6 +63,15 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
   { value: 'mieru', label: 'Mieru (stealth proxy)' },
 ];
 
+// Disabled sing-box teaser after xray (roadmap signal; not installable yet).
+// Separate from the typed PROTOCOL_OPTIONS so the sentinel never enters
+// NodeProtocol form state.
+const NODE_PROTOCOL_SELECT_DATA = [
+  PROTOCOL_OPTIONS[0], // xray
+  { value: '__singbox_soon', label: 'sing-box (soon)', disabled: true },
+  ...PROTOCOL_OPTIONS.slice(1),
+];
+
 // Hard-coded mTLS port from install-iceslab-node.sh - also the default in the
 // create wizard. Edit modal lets admin tweak per-node. Wave-13 bumped from
 // 8443 to 1337 (see NodeFormModal.tsx for rationale).
@@ -462,7 +471,7 @@ export function NodeEditModal({
                 <Select
                   label={t('nodes.edit.paramsProtocol')}
                   description={t('nodes.edit.paramsProtocolDesc')}
-                  data={PROTOCOL_OPTIONS}
+                  data={NODE_PROTOCOL_SELECT_DATA}
                   allowDeselect={false}
                   {...form.getInputProps('protocol')}
                 />
@@ -764,6 +773,13 @@ export function NodeEditModal({
                       addBindingMutation.isPending &&
                       addBindingMutation.variables === p.id
                     }
+                    // Bug #5: disable ALL chips while any add is in flight.
+                    // The mutationFn computes the free port from the rendered
+                    // bindings list; two rapid clicks both see the pre-add
+                    // list and both pick 443 -> second 409s. Forcing sequential
+                    // adds means each click sees the prior binding (refetched
+                    // on success) and picks the next free port.
+                    disabled={addBindingMutation.isPending}
                     onClick={() => addBindingMutation.mutate(p.id)}
                   >
                     {p.name}
