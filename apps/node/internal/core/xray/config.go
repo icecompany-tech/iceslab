@@ -302,10 +302,14 @@ func renderConfig(inbound InboundConfig, users []xrayClient) ([]byte, error) {
 // the REALITY streamSettings stack and the api/stats infrastructure — only
 // the inbound `protocol` and the `clients` element shape differ.
 func userInboundProtocol(cfg InboundConfig) string {
-	if cfg.Subprotocol == "trojan" {
+	switch cfg.Subprotocol {
+	case "trojan":
 		return "trojan"
+	case "vmess":
+		return "vmess"
+	default:
+		return "vless"
 	}
-	return "vless"
 }
 
 // buildUserInboundSettings produces the inbound's `settings` block. VLESS
@@ -323,6 +327,21 @@ func buildUserInboundSettings(cfg InboundConfig, users []xrayClient) map[string]
 			clients = append(clients, map[string]any{
 				"password": u.ID,
 				"email":    u.Email,
+			})
+		}
+		return map[string]any{
+			"clients": clients,
+		}
+	}
+	if cfg.Subprotocol == "vmess" {
+		// VMess: per-user UUID, AEAD (alterId omitted = 0). No Vision flow and
+		// no `decryption` field (VMess negotiates its own cipher via `scy` on
+		// the client side).
+		clients := make([]map[string]any, 0, len(users))
+		for _, u := range users {
+			clients = append(clients, map[string]any{
+				"id":    u.ID,
+				"email": u.Email,
 			})
 		}
 		return map[string]any{

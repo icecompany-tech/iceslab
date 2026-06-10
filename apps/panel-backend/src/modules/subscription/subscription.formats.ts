@@ -10,6 +10,8 @@ export {
   type VlessRealityUriOpts,
   buildTrojanRealityUri,
   type TrojanRealityUriOpts,
+  buildVmessUri,
+  type VmessUriOpts,
 } from '../../core-adapters/xray/index.js';
 export {
   buildShadowsocksUri,
@@ -120,7 +122,7 @@ export interface XraySubscriptionEndpoint extends SubscriptionEndpointBase {
   serviceName?: string;
   /** Slice 24c part 3 — controls URI scheme (`vless://` vs `trojan://`)
    *  and downstream singbox/clash outbound type. */
-  subprotocol?: 'vless' | 'trojan';
+  subprotocol?: 'vless' | 'trojan' | 'vmess';
 }
 
 export interface AmneziawgSubscriptionEndpoint extends SubscriptionEndpointBase {

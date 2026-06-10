@@ -97,10 +97,11 @@ export interface XrayInboundCfg {
   path?: string;                  // ws/xhttp/httpupgrade
   host?: string;                  // ws/xhttp/httpupgrade Host header override
   serviceName?: string;           // grpc
-  /** Slice 24c part 3 — subprotocol carried over the REALITY stack.
-   *  `vless` (default) → per-user UUID; `trojan` → per-user password
-   *  (we reuse user.xrayUuid as the password). */
-  subprotocol?: 'vless' | 'trojan';
+  /** Subprotocol carried by the xray inbound. `vless` (default) → per-user
+   *  UUID with optional Vision flow; `trojan` → per-user password (we reuse
+   *  user.xrayUuid); `vmess` → per-user UUID, AEAD (no flow). VMess pairs with
+   *  security 'none'/'tls' only (its share link cannot carry REALITY). */
+  subprotocol?: 'vless' | 'trojan' | 'vmess';
 }
 
 export interface HysteriaInboundCfg {

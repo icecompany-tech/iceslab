@@ -19,6 +19,7 @@ import {
   buildSubscriptionJson,
   buildTrojanRealityUri,
   buildVlessRealityUri,
+  buildVmessUri,
   encodePlainList,
   hostFromAddress,
   mtprotoSecret,
@@ -317,7 +318,7 @@ export async function generateSubscription(
       });
     } else if (ib.protocol === 'xray' && user.xrayUuid) {
       const cfg = ib.config as unknown as XrayInboundConfig & {
-        subprotocol?: 'vless' | 'trojan';
+        subprotocol?: 'vless' | 'trojan' | 'vmess';
       };
       // Slice 30 — per-host overrides on the most-used REALITY knobs. Each
       // null falls through to the profile-level config, so back-compat with
@@ -350,43 +351,62 @@ export async function generateSubscription(
           : profileSecurity === 'none'
             ? 'none'
             : 'default';
-      const uri =
-        subprotocol === 'trojan'
-          ? buildTrojanRealityUri({
-              password: user.xrayUuid,
-              host,
-              port,
-              publicKey: cfg.realityPublicKey,
-              shortId,
-              sni,
-              fingerprint,
-              network,
-              path: xrayPath,
-              hostHeader: xrayHostHeader,
-              serviceName: cfg.serviceName,
-              name: nodeName,
-              alpn: hostAlpn,
-              allowInsecure: hostAllowInsecure,
-              securityLayer: effectiveSecurityLayer,
-            })
-          : buildVlessRealityUri({
-              uuid: user.xrayUuid,
-              host,
-              port,
-              publicKey: cfg.realityPublicKey,
-              shortId,
-              sni,
-              flow: cfg.flow,
-              fingerprint,
-              network,
-              path: xrayPath,
-              hostHeader: xrayHostHeader,
-              serviceName: cfg.serviceName,
-              name: nodeName,
-              alpn: hostAlpn,
-              allowInsecure: hostAllowInsecure,
-              securityLayer: effectiveSecurityLayer,
-            });
+      let uri: string;
+      if (subprotocol === 'trojan') {
+        uri = buildTrojanRealityUri({
+          password: user.xrayUuid,
+          host,
+          port,
+          publicKey: cfg.realityPublicKey,
+          shortId,
+          sni,
+          fingerprint,
+          network,
+          path: xrayPath,
+          hostHeader: xrayHostHeader,
+          serviceName: cfg.serviceName,
+          name: nodeName,
+          alpn: hostAlpn,
+          allowInsecure: hostAllowInsecure,
+          securityLayer: effectiveSecurityLayer,
+        });
+      } else if (subprotocol === 'vmess') {
+        // VMess share link carries no REALITY: security is none (CDN-fronted /
+        // plain) or tls only. 'default' (reality) collapses to 'none' here.
+        uri = buildVmessUri({
+          uuid: user.xrayUuid,
+          host,
+          port,
+          name: nodeName,
+          network,
+          path: xrayPath,
+          hostHeader: xrayHostHeader,
+          serviceName: cfg.serviceName,
+          sni,
+          fingerprint,
+          alpn: hostAlpn,
+          securityLayer: effectiveSecurityLayer === 'tls' ? 'tls' : 'none',
+        });
+      } else {
+        uri = buildVlessRealityUri({
+          uuid: user.xrayUuid,
+          host,
+          port,
+          publicKey: cfg.realityPublicKey,
+          shortId,
+          sni,
+          flow: cfg.flow,
+          fingerprint,
+          network,
+          path: xrayPath,
+          hostHeader: xrayHostHeader,
+          serviceName: cfg.serviceName,
+          name: nodeName,
+          alpn: hostAlpn,
+          allowInsecure: hostAllowInsecure,
+          securityLayer: effectiveSecurityLayer,
+        });
+      }
       endpoints.push({
         protocol: 'xray',
         nodeName,
@@ -394,6 +414,13 @@ export async function generateSubscription(
         port,
         ...hostMeta,
         securityLayer: effectiveSecurityLayer,
+        // VMess isn't representable in clash/singbox/xrayjson yet (they build a
+        // vless entry), so keep it out of those formats to avoid a broken
+        // config. The vmess:// link still ships in the raw/base64 + json sub.
+        disableForFormats:
+          subprotocol === 'vmess'
+            ? [...hostMeta.disableForFormats, 'clash', 'singbox', 'xrayjson']
+            : hostMeta.disableForFormats,
         uuid: user.xrayUuid,
         publicKey: cfg.realityPublicKey,
         shortId,

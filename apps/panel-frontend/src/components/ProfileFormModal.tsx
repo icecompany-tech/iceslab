@@ -91,7 +91,7 @@ interface FormValues {
   xrayPath: string;
   xrayHostHeader: string;
   xrayServiceName: string;
-  xraySubprotocol: 'vless' | 'trojan';
+  xraySubprotocol: 'vless' | 'trojan' | 'vmess';
   xraySecurity: 'reality' | 'none';
 
   // AmneziaWG
@@ -267,7 +267,7 @@ function defaults(profile: Profile | null): FormValues {
         xrayPath: (cfg.path as string) ?? '',
         xrayHostHeader: (cfg.host as string) ?? '',
         xrayServiceName: (cfg.serviceName as string) ?? '',
-        xraySubprotocol: ((cfg.subprotocol as 'vless' | 'trojan') ?? 'vless'),
+        xraySubprotocol: ((cfg.subprotocol as 'vless' | 'trojan' | 'vmess') ?? 'vless'),
         xraySecurity: ((cfg.security as 'reality' | 'none') ?? 'reality'),
       };
     case 'amneziawg': {
@@ -376,6 +376,17 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.xrayNetwork]);
+
+  useEffect(() => {
+    // VMess share links can't carry REALITY; force a non-reality security.
+    if (
+      form.values.xraySubprotocol === 'vmess' &&
+      form.values.xraySecurity === 'reality'
+    ) {
+      form.setFieldValue('xraySecurity', 'none');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.values.xraySubprotocol]);
 
   const keypairMutation = useMutation({
     mutationFn: (protocol: 'xray' | 'amneziawg') => generateInboundKeypair(protocol),
@@ -776,6 +787,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 >
                   <Group gap="xs">
                     <Chip value="vless" size="sm" variant="light">VLESS</Chip>
+                    <Chip value="vmess" size="sm" variant="light">VMess</Chip>
                     <Chip value="trojan" size="sm" variant="light">Trojan</Chip>
                   </Group>
                 </Chip.Group>
@@ -792,7 +804,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   { value: '', label: t('profiles.form.cfg.realityFlowNone') },
                 ]}
                 disabled={
-                  form.values.xraySubprotocol === 'trojan' ||
+                  form.values.xraySubprotocol !== 'vless' ||
                   !FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork)
                 }
                 {...form.getInputProps('xrayFlow')}
@@ -870,7 +882,14 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   }}
                 >
                   <Group gap="xs">
-                    <Chip value="reality" size="sm" variant="light">REALITY</Chip>
+                    <Chip
+                      value="reality"
+                      size="sm"
+                      variant="light"
+                      disabled={form.values.xraySubprotocol === 'vmess'}
+                    >
+                      REALITY
+                    </Chip>
                     <Chip value="none" size="sm" variant="light">none (CDN / plain)</Chip>
                   </Group>
                 </Chip.Group>

@@ -104,7 +104,7 @@ export const XrayConfigSchema = z.object({
    * differs (per-user keys + cipher selection) and benefits from its own
    * commit.
    */
-  subprotocol: z.enum(['vless', 'trojan']).default('vless'),
+  subprotocol: z.enum(['vless', 'trojan', 'vmess']).default('vless'),
 });
 
 // Bounds and defaults match upstream amnezia-vpn AmneziaWG v2.0 spec
