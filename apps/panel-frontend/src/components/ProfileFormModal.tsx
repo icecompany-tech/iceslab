@@ -5,6 +5,7 @@ import {
   Alert,
   Button,
   Card,
+  Chip,
   Divider,
   Group,
   Modal,
@@ -32,6 +33,23 @@ import {
 import { RecipePicker } from './RecipePicker';
 import { validateXrayConfig } from '../lib/recipes';
 import { PROTOCOL_OPTIONS, protocolLabel } from '../lib/protocols';
+
+// Xray stream transports. The whole stack already handles all six (Zod schema,
+// node config.go renderer, client URI builder) - this is just the operator-
+// facing picker that previously surfaced only raw/xhttp/grpc.
+const XRAY_TRANSPORTS: { value: string; label: string; hint: string }[] = [
+  { value: 'raw', label: 'raw', hint: 'Plain TCP. Canonical REALITY + Vision, best latency, no CDN.' },
+  { value: 'ws', label: 'ws', hint: 'WebSocket. CDN-frontable (Cloudflare etc). Set path + host.' },
+  { value: 'grpc', label: 'gRPC', hint: 'HTTP/2 multiplexed. CDN-frontable. Set a serviceName.' },
+  { value: 'xhttp', label: 'xhttp', hint: 'Chunked HTTP (ex-SplitHTTP). CDN-frontable, Vision-compatible.' },
+  { value: 'httpupgrade', label: 'httpupgrade', hint: 'HTTP Upgrade. WebSocket-like without the WS handshake overhead.' },
+  { value: 'kcp', label: 'mKCP', hint: 'UDP-based, resilient on lossy links. Do not share a UDP port with Hysteria/AWG.' },
+];
+
+// Vision flow is only valid on raw/xhttp; other transports reject it.
+const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];
+// path + host header apply to these transports (same URI param names).
+const PATH_HOST_TRANSPORTS = ['ws', 'xhttp', 'httpupgrade'];
 
 // Profile protocol dropdown = the real protocols + a disabled sing-box teaser
 // inserted right after xray (roadmap signal: sing-box engine is coming, not
@@ -345,6 +363,13 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
   useEffect(() => {
     if (form.values.xrayNetwork === 'grpc' && !form.values.xrayServiceName) {
       form.setFieldValue('xrayServiceName', 'GunService');
+    }
+    // Vision flow is only valid on raw/xhttp; clear it on other transports so
+    // the server account and the client URI don't disagree (xray rejects
+    // "client flow is empty" when the server carries Vision but the transport
+    // can't use it).
+    if (!FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork) && form.values.xrayFlow) {
+      form.setFieldValue('xrayFlow', '');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.xrayNetwork]);
@@ -801,30 +826,44 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   {...form.getInputProps('xraySubprotocol')}
                 />
               </Group>
-              <Group grow align="flex-start">
-                <Select
-                  label="Flow"
-                  description={t('profiles.form.cfg.realityFlowDesc')}
-                  data={[
-                    { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
-                    { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' },
-                    { value: '', label: t('profiles.form.cfg.realityFlowNone') },
-                  ]}
-                  {...form.getInputProps('xrayFlow')}
-                />
-                <Select
-                  label="Network (transport)"
-                  description={t('profiles.form.cfg.realityNetworkDesc')}
-                  data={[
-                    { value: 'raw', label: t('profiles.form.cfg.realityNetworkRaw') },
-                    { value: 'xhttp', label: 'xhttp (HTTP/2 chunked)' },
-                    { value: 'grpc', label: 'gRPC' },
-                  ]}
-                  allowDeselect={false}
-                  {...form.getInputProps('xrayNetwork')}
-                />
-              </Group>
-              {form.values.xrayNetwork === 'xhttp' && (
+              <Select
+                label="Flow"
+                description={t('profiles.form.cfg.realityFlowDesc')}
+                data={[
+                  { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
+                  { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' },
+                  { value: '', label: t('profiles.form.cfg.realityFlowNone') },
+                ]}
+                disabled={!FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork)}
+                {...form.getInputProps('xrayFlow')}
+              />
+              {/* Transport family picker. The full matrix is supported end to
+                  end (Zod schema / node renderer / client URI); this surfaces
+                  all six. Vision flow auto-clears for transports that reject it. */}
+              <Stack gap={6}>
+                <Text size="sm" fw={500}>
+                  {t('profiles.form.cfg.realityNetworkDesc')}
+                </Text>
+                <Chip.Group
+                  multiple={false}
+                  value={form.values.xrayNetwork}
+                  onChange={(v) => {
+                    if (v) form.setFieldValue('xrayNetwork', v as typeof form.values.xrayNetwork);
+                  }}
+                >
+                  <Group gap="xs">
+                    {XRAY_TRANSPORTS.map((tr) => (
+                      <Chip key={tr.value} value={tr.value} size="sm" variant="light">
+                        {tr.label}
+                      </Chip>
+                    ))}
+                  </Group>
+                </Chip.Group>
+                <Text size="xs" c="dimmed">
+                  {XRAY_TRANSPORTS.find((tr) => tr.value === form.values.xrayNetwork)?.hint}
+                </Text>
+              </Stack>
+              {PATH_HOST_TRANSPORTS.includes(form.values.xrayNetwork) && (
                 <Group grow align="flex-start">
                   <TextInput
                     label="Path"
@@ -848,6 +887,15 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   required
                   {...form.getInputProps('xrayServiceName')}
                 />
+              )}
+              {form.values.xrayNetwork === 'kcp' && (
+                <Alert color="blue" variant="light" p="xs">
+                  <Text size="xs">
+                    mKCP renders with safe defaults on the node (header type none).
+                    It is UDP-based: do not place it on a UDP port already used by
+                    Hysteria or AmneziaWG on this node.
+                  </Text>
+                </Alert>
               )}
             </Stack>
           )}
