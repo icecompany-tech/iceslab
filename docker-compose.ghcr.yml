@@ -1,0 +1,133 @@
+# GHCR-pull runtime for the Iceslab control-plane.
+#
+# Same topology as docker-compose.prod.yml, but the backend/frontend run
+# PRE-BUILT images pulled from GHCR instead of being built on the host. This is
+# the runtime the self-update flow (ROADMAP D2) drives, and a faster deploy
+# option in its own right (no on-host tsc/pnpm build, which is the OOM risk on
+# a 2 GB box). The build-based docker-compose.prod.yml is unchanged and still
+# the default; this file is opt-in.
+#
+# Pick the version with ICESLAB_IMAGE_TAG (a published tag: `main`, `v0.1.5`,
+# or `sha-<7c>`); defaults to `main`. CI publishes these on every main push and
+# every v* tag (see .github/workflows/ci.yml).
+#
+# Usage:
+#   ICESLAB_IMAGE_TAG=v0.1.5 docker compose -f docker-compose.ghcr.yml \
+#     --env-file .env.production pull
+#   ICESLAB_IMAGE_TAG=v0.1.5 docker compose -f docker-compose.ghcr.yml \
+#     --env-file .env.production run --rm migrate
+#   ICESLAB_IMAGE_TAG=v0.1.5 docker compose -f docker-compose.ghcr.yml \
+#     --env-file .env.production up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: iceslab-prod-postgres
+    # See docker-compose.prod.yml for the 2 GB / 1 CPU sizing rationale.
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: iceslab-prod-redis
+    mem_limit: 384m
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_prod_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: applies pending Prisma migrations from the pulled image, exits.
+  migrate:
+    image: ghcr.io/icecompany-tech/iceslab-backend:${ICESLAB_IMAGE_TAG:-main}
+    container_name: iceslab-prod-migrate
+    mem_limit: 384m
+    # The backend image runs as `node`; the migrate one-shot shells out to
+    # pnpm/corepack for `prisma migrate deploy`, which expects root.
+    user: root
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    restart: "no"
+
+  backend:
+    image: ghcr.io/icecompany-tech/iceslab-backend:${ICESLAB_IMAGE_TAG:-main}
+    container_name: iceslab-prod-backend
+    mem_limit: 768m
+    environment:
+      NODE_ENV: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      PUBLIC_URL: ${PUBLIC_URL}
+      HYSTERIA_PUBLIC_PORT: ${HYSTERIA_PUBLIC_PORT:-443}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-2}
+      PANEL_PUBLIC_IP: ${PANEL_PUBLIC_IP:-}
+      RATE_LIMIT_SUB_PER_MIN: ${RATE_LIMIT_SUB_PER_MIN:-30}
+      RATE_LIMIT_BOOTSTRAP_PER_MIN: ${RATE_LIMIT_BOOTSTRAP_PER_MIN:-10}
+      RATE_LIMIT_HEARTBEAT_PER_MIN: ${RATE_LIMIT_HEARTBEAT_PER_MIN:-120}
+      LOGIN_LOCKOUT_FAILURES: ${LOGIN_LOCKOUT_FAILURES:-10}
+      LOGIN_LOCKOUT_DURATION_MIN: ${LOGIN_LOCKOUT_DURATION_MIN:-5}
+      LOGIN_LOCKOUT_WINDOW_MIN: ${LOGIN_LOCKOUT_WINDOW_MIN:-10}
+      ACME_DEFAULT_EMAIL: ${ACME_DEFAULT_EMAIL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ADMIN_ALLOWED_COUNTRIES: ${ADMIN_ALLOWED_COUNTRIES:-}
+      HONEYPOT_BLACKLIST_TTL_SEC: ${HONEYPOT_BLACKLIST_TTL_SEC:-3600}
+      HONEY_USER_TOKENS: ${HONEY_USER_TOKENS:-}
+      RATE_LIMIT_SUB_IP_PER_MIN: ${RATE_LIMIT_SUB_IP_PER_MIN:-120}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 30s
+
+  frontend:
+    image: ghcr.io/icecompany-tech/iceslab-frontend:${ICESLAB_IMAGE_TAG:-main}
+    container_name: iceslab-prod-frontend
+    mem_limit: 96m
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
