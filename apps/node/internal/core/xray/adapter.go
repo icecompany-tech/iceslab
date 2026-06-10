@@ -241,6 +241,10 @@ type xrayInboundCfgWire struct {
 	// Slice 24c part 3 — controls inbound `protocol` (vless vs trojan) and
 	// `settings.clients` shape. Empty/missing → vless (back-compat).
 	Subprotocol string `json:"subprotocol,omitempty"`
+	// Stream security: "reality" (default/empty) or "none" (plain transport,
+	// e.g. ws/httpupgrade behind a CDN that terminates TLS). When "none", the
+	// Reality* fields above may be empty.
+	Security string `json:"security,omitempty"`
 }
 
 // ApplyInbound parses the panel-pushed Xray config, swaps it into the live
@@ -255,8 +259,9 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("xray ApplyInbound: parse cfg: %w", err)
 	}
-	if wire.RealityPrivateKey == "" {
-		return fmt.Errorf("xray ApplyInbound: realityPrivateKey is required")
+	// REALITY needs a private key; security="none" (plain transport) does not.
+	if wire.Security != "none" && wire.RealityPrivateKey == "" {
+		return fmt.Errorf("xray ApplyInbound: realityPrivateKey is required for REALITY security")
 	}
 
 	// Wave-14 C1: port now flows from the panel binding into REALITY's
@@ -283,6 +288,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		HostHeader:         wire.Host,
 		ServiceName:        wire.ServiceName,
 		Subprotocol:        wire.Subprotocol,
+		Security:           wire.Security,
 	}
 
 	a.mu.Lock()
@@ -315,7 +321,8 @@ func inboundEqual(a, b InboundConfig) bool {
 		a.Path != b.Path ||
 		a.HostHeader != b.HostHeader ||
 		a.ServiceName != b.ServiceName ||
-		a.Subprotocol != b.Subprotocol {
+		a.Subprotocol != b.Subprotocol ||
+		a.Security != b.Security {
 		return false
 	}
 	if !stringSliceEqual(a.RealityServerNames, b.RealityServerNames) {

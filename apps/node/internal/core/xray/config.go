@@ -72,6 +72,12 @@ type InboundConfig struct {
 	// of the panel; on the agent's renderConfig we map xrayClient.ID into
 	// `password` for trojan instead of `id` for vless).
 	Subprotocol string
+
+	// Security is the stream security layer: "reality" (default / empty) or
+	// "none" (plain transport, e.g. ws/httpupgrade behind a CDN that terminates
+	// TLS, or local testing). When "none", the Reality* fields are not required
+	// and no realitySettings are emitted.
+	Security string
 }
 
 func (c *InboundConfig) withDefaults() InboundConfig {
@@ -98,6 +104,11 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 }
 
 func (c *InboundConfig) validate() error {
+	// security="none" is a plain transport (CDN-fronted ws/httpupgrade or local
+	// testing) with no REALITY material to validate.
+	if c.Security == "none" {
+		return nil
+	}
 	if c.RealityPrivateKey == "" {
 		return errors.New("RealityPrivateKey is required")
 	}
@@ -338,17 +349,25 @@ func buildStreamSettings(cfg InboundConfig) map[string]any {
 		path = "/"
 	}
 
+	security := "reality"
+	if cfg.Security == "none" {
+		security = "none"
+	}
 	stream := map[string]any{
 		"network":  network,
-		"security": "reality",
-		"realitySettings": map[string]any{
+		"security": security,
+	}
+	// REALITY material is emitted only for the reality security layer; "none"
+	// is a plain transport (the TLS, if any, is terminated by a fronting CDN).
+	if security == "reality" {
+		stream["realitySettings"] = map[string]any{
 			"show":        false,
 			"dest":        cfg.RealityDest,
 			"xver":        0,
 			"serverNames": cfg.RealityServerNames,
 			"privateKey":  cfg.RealityPrivateKey,
 			"shortIds":    cfg.RealityShortIDs,
-		},
+		}
 	}
 
 	switch network {

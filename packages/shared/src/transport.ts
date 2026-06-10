@@ -81,6 +81,11 @@ export interface InboundDto {
 }
 
 export interface XrayInboundCfg {
+  /** Stream security. 'reality' (default) or 'none' (plain transport, for
+   *  ws/httpupgrade behind a CDN that terminates TLS, or local testing). The
+   *  reality* fields below are required only when security is 'reality'. A
+   *  later step adds node-terminated 'tls'. */
+  security?: 'reality' | 'none';
   realityDest: string;            // e.g. "www.cloudflare.com:443"
   realityServerNames: string[];   // SNI candidates
   realityShortIds: string[];      // hex strings, 0..16 chars even-length

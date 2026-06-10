@@ -39,19 +39,29 @@ export const HysteriaConfigSchema = z.object({
 
 export const XrayConfigSchema = z.object({
   /**
-   * REALITY target — the legitimate site Xray forwards mismatched probes to.
-   * Format `host:port`, e.g. "www.cloudflare.com:443".
+   * Stream security. 'reality' (default) or 'none' (plain transport, e.g.
+   * ws/httpupgrade behind a CDN that terminates TLS, or local testing). The
+   * reality* fields below are required only for 'reality' (the form enforces
+   * that client-side and the node's config.go validate() rejects a reality
+   * inbound with missing keys). Kept as a plain ZodObject (no .refine) so it
+   * participates in the InboundConfigByProtocol discriminated union.
    */
-  realityDest: z.string().regex(/^[a-zA-Z0-9.-]+:\d{1,5}$/),
-  realityServerNames: z.array(z.string().min(1).max(255)).min(1).max(8),
+  security: z.enum(['reality', 'none']).default('reality'),
+  /**
+   * REALITY target — the legitimate site Xray forwards mismatched probes to.
+   * Format `host:port`, e.g. "www.cloudflare.com:443". May be empty when
+   * security is 'none'.
+   */
+  realityDest: z.string().regex(/^[a-zA-Z0-9.-]+:\d{1,5}$/).or(z.literal('')).default(''),
+  realityServerNames: z.array(z.string().min(1).max(255)).max(8).default([]),
   /** REALITY shortIds — hex strings, max 16 chars each. */
   realityShortIds: z
     .array(z.string().regex(/^[0-9a-fA-F]{0,16}$/))
-    .min(1)
-    .max(8),
-  realityPrivateKey: z.string().min(1).max(128),
+    .max(8)
+    .default([]),
+  realityPrivateKey: z.string().max(128).default(''),
   /** REALITY public key paired with privateKey — emitted in client URI. */
-  realityPublicKey: z.string().min(1).max(128),
+  realityPublicKey: z.string().max(128).default(''),
   // Mantine Select returns null when the empty option is picked. Coerce to
   // '' so the schema accepts the "no flow" choice the same way it accepts
   // 'xtls-rprx-vision'. Empty string is the canonical "no flow" wire value.
