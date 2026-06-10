@@ -338,7 +338,18 @@ export async function generateSubscription(
       // falls through (URI builder skips the param), so back-compat is exact.
       const hostAlpn = hostMeta.alpn;
       const hostAllowInsecure = hostMeta.allowInsecure;
-      const hostSecurityLayer = hostMeta.securityLayer;
+      // Base security comes from the profile: 'none' (a CDN-fronted / plain
+      // inbound, rendered as security:"none" on the node) maps to a 'none'
+      // client-URI layer; otherwise reality. A per-host override (tls/none)
+      // still wins over the profile base.
+      const profileSecurity =
+        (cfg as { security?: 'reality' | 'none' }).security ?? 'reality';
+      const effectiveSecurityLayer: 'default' | 'tls' | 'none' =
+        hostMeta.securityLayer === 'tls' || hostMeta.securityLayer === 'none'
+          ? hostMeta.securityLayer
+          : profileSecurity === 'none'
+            ? 'none'
+            : 'default';
       const uri =
         subprotocol === 'trojan'
           ? buildTrojanRealityUri({
@@ -356,7 +367,7 @@ export async function generateSubscription(
               name: nodeName,
               alpn: hostAlpn,
               allowInsecure: hostAllowInsecure,
-              securityLayer: hostSecurityLayer,
+              securityLayer: effectiveSecurityLayer,
             })
           : buildVlessRealityUri({
               uuid: user.xrayUuid,
@@ -374,7 +385,7 @@ export async function generateSubscription(
               name: nodeName,
               alpn: hostAlpn,
               allowInsecure: hostAllowInsecure,
-              securityLayer: hostSecurityLayer,
+              securityLayer: effectiveSecurityLayer,
             });
       endpoints.push({
         protocol: 'xray',
@@ -382,6 +393,7 @@ export async function generateSubscription(
         host,
         port,
         ...hostMeta,
+        securityLayer: effectiveSecurityLayer,
         uuid: user.xrayUuid,
         publicKey: cfg.realityPublicKey,
         shortId,

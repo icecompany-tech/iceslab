@@ -69,11 +69,20 @@ export function buildVlessRealityUri(opts: VlessRealityUriOpts): string {
     type: network,
     security,
     encryption: 'none',
-    pbk: opts.publicKey,
-    sid: opts.shortId,
-    sni: opts.sni,
-    fp: opts.fingerprint ?? 'chrome',
   });
+
+  // REALITY public key + shortId apply only to the reality layer. SNI +
+  // fingerprint are meaningful for any TLS-like layer (reality or tls) but not
+  // for plain 'none' (a fronting CDN terminates TLS; the client speaks plain
+  // to it). Insertion order preserves the reality query string exactly.
+  if (security === 'reality') {
+    params.set('pbk', opts.publicKey);
+    params.set('sid', opts.shortId);
+  }
+  if (security !== 'none') {
+    params.set('sni', opts.sni);
+    params.set('fp', opts.fingerprint ?? 'chrome');
+  }
 
   if (opts.alpn && opts.alpn.length > 0) {
     params.set('alpn', opts.alpn.join(','));

@@ -47,11 +47,19 @@ export function buildTrojanRealityUri(opts: TrojanRealityUriOpts): string {
   const params = new URLSearchParams({
     type: network,
     security,
-    pbk: opts.publicKey,
-    sid: opts.shortId,
-    sni: opts.sni,
-    fp: opts.fingerprint ?? 'chrome',
   });
+
+  // REALITY material only for the reality layer; SNI + fp for any TLS-like
+  // layer but not plain 'none' (CDN-terminated TLS). Insertion order preserves
+  // the reality query string exactly.
+  if (security === 'reality') {
+    params.set('pbk', opts.publicKey);
+    params.set('sid', opts.shortId);
+  }
+  if (security !== 'none') {
+    params.set('sni', opts.sni);
+    params.set('fp', opts.fingerprint ?? 'chrome');
+  }
 
   if (opts.alpn && opts.alpn.length > 0) {
     params.set('alpn', opts.alpn.join(','));

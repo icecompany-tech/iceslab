@@ -92,6 +92,7 @@ interface FormValues {
   xrayHostHeader: string;
   xrayServiceName: string;
   xraySubprotocol: 'vless' | 'trojan';
+  xraySecurity: 'reality' | 'none';
 
   // AmneziaWG
   awgSubnet: string;
@@ -206,6 +207,7 @@ function defaults(profile: Profile | null): FormValues {
     xrayHostHeader: '',
     xrayServiceName: '',
     xraySubprotocol: 'vless',
+    xraySecurity: 'reality',
 
     awgSubnet: '10.66.66.0/24',
     awgServerPriv: '',
@@ -266,6 +268,7 @@ function defaults(profile: Profile | null): FormValues {
         xrayHostHeader: (cfg.host as string) ?? '',
         xrayServiceName: (cfg.serviceName as string) ?? '',
         xraySubprotocol: ((cfg.subprotocol as 'vless' | 'trojan') ?? 'vless'),
+        xraySecurity: ((cfg.security as 'reality' | 'none') ?? 'reality'),
       };
     case 'amneziawg': {
       const obf = (cfg.obfuscation as Record<string, number | string> | undefined) ?? {};
@@ -470,6 +473,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           fingerprint: values.xrayFingerprint,
           network: values.xrayNetwork,
           subprotocol: values.xraySubprotocol,
+          security: values.xraySecurity,
           ...(values.xrayPath ? { path: values.xrayPath } : {}),
           ...(values.xrayHostHeader ? { host: values.xrayHostHeader } : {}),
           ...(values.xrayServiceName ? { serviceName: values.xrayServiceName } : {}),
@@ -853,64 +857,88 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 </Alert>
               )}
 
-              {/* Security. REALITY only for now; B1d adds none/tls as a chip-group
-                  here. REALITY stays the recommended default for the RU threat model. */}
-              <Divider label="3 · Security · REALITY" labelPosition="left" />
-              <Group grow align="flex-start">
-                <TextInput
-                  label="REALITY dest (target site)"
-                  description={t('profiles.form.cfg.realityDestDesc')}
-                  placeholder="www.cloudflare.com:443"
-                  required
-                  {...form.getInputProps('xrayDest')}
-                />
-                <TextInput
-                  label="REALITY serverNames"
-                  description={t('profiles.form.cfg.realityServerNamesDesc')}
-                  placeholder="www.cloudflare.com, cdn.cloudflare.com"
-                  required
-                  {...form.getInputProps('xrayServerNames')}
-                />
-              </Group>
-              <Group grow align="flex-start">
-                <TextInput
-                  label="REALITY shortIds"
-                  description={t('profiles.form.cfg.realityShortIdsDesc')}
-                  placeholder="abc123, deadbeef"
-                  required
-                  {...form.getInputProps('xrayShortIds')}
-                />
-                <Select
-                  label="Fingerprint"
-                  description={t('profiles.form.cfg.realityFingerprintDesc')}
-                  data={['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random']}
-                  {...form.getInputProps('xrayFingerprint')}
-                />
-              </Group>
-              <Group align="end" wrap="nowrap" gap="xs">
-                <PasswordInput
-                  flex={1}
-                  label="REALITY private key"
-                  description={t('profiles.form.cfg.realityPrivateKeyDesc')}
-                  required
-                  {...form.getInputProps('xrayPrivateKey')}
-                />
-                <Button
-                  leftSection={<IconKey size={14} />}
-                  variant="light"
-                  loading={keypairMutation.isPending}
-                  onClick={generateXrayKeys}
-                  type="button"
+              {/* Security: REALITY (default) or none (plain transport for
+                  ws/httpupgrade behind a CDN that terminates TLS, or local
+                  testing). Node-terminated TLS-with-cert is a later step. */}
+              <Divider label="3 · Security" labelPosition="left" />
+              <Stack gap={6}>
+                <Chip.Group
+                  multiple={false}
+                  value={form.values.xraySecurity}
+                  onChange={(v) => {
+                    if (v) form.setFieldValue('xraySecurity', v as typeof form.values.xraySecurity);
+                  }}
                 >
-                  {t('profiles.form.cfg.generate')}
-                </Button>
-              </Group>
-              <TextInput
-                label="REALITY public key"
-                description={t('profiles.form.cfg.realityPublicKeyDesc')}
-                required
-                {...form.getInputProps('xrayPublicKey')}
-              />
+                  <Group gap="xs">
+                    <Chip value="reality" size="sm" variant="light">REALITY</Chip>
+                    <Chip value="none" size="sm" variant="light">none (CDN / plain)</Chip>
+                  </Group>
+                </Chip.Group>
+                <Text size="xs" c="dimmed">
+                  {form.values.xraySecurity === 'reality'
+                    ? 'REALITY: TLS-replacement, no domain or certificate needed. Recommended.'
+                    : 'none: plain transport. Use behind a CDN that terminates TLS (ws / httpupgrade) or for local testing. No REALITY keypair required.'}
+                </Text>
+              </Stack>
+              {form.values.xraySecurity === 'reality' && (
+                <>
+                  <Group grow align="flex-start">
+                    <TextInput
+                      label="REALITY dest (target site)"
+                      description={t('profiles.form.cfg.realityDestDesc')}
+                      placeholder="www.cloudflare.com:443"
+                      required
+                      {...form.getInputProps('xrayDest')}
+                    />
+                    <TextInput
+                      label="REALITY serverNames"
+                      description={t('profiles.form.cfg.realityServerNamesDesc')}
+                      placeholder="www.cloudflare.com, cdn.cloudflare.com"
+                      required
+                      {...form.getInputProps('xrayServerNames')}
+                    />
+                  </Group>
+                  <Group grow align="flex-start">
+                    <TextInput
+                      label="REALITY shortIds"
+                      description={t('profiles.form.cfg.realityShortIdsDesc')}
+                      placeholder="abc123, deadbeef"
+                      required
+                      {...form.getInputProps('xrayShortIds')}
+                    />
+                    <Select
+                      label="Fingerprint"
+                      description={t('profiles.form.cfg.realityFingerprintDesc')}
+                      data={['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random']}
+                      {...form.getInputProps('xrayFingerprint')}
+                    />
+                  </Group>
+                  <Group align="end" wrap="nowrap" gap="xs">
+                    <PasswordInput
+                      flex={1}
+                      label="REALITY private key"
+                      description={t('profiles.form.cfg.realityPrivateKeyDesc')}
+                      required
+                      {...form.getInputProps('xrayPrivateKey')}
+                    />
+                    <Button
+                      leftSection={<IconKey size={14} />}
+                      variant="light"
+                      loading={keypairMutation.isPending}
+                      onClick={generateXrayKeys}
+                      type="button"
+                    >
+                      {t('profiles.form.cfg.generate')}
+                    </Button>
+                  </Group>
+                  <TextInput
+                    label="REALITY public key"
+                    description={t('profiles.form.cfg.realityPublicKeyDesc')}
+                    required
+                    {...form.getInputProps('xrayPublicKey')}
+                  />
+                </>
+              )}
             </Stack>
           )}
 
