@@ -21,7 +21,9 @@ ENV CI=true \
     NPM_CONFIG_FETCH_RETRIES=5 \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
     NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
-    NPM_CONFIG_FETCH_TIMEOUT=300000
+    NPM_CONFIG_FETCH_TIMEOUT=300000 \
+    CHECKPOINT_DISABLE=1 \
+    PRISMA_HIDE_UPDATE_MESSAGE=1
 RUN corepack enable
 WORKDIR /repo
 
@@ -41,7 +43,16 @@ COPY packages/shared packages/shared
 
 # Generate Prisma client + compile TS to dist/.
 WORKDIR /repo/apps/panel-backend
-RUN pnpm exec prisma generate
+# Retry prisma generate: it pulls the query engine / does network checks and
+# a flaky network can ECONNRESET mid-fetch. Five attempts with a short
+# backoff turns a transient blip into a non-event instead of a failed deploy.
+# CHECKPOINT_DISABLE (set above) already removes the spurious update-check call.
+RUN for i in 1 2 3 4 5; do \
+      pnpm exec prisma generate && exit 0; \
+      echo "prisma generate attempt $i failed; retrying in 5s"; \
+      sleep 5; \
+    done; \
+    echo "prisma generate failed after 5 attempts" >&2; exit 1
 RUN pnpm exec tsc
 
 # Strip dev deps so only production node_modules remain.
