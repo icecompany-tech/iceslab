@@ -759,73 +759,26 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
 
           {form.values.protocol === 'xray' && (
             <Stack>
-              <Group grow align="flex-start">
-                <TextInput
-                  label="REALITY dest (target site)"
-                  description={t('profiles.form.cfg.realityDestDesc')}
-                  placeholder="www.cloudflare.com:443"
-                  required
-                  {...form.getInputProps('xrayDest')}
-                />
-                <TextInput
-                  label="REALITY serverNames"
-                  description={t('profiles.form.cfg.realityServerNamesDesc')}
-                  placeholder="www.cloudflare.com, cdn.cloudflare.com"
-                  required
-                  {...form.getInputProps('xrayServerNames')}
-                />
-              </Group>
-              <Group grow align="flex-start">
-                <TextInput
-                  label="REALITY shortIds"
-                  description={t('profiles.form.cfg.realityShortIdsDesc')}
-                  placeholder="abc123, deadbeef"
-                  required
-                  {...form.getInputProps('xrayShortIds')}
-                />
-                <Select
-                  label="Fingerprint"
-                  description={t('profiles.form.cfg.realityFingerprintDesc')}
-                  data={['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random']}
-                  {...form.getInputProps('xrayFingerprint')}
-                />
-              </Group>
-              <Group align="end" wrap="nowrap" gap="xs">
-                <PasswordInput
-                  flex={1}
-                  label="REALITY private key"
-                  description={t('profiles.form.cfg.realityPrivateKeyDesc')}
-                  required
-                  {...form.getInputProps('xrayPrivateKey')}
-                />
-                <Button
-                  leftSection={<IconKey size={14} />}
-                  variant="light"
-                  loading={keypairMutation.isPending}
-                  onClick={generateXrayKeys}
-                  type="button"
+              {/* 3x-ui progressive flow: pick Protocol, then Transport, then
+                  Security. Each step is a labeled section. */}
+              <Divider label="1 · Protocol" labelPosition="left" />
+              <Stack gap={6}>
+                <Chip.Group
+                  multiple={false}
+                  value={form.values.xraySubprotocol}
+                  onChange={(v) => {
+                    if (v) form.setFieldValue('xraySubprotocol', v as typeof form.values.xraySubprotocol);
+                  }}
                 >
-                  {t('profiles.form.cfg.generate')}
-                </Button>
-              </Group>
-              <Group grow align="flex-start">
-                <TextInput
-                  label="REALITY public key"
-                  description={t('profiles.form.cfg.realityPublicKeyDesc')}
-                  required
-                  {...form.getInputProps('xrayPublicKey')}
-                />
-                <Select
-                  label="Subprotocol"
-                  description={t('profiles.form.cfg.realitySubprotocolDesc')}
-                  data={[
-                    { value: 'vless', label: t('profiles.form.cfg.realitySubprotocolVless') },
-                    { value: 'trojan', label: t('profiles.form.cfg.realitySubprotocolTrojan') },
-                  ]}
-                  allowDeselect={false}
-                  {...form.getInputProps('xraySubprotocol')}
-                />
-              </Group>
+                  <Group gap="xs">
+                    <Chip value="vless" size="sm" variant="light">VLESS</Chip>
+                    <Chip value="trojan" size="sm" variant="light">Trojan</Chip>
+                  </Group>
+                </Chip.Group>
+                <Text size="xs" c="dimmed">
+                  {t('profiles.form.cfg.realitySubprotocolDesc')}
+                </Text>
+              </Stack>
               <Select
                 label="Flow"
                 description={t('profiles.form.cfg.realityFlowDesc')}
@@ -834,16 +787,18 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' },
                   { value: '', label: t('profiles.form.cfg.realityFlowNone') },
                 ]}
-                disabled={!FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork)}
+                disabled={
+                  form.values.xraySubprotocol === 'trojan' ||
+                  !FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork)
+                }
                 {...form.getInputProps('xrayFlow')}
               />
+
               {/* Transport family picker. The full matrix is supported end to
                   end (Zod schema / node renderer / client URI); this surfaces
                   all six. Vision flow auto-clears for transports that reject it. */}
+              <Divider label="2 · Transport" labelPosition="left" />
               <Stack gap={6}>
-                <Text size="sm" fw={500}>
-                  {t('profiles.form.cfg.realityNetworkDesc')}
-                </Text>
                 <Chip.Group
                   multiple={false}
                   value={form.values.xrayNetwork}
@@ -897,6 +852,65 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                   </Text>
                 </Alert>
               )}
+
+              {/* Security. REALITY only for now; B1d adds none/tls as a chip-group
+                  here. REALITY stays the recommended default for the RU threat model. */}
+              <Divider label="3 · Security · REALITY" labelPosition="left" />
+              <Group grow align="flex-start">
+                <TextInput
+                  label="REALITY dest (target site)"
+                  description={t('profiles.form.cfg.realityDestDesc')}
+                  placeholder="www.cloudflare.com:443"
+                  required
+                  {...form.getInputProps('xrayDest')}
+                />
+                <TextInput
+                  label="REALITY serverNames"
+                  description={t('profiles.form.cfg.realityServerNamesDesc')}
+                  placeholder="www.cloudflare.com, cdn.cloudflare.com"
+                  required
+                  {...form.getInputProps('xrayServerNames')}
+                />
+              </Group>
+              <Group grow align="flex-start">
+                <TextInput
+                  label="REALITY shortIds"
+                  description={t('profiles.form.cfg.realityShortIdsDesc')}
+                  placeholder="abc123, deadbeef"
+                  required
+                  {...form.getInputProps('xrayShortIds')}
+                />
+                <Select
+                  label="Fingerprint"
+                  description={t('profiles.form.cfg.realityFingerprintDesc')}
+                  data={['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random']}
+                  {...form.getInputProps('xrayFingerprint')}
+                />
+              </Group>
+              <Group align="end" wrap="nowrap" gap="xs">
+                <PasswordInput
+                  flex={1}
+                  label="REALITY private key"
+                  description={t('profiles.form.cfg.realityPrivateKeyDesc')}
+                  required
+                  {...form.getInputProps('xrayPrivateKey')}
+                />
+                <Button
+                  leftSection={<IconKey size={14} />}
+                  variant="light"
+                  loading={keypairMutation.isPending}
+                  onClick={generateXrayKeys}
+                  type="button"
+                >
+                  {t('profiles.form.cfg.generate')}
+                </Button>
+              </Group>
+              <TextInput
+                label="REALITY public key"
+                description={t('profiles.form.cfg.realityPublicKeyDesc')}
+                required
+                {...form.getInputProps('xrayPublicKey')}
+              />
             </Stack>
           )}
 
