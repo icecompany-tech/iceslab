@@ -289,6 +289,7 @@ export default {
     deployToNodes: 'Deploy to nodes',
     bindingsTooltipNone: 'Not deployed - click to deploy',
     bindingsTooltipDeployed: 'Deployed on nodes - click to manage',
+    usersTooltip: 'Users with access via squads: {{count}}',
     deleteTitle: 'Delete profile "{{name}}"?',
     deleteWithBindings: 'Profile is deployed to {{count}} nodes. Deleting will remove it from all nodes (cascade) and invalidate this protocol\'s subscriptions for affected users.',
     deleteSafe: 'Profile is not bound to any node - safe to delete.',

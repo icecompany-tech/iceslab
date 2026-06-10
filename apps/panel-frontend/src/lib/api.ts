@@ -626,6 +626,8 @@ export interface Profile {
   config: InboundConfig;
   enabled: boolean;
   bindingCount: number;
+  /** Distinct users who can reach this profile via squad ACL. */
+  userCount: number;
   createdAt: string;
   updatedAt: string;
 }

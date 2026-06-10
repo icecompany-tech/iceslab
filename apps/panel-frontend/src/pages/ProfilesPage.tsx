@@ -29,6 +29,7 @@ import {
   IconSearch,
   IconServer2,
   IconTrash,
+  IconUsers,
 } from '@tabler/icons-react';
 import {
   createProfile,
@@ -455,6 +456,28 @@ function ProfileCard({
             <IconServer2 size={11} />
             {bindingCount}
           </UnstyledButton>
+        </Tooltip>
+        <Tooltip label={t('profiles.usersTooltip', { count: profile.userCount })}>
+          <Text
+            component="span"
+            aria-label={t('profiles.usersTooltip', { count: profile.userCount })}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 8px',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 500,
+              backgroundColor: profile.userCount === 0 ? 'transparent' : `${CYAN}1A`,
+              color: profile.userCount === 0 ? MIST : CYAN,
+              border: `1px solid ${profile.userCount === 0 ? HAIRLINE : `${CYAN}33`}`,
+              fontFamily: "'Geist Mono', monospace",
+            }}
+          >
+            <IconUsers size={11} />
+            {profile.userCount}
+          </Text>
         </Tooltip>
         {!profile.enabled && (
           <Badge variant="default" size="sm" style={{ backgroundColor: `${MIST}1A`, color: MIST }}>

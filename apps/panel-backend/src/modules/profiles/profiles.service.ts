@@ -63,6 +63,30 @@ export class NodeNotFoundError extends Error {
   }
 }
 
+// A5 — per-profile user reach: distinct users across every squad the profile is
+// assigned to (group_profiles -> group_members), deduped. Users are explicit
+// members of their squads (incl. the system "All" squad), so this also counts
+// the "All" reach. One aggregate for the list; a scoped count for a single one.
+async function userReachByProfile(): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<{ profile_id: string; user_count: number }[]>`
+    SELECT gp.profile_id, COUNT(DISTINCT gm.user_id)::int AS user_count
+    FROM group_profiles gp
+    JOIN group_members gm ON gm.group_id = gp.group_id
+    GROUP BY gp.profile_id
+  `;
+  return new Map(rows.map((r) => [r.profile_id, r.user_count]));
+}
+
+async function userReachForProfile(profileId: string): Promise<number> {
+  const rows = await prisma.$queryRaw<{ user_count: number }[]>`
+    SELECT COUNT(DISTINCT gm.user_id)::int AS user_count
+    FROM group_profiles gp
+    JOIN group_members gm ON gm.group_id = gp.group_id
+    WHERE gp.profile_id = ${profileId}::uuid
+  `;
+  return rows[0]?.user_count ?? 0;
+}
+
 // ───── Profile CRUD ─────
 
 export async function createProfile(input: CreateProfileInput): Promise<PublicProfileDto> {
@@ -107,7 +131,8 @@ export async function listProfiles(q: ListProfilesQuery): Promise<PublicProfileD
     orderBy: [{ protocol: 'asc' }, { name: 'asc' }],
     include: { _count: { select: { bindings: true } } },
   });
-  return profiles.map(mapProfile);
+  const reach = await userReachByProfile();
+  return profiles.map((p) => mapProfile(p, reach.get(p.id) ?? 0));
 }
 
 export async function getProfileById(id: string): Promise<PublicProfileDto> {
@@ -116,7 +141,7 @@ export async function getProfileById(id: string): Promise<PublicProfileDto> {
     include: { _count: { select: { bindings: true } } },
   });
   if (!profile) throw new ProfileNotFoundError(id);
-  return mapProfile(profile);
+  return mapProfile(profile, await userReachForProfile(id));
 }
 
 export async function updateProfile(
@@ -151,7 +176,7 @@ export async function updateProfile(
     include: { _count: { select: { bindings: true } } },
   });
   eventBus.emit('profile.updated', { profileId: id });
-  return mapProfile(updated);
+  return mapProfile(updated, await userReachForProfile(id));
 }
 
 export async function deleteProfile(id: string): Promise<void> {

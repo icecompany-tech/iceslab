@@ -12,6 +12,9 @@ export interface PublicProfileDto {
   enabled: boolean;
   /** Number of node bindings active for this profile. */
   bindingCount: number;
+  /** Distinct users who can reach this profile via squad ACL (deduped across
+   *  every squad the profile is assigned to, including the system "All" squad). */
+  userCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +34,7 @@ export interface PublicBindingDto {
 
 export function mapProfile(
   profile: Profile & { _count?: { bindings: number }; bindings?: ProfileNodeBinding[] },
+  userCount = 0,
 ): PublicProfileDto {
   const bindingCount =
     profile._count?.bindings ?? profile.bindings?.length ?? 0;
@@ -42,6 +46,7 @@ export function mapProfile(
     config: profile.config,
     enabled: profile.enabled,
     bindingCount,
+    userCount,
     createdAt: profile.createdAt.toISOString(),
     updatedAt: profile.updatedAt.toISOString(),
   };
