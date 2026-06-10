@@ -42,6 +42,15 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
   { value: 'mieru', label: 'Mieru (stealth proxy)' },
 ];
 
+// Node protocol dropdown = real protocols + a disabled sing-box teaser after
+// xray (roadmap signal; not installable yet). Separate from the typed
+// PROTOCOL_OPTIONS so the sentinel value never enters NodeProtocol form state.
+const NODE_PROTOCOL_SELECT_DATA = [
+  PROTOCOL_OPTIONS[0], // xray
+  { value: '__singbox_soon', label: 'sing-box (soon)', disabled: true },
+  ...PROTOCOL_OPTIONS.slice(1),
+];
+
 // Default mTLS port the node-agent listens on. Hard-coded in
 // install-iceslab-node.sh; admins can override per-node via the Port field.
 // Wave-13 (2026-05-21) bumped from 8443 to 1337: 8443 is the canonical
@@ -302,7 +311,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
               <Select
                 label={t('nodes.form.protocol')}
                 description={t('nodes.form.protocolDesc')}
-                data={PROTOCOL_OPTIONS}
+                data={NODE_PROTOCOL_SELECT_DATA}
                 allowDeselect={false}
                 {...form.getInputProps('protocol')}
               />

@@ -13,9 +13,12 @@ export interface ProtocolOption {
   label: string;
 }
 
+// Display order is intentional (xray first as the flagship). When sing-box
+// lands as an engine it goes right after xray:
+//   xray, sing-box, hysteria, amneziawg, naive, shadowsocks, mtproto, mieru
 export const PROTOCOL_OPTIONS: ProtocolOption[] = [
-  { value: 'hysteria', label: 'Hysteria 2' },
   { value: 'xray', label: 'Xray (VLESS / Trojan + REALITY)' },
+  { value: 'hysteria', label: 'Hysteria 2' },
   { value: 'amneziawg', label: 'AmneziaWG' },
   { value: 'naive', label: 'NaiveProxy' },
   { value: 'shadowsocks', label: 'Shadowsocks 2022' },

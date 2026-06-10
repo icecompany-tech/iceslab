@@ -33,6 +33,18 @@ import { RecipePicker } from './RecipePicker';
 import { validateXrayConfig } from '../lib/recipes';
 import { PROTOCOL_OPTIONS, protocolLabel } from '../lib/protocols';
 
+// Profile protocol dropdown = the real protocols + a disabled sing-box teaser
+// inserted right after xray (roadmap signal: sing-box engine is coming, not
+// selectable yet). Kept LOCAL to this form on purpose: the shared
+// PROTOCOL_OPTIONS drives squad per-protocol groupings, dividers, and
+// protocolLabel, where a fake protocol would create an empty "sing-box" group.
+// The sentinel value is non-selectable, so it never reaches form state.
+const PROFILE_PROTOCOL_SELECT_DATA = [
+  PROTOCOL_OPTIONS[0], // xray
+  { value: '__singbox_soon', label: 'sing-box (soon)', disabled: true },
+  ...PROTOCOL_OPTIONS.slice(1),
+];
+
 type Mode = 'create' | 'edit';
 
 interface FormValues {
@@ -561,7 +573,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
             <Select
               label={t('profiles.form.protocol')}
               description={isEdit ? t('profiles.form.protocolEdit') : undefined}
-              data={PROTOCOL_OPTIONS}
+              data={PROFILE_PROTOCOL_SELECT_DATA}
               disabled={isEdit}
               allowDeselect={false}
               {...form.getInputProps('protocol')}
