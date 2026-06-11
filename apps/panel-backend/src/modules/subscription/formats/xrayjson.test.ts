@@ -123,4 +123,54 @@ describe('buildXrayJson', () => {
   it('output is byte-deterministic for the same input', () => {
     expect(buildXrayJson([xrayEp])).toBe(buildXrayJson([xrayEp]));
   });
+
+  // Routing Templates (R1a).
+  describe('routingPreset', () => {
+    it('default proxy-all output is byte-identical to pre-R1 (no preset rules, AsIs)', () => {
+      expect(buildXrayJson([xrayEp], { routingPreset: 'proxy-all' })).toBe(
+        buildXrayJson([xrayEp]),
+      );
+      const cfg = parse(buildXrayJson([xrayEp]));
+      expect(cfg.routing.domainStrategy).toBe('AsIs');
+      expect(cfg.routing.rules).toHaveLength(1);
+      expect(JSON.stringify(cfg.routing.rules)).not.toContain('geosite');
+    });
+
+    it('ru-split prepends block/direct rules ahead of the catch-all', () => {
+      const cfg = parse(buildXrayJson([xrayEp], { routingPreset: 'ru-split' }));
+      const rules = cfg.routing.rules;
+      expect(rules).toHaveLength(4);
+      expect(rules[0].domain).toEqual(['geosite:category-ads-all']);
+      expect(rules[0].outboundTag).toBe('block');
+      expect(rules[1].domain).toEqual([
+        'geosite:category-ru',
+        'geosite:category-gov-ru',
+      ]);
+      expect(rules[1].outboundTag).toBe('direct');
+      expect(rules[2].ip).toEqual(['geoip:private', 'geoip:ru']);
+      expect(rules[2].outboundTag).toBe('direct');
+      // Catch-all stays last so unmatched traffic still tunnels.
+      expect(rules[3].network).toBe('tcp,udp');
+      expect(rules[3].outboundTag).toBe('eu-1-xray');
+    });
+
+    it('ru-split switches domainStrategy to IPIfNonMatch', () => {
+      const cfg = parse(buildXrayJson([xrayEp], { routingPreset: 'ru-split' }));
+      expect(cfg.routing.domainStrategy).toBe('IPIfNonMatch');
+    });
+
+    it('ru-split composes with bundle=balancer (preset rules first, balancer catch-all last)', () => {
+      const second: SubscriptionEndpoint = { ...xrayEp, nodeName: 'us-1' };
+      const cfg = parse(
+        buildXrayJson([xrayEp, second], {
+          bundle: 'balancer',
+          routingPreset: 'ru-split',
+        }),
+      );
+      const rules = cfg.routing.rules;
+      expect(rules).toHaveLength(4);
+      expect(rules[3].balancerTag).toBe('balancer-auto');
+      expect(cfg.observatory).toBeDefined();
+    });
+  });
 });

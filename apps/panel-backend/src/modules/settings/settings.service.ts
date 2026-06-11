@@ -1,3 +1,4 @@
+import { isRoutingPresetId, type RoutingPresetId } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 
 /**
@@ -15,6 +16,7 @@ export interface SubscriptionSettings {
   supportUrl: string | null;
   announceTemplate: string | null;
   brandName: string | null;
+  routingPreset: RoutingPresetId;
 }
 
 /**
@@ -36,12 +38,17 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
     return fallback;
   };
 
+  // Routing Templates (R1a). Unknown / missing values fall back to
+  // 'proxy-all' (legacy behaviour) so a hand-edited row can never break /sub.
+  const routingRaw = map.get('subscriptionRoutingPreset');
+
   return {
     profileTitle: asString('subscriptionProfileTitle'),
     updateIntervalHours: asInt('subscriptionUpdateIntervalHours', 24),
     supportUrl: asString('subscriptionSupportUrl'),
     announceTemplate: asString('subscriptionAnnounceTemplate'),
     brandName: asString('brandName'),
+    routingPreset: isRoutingPresetId(routingRaw) ? routingRaw : 'proxy-all',
   };
 }
 

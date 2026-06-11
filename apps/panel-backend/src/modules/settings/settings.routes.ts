@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { ROUTING_PRESET_IDS } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import { prisma } from '../../prisma.js';
 
@@ -25,6 +26,10 @@ import { prisma } from '../../prisma.js';
  *   - `subscriptionAnnounceTemplate` (string)     — Announce header template,
  *                                                   placeholders: {{TRAFFIC_LEFT}},
  *                                                   {{DAYS_LEFT}}, {{SUPPORT_URL}}
+ *   - `subscriptionRoutingPreset` (enum, R1a)     - routing rules emitted into
+ *                                                   clash/singbox/xrayjson:
+ *                                                   'proxy-all' (default) |
+ *                                                   'ru-split'
  *
  * Future keys land in the same table; flip `isPublic` per key.
  */
@@ -37,6 +42,7 @@ const UpsertInput = z.object({
   subscriptionUpdateIntervalHours: z.number().int().min(1).max(168).optional(),
   subscriptionSupportUrl: z.string().url().max(255).nullable().optional(),
   subscriptionAnnounceTemplate: z.string().max(512).nullable().optional(),
+  subscriptionRoutingPreset: z.enum(ROUTING_PRESET_IDS).optional(),
 });
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {

@@ -1,3 +1,4 @@
+import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
@@ -29,11 +30,33 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  * picks the lowest-latency one. Default ('flat') keeps the legacy "first
  * outbound wins" routing rule for back-compat.
  */
+/**
+ * Routing Templates (R1a) - `routingPreset: 'ru-split'` prepends split-routing
+ * rules ahead of the catch-all: ads/malware -> block, RU domains
+ * (geosite:category-ru + category-gov-ru) and RU/private IPs -> direct,
+ * everything else falls through to the tunnel. Uses the geosite:/geoip:
+ * databases that ship inside every xray client install, so no extra files
+ * are needed. `domainStrategy` switches to IPIfNonMatch so domains that miss
+ * every domain rule get a second, IP-based pass (otherwise geoip:ru never
+ * matches a domain-typed destination). Default 'proxy-all' keeps the output
+ * byte-identical to pre-R1 builds.
+ */
 export interface XrayJsonBuildOpts {
   bundle?: 'flat' | 'balancer';
   probeUrl?: string;
   probeIntervalSec?: number;
+  routingPreset?: RoutingPresetId;
 }
+
+const RU_SPLIT_RULES: ReadonlyArray<Record<string, unknown>> = [
+  { type: 'field', domain: ['geosite:category-ads-all'], outboundTag: 'block' },
+  {
+    type: 'field',
+    domain: ['geosite:category-ru', 'geosite:category-gov-ru'],
+    outboundTag: 'direct',
+  },
+  { type: 'field', ip: ['geoip:private', 'geoip:ru'], outboundTag: 'direct' },
+];
 
 export function buildXrayJson(
   endpoints: SubscriptionEndpoint[],
@@ -42,6 +65,7 @@ export function buildXrayJson(
   const xrayEps = endpoints.filter((e) => e.protocol === 'xray');
   const proxyTags: string[] = [];
   const bundle = opts.bundle ?? 'flat';
+  const ruSplit = (opts.routingPreset ?? 'proxy-all') === 'ru-split';
 
   const proxyOutbounds = xrayEps.map((e) => {
     if (e.protocol !== 'xray') throw new Error('unreachable'); // narrowing
@@ -159,9 +183,10 @@ export function buildXrayJson(
       { tag: 'block', protocol: 'blackhole' },
     ],
     routing: {
-      domainStrategy: 'AsIs',
+      domainStrategy: ruSplit ? 'IPIfNonMatch' : 'AsIs',
       ...(balancers ? { balancers } : {}),
       rules: [
+        ...(ruSplit ? RU_SPLIT_RULES : []),
         balancerActive
           ? { type: 'field', network: 'tcp,udp', balancerTag: 'balancer-auto' }
           : proxyTags.length > 0

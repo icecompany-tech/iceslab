@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isIP } from 'node:net';
 import { z } from 'zod';
+import { ROUTING_PRESET_IDS, type RoutingPresetId } from '@iceslab/shared';
 import * as service from './subscription.service.js';
 import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
@@ -43,6 +44,11 @@ const QuerySchema = z.object({
   // legacy "return everything" behaviour so existing clients don't regress.
   // Capped at 32 to avoid pathological "give me 9999" requests.
   topN: z.coerce.number().int().min(1).max(32).optional(),
+  // Routing Templates (R1a) - per-request override of the panel-wide
+  // `subscriptionRoutingPreset` setting. Lets the admin smoke-test a preset
+  // on one client before flipping it for everyone (same idea as `bundle`).
+  // Only meaningful for full-config formats (clash/singbox/xrayjson).
+  routing: z.enum(ROUTING_PRESET_IDS).optional(),
 });
 
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
@@ -434,6 +440,15 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
+      // Routing Templates (R1a) - resolve the preset only for full-config
+      // formats: `?routing=` wins, then the panel-wide setting. plain/json/
+      // wgconf carry no routing section, so we skip the settings read there.
+      let routingPreset: RoutingPresetId = 'proxy-all';
+      if (format === 'clash' || format === 'singbox' || format === 'xrayjson') {
+        routingPreset =
+          query.routing ?? (await getSubscriptionSettings()).routingPreset;
+      }
+
       switch (format) {
         case 'json':
           return reply
@@ -476,7 +491,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               : undefined;
           return reply
             .type('application/json')
-            .send(buildXrayJson(filtered, { bundle: xjBundle }));
+            .send(buildXrayJson(filtered, { bundle: xjBundle, routingPreset }));
         }
         case 'plain':
         default:
