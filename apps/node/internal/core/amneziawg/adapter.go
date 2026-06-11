@@ -57,6 +57,18 @@ type Adapter struct {
 	mu      sync.Mutex
 	peers   map[string]Peer // key: userId
 	started bool
+	// lastStats holds the previous cumulative kernel counters per peer, keyed
+	// by PublicKey to match `awg show dump`. GetStats diffs against it so the
+	// panel ingests per-poll DELTAS (the same contract the xray adapter meets
+	// via `statsquery -reset`). Rebuilt every poll: a pubkey's absence means
+	// "first sight" (fresh agent start or just-added peer) and reports zero, so
+	// an agent restart over a still-up interface never re-bills the lifetime.
+	lastStats map[string]peerCounters
+}
+
+type peerCounters struct {
+	rx int64
+	tx int64
 }
 
 func New(cfg Config, logger *slog.Logger) *Adapter {
@@ -73,9 +85,10 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 		cfg.runCmd = realRunCmd
 	}
 	return &Adapter{
-		cfg:    cfg,
-		logger: logger,
-		peers:  make(map[string]Peer),
+		cfg:       cfg,
+		logger:    logger,
+		peers:     make(map[string]Peer),
+		lastStats: make(map[string]peerCounters),
 	}
 }
 
@@ -179,9 +192,23 @@ func (a *Adapter) RemoveUser(userID string) error {
 }
 
 // GetStats parses `awg show <iface> dump` and maps per-peer RX/TX counters
-// back to user IDs via the tracked peers. Counters are kernel-cumulative
-// (lifetime of the interface) — the panel computes daily/monthly deltas
-// by snapshotting these values periodically.
+// back to user IDs via the tracked peers.
+//
+// Kernel counters are CUMULATIVE for the lifetime of the interface, but the
+// panel's stats cron treats every adapter's per-user bytes as a delta since
+// the last poll (xray meets that contract with `statsquery -reset`). So this
+// adapter snapshots the cumulative values (a.lastStats) and emits the per-poll
+// DELTA. Without this, the cron re-added each peer's entire lifetime total on
+// every tick — endless phantom traffic that drained user quotas (the runaway
+// AWG accounting bug, 2026-06-11).
+//
+// Two edge cases are handled so we never emit a spurious spike:
+//   - First sight of a peer (fresh agent start, or peer just added): record the
+//     baseline, report zero. An agent restart that leaves the interface up
+//     would otherwise re-bill the whole lifetime.
+//   - Counter goes backwards (interface bounced via systemctl restart /
+//     awg-quick down-up zeroes kernel counters): restart the delta from the
+//     current value instead of emitting a negative.
 //
 // In config-only mode (no AwgBin) returns zero counters per user without
 // shelling out, mirroring the old stub behaviour for dev environments
@@ -219,17 +246,38 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 	rxByPub, txByPub := parseAwgDump(string(out))
 
 	var totalIn, totalOut int64
+	// Rebuild the snapshot from scratch each poll so removed peers drop out and
+	// a re-added peer (its kernel counter reset to 0) is treated as first-sight.
+	next := make(map[string]peerCounters, len(a.peers))
 	for id, peer := range a.peers {
-		rx := rxByPub[peer.PublicKey]
-		tx := txByPub[peer.PublicKey]
+		curRx := rxByPub[peer.PublicKey]
+		curTx := txByPub[peer.PublicKey]
+		next[peer.PublicKey] = peerCounters{rx: curRx, tx: curTx}
+
+		var dRx, dTx int64
+		if last, seen := a.lastStats[peer.PublicKey]; seen {
+			if curRx >= last.rx {
+				dRx = curRx - last.rx
+			} else {
+				dRx = curRx // interface bounced, counter reset
+			}
+			if curTx >= last.tx {
+				dTx = curTx - last.tx
+			} else {
+				dTx = curTx
+			}
+		}
+		// else: first sight — baseline recorded above, count nothing this tick.
+
 		users = append(users, core.UserStats{
 			UserID:   id,
-			BytesIn:  rx,
-			BytesOut: tx,
+			BytesIn:  dRx,
+			BytesOut: dTx,
 		})
-		totalIn += rx
-		totalOut += tx
+		totalIn += dRx
+		totalOut += dTx
 	}
+	a.lastStats = next
 
 	return &core.Stats{
 		Users:         users,

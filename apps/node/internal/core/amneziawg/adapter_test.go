@@ -153,9 +153,14 @@ BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=	psk-a	1.2.3.4:54321	10.66.66.2/32	1
 CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=	(none)	(none)	10.66.66.3/32	0	0	0	off
 `
 
-func TestAdapter_GetStats_ParsesDumpAndMapsToUsers(t *testing.T) {
+// Verifies the pubkey->userID mapping AND the cumulative->delta accounting:
+// the kernel counters are cumulative, but GetStats must emit per-poll deltas
+// (first sight reports zero, growth reports the diff, a counter reset restarts
+// from the current value). Regression guard for the runaway AWG traffic bug
+// where every poll re-billed the lifetime total.
+func TestAdapter_GetStats_ParsesDumpAndReportsDeltas(t *testing.T) {
 	dir := t.TempDir()
-	calls := []string{}
+	currentDump := fakeAwgDump
 	a := New(Config{
 		Inbound:     validInbound(),
 		ConfigPath:  filepath.Join(dir, "awg0.conf"),
@@ -163,9 +168,8 @@ func TestAdapter_GetStats_ParsesDumpAndMapsToUsers(t *testing.T) {
 		AwgQuickBin: "/usr/bin/awg-quick",
 	}, slog.Default())
 	a.cfg.runCmd = func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		calls = append(calls, name+" "+strings.Join(args, " "))
 		if len(args) > 0 && args[0] == "show" {
-			return []byte(fakeAwgDump), nil
+			return []byte(currentDump), nil
 		}
 		return nil, nil
 	}
@@ -175,22 +179,53 @@ func TestAdapter_GetStats_ParsesDumpAndMapsToUsers(t *testing.T) {
 	a.AddUser(core.User{UserID: "alice", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.66.66.2/32"})
 	a.AddUser(core.User{UserID: "bob", AmneziaWGPublicKey: testWGPubKeyB, AmneziaWGAllowedIP: "10.66.66.3/32"})
 
+	byID := func(s *core.Stats) map[string]core.UserStats {
+		m := map[string]core.UserStats{}
+		for _, u := range s.Users {
+			m[u.UserID] = u
+		}
+		return m
+	}
+
+	// Poll 1: first sight. alice is already at 24390/348 cumulative in the
+	// kernel, but we record the baseline and bill nothing.
 	stats, err := a.GetStats()
 	if err != nil {
-		t.Fatalf("GetStats: %v", err)
+		t.Fatalf("GetStats poll1: %v", err)
 	}
-	byID := map[string]core.UserStats{}
-	for _, u := range stats.Users {
-		byID[u.UserID] = u
+	if got := byID(stats)["alice"]; got.BytesIn != 0 || got.BytesOut != 0 {
+		t.Errorf("poll1 alice (first sight): got rx=%d tx=%d, want 0/0", got.BytesIn, got.BytesOut)
 	}
-	if got := byID["alice"]; got.BytesIn != 24390 || got.BytesOut != 348 {
-		t.Errorf("alice counters: got rx=%d tx=%d, want 24390/348", got.BytesIn, got.BytesOut)
+	if stats.TotalBytesIn != 0 || stats.TotalBytesOut != 0 {
+		t.Errorf("poll1 totals: got %d/%d, want 0/0", stats.TotalBytesIn, stats.TotalBytesOut)
 	}
-	if got := byID["bob"]; got.BytesIn != 0 || got.BytesOut != 0 {
-		t.Errorf("bob counters: got rx=%d tx=%d, want 0/0", got.BytesIn, got.BytesOut)
+
+	// Poll 2: alice's cumulative grows 24390->30000 / 348->500. Expect the
+	// delta (5610/152), NOT the cumulative.
+	currentDump = strings.Replace(fakeAwgDump, "24390\t348", "30000\t500", 1)
+	stats, err = a.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats poll2: %v", err)
 	}
-	if stats.TotalBytesIn != 24390 || stats.TotalBytesOut != 348 {
-		t.Errorf("totals: got %d/%d, want 24390/348", stats.TotalBytesIn, stats.TotalBytesOut)
+	if got := byID(stats)["alice"]; got.BytesIn != 5610 || got.BytesOut != 152 {
+		t.Errorf("poll2 alice delta: got rx=%d tx=%d, want 5610/152", got.BytesIn, got.BytesOut)
+	}
+	if got := byID(stats)["bob"]; got.BytesIn != 0 || got.BytesOut != 0 {
+		t.Errorf("poll2 bob: got rx=%d tx=%d, want 0/0", got.BytesIn, got.BytesOut)
+	}
+	if stats.TotalBytesIn != 5610 || stats.TotalBytesOut != 152 {
+		t.Errorf("poll2 totals: got %d/%d, want 5610/152", stats.TotalBytesIn, stats.TotalBytesOut)
+	}
+
+	// Poll 3: interface bounced — counters reset below the snapshot. Delta must
+	// restart from the current value (100/40), never go negative.
+	currentDump = strings.Replace(fakeAwgDump, "24390\t348", "100\t40", 1)
+	stats, err = a.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats poll3: %v", err)
+	}
+	if got := byID(stats)["alice"]; got.BytesIn != 100 || got.BytesOut != 40 {
+		t.Errorf("poll3 alice after reset: got rx=%d tx=%d, want 100/40", got.BytesIn, got.BytesOut)
 	}
 }
 
