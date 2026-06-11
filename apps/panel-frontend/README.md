@@ -5,12 +5,12 @@ React 19 + Vite 8 SPA for the Iceslab admin UI.
 ## Stack
 
 - React 19 + TypeScript
-- Vite 8 — dev server and build, served by nginx in prod
-- Mantine 8 — UI kit (AppShell, Table, Form, Modal, Notifications, MultiSelect, SegmentedControl)
-- TanStack Query 5 — server state with cache invalidation on mutation
-- Zustand 5 + persist middleware — auth token kept in localStorage
-- React Router DOM 7 — routes + ProtectedRoute gate
-- Axios — HTTP client with JWT interceptor and 401-clear-session interceptor
+- Vite 8: dev server and build, served by nginx in prod
+- Mantine 8: UI kit (AppShell, Table, Form, Modal, Notifications, MultiSelect, SegmentedControl)
+- TanStack Query 5: server state with cache invalidation on mutation
+- Zustand 5 + persist middleware: auth token kept in localStorage
+- React Router DOM 7: routes + ProtectedRoute gate
+- Axios: HTTP client with JWT interceptor and 401-clear-session interceptor
 
 ## Pages
 
@@ -18,10 +18,10 @@ React 19 + Vite 8 SPA for the Iceslab admin UI.
 |---|---|---|
 | `/login` | LoginPage | Renders "Create first admin" when no admin exists yet |
 | `/users` | UsersPage | CRUD, traffic limits + reset strategies, `enabledProtocols` MultiSelect, soft-delete confirm modal |
-| `/nodes` | NodesPage | CRUD + one-time mTLS payload modal at create (admin must save it — panel never re-emits) |
-| `/profiles` | ProfilesPage | Per-protocol form (Hysteria / Xray / AmneziaWG / Naive / SS / MTProto / Mieru) — Xray network selector (raw/xhttp/ws/grpc) + Generate-keypair button |
-| `/squads` | SquadsPage | ACL groups — which profile is visible to which user group |
-| `/subscription/metadata` | SubscriptionMetadataPage | Profile-Title / Update-Interval / Support-URL / Announce template headers emitted on `/sub/:token` |
+| `/nodes` | NodesPage | CRUD + one-time mTLS payload modal at create (admin must save it, panel never re-emits) |
+| `/profiles` | ProfilesPage | Per-protocol form (Hysteria / Xray / AmneziaWG / Naive / SS / MTProto / Mieru); Xray 3-step picker: protocol (VLESS/VMess/Trojan) → transport (raw/ws/grpc/xhttp/httpupgrade/kcp) → security (REALITY/TLS/none) + Generate-keypair button |
+| `/squads` | SquadsPage | ACL groups: which profile is visible to which user group |
+| `/subscription/metadata` | SubscriptionMetadataPage | Profile-Title / Update-Interval / Support-URL / Announce headers emitted on `/sub/:token` + routing preset picker (proxy-all / ru-split) |
 | `/subscription/routing` | SrrPage | Subscription Response Rules CRUD + Test-against-UA panel (legacy `/srr` redirects here) |
 | `/settings` | SettingsPage | Brand name, API tokens, regions |
 

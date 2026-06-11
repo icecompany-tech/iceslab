@@ -101,5 +101,5 @@ All endpoints require panel mTLS client cert (`tls.RequireAndVerifyClientCert`).
 
 Per-adapter behaviour:
 
-- Hysteria — `AddUser` updates the in-memory password→user map; client reconnects authenticate via the local `/auth` callback. No subprocess restart.
-- Xray — `AddUser` rewrites `config.json` and restarts the xray subprocess (~1s downtime per mutation). Live management via gRPC `proxyman.HandlerService.AlterInbound` is on the roadmap.
+- Hysteria - `AddUser` updates the in-memory password→user map; client reconnects authenticate via the local `/auth` callback. No subprocess restart.
+- Xray - `AddUser` rewrites `config.json` and restarts the xray subprocess (~1s downtime per mutation). Live management via gRPC `proxyman.HandlerService.AlterInbound` is on the roadmap.

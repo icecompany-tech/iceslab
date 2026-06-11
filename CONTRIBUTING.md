@@ -16,8 +16,8 @@ pnpm --filter @iceslab/panel-frontend dev    # SPA on :5173
 
 ## Branches
 
-- `main` — what installer scripts pull. Tagged releases (`v0.1.0`, `v0.1.1`, ...).
-- `develop` — daily working branch. Most PRs land here.
+- `main` - what installer scripts pull. Tagged releases (`v0.1.0`, `v0.1.1`, ...).
+- `develop` - daily working branch. Most PRs land here.
 - Tagged releases happen via PR `develop` → `main` plus a new tag.
 
 ## Before opening a PR
@@ -54,7 +54,7 @@ Use https://github.com/icecompany-tech/iceslab/issues/new. Include:
 - Relevant logs (`journalctl -u iceslab-node`, panel-backend stdout)
 - What you tried, what happened, what you expected
 
-For security issues see [SECURITY.md](./SECURITY.md) — don't file public issues for those.
+For security issues see [SECURITY.md](./SECURITY.md) - don't file public issues for those.
 
 ## License
 

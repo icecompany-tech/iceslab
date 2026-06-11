@@ -5,19 +5,19 @@ Fastify-based control-plane API for Iceslab. Runs the admin REST endpoints, the 
 ## Stack
 
 - TypeScript on Node 22 (ESM)
-- Fastify 5 — schema-first HTTP, hooks, plugins
-- Prisma 7 + PostgreSQL 16 — schema, migrations, type-safe queries
-- Zod 4 — runtime validation, discriminated unions for inbound configs
-- BullMQ + Redis 7 — `nodeUsersQueue` for fan-out to nodes, `cronTasksQueue` for traffic-reset and review jobs
-- `@peculiar/x509` + undici — mTLS keypair generation and outbound HTTPS with mutual auth
-- Pino — structured JSON logs
-- JWT (`jose`) + bcrypt + `@fastify/rate-limit` — admin auth
+- Fastify 5 - schema-first HTTP, hooks, plugins
+- Prisma 7 + PostgreSQL 16 - schema, migrations, type-safe queries
+- Zod 4 - runtime validation, discriminated unions for inbound configs
+- BullMQ + Redis 7 - `nodeUsersQueue` for fan-out to nodes, `cronTasksQueue` for traffic-reset and review jobs
+- `@peculiar/x509` + undici - mTLS keypair generation and outbound HTTPS with mutual auth
+- Pino - structured JSON logs
+- JWT (`jose`) + bcrypt + `@fastify/rate-limit` - admin auth
 
 ## Layout
 
 ```
 src/
-├── app.ts            buildApp() factory — used by index.ts and tests
+├── app.ts            buildApp() factory - used by index.ts and tests
 ├── index.ts          bootstrap (workers, schedulers, listen)
 ├── config.ts         Zod-validated env
 ├── prisma.ts         single PrismaClient instance
@@ -29,7 +29,7 @@ src/
 │   ├── nodes/        nodes CRUD + mTLS transport (panel→node REST)
 │   ├── inbounds/     inbounds CRUD with discriminated config schemas
 │   ├── subscription/ /sub/:token + format builders + ?format= dispatcher
-│   ├── srr/          Subscription Response Rules — UA-driven format auto-select
+│   ├── srr/          Subscription Response Rules - UA-driven format auto-select
 │   ├── amneziawg/    IP allocator service (panel-side, persists peer→IP)
 │   ├── keygen/       CA + per-node mTLS cert issuance
 │   └── scheduler/    BullMQ queue + cron registration

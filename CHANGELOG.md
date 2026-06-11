@@ -176,7 +176,7 @@ wiring so port changes from the UI take effect on every core.
   serial mTLS round-trips.
 - **UsersPage server-side pagination** + debounced search (was fetching up to 500
   users and paging in JS, silently truncating larger installs).
-- **AppLayout reads sidebar counts from the dashboard cache** — one request
+- **AppLayout reads sidebar counts from the dashboard cache** - one request
   instead of four full-list queries on every page transition.
 - **removeUser cron enqueues deduped by jobId** (a stable orphan was re-enqueued
   ~144×/day).

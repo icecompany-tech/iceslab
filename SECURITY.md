@@ -29,7 +29,7 @@ Expect an initial reply within ~72 hours.
 ## What's out of scope
 
 - DoS via traffic floods (proxies are inherently exposed to abuse)
-- Issues in upstream binaries (Hysteria, Xray, AmneziaWG, Caddy, mtg, mieru, mita) — please report those to the respective upstream projects
+- Issues in upstream binaries (Hysteria, Xray, AmneziaWG, Caddy, mtg, mieru, mita) - please report those to the respective upstream projects
 - Operator misconfiguration (e.g. running with a weak admin password)
 - Findings that require physical access to the panel VPS
 

@@ -6,7 +6,7 @@
 
 English · [Русский](./README.ru.md)
 
-Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS + REALITY + Vision), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru — each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
+Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru: each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
 
 ## Install
 
@@ -96,17 +96,17 @@ Bootstrap installs the upstream binary: xcaddy fork for Naive (needs 2 GB RAM), 
 
 These protocols take no install-time flags for domain or cert. They start idle and wait for the panel to push their inbound config via `applyInbounds`. Domain, email, masquerade and other protocol-specific fields live on the panel-side Profile (set once via UI), then propagate to every node the profile is deployed to. Naive needs an A-record (set in the profile's `hostname` field); MTProto picks its masquerade domain in the profile; SS2022 and Mieru don't need a public domain.
 
-A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default since v0.1.2; 8443 on pre-v0.1.2 installs). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node — changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
+A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default since v0.1.2; 8443 on pre-v0.1.2 installs). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node: changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
 
 ### Running multiple protocols on one node
 
 One node-agent can host several protocols at once. The model is: a Profile carries one protocol + its config; a Binding deploys that profile onto a node at a specific port. To run, say, Xray + Hysteria + Shadowsocks on the same VPS:
 
-1. Install the node-agent once (any single `--protocol` flag, or none — it just bootstraps the agent + the binaries you ask for).
+1. Install the node-agent once (any single `--protocol` flag, or none, it just bootstraps the agent + the binaries you ask for).
 2. Create one Profile per protocol in the panel (Profiles → Create).
 3. In Nodes → edit the node, deploy each profile as a binding. Each binding gets its own listen port; the quick-deploy chips auto-pick the first free port from `[443, 8443, 2053, 2083, 2087, 2096]`, or you can type one inline.
 
-Two bindings can't share a port (unique `(node, port)` constraint), and none of them may reuse the node-agent's own mTLS port (1337 by default). The UI flags a port collision before you save. There's no "one socket, N protocols" multiplexing — each protocol listens on its own port.
+Two bindings can't share a port (unique `(node, port)` constraint), and none of them may reuse the node-agent's own mTLS port (1337 by default). The UI flags a port collision before you save. There's no "one socket, N protocols" multiplexing: each protocol listens on its own port.
 
 ### Installer knobs
 
@@ -115,7 +115,7 @@ Both installers read env overrides. The ones people reach for most:
 | Env | Default | Effect |
 |---|---|---|
 | `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.1.5` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
-| `SKIP_SWAP` | `0` | Set `1` to skip the auto 4 GB swapfile on small-RAM VPS. The build may OOM on <3.5 GB RAM without swap — only opt out if you manage swap yourself. |
+| `SKIP_SWAP` | `0` | Set `1` to skip the auto 4 GB swapfile on small-RAM VPS. The build may OOM on <3.5 GB RAM without swap; only opt out if you manage swap yourself. |
 | `NODE_PORT` | `1337` | node-agent mTLS listen port. Change per-node to dodge port scanners. |
 | `FRONTEND_PORT` | `8080` | Panel SPA port in bare-IP mode (ignored when `PANEL_DOMAIN` is set, Caddy fronts 443). |
 
@@ -124,12 +124,30 @@ Both installers read env overrides. The ones people reach for most:
 | Protocol | What runs on the node | Native or Xray |
 |---|---|---|
 | Hysteria 2 | `hysteria server` from apernet/hysteria, with auth-callback, Brutal CC, Salamander obfs, port-hopping | native |
-| Xray | `xray run` with VLESS + REALITY + Vision; transports raw / xhttp / ws / gRPC / httpupgrade / kcp; Trojan over REALITY | native |
+| Xray | `xray run` with VLESS / VMess / Trojan; security REALITY, own-cert TLS or none; transports raw / ws / gRPC / xhttp / httpupgrade / kcp; Vision flow | native |
 | AmneziaWG | amnezia-vpn DKMS kernel module + `awg-quick` | native |
 | NaiveProxy | Caddy fork (`klzgrad/forwardproxy@naive` via xcaddy) | native |
 | Shadowsocks 2022 | xray-core inbound with `2022-blake3-*` ciphers | reuses xray binary |
 | MTProto | `9seconds/mtg` Fake-TLS, per-inbound secret derived from (id, domain) | native |
 | Mieru | `enfein/mieru` (`mita apply config` + reload) | native |
+
+## Subscriptions
+
+One link per user: `https://panel.example.com/sub/<token>`. The same URL serves every client:
+
+| Format | Trigger | Typical clients |
+|---|---|---|
+| base64 URI list (`plain`) | default | v2rayN, Streisand, anything |
+| `clash` | `?format=clash` or User-Agent match | Clash Meta / mihomo apps |
+| `singbox` | `?format=singbox` or UA | sing-box, Hiddify |
+| `xrayjson` | `?format=xrayjson` or UA | Xray-JSON importers |
+| `json` | `?format=json` | API integrations |
+| `wgconf` | `?format=wgconf` | AmneziaWG / wg-quick `.conf` |
+| HTML page | browser | landing page with QR + per-format links |
+
+User-Agent auto-detection is admin-editable (Subscription Response Rules page). Useful query params: `?topN=N` caps the list to the best nodes by region + load, `?bundle=url-test|balancer` picks the auto-failover flavor, `?routing=` overrides the routing preset per request.
+
+Panel-wide routing preset (Subscription page): `proxy-all` (default, everything tunnels) or `ru-split` (ads blocked, RU domains/IPs and private ranges direct, the rest tunnels). Applies to the full-config formats: clash, singbox, xrayjson. Per-user device limits (HWID) are enforced on the same endpoint.
 
 ## Stack
 
@@ -166,9 +184,9 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 
 ## Project policies
 
-- **Contributing** — see [CONTRIBUTING.md](./CONTRIBUTING.md). PRs accepted under AGPL-3.0 inbound = outbound; commits squashed on merge.
-- **Security** — vulnerabilities to `learntoowork@outlook.com`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
-- **Trademark** — the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected — fork freely, just rename if you ship publicly.
+- **Contributing**: see [CONTRIBUTING.md](./CONTRIBUTING.md). PRs accepted under AGPL-3.0 inbound = outbound; commits squashed on merge.
+- **Security**: vulnerabilities to `learntoowork@outlook.com`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
+- **Trademark**: the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected: fork freely, just rename if you ship publicly.
 
 ## License
 

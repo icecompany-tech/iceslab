@@ -6,7 +6,7 @@
 
 [English](./README.md) · Русский
 
-Self-hosted панель для прокси, которая запускает настоящий апстрим-бинарник каждого протокола вместо того чтобы оборачивать всё через Xray-core. Hysteria 2, Xray (VLESS + REALITY + Vision), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru — каждый это реальный бинарь проекта, под управлением Go node-agent через общий интерфейс `CoreAdapter`.
+Self-hosted панель для прокси, которая запускает настоящий апстрим-бинарник каждого протокола вместо того чтобы оборачивать всё через Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru: каждый это реальный бинарь проекта, под управлением Go node-agent через общий интерфейс `CoreAdapter`.
 
 ## Установка
 
@@ -81,7 +81,7 @@ bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... -
 
 - Default подсеть `10.66.66.0/24`. Очевидная `10.0.0.0/24` коллизит с внутренним host-gateway у некоторых бюджетных VPS-провайдеров.
 - Порт меньше 9999. RU мобильные ISP DPI-дропают исходящий UDP/443, а 51820 это default WireGuard который таргетят специально. 1234 или 51280 нормально.
-- Клиент: AmneziaVPN ≥ 4.8.12.9 или Hiddify Next ≥ 2.4. Есть upstream-баг ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)) когда ненулевые S3/S4 молча дропают трафик — пресеты по умолчанию `S3=0 S4=0`.
+- Клиент: AmneziaVPN ≥ 4.8.12.9 или Hiddify Next ≥ 2.4. Есть upstream-баг ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)) когда ненулевые S3/S4 молча дропают трафик, поэтому пресеты по умолчанию `S3=0 S4=0`.
 
 #### NaiveProxy / Shadowsocks 2022 / MTProto / Mieru
 
@@ -96,7 +96,7 @@ Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (н
 
 Эти протоколы не принимают флагов домена или cert при установке. Стартуют idle и ждут пока панель пушнёт inbound config через `applyInbounds`. Domain, email, masquerade и прочие protocol-specific поля живут в panel-side Profile (задаётся в UI один раз) и потом распространяются на все ноды куда профиль задеплоен. Naive требует A-запись (`hostname` в профиле); MTProto выбирает masquerade-домен там же; SS2022 и Mieru не требуют публичного домена.
 
-Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 1337 по умолчанию начиная с v0.1.2; 8443 на pre-v0.1.2 установках). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) — голый IP. Задавай правильно при создании ноды, потому что менять потом — только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
+Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 1337 по умолчанию начиная с v0.1.2; 8443 на pre-v0.1.2 установках). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) это голый IP. Задавай правильно при создании ноды, потому что менять потом можно только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
 
 ### Несколько протоколов на одной ноде
 
@@ -106,7 +106,7 @@ Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (н
 2. Создай по одному Profile на каждый протокол (Profiles → Create).
 3. В Nodes → редактирование ноды задеплой каждый профиль как binding. Каждый binding получает свой listen-порт; чипы quick-deploy сами берут первый свободный из `[443, 8443, 2053, 2083, 2087, 2096]`, либо впиши вручную.
 
-Два binding не могут делить порт (уникальный индекс `(node, port)`), и ни один не должен совпадать с mTLS-портом самого node-agent (по умолчанию 1337). UI подсветит конфликт до сохранения. Мультиплексирования "один сокет, N протоколов" нет — каждый протокол слушает свой порт.
+Два binding не могут делить порт (уникальный индекс `(node, port)`), и ни один не должен совпадать с mTLS-портом самого node-agent (по умолчанию 1337). UI подсветит конфликт до сохранения. Мультиплексирования "один сокет, N протоколов" нет: каждый протокол слушает свой порт.
 
 ### Параметры установщика
 
@@ -115,7 +115,7 @@ Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (н
 | Env | По умолчанию | Эффект |
 |---|---|---|
 | `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.1.5` | Git-тег/ветка/sha для установки. Пинь на тег релиза для воспроизводимости. |
-| `SKIP_SWAP` | `0` | Поставь `1` чтобы пропустить авто-создание swapfile 4 ГБ на VPS с малым RAM. На <3.5 ГБ RAM без swap сборка может словить OOM — отключай только если управляешь swap сам. |
+| `SKIP_SWAP` | `0` | Поставь `1` чтобы пропустить авто-создание swapfile 4 ГБ на VPS с малым RAM. На <3.5 ГБ RAM без swap сборка может словить OOM; отключай только если управляешь swap сам. |
 | `NODE_PORT` | `1337` | mTLS listen-порт node-agent. Меняй per-node чтобы уходить от сканеров портов. |
 | `FRONTEND_PORT` | `8080` | Порт SPA панели в bare-IP режиме (игнорируется когда задан `PANEL_DOMAIN`, тогда Caddy на 443). |
 
@@ -124,12 +124,30 @@ Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (н
 | Протокол | Что запускается на ноде | Native или Xray |
 |---|---|---|
 | Hysteria 2 | `hysteria server` из apernet/hysteria, с auth-callback, Brutal CC, Salamander obfs, port-hopping | native |
-| Xray | `xray run` с VLESS + REALITY + Vision; транспорты raw / xhttp / ws / gRPC / httpupgrade / kcp; Trojan поверх REALITY | native |
+| Xray | `xray run` с VLESS / VMess / Trojan; security REALITY, свой TLS-серт или none; транспорты raw / ws / gRPC / xhttp / httpupgrade / kcp; Vision flow | native |
 | AmneziaWG | amnezia-vpn DKMS kernel-модуль + `awg-quick` | native |
 | NaiveProxy | Caddy fork (`klzgrad/forwardproxy@naive` через xcaddy) | native |
 | Shadowsocks 2022 | xray-core inbound с `2022-blake3-*` шифрами | reuses xray binary |
 | MTProto | `9seconds/mtg` Fake-TLS, per-inbound secret из (id, domain) | native |
 | Mieru | `enfein/mieru` (`mita apply config` + reload) | native |
+
+## Подписки
+
+Одна ссылка на юзера: `https://panel.example.com/sub/<token>`. Один URL обслуживает все клиенты:
+
+| Формат | Триггер | Типичные клиенты |
+|---|---|---|
+| base64 URI-список (`plain`) | по умолчанию | v2rayN, Streisand, что угодно |
+| `clash` | `?format=clash` или User-Agent | приложения на Clash Meta / mihomo |
+| `singbox` | `?format=singbox` или UA | sing-box, Hiddify |
+| `xrayjson` | `?format=xrayjson` или UA | импортёры Xray-JSON |
+| `json` | `?format=json` | API-интеграции |
+| `wgconf` | `?format=wgconf` | AmneziaWG / wg-quick `.conf` |
+| HTML-страница | браузер | человекочитаемая страница с QR и ссылками |
+
+Автоопределение по User-Agent редактируется админом (страница Subscription Response Rules). Полезные query-параметры: `?topN=N` режет список до лучших нод по региону и нагрузке, `?bundle=url-test|balancer` выбирает режим авто-failover, `?routing=` переопределяет пресет маршрутизации на один запрос.
+
+Панельный пресет маршрутизации (страница Подписка): `proxy-all` (по умолчанию, всё через туннель) или `ru-split` (реклама в блок, RU-домены/IP и приватные диапазоны напрямую, остальное в туннель). Действует на форматы полного конфига: clash, singbox, xrayjson. Лимит устройств на юзера (HWID) применяется на этом же эндпоинте.
 
 ## Стек
 
@@ -166,9 +184,9 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 
 ## Политики проекта
 
-- **Контрибуция** — см. [CONTRIBUTING.md](./CONTRIBUTING.md). PR принимаются под AGPL-3.0 inbound = outbound, коммиты squash'ятся при merge.
-- **Безопасность** — уязвимости на `learntoowork@outlook.com`. Детали и таймлайн раскрытия в [SECURITY.md](./SECURITY.md).
-- **Торговая марка** — имя "Iceslab" ограничено к использованию, политика в [TRADEMARK.md](./TRADEMARK.md). AGPL-права на код не затрагивает, форкай свободно, просто переименуй если шипишь публично.
+- **Контрибуция**: см. [CONTRIBUTING.md](./CONTRIBUTING.md). PR принимаются под AGPL-3.0 inbound = outbound, коммиты squash'ятся при merge.
+- **Безопасность**: уязвимости на `learntoowork@outlook.com`. Детали и таймлайн раскрытия в [SECURITY.md](./SECURITY.md).
+- **Торговая марка**: имя "Iceslab" ограничено к использованию, политика в [TRADEMARK.md](./TRADEMARK.md). AGPL-права на код не затрагивает, форкай свободно, просто переименуй если шипишь публично.
 
 ## Лицензия
 
