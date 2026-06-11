@@ -150,6 +150,14 @@ export default {
       noBindings:
         'На эту ноду пока ничего не задеплоено. Используй «Развернуть на нодах» в карточке Profile, или quick-deploy ниже.',
       quickDeployHint: 'Quick-deploy - совместимые профили:',
+      addProtocolLabel: 'Добавить протокол',
+      addProtocolHint:
+        'Разверни сюда ещё профиль. Каждый - это новый binding, который агент гоняет дочерним процессом: на ноде может крутиться несколько протоколов сразу. Профили под установленное ядро идут первыми; кросс-протокольным нужен бинарь на ноде.',
+      addProtocolMatch:
+        '{{protocol}} совпадает с установленным ядром ноды - развернётся вживую на свободном порту.',
+      addProtocolMismatch:
+        '{{protocol}} отличается от ядра ноды ({{node}}). Binding создастся, но агент будет гонять его в callback-only, пока на ноде не поставлен бинарь {{protocol}} (пока по SSH; one-button-установка будет позже).',
+      hostsLabel: 'Hosts · варианты доступа',
       removeBindingTooltip: 'Снять с этой ноды',
       uptime: 'uptime {{value}}',
       coresLabel: 'Cores',

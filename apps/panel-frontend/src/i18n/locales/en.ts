@@ -146,6 +146,14 @@ export default {
       noBindings:
         'Nothing deployed on this node yet. Use "Deploy to nodes" in a profile card, or quick-deploy below.',
       quickDeployHint: 'Quick-deploy - compatible profiles:',
+      addProtocolLabel: 'Add protocol',
+      addProtocolHint:
+        'Deploy another profile here. Each one is a new binding the agent runs as a child process - a node can serve several protocols at once. Matching-core profiles lead; cross-protocol ones need the binary on the node.',
+      addProtocolMatch:
+        '{{protocol}} matches this node\'s installed core - deploys live on a free port.',
+      addProtocolMismatch:
+        '{{protocol}} differs from the node\'s {{node}} core. The binding deploys, but the agent runs it callback-only until the {{protocol}} binary is installed on the node (SSH for now; one-button install lands later).',
+      hostsLabel: 'Hosts · access variants',
       removeBindingTooltip: 'Undeploy from this node',
       uptime: 'uptime {{value}}',
       coresLabel: 'Cores',

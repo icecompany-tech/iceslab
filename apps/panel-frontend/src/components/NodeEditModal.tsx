@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import {
   IconActivity,
+  IconAlertTriangle,
   IconBolt,
   IconCheck,
   IconCpu,
@@ -33,6 +34,7 @@ import {
   IconDeviceFloppy,
   IconKey,
   IconLink,
+  IconPlus,
   IconRocket,
   IconTrash,
   IconWorld,
@@ -253,12 +255,19 @@ export function NodeEditModal({
   // Initialized lazily on first edit; cleared after save.
   const [portDrafts, setPortDrafts] = useState<Record<string, number>>({});
 
-  // Quick-deploy: auto-create binding for any selected available profile.
-  const availableProfiles = (profilesQuery.data?.profiles ?? []).filter(
-    (p) =>
-      !bindingsWithProfile.some((bp) => bp.binding.profileId === p.id) &&
-      p.protocol === form.values.protocol,
-  );
+  // F-P1-b "+ Add protocol": every profile not yet bound here is deployable,
+  // NOT just ones matching the node's installed core. The old `p.protocol ===
+  // form.values.protocol` gate is exactly why adding hy2 to an xray node from
+  // the node modal was impossible (the chip never appeared). Now all show;
+  // cross-protocol ones are flagged (binary may be absent -> callback-only).
+  // Sorted matching-core-first so the "just works" options lead.
+  const availableProfiles = (profilesQuery.data?.profiles ?? [])
+    .filter((p) => !bindingsWithProfile.some((bp) => bp.binding.profileId === p.id))
+    .sort((a, b) => {
+      const am = a.protocol === node?.protocol ? 0 : 1;
+      const bm = b.protocol === node?.protocol ? 0 : 1;
+      return am - bm || a.name.localeCompare(b.name);
+    });
   const nodeAgentPort = parseNodeAgentPort(node?.address);
   const addBindingMutation = useMutation({
     mutationFn: (profileId: string) => {
@@ -730,6 +739,21 @@ export function NodeEditModal({
                   </Group>
                   {profile && (
                     <Box mt="xs" pl="xl">
+                      {/* F-P1-b: label the host sub-level so "add host" (an
+                          access variant: SNI/fingerprint) reads as nested under
+                          the binding (the protocol), not as "add protocol". */}
+                      <Text
+                        mb={4}
+                        style={{
+                          fontFamily: "'Geist Mono', monospace",
+                          fontSize: 9,
+                          letterSpacing: '0.12em',
+                          textTransform: 'uppercase',
+                          color: '#7A8BA3',
+                        }}
+                      >
+                        {t('nodes.edit.hostsLabel')}
+                      </Text>
                       <HostsManager
                         bindingId={binding.id}
                         protocol={profile.protocol}
@@ -742,33 +766,72 @@ export function NodeEditModal({
           )}
 
           {availableProfiles.length > 0 && (
-            <Box mt="sm">
-              <Text size="xs" c="dimmed" mb={4}>
-                {t('nodes.edit.quickDeployHint')}
+            <Box mt="md">
+              <Divider
+                mb="sm"
+                labelPosition="left"
+                label={
+                  <Group gap={6}>
+                    <IconPlus size={12} />
+                    <Text size="xs" fw={600} tt="uppercase" style={{ letterSpacing: '0.08em' }}>
+                      {t('nodes.edit.addProtocolLabel')}
+                    </Text>
+                  </Group>
+                }
+              />
+              <Text size="xs" c="dimmed" mb={6}>
+                {t('nodes.edit.addProtocolHint')}
               </Text>
               <Group gap={6} wrap="wrap">
-                {availableProfiles.map((p) => (
-                  <Button
-                    key={p.id}
-                    variant="light"
-                    size="xs"
-                    leftSection={<IconLink size={12} />}
-                    loading={
-                      addBindingMutation.isPending &&
-                      addBindingMutation.variables === p.id
-                    }
-                    // Bug #5: disable ALL chips while any add is in flight.
-                    // The mutationFn computes the free port from the rendered
-                    // bindings list; two rapid clicks both see the pre-add
-                    // list and both pick 443 -> second 409s. Forcing sequential
-                    // adds means each click sees the prior binding (refetched
-                    // on success) and picks the next free port.
-                    disabled={addBindingMutation.isPending}
-                    onClick={() => addBindingMutation.mutate(p.id)}
-                  >
-                    {p.name}
-                  </Button>
-                ))}
+                {availableProfiles.map((p) => {
+                  // Cross-protocol = the node's installed core differs, so the
+                  // protocol binary is likely absent and the agent runs the
+                  // inbound callback-only until it's installed (SSH / F-P2).
+                  const mismatch = p.protocol !== node.protocol;
+                  return (
+                    <Tooltip
+                      key={p.id}
+                      label={
+                        mismatch
+                          ? t('nodes.edit.addProtocolMismatch', {
+                              protocol: p.protocol,
+                              node: node.protocol,
+                            })
+                          : t('nodes.edit.addProtocolMatch', { protocol: p.protocol })
+                      }
+                      multiline
+                      w={280}
+                    >
+                      <Button
+                        variant="light"
+                        color={mismatch ? 'yellow' : 'violet'}
+                        size="xs"
+                        leftSection={
+                          mismatch ? <IconAlertTriangle size={12} /> : <IconLink size={12} />
+                        }
+                        rightSection={
+                          <Text span size="9px" ff="monospace" tt="uppercase" style={{ opacity: 0.7 }}>
+                            {p.protocol}
+                          </Text>
+                        }
+                        loading={
+                          addBindingMutation.isPending &&
+                          addBindingMutation.variables === p.id
+                        }
+                        // Bug #5: disable ALL chips while any add is in flight.
+                        // The mutationFn computes the free port from the rendered
+                        // bindings list; two rapid clicks both see the pre-add
+                        // list and both pick 443 -> second 409s. Forcing sequential
+                        // adds means each click sees the prior binding (refetched
+                        // on success) and picks the next free port.
+                        disabled={addBindingMutation.isPending}
+                        onClick={() => addBindingMutation.mutate(p.id)}
+                      >
+                        {p.name}
+                      </Button>
+                    </Tooltip>
+                  );
+                })}
               </Group>
             </Box>
           )}
