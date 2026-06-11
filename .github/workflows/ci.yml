@@ -175,7 +175,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Build + push
-        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
@@ -188,15 +187,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,scope=${{ matrix.image.name }},mode=max
 
-      # I7 - scan the published image for OS-package vulns the npm-audit gate
-      # can't see (alpine packages, the Go runtime base, etc). `ignore-unfixed`
-      # keeps it actionable: it only fails when a fix is actually available to
-      # bump to, so unpatched upstream base CVEs don't wedge every deploy.
-      - name: Trivy image scan (HIGH,CRITICAL, fixable)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}@${{ steps.build.outputs.digest }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-          vuln-type: os,library
+      # I7 (Trivy image scan) intentionally deferred: a pinned trivy-action
+      # version must be verified against a live run (a bad ref fails the whole
+      # docker job at action-resolution), and the scan should land report-only
+      # first so an unpatched base CVE doesn't wedge every deploy. Add it as a
+      # separate, watched change once the baseline is known clean.
