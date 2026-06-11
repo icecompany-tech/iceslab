@@ -5,15 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/subprocess"
 )
 
 const Name = "shadowsocks"
+
+// apiCallTimeout caps the live HandlerService calls (`xray api adu`/`rmu`).
+const apiCallTimeout = 5 * time.Second
 
 // Config is the per-instance settings for a ShadowsocksAdapter.
 type Config struct {
@@ -118,12 +124,18 @@ func (a *Adapter) AddUser(user core.User) error {
 		// and let Start/ApplyInbound flush it later.
 		return nil
 	}
+	// N1 - live add via xray's HandlerService (SS rides xray-core); fall back
+	// to a full restart if it isn't possible.
+	if a.liveUpdateUser(context.Background(), liveAdd, desired) {
+		return nil
+	}
 	return a.regenerateAndRestart(context.Background())
 }
 
 func (a *Adapter) RemoveUser(userID string) error {
 	a.mu.Lock()
-	if _, ok := a.users[userID]; !ok {
+	removed, ok := a.users[userID]
+	if !ok {
 		a.mu.Unlock()
 		return nil
 	}
@@ -133,7 +145,109 @@ func (a *Adapter) RemoveUser(userID string) error {
 	if !started {
 		return nil
 	}
+	if a.liveUpdateUser(context.Background(), liveRemove, removed) {
+		return nil
+	}
 	return a.regenerateAndRestart(context.Background())
+}
+
+type liveOp int
+
+const (
+	liveAdd liveOp = iota
+	liveRemove
+)
+
+// buildAduInbound renders the single-inbound JSON `xray api adu` consumes for a
+// Shadowsocks inbound: the SS settings shape (method + server PSK + the one
+// client + network) so xray-core can validate and attach the user. Mirrors the
+// settings block in renderConfig so the shape can't drift.
+func buildAduInbound(inbound InboundConfig, target ssClient) ([]byte, error) {
+	c := inbound.withDefaults()
+	return json.Marshal(map[string]any{
+		"tag":      c.Tag,
+		"protocol": "shadowsocks",
+		"settings": map[string]any{
+			"method":   c.Method,
+			"password": c.ServerPSK,
+			"clients":  []ssClient{target},
+			"network":  "tcp,udp",
+		},
+	})
+}
+
+// liveUpdateUser adds/removes a single SS user on the RUNNING xray via the
+// HandlerService and keeps the on-disk config in sync. Returns true on success;
+// false tells the caller to fall back to a restart. restartMu-guarded.
+func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target ssClient) bool {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+
+	a.mu.Lock()
+	clients := sortedClients(a.users)
+	inbound := a.cfg.Inbound
+	cfgPath := a.cfg.ConfigPath
+	binPath := a.cfg.BinaryPath
+	run := a.cfg.RunCmd
+	proc := a.proc
+	a.mu.Unlock()
+
+	if binPath == "" || run == nil || proc == nil || !proc.Running() {
+		return false
+	}
+
+	blob, err := renderConfig(inbound, clients)
+	if err != nil {
+		return false
+	}
+	if cfgPath != "" {
+		if err := writeConfig(cfgPath, blob); err != nil {
+			return false
+		}
+	}
+
+	cfg := inbound.withDefaults()
+	cctx, cancel := context.WithTimeout(ctx, apiCallTimeout)
+	defer cancel()
+	server := fmt.Sprintf("--server=127.0.0.1:%d", cfg.ApiPort)
+
+	switch op {
+	case liveAdd:
+		data, err := buildAduInbound(inbound, target)
+		if err != nil {
+			return false
+		}
+		tmp, err := os.CreateTemp("", "ice-ss-adu-*.json")
+		if err != nil {
+			return false
+		}
+		tmpPath := tmp.Name()
+		defer os.Remove(tmpPath)
+		if _, err := tmp.Write(data); err != nil {
+			_ = tmp.Close()
+			return false
+		}
+		if err := tmp.Close(); err != nil {
+			return false
+		}
+		if out, err := run(cctx, binPath, "api", "adu", server, tmpPath); err != nil {
+			a.logger.Warn("ss api adu failed; falling back to restart",
+				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		a.logger.Info("shadowsocks user added live (no restart)", "email", target.Email)
+		return true
+	case liveRemove:
+		if out, err := run(cctx, binPath, "api", "rmu", server, "-tag="+cfg.Tag, target.Email); err != nil {
+			a.logger.Warn("ss api rmu failed; falling back to restart",
+				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		a.logger.Info("shadowsocks user removed live (no restart)", "email", target.Email)
+		return true
+	default:
+		return false
+	}
 }
 
 // inboundCfgWire mirrors `ShadowsocksInboundCfg` in

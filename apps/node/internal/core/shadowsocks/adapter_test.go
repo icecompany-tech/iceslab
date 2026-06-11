@@ -12,6 +12,47 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
+// TestN1_BuildAduInbound verifies the `xray api adu` input JSON for a
+// Shadowsocks inbound: tag + protocol=shadowsocks + settings carrying the
+// method, server PSK, the one client (password+email), and network. A wrong
+// shape would make every live add silently fall back to a restart.
+func TestN1_BuildAduInbound(t *testing.T) {
+	data, err := buildAduInbound(
+		InboundConfig{Method: "2022-blake3-aes-256-gcm", ServerPSK: "server-psk", Tag: "ss-in"},
+		ssClient{Password: "user-pw", Email: "alice"},
+	)
+	if err != nil {
+		t.Fatalf("buildAduInbound: %v", err)
+	}
+	var doc struct {
+		Tag      string `json:"tag"`
+		Protocol string `json:"protocol"`
+		Settings struct {
+			Method   string `json:"method"`
+			Password string `json:"password"`
+			Network  string `json:"network"`
+			Clients  []struct {
+				Password string `json:"password"`
+				Email    string `json:"email"`
+			} `json:"clients"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, data)
+	}
+	if doc.Tag != "ss-in" || doc.Protocol != "shadowsocks" {
+		t.Errorf("tag/proto: got %q / %q", doc.Tag, doc.Protocol)
+	}
+	if doc.Settings.Method != "2022-blake3-aes-256-gcm" || doc.Settings.Password != "server-psk" {
+		t.Errorf("method/serverPSK: got %q / %q", doc.Settings.Method, doc.Settings.Password)
+	}
+	if len(doc.Settings.Clients) != 1 ||
+		doc.Settings.Clients[0].Password != "user-pw" ||
+		doc.Settings.Clients[0].Email != "alice" {
+		t.Errorf("client: got %+v", doc.Settings.Clients)
+	}
+}
+
 func newConfigOnlyAdapter(t *testing.T) *Adapter {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
