@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -74,6 +73,17 @@ func (s *Subprocess) Start(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, s.cfg.Binary, s.cfg.Args...)
 	cmd.Stdout = newLogWriter(s.cfg.Logger, slog.LevelInfo, s.cfg.Name)
 	cmd.Stderr = newLogWriter(s.cfg.Logger, slog.LevelError, s.cfg.Name)
+	// N5 - put the child in its own process group so Stop (and ctx-cancel) can
+	// signal the WHOLE group (-pgid), reaping any grandchildren the core forks
+	// (helper procs, ACME/cert workers). Without this an orphaned grandchild
+	// keeps the listen port and triggers a restart-storm on the next spawn.
+	// Platform-specific (unix process groups); see subprocess_unix.go.
+	setProcessGroup(cmd)
+	// N4 - bound cmd.Wait(): if a grandchild inherits the stdout/stderr fd and
+	// outlives the parent, Wait() would block forever, deadlocking the watcher
+	// (and any restartMu held across it). WaitDelay forces the pipes closed +
+	// kills leftovers after the grace period so Wait always returns.
+	cmd.WaitDelay = StopGracePeriod
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn %s: %w", s.cfg.Name, err)
 	}
@@ -140,7 +150,9 @@ func (s *Subprocess) Stop(_ context.Context) error {
 	default:
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	// N5 - signal the whole process group (Setpgid in Start made the child a
+	// group leader). Reaps grandchildren too. See subprocess_unix.go.
+	if err := terminateGroup(cmd); err != nil {
 		s.cfg.Logger.Warn("sigterm failed", "name", s.cfg.Name, "err", err)
 	}
 
@@ -148,7 +160,7 @@ func (s *Subprocess) Stop(_ context.Context) error {
 	case <-exited:
 		return nil
 	case <-time.After(StopGracePeriod):
-		_ = cmd.Process.Kill()
+		_ = killGroup(cmd)
 		// Block until the watcher reaps the killed process — otherwise
 		// the goroutine outlives Stop and ProcessState races with any
 		// later (mis-)use of cmd.
