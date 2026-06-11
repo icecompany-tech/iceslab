@@ -55,6 +55,20 @@ RUN for i in 1 2 3 4 5; do \
     echo "prisma generate failed after 5 attempts" >&2; exit 1
 RUN pnpm exec tsc
 
+# Compile the @iceslab/shared workspace package in-place (emit .js siblings
+# next to the .ts in its src/). Its package.json points the package entry at
+# `src/index.ts` so dev tooling (tsx / vitest / vite) reads TS source directly.
+# Production, however, runs plain `node dist/index.js`, and since Node 22.22 a
+# .ts entry's `export * from './transport.js'` no longer falls back to
+# transport.ts (ERR_MODULE_NOT_FOUND) — node:22-alpine floated into that
+# behaviour and crash-looped the backend on the first rebuild. Emitting the
+# compiled .js siblings makes the source entry resolve under plain node without
+# touching package.json (so dev/test/frontend stay on TS source — they never
+# see these .js, which exist only inside this image). cwd here is
+# /repo/apps/panel-backend; use absolute paths to dodge cwd ambiguity.
+RUN pnpm exec tsc -p /repo/packages/shared/tsconfig.json \
+      --outDir /repo/packages/shared/src --declaration false
+
 # Strip dev deps so only production node_modules remain.
 WORKDIR /repo
 RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
