@@ -33,10 +33,23 @@ export {
 } from '../../core-adapters/mieru/index.js';
 
 /**
- * Strip the optional `:port` suffix from a `host[:port]` string. Returns
- * just the host (or the original input if it has no `:`).
+ * Strip the optional `:port` suffix from a `host[:port]` string, returning the
+ * host. IPv6-aware: a bare `indexOf(':')` split mangled `2001:db8::1` into
+ * `2001`. Handles bracketed (`[::1]:443`) and bare (`2001:db8::1`) IPv6.
  */
 export function hostFromAddress(address: string): string {
+  // Bracketed IPv6: `[::1]` or `[::1]:443` → return the bracketed host.
+  if (address.startsWith('[')) {
+    const close = address.indexOf(']');
+    return close === -1 ? address : address.slice(0, close + 1);
+  }
+  // Bare IPv6 (more than one colon, no brackets) has no unambiguous port
+  // suffix to strip — return it untouched rather than truncating at the
+  // first colon.
+  if (address.indexOf(':') !== address.lastIndexOf(':')) {
+    return address;
+  }
+  // Plain `host:port` or bare host.
   const idx = address.indexOf(':');
   return idx === -1 ? address : address.slice(0, idx);
 }
