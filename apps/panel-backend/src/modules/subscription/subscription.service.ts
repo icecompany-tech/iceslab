@@ -1,3 +1,4 @@
+import { isRoutingPresetId, type RoutingPresetId } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import {
   lookupClientCountry,
@@ -62,6 +63,25 @@ export interface SubscriptionResult {
   endpoints: SubscriptionEndpoint[];
   textPlain: string;
   json: SubscriptionJsonResponse;
+  // R3-a - effective routing override from the user's squads, or null to
+  // inherit the panel-wide default. The single distinct non-null preset across
+  // the user's squads; null when no squad overrides OR they conflict.
+  squadRoutingPreset: RoutingPresetId | null;
+}
+
+/**
+ * R3-a - reduce a user's per-squad routing overrides to one effective preset.
+ * Rule: the single distinct VALID preset across their squads wins; zero
+ * overrides, or a conflict (>1 distinct), returns null = inherit the panel-wide
+ * default. Invalid/garbage values are ignored. Pure (no DB) for testing.
+ */
+export function resolveSquadRouting(
+  overrides: (string | null)[],
+): RoutingPresetId | null {
+  const distinct = [
+    ...new Set(overrides.filter((p): p is RoutingPresetId => p !== null && isRoutingPresetId(p))),
+  ];
+  return distinct.length === 1 ? distinct[0]! : null;
 }
 
 // ───── Per-protocol config shapes (mirror inbounds.schemas.ts) ─────
@@ -591,9 +611,17 @@ export async function generateSubscription(
     e.nodeName = name;
   }
 
+  // R3-a - resolve the per-squad routing override across the user's squads.
+  const userGroups = await prisma.group.findMany({
+    where: { members: { some: { userId: user.id } } },
+    select: { routingPreset: true },
+  });
+  const squadRoutingPreset = resolveSquadRouting(userGroups.map((g) => g.routingPreset));
+
   return {
     endpoints,
     textPlain: encodePlainList(endpoints.map((e) => e.uri)),
     json: buildSubscriptionJson(user, endpoints),
+    squadRoutingPreset,
   };
 }

@@ -12,6 +12,7 @@ import {
   Modal,
   Paper,
   ScrollArea,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -20,6 +21,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import type { RoutingPresetId } from '@iceslab/shared';
 import {
   IconBolt,
   IconCheck,
@@ -50,6 +52,8 @@ const PROTOCOL_COLORS: Record<string, string> = {
 interface FormValues {
   name: string;
   description: string;
+  // R3-a - '' = inherit the panel-wide routing preset.
+  routingPreset: string;
   profileIds: string[];
 }
 
@@ -57,6 +61,7 @@ function defaultValues(squad: Squad | null): FormValues {
   return {
     name: squad?.name ?? '',
     description: squad?.description ?? '',
+    routingPreset: squad?.routingPreset ?? '',
     profileIds: squad?.profileIds ?? [],
   };
 }
@@ -132,6 +137,7 @@ export function SquadFormModal({
     const base = {
       name: values.name,
       description: values.description.trim() || null,
+      routingPreset: (values.routingPreset as RoutingPresetId) || null,
       profileIds: values.profileIds,
     };
     if (isEdit) {
@@ -293,6 +299,19 @@ export function SquadFormModal({
             minRows={2}
             disabled={isAllSquad}
             {...form.getInputProps('description')}
+          />
+          {/* R3-a - per-squad routing override. '' = inherit panel default. */}
+          <Select
+            label={t('squads.form.routing')}
+            description={t('squads.form.routingDesc')}
+            disabled={isAllSquad}
+            data={[
+              { value: '', label: t('squads.form.routingInherit') },
+              { value: 'proxy-all', label: t('squads.form.routingProxyAll') },
+              { value: 'ru-split', label: t('squads.form.routingRuSplit') },
+            ]}
+            allowDeselect={false}
+            {...form.getInputProps('routingPreset')}
           />
 
           <Divider

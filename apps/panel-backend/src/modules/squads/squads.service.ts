@@ -65,6 +65,7 @@ export async function createSquad(input: CreateSquadInput): Promise<PublicSquadD
     data: {
       name: input.name,
       description: input.description ?? null,
+      routingPreset: input.routingPreset ?? null,
       groupProfiles: {
         create: input.profileIds.map((profileId) => ({ profileId })),
       },
@@ -109,6 +110,7 @@ export async function updateSquad(
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.routingPreset !== undefined ? { routingPreset: input.routingPreset } : {}),
       },
       include: includeRelations,
     });

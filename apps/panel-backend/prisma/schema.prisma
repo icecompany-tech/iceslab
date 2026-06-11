@@ -325,6 +325,10 @@ model Group {
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @unique @db.VarChar(64)
   description String?
+  // R3-a - optional per-squad routing-preset override (e.g. 'ru-split'). Null =
+  // inherit the panel-wide default. A user's effective preset is the single
+  // distinct non-null override across their squads (see subscription.service).
+  routingPreset String? @map("routing_preset") @db.VarChar(32)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

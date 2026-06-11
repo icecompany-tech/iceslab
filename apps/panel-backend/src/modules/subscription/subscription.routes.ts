@@ -440,13 +440,16 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         );
       }
 
-      // Routing Templates (R1a) - resolve the preset only for full-config
-      // formats: `?routing=` wins, then the panel-wide setting. plain/json/
-      // wgconf carry no routing section, so we skip the settings read there.
+      // Routing Templates - resolve the preset only for full-config formats.
+      // Precedence (R1a + R3-a): `?routing=` query wins, then the user's
+      // per-squad override, then the panel-wide setting. plain/json/wgconf
+      // carry no routing section, so we skip the read there.
       let routingPreset: RoutingPresetId = 'proxy-all';
       if (format === 'clash' || format === 'singbox' || format === 'xrayjson') {
         routingPreset =
-          query.routing ?? (await getSubscriptionSettings()).routingPreset;
+          query.routing ??
+          result.squadRoutingPreset ??
+          (await getSubscriptionSettings()).routingPreset;
       }
 
       switch (format) {

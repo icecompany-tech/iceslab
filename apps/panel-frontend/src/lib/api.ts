@@ -626,6 +626,8 @@ export interface Squad {
   description: string | null;
   /** Slice 27, squad ACL is profile-level. Renamed from inboundIds. */
   profileIds: string[];
+  /** R3-a, per-squad routing-preset override; null = inherit panel default. */
+  routingPreset: RoutingPresetId | null;
   memberCount: number;
   createdAt: string;
   updatedAt: string;
@@ -634,12 +636,14 @@ export interface Squad {
 export interface CreateSquadInput {
   name: string;
   description?: string | null;
+  routingPreset?: RoutingPresetId | null;
   profileIds?: string[];
 }
 
 export interface UpdateSquadInput {
   name?: string;
   description?: string | null;
+  routingPreset?: RoutingPresetId | null;
   /** Replaces the full profile set when provided. */
   profileIds?: string[];
 }
