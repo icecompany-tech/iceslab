@@ -733,10 +733,15 @@ export interface TestConnectResult {
   endpoint: string;
   port: number;
   probe: 'tcp' | 'tls' | 'skip';
+  // K10 — 'endpoint' = client-facing target; 'dest' = the REALITY masquerade
+  // target the node borrows its TLS1.3 handshake from.
+  kind: 'endpoint' | 'dest';
   sni?: string;
   ok: boolean;
   latencyMs?: number;
   certCn?: string;
+  // TLS-only — negotiated version. REALITY needs the dest to speak TLSv1.3.
+  tlsVersion?: string;
   error?: string;
   notes?: string;
 }

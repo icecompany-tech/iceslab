@@ -175,6 +175,16 @@ function ResultRow({ result }: { result: TestConnectResult }) {
                 <Code style={{ fontSize: 11 }}>cert={result.certCn}</Code>
               </Tooltip>
             )}
+            {result.tlsVersion && (
+              <Tooltip label="Negotiated TLS version - REALITY needs the dest to speak TLSv1.3">
+                <Code
+                  style={{ fontSize: 11 }}
+                  c={result.tlsVersion !== 'TLSv1.3' && result.kind === 'dest' ? 'red' : undefined}
+                >
+                  {result.tlsVersion}
+                </Code>
+              </Tooltip>
+            )}
           </Group>
           {result.error && (
             <Text size="xs" c="red">
