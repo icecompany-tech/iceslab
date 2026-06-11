@@ -103,9 +103,11 @@ export async function findExpiredUsers(): Promise<number> {
   // removeUser is idempotent on the node side, so an occasional duplicate
   // (e.g. reconcile also enqueues) is harmless. (reconcile keeps its own
   // day-bucket jobId because IT re-selects orphans every tick.)
-  for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id });
-  }
+  // B11: one addBulk instead of N awaited add()s — a 1000-user expiry batch
+  // was 1000 sequential Redis round-trips; addBulk pipelines them.
+  await nodeUsersQueue.addBulk(
+    ids.map((id) => ({ name: 'removeUser', data: { userId: id } })),
+  );
   await prisma.user.updateMany({
     where: { id: { in: ids } },
     data: { status: 'expired' },
@@ -142,10 +144,10 @@ export async function findExceededTrafficUsers(): Promise<number> {
   // Same crash-safety argument as findExpiredUsers — enqueue before flip.
   // Bug #8: no dedup jobId here either (same one-time-transition reasoning;
   // see findExpiredUsers). A limited user re-activated then re-limited within
-  // the hour must still get removed.
-  for (const id of ids) {
-    await nodeUsersQueue.add('removeUser', { userId: id });
-  }
+  // the hour must still get removed. B11: addBulk over per-id awaited add.
+  await nodeUsersQueue.addBulk(
+    ids.map((id) => ({ name: 'removeUser', data: { userId: id } })),
+  );
   await prisma.user.updateMany({
     where: { id: { in: ids } },
     data: { status: 'limited' },
@@ -203,12 +205,14 @@ export async function reconcileOrphanNodeUsers(): Promise<number> {
   // day if the original failed and aged out. Picked daily over hourly to
   // bound recovery latency at <=24h while keeping the cron self-healing.
   const dayBucket = Math.floor(now / 86_400_000);
-  for (const u of orphans) {
-    await nodeUsersQueue.add(
-      'removeUser',
-      { userId: u.id },
-      { jobId: `removeUser-${u.id}-d${dayBucket}` },
-    );
-  }
+  // B11: addBulk keeps the per-orphan day-bucket jobId (dedup) while
+  // collapsing N round-trips into one pipelined call.
+  await nodeUsersQueue.addBulk(
+    orphans.map((u) => ({
+      name: 'removeUser',
+      data: { userId: u.id },
+      opts: { jobId: `removeUser-${u.id}-d${dayBucket}` },
+    })),
+  );
   return orphans.length;
 }

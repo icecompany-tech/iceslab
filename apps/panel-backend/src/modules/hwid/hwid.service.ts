@@ -47,6 +47,21 @@ export async function enforceHwid(
     return { status: 'disabled', active: 0, limit };
   }
 
+  // B13 — no per-user cap means nothing to enforce, so skip the
+  // findUnique+update+count (or advisory-lock tx) dance entirely. One upsert
+  // registers/touches the device for the audit log. This is the common case
+  // (most users have no HWID limit), so it keeps /sub off the multi-query hot
+  // path. `active` is left 0: the X-Hwid-Active numerator is cosmetic when the
+  // denominator is "unlimited".
+  if (limit === null) {
+    await prisma.hwidUserDevice.upsert({
+      where: { userId_hwid: { userId, hwid } },
+      create: { userId, hwid },
+      update: { lastSeenAt: new Date() },
+    });
+    return { status: 'allowed', active: 0, limit: null };
+  }
+
   const existing = await prisma.hwidUserDevice.findUnique({
     where: { userId_hwid: { userId, hwid } },
   });

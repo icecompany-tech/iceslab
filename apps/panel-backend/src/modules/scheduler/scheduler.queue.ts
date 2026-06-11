@@ -9,6 +9,7 @@ import {
 } from '../users/users.cron.js';
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
+import { pruneHistory } from '../maintenance/retention.cron.js';
 
 // ───── Queue ─────
 
@@ -41,6 +42,7 @@ const CRON_JOBS: CronJobSpec[] = [
   { name: 'node-metrics-poll',              pattern: '*/15 * * * * *' }, // каждые 15 секунд
   { name: 'node-stats-poll',                pattern: '*/30 * * * * *' }, // каждые 30 секунд — per-user/per-node traffic
   { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут — catch-up for status-flip crashes / dropped jobs
+  { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день — B2 retention для append-only history-таблиц
 ];
 
 // ───── Регистрация (вызывается один раз при бутстрапе) ─────
@@ -123,6 +125,16 @@ export function startCronTasksWorker(): Worker {
         case 'reconcile-orphan-users': {
           const n = await reconcileOrphanNodeUsers();
           if (n > 0) console.log(`[cron] reconcile-orphan-users — re-queued removeUser for ${n} users`);
+          break;
+        }
+        case 'prune-history': {
+          const r = await pruneHistory();
+          const total = r.subscriptionRequests + r.nodeUserUsage + r.nodeUsage;
+          if (total > 0) {
+            console.log(
+              `[cron] prune-history — deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage rows`,
+            );
+          }
           break;
         }
         default:

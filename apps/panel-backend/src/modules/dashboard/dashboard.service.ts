@@ -425,16 +425,7 @@ async function recentEvents(): Promise<DashboardOverview['recentEvents']> {
   }));
 }
 
-export async function getOverview(): Promise<DashboardOverview> {
-  const cached = await redis.get(OVERVIEW_CACHE_KEY).catch(() => null);
-  if (cached) {
-    try {
-      return JSON.parse(cached) as DashboardOverview;
-    } catch {
-      // Corrupted cache — fall through and recompute.
-    }
-  }
-
+async function computeOverview(): Promise<DashboardOverview> {
   const [users, traffic, nodesAndSystem, byProtocol, topUsers, events, host, profileCount, squadCount] =
     await Promise.all([
       userMetrics(),
@@ -466,4 +457,28 @@ export async function getOverview(): Promise<DashboardOverview> {
     .catch(() => undefined);
 
   return overview;
+}
+
+// B10 single-flight: when the cache expires and several admin tabs hit the
+// endpoint in the same instant, only ONE ~20-query recompute runs; the rest
+// await the same in-flight promise instead of each firing their own stampede
+// of aggregates at a 1-vCPU host. In-process (the prod deploy is single
+// instance); cleared in finally so the next post-cache miss recomputes fresh.
+let inflightOverview: Promise<DashboardOverview> | null = null;
+
+export async function getOverview(): Promise<DashboardOverview> {
+  const cached = await redis.get(OVERVIEW_CACHE_KEY).catch(() => null);
+  if (cached) {
+    try {
+      return JSON.parse(cached) as DashboardOverview;
+    } catch {
+      // Corrupted cache — fall through and recompute.
+    }
+  }
+
+  if (inflightOverview) return inflightOverview;
+  inflightOverview = computeOverview().finally(() => {
+    inflightOverview = null;
+  });
+  return inflightOverview;
 }
