@@ -174,7 +174,10 @@ export function AppLayout() {
   void opened;
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { admin, clearSession } = useAuth();
+  // F13 - select individual slices instead of the whole store object, so an
+  // unrelated store update doesn't re-render the entire layout.
+  const admin = useAuth((s) => s.admin);
+  const clearSession = useAuth((s) => s.clearSession);
   const qc = useQueryClient();
   const brandName = useBrandName();
   const { t } = useTranslation();

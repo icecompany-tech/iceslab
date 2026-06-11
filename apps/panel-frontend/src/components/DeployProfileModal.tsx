@@ -40,7 +40,11 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   const qc = useQueryClient();
 
   const nodesQuery = useQuery({
-    queryKey: ['nodes', 'all'],
+    // F8 - distinct key. NodesPage caches ['nodes', regionFilter] and with the
+    // default region that's ['nodes', 'all'] - the same key this modal used,
+    // but a different queryFn shape. Namespacing avoids the two clobbering each
+    // other's cache.
+    queryKey: ['nodes', 'deploy-picker'],
     queryFn: () => listNodes({ limit: 100 }),
     enabled: opened,
   });

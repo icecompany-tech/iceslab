@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActionIcon,
@@ -126,10 +126,19 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
   const isEdit = user !== null;
   // STRATEGY_VALUES are stable enum keys; we render labels via t() so the
   // language switch reflows the select without re-mounting the form.
-  const strategyOptions = STRATEGY_VALUES.map((v) => ({
-    value: v,
-    label: t(`users.strategy.${v}`),
-  }));
+  // F12 - memoize so the array isn't rebuilt on every keystroke-driven render.
+  const strategyOptions = useMemo(
+    () => STRATEGY_VALUES.map((v) => ({ value: v, label: t(`users.strategy.${v}`) })),
+    [t],
+  );
+  // F12 - status options, memoized for the same reason.
+  const statusOptions = useMemo(
+    () => [
+      { value: 'active', label: t('userStatus.active') },
+      { value: 'disabled', label: t('userStatus.disabled') },
+    ],
+    [t],
+  );
 
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
 
@@ -306,10 +315,7 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                 <SectionCard icon={<IconLock size={16} />} title={t('users.table.status')}>
                   <Select
                     label={t('users.table.status')}
-                    data={[
-                      { value: 'active', label: t('userStatus.active') },
-                      { value: 'disabled', label: t('userStatus.disabled') },
-                    ]}
+                    data={statusOptions}
                     {...form.getInputProps('status')}
                   />
                 </SectionCard>

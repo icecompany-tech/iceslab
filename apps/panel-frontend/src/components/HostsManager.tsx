@@ -147,6 +147,17 @@ export function HostsManager({ bindingId, protocol }: HostsManagerProps) {
   const reorderMutation = useMutation({
     mutationFn: (ids: string[]) => reorderHosts(ids),
     onSuccess: () => invalidate(),
+    // F6 - a failed reorder used to fail silently (no onError handler): the
+    // arrow move looked like it worked but the server order never changed.
+    // Surface the error and resync the list from the server.
+    onError: (err) => {
+      invalidate();
+      notifications.show({
+        color: 'red',
+        title: t('common.saveError'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    },
   });
 
   function move(idx: number, dir: -1 | 1) {
