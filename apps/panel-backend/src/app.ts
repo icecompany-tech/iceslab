@@ -7,7 +7,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config } from './config.js';
 import { pingDatabase } from './prisma.js';
-import { pingRedis } from './lib/redis.js';
+import { pingRedis, redis } from './lib/redis.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { usersRoutes } from './modules/users/users.routes.js';
 import { nodesRoutes } from './modules/nodes/nodes.routes.js';
@@ -172,6 +172,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     max: 100,
     timeWindow: '1 minute',
     cache: 10000,
+    // B9 - back the rate-limit counter with Redis so the window survives a
+    // restart (in-memory reset every deploy, letting a flooder start fresh)
+    // and stays consistent if the backend ever runs more than one instance.
+    redis,
   });
 
   await app.register(fastifyCookie);

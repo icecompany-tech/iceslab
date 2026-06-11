@@ -75,8 +75,42 @@ function isHoneypotPath(url: string): boolean {
 
 const BLACKLIST_KEY = (ip: string): string => `sec:blacklist:${ip}`;
 
+// B8 - in-process cache over the blacklist lookup. The prior code hit Redis
+// (EXISTS) on EVERY request, even though the overwhelming majority come from
+// non-blacklisted IPs (and a polling subscription client or admin tab hammers
+// the same IP). Cache the answer: positives for the full blacklist TTL (they
+// won't flip to false until expiry), negatives only briefly so a blacklist set
+// by another path is still picked up fast. When THIS process blacklists an IP
+// we update the cache positively right away. Bounded LRU-ish (oldest-evict on
+// overflow) so a flood of distinct IPs can't grow it unbounded.
+const NEG_CACHE_TTL_MS = 5_000;
+const BLACKLIST_CACHE_MAX = 10_000;
+const blacklistCache = new Map<string, { hit: boolean; expiresAt: number }>();
+
+function cacheGet(ip: string): boolean | null {
+  const e = blacklistCache.get(ip);
+  if (!e) return null;
+  if (Date.now() > e.expiresAt) {
+    blacklistCache.delete(ip);
+    return null;
+  }
+  return e.hit;
+}
+
+function cacheSet(ip: string, hit: boolean, ttlMs: number): void {
+  if (blacklistCache.size >= BLACKLIST_CACHE_MAX) {
+    const oldest = blacklistCache.keys().next().value;
+    if (oldest !== undefined) blacklistCache.delete(oldest);
+  }
+  blacklistCache.set(ip, { hit, expiresAt: Date.now() + ttlMs });
+}
+
 async function isBlacklisted(ip: string): Promise<boolean> {
-  return (await redis.exists(BLACKLIST_KEY(ip))) === 1;
+  const cached = cacheGet(ip);
+  if (cached !== null) return cached;
+  const hit = (await redis.exists(BLACKLIST_KEY(ip))) === 1;
+  cacheSet(ip, hit, hit ? config.HONEYPOT_BLACKLIST_TTL_SEC * 1000 : NEG_CACHE_TTL_MS);
+  return hit;
 }
 
 async function blacklist(ip: string): Promise<boolean> {
@@ -89,6 +123,9 @@ async function blacklist(ip: string): Promise<boolean> {
     config.HONEYPOT_BLACKLIST_TTL_SEC,
     'NX',
   );
+  // B8 - reflect the entry locally so the very next request from this IP is
+  // blocked without waiting for its negative cache entry to expire.
+  cacheSet(ip, true, config.HONEYPOT_BLACKLIST_TTL_SEC * 1000);
   return ok === 'OK';
 }
 
