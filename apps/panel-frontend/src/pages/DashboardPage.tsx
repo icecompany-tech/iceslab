@@ -332,27 +332,27 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
             <TrafficStat
               label={t('dashboard.traffic.labels.today')}
               value={formatBytes(traffic.todayBytes)}
-              delta={deltaText(traffic.todayBytes, traffic.yesterdayBytes)}
+              delta={formatDelta(traffic.todayBytes, traffic.yesterdayBytes)}
             />
             <TrafficStat
               label={t('dashboard.traffic.labels.week')}
               value={formatBytes(traffic.last7dBytes)}
-              delta={deltaText(traffic.last7dBytes, traffic.prev7dBytes)}
+              delta={formatDelta(traffic.last7dBytes, traffic.prev7dBytes)}
             />
             <TrafficStat
               label={t('dashboard.traffic.labels.d30')}
               value={formatBytes(traffic.last30dBytes)}
-              delta={deltaText(traffic.last30dBytes, traffic.prev30dBytes)}
+              delta={formatDelta(traffic.last30dBytes, traffic.prev30dBytes)}
             />
             <TrafficStat
               label={t('dashboard.traffic.labels.month')}
               value={formatBytes(traffic.calendarMonthBytes)}
-              delta={deltaText(traffic.calendarMonthBytes, traffic.lastCalendarMonthBytes)}
+              delta={formatDelta(traffic.calendarMonthBytes, traffic.lastCalendarMonthBytes)}
             />
             <TrafficStat
               label={t('dashboard.traffic.labels.year')}
               value={formatBytes(traffic.currentYearBytes)}
-              delta={deltaText(traffic.currentYearBytes, traffic.lastYearBytes)}
+              delta={formatDelta(traffic.currentYearBytes, traffic.lastYearBytes)}
             />
           </Group>
         </Group>
@@ -939,7 +939,7 @@ function TrafficStat({
 }: {
   label: string;
   value: string;
-  // K1 - "vs previous period" delta from deltaText(); undefined = no delta row.
+  // K1 - "vs previous period" delta from formatDelta(); undefined = no delta row.
   delta?: { text: string; positive: boolean; noData: boolean };
 }) {
   return (
