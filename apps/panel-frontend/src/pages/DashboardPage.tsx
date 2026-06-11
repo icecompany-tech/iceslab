@@ -329,11 +329,31 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
             </Stack>
           </Group>
           <Group gap="lg">
-            <TrafficStat label={t('dashboard.traffic.labels.today')} value={formatBytes(traffic.todayBytes)} />
-            <TrafficStat label={t('dashboard.traffic.labels.week')} value={formatBytes(traffic.last7dBytes)} />
-            <TrafficStat label={t('dashboard.traffic.labels.d30')} value={formatBytes(traffic.last30dBytes)} />
-            <TrafficStat label={t('dashboard.traffic.labels.month')} value={formatBytes(traffic.calendarMonthBytes)} />
-            <TrafficStat label={t('dashboard.traffic.labels.year')} value={formatBytes(traffic.currentYearBytes)} />
+            <TrafficStat
+              label={t('dashboard.traffic.labels.today')}
+              value={formatBytes(traffic.todayBytes)}
+              delta={deltaText(traffic.todayBytes, traffic.yesterdayBytes)}
+            />
+            <TrafficStat
+              label={t('dashboard.traffic.labels.week')}
+              value={formatBytes(traffic.last7dBytes)}
+              delta={deltaText(traffic.last7dBytes, traffic.prev7dBytes)}
+            />
+            <TrafficStat
+              label={t('dashboard.traffic.labels.d30')}
+              value={formatBytes(traffic.last30dBytes)}
+              delta={deltaText(traffic.last30dBytes, traffic.prev30dBytes)}
+            />
+            <TrafficStat
+              label={t('dashboard.traffic.labels.month')}
+              value={formatBytes(traffic.calendarMonthBytes)}
+              delta={deltaText(traffic.calendarMonthBytes, traffic.lastCalendarMonthBytes)}
+            />
+            <TrafficStat
+              label={t('dashboard.traffic.labels.year')}
+              value={formatBytes(traffic.currentYearBytes)}
+              delta={deltaText(traffic.currentYearBytes, traffic.lastYearBytes)}
+            />
           </Group>
         </Group>
         <Sparkline data={traffic.last24hHourly} />
@@ -912,13 +932,27 @@ function StatusDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function TrafficStat({ label, value }: { label: string; value: string }) {
+function TrafficStat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: string;
+  // K1 - "vs previous period" delta from deltaText(); undefined = no delta row.
+  delta?: { text: string; positive: boolean; noData: boolean };
+}) {
   return (
     <Stack gap={4} align="flex-end">
       <Text style={{ ...MONO_LABEL, fontSize: 9, letterSpacing: '0.14em' }}>{label}</Text>
       <Text style={{ ...DISPLAY, fontSize: 16, fontWeight: 500, color: SNOW, lineHeight: 1 }}>
         {value}
       </Text>
+      {delta && !delta.noData && delta.text && (
+        <Text style={{ fontSize: 10, lineHeight: 1, color: delta.positive ? '#3FE0A0' : '#F2787E' }}>
+          {delta.text}
+        </Text>
+      )}
     </Stack>
   );
 }

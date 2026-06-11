@@ -40,6 +40,14 @@ export interface DashboardOverview {
     last30dBytes: number;
     calendarMonthBytes: number;
     currentYearBytes: number;
+    // K1 — prior-period totals so the UI can render "vs previous" deltas
+    // (today vs yesterday already covered by yesterdayBytes). Rolling windows
+    // mirror their current-period counterparts; calendar month/year use
+    // calendar boundaries.
+    prev7dBytes: number;
+    prev30dBytes: number;
+    lastCalendarMonthBytes: number;
+    lastYearBytes: number;
     last24hHourly: { hour: string; bytes: number }[];
   };
   system: {
@@ -116,6 +124,23 @@ function startOfMonth(): Date {
 function startOfCalendarMonth(): Date {
   const d = new Date();
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+// K1 — prior-period boundaries for "vs previous" deltas.
+function daysAgo(n: number): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d;
+}
+
+function startOfLastCalendarMonth(): Date {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+}
+
+function startOfLastYear(): Date {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear() - 1, 0, 1));
 }
 
 function startOfYear(): Date {
@@ -202,16 +227,32 @@ async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
   const calMonth = startOfCalendarMonth();
   const year = startOfYear();
 
-  const [todayBytes, yesterdayBytes, last7dBytes, last30dBytes, calendarMonthBytes, currentYearBytes, hourly] =
-    await Promise.all([
-      sumNodeUsageSince(today),
-      sumNodeUsageSince(yesterday, today),
-      sumNodeUsageSince(week),
-      sumNodeUsageSince(month),
-      sumNodeUsageSince(calMonth),
-      sumNodeUsageSince(year),
-      last24hHourly(),
-    ]);
+  const [
+    todayBytes,
+    yesterdayBytes,
+    last7dBytes,
+    last30dBytes,
+    calendarMonthBytes,
+    currentYearBytes,
+    prev7dBytes,
+    prev30dBytes,
+    lastCalendarMonthBytes,
+    lastYearBytes,
+    hourly,
+  ] = await Promise.all([
+    sumNodeUsageSince(today),
+    sumNodeUsageSince(yesterday, today),
+    sumNodeUsageSince(week),
+    sumNodeUsageSince(month),
+    sumNodeUsageSince(calMonth),
+    sumNodeUsageSince(year),
+    // Prior windows: [14d,7d), [60d,30d), last calendar month, last year.
+    sumNodeUsageSince(daysAgo(14), week),
+    sumNodeUsageSince(daysAgo(60), month),
+    sumNodeUsageSince(startOfLastCalendarMonth(), calMonth),
+    sumNodeUsageSince(startOfLastYear(), year),
+    last24hHourly(),
+  ]);
 
   return {
     todayBytes,
@@ -220,6 +261,10 @@ async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
     last30dBytes,
     calendarMonthBytes,
     currentYearBytes,
+    prev7dBytes,
+    prev30dBytes,
+    lastCalendarMonthBytes,
+    lastYearBytes,
     last24hHourly: hourly,
   };
 }

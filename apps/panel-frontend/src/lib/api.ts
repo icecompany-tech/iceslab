@@ -934,6 +934,11 @@ export interface DashboardOverview {
     last30dBytes: number;
     calendarMonthBytes: number;
     currentYearBytes: number;
+    // K1 - prior-period totals for "vs previous" deltas.
+    prev7dBytes: number;
+    prev30dBytes: number;
+    lastCalendarMonthBytes: number;
+    lastYearBytes: number;
     last24hHourly: { hour: string; bytes: number }[];
   };
   system: {
