@@ -121,6 +121,16 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ bindings: await svc.listBindings(q) });
   });
 
+  // F-P1-b — suggest a free listen port for a NEW binding on a node, so the
+  // deploy modal stops defaulting to 443 (which 409s the moment a node already
+  // runs a protocol there). Static path wins over `:id` in find-my-way.
+  app.get('/api/bindings/next-free-port', auth, async (req, reply) => {
+    const { nodeId } = z
+      .object({ nodeId: z.string().uuid() })
+      .parse(req.query);
+    return reply.send({ port: await svc.nextFreePortForNode(nodeId) });
+  });
+
   app.get('/api/bindings/:id', auth, async (req, reply) => {
     const { id } = BindingIdParamSchema.parse(req.params);
     try {

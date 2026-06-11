@@ -21,6 +21,7 @@ import {
   apiErrorMessage,
   createBinding,
   deleteBinding,
+  getNextFreePort,
   listBindings,
   listNodes,
   type Binding,
@@ -73,9 +74,40 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   // Existing bindings keep their port - admin edits them inline in
   // Nodes → Edit. Initialized to the profile default on each open.
   const [port, setPort] = useState<number>(defaultPort);
+  // F-P1-b — once the admin types a port, stop auto-suggesting so we don't
+  // clobber their choice. Reset on each open.
+  const [portTouched, setPortTouched] = useState(false);
   useEffect(() => {
-    if (opened) setPort(defaultPort);
+    if (opened) {
+      setPort(defaultPort);
+      setPortTouched(false);
+    }
   }, [opened, defaultPort]);
+
+  // F-P1-b auto-free-port: when the admin picks a node that isn't deployed yet,
+  // suggest the next free port on it instead of blindly reusing 443 (which
+  // 409s the moment that node already runs a protocol). Skips if the admin
+  // already typed their own port this session. Uses the FIRST newly-selected
+  // node; a port free there may still collide on another node in a multi-select,
+  // but the human-readable 409 (F-P1) covers that edge.
+  const firstNewNodeId = useMemo(() => {
+    for (const id of selected) if (!initialSelected.has(id)) return id;
+    return null;
+  }, [selected, initialSelected]);
+  useEffect(() => {
+    if (!opened || portTouched || firstNewNodeId === null) return;
+    let cancelled = false;
+    getNextFreePort(firstNewNodeId)
+      .then((p) => {
+        if (!cancelled) setPort(p);
+      })
+      .catch(() => {
+        /* fall back to the current value; createBinding still guards the port */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [opened, portTouched, firstNewNodeId]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -176,12 +208,15 @@ export function DeployProfileModal({ profile, onClose }: Props) {
           description={
             profile?.protocol === 'amneziawg'
               ? t('profileForm.deployHintAwgPort')
-              : undefined
+              : t('profiles.deploy.portAutoHint')
           }
           min={1}
           max={65535}
           value={port}
-          onChange={(v) => setPort(typeof v === 'number' ? v : Number(v) || defaultPort)}
+          onChange={(v) => {
+            setPortTouched(true);
+            setPort(typeof v === 'number' ? v : Number(v) || defaultPort);
+          }}
         />
 
         {loading ? (

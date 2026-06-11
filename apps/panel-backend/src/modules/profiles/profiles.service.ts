@@ -52,6 +52,42 @@ export class PortInUseError extends Error {
     this.name = 'PortInUseError';
   }
 }
+
+// F-P1-b — candidate listen ports for a new binding, in preference order.
+// Common HTTPS-alt ports that survive most ISP egress filters and read as
+// ordinary TLS (good for REALITY / Hysteria masquerade). 443 first because it's
+// the least suspicious; the rest are Cloudflare-proxy ports. Replaces the old
+// blind "default to 443" that guaranteed a 409 when adding a second protocol to
+// a node already listening on 443.
+export const CANDIDATE_PORTS = [443, 8443, 2053, 2083, 2087, 2096] as const;
+
+// pickFreePort returns the first CANDIDATE_PORTS entry not already taken on the
+// node. If every candidate is in use it scans upward from 20000 for the first
+// free port, so a node running many protocols still gets a usable suggestion
+// instead of a guaranteed conflict. Pure (no DB) so it's unit-testable.
+export function pickFreePort(used: Iterable<number>): number {
+  const taken = new Set<number>(used);
+  for (const p of CANDIDATE_PORTS) {
+    if (!taken.has(p)) return p;
+  }
+  for (let p = 20000; p <= 65000; p++) {
+    if (!taken.has(p)) return p;
+  }
+  // Pathological (45000 ports bound on one node): fall back to 443 and let the
+  // createBinding conflict check surface a human 409.
+  return 443;
+}
+
+// nextFreePortForNode suggests a listen port for a NEW binding on `nodeId`,
+// avoiding every port already bound there. Powers the deploy modal's port
+// pre-fill and the future in-node "+ Add protocol" flow.
+export async function nextFreePortForNode(nodeId: string): Promise<number> {
+  const bindings = await prisma.profileNodeBinding.findMany({
+    where: { nodeId },
+    select: { port: true },
+  });
+  return pickFreePort(bindings.map((b) => b.port));
+}
 export class NodeAlreadyBoundError extends Error {
   constructor(public profileId: string, public nodeId: string) {
     super(`Node ${nodeId} is already bound to profile ${profileId}`);

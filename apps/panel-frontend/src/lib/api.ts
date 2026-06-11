@@ -730,6 +730,16 @@ export async function createBinding(input: CreateBindingInput): Promise<Binding>
   return data;
 }
 
+/** F-P1-b — next free listen port for a new binding on `nodeId` (skips ports
+ *  already bound there). Pre-fills the deploy modal so it stops defaulting to
+ *  443 and 409-ing on multi-protocol nodes. */
+export async function getNextFreePort(nodeId: string): Promise<number> {
+  const { data } = await api.get<{ port: number }>('/api/bindings/next-free-port', {
+    params: { nodeId },
+  });
+  return data.port;
+}
+
 export async function updateBinding(id: string, input: UpdateBindingInput): Promise<Binding> {
   const { data } = await api.put<Binding>(`/api/bindings/${id}`, input);
   return data;

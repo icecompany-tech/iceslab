@@ -358,6 +358,7 @@ export default {
       title: 'Deploy "{{name}}" to nodes',
       hint: 'Tick the nodes you want this profile on. Unticking deletes existing bindings (cascade - users lose URLs for that node). Port for new bindings: {{port}}.',
       port: 'Port for new bindings',
+      portAutoHint: 'Auto-picked free port on the selected node. Override if needed.',
       noNodes: 'No nodes - create one under Nodes first.',
       saved: 'Deployed: +{{added}} / removed: -{{removed}}',
       noChanges: 'No changes',
