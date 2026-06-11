@@ -97,7 +97,13 @@ function defaultValues(user: User | null): FormValues {
       user?.trafficLimitBytes != null ? Math.round(user.trafficLimitBytes / GiB) : '',
     trafficLimitStrategy: user?.trafficLimitStrategy ?? 'no_reset',
     expireDays: '',
-    status: (user?.status as 'active' | 'disabled') ?? 'active',
+    // The edit form can only SET 'active' or 'disabled' (limited/expired are
+    // cron-managed, and UpdateUserSchema rejects them — sending them back 400s
+    // every save). Map the cron-only states to 'active': editing a limited/
+    // expired user and saving reactivates them, which is what an admin bumping
+    // a quota-hit user's traffic expects. If they're still over quota, the
+    // review cron re-limits them next tick (self-correcting).
+    status: user?.status === 'disabled' ? 'disabled' : 'active',
     description: user?.description ?? '',
     tag: user?.tag ?? '',
     email: user?.email ?? '',
@@ -178,7 +184,9 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
     if (isEdit) {
       const input: UpdateUserInput = {
         status: values.status,
-        trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb),
+        // 0 or empty GB both mean "unlimited" -> null. The schema's
+        // .positive() rejects a literal 0, so map it to null here.
+        trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb) || null,
         trafficLimitStrategy: values.trafficLimitStrategy,
         description: values.description || null,
         tag: values.tag || null,
@@ -192,7 +200,8 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
     } else {
       const input: CreateUserInput = {
         username: values.username,
-        trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb),
+        // 0 or empty GB both mean "unlimited" -> null (schema .positive() rejects 0).
+        trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb) || null,
         trafficLimitStrategy: values.trafficLimitStrategy,
         expireDays: values.expireDays === '' ? null : Number(values.expireDays),
         description: values.description || null,
