@@ -532,6 +532,15 @@ export default {
       announce: 'Announce template',
       announceDesc: 'Banner показанный юзеру в клиенте. Поддерживает {{TRAFFIC_LEFT}}, {{DAYS_LEFT}}, {{SUPPORT_URL}}. Пусто → header не выдаётся.',
       saved: 'Метаданные подписки обновлены',
+      routingTitle: 'Маршрутизация',
+      routingDesc:
+        'Правила трафика в форматах полного конфига (Clash / sing-box / Xray JSON). URI-форматы правил не несут.',
+      routingProxyAll: 'Всё через туннель',
+      routingProxyAllDesc: 'Весь трафик идёт через прокси. Поведение по умолчанию.',
+      routingRuSplit: 'Умный сплит для РФ',
+      routingRuSplitDesc:
+        'Реклама и малварь в блок, российские сайты и локальные адреса напрямую, остальное через туннель.',
+      routingSaved: 'Пресет маршрутизации обновлён',
     },
   },
   regions: {

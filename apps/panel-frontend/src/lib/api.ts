@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios';
+import type { RoutingPresetId } from '@iceslab/shared';
 import { useAuth } from '../stores/auth';
 import { queryClient } from './queryClient';
 
@@ -1004,6 +1005,7 @@ export interface AdminSettings extends PublicSettings {
   subscriptionUpdateIntervalHours?: number;
   subscriptionSupportUrl?: string | null;
   subscriptionAnnounceTemplate?: string | null;
+  subscriptionRoutingPreset?: RoutingPresetId;
 }
 
 export interface UpdateSettingsInput {
@@ -1012,6 +1014,7 @@ export interface UpdateSettingsInput {
   subscriptionUpdateIntervalHours?: number;
   subscriptionSupportUrl?: string | null;
   subscriptionAnnounceTemplate?: string | null;
+  subscriptionRoutingPreset?: RoutingPresetId;
 }
 
 /** Fetch public-flagged settings, no auth required. Used by LoginPage so

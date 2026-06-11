@@ -4,6 +4,7 @@ import {
   Card,
   Group,
   NumberInput,
+  Radio,
   Stack,
   Text,
   Textarea,
@@ -12,7 +13,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconCheck, IconRss } from '@tabler/icons-react';
+import { IconCheck, IconRoute, IconRss } from '@tabler/icons-react';
+import type { RoutingPresetId } from '@iceslab/shared';
 import { PageHero } from '../components/PageHero';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getSettings, updateSettings } from '../lib/api';
@@ -58,6 +60,30 @@ export function SubscriptionMetadataPage() {
       notifications.show({
         color: 'green',
         message: t('settings.subscription.saved'),
+      });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        title: t('common.saveError'),
+        message: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  // Routing Templates (R1d). The picker saves on change ("simple toggle") and
+  // reads its value straight from the query - no local state, so the radio
+  // can never drift from what the server actually persisted. While the save
+  // is in flight the group is disabled; on success the invalidated query
+  // snaps it to the new value.
+  const routingPreset: RoutingPresetId =
+    settingsQuery.data?.subscriptionRoutingPreset ?? 'proxy-all';
+  const routingMutation = useMutation({
+    mutationFn: updateSettings,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] });
+      notifications.show({
+        color: 'green',
+        message: t('settings.subscription.routingSaved'),
       });
     },
     onError: (err) =>
@@ -145,6 +171,44 @@ export function SubscriptionMetadataPage() {
             </PrimaryButton>
           </Group>
         </Stack>
+      </Card>
+
+      <Card withBorder padding="lg" radius="md">
+        <Group gap="sm" mb="md">
+          <ThemeIcon size={32} radius="md" variant="light" color="teal">
+            <IconRoute size={18} />
+          </ThemeIcon>
+          <Stack gap={0}>
+            <Text fw={600}>{t('settings.subscription.routingTitle')}</Text>
+            <Text size="xs" c="dimmed">
+              {t('settings.subscription.routingDesc')}
+            </Text>
+          </Stack>
+        </Group>
+
+        <Radio.Group
+          value={routingPreset}
+          onChange={(v) =>
+            routingMutation.mutate({
+              subscriptionRoutingPreset: v as RoutingPresetId,
+            })
+          }
+        >
+          <Stack gap="sm" maw={620}>
+            <Radio
+              value="proxy-all"
+              disabled={routingMutation.isPending || settingsQuery.isLoading}
+              label={t('settings.subscription.routingProxyAll')}
+              description={t('settings.subscription.routingProxyAllDesc')}
+            />
+            <Radio
+              value="ru-split"
+              disabled={routingMutation.isPending || settingsQuery.isLoading}
+              label={t('settings.subscription.routingRuSplit')}
+              description={t('settings.subscription.routingRuSplitDesc')}
+            />
+          </Stack>
+        </Radio.Group>
       </Card>
     </Stack>
   );
