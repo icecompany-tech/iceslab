@@ -172,6 +172,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 
   const hasAwg = data.protocols.includes('amneziawg');
   const hasXray = data.protocols.includes('xray');
+  const hasSs = data.protocols.includes('shadowsocks');
   const proxyDownloads: { label: string; fmt: string }[] = [
     { label: 'Clash', fmt: 'clash' },
     { label: 'Sing-box', fmt: 'singbox' },
@@ -179,6 +180,8 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     // XKeen (xray-core on Keenetic routers) - only useful when an xray endpoint
     // exists (it emits xray outbounds + routing for the router's confdir).
     ...(hasXray ? [{ label: 'XKeen', fmt: 'xkeen' }] : []),
+    // Outline / SIP008 is Shadowsocks-only.
+    ...(hasSs ? [{ label: 'Outline', fmt: 'outline' }] : []),
     { label: 'Base64', fmt: 'plain' },
   ];
 

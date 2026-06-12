@@ -7,6 +7,7 @@ import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
 import { buildWgQuickConf } from './formats/wgconf.js';
 import { buildXrayJson } from './formats/xrayjson.js';
+import { buildOutlineJson } from './formats/outline.js';
 import { buildSubscriptionPage } from './formats/page.js';
 import QRCode from 'qrcode-svg';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
@@ -26,7 +27,7 @@ const TokenParamSchema = z.object({
   token: z.string().min(8).max(128),
 });
 
-const FormatEnum = z.enum(['plain', 'json', 'clash', 'singbox', 'wgconf', 'xrayjson', 'xkeen']);
+const FormatEnum = z.enum(['plain', 'json', 'clash', 'singbox', 'wgconf', 'xrayjson', 'xkeen', 'outline']);
 type Format = z.infer<typeof FormatEnum>;
 
 const QuerySchema = z.object({
@@ -520,6 +521,12 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             )
             .send(buildXrayJson(filtered, { bundle: xkBundle, routingPreset, forRouter: true }));
         }
+        case 'outline':
+          // SIP008 Shadowsocks online-config (Outline / shadowsocks-* clients).
+          // SS-only; non-SS endpoints are skipped inside the builder.
+          return reply
+            .type('application/json')
+            .send(buildOutlineJson(filtered));
         case 'plain':
         default:
           return reply

@@ -59,6 +59,7 @@ const FORMAT_OPTIONS = [
   { value: 'singbox', label: 'Sing-box JSON' },
   { value: 'xrayjson', label: 'Xray JSON' },
   { value: 'xkeen', label: 'XKeen (router)' },
+  { value: 'outline', label: 'Outline (SIP008)' },
   { value: 'wgconf', label: 'wg-quick' },
   { value: 'mieru-json', label: 'Mieru JSON' },
 ];

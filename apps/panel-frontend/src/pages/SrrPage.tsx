@@ -40,6 +40,7 @@ const FORMAT_COLORS: Record<string, string> = {
   wgconf: 'teal',
   xrayjson: 'violet',
   xkeen: 'grape',
+  outline: 'cyan',
 };
 
 export function SrrPage() {

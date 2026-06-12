@@ -10,6 +10,7 @@ const FormatEnum = z.enum([
   'xkeen',
   'wgconf',
   'mieru-json',
+  'outline',
 ]);
 
 const SecurityLayerEnum = z.enum(['default', 'tls', 'none']);

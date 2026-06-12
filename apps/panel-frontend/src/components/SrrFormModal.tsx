@@ -15,6 +15,7 @@ const FORMAT_OPTIONS: { value: SubscriptionFormat; label: string }[] = [
   { value: 'wgconf', label: 'wg-quick conf (AmneziaWG)' },
   { value: 'xrayjson', label: 'Xray JSON' },
   { value: 'xkeen', label: 'XKeen (Keenetic router)' },
+  { value: 'outline', label: 'Outline / SIP008 (Shadowsocks)' },
 ];
 
 interface FormValues {

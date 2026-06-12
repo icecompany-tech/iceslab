@@ -8,6 +8,7 @@ export const SrrFormat = z.enum([
   'wgconf',
   'xrayjson',
   'xkeen',
+  'outline',
 ]);
 
 /**
