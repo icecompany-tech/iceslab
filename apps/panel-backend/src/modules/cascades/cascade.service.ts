@@ -68,11 +68,17 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
         enabled: input.enabled,
         hops: {
           create: hops.map((h, idx) => ({
-            nodeId: h.nodeId,
+            // Nested create uses the checked input -> connect the relation
+            // rather than setting the raw nodeId scalar.
+            node: { connect: { id: h.nodeId } },
             position: h.position,
             entryProtocol: h.entryProtocol ?? null,
             linkProtocol: h.linkProtocol ?? null,
-            ...(idx < hops.length - 1 ? { linkConfig: creds[idx] } : {}),
+            // Fresh object literal so it's assignable to Prisma's Json input
+            // (a typed LinkCred lacks the index signature Json requires).
+            ...(idx < hops.length - 1
+              ? { linkConfig: { uuid: creds[idx]!.uuid, port: creds[idx]!.port } }
+              : {}),
           })),
         },
       },
@@ -109,13 +115,17 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
         // set rather than diffing.
         await tx.cascadeHop.deleteMany({ where: { cascadeId: id } });
         await tx.cascadeHop.createMany({
+          // createMany uses the unchecked input, so the raw nodeId scalar is
+          // correct here (no relation connect).
           data: hops.map((h, idx) => ({
             cascadeId: id,
             nodeId: h.nodeId,
             position: h.position,
             entryProtocol: h.entryProtocol ?? null,
             linkProtocol: h.linkProtocol ?? null,
-            ...(idx < hops.length - 1 ? { linkConfig: creds[idx] } : {}),
+            ...(idx < hops.length - 1
+              ? { linkConfig: { uuid: creds[idx]!.uuid, port: creds[idx]!.port } }
+              : {}),
           })),
         });
       }
