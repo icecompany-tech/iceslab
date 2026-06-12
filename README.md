@@ -114,7 +114,7 @@ Both installers read env overrides. The ones people reach for most:
 
 | Env | Default | Effect |
 |---|---|---|
-| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.1.5` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
+| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.1.6` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
 | `SKIP_SWAP` | `0` | Set `1` to skip the auto 4 GB swapfile on small-RAM VPS. The build may OOM on <3.5 GB RAM without swap; only opt out if you manage swap yourself. |
 | `NODE_PORT` | `1337` | node-agent mTLS listen port. Change per-node to dodge port scanners. |
 | `FRONTEND_PORT` | `8080` | Panel SPA port in bare-IP mode (ignored when `PANEL_DOMAIN` is set, Caddy fronts 443). |

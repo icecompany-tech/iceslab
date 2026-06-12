@@ -3,6 +3,92 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
+## v0.1.6
+
+The largest release since the alpha opened: a censorship-survival toolkit for
+hostile networks (routing presets, multi-hop cascades, REALITY self-steal), live
+user management with no restarts, admin two-factor auth, operator analytics and a
+Telegram bot, far broader client-app coverage, and a deep performance and
+reliability audit across both the panel and the node-agent.
+
+### Security
+
+- **Admin two-factor auth (TOTP).** Optional RFC6238 TOTP on the admin login,
+  with a guided enrollment (enable requires a confirmed code, so you cannot lock
+  yourself out) and a disable flow. Recovery is a single SQL update if a device
+  is lost. Additive: existing logins are untouched until an admin opts in.
+
+### Added
+
+- **Routing presets with split-DNS.** A subscription can carry a `ru-split`
+  preset (ads and local destinations resolve and egress direct, everything else
+  is tunneled), rendered correctly into the Xray-JSON, Clash and sing-box
+  formats with a matching split-DNS block so lookups do not leak. Selectable per
+  subscription, per squad (override), or via a `?routing=` query, plus a raw
+  custom-rules editor for hand-written Xray routing rules.
+- **Multi-hop cascades (experimental).** Chain nodes entry -> transit -> exit:
+  the client connects to an entry node and traffic is forwarded hop to hop to an
+  exit that egresses direct. Full operator UI (hop builder, reorder, validation)
+  plus node-agent forwarding for the Xray vless cell. Built for networks where a
+  single foreign hop is blocked; field validation is in progress.
+- **REALITY self-steal (experimental).** A REALITY mode where the node runs its
+  own local TLS fallback and presents its own domain, so the SNI and the server
+  IP stay consistent (the mismatch that gets a borrowed-SNI REALITY connection
+  mangled on aggressive DPI). Selectable per profile.
+- **Live user add and remove with no restart.** Adding or removing an Xray or
+  Shadowsocks user now goes through the core's runtime management API, so live
+  connections are never dropped. It falls back to the previous config-restart
+  path only when the runtime call cannot be made, so it can only improve on the
+  old behaviour.
+- **Operator analytics.** Dashboard bandwidth now shows deltas against the prior
+  period on every window, plus a new Insights page: a subscription-request
+  breakdown by client app and a HWID device-count distribution, both computed
+  from already-stored data with no new tracking.
+- **Operator Telegram bot.** A read-only bot answering `/status` and
+  `/user <name>` to the operator chat, plus a daily digest of users near expiry
+  or near their traffic cap.
+- **Signed outbound webhooks.** User, profile and node events are forwarded to
+  configured URLs with an HMAC-SHA256 signature over the payload.
+- **Broader client-app coverage.** New subscription formats: XKeen (Xray confdir
+  for Keenetic routers), Outline / SIP008, Surge, Quantumult X and Loon.
+- **Multi-core node UX.** Add a second protocol to an existing node from the node
+  view, with an auto-picked free port and a human-readable message when a port is
+  already taken. Plus a masquerade REALITY recipe and a test-connect that probes
+  the REALITY dest for resolvability and TLS 1.3.
+- **Per-squad defaults.** A squad can carry a routing-preset override and a
+  default HWID device limit.
+
+### Changed
+
+- **Panel performance pass.** Response schemas for fast JSON serialization on the
+  hot dashboard and user-list endpoints, in-process caches for subscription
+  settings, squad bindings and blacklist lookups (all write-busted), bulk
+  single-statement traffic upserts and AmneziaWG peer pre-allocation, cursor
+  pagination on backfill, and lazy-loaded frontend routes (initial bundle cut by
+  about a third).
+- **Node-agent reliability.** Adapter locks are split so a multi-second core
+  restart no longer blocks health checks or the panel's push workers, a bounded
+  restart-on-crash supervisor backs every spawned core, subprocesses are
+  group-killed so no orphans leak, and stats and health probes run concurrently
+  with cached AmneziaWG and UFW reads plus zero-user short-circuits.
+
+### Fixed
+
+- **AmneziaWG runaway traffic.** AWG reported kernel-cumulative counters where the
+  panel expected per-poll deltas, so a peer's lifetime total was re-billed on
+  every poll and drained quotas. The agent now emits true deltas (baseline on
+  first sight, so an agent restart never re-bills the backlog).
+- **Editing a limited or expired user no longer fails.** Saving such a user
+  returned 400 on every attempt; it now reactivates correctly, and a 0 GB
+  traffic limit is read as unlimited.
+- **Per-user stats no longer error on multi-inbound users.** A user present on
+  more than one inbound of a node tripped a Postgres conflict (21000); per-user
+  rows are aggregated before the bulk upsert.
+- **Smaller audit fixes.** IPv6-aware subscription host parsing, a human-readable
+  port-conflict 409 naming the node and profile, an online-aware node status dot,
+  a flag-emoji guard for non-ISO country codes, a bounded Hysteria auth-callback
+  body, and a settings form that re-seeds from the server after save.
+
 ## v0.1.5
 
 Full Xray protocol matrix: VLESS, VMess and Trojan over any transport and any
