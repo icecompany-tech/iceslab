@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActionIcon,
@@ -43,10 +43,12 @@ import {
   createBinding,
   deleteBinding,
   listBindings,
+  listHosts,
   listProfiles,
   listRegions,
   listSquads,
   updateBinding,
+  type Host,
   type Node as PanelNode,
   type NodeProtocol,
   type UpdateNodeInput,
@@ -197,6 +199,22 @@ export function NodeEditModal({
     queryFn: () => listSquads(),
     enabled: opened,
   });
+  // F7 - one batch fetch of every host across this node's bindings, replacing
+  // the per-binding ['hosts', bindingId] query each HostsManager used to mount.
+  const hostsQuery = useQuery({
+    queryKey: ['hosts', 'node', node?.id],
+    queryFn: () => listHosts({ nodeId: node!.id }),
+    enabled: opened && node !== null,
+  });
+  const hostsByBinding = useMemo(() => {
+    const m = new Map<string, Host[]>();
+    for (const h of hostsQuery.data?.hosts ?? []) {
+      const arr = m.get(h.bindingId);
+      if (arr) arr.push(h);
+      else m.set(h.bindingId, [h]);
+    }
+    return m;
+  }, [hostsQuery.data]);
   const bindingsWithProfile = (bindingsQuery.data?.bindings ?? []).map((b) => {
     const p = (profilesQuery.data?.profiles ?? []).find((x) => x.id === b.profileId);
     return { binding: b, profile: p };
@@ -761,6 +779,9 @@ export function NodeEditModal({
                       <HostsManager
                         bindingId={binding.id}
                         protocol={profile.protocol}
+                        hosts={hostsByBinding.get(binding.id) ?? []}
+                        nodeId={node.id}
+                        loading={hostsQuery.isLoading}
                       />
                     </Box>
                   )}

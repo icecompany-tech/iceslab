@@ -18,6 +18,9 @@ export const HostIdParamSchema = z.object({ id: z.uuid() });
 export const ListHostsQuerySchema = z.object({
   bindingId: z.uuid().optional(),
   profileId: z.uuid().optional(),
+  // F7 - fetch every host across all of a node's bindings in one call (the
+  // NodeEditModal used to mount one ['hosts', bindingId] query per binding).
+  nodeId: z.uuid().optional(),
 });
 
 export const CreateHostSchema = z.object({

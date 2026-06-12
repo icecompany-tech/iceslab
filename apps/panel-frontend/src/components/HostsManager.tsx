@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   IconArrowDown,
   IconArrowUp,
@@ -30,7 +30,6 @@ import {
 import {
   createHost,
   deleteHost,
-  listHosts,
   reorderHosts,
   updateHost,
   type CreateHostInput,
@@ -66,6 +65,12 @@ const FORMAT_OPTIONS = [
 interface HostsManagerProps {
   bindingId: string;
   protocol: ProtocolName;
+  // F7 - hosts are fetched ONCE at the node level by NodeEditModal and passed
+  // down pre-filtered per binding, so this component no longer mounts its own
+  // ['hosts', bindingId] query (a node with N bindings used to fire N requests).
+  hosts: Host[];
+  nodeId: string;
+  loading?: boolean;
 }
 
 /**
@@ -73,7 +78,13 @@ interface HostsManagerProps {
  * surface - list / add / edit / delete / reorder. Drag-and-drop is
  * deferred (slice 31), arrows are plenty for typical 2-4 host setups.
  */
-export function HostsManager({ bindingId, protocol }: HostsManagerProps) {
+export function HostsManager({
+  bindingId,
+  protocol,
+  hosts: hostsProp,
+  nodeId,
+  loading,
+}: HostsManagerProps) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -81,22 +92,15 @@ export function HostsManager({ bindingId, protocol }: HostsManagerProps) {
 
   const supportsHosts = !PROTOCOLS_WITHOUT_HOSTS.has(protocol);
 
-  const hostsQuery = useQuery({
-    queryKey: ['hosts', bindingId],
-    queryFn: () => listHosts({ bindingId }),
-    enabled: supportsHosts,
-  });
-
   const hosts = useMemo(
-    () =>
-      [...(hostsQuery.data?.hosts ?? [])].sort(
-        (a, b) => a.priority - b.priority,
-      ),
-    [hostsQuery.data],
+    () => [...hostsProp].sort((a, b) => a.priority - b.priority),
+    [hostsProp],
   );
 
+  // F7 - mutations refetch the node-level query the parent owns, not a
+  // per-binding one.
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['hosts', bindingId] });
+    qc.invalidateQueries({ queryKey: ['hosts', 'node', nodeId] });
   };
 
   const createMutation = useMutation({
@@ -195,7 +199,7 @@ export function HostsManager({ bindingId, protocol }: HostsManagerProps) {
         </Button>
       </Group>
 
-      {hosts.length === 0 && hostsQuery.isFetched && (
+      {!loading && hosts.length === 0 && (
         <Text size="xs" c="dimmed" py="xs">
           {t('hosts.empty')}
         </Text>

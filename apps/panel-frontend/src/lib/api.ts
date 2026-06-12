@@ -900,6 +900,7 @@ export type UpdateHostInput = Partial<Omit<CreateHostInput, 'bindingId'>>;
 export async function listHosts(params?: {
   bindingId?: string;
   profileId?: string;
+  nodeId?: string;
 }): Promise<{ hosts: Host[] }> {
   const { data } = await api.get<{ hosts: Host[] }>('/api/hosts', { params });
   return data;

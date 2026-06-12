@@ -29,7 +29,14 @@ export class BindingNotFoundError extends Error {
 export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
   const where: Prisma.HostWhereInput = {};
   if (q.bindingId) where.bindingId = q.bindingId;
-  if (q.profileId) where.binding = { profileId: q.profileId };
+  // F7 - profileId/nodeId both filter through the binding relation; combine so
+  // passing both narrows to a node's bindings of that profile.
+  if (q.profileId || q.nodeId) {
+    where.binding = {
+      ...(q.profileId ? { profileId: q.profileId } : {}),
+      ...(q.nodeId ? { nodeId: q.nodeId } : {}),
+    };
+  }
   const rows = await prisma.host.findMany({
     where,
     orderBy: [{ bindingId: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
