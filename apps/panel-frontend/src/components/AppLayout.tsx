@@ -430,7 +430,9 @@ export function AppLayout() {
                     ? `${nodesOnline}/${nodesTotal}`
                     : nodesTotal
                 }
-                countDot={nodesTotal !== undefined}
+                // LOW: green dot reflects ONLINE nodes, not just "nodes exist".
+                // With 0 online the dot was misleadingly green (looks healthy).
+                countDot={nodesOnline !== undefined && nodesOnline > 0}
               />
             </Stack>
 

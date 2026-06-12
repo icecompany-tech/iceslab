@@ -985,8 +985,14 @@ function StatusChip({ label, value, dot }: { label: string; value: number; dot: 
 
 function flagEmoji(cc: string): string {
   if (cc.length !== 2) return '';
+  const up = cc.toUpperCase();
+  const c0 = up.charCodeAt(0);
+  const c1 = up.charCodeAt(1);
+  // LOW: only ISO-3166 alpha-2 (A-Z) map to regional-indicator flags. A
+  // non-letter code (digits, region slug, '??') otherwise produced garbage
+  // codepoints outside the flag range.
+  if (c0 < 65 || c0 > 90 || c1 < 65 || c1 > 90) return '';
   const A = 0x1f1e6;
   const a = 'A'.charCodeAt(0);
-  return String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(0) - a)) +
-    String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(1) - a));
+  return String.fromCodePoint(A + (c0 - a)) + String.fromCodePoint(A + (c1 - a));
 }
