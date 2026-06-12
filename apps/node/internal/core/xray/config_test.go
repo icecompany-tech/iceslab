@@ -163,6 +163,199 @@ func TestWriteConfigAtomic(t *testing.T) {
 	}
 }
 
+// ───── K9-B: REALITY self-steal ─────
+
+// TestSelfSteal_RewritesDestAndValidates checks that self-steal mode (a) passes
+// validation even with an empty/loopback dest the SSRF guard would normally
+// reject, and (b) withDefaults rewrites RealityDest to the local fallback, so
+// the rendered REALITY config points at 127.0.0.1:8443.
+func TestSelfSteal_RewritesDestAndValidates(t *testing.T) {
+	cfg := InboundConfig{
+		RealityServerNames: []string{"node.example.com"},
+		RealityPrivateKey:  "k",
+		RealityShortIDs:    []string{"ab"},
+		RealityMode:        "self-steal",
+		// RealityDest deliberately empty: self-steal supplies it.
+	}
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("self-steal should validate without a panel dest: %v", err)
+	}
+	d := cfg.withDefaults()
+	if d.RealityDest != selfStealAddr {
+		t.Errorf("withDefaults should rewrite dest to %s, got %q", selfStealAddr, d.RealityDest)
+	}
+
+	blob, err := renderConfig(cfg, []xrayClient{{ID: "u1", Email: "u1"}})
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	if !strings.Contains(string(blob), selfStealAddr) {
+		t.Errorf("rendered config should reference self-steal dest %s", selfStealAddr)
+	}
+}
+
+// TestStealOthers_StillRejectsLoopbackDest guards the SSRF check for the normal
+// mode: a loopback dest WITHOUT self-steal must still be refused.
+func TestStealOthers_StillRejectsLoopbackDest(t *testing.T) {
+	cfg := InboundConfig{
+		RealityServerNames: []string{"x.com"},
+		RealityPrivateKey:  "k",
+		RealityShortIDs:    []string{"ab"},
+		RealityDest:        "127.0.0.1:8443",
+		// RealityMode empty == steal-others.
+	}
+	if err := cfg.validate(); err == nil {
+		t.Errorf("loopback dest must be rejected when NOT self-steal (SSRF guard)")
+	}
+}
+
+// ───── C3: cascade fragment merging ─────
+
+// TestRender_CascadeNil_ByteIdenticalToBase is the safety net for non-cascade
+// nodes: passing a nil *CascadeFragments must produce exactly the same bytes as
+// the plain renderConfig path, so every existing node is unaffected.
+func TestRender_CascadeNil_ByteIdenticalToBase(t *testing.T) {
+	users := []xrayClient{{ID: "u1", Email: "u1", Flow: "xtls-rprx-vision"}}
+	base, err := renderConfig(validInbound(), users)
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	withNil, err := renderConfigWithCascade(validInbound(), users, nil)
+	if err != nil {
+		t.Fatalf("renderConfigWithCascade(nil): %v", err)
+	}
+	if string(base) != string(withNil) {
+		t.Errorf("nil cascade must be byte-identical to base render\nbase:\n%s\nwithNil:\n%s", base, withNil)
+	}
+}
+
+// TestRender_CascadeFragmentsMerged checks that the panel-generated link-in
+// inbound, link-out outbound and routing rules are appended to the base config,
+// and that base anti-abuse rules still precede the cascade rules.
+func TestRender_CascadeFragmentsMerged(t *testing.T) {
+	cascade := &CascadeFragments{
+		Inbounds: []json.RawMessage{
+			json.RawMessage(`{"tag":"cascade-link-in","protocol":"vless","port":24000}`),
+		},
+		Outbounds: []json.RawMessage{
+			json.RawMessage(`{"tag":"cascade-link-out","protocol":"vless"}`),
+		},
+		RoutingRules: []json.RawMessage{
+			json.RawMessage(`{"type":"field","inboundTag":["vless-in"],"outboundTag":"cascade-link-out"}`),
+		},
+	}
+	blob, err := renderConfigWithCascade(validInbound(), []xrayClient{{ID: "u1", Email: "u1"}}, cascade)
+	if err != nil {
+		t.Fatalf("renderConfigWithCascade: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(blob, &m); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+
+	// link-in inbound present (base vless + api-in + cascade = 3)
+	inbounds := m["inbounds"].([]any)
+	if len(inbounds) != 3 {
+		t.Fatalf("expected 3 inbounds (vless + api-in + cascade-link-in), got %d", len(inbounds))
+	}
+	var sawLinkIn bool
+	for _, raw := range inbounds {
+		if raw.(map[string]any)["tag"] == "cascade-link-in" {
+			sawLinkIn = true
+		}
+	}
+	if !sawLinkIn {
+		t.Errorf("cascade-link-in inbound not merged: %v", inbounds)
+	}
+
+	// link-out outbound present (base direct/dns-out/blocked + cascade = 4)
+	outbounds := m["outbounds"].([]any)
+	var sawLinkOut bool
+	for _, raw := range outbounds {
+		if raw.(map[string]any)["tag"] == "cascade-link-out" {
+			sawLinkOut = true
+		}
+	}
+	if !sawLinkOut {
+		t.Errorf("cascade-link-out outbound not merged: %v", outbounds)
+	}
+
+	// Cascade routing rule present AND positioned after the base block rules so
+	// the DNS-hijack / BitTorrent / SMTP rules keep precedence.
+	rules := m["routing"].(map[string]any)["rules"].([]any)
+	lastIdx, cascadeIdx := -1, -1
+	for i, raw := range rules {
+		r := raw.(map[string]any)
+		if r["outboundTag"] == "blocked" {
+			lastIdx = i // remember the last base block rule index
+		}
+		if r["outboundTag"] == "cascade-link-out" {
+			cascadeIdx = i
+		}
+	}
+	if cascadeIdx == -1 {
+		t.Fatalf("cascade routing rule not merged: %v", rules)
+	}
+	if cascadeIdx < lastIdx {
+		t.Errorf("cascade rule (idx %d) must come after base block rules (last block idx %d)", cascadeIdx, lastIdx)
+	}
+}
+
+// TestCascadeEqual covers the restart-gate helper: nil==nil, nil!=non-nil, and
+// byte-equality of the raw fragments.
+func TestCascadeEqual(t *testing.T) {
+	a := &CascadeFragments{Inbounds: []json.RawMessage{json.RawMessage(`{"tag":"x"}`)}}
+	b := &CascadeFragments{Inbounds: []json.RawMessage{json.RawMessage(`{"tag":"x"}`)}}
+	c := &CascadeFragments{Inbounds: []json.RawMessage{json.RawMessage(`{"tag":"y"}`)}}
+	if !cascadeEqual(nil, nil) {
+		t.Errorf("nil == nil should be equal")
+	}
+	if cascadeEqual(a, nil) || cascadeEqual(nil, a) {
+		t.Errorf("nil and non-nil must differ")
+	}
+	if !cascadeEqual(a, b) {
+		t.Errorf("identical fragments should be equal")
+	}
+	if cascadeEqual(a, c) {
+		t.Errorf("different fragments should differ")
+	}
+}
+
+// TestApplyInboundWire_ParsesCascade verifies the panel-pushed `cascade` field
+// round-trips into the adapter's wire DTO.
+func TestApplyInboundWire_ParsesCascade(t *testing.T) {
+	raw := []byte(`{
+		"realityPrivateKey":"k",
+		"cascade":{
+			"inbounds":[{"tag":"cascade-link-in"}],
+			"outbounds":[{"tag":"cascade-link-out"}],
+			"routingRules":[{"type":"field","outboundTag":"cascade-link-out"}]
+		}
+	}`)
+	var wire xrayInboundCfgWire
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if wire.Cascade == nil {
+		t.Fatalf("cascade not parsed from wire")
+	}
+	if len(wire.Cascade.Inbounds) != 1 || len(wire.Cascade.Outbounds) != 1 || len(wire.Cascade.RoutingRules) != 1 {
+		t.Errorf("cascade fragments not fully parsed: %+v", wire.Cascade)
+	}
+}
+
+// TestApplyInboundWire_NoCascadeIsNil: a plain node's wire has no `cascade`,
+// so the field must stay nil (drives the byte-identical render path).
+func TestApplyInboundWire_NoCascadeIsNil(t *testing.T) {
+	var wire xrayInboundCfgWire
+	if err := json.Unmarshal([]byte(`{"realityPrivateKey":"k"}`), &wire); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if wire.Cascade != nil {
+		t.Errorf("expected nil cascade when absent from wire, got %+v", wire.Cascade)
+	}
+}
+
 // ───── Slice 24c part 2: routing defaults + sockopt + transport branches ─────
 
 func renderToMap(t *testing.T, cfg InboundConfig) map[string]any {

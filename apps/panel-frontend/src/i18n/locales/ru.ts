@@ -331,6 +331,12 @@ export default {
         brutalUpLabel: 'Brutal CC, ↑ Mbps',
         brutalDownLabel: 'Brutal CC, ↓ Mbps',
         realityDestDesc: 'host:port, фронт для прикрытия',
+        realityModeLabel: 'Режим REALITY',
+        realityModeDesc: 'Как REALITY заимствует TLS-личность',
+        realityModeStealOthers: 'steal-from-others (внешний декой)',
+        realityModeSelfSteal: 'self-steal (локальный fallback, РФ-2026)',
+        realityModeSelfStealHint:
+          'Self-steal: нода поднимает локальный TLS-fallback, dest REALITY смотрит на него. В serverNames укажите домен, резолвящийся в IP ЭТОЙ ноды, чтобы SNI и IP совпадали (переживает whitelist-shutdown в РФ). dest игнорируется.',
         realityServerNamesDesc: 'через запятую',
         realityShortIdsDesc: 'hex, через запятую',
         realityFingerprintDesc: 'TLS fingerprint клиента',

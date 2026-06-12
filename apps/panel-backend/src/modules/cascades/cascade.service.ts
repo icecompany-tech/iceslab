@@ -1,7 +1,13 @@
+import type { XrayCascadeFragments } from '@iceslab/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
 import { validateCascadeHops } from './cascade.validation.js';
-import { generateLinkCreds } from './cascade.config.js';
+import {
+  buildCascadeConfigs,
+  generateLinkCreds,
+  type CascadeConfigHopInput,
+  type LinkCred,
+} from './cascade.config.js';
 import type { CreateCascadeInput, UpdateCascadeInput } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 
@@ -138,6 +144,74 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
     }
     throw err;
   }
+}
+
+/**
+ * C3 - resolve the xray cascade fragments (link-in inbound, link-out outbound,
+ * routing rules) for a node's hop, or null if the node is not part of any
+ * enabled cascade. The inbound-sync push injects the result into the node's
+ * XrayInboundCfg so the node-agent can chain entry->exit.
+ *
+ * Link creds are read from each originating hop's persisted linkConfig
+ * (generated once at cascade create/update) so the chain stays stable across
+ * pushes - regenerating uuids/ports per push would tear down every live link.
+ *
+ * The `direct` (freedom) outbound that buildCascadeConfigs emits is dropped
+ * here: the node's base xray config already ships a `direct` outbound, and two
+ * outbounds sharing a tag make xray reject the whole config.
+ */
+export async function getCascadeFragmentsForNode(
+  nodeId: string,
+): Promise<XrayCascadeFragments | null> {
+  // A node belongs to at most one cascade in the v1 model; first enabled match.
+  const member = await prisma.cascadeHop.findFirst({
+    where: { nodeId, cascade: { enabled: true } },
+    select: { cascadeId: true },
+  });
+  if (!member) return null;
+
+  const cascade = await prisma.cascade.findUnique({
+    where: { id: member.cascadeId },
+    include: {
+      hops: {
+        orderBy: { position: 'asc' },
+        include: { node: { select: { id: true, address: true } } },
+      },
+    },
+  });
+  // A single-hop "cascade" has no links to build - treat as not-a-cascade.
+  if (!cascade || cascade.hops.length < 2) return null;
+
+  const hopInputs: CascadeConfigHopInput[] = cascade.hops.map((h) => ({
+    nodeId: h.nodeId,
+    position: h.position,
+    // Public host the previous hop dials. node.address is host[:agentPort];
+    // the link binds its own port (cred.port), so strip any agent port.
+    nodeHost: h.node.address.split(':')[0]!,
+  }));
+
+  // Rebuild link creds from each originating hop's persisted linkConfig.
+  // Hops are position-sorted; hops[0..n-2] each carry one linkConfig.
+  const linkCreds: LinkCred[] = [];
+  for (let i = 0; i < cascade.hops.length - 1; i++) {
+    const lc = cascade.hops[i]!.linkConfig as unknown as { uuid?: string; port?: number } | null;
+    if (!lc || typeof lc.uuid !== 'string' || typeof lc.port !== 'number') {
+      // Malformed/missing cred (data drift) - safer to ship no cascade than a
+      // half-wired chain that silently blackholes user traffic.
+      return null;
+    }
+    linkCreds.push({ uuid: lc.uuid, port: lc.port });
+  }
+
+  const configs = buildCascadeConfigs(hopInputs, linkCreds);
+  const mine = configs.find((c) => c.nodeId === nodeId);
+  if (!mine) return null;
+
+  return {
+    inbounds: mine.inbounds,
+    outbounds: mine.outbounds.filter((o) => o.tag !== 'direct'),
+    routingRules: mine.routingRules,
+  };
 }
 
 export async function deleteCascade(id: string): Promise<void> {

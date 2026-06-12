@@ -326,6 +326,12 @@ export default {
         brutalUpLabel: 'Brutal CC, ↑ Mbps',
         brutalDownLabel: 'Brutal CC, ↓ Mbps',
         realityDestDesc: 'host:port, fronting decoy',
+        realityModeLabel: 'REALITY mode',
+        realityModeDesc: 'How REALITY borrows a TLS identity',
+        realityModeStealOthers: 'steal-from-others (external decoy)',
+        realityModeSelfSteal: 'self-steal (local fallback, RU-2026)',
+        realityModeSelfStealHint:
+          'Self-steal: the node runs a local TLS fallback and REALITY dest points at it. Set serverNames to a domain that resolves to THIS node IP, so SNI and IP match (survives RU whitelist-shutdown). dest is ignored.',
         realityServerNamesDesc: 'comma-separated',
         realityShortIdsDesc: 'hex, comma-separated',
         realityFingerprintDesc: 'client TLS fingerprint',

@@ -99,6 +99,14 @@ export interface XrayInboundCfg {
   realityShortIds: string[];      // hex strings, 0..16 chars even-length
   realityPrivateKey: string;      // base64url (REALITY-style, NOT WireGuard base64)
   realityPublicKey: string;
+  /** K9-B - how REALITY borrows a TLS identity:
+   *   - 'steal-others' (default/empty): dest = an external camouflage site;
+   *     works outside RU but SNI-IP-mismatches under RU-DPI.
+   *   - 'self-steal': the node-agent runs a local TLS fallback and REALITY's
+   *     dest points at it (127.0.0.1:8443), with serverNames = the node's own
+   *     domain so SNI and IP stay consistent. Set serverNames to a domain that
+   *     resolves to the node IP; the node ignores realityDest in this mode. */
+  realityMode?: 'steal-others' | 'self-steal';
   flow: 'xtls-rprx-vision' | 'none';
   fingerprint: string;            // chrome / firefox / safari / etc
   network: 'raw' | 'xhttp' | 'ws' | 'grpc' | 'httpupgrade' | 'kcp';
@@ -110,6 +118,31 @@ export interface XrayInboundCfg {
    *  user.xrayUuid); `vmess` → per-user UUID, AEAD (no flow). VMess pairs with
    *  security 'none'/'tls' only (its share link cannot carry REALITY). */
   subprotocol?: 'vless' | 'trojan' | 'vmess';
+  /** C3 cascade chaining fragments for THIS node's hop. Generated panel-side
+   *  by buildCascadeConfigs and merged into the node's xray config:
+   *  link-in inbound (transit/exit nodes), link-out outbound (entry/transit
+   *  nodes), and the per-role routing rules. Absent for plain (non-cascade)
+   *  nodes, in which case the node renders exactly as before. */
+  cascade?: XrayCascadeFragments;
+}
+
+/**
+ * C3 cascade fragments: raw xray config objects the panel hands to a node so it
+ * can chain entry→exit. The panel owns the exact xray shape (the node-agent
+ * stays protocol-agnostic and just merges these into inbounds/outbounds/
+ * routing.rules). Each element is a fully-formed xray config object.
+ */
+export interface XrayCascadeFragments {
+  /** Link-IN inbounds (the previous hop dials these). Present on transit/exit
+   *  nodes. */
+  inbounds: unknown[];
+  /** Link-OUT outbounds (this hop dials the next). Present on entry/transit
+   *  nodes. */
+  outbounds: unknown[];
+  /** Per-role routing rules: entry routes user traffic → link-out; transit
+   *  routes link-in → link-out; exit routes link-in → direct. Appended after
+   *  the node's base block/DNS rules on the node side. */
+  routingRules: unknown[];
 }
 
 export interface HysteriaInboundCfg {

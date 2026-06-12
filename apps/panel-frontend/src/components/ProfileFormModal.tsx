@@ -85,6 +85,7 @@ interface FormValues {
   xrayShortIds: string;
   xrayPrivateKey: string;
   xrayPublicKey: string;
+  xrayRealityMode: 'steal-others' | 'self-steal';
   xrayFlow: string;
   xrayFingerprint: string;
   xrayNetwork: 'raw' | 'xhttp' | 'ws' | 'grpc' | 'httpupgrade' | 'kcp';
@@ -203,6 +204,7 @@ function defaults(profile: Profile | null): FormValues {
     xrayShortIds: '',
     xrayPrivateKey: '',
     xrayPublicKey: '',
+    xrayRealityMode: 'steal-others',
     xrayFlow: 'xtls-rprx-vision',
     xrayFingerprint: 'chrome',
     xrayNetwork: 'raw',
@@ -267,6 +269,7 @@ function defaults(profile: Profile | null): FormValues {
         xrayShortIds: ((cfg.realityShortIds as string[]) ?? []).join(', '),
         xrayPrivateKey: (cfg.realityPrivateKey as string) ?? '',
         xrayPublicKey: (cfg.realityPublicKey as string) ?? '',
+        xrayRealityMode: ((cfg.realityMode as 'steal-others' | 'self-steal') ?? 'steal-others'),
         xrayFlow: (cfg.flow as string) ?? base.xrayFlow,
         xrayFingerprint: (cfg.fingerprint as string) ?? base.xrayFingerprint,
         xrayNetwork: ((cfg.network as 'raw' | 'xhttp' | 'ws' | 'grpc' | 'httpupgrade' | 'kcp') ?? 'raw'),
@@ -489,6 +492,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           realityShortIds: csvList(values.xrayShortIds),
           realityPrivateKey: values.xrayPrivateKey,
           realityPublicKey: values.xrayPublicKey,
+          realityMode: values.xrayRealityMode,
           flow: values.xrayFlow,
           fingerprint: values.xrayFingerprint,
           network: values.xrayNetwork,
@@ -916,12 +920,27 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
               </Stack>
               {form.values.xraySecurity === 'reality' && (
                 <>
+                  <Select
+                    label={t('profiles.form.cfg.realityModeLabel')}
+                    description={t('profiles.form.cfg.realityModeDesc')}
+                    data={[
+                      { value: 'steal-others', label: t('profiles.form.cfg.realityModeStealOthers') },
+                      { value: 'self-steal', label: t('profiles.form.cfg.realityModeSelfSteal') },
+                    ]}
+                    {...form.getInputProps('xrayRealityMode')}
+                  />
+                  {form.values.xrayRealityMode === 'self-steal' && (
+                    <Text size="xs" c="dimmed">
+                      {t('profiles.form.cfg.realityModeSelfStealHint')}
+                    </Text>
+                  )}
                   <Group grow align="flex-start">
                     <TextInput
                       label="REALITY dest (target site)"
                       description={t('profiles.form.cfg.realityDestDesc')}
                       placeholder="www.cloudflare.com:443"
-                      required
+                      required={form.values.xrayRealityMode !== 'self-steal'}
+                      disabled={form.values.xrayRealityMode === 'self-steal'}
                       {...form.getInputProps('xrayDest')}
                     />
                     <TextInput

@@ -39,6 +39,15 @@ type InboundConfig struct {
 	RealityPrivateKey  string   // x25519 private key (paired pubkey advertised in URI)
 	RealityShortIDs    []string // hex strings, max 16 chars each
 
+	// RealityMode (K9-B) selects how REALITY borrows a TLS identity:
+	//   - "" / "steal-others": dest = an external camouflage site (default;
+	//     works outside RU but SNI-IP-mismatches under RU-DPI).
+	//   - "self-steal": dest = the node's own loopback TLS fallback
+	//     (selfStealAddr) + serverNames = the node's domain, so SNI and IP are
+	//     consistent. The adapter runs that fallback (see selfsteal.go) and
+	//     withDefaults rewrites RealityDest to it.
+	RealityMode string
+
 	// Flow controls Vision (xtls-rprx-vision) on the client side; empty disables.
 	Flow string
 
@@ -108,6 +117,11 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 	if out.ApiPort == 0 {
 		out.ApiPort = 8080
 	}
+	// K9-B self-steal: REALITY's dest is the node's own loopback TLS fallback,
+	// regardless of what (if anything) the panel sent for RealityDest.
+	if out.RealityMode == selfStealModeValue {
+		out.RealityDest = selfStealAddr
+	}
 	return out
 }
 
@@ -132,6 +146,13 @@ func (c *InboundConfig) validate() error {
 	}
 	if len(c.RealityShortIDs) == 0 {
 		return errors.New("RealityShortIDs must have at least one entry")
+	}
+	// K9-B self-steal: RealityDest is the node's own loopback TLS fallback,
+	// supplied by withDefaults (selfStealAddr). The panel needn't send a dest,
+	// and the loopback/SSRF guard below is intentionally bypassed: this
+	// loopback target is our managed fallback, not an operator-pointed host.
+	if c.RealityMode == selfStealModeValue {
+		return nil
 	}
 	if c.RealityDest == "" {
 		return errors.New("RealityDest is required")
@@ -175,9 +196,28 @@ type xrayClient struct {
 	Flow  string `json:"flow,omitempty"`
 }
 
+// CascadeFragments are the extra xray config pieces a cascade hop contributes,
+// generated panel-side (C2 buildCascadeConfigs) and pushed to the node alongside
+// the inbound config:
+//   - Inbounds:     the link-IN inbound (transit/exit nodes receive the prev hop)
+//   - Outbounds:    the link-OUT outbound (entry/transit nodes dial the next hop)
+//   - RoutingRules: per-role rules (entry: user->link-out; transit: link-in->
+//     link-out; exit: link-in->direct). Appended AFTER the base rules so the
+//     DNS-hijack and BitTorrent/SMTP block rules still take precedence.
+//
+// Each element is a raw JSON object so the panel owns the exact xray shape and
+// the node-agent stays protocol-agnostic. Nil/empty = a non-cascade node, in
+// which case renderConfig output is byte-identical to before this feature.
+type CascadeFragments struct {
+	Inbounds     []json.RawMessage `json:"inbounds"`
+	Outbounds    []json.RawMessage `json:"outbounds"`
+	RoutingRules []json.RawMessage `json:"routingRules"`
+}
+
 // renderConfig produces a complete Xray config.json blob for the given users.
 // Marshaled as indented JSON for human-readability when an operator needs to
-// inspect what the adapter wrote.
+// inspect what the adapter wrote. Thin wrapper over renderConfigWithCascade for
+// the non-cascade path.
 //
 // Slice 24c — per-user stats. The config now wires up Xray's StatsService:
 //
@@ -194,10 +234,121 @@ type xrayClient struct {
 // The api inbound MUST stay on 127.0.0.1 — exposing it externally would
 // give anyone the ability to read all traffic counters and reset them.
 func renderConfig(inbound InboundConfig, users []xrayClient) ([]byte, error) {
+	return renderConfigWithCascade(inbound, users, nil)
+}
+
+// renderConfigWithCascade is renderConfig plus optional cascade fragments (C3).
+// When cascade is nil the output is byte-identical to the pre-cascade config.
+func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade *CascadeFragments) ([]byte, error) {
 	if err := inbound.validate(); err != nil {
 		return nil, err
 	}
 	cfg := inbound.withDefaults()
+
+	inbounds := []any{
+		map[string]any{
+			"tag":            cfg.Tag,
+			"listen":         cfg.ListenHost,
+			"port":           cfg.ListenPort,
+			"protocol":       userInboundProtocol(cfg),
+			"settings":       buildUserInboundSettings(cfg, users),
+			"streamSettings": buildStreamSettings(cfg),
+			// Sniffing — slice 24c part 2. Lets routing rules see the
+			// real destination protocol/SNI rather than just the IP/port,
+			// which is needed for the `geosite:` and `protocol:` matchers
+			// below to actually fire. `routeOnly: false` (default) means
+			// the sniffed value also drives the connection, so DNS-over-
+			// HTTPS hijack-protection rules work too.
+			"sniffing": map[string]any{
+				"enabled":      true,
+				"destOverride": []string{"http", "tls", "quic"},
+			},
+		},
+		map[string]any{
+			"tag":      "api-in",
+			"listen":   "127.0.0.1",
+			"port":     cfg.ApiPort,
+			"protocol": "dokodemo-door",
+			"settings": map[string]any{
+				"address": "127.0.0.1",
+			},
+		},
+	}
+
+	// Outbounds — slice 24c part 2:
+	//   - `direct` (freedom): default exit
+	//   - `dns-out`: DNS server outbound — routing rule below pins all
+	//     `protocol: dns` traffic here so client DNS queries don't leak
+	//     out via `direct` and reveal real destinations to the resolver
+	//   - `blocked` (blackhole): drop target for BLOCK rules
+	outbounds := []any{
+		map[string]any{
+			"protocol": "freedom",
+			"tag":      "direct",
+			"streamSettings": map[string]any{
+				"sockopt": map[string]any{
+					// BBR congestion control — measurably better throughput
+					// on lossy networks (5-30% in our prod-runs). Requires
+					// `net.core.default_qdisc=fq` + `net.ipv4.tcp_congestion
+					// _control=bbr` in sysctl on the node — install-iceslab-node.sh
+					// sets these (slice 23.1).
+					"tcpCongestion": "bbr",
+					"tcpFastOpen":   true,
+				},
+			},
+		},
+		map[string]any{"protocol": "dns", "tag": "dns-out"},
+		map[string]any{"protocol": "blackhole", "tag": "blocked"},
+	}
+
+	rules := []any{
+		// Loopback management: api inbound traffic only ever talks
+		// to the api outbound (the StatsService).
+		map[string]any{
+			"type":        "field",
+			"inboundTag":  []string{"api-in"},
+			"outboundTag": "api",
+		},
+		// DNS hijack protection — route all DNS-protocol traffic to
+		// the dns-out outbound so the upstream resolver can't see the
+		// client's real IP.
+		map[string]any{
+			"type":        "field",
+			"protocol":    []string{"dns"},
+			"outboundTag": "dns-out",
+		},
+		// BLOCK rules — slice 24c part 2 anti-abuse:
+		//   - BitTorrent: most VPS providers' AUP forbids it; one
+		//     subscriber's torrenting can get the whole node nuked.
+		//   - SMTP (port 25): outbound mail abuse / spam — providers
+		//     blacklist the IP within hours.
+		map[string]any{
+			"type":        "field",
+			"protocol":    []string{"bittorrent"},
+			"outboundTag": "blocked",
+		},
+		map[string]any{
+			"type":        "field",
+			"port":        "25",
+			"outboundTag": "blocked",
+		},
+	}
+
+	// C3 — append cascade fragments. Order matters: cascade rules come AFTER the
+	// base block/dns rules so a cascade entry's catch-all (user traffic ->
+	// link-out) doesn't shadow DNS-hijack/BitTorrent/SMTP handling.
+	if cascade != nil {
+		for _, ib := range cascade.Inbounds {
+			inbounds = append(inbounds, ib)
+		}
+		for _, ob := range cascade.Outbounds {
+			outbounds = append(outbounds, ob)
+		}
+		for _, r := range cascade.RoutingRules {
+			rules = append(rules, r)
+		}
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{
 			"loglevel": "info",
@@ -219,94 +370,11 @@ func renderConfig(inbound InboundConfig, users []xrayClient) ([]byte, error) {
 				"statsInboundDownlink": true,
 			},
 		},
-		"inbounds": []map[string]any{
-			{
-				"tag":            cfg.Tag,
-				"listen":         cfg.ListenHost,
-				"port":           cfg.ListenPort,
-				"protocol":       userInboundProtocol(cfg),
-				"settings":       buildUserInboundSettings(cfg, users),
-				"streamSettings": buildStreamSettings(cfg),
-				// Sniffing — slice 24c part 2. Lets routing rules see the
-				// real destination protocol/SNI rather than just the IP/port,
-				// which is needed for the `geosite:` and `protocol:` matchers
-				// below to actually fire. `routeOnly: false` (default) means
-				// the sniffed value also drives the connection, so DNS-over-
-				// HTTPS hijack-protection rules work too.
-				"sniffing": map[string]any{
-					"enabled":      true,
-					"destOverride": []string{"http", "tls", "quic"},
-				},
-			},
-			{
-				"tag":      "api-in",
-				"listen":   "127.0.0.1",
-				"port":     cfg.ApiPort,
-				"protocol": "dokodemo-door",
-				"settings": map[string]any{
-					"address": "127.0.0.1",
-				},
-			},
-		},
-		// Outbounds — slice 24c part 2:
-		//   - `direct` (freedom): default exit
-		//   - `dns-out`: DNS server outbound — routing rule below pins all
-		//     `protocol: dns` traffic here so client DNS queries don't leak
-		//     out via `direct` and reveal real destinations to the resolver
-		//   - `blocked` (blackhole): drop target for BLOCK rules
-		"outbounds": []map[string]any{
-			{
-				"protocol": "freedom",
-				"tag":      "direct",
-				"streamSettings": map[string]any{
-					"sockopt": map[string]any{
-						// BBR congestion control — measurably better throughput
-						// on lossy networks (5-30% in our prod-runs). Requires
-						// `net.core.default_qdisc=fq` + `net.ipv4.tcp_congestion
-						// _control=bbr` in sysctl on the node — install-iceslab-node.sh
-						// sets these (slice 23.1).
-						"tcpCongestion": "bbr",
-						"tcpFastOpen":   true,
-					},
-				},
-			},
-			{"protocol": "dns", "tag": "dns-out"},
-			{"protocol": "blackhole", "tag": "blocked"},
-		},
+		"inbounds":  inbounds,
+		"outbounds": outbounds,
 		"routing": map[string]any{
 			"domainStrategy": "IPIfNonMatch",
-			"rules": []map[string]any{
-				// Loopback management: api inbound traffic only ever talks
-				// to the api outbound (the StatsService).
-				{
-					"type":        "field",
-					"inboundTag":  []string{"api-in"},
-					"outboundTag": "api",
-				},
-				// DNS hijack protection — route all DNS-protocol traffic to
-				// the dns-out outbound so the upstream resolver can't see the
-				// client's real IP.
-				{
-					"type":        "field",
-					"protocol":    []string{"dns"},
-					"outboundTag": "dns-out",
-				},
-				// BLOCK rules — slice 24c part 2 anti-abuse:
-				//   - BitTorrent: most VPS providers' AUP forbids it; one
-				//     subscriber's torrenting can get the whole node nuked.
-				//   - SMTP (port 25): outbound mail abuse / spam — providers
-				//     blacklist the IP within hours.
-				{
-					"type":        "field",
-					"protocol":    []string{"bittorrent"},
-					"outboundTag": "blocked",
-				},
-				{
-					"type":        "field",
-					"port":        "25",
-					"outboundTag": "blocked",
-				},
-			},
+			"rules":          rules,
 		},
 	}
 	return json.MarshalIndent(doc, "", "  ")

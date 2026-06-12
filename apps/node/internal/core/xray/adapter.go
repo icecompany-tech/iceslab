@@ -1,6 +1,7 @@
 package xray
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -61,6 +62,17 @@ type Adapter struct {
 	users   map[string]xrayClient // key: userId
 	started bool                  // set true after first successful regenerateAndRestart
 
+	// cascade holds the optional C3 chaining fragments (link-in inbound,
+	// link-out outbound, routing rules) for THIS node's hop, pushed by the
+	// panel via ApplyInbound. nil = node is not part of any cascade, in which
+	// case rendering is byte-identical to a plain node.
+	cascade *CascadeFragments
+
+	// selfSteal is the K9-B local TLS fallback, running only while the inbound
+	// is REALITY self-steal mode. nil otherwise. Lifecycle is managed in
+	// regenerateAndRestart under restartMu; the field is read under a.mu.
+	selfSteal *selfStealServer
+
 	proc *subprocess.Subprocess
 
 	// restartMu serializes regenerateAndRestart so concurrent config changes
@@ -100,17 +112,27 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndRestart(ctx)
 }
 
-// Stop terminates the subprocess. The on-disk config is left in place.
+// Stop terminates the subprocess and the K9-B self-steal fallback. The on-disk
+// config is left in place. Reads+clears the shared fields under a.mu, then does
+// the slow Shutdown/Stop with the lock released (a.mu is never held across IO).
 func (a *Adapter) Stop(ctx context.Context) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.started = false
-	if a.proc == nil {
+	proc := a.proc
+	a.proc = nil
+	ss := a.selfSteal
+	a.selfSteal = nil
+	a.mu.Unlock()
+
+	if ss != nil {
+		if err := ss.stop(ctx); err != nil {
+			a.logger.Warn("xray self-steal stop failed", "err", err)
+		}
+	}
+	if proc == nil {
 		return nil
 	}
-	err := a.proc.Stop(ctx)
-	a.proc = nil
-	return err
+	return proc.Stop(ctx)
 }
 
 // AddUser registers the user with the adapter. N1: it first tries a LIVE add
@@ -197,6 +219,7 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	a.mu.Lock()
 	clients := sortedClients(a.users)
 	inbound := a.cfg.Inbound
+	cascade := a.cascade
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -210,8 +233,9 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 		return false
 	}
 
-	// Keep the on-disk config current so a later restart has the same user set.
-	blob, err := renderConfig(inbound, clients)
+	// Keep the on-disk config current so a later restart has the same user set
+	// (and the same cascade fragments).
+	blob, err := renderConfigWithCascade(inbound, clients, cascade)
 	if err != nil {
 		return false
 	}
@@ -370,6 +394,14 @@ type xrayInboundCfgWire struct {
 	TLSServerName string `json:"tlsServerName,omitempty"`
 	TLSCert       string `json:"tlsCert,omitempty"`
 	TLSKey        string `json:"tlsKey,omitempty"`
+	// K9-B: REALITY mode: "" / "steal-others" (default) or "self-steal".
+	// self-steal makes the node run a local TLS fallback and point dest at it
+	// (see selfsteal.go), fixing the SNI-IP mismatch that RU-DPI detects.
+	RealityMode string `json:"realityMode,omitempty"`
+	// C3: cascade chaining fragments for this node's hop (link-in inbound,
+	// link-out outbound, routing rules). Generated panel-side by
+	// buildCascadeConfigs; nil/missing for plain (non-cascade) nodes.
+	Cascade *CascadeFragments `json:"cascade,omitempty"`
 }
 
 // ApplyInbound parses the panel-pushed Xray config, swaps it into the live
@@ -417,17 +449,21 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		TLSServerName:      wire.TLSServerName,
 		TLSCert:            wire.TLSCert,
 		TLSKey:             wire.TLSKey,
+		RealityMode:        wire.RealityMode,
 	}
 
 	a.mu.Lock()
 	// Idempotency check — same config → noop. Compare struct fields
 	// instead of byte-marshalling for speed; slice equality via reflect.
-	if inboundEqual(a.cfg.Inbound, newInbound) {
+	// C3: a cascade change alone (same inbound) must still trigger a restart,
+	// so factor the cascade fragments into the gate.
+	if inboundEqual(a.cfg.Inbound, newInbound) && cascadeEqual(a.cascade, wire.Cascade) {
 		a.mu.Unlock()
 		a.logger.Info("xray ApplyInbound: config unchanged, skipping restart")
 		return nil
 	}
 	a.cfg.Inbound = newInbound
+	a.cascade = wire.Cascade
 	a.mu.Unlock()
 	a.logger.Info("xray ApplyInbound: config changed, regenerating and restarting",
 		"sni", wire.RealityServerNames, "shortIds", len(wire.RealityShortIDs))
@@ -453,7 +489,8 @@ func inboundEqual(a, b InboundConfig) bool {
 		a.Security != b.Security ||
 		a.TLSServerName != b.TLSServerName ||
 		a.TLSCert != b.TLSCert ||
-		a.TLSKey != b.TLSKey {
+		a.TLSKey != b.TLSKey ||
+		a.RealityMode != b.RealityMode {
 		return false
 	}
 	if !stringSliceEqual(a.RealityServerNames, b.RealityServerNames) {
@@ -477,6 +514,30 @@ func stringSliceEqual(a, b []string) bool {
 	return true
 }
 
+// cascadeEqual reports whether two cascade fragment sets are byte-identical, so
+// ApplyInbound can skip a restart when neither the inbound nor the cascade
+// changed. nil == nil; nil != non-nil.
+func cascadeEqual(a, b *CascadeFragments) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return rawSliceEqual(a.Inbounds, b.Inbounds) &&
+		rawSliceEqual(a.Outbounds, b.Outbounds) &&
+		rawSliceEqual(a.RoutingRules, b.RoutingRules)
+}
+
+func rawSliceEqual(a, b []json.RawMessage) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !bytes.Equal(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // regenerateAndRestart renders the current users-map to ConfigPath and
 // (re)starts the xray subprocess. Bug #1: it must NOT be called with a.mu
 // held. restartMu serializes restarts; a.mu is taken only for the fast
@@ -490,11 +551,12 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	a.mu.Lock()
 	clients := sortedClients(a.users)
 	inbound := a.cfg.Inbound
+	cascade := a.cascade
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	a.mu.Unlock()
 
-	blob, err := renderConfig(inbound, clients)
+	blob, err := renderConfigWithCascade(inbound, clients, cascade)
 	if err != nil {
 		return fmt.Errorf("render xray config: %w", err)
 	}
@@ -512,6 +574,11 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 		a.logger.Info("xray config written (config-only mode)", "users", len(clients))
 		return nil
 	}
+
+	// K9-B: bring the self-steal local TLS fallback in line with the inbound's
+	// REALITY mode BEFORE the xray swap, so REALITY's loopback dest
+	// (127.0.0.1:8443) is already answering when xray comes back up.
+	a.reconcileSelfSteal(ctx, inbound)
 
 	// Stop the existing subprocess (keep the field pointing at it so Healthy
 	// reflects "down" during the swap; xray binds a fixed port so old must
@@ -545,6 +612,59 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	a.mu.Unlock()
 	a.logger.Info("xray (re)started", "users", len(clients))
 	return nil
+}
+
+// reconcileSelfSteal (K9-B) starts/stops/restarts the local TLS fallback so it
+// matches the inbound's REALITY mode. Called from regenerateAndRestart under
+// restartMu (so it can't race itself); a.mu only guards the field read/write,
+// never held across the slow start/Shutdown.
+func (a *Adapter) reconcileSelfSteal(ctx context.Context, inbound InboundConfig) {
+	want := inbound.RealityMode == selfStealModeValue
+	domain := ""
+	if want && len(inbound.RealityServerNames) > 0 {
+		domain = inbound.RealityServerNames[0]
+	}
+	// No domain -> no cert subject -> can't run the fallback; treat as "off".
+	if domain == "" {
+		want = false
+	}
+
+	a.mu.Lock()
+	cur := a.selfSteal
+	a.mu.Unlock()
+
+	// Already in the desired state: off-and-nil, or on-with-same-domain.
+	if !want && cur == nil {
+		return
+	}
+	if want && cur != nil && cur.domain == domain {
+		return
+	}
+
+	// Stop the existing server (mode turned off, or the domain changed).
+	if cur != nil {
+		if err := cur.stop(ctx); err != nil {
+			a.logger.Warn("xray self-steal stop failed", "err", err)
+		}
+		a.mu.Lock()
+		a.selfSteal = nil
+		a.mu.Unlock()
+	}
+	if !want {
+		return
+	}
+
+	srv, err := startSelfSteal(selfStealAddr, domain, a.logger)
+	if err != nil {
+		// Non-fatal: xray still starts, but REALITY's dest (127.0.0.1:8443)
+		// won't answer until the next reconcile. Surface loudly.
+		a.logger.Error("xray self-steal start failed; REALITY dest will not answer",
+			"domain", domain, "err", err)
+		return
+	}
+	a.mu.Lock()
+	a.selfSteal = srv
+	a.mu.Unlock()
 }
 
 // sortedClients returns the user map in deterministic order so successive

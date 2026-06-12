@@ -6,6 +6,7 @@ import { mtprotoSecret } from '../../core-adapters/mtproto/index.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
+import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
 import { getLogger } from '../../lib/logger.js';
 
 // ───── Job data shapes ─────
@@ -127,7 +128,7 @@ async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]> {
     orderBy: { port: 'asc' },
   });
 
-  return bindings.map((b) => {
+  const inbounds = bindings.map((b) => {
     // Shallow merge: per-binding overrides win over profile.config. Used for
     // ACME domain, AmneziaWG private key, Shadowsocks server PSK, etc.
     const baseConfig = (b.profile.config ?? {}) as Record<string, unknown>;
@@ -168,6 +169,30 @@ async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]> {
       config,
     };
   });
+
+  // C3 - if this node is a hop in an enabled cascade, attach its chaining
+  // fragments (link-in inbound, link-out outbound, routing rules) to the node's
+  // xray inbound. The node-agent merges them into the xray config and forwards
+  // entry->exit. Non-cascade nodes: getCascadeFragmentsForNode returns null and
+  // this is a no-op, so the wire stays byte-identical to before.
+  const cascade = await getCascadeFragmentsForNode(nodeId);
+  if (cascade) {
+    // A node runs a single xray config.json, so the first xray inbound is the
+    // one (and only one) that carries the cascade.
+    const xrayInbound = inbounds.find((i) => i.protocol === 'xray');
+    if (xrayInbound) {
+      xrayInbound.config = {
+        ...(xrayInbound.config as Record<string, unknown>),
+        cascade,
+      } as InboundDto['config'];
+    } else {
+      getLogger().info(
+        `[inbound-sync] node ${nodeId} is in an enabled cascade but has no xray inbound; cascade not applied`,
+      );
+    }
+  }
+
+  return inbounds;
 }
 
 /**
