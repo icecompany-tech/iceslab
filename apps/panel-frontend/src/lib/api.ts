@@ -673,6 +673,67 @@ export async function deleteSquad(id: string): Promise<void> {
   await api.delete(`/api/squads/${id}`);
 }
 
+// ───── Cascades (multi-hop, Section C) ─────
+
+export type CascadeProtocol =
+  | 'xray' | 'hysteria' | 'amneziawg' | 'naive' | 'shadowsocks' | 'mtproto' | 'mieru';
+
+export interface CascadeHop {
+  id: string;
+  nodeId: string;
+  nodeName: string;
+  position: number;
+  entryProtocol: string | null;
+  linkProtocol: string | null;
+}
+
+export interface Cascade {
+  id: string;
+  name: string;
+  enabled: boolean;
+  hops: CascadeHop[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CascadeHopInput {
+  nodeId: string;
+  position: number;
+  entryProtocol?: CascadeProtocol;
+  linkProtocol?: CascadeProtocol;
+}
+
+export interface CreateCascadeInput {
+  name: string;
+  enabled?: boolean;
+  hops: CascadeHopInput[];
+}
+
+export interface UpdateCascadeInput {
+  name?: string;
+  enabled?: boolean;
+  hops?: CascadeHopInput[];
+}
+
+export async function listCascades(): Promise<{ cascades: Cascade[] }> {
+  const { data } = await api.get<{ cascades: Cascade[] }>('/api/cascades');
+  return data;
+}
+
+export async function createCascade(input: CreateCascadeInput): Promise<Cascade> {
+  const { data } = await api.post<Cascade>('/api/cascades', input);
+  return data;
+}
+
+export async function updateCascade(id: string, input: UpdateCascadeInput): Promise<Cascade> {
+  const { data } = await api.put<Cascade>(`/api/cascades/${id}`, input);
+  return data;
+}
+
+export async function deleteCascade(id: string): Promise<void> {
+  await api.delete(`/api/cascades/${id}`);
+}
+
 // ───── Profiles + Bindings (slice 27) ─────
 //
 // Replaces the per-node Inbound model. A Profile is a logical inbound

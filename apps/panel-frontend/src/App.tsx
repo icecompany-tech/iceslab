@@ -22,6 +22,9 @@ const ProfilesPage = lazy(() =>
   import('./pages/ProfilesPage').then((m) => ({ default: m.ProfilesPage })),
 );
 const SquadsPage = lazy(() => import('./pages/SquadsPage').then((m) => ({ default: m.SquadsPage })));
+const CascadesPage = lazy(() =>
+  import('./pages/CascadesPage').then((m) => ({ default: m.CascadesPage })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -39,6 +42,7 @@ export default function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/nodes" element={<NodesPage />} />
+          <Route path="/cascades" element={<CascadesPage />} />
           <Route path="/profiles" element={<ProfilesPage />} />
           {/* Slice 27, /inbounds replaced by /profiles. Keep redirect so
               existing bookmarks don't 404. */}
