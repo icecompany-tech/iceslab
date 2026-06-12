@@ -1,13 +1,15 @@
 import { prisma } from '../../prisma.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
+import { getLogger } from '../../lib/logger.js';
+import { computeNodeStatsWrites } from './stats.compute.js';
 
 /**
  * Per-node in-memory snapshot of the last seen cumulative `totalBytesIn/Out`
  * from the agent. Used by the "no per-user accounting" fallback (mtproto +
  * any future single-counter adapter) to compute deltas tick-to-tick. Lives
- * in module scope — cleared when the backend restarts; that's fine, the
- * first tick after restart just records the current snapshot without
- * writing a fake spike.
+ * in module scope - cleared when the backend restarts; that's fine, the
+ * first tick after restart just records the current snapshot.
  */
 const totalSnapshot = new Map<string, { in: bigint; out: bigint }>();
 
@@ -18,11 +20,20 @@ const totalSnapshot = new Map<string, { in: bigint; out: bigint }>();
  *
  * Agent-side: xray's `api statsquery -reset` returns deltas since last
  * poll; the agent's `GET /stats` endpoint already wraps that. Other cores
- * (Hysteria/AWG/Naive/SS) don't expose per-user counters today — they're
+ * (Hysteria/AWG/Naive/SS) don't expose per-user counters today - they're
  * absent from the response and silently skipped here.
  *
  * Apply `node.consumptionMultiplier` to the user-side delta so premium
  * regions count more (or less) against per-user limits.
+ *
+ * B3 - per-node writes go out as one bulk `unnest`-based upsert per table
+ * (user_traffic, node_user_usage_history) instead of N individual upserts.
+ * That collapses 2N statements into 2, cutting round-trips and the row-lock
+ * window on `user_traffic` under contention. All writes for a node still run
+ * in one `$transaction`: the agent's getStats() destructively drained the
+ * upstream counters, so a partial commit would burn deltas - all-or-nothing
+ * means an upsert failure rolls back and the agent returns cumulative+new on
+ * the next tick.
  *
  * Idempotent: on transient failure, skip and try next tick. Never block
  * the cron loop on one slow/down node.
@@ -33,18 +44,17 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       deletedAt: null,
       status: { notIn: ['disabled', 'unreachable'] },
     },
-    // protocol is used below for the mtproto presence-only online fallback.
-    // Single-secret protocols (mtproto via mtg) can't attribute traffic to a
-    // specific userId, so the bytes-delta loop never touches user.onlineAt
-    // for them and the UI shows OFFLINE forever. We patch around that by
-    // treating "user is currently tracked by the adapter" as the online
-    // signal — only for protocols where the design forces this.
+    // protocol drives the mtproto presence-only online fallback. Single-secret
+    // protocols (mtproto via mtg) can't attribute traffic to a specific userId,
+    // so the bytes-delta loop never touches user.onlineAt for them and the UI
+    // shows OFFLINE forever. We patch around that by treating "user is tracked
+    // by the adapter" as the online signal - only for protocols that force it.
     select: { id: true, address: true, consumptionMultiplier: true, protocol: true },
   });
   if (nodes.length === 0) return { ok: 0, failed: 0 };
 
   const now = new Date();
-  // Floor to current hour bucket — UTC. node_usage_history has @@id([nodeId, hour]).
+  // Floor to current hour bucket - UTC. node_usage_history has @@id([nodeId, hour]).
   const hourBucket = new Date(
     Date.UTC(
       now.getUTCFullYear(),
@@ -53,13 +63,12 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       now.getUTCHours(),
     ),
   );
-  // Floor to current UTC day. node_user_usage_history has @@id([nodeId, date,
-  // userId]); the dashboard "Top users today" groups that table by userId
-  // WHERE date = today, so the bucket must match startOfToday()'s UTC-midnight
-  // shape exactly. Until now nothing wrote this table, so the card was empty.
-  const dateBucket = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
+  // Current UTC calendar day as a TZ-independent 'YYYY-MM-DD' string. The
+  // bulk upsert casts it with `::date`, which (unlike binding a Date and
+  // casting timestamptz->date) never shifts under the session timezone. The
+  // dashboard "Top users today" groups node_user_usage_history by userId WHERE
+  // date = today, so this must match startOfToday()'s UTC-midnight shape.
+  const dateStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
 
   let ok = 0;
   let failed = 0;
@@ -69,178 +78,107 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       try {
         const transport = new NodeTransport(node);
         const res = await transport.getStats();
-        const rawTotal =
-          (res.users ?? []).reduce(
-            (acc, u) => acc + (u.bytesIn || 0) + (u.bytesOut || 0),
-            0,
-          );
-        if (rawTotal > 0) {
-          console.log(
-            `[cron] node-stats-poll ${node.id} — ${res.users.length} entries, total=${rawTotal}B`,
-          );
-        }
-        const multiplier = Number(node.consumptionMultiplier ?? 1) || 1;
-        let nodeDownload = 0n;
-        let nodeUpload = 0n;
         const userList = res.users ?? [];
-
-        // Compute everything we need first, THEN run all writes in one
-        // transaction. The agent's getStats() already drained the upstream
-        // counters (xray's `statsquery -reset` is destructive), so any
-        // partial-failure mid-loop on the panel side burns those deltas —
-        // they're not recoverable on the next poll. Single $transaction
-        // commits all-or-nothing: if any upsert fails, everything rolls
-        // back and the agent will return cumulative+new on next tick
-        // (only deltas since the last successful commit are at risk).
-        type UserWrite = {
-          userId: string;
-          scaled: bigint;
-          scaledIn: bigint;
-          scaledOut: bigint;
-        };
-        const userWrites: UserWrite[] = [];
-        // Presence-only userIds (mtproto-style adapters): we have zero bytes
-        // for them but the adapter reported them in res.users, which is the
-        // only signal we get that they exist on this node. Touch onlineAt
-        // without incrementing traffic so the UI stops showing OFFLINE
-        // forever for MTProto-only users. Documented limitation: per-user
-        // quotas still don't apply to mtproto bytes since we can't measure
-        // them — surface this to admins in the UI separately (see
-        // UserFormModal MTProto-row tooltip).
-        const presenceOnlyUserIds: string[] = [];
-        const isPresenceOnlyProtocol = node.protocol === 'mtproto';
-        // Apply the node's consumption multiplier consistently to billing
-        // (usedTrafficBytes) and the per-user daily history below.
-        const scale = (v: bigint) =>
-          multiplier === 1 ? v : BigInt(Math.round(Number(v) * multiplier));
-        for (const u of userList) {
-          const inB = BigInt(u.bytesIn || 0);
-          const outB = BigInt(u.bytesOut || 0);
-          nodeUpload += inB;
-          nodeDownload += outB;
-          const userDelta = inB + outB;
-          if (userDelta === 0n) {
-            if (isPresenceOnlyProtocol) presenceOnlyUserIds.push(u.userId);
-            continue;
-          }
-          userWrites.push({
-            userId: u.userId,
-            scaled: scale(userDelta),
-            scaledIn: scale(inB),
-            scaledOut: scale(outB),
-          });
-        }
-
-        // Per-node hourly bucket — computed before the tx so we can include
-        // the totalBytes fallback (mtproto-style single-counter protocols).
-        if (nodeDownload === 0n && nodeUpload === 0n) {
-          const cumIn = BigInt(res.totalBytesIn || 0);
-          const cumOut = BigInt(res.totalBytesOut || 0);
-          if (cumIn > 0n || cumOut > 0n) {
-            const prev = totalSnapshot.get(node.id) ?? { in: 0n, out: 0n };
-            const dIn = cumIn > prev.in ? cumIn - prev.in : 0n;
-            const dOut = cumOut > prev.out ? cumOut - prev.out : 0n;
-            totalSnapshot.set(node.id, { in: cumIn, out: cumOut });
-            nodeUpload += dIn;
-            nodeDownload += dOut;
-          }
-        }
-
-        const writes: ReturnType<typeof prisma.userTraffic.upsert>[] = [];
-        for (const w of userWrites) {
-          writes.push(
-            prisma.userTraffic.upsert({
-              where: { userId: w.userId },
-              create: {
-                userId: w.userId,
-                usedTrafficBytes: w.scaled,
-                lifetimeTrafficBytes: w.scaled,
-                onlineAt: now,
-                firstConnectedAt: now,
-                lastConnectedNodeId: node.id,
-              },
-              update: {
-                usedTrafficBytes: { increment: w.scaled },
-                lifetimeTrafficBytes: { increment: w.scaled },
-                onlineAt: now,
-                lastConnectedNodeId: node.id,
-              },
-            }),
-          );
-          // Per-user daily bucket — powers the dashboard "Top users today"
-          // card. Direction split, scaled by the node multiplier to stay
-          // consistent with usedTrafficBytes above. Zero-delta users were
-          // already `continue`d, so every w here genuinely moved bytes.
-          writes.push(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            prisma.nodeUserUsageHistory.upsert({
-              where: {
-                nodeId_date_userId: {
-                  nodeId: node.id,
-                  date: dateBucket,
-                  userId: w.userId,
-                },
-              },
-              create: {
-                nodeId: node.id,
-                date: dateBucket,
-                userId: w.userId,
-                bytesIn: w.scaledIn,
-                bytesOut: w.scaledOut,
-              },
-              update: {
-                bytesIn: { increment: w.scaledIn },
-                bytesOut: { increment: w.scaledOut },
-              },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            }) as any,
+        const rawTotal = userList.reduce(
+          (acc, u) => acc + (u.bytesIn || 0) + (u.bytesOut || 0),
+          0,
+        );
+        if (rawTotal > 0) {
+          getLogger().info(
+            `[cron] node-stats-poll ${node.id} - ${userList.length} entries, total=${rawTotal}B`,
           );
         }
-        // Presence-only upserts (MTProto fallback): touch onlineAt + record
-        // last node, but do not increment usedTrafficBytes — we cannot
-        // measure those bytes. firstConnectedAt seeded from `now` on first
-        // sighting so the user's "connected since" reflects reality.
-        for (const uid of presenceOnlyUserIds) {
-          writes.push(
-            prisma.userTraffic.upsert({
-              where: { userId: uid },
-              create: {
-                userId: uid,
-                usedTrafficBytes: 0n,
-                lifetimeTrafficBytes: 0n,
-                onlineAt: now,
-                firstConnectedAt: now,
-                lastConnectedNodeId: node.id,
-              },
-              update: {
-                onlineAt: now,
-                lastConnectedNodeId: node.id,
-              },
-            }),
+
+        // All the delta math (scaling, zero-delta skip, presence-only signal,
+        // single-counter fallback) lives in the pure, unit-tested helper.
+        const w = computeNodeStatsWrites({
+          users: userList,
+          multiplier: Number(node.consumptionMultiplier ?? 1) || 1,
+          isPresenceOnlyProtocol: node.protocol === 'mtproto',
+          totalBytesIn: res.totalBytesIn,
+          totalBytesOut: res.totalBytesOut,
+          prevSnapshot: totalSnapshot.get(node.id),
+        });
+
+        const stmts: Prisma.PrismaPromise<unknown>[] = [];
+
+        // user_traffic: bulk upsert. used+lifetime increment by the scaled
+        // delta; online_at/last_connected_node_id always refreshed;
+        // first_connected_at only set on insert (absent from the SET list, so
+        // preserved on conflict). Presence-only rows carry scaled=0 - a no-op
+        // on traffic that still touches online_at. Values bound as text[] and
+        // cast in-SQL so bigints serialize unambiguously through the pg driver.
+        if (w.userTrafficRows.length > 0) {
+          const ids = w.userTrafficRows.map((r) => r.userId);
+          const amts = w.userTrafficRows.map((r) => r.scaled.toString());
+          stmts.push(
+            prisma.$executeRaw(Prisma.sql`
+              INSERT INTO user_traffic
+                (user_id, used_traffic_bytes, lifetime_traffic_bytes, online_at, first_connected_at, last_connected_node_id)
+              SELECT u.uid, u.amt, u.amt, ${now}, ${now}, ${node.id}::uuid
+              FROM unnest(
+                ARRAY[${Prisma.join(ids)}]::uuid[],
+                ARRAY[${Prisma.join(amts)}]::bigint[]
+              ) AS u(uid, amt)
+              ON CONFLICT (user_id) DO UPDATE SET
+                used_traffic_bytes     = user_traffic.used_traffic_bytes + EXCLUDED.used_traffic_bytes,
+                lifetime_traffic_bytes = user_traffic.lifetime_traffic_bytes + EXCLUDED.lifetime_traffic_bytes,
+                online_at              = EXCLUDED.online_at,
+                last_connected_node_id = EXCLUDED.last_connected_node_id
+            `),
           );
         }
-        if (nodeDownload > 0n || nodeUpload > 0n) {
-          writes.push(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
+        // node_user_usage_history: per-user daily bucket. node_id + date are
+        // constant for this node/tick, so they ride as scalars; only the
+        // per-user arrays unnest. Powers the dashboard "Top users today" card.
+        if (w.historyRows.length > 0) {
+          const ids = w.historyRows.map((r) => r.userId);
+          const ins = w.historyRows.map((r) => r.bytesIn.toString());
+          const outs = w.historyRows.map((r) => r.bytesOut.toString());
+          stmts.push(
+            prisma.$executeRaw(Prisma.sql`
+              INSERT INTO node_user_usage_history (node_id, "date", user_id, bytes_in, bytes_out)
+              SELECT ${node.id}::uuid, ${dateStr}::date, u.uid, u.bin, u.bout
+              FROM unnest(
+                ARRAY[${Prisma.join(ids)}]::uuid[],
+                ARRAY[${Prisma.join(ins)}]::bigint[],
+                ARRAY[${Prisma.join(outs)}]::bigint[]
+              ) AS u(uid, bin, bout)
+              ON CONFLICT (node_id, "date", user_id) DO UPDATE SET
+                bytes_in  = node_user_usage_history.bytes_in + EXCLUDED.bytes_in,
+                bytes_out = node_user_usage_history.bytes_out + EXCLUDED.bytes_out
+            `),
+          );
+        }
+
+        // node_usage_history: a single (nodeId, hour) row - no fan-out, so the
+        // typed upsert stays. Raw (unscaled) bytes that crossed the wire.
+        if (w.nodeDownload > 0n || w.nodeUpload > 0n) {
+          stmts.push(
             prisma.nodeUsageHistory.upsert({
               where: { nodeId_hour: { nodeId: node.id, hour: hourBucket } },
               create: {
                 nodeId: node.id,
                 hour: hourBucket,
-                downloadBytes: nodeDownload,
-                uploadBytes: nodeUpload,
+                downloadBytes: w.nodeDownload,
+                uploadBytes: w.nodeUpload,
               },
               update: {
-                downloadBytes: { increment: nodeDownload },
-                uploadBytes: { increment: nodeUpload },
+                downloadBytes: { increment: w.nodeDownload },
+                uploadBytes: { increment: w.nodeUpload },
               },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            }) as any,
+            }) as unknown as Prisma.PrismaPromise<unknown>,
           );
         }
-        if (writes.length > 0) {
-          await prisma.$transaction(writes);
+
+        if (stmts.length > 0) {
+          await prisma.$transaction(stmts);
         }
+        // Advance the single-counter snapshot only after a clean commit, so a
+        // failed write doesn't drop those node-level bytes (next poll
+        // re-derives the delta from the un-advanced baseline).
+        if (w.newSnapshot) totalSnapshot.set(node.id, w.newSnapshot);
         ok++;
       } catch (err) {
         failed++;
@@ -250,7 +188,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
             : err instanceof Error
               ? err.message
               : String(err);
-        console.log(`[cron] node-stats-poll ${node.id} FAILED: ${detail}`);
+        getLogger().error(`[cron] node-stats-poll ${node.id} FAILED: ${detail}`);
       }
     }),
   );
