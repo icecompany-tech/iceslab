@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma.js';
 import { eventBus } from '../../lib/event-bus.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
 import { nodeUsersQueue } from './users.queue.js';
 
 type ResetStrategy = 'day' | 'week' | 'month';
@@ -215,4 +216,69 @@ export async function reconcileOrphanNodeUsers(): Promise<number> {
     })),
   );
   return orphans.length;
+}
+
+// K3-tail - proactive near-expiry / near-cap alerts, as a once-daily digest
+// (not per-user spam, so no dedup state is needed). Sent to the operator's
+// Telegram (no-op when Telegram isn't configured).
+const NEAR_EXPIRY_DAYS = 3;
+const NEAR_CAP_PERCENT = 90;
+
+/** Build the digest message (pure + testable). Null = nothing to report. */
+export function formatNearLimitsDigest(
+  expiring: { username: string; expireAt: Date | null }[],
+  nearCap: { username: string; pct: number }[],
+): string | null {
+  if (expiring.length === 0 && nearCap.length === 0) return null;
+  const lines: string[] = ['*Iceslab daily digest*'];
+  if (expiring.length > 0) {
+    lines.push(`*Expiring soon (<= ${NEAR_EXPIRY_DAYS}d):*`);
+    for (const u of expiring) {
+      const when = u.expireAt ? u.expireAt.toISOString().slice(0, 10) : '?';
+      lines.push(`- ${escapeMarkdown(u.username)}: ${when}`);
+    }
+  }
+  if (nearCap.length > 0) {
+    lines.push(`*Near traffic cap (>= ${NEAR_CAP_PERCENT}%):*`);
+    for (const u of nearCap) {
+      lines.push(`- ${escapeMarkdown(u.username)}: ${u.pct}%`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Find active users near expiry (<= NEAR_EXPIRY_DAYS away) or near their
+ * traffic cap (>= NEAR_CAP_PERCENT% but not yet over) and send the operator a
+ * single Telegram digest. Returns the number of users in the digest.
+ */
+export async function alertNearLimits(): Promise<number> {
+  const now = new Date();
+  const soon = new Date(now.getTime() + NEAR_EXPIRY_DAYS * 86_400_000);
+
+  const expiring = await prisma.user.findMany({
+    where: { status: 'active', deletedAt: null, expireAt: { gte: now, lte: soon } },
+    select: { username: true, expireAt: true },
+    orderBy: { expireAt: 'asc' },
+    take: 50,
+  });
+
+  // used >= 90% of limit but still under it (at/over -> findExceededTrafficUsers).
+  const nearCap = await prisma.$queryRaw<{ username: string; pct: number }[]>`
+    SELECT u.username AS username,
+           floor(ut.used_traffic_bytes::numeric / u.traffic_limit_bytes::numeric * 100)::int AS pct
+    FROM users u
+    JOIN user_traffic ut ON u.id = ut.user_id
+    WHERE u.status = 'active' AND u.deleted_at IS NULL
+      AND u.traffic_limit_bytes IS NOT NULL AND u.traffic_limit_bytes > 0
+      AND ut.used_traffic_bytes >= u.traffic_limit_bytes * ${NEAR_CAP_PERCENT} / 100
+      AND ut.used_traffic_bytes < u.traffic_limit_bytes
+    ORDER BY pct DESC
+    LIMIT 50
+  `;
+
+  const msg = formatNearLimitsDigest(expiring, nearCap);
+  if (!msg) return 0;
+  notifyTelegramAsync(msg);
+  return expiring.length + nearCap.length;
 }

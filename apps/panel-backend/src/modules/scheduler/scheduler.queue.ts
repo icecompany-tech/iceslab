@@ -6,6 +6,7 @@ import {
   findExpiredUsers,
   findExceededTrafficUsers,
   reconcileOrphanNodeUsers,
+  alertNearLimits,
 } from '../users/users.cron.js';
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
@@ -44,6 +45,7 @@ const CRON_JOBS: CronJobSpec[] = [
   { name: 'node-stats-poll',                pattern: '*/30 * * * * *' }, // каждые 30 секунд — per-user/per-node traffic
   { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут — catch-up for status-flip crashes / dropped jobs
   { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день — B2 retention для append-only history-таблиц
+  { name: 'alert-near-expiry',              pattern: '0 9 * * *'  },     // 09:00 каждый день - K3 near-expiry/near-cap дайджест в Telegram
 ];
 
 // ───── Регистрация (вызывается один раз при бутстрапе) ─────
@@ -126,6 +128,11 @@ export function startCronTasksWorker(): Worker {
         case 'reconcile-orphan-users': {
           const n = await reconcileOrphanNodeUsers();
           if (n > 0) getLogger().info(`[cron] reconcile-orphan-users — re-queued removeUser for ${n} users`);
+          break;
+        }
+        case 'alert-near-expiry': {
+          const n = await alertNearLimits();
+          if (n > 0) getLogger().info(`[cron] alert-near-expiry - digest sent for ${n} user(s)`);
           break;
         }
         case 'prune-history': {
