@@ -18,12 +18,14 @@ import {
 import { buildApp } from './app.js';
 import { setBaseLogger } from './lib/logger.js';
 import { startMetricsRefreshLoop } from './lib/metrics-refresh.js';
+import { startTelegramBot } from './lib/telegram-bot.js';
 
 let app: FastifyInstance | null = null;
 let nodeUsersWorker: Worker | null = null;
 let inboundSyncWorker: Worker | null = null;
 let cronTasksWorker: Worker | null = null;
 let stopMetricsRefresh: (() => void) | null = null;
+let stopTelegramBot: (() => void) | null = null;
 
 async function start() {
   try {
@@ -65,6 +67,9 @@ async function start() {
     stopMetricsRefresh = startMetricsRefreshLoop();
     app.log.info('Metrics refresh loop started');
 
+    // K3 - operator Telegram bot (no-op when Telegram isn't configured).
+    stopTelegramBot = startTelegramBot();
+
     await app.listen({ port: config.APP_PORT, host: config.APP_HOST });
   } catch (err) {
     console.error(err);
@@ -88,6 +93,9 @@ async function shutdown() {
   }
   if (stopMetricsRefresh) {
     stopMetricsRefresh();
+  }
+  if (stopTelegramBot) {
+    stopTelegramBot();
   }
   await closeNodeTransport();
   await prisma.$disconnect();
