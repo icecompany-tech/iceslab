@@ -10,6 +10,7 @@ import {
 // kept on the User row for backwards-compat but never filters subscription
 // output.
 import { allocatePeer } from '../amneziawg/amneziawg.service.js';
+import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
 import {
   buildHysteriaUri,
@@ -179,42 +180,59 @@ export async function generateSubscription(
   // member of. If the user has zero memberships the subscription is empty
   // (createUser auto-adds them to "All", so this is only reachable if
   // someone clears memberships via raw SQL).
-  const bindings = await prisma.profileNodeBinding.findMany({
-    where: {
-      enabled: true,
-      profile: {
-        enabled: true,
-        groupProfiles: {
-          some: {
-            group: { members: { some: { userId: user.id } } },
-          },
-        },
-      },
-      node: { deletedAt: null, status: { not: 'disabled' } },
-    },
-    include: {
-      profile: { select: { id: true, protocol: true, config: true } },
-      node: {
-        select: {
-          id: true,
-          name: true,
-          address: true,
-          createdAt: true,
-          // Slice 28 — region.code drives the "same-region bonus" in the
-          // smart-selection ranker. Null when admin hasn't tagged a region;
-          // ranker still works (utilization-only score for that node).
-          region: { select: { code: true } },
-        },
-      },
-      // Slice 30 — one binding fans out into N enabled hosts. Order them
-      // by `priority` so subscription URL ordering is admin-controlled.
-      hosts: {
-        where: { enabled: true },
-        orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
-      },
-    },
-    orderBy: [{ port: 'asc' }],
-  });
+  //
+  // B6 - the binding set is a pure function of the user's SQUAD SET, so we
+  // resolve the (cheap, indexed) group-id list first and serve the heavy
+  // nested query from a squad-set-keyed in-process cache shared by every user
+  // in the same squads. Membership changes need no busting, the user just
+  // maps to a different key.
+  const groupIds = (
+    await prisma.groupMember.findMany({
+      where: { userId: user.id },
+      select: { groupId: true },
+    })
+  ).map((g) => g.groupId);
+
+  const cachedBindings =
+    groupIds.length === 0
+      ? []
+      : await getCachedBindings(bindingsCacheKey(groupIds), Date.now(), () =>
+          prisma.profileNodeBinding.findMany({
+            where: {
+              enabled: true,
+              profile: {
+                enabled: true,
+                groupProfiles: { some: { groupId: { in: groupIds } } },
+              },
+              node: { deletedAt: null, status: { not: 'disabled' } },
+            },
+            include: {
+              profile: { select: { id: true, protocol: true, config: true } },
+              node: {
+                select: {
+                  id: true,
+                  name: true,
+                  address: true,
+                  createdAt: true,
+                  // Slice 28 — region.code drives the "same-region bonus" in the
+                  // smart-selection ranker. Null when admin hasn't tagged a region;
+                  // ranker still works (utilization-only score for that node).
+                  region: { select: { code: true } },
+                },
+              },
+              // Slice 30 — one binding fans out into N enabled hosts. Order them
+              // by `priority` so subscription URL ordering is admin-controlled.
+              hosts: {
+                where: { enabled: true },
+                orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+              },
+            },
+            orderBy: [{ port: 'asc' }],
+          }),
+        );
+  // Shallow copy - the cached array is shared across requests/users, and the
+  // sort here plus the topN filter below both mutate the array in place.
+  const bindings = [...cachedBindings];
   // Sort by node createdAt then port so the order across formats stays stable.
   bindings.sort((a, b) => {
     const t = a.node.createdAt.getTime() - b.node.createdAt.getTime();
