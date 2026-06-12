@@ -156,4 +156,29 @@ describe('pollNodeStats bulk upsert (B3, integration)', () => {
     const hist = await prisma.nodeUserUsageHistory.findMany({ where: { userId: u1 } });
     expect(hist).toHaveLength(0);
   });
+
+  // Regression for the prod failure (2026-06-12): a node reported the same user
+  // twice in one poll (two inbounds) and the bulk unnest upsert hit Postgres
+  // 21000 ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+  it('handles a user reported twice in one poll without a conflict error', async () => {
+    const nodeId = await createNode('eu-5', '10.0.0.5:8443');
+    const u1 = await createUser('frank');
+
+    mockStats(stats([
+      { userId: u1, bytesIn: 100, bytesOut: 50 },
+      { userId: u1, bytesIn: 20, bytesOut: 5 }, // same user, second inbound
+    ]));
+    const r = await pollNodeStats();
+    expect(r.failed).toBe(0); // previously failed with 21000
+    expect(r.ok).toBe(1);
+
+    const t = await prisma.userTraffic.findUnique({ where: { userId: u1 } });
+    expect(t?.usedTrafficBytes).toBe(175n); // 150 + 25 aggregated
+
+    const hist = await prisma.nodeUserUsageHistory.findMany({ where: { userId: u1 } });
+    expect(hist).toHaveLength(1);
+    expect(hist[0]!.bytesIn).toBe(120n);
+    expect(hist[0]!.bytesOut).toBe(55n);
+    expect(hist[0]!.nodeId).toBe(nodeId);
+  });
 });

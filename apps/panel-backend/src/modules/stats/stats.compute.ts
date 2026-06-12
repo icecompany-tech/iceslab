@@ -67,8 +67,15 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
   const scale = (v: bigint): bigint =>
     multiplier === 1 ? v : BigInt(Math.round(Number(v) * multiplier));
 
-  const userTrafficRows: UserTrafficRow[] = [];
-  const historyRows: UserHistoryRow[] = [];
+  // Aggregate by userId BEFORE producing rows. A node can report the same user
+  // more than once per poll (a user with multiple inbounds on one node, e.g.
+  // vless + trojan), and the bulk unnest upsert must not let ON CONFLICT touch
+  // the same target row twice in one statement (Postgres error 21000). Summing
+  // each entry's scaled bytes here matches the old per-user loop exactly (it ran
+  // one increment per entry) and keeps userIds unique in the unnest array.
+  const usedByUser = new Map<string, bigint>();
+  const histByUser = new Map<string, { in: bigint; out: bigint }>();
+  const presenceOnly = new Set<string>();
   let nodeUpload = 0n;
   let nodeDownload = 0n;
 
@@ -80,22 +87,35 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
     nodeDownload += outB;
     const delta = inB + outB;
     if (delta === 0n) {
-      // Presence-only adapters (mtproto): the user appearing in the response
-      // is the only "online" signal we get. Emit a zero-increment row so the
-      // upsert touches online_at/last_connected_node_id without billing; skip
-      // the daily history (no bytes to bucket). Non-presence protocols just
-      // drop the zero-delta user entirely.
-      if (input.isPresenceOnlyProtocol) {
-        userTrafficRows.push({ userId: u.userId, scaled: 0n });
-      }
+      // Presence-only adapters (mtproto): the user appearing in the response is
+      // the only "online" signal we get. Record a zero-increment touch (so the
+      // upsert refreshes online_at/last_connected_node_id) without billing; skip
+      // the daily history. Non-presence protocols drop the zero-delta user.
+      if (input.isPresenceOnlyProtocol) presenceOnly.add(u.userId);
       continue;
     }
-    userTrafficRows.push({ userId: u.userId, scaled: scale(delta) });
-    historyRows.push({
-      userId: u.userId,
-      bytesIn: scale(inB),
-      bytesOut: scale(outB),
-    });
+    usedByUser.set(u.userId, (usedByUser.get(u.userId) ?? 0n) + scale(delta));
+    const h = histByUser.get(u.userId) ?? { in: 0n, out: 0n };
+    h.in += scale(inB);
+    h.out += scale(outB);
+    histByUser.set(u.userId, h);
+  }
+
+  // A userId that moved real bytes on one inbound and zero on another is billed
+  // (it's in usedByUser); drop it from the presence-only touch set to avoid a
+  // duplicate user_traffic row in the unnest.
+  for (const id of usedByUser.keys()) presenceOnly.delete(id);
+
+  const userTrafficRows: UserTrafficRow[] = [];
+  for (const [userId, scaled] of usedByUser) {
+    userTrafficRows.push({ userId, scaled });
+  }
+  for (const userId of presenceOnly) {
+    userTrafficRows.push({ userId, scaled: 0n });
+  }
+  const historyRows: UserHistoryRow[] = [];
+  for (const [userId, h] of histByUser) {
+    historyRows.push({ userId, bytesIn: h.in, bytesOut: h.out });
   }
 
   // Single-counter fallback (mtproto-style): no per-user bytes at all, so roll
