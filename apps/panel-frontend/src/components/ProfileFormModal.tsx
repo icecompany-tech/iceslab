@@ -944,9 +944,21 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                       {...form.getInputProps('xrayDest')}
                     />
                     <TextInput
-                      label="REALITY serverNames"
-                      description={t('profiles.form.cfg.realityServerNamesDesc')}
-                      placeholder="www.cloudflare.com, cdn.cloudflare.com"
+                      label={
+                        form.values.xrayRealityMode === 'self-steal'
+                          ? t('profiles.form.cfg.realitySelfStealDomainLabel')
+                          : 'REALITY serverNames'
+                      }
+                      description={
+                        form.values.xrayRealityMode === 'self-steal'
+                          ? t('profiles.form.cfg.realitySelfStealDomainDesc')
+                          : t('profiles.form.cfg.realityServerNamesDesc')
+                      }
+                      placeholder={
+                        form.values.xrayRealityMode === 'self-steal'
+                          ? 'des-01.example.com'
+                          : 'www.cloudflare.com, cdn.cloudflare.com'
+                      }
                       required
                       {...form.getInputProps('xrayServerNames')}
                     />

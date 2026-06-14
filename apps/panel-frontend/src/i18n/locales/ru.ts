@@ -336,7 +336,10 @@ export default {
         realityModeStealOthers: 'steal-from-others (внешний декой)',
         realityModeSelfSteal: 'self-steal (локальный fallback, РФ-2026)',
         realityModeSelfStealHint:
-          'Self-steal: нода поднимает локальный TLS-fallback, dest REALITY смотрит на него. В serverNames укажите домен, резолвящийся в IP ЭТОЙ ноды, чтобы SNI и IP совпадали (переживает whitelist-shutdown в РФ). dest игнорируется.',
+          'Self-steal: нода поднимает локальный TLS-fallback, dest REALITY смотрит на него. В поле ниже укажите домен, резолвящийся в IP ЭТОЙ ноды, чтобы SNI и IP совпадали (переживает whitelist-shutdown в РФ). dest игнорируется.',
+        realitySelfStealDomainLabel: 'Свой домен (должен указывать на IP ноды)',
+        realitySelfStealDomainDesc:
+          'A-запись этого домена на IP ЭТОЙ ноды. Нода поднимает локальный TLS-серт под него, REALITY использует его как serverName: SNI и IP консистентны.',
         realityServerNamesDesc: 'через запятую',
         realityShortIdsDesc: 'hex, через запятую',
         realityFingerprintDesc: 'TLS fingerprint клиента',

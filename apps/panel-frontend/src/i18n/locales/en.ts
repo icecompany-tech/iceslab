@@ -331,7 +331,10 @@ export default {
         realityModeStealOthers: 'steal-from-others (external decoy)',
         realityModeSelfSteal: 'self-steal (local fallback, RU-2026)',
         realityModeSelfStealHint:
-          'Self-steal: the node runs a local TLS fallback and REALITY dest points at it. Set serverNames to a domain that resolves to THIS node IP, so SNI and IP match (survives RU whitelist-shutdown). dest is ignored.',
+          'Self-steal: the node runs a local TLS fallback and REALITY dest points at it. Set the domain below to one that resolves to THIS node IP, so SNI and IP match (survives RU whitelist-shutdown). dest is ignored.',
+        realitySelfStealDomainLabel: 'Your domain (must point to node IP)',
+        realitySelfStealDomainDesc:
+          'A-record this domain to THIS node IP. The node serves a local TLS cert for it, REALITY uses it as serverName: SNI and IP stay consistent.',
         realityServerNamesDesc: 'comma-separated',
         realityShortIdsDesc: 'hex, comma-separated',
         realityFingerprintDesc: 'client TLS fingerprint',

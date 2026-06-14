@@ -89,6 +89,11 @@ func New(cfg Config) (*Server, error) {
 func (s *Server) Run(ctx context.Context) error {
 	s.startedAt = time.Now()
 
+	// Self-heal the firewall on boot: re-open UFW for every persisted inbound
+	// port. Covers restarts and the case where a push-time `ufw allow` failed
+	// transiently (it has no retry) or the rule was lost to a reimage.
+	s.ensureFirewallFromStore(ctx)
+
 	cert, err := tls.X509KeyPair(
 		[]byte(s.cfg.Payload.NodeCertPem),
 		[]byte(s.cfg.Payload.NodeKeyPem),
@@ -384,28 +389,10 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 			failed++
 			continue
 		}
-		// Open UFW for the inbound's port BEFORE marking applied — admin
-		// might've picked a port that install-iceslab-node.sh didn't pre-open
-		// (it only opens 443/1234/conventional). Idempotent: ufw skips
-		// already-existing rules silently. Per-protocol UDP vs TCP from
-		// protoForInbound() — keeps in lockstep with install-iceslab-node.sh.
-		//
-		// Bug #9: when ib.Port == 0 (legacy pre-slice-50 push), the adapter
-		// falls back to its install-time ListenPort, but the server can't see
-		// that port, so firewall.Allow(0) is a no-op and the real port may
-		// have no UFW rule. The current panel always sends a concrete port, so
-		// this is a defensive log: surface it loudly instead of silently
-		// leaving the firewall closed for that inbound.
-		if ib.Port == 0 {
-			s.logger.Warn("applyInbounds: inbound has port=0 (legacy push); "+
-				"firewall rule NOT opened automatically, open the adapter's "+
-				"install-time port manually if clients can't connect",
-				"protocol", ib.Protocol, "inboundId", ib.ID)
-		} else {
-			for _, proto := range protoForInbound(ib.Protocol) {
-				firewall.Allow(r.Context(), s.logger, ib.Port, proto)
-			}
-		}
+		// Open UFW for the inbound's port. Extracted into ensureInboundFirewall
+		// so the exact same logic also runs on boot (ensureFirewallFromStore),
+		// not only when a push lands.
+		s.ensureInboundFirewall(r.Context(), ib)
 		applied++
 	}
 
@@ -420,6 +407,55 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		Applied: applied,
 		Skipped: len(req.Inbounds) - applied,
 	})
+}
+
+// ensureInboundFirewall opens UFW for one inbound's port. Per-protocol UDP vs
+// TCP from protoForInbound() keeps it in lockstep with install-iceslab-node.sh.
+// Idempotent: ufw skips already-existing rules silently.
+//
+// Bug #9: when ib.Port == 0 (legacy pre-slice-50 push), the adapter falls back
+// to its install-time ListenPort, but the server can't see that port, so
+// firewall.Allow(0) is a no-op and the real port may have no UFW rule. The
+// current panel always sends a concrete port, so this is a defensive log.
+func (s *Server) ensureInboundFirewall(ctx context.Context, ib dto.InboundDto) {
+	if ib.Port == 0 {
+		s.logger.Warn("applyInbounds: inbound has port=0 (legacy push); "+
+			"firewall rule NOT opened automatically, open the adapter's "+
+			"install-time port manually if clients can't connect",
+			"protocol", ib.Protocol, "inboundId", ib.ID)
+		return
+	}
+	for _, proto := range protoForInbound(ib.Protocol) {
+		firewall.Allow(ctx, s.logger, ib.Port, proto)
+	}
+}
+
+// ensureFirewallFromStore re-opens UFW for every persisted inbound port on boot.
+// The applyInbounds handler opens ports too, but only when a push lands; a node
+// that restarts (or whose ufw rule was lost to a reimage, or to a transient
+// `ufw allow` failure that has no retry) would otherwise run its cores with the
+// firewall closed until the next panel push. Re-ensuring from the persisted set
+// on every start makes the firewall self-heal. Best-effort: a missing or
+// unparseable store is skipped silently (fresh node = nothing to ensure).
+func (s *Server) ensureFirewallFromStore(ctx context.Context) {
+	if s.cfg.InboundsStorePath == "" {
+		return
+	}
+	body, err := os.ReadFile(s.cfg.InboundsStorePath)
+	if err != nil {
+		return // no persisted inbounds yet
+	}
+	var inbounds []dto.InboundDto
+	if err := json.Unmarshal(body, &inbounds); err != nil {
+		s.logger.Warn("ensureFirewallFromStore: cannot parse persisted inbounds", "err", err)
+		return
+	}
+	for _, ib := range inbounds {
+		s.ensureInboundFirewall(ctx, ib)
+	}
+	if len(inbounds) > 0 {
+		s.logger.Info("ensureFirewallFromStore: re-ensured firewall for persisted inbounds", "count", len(inbounds))
+	}
 }
 
 // writeInboundsAtomically marshals the inbound set and delegates to the
