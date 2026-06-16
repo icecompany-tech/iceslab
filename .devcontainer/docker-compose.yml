@@ -1,0 +1,23 @@
+# Dev-container overlay. Adds an `app` service (where the editor + toolchain
+# live) on top of the existing dev stack in ../docker-compose.yml. The app
+# reaches Postgres and Redis by compose service name on the shared network
+# (postgres:5432 / postgres-test:5432 / redis:6379), so no host port mapping
+# is involved and nothing collides with what the host has bound.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm
+    init: true
+    volumes:
+      - ..:/workspaces/iceslab:cached
+    # Keep the container alive; VS Code attaches and runs the toolchain in it.
+    command: sleep infinity
+    # NOTE: deliberately NO DATABASE_URL / REDIS_URL / NODE_ENV / JWT_SECRET
+    # here. vitest copies any matching process.env key over .env.test
+    # (see apps/panel-backend/vitest.config.ts), so a stray DATABASE_URL would
+    # silently point the test suite at the dev database and cleanDatabase()
+    # would wipe it. Dev-server env comes from the repo-root .env (--env-file);
+    # tests come from .env.test. prisma generate + tsc need neither.
+    depends_on:
+      - postgres
+      - redis
+      - postgres-test

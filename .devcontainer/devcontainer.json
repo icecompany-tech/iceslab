@@ -1,0 +1,36 @@
+{
+  // Iceslab dev container. Pins the whole panel toolchain (Node 22, pnpm
+  // 10.33.2, Prisma, Go 1.22) inside one Linux image so `pnpm`, `prisma
+  // generate`, `tsc` and tests behave identically here, in CI and for every
+  // contributor - no Windows/WSL boundary, no POSIX-vs-CMD shim mismatch.
+  "name": "iceslab",
+
+  // Reuse the existing dev stack (postgres / redis / postgres-test) and add an
+  // `app` service where the editor + toolchain live. Order matters: the root
+  // file defines the data services, the overlay adds `app`.
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspaces/iceslab",
+
+  // Go is needed for the node-agent (apps/node). 1.22 matches CI.
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": { "version": "1.22" }
+  },
+
+  // Backend (APP_PORT) and Vite dev server.
+  "forwardPorts": [3000, 5173],
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "node",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Prisma.prisma",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "golang.go"
+      ]
+    }
+  }
+}

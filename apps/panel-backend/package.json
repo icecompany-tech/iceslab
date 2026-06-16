@@ -12,6 +12,7 @@
     "start": "node --env-file=../../.env dist/index.js",
     "db:migrate": "node ./node_modules/prisma/build/index.js migrate deploy",
     "demo:metrics": "tsx --env-file=../../.env scripts/demo-metrics.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests"
   },
