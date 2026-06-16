@@ -93,6 +93,7 @@ interface XrayInboundConfig {
   realityShortIds: string[];
   realityPrivateKey: string;
   realityPublicKey: string;
+  realityMode?: 'steal-others' | 'self-steal';
   flow: string;
   fingerprint: string;
   network: 'raw' | 'xhttp' | 'ws' | 'grpc';

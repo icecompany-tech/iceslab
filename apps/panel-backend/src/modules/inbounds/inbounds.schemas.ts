@@ -68,6 +68,20 @@ export const XrayConfigSchema = z.object({
   realityPrivateKey: z.string().max(128).default(''),
   /** REALITY public key paired with privateKey — emitted in client URI. */
   realityPublicKey: z.string().max(128).default(''),
+  /**
+   * REALITY camouflage mode.
+   *   - 'steal-others' (default): borrow an external site's TLS identity
+   *     (realityDest points at a public host, e.g. a CDN).
+   *   - 'self-steal': the node serves a local TLS fallback for its OWN domain;
+   *     serverNames is overridden per-node with Node.domain at deploy time
+   *     (see inbounds.queue + subscription.service).
+   * MUST be declared here: Zod strips unknown keys, so without this field the
+   * value is silently dropped when a profile is created/updated, the queue's
+   * self-steal detection never fires, and the mode degrades to steal-others
+   * (SNI != node IP -> RU-DPI mismatch). The wire DTO, node adapter, queue and
+   * subscription all already read it; the schema was the missing link.
+   */
+  realityMode: z.enum(['steal-others', 'self-steal']).default('steal-others'),
   // Mantine Select returns null when the empty option is picked. Coerce to
   // '' so the schema accepts the "no flow" choice the same way it accepts
   // 'xtls-rprx-vision'. Empty string is the canonical "no flow" wire value.
