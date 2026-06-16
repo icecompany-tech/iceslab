@@ -223,7 +223,20 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   if (input.maxUsers !== undefined) data.maxUsers = input.maxUsers;
   if (input.domain !== undefined) data.domain = input.domain;
 
+  // A Node.domain change alters the per-node REALITY self-steal serverNames
+  // pushed to the agent (inbounds.queue) and the client SNI (subscription).
+  // Detect it before the write so we can re-push the inbound set; otherwise the
+  // live node config drifts until an unrelated binding/profile edit or agent
+  // restart fires a sync. Caught in review 2026-06-17.
+  const domainChanged =
+    input.domain !== undefined && input.domain !== existing.domain;
+
   const updated = await repo.updateById(id, data);
+
+  if (domainChanged) {
+    eventBus.emit('node.updated', { nodeId: id, nodeName: updated.name });
+  }
+
   return mapNodeToPublic(updated);
 }
 

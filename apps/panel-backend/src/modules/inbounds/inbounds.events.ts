@@ -53,6 +53,13 @@ export function registerInboundEventHandlers(): void {
     enqueue(nodeId, `node.created ${nodeName}`);
   });
 
+  // node.updated → a config-affecting node field changed (the self-steal
+  // REALITY domain). Re-push so the live node config tracks Node.domain
+  // instead of drifting until an unrelated edit/restart fires.
+  eventBus.on('node.updated', ({ nodeId, nodeName }) => {
+    enqueue(nodeId, `node.updated ${nodeName}`);
+  });
+
   // ───── Slice 27 — Profile + Binding events ─────
   //
   // binding.* is per-(profile, node) — only that node needs re-push.

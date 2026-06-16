@@ -189,9 +189,15 @@ async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]> {
     const domain = nodeRow?.domain ?? null;
     for (const ib of selfStealInbounds) {
       if (domain) {
+        // Key MUST be `realityServerNames` (the wire-contract field the
+        // node reads - see packages/shared XrayInboundCfg + the Go adapter).
+        // A bare `serverNames` is an unknown key the agent's JSON decode
+        // silently drops, leaving REALITY with the profile serverName and an
+        // empty per-node SNI: SNI/IP mismatch + the local TLS fallback never
+        // starts, so self-steal fails closed. Caught in review 2026-06-17.
         ib.config = {
           ...(ib.config as Record<string, unknown>),
-          serverNames: [domain],
+          realityServerNames: [domain],
         } as InboundDto['config'];
       } else {
         getLogger().info(

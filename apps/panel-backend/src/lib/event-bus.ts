@@ -17,6 +17,11 @@ export interface DomainEventMap {
   // an empty new node otherwise stays empty until each existing user is
   // mutated again. Caught live during slice-23 VPS test 2026-05-06.
   'node.created':         { nodeId: string; nodeName: string };
+  // node.updated → a node field that changes the pushed config (currently the
+  // self-steal REALITY domain) was edited; re-push the inbound set so the live
+  // node config matches. Without this a Node.domain edit only self-heals on an
+  // unrelated binding/profile edit or an agent restart. Caught in review 2026-06-17.
+  'node.updated':         { nodeId: string; nodeName: string };
   // inbound.* → push the full inbound set of the affected node to its
   // node-agent over mTLS, so the protocol server (xray/hysteria/awg/naive)
   // gets the live config without admin SSH editing /etc/iceslab-node/env.
