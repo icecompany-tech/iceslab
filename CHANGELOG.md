@@ -3,6 +3,50 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
+## Unreleased
+
+Multi-hop cascades validated end to end on real nodes for the first time (RU
+entry to EU exit, the client's egress IP becomes the exit's), which surfaced and
+closed two real defects along the way. Plus the full set of well-known client
+detection rules, an inline enable toggle for those rules, a per-profile reach
+count that ignores deleted users, and a batch of form and stats polish.
+
+### Added
+
+- **All well-known subscription clients are seeded.** The User-Agent detection
+  rules now cover the clients that previously had no rule and fell through to the
+  base64 list they cannot parse: Surge and Surfboard, Quantumult X, Loon, Outline,
+  XKeen, plus Karing, Throne and FoXray, and explicit plain-list rules for
+  Shadowrocket, Streisand, V2Box and Happ. Idempotent seed.
+- **Inline enable/disable toggle on the subscription rules table.** Turn a rule
+  on or off in place without opening the editor; optimistic with rollback on
+  failure.
+
+### Fixed
+
+- **Enabling a cascade now reaches the nodes.** Creating, editing or deleting a
+  cascade emitted no event, so the chaining fragments only lived in the database
+  and never pushed to the hop nodes until some unrelated profile or binding edit
+  fired a re-sync. The cascade service now re-pushes every node that is or was a
+  hop (so disabled or removed hops also drop their fragments).
+- **A node reporting one user twice no longer rolls back its stats.** When a node
+  reported the same user on two protocols (for example VLESS plus Shadowsocks),
+  the cumulative-snapshot upsert received a duplicate row and Postgres aborted the
+  whole transaction, so that node recorded nothing. The duplicates are now summed
+  into one entry per user. This was why cascade nodes showed zero traffic.
+- **Per-profile user reach excludes deleted users.** A profile's "users with
+  access" count included soft-deleted users (their squad membership is kept for
+  restore), so one live user could read as four. The reach query now joins live
+  users only.
+- **Implausible per-poll traffic deltas are discarded.** A node reporting more
+  than a terabyte for one user in a single 30-second poll is re-billing its
+  lifetime counter (an outdated agent), not real traffic; the panel now drops such
+  a delta and logs it instead of corrupting quotas and node history.
+- **Form and tab polish.** New profiles default to Xray (REALITY) instead of
+  Hysteria, the REALITY option rows bottom-align instead of staggering, the long
+  node bootstrap payload wraps inside its box instead of overflowing, and the
+  favicon is wired into the page.
+
 ## v0.1.7
 
 The censorship-survival work from v0.1.6 made functional and field-ready: the
