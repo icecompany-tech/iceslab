@@ -287,6 +287,14 @@ if [[ "$TOTAL_RAM_MB" -lt 3500 && "$CURRENT_SWAP_MB" -lt 1000 ]]; then
     SWAP_SIZE=${SWAP_SIZE_MB:-4096}
     log "Creating ${SWAP_SIZE} MB swap at /swapfile (small-RAM VPS insurance)"
     log "  (opt out with SKIP_SWAP=1 if you'd rather manage swap yourself)"
+    # Re-run safe: a leftover /swapfile from a prior partial run may still be
+    # ACTIVE swap, which makes dd/fallocate fail with "Text file busy". Disable
+    # and remove it first so we can (re)create cleanly. Only /swapfile is
+    # touched - any distro-default swap (e.g. /swap.img) is left alone.
+    if [[ -e /swapfile ]]; then
+      swapoff /swapfile 2>/dev/null || true
+      rm -f /swapfile
+    fi
     if ! fallocate -l "${SWAP_SIZE}M" /swapfile 2>/dev/null; then
       log "fallocate not supported on this FS, falling back to dd (slower)"
       dd if=/dev/zero of=/swapfile bs=1M count="${SWAP_SIZE}" status=none
