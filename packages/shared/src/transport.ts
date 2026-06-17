@@ -254,12 +254,21 @@ export interface UserStats {
 }
 
 export interface GetStatsResponse {
-  /** Per-user counters since the last poll. */
+  /**
+   * Per-user counters. Cumulative since core start when `cumulative` is true
+   * (the panel computes deltas against a stored snapshot); otherwise deltas
+   * since the last poll (legacy agents).
+   */
   users: UserStats[];
   /** Node uptime in seconds. */
   uptime: number;
   totalBytesIn: number;
   totalBytesOut: number;
+  /**
+   * #5 - true when `users[]` are cumulative-since-core-start (xray
+   * non-destructive read). Absent/false = legacy already-deltas semantics.
+   */
+  cumulative?: boolean;
 }
 
 // ───── GET /healthz ─────

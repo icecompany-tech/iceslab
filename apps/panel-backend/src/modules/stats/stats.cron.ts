@@ -2,7 +2,11 @@ import { prisma } from '../../prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { getLogger } from '../../lib/logger.js';
-import { computeNodeStatsWrites } from './stats.compute.js';
+import {
+  computeNodeStatsWrites,
+  computeUserDeltas,
+  type StatsUserEntry,
+} from './stats.compute.js';
 
 /**
  * Per-node in-memory snapshot of the last seen cumulative `totalBytesIn/Out`
@@ -78,7 +82,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       try {
         const transport = new NodeTransport(node);
         const res = await transport.getStats();
-        const userList = res.users ?? [];
+        let userList: StatsUserEntry[] = res.users ?? [];
         const rawTotal = userList.reduce(
           (acc, u) => acc + (u.bytesIn || 0) + (u.bytesOut || 0),
           0,
@@ -89,14 +93,37 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           );
         }
 
+        // #5 - cumulative-mode agents (xray non-destructive read) report per-user
+        // counters cumulative-since-core-start. Convert them to per-poll deltas
+        // against the stored snapshot here, then persist the new snapshot in the
+        // SAME transaction as the increments below, so a lost response or a
+        // rolled-back commit never drops bytes. Legacy agents (no `cumulative`
+        // flag) already send deltas and skip this path.
+        let snapshotUpserts: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
+        if (res.cumulative && userList.length > 0) {
+          const prevRows = await prisma.nodeUserTrafficSnapshot.findMany({
+            where: { nodeId: node.id, userId: { in: userList.map((u) => u.userId) } },
+            select: { userId: true, cumIn: true, cumOut: true },
+          });
+          const prev = new Map(
+            prevRows.map((r) => [r.userId, { cumIn: r.cumIn, cumOut: r.cumOut }]),
+          );
+          const d = computeUserDeltas(userList, prev);
+          userList = d.deltas;
+          snapshotUpserts = d.snapshots;
+        }
+
         // All the delta math (scaling, zero-delta skip, presence-only signal,
-        // single-counter fallback) lives in the pure, unit-tested helper.
+        // single-counter fallback) lives in the pure, unit-tested helper. For
+        // cumulative agents the node totals are cumulative too, so we drop them
+        // here: node-level history comes from the per-user deltas, and the
+        // totals-fallback is only for presence-only single-counter cores.
         const w = computeNodeStatsWrites({
           users: userList,
           multiplier: Number(node.consumptionMultiplier ?? 1) || 1,
           isPresenceOnlyProtocol: node.protocol === 'mtproto',
-          totalBytesIn: res.totalBytesIn,
-          totalBytesOut: res.totalBytesOut,
+          totalBytesIn: res.cumulative ? undefined : res.totalBytesIn,
+          totalBytesOut: res.cumulative ? undefined : res.totalBytesOut,
           prevSnapshot: totalSnapshot.get(node.id),
         });
 
@@ -169,6 +196,35 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
                 uploadBytes: { increment: w.nodeUpload },
               },
             }) as unknown as Prisma.PrismaPromise<unknown>,
+          );
+        }
+
+        // #5 - advance the per-(node,user) cumulative snapshot in the SAME
+        // transaction as the increments. If the commit fails the snapshot stays
+        // put and the next poll re-derives the delta from it, so no bytes are
+        // lost. Sorted by userId for the same deadlock-safe lock order as the
+        // other bulk upserts.
+        if (snapshotUpserts.length > 0) {
+          const sorted = [...snapshotUpserts].sort((a, b) =>
+            a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0,
+          );
+          const sids = sorted.map((s) => s.userId);
+          const sins = sorted.map((s) => s.cumIn.toString());
+          const souts = sorted.map((s) => s.cumOut.toString());
+          stmts.push(
+            prisma.$executeRaw(Prisma.sql`
+              INSERT INTO node_user_traffic_snapshot (node_id, user_id, cum_in, cum_out, updated_at)
+              SELECT ${node.id}::uuid, u.uid, u.cin, u.cout, ${now}
+              FROM unnest(
+                ARRAY[${Prisma.join(sids)}]::uuid[],
+                ARRAY[${Prisma.join(sins)}]::bigint[],
+                ARRAY[${Prisma.join(souts)}]::bigint[]
+              ) AS u(uid, cin, cout)
+              ON CONFLICT (node_id, user_id) DO UPDATE SET
+                cum_in     = EXCLUDED.cum_in,
+                cum_out    = EXCLUDED.cum_out,
+                updated_at = EXCLUDED.updated_at
+            `),
           );
         }
 

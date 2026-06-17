@@ -15,7 +15,7 @@ const statsQueryTimeout = 5 * time.Second
 
 // xrayStatsResponse mirrors the JSON returned by:
 //
-//	xray api statsquery -server 127.0.0.1:<port> -pattern user -reset
+//	xray api statsquery -server 127.0.0.1:<port> -pattern user
 //
 // Each entry's `name` is `user>>><email>>>traffic>>>{uplink,downlink}`,
 // where we set `email` = userId in renderConfig (see config.go).
@@ -61,9 +61,12 @@ func statEntryInt64(raw json.RawMessage) (int64, bool) {
 	return n, true
 }
 
-// queryUserStats invokes `xray api statsquery` and returns per-user byte
-// counters. The `-reset` flag is intentional: it drains the counter on
-// every read so we can ingest deltas instead of resetting state ourselves.
+// queryUserStats invokes `xray api statsquery` (WITHOUT -reset) and returns
+// per-user CUMULATIVE byte counters since the xray process started. The read
+// is non-destructive: the panel stores a per-(node,user) snapshot and computes
+// the deltas itself, so a lost response or a failed panel-side commit never
+// drops bytes (the next poll re-derives the delta from the un-advanced
+// snapshot). A destructive `-reset` read made those bytes unrecoverable. #5.
 //
 // Returns a map keyed by userId (email) → (uplinkBytes, downlinkBytes).
 // Missing entries imply zero. Errors propagate; callers decide whether to
@@ -84,7 +87,6 @@ func queryUserStats(
 		"api", "statsquery",
 		"-server", fmt.Sprintf("127.0.0.1:%d", apiPort),
 		"-pattern", "user",
-		"-reset",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("xray api statsquery: %w (%s)", err, strings.TrimSpace(string(out)))

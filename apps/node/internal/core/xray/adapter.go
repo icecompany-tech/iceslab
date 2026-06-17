@@ -352,6 +352,9 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		Users:         out,
 		TotalBytesIn:  totalIn,
 		TotalBytesOut: totalOut,
+		// #5 - non-destructive read (no -reset): Users[] are cumulative, so the
+		// panel computes deltas against its per-(node,user) snapshot.
+		Cumulative: true,
 	}, nil
 }
 

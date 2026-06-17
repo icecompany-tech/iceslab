@@ -73,8 +73,13 @@ func TestQueryUserStats_AggregatesUplinkAndDownlink(t *testing.T) {
 		if !strings.Contains(joined, "api statsquery") {
 			t.Errorf("expected `api statsquery` in args, got %v", args)
 		}
-		if !strings.Contains(joined, "-reset") {
-			t.Errorf("expected `-reset` flag, got %v", args)
+		// #5 - the read must be non-destructive (no -reset) so per-user counters
+		// stay cumulative and the panel computes deltas against its snapshot.
+		if strings.Contains(joined, "-reset") {
+			t.Errorf("did not expect `-reset` (read must be non-destructive), got %v", args)
+		}
+		if !strings.Contains(joined, "-pattern user") {
+			t.Errorf("expected `-pattern user` in args, got %v", args)
 		}
 		if !strings.Contains(joined, "127.0.0.1:8080") {
 			t.Errorf("expected 127.0.0.1:8080 server, got %v", args)

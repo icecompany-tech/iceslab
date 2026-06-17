@@ -31,4 +31,10 @@ type Stats struct {
 	Users         []UserStats
 	TotalBytesIn  int64
 	TotalBytesOut int64
+	// Cumulative reports whether Users[] counters are cumulative-since-core-start
+	// (so the panel computes per-poll deltas against a stored snapshot) rather
+	// than already-deltas-since-last-poll. Xray reports cumulative via a
+	// non-destructive read; panels that don't see this flag use the legacy
+	// delta path. #5.
+	Cumulative bool
 }

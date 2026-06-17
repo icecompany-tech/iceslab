@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { computeNodeStatsWrites } from './stats.compute.js';
+import {
+  computeNodeStatsWrites,
+  computeUserDeltas,
+  type UserSnapshot,
+} from './stats.compute.js';
 
 describe('computeNodeStatsWrites (B3)', () => {
   it('scales per-user billing but leaves node totals raw', () => {
@@ -150,5 +154,48 @@ describe('computeNodeStatsWrites (B3)', () => {
       { userId: 'u2', scaled: 0n },
     ]);
     expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 5n, bytesOut: 0n }]);
+  });
+});
+
+describe('computeUserDeltas (#5 - non-destructive cumulative)', () => {
+  const snap = (cumIn: bigint, cumOut: bigint): UserSnapshot => ({ cumIn, cumOut });
+
+  it('first sight bills nothing and just baselines the snapshot', () => {
+    const r = computeUserDeltas([{ userId: 'u1', bytesIn: 5000, bytesOut: 3000 }], new Map());
+    // must NOT bill the whole cumulative-since-core-start counter to the user
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 0, bytesOut: 0 }]);
+    expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 5000n, cumOut: 3000n }]);
+  });
+
+  it('bills the delta against the prior snapshot', () => {
+    const r = computeUserDeltas(
+      [{ userId: 'u1', bytesIn: 5200, bytesOut: 3100 }],
+      new Map([['u1', snap(5000n, 3000n)]]),
+    );
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 200, bytesOut: 100 }]);
+    expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 5200n, cumOut: 3100n }]);
+  });
+
+  it('re-baselines on a counter reset (core restart): delta = new cumulative', () => {
+    const r = computeUserDeltas(
+      [{ userId: 'u1', bytesIn: 40, bytesOut: 10 }],
+      new Map([['u1', snap(5000n, 3000n)]]),
+    );
+    // counter dropped below the snapshot -> xray restarted; the post-restart
+    // cumulative IS the delta, and we re-baseline to it.
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 40, bytesOut: 10 }]);
+    expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 40n, cumOut: 10n }]);
+  });
+
+  it('a failed tick loses nothing: next poll re-derives from the un-advanced baseline', () => {
+    // Caller persists the snapshot in the same transaction as the increments,
+    // so a failed commit leaves the baseline un-advanced. Against that same
+    // baseline, a later poll's delta re-includes every byte since it - contrast
+    // the destructive -reset model, where the drained bytes were gone.
+    const baseline = new Map([['u1', snap(100n, 0n)]]);
+    const failedTick = computeUserDeltas([{ userId: 'u1', bytesIn: 250, bytesOut: 0 }], baseline);
+    expect(failedTick.deltas[0]!.bytesIn).toBe(150); // would have billed 150, but commit failed
+    const nextTick = computeUserDeltas([{ userId: 'u1', bytesIn: 400, bytesOut: 0 }], baseline);
+    expect(nextTick.deltas[0]!.bytesIn).toBe(300); // 150 (lost tick) + 150 (this tick), nothing dropped
   });
 });

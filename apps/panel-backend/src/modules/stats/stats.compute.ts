@@ -62,6 +62,53 @@ export interface NodeStatsWrites {
   newSnapshot: { in: bigint; out: bigint } | null;
 }
 
+/** Cumulative per-(node,user) byte snapshot the poller persists between ticks. */
+export interface UserSnapshot {
+  cumIn: bigint;
+  cumOut: bigint;
+}
+
+export interface UserDeltaResult {
+  /** Per-poll deltas, ready to feed into computeNodeStatsWrites as `users`. */
+  deltas: StatsUserEntry[];
+  /** Cumulative values seen this tick, to persist as the new snapshot per user. */
+  snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[];
+}
+
+/**
+ * #5 - turn cumulative-since-core-start per-user counters (xray non-destructive
+ * read) into per-poll deltas against the stored snapshot. Because the read is
+ * non-destructive, a lost response or a failed commit never drops bytes: the
+ * snapshot is not advanced on failure, so the next poll's delta re-includes the
+ * missed bytes.
+ *
+ * Per-user rules (stricter than the node-level single-counter fallback, which
+ * may spike on first sight because it is dashboard-only, not billing):
+ *   - first sight (no prior snapshot): delta 0, just baseline. We must NOT bill
+ *     the whole accumulated-since-core-start counter to the user (it could be a
+ *     long-running xray's lifetime traffic, or this snapshot table being new).
+ *   - counter dropped below the snapshot: the core restarted (counters reset),
+ *     so the new cumulative IS the delta; re-baseline to it.
+ *   - otherwise: delta = current - previous.
+ */
+export function computeUserDeltas(
+  reported: StatsUserEntry[],
+  prev: Map<string, UserSnapshot>,
+): UserDeltaResult {
+  const deltas: StatsUserEntry[] = [];
+  const snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
+  for (const u of reported) {
+    const cumIn = BigInt(u.bytesIn || 0);
+    const cumOut = BigInt(u.bytesOut || 0);
+    const p = prev.get(u.userId);
+    const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : cumIn) : 0n;
+    const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : cumOut) : 0n;
+    deltas.push({ userId: u.userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
+    snapshots.push({ userId: u.userId, cumIn, cumOut });
+  }
+  return { deltas, snapshots };
+}
+
 export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
   const multiplier = Number(input.multiplier ?? 1) || 1;
   const scale = (v: bigint): bigint =>

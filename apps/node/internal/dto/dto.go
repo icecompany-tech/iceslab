@@ -90,6 +90,10 @@ type GetStatsResponse struct {
 	Uptime        int64       `json:"uptime"`
 	TotalBytesIn  int64       `json:"totalBytesIn"`
 	TotalBytesOut int64       `json:"totalBytesOut"`
+	// Cumulative=true means Users[] counters are cumulative-since-core-start and
+	// the panel must compute deltas against its stored snapshot. Absent/false
+	// keeps the legacy "already-deltas" interpretation for older agents. #5.
+	Cumulative bool `json:"cumulative,omitempty"`
 }
 
 // ───── GET /healthz ─────

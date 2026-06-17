@@ -524,9 +524,10 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	// statsquery, awg show dump); serial polling stacked the per-adapter
 	// timeouts into one long request. Per-index slots avoid a shared-write race.
 	type statResult struct {
-		users []dto.UserStats
-		in    int64
-		out   int64
+		users      []dto.UserStats
+		in         int64
+		out        int64
+		cumulative bool
 	}
 	results := make([]statResult, len(s.cfg.Adapters))
 	var wg sync.WaitGroup
@@ -539,7 +540,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 				s.logger.Error("adapter getStats failed", "core", adapter.Name(), "err", err)
 				return
 			}
-			res := statResult{in: stats.TotalBytesIn, out: stats.TotalBytesOut}
+			res := statResult{in: stats.TotalBytesIn, out: stats.TotalBytesOut, cumulative: stats.Cumulative}
 			for _, u := range stats.Users {
 				res.users = append(res.users, dto.UserStats{
 					UserID:   u.UserID,
@@ -554,10 +555,14 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	allUsers := []dto.UserStats{}
 	var totalIn, totalOut int64
+	var cumulative bool
 	for _, res := range results {
 		allUsers = append(allUsers, res.users...)
 		totalIn += res.in
 		totalOut += res.out
+		// #5 - only xray fills Users[] and it reports cumulative; OR the flag so
+		// the panel uses the snapshot-delta path for this node's per-user counters.
+		cumulative = cumulative || res.cumulative
 	}
 	uptime := int64(time.Since(s.startedAt).Seconds())
 	writeJSON(w, http.StatusOK, dto.GetStatsResponse{
@@ -565,6 +570,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		Uptime:        uptime,
 		TotalBytesIn:  totalIn,
 		TotalBytesOut: totalOut,
+		Cumulative:    cumulative,
 	})
 }
 
