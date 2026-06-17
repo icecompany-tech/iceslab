@@ -8,6 +8,7 @@ import {
   Code,
   Group,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -80,6 +81,33 @@ export function SrrPage() {
         title: t('common.saveError'),
         message: err instanceof Error ? err.message : String(err),
       }),
+  });
+
+  // Inline enable/disable straight from the table. Optimistic so rapid on/off
+  // feels instant; rolls back + toasts on failure. No success toast - the
+  // switch position is the confirmation, and a toast per flip would spam.
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      updateSrrRule(id, { enabled }),
+    onMutate: async ({ id, enabled }) => {
+      await qc.cancelQueries({ queryKey: ['srr'] });
+      const prev = qc.getQueryData<{ rules: SrrRule[] }>(['srr']);
+      if (prev) {
+        qc.setQueryData<{ rules: SrrRule[] }>(['srr'], {
+          rules: prev.rules.map((r) => (r.id === id ? { ...r, enabled } : r)),
+        });
+      }
+      return { prev };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['srr'], ctx.prev);
+      notifications.show({
+        color: 'red',
+        title: t('common.saveError'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['srr'] }),
   });
 
   const deleteMutation = useMutation({
@@ -195,7 +223,16 @@ export function SrrPage() {
                     {r.format}
                   </Badge>
                 </Table.Td>
-                <Table.Td>{r.enabled ? '✓' : '-'}</Table.Td>
+                <Table.Td>
+                  <Switch
+                    size="sm"
+                    checked={r.enabled}
+                    onChange={(e) =>
+                      toggleMutation.mutate({ id: r.id, enabled: e.currentTarget.checked })
+                    }
+                    aria-label={t('srr.columns.enabled')}
+                  />
+                </Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
                     <Tooltip label={t('common.edit')}>
