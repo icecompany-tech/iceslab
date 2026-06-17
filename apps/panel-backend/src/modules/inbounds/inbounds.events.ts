@@ -96,4 +96,13 @@ export function registerInboundEventHandlers(): void {
       enqueue(nodeId, `profile.deleted ${profileId}`);
     }
   });
+
+  // cascade.changed → re-push every node that is now or was a hop, so the xray
+  // cascade fragments get injected (create/enable) or removed (disable/delete).
+  // The cascade service computes the union of old+new hop nodes.
+  eventBus.on('cascade.changed', ({ nodeIds }) => {
+    for (const nodeId of nodeIds) {
+      enqueue(nodeId, `cascade.changed`);
+    }
+  });
 }

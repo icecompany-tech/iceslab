@@ -1,6 +1,7 @@
 import type { XrayCascadeFragments } from '@iceslab/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
+import { eventBus } from '../../lib/event-bus.js';
 import { validateCascadeHops } from './cascade.validation.js';
 import {
   buildCascadeConfigs,
@@ -96,6 +97,10 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
       },
       include: hopInclude,
     });
+    // Push the chaining fragments to every hop now, not on some later unrelated
+    // edit. inbounds.events re-syncs each node's inbound set, where
+    // getCascadeFragmentsForNode injects the link-in/out + routing.
+    eventBus.emit('cascade.changed', { nodeIds: hops.map((h) => h.nodeId) });
     return mapCascade(c);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -106,8 +111,14 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
 }
 
 export async function updateCascade(id: string, input: UpdateCascadeInput): Promise<CascadeDto> {
-  const existing = await prisma.cascade.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.cascade.findUnique({
+    where: { id },
+    select: { id: true, hops: { select: { nodeId: true } } },
+  });
   if (!existing) throw new CascadeNotFoundError(id);
+  // Capture the pre-update hop nodes: a node dropped from the cascade (or a
+  // disable toggle) must also re-push so its now-stale fragments are removed.
+  const oldNodeIds = existing.hops.map((h) => h.nodeId);
 
   const hops = input.hops ? validateCascadeHops(input.hops) : null;
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
@@ -147,6 +158,11 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
       }
       return tx.cascade.findUniqueOrThrow({ where: { id }, include: hopInclude });
     });
+    // Re-push old + new hops (deduped): old-only nodes drop their fragments,
+    // new/kept nodes get the refreshed chain. An enabled-only toggle has no
+    // `hops` input, so newNodeIds is empty and we re-push the existing hops.
+    const newNodeIds = hops ? hops.map((h) => h.nodeId) : [];
+    eventBus.emit('cascade.changed', { nodeIds: [...new Set([...oldNodeIds, ...newNodeIds])] });
     return mapCascade(c);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -225,6 +241,12 @@ export async function getCascadeFragmentsForNode(
 }
 
 export async function deleteCascade(id: string): Promise<void> {
+  // Grab the hop nodes before deleting so we can re-push them afterwards to
+  // strip the cascade fragments from their live xray config.
+  const existing = await prisma.cascade.findUnique({
+    where: { id },
+    select: { hops: { select: { nodeId: true } } },
+  });
   try {
     await prisma.cascade.delete({ where: { id } });
   } catch (err) {
@@ -232,5 +254,8 @@ export async function deleteCascade(id: string): Promise<void> {
       throw new CascadeNotFoundError(id);
     }
     throw err;
+  }
+  if (existing && existing.hops.length > 0) {
+    eventBus.emit('cascade.changed', { nodeIds: existing.hops.map((h) => h.nodeId) });
   }
 }

@@ -39,6 +39,13 @@ export interface DomainEventMap {
   'binding.created':      { bindingId: string; profileId: string; nodeId: string };
   'binding.updated':      { bindingId: string; profileId: string; nodeId: string };
   'binding.deleted':      { bindingId: string; profileId: string; nodeId: string };
+  // cascade.changed → a cascade's hops/enabled state changed, or it was
+  // deleted. Every node that IS now or WAS a hop needs its inbound set
+  // re-pushed so the xray cascade fragments (link-in/out + routing rules) get
+  // injected or removed. Without this, enabling a cascade only landed in the
+  // DB and never reached the nodes until an unrelated profile/binding edit
+  // fired a re-push. Caught live during the first cascade field test 2026-06-17.
+  'cascade.changed':      { nodeIds: string[] };
 }
 
 type EventHandler<K extends keyof DomainEventMap> = (
