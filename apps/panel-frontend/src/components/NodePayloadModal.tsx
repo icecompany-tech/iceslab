@@ -144,7 +144,10 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
           </Text>
           <Collapse in={showRaw}>
             <ScrollArea h={160} type="auto" mt="xs">
-              <Code block style={{ wordBreak: 'break-all' }}>
+              {/* base64 payload is one giant unbroken token; pre-wrap + break-all
+                  fold it into the box width instead of letting it run off the
+                  right edge (Code block defaults to white-space: pre). */}
+              <Code block style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
                 {payload}
               </Code>
             </ScrollArea>
