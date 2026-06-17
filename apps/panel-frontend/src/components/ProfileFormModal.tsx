@@ -1004,7 +1004,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                       {...form.getInputProps('xrayRealityFallbackUpstream')}
                     />
                   )}
-                  <Group grow align="flex-start">
+                  <Group grow align="flex-end">
                     <TextInput
                       label="REALITY dest (target site)"
                       description={t('profiles.form.cfg.realityDestDesc')}
@@ -1120,7 +1120,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 <Tabs.Panel value="reality" pt="sm">
                   {form.values.xraySecurity === 'reality' ? (
                     <Stack gap="sm">
-                      <Group grow align="flex-start">
+                      <Group grow align="flex-end">
                         <Select
                           label={t('profiles.form.cfg.realityXverLabel')}
                           description={t('profiles.form.cfg.realityXverDesc')}
@@ -1151,7 +1151,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                       <Text size="xs" fw={500}>
                         {t('profiles.form.cfg.realityFallbackRateGroup')}
                       </Text>
-                      <Group grow align="flex-start">
+                      <Group grow align="flex-end">
                         <NumberInput
                           label={t('profiles.form.cfg.realityLimitFallbackUploadLabel')}
                           description={t('profiles.form.cfg.realityLimitFallbackUploadDesc')}
