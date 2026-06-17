@@ -194,6 +194,23 @@ describe('computeNodeStatsWrites (B3)', () => {
 describe('computeUserDeltas (#5 - non-destructive cumulative)', () => {
   const snap = (cumIn: bigint, cumOut: bigint): UserSnapshot => ({ cumIn, cumOut });
 
+  // Regression: a node reporting the same userId twice (a user on vless +
+  // shadowsocks on one node) made the snapshot upsert's unnest carry a
+  // duplicate (node_id, user_id), which Postgres rejected with 21000 and rolled
+  // back the node's entire stats transaction. Sum the duplicates into one.
+  it('aggregates a duplicated userId into one delta + snapshot', () => {
+    const r = computeUserDeltas(
+      [
+        { userId: 'u1', bytesIn: 100, bytesOut: 50 },
+        { userId: 'u1', bytesIn: 20, bytesOut: 5 },
+      ],
+      new Map([['u1', snap(100n, 30n)]]),
+    );
+    expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 120n, cumOut: 55n }]);
+    // delta = summed cumulative (120/55) - prev (100/30)
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 20, bytesOut: 25 }]);
+  });
+
   it('first sight bills nothing and just baselines the snapshot', () => {
     const r = computeUserDeltas([{ userId: 'u1', bytesIn: 5000, bytesOut: 3000 }], new Map());
     // must NOT bill the whole cumulative-since-core-start counter to the user

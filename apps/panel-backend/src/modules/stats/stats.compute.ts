@@ -110,16 +110,30 @@ export function computeUserDeltas(
   reported: StatsUserEntry[],
   prev: Map<string, UserSnapshot>,
 ): UserDeltaResult {
+  // A node can report the same userId more than once per poll: a user reachable
+  // on multiple inbounds/protocols on one node (vless + shadowsocks both ride
+  // xray; the agent merges every adapter's stats). Sum their cumulative counters
+  // into ONE entry per userId FIRST. Without this, the snapshot upsert's unnest
+  // gets a duplicate (node_id, user_id) and Postgres aborts the whole statement
+  // with 21000 ("ON CONFLICT DO UPDATE command cannot affect row a second
+  // time"), rolling back the node's entire stats transaction (so it records
+  // nothing). Mirrors the userId aggregation computeNodeStatsWrites already does.
+  const byUser = new Map<string, { cumIn: bigint; cumOut: bigint }>();
+  for (const u of reported) {
+    const cur = byUser.get(u.userId) ?? { cumIn: 0n, cumOut: 0n };
+    cur.cumIn += BigInt(u.bytesIn || 0);
+    cur.cumOut += BigInt(u.bytesOut || 0);
+    byUser.set(u.userId, cur);
+  }
+
   const deltas: StatsUserEntry[] = [];
   const snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
-  for (const u of reported) {
-    const cumIn = BigInt(u.bytesIn || 0);
-    const cumOut = BigInt(u.bytesOut || 0);
-    const p = prev.get(u.userId);
+  for (const [userId, { cumIn, cumOut }] of byUser) {
+    const p = prev.get(userId);
     const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : cumIn) : 0n;
     const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : cumOut) : 0n;
-    deltas.push({ userId: u.userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
-    snapshots.push({ userId: u.userId, cumIn, cumOut });
+    deltas.push({ userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
+    snapshots.push({ userId, cumIn, cumOut });
   }
   return { deltas, snapshots };
 }
