@@ -5,6 +5,9 @@ import { validateCascadeHops } from './cascade.validation.js';
 import {
   buildCascadeConfigs,
   generateLinkCreds,
+  normalizeLinkProtocol,
+  parseLinkCred,
+  serializeLinkCred,
   type CascadeConfigHopInput,
   type LinkCred,
 } from './cascade.config.js';
@@ -65,8 +68,11 @@ export async function getCascade(id: string): Promise<CascadeDto> {
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
   const hops = validateCascadeHops(input.hops);
   await assertNodesExist(hops.map((h) => h.nodeId));
-  // C2 - pre-generate inter-hop link creds; stored on each non-exit hop.
-  const creds = generateLinkCreds(hops.length);
+  // C2/C3b - pre-generate inter-hop link creds (per the originating hop's
+  // linkProtocol); stored on each non-exit hop.
+  const creds = generateLinkCreds(
+    hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
+  );
   try {
     const c = await prisma.cascade.create({
       data: {
@@ -83,7 +89,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
             // Fresh object literal so it's assignable to Prisma's Json input
             // (a typed LinkCred lacks the index signature Json requires).
             ...(idx < hops.length - 1
-              ? { linkConfig: { uuid: creds[idx]!.uuid, port: creds[idx]!.port } }
+              ? { linkConfig: serializeLinkCred(creds[idx]!) }
               : {}),
           })),
         },
@@ -105,7 +111,11 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
 
   const hops = input.hops ? validateCascadeHops(input.hops) : null;
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
-  const creds = hops ? generateLinkCreds(hops.length) : [];
+  const creds = hops
+    ? generateLinkCreds(
+        hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
+      )
+    : [];
 
   try {
     const c = await prisma.$transaction(async (tx) => {
@@ -130,7 +140,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
             entryProtocol: h.entryProtocol ?? null,
             linkProtocol: h.linkProtocol ?? null,
             ...(idx < hops.length - 1
-              ? { linkConfig: { uuid: creds[idx]!.uuid, port: creds[idx]!.port } }
+              ? { linkConfig: serializeLinkCred(creds[idx]!) }
               : {}),
           })),
         });
@@ -194,13 +204,13 @@ export async function getCascadeFragmentsForNode(
   // Hops are position-sorted; hops[0..n-2] each carry one linkConfig.
   const linkCreds: LinkCred[] = [];
   for (let i = 0; i < cascade.hops.length - 1; i++) {
-    const lc = cascade.hops[i]!.linkConfig as unknown as { uuid?: string; port?: number } | null;
-    if (!lc || typeof lc.uuid !== 'string' || typeof lc.port !== 'number') {
+    const cred = parseLinkCred(cascade.hops[i]!.linkConfig);
+    if (!cred) {
       // Malformed/missing cred (data drift) - safer to ship no cascade than a
       // half-wired chain that silently blackholes user traffic.
       return null;
     }
-    linkCreds.push({ uuid: lc.uuid, port: lc.port });
+    linkCreds.push(cred);
   }
 
   const configs = buildCascadeConfigs(hopInputs, linkCreds);
