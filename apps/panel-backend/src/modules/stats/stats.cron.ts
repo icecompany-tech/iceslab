@@ -18,6 +18,20 @@ import {
 const totalSnapshot = new Map<string, { in: bigint; out: bigint }>();
 
 /**
+ * Per-user per-poll sanity ceiling for ingested traffic deltas. node-stats-poll
+ * runs every 30s (scheduler.queue.ts), so one user's delta is at most ~30s of
+ * traffic. 1 TiB in 30s is ~293 Gbit/s, beyond any VPS link by orders of
+ * magnitude, so a per-poll delta above this is never real: it's an agent
+ * re-billing its lifetime cumulative (e.g. a node-agent built before the AWG
+ * per-poll-delta fix, commit 5197f4a, which re-sent the whole counter every
+ * poll). computeNodeStatsWrites discards such entries instead of nuking a user's
+ * quota and the node's history with phantom TiB; we log each one so the operator
+ * knows to redeploy that node-agent. Generous on purpose - a missed poll that
+ * batches several intervals of a saturated link still stays well under 1 TiB.
+ */
+const NODE_STATS_MAX_USER_DELTA_BYTES = 1024 ** 4; // 1 TiB
+
+/**
  * Poll per-user traffic stats from every online node and roll them into
  * `user_traffic.used_traffic_bytes` (per-user) and `node_usage_history`
  * (per-node, hourly bucket).
@@ -125,7 +139,17 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           totalBytesIn: res.cumulative ? undefined : res.totalBytesIn,
           totalBytesOut: res.cumulative ? undefined : res.totalBytesOut,
           prevSnapshot: totalSnapshot.get(node.id),
+          maxUserDeltaBytes: NODE_STATS_MAX_USER_DELTA_BYTES,
         });
+
+        // A non-empty clamp list is a misbehaving / outdated node-agent re-billing
+        // its lifetime cumulative every poll. Discarded above so it can't corrupt
+        // quotas or node history; log loudly so the operator redeploys that node.
+        for (const c of w.clamped) {
+          getLogger().warn(
+            `[cron] node-stats-poll ${node.id} - discarded implausible delta for user ${c.userId}: in=${c.bytesIn}B out=${c.bytesOut}B in one 30s poll (> 1 TiB). Node-agent likely predates the AWG per-poll-delta fix - redeploy this node.`,
+          );
+        }
 
         const stmts: Prisma.PrismaPromise<unknown>[] = [];
 

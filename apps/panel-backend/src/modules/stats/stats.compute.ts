@@ -29,6 +29,15 @@ export interface NodeStatsInput {
   totalBytesOut?: number;
   /** Last seen cumulative snapshot for this node (single-counter fallback). */
   prevSnapshot?: { in: bigint; out: bigint };
+  /**
+   * Sanity ceiling for a single user's per-poll bytesIn/bytesOut. A delta above
+   * this is physically impossible for the poll interval and means the agent
+   * re-billed its lifetime cumulative (a node-agent predating the AWG per-poll-
+   * delta fix, or any future counter bug). Such an entry is discarded entirely
+   * (no billing, no history, no node total) and surfaced in `clamped` so the
+   * caller can warn. undefined = no ceiling (back-compat; existing tests).
+   */
+  maxUserDeltaBytes?: number;
 }
 
 /** One per-user `user_traffic` increment (used+lifetime). 0 = presence touch. */
@@ -60,6 +69,12 @@ export interface NodeStatsWrites {
    * pre-commit).
    */
   newSnapshot: { in: bigint; out: bigint } | null;
+  /**
+   * Entries whose per-poll delta exceeded `maxUserDeltaBytes` and were dropped.
+   * Empty when no ceiling was set or nothing tripped it. The caller logs these:
+   * a non-empty list almost always means a misbehaving / outdated node-agent.
+   */
+  clamped: { userId: string; bytesIn: number; bytesOut: number }[];
 }
 
 /** Cumulative per-(node,user) byte snapshot the poller persists between ticks. */
@@ -123,12 +138,26 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
   const usedByUser = new Map<string, bigint>();
   const histByUser = new Map<string, { in: bigint; out: bigint }>();
   const presenceOnly = new Set<string>();
+  const clamped: { userId: string; bytesIn: number; bytesOut: number }[] = [];
+  const ceiling =
+    input.maxUserDeltaBytes !== undefined ? BigInt(input.maxUserDeltaBytes) : null;
   let nodeUpload = 0n;
   let nodeDownload = 0n;
 
   for (const u of input.users) {
     const inB = BigInt(u.bytesIn || 0);
     const outB = BigInt(u.bytesOut || 0);
+    // Sanity guard: one poll's delta is at most the traffic since the previous
+    // poll. A value above the ceiling can't be real for one user on one link and
+    // means the agent re-billed its lifetime cumulative (a node-agent built
+    // before the AWG per-poll-delta fix re-sent the whole counter every poll, or
+    // any future counter bug). Discard the entry entirely - billing nothing is
+    // far safer than writing phantom TiB into a user's quota and the node's
+    // history. Surface it so the caller warns; the fix is to redeploy that node.
+    if (ceiling !== null && (inB > ceiling || outB > ceiling)) {
+      clamped.push({ userId: u.userId, bytesIn: Number(inB), bytesOut: Number(outB) });
+      continue;
+    }
     // Node-level totals are raw, unscaled bytes across the wire.
     nodeUpload += inB;
     nodeDownload += outB;
@@ -196,5 +225,5 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
     }
   }
 
-  return { userTrafficRows, historyRows, nodeDownload, nodeUpload, newSnapshot };
+  return { userTrafficRows, historyRows, nodeDownload, nodeUpload, newSnapshot, clamped };
 }

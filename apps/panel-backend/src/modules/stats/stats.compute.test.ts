@@ -137,6 +137,40 @@ describe('computeNodeStatsWrites (B3)', () => {
     expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 14n }]);
   });
 
+  // Regression guard for the runaway AWG accounting bug as seen from the panel
+  // side: a node-agent built before the per-poll-delta fix re-sends its whole
+  // lifetime cumulative every 30s poll. The panel must refuse to ingest a
+  // physically-impossible per-user delta rather than write phantom TiB into the
+  // user's quota and node history.
+  it('discards a per-user delta above the sanity ceiling and reports it', () => {
+    const TiB = 1024 ** 4;
+    const w = computeNodeStatsWrites({
+      users: [
+        { userId: 'sane', bytesIn: 1000, bytesOut: 500 },
+        { userId: 'runaway', bytesIn: 250 * TiB, bytesOut: 0 }, // re-billed lifetime
+      ],
+      multiplier: 1,
+      isPresenceOnlyProtocol: false,
+      maxUserDeltaBytes: TiB,
+    });
+    // sane user billed normally; runaway dropped from every accumulator
+    expect(w.userTrafficRows).toEqual([{ userId: 'sane', scaled: 1500n }]);
+    expect(w.historyRows).toEqual([{ userId: 'sane', bytesIn: 1000n, bytesOut: 500n }]);
+    expect(w.nodeUpload).toBe(1000n);
+    expect(w.nodeDownload).toBe(500n);
+    expect(w.clamped).toEqual([{ userId: 'runaway', bytesIn: 250 * TiB, bytesOut: 0 }]);
+  });
+
+  it('no ceiling set: nothing is clamped (back-compat)', () => {
+    const w = computeNodeStatsWrites({
+      users: [{ userId: 'u1', bytesIn: 9_999_999_999_999, bytesOut: 0 }],
+      multiplier: 1,
+      isPresenceOnlyProtocol: false,
+    });
+    expect(w.clamped).toEqual([]);
+    expect(w.nodeUpload).toBe(9_999_999_999_999n);
+  });
+
   it('dedups presence-only touches and never duplicates a billed user', () => {
     const w = computeNodeStatsWrites({
       users: [
