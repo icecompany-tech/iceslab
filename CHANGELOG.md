@@ -3,6 +3,60 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
+## v0.1.7 (unreleased)
+
+The censorship-survival work from v0.1.6 made functional and field-ready: the
+REALITY self-steal vertical actually works end to end now, traffic accounting is
+zero-loss across restarts, and admin two-factor is hardened against code replay.
+Plus the full advanced Xray option surface and an opt-in probe-resistance knob.
+Not yet tagged: the headline self-steal path is pending a real-network field run.
+
+### Security
+
+- **TOTP replay rejected within the validity window.** A one-time code can no
+  longer be reused inside its 30-second step: the last-accepted step is recorded
+  and a login presenting a step at or below it is refused. Closes the small
+  replay window the initial TOTP work left open.
+
+### Added
+
+- **Advanced Xray options, tabbed.** The profile form's Xray section moved to
+  tabs (REALITY / TLS / Transport) and exposes the previously hidden option
+  surface: REALITY xver and max-time-diff, TLS reject-unknown-SNI, XHTTP mode and
+  request-padding, gRPC multi-mode.
+- **REALITY fallback rate-limit (probe resistance, opt-in).** An optional
+  per-direction throttle on unverified fallback connections, so a scanner that
+  fails REALITY auth is forwarded to the target slowly and sees a slow site
+  rather than a full-speed proxy. Off by default: the throttle is itself a
+  detectable pattern, so it stays an expert opt-in.
+
+### Changed
+
+- **Zero-loss traffic accounting.** Per-user stats are now drained
+  non-destructively: the node reports cumulative counters and the panel computes
+  the delta against a stored per-node-per-user snapshot in the same transaction
+  as the increment. A failed or retried stats write can no longer lose a slice of
+  a user's traffic the way the previous reset-on-read drain could.
+- **Frontend API base URL defaults to same-origin in production.** Production
+  builds talk to their own origin instead of a hardcoded localhost, so the panel
+  works served from anywhere without a build-time override.
+- **Dependency audit gate kept clean.** Two transitive advisories pulled to
+  patched versions via overrides so the production audit gate stays green.
+
+### Fixed
+
+- **REALITY self-steal now works end to end.** Two wiring defects made self-steal
+  silently degrade to borrowing an external TLS identity (the mode that
+  mismatches under aggressive DPI): the camouflage-mode field was dropped by the
+  config schema before it reached the node, and the per-node domain was pushed
+  under the wrong wire key so the node received an empty server-name list. Both
+  fixed, plus the node is re-pushed when its domain changes. The self-steal
+  vertical is now functional (real-network validation pending).
+- **Add and remove of a user converge under rapid status changes.** A user
+  toggled active and limited in quick succession could leave the node user set
+  out of sync with the panel; the sync now gates on the live desired status so
+  the node converges to the correct set.
+
 ## v0.1.6
 
 The largest release since the alpha opened: a censorship-survival toolkit for
