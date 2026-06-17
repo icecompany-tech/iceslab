@@ -202,7 +202,9 @@ function randomAwgHeaders(): { h1: number; h2: number; h3: number; h4: number } 
 
 function defaults(profile: Profile | null): FormValues {
   const base: FormValues = {
-    protocol: profile?.protocol ?? 'hysteria',
+    // New profiles default to xray (REALITY): it's the lead protocol and the
+    // first entry in the dropdown. Editing keeps the profile's real protocol.
+    protocol: profile?.protocol ?? 'xray',
     name: profile?.name ?? '',
     description: profile?.description ?? '',
     enabled: profile?.enabled ?? true,
