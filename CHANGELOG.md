@@ -3,7 +3,7 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
-## v0.1.7 (unreleased)
+## v0.1.7
 
 The censorship-survival work from v0.1.6 made functional and field-ready: the
 REALITY self-steal vertical actually works end to end now, traffic accounting is
@@ -11,7 +11,9 @@ zero-loss across restarts, and admin two-factor is hardened against code replay.
 Plus the full advanced Xray option surface and an opt-in probe-resistance knob,
 TLS-fragment, per-user and China routing presets, a Shadowsocks cascade link, a
 realistic self-steal fallback, and live Shadowsocks user management.
-Not yet tagged: the headline self-steal path is pending a real-network field run.
+Self-steal and the node-hardening toggles ship functional with real-network
+field-validation in progress (the maturity bar v0.1.6 used for its experimental
+features).
 
 ### Security
 

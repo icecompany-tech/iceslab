@@ -187,7 +187,7 @@ banner() {
   printf '  | | (__| _|\\__ \\| |__ / _ \\| _ \\\n'
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m  node-agent\n'
   printf '\n'
-  printf '  v0.1.6  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.1.7  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
@@ -223,7 +223,7 @@ cleanup_stale_apt_locks
 
 ICESLAB_NODE_DIR=${ICESLAB_NODE_DIR:-/opt/iceslab-node}
 ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.1.6}
+ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.1.7}
 
 # ───── Third-party installer pinning (supply-chain) ─────
 #

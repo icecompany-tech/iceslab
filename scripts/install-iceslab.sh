@@ -15,12 +15,12 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab.sh)
 #
 # Or with a specific tag/branch:
-#   ICESLAB_REF=v0.1.6 bash <(curl ...)
+#   ICESLAB_REF=v0.1.7 bash <(curl ...)
 #
 # Customisation via env:
 #   ICESLAB_DIR        Install dir (default /opt/iceslab)
 #   ICESLAB_REPO       Git URL (default https://github.com/icecompany-tech/iceslab.git)
-#   ICESLAB_REF        Branch/tag/sha (default v0.1.6, pinned for alpha)
+#   ICESLAB_REF        Branch/tag/sha (default v0.1.7, pinned for alpha)
 #   ICESLAB_REF_SHA    Optional commit SHA to verify after checkout. Defeats
 #                      upstream tag re-pointing attacks. Recommended for prod.
 #   FRONTEND_PORT        Host port the SPA listens on (default 8080)
@@ -127,7 +127,7 @@ banner() {
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m\n'
   printf '\n'
   printf '  Self-hosted multi-core proxy panel\n'
-  printf '  v0.1.6  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.1.7  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
@@ -176,7 +176,7 @@ cleanup_stale_apt_locks
 
 ICESLAB_DIR=${ICESLAB_DIR:-/opt/iceslab}
 ICESLAB_REPO=${ICESLAB_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_REF=${ICESLAB_REF:-v0.1.6}
+ICESLAB_REF=${ICESLAB_REF:-v0.1.7}
 FRONTEND_PORT=${FRONTEND_PORT:-8080}
 PANEL_DOMAIN=${PANEL_DOMAIN:-}
 ACME_DEFAULT_EMAIL=${ACME_DEFAULT_EMAIL:-}
@@ -425,7 +425,7 @@ else
 fi
 
 # Wave-14 #4: tags on GitHub are mutable — if the upstream repo or a
-# maintainer token is compromised, an attacker can re-point v0.1.6 to a
+# maintainer token is compromised, an attacker can re-point v0.1.7 to a
 # hostile commit. Operators who care can pin the expected commit SHA via
 # ICESLAB_REF_SHA env; we then verify the checkout matches and abort if
 # the tag was silently re-pointed since the SHA was published.
