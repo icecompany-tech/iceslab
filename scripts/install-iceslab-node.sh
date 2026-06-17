@@ -672,6 +672,13 @@ if [[ "$TOTAL_RAM_MB" -lt 1500 && "$CURRENT_SWAP_MB" -lt 500 ]]; then
   else
     SWAP_SIZE=${SWAP_SIZE_MB:-2048}
     log "Creating ${SWAP_SIZE} MB swap at /swapfile"
+    # Re-run safe: a leftover active /swapfile makes dd/fallocate fail with
+    # "Text file busy". Disable + remove it first (only /swapfile, never any
+    # distro-default swap like /swap.img).
+    if [[ -e /swapfile ]]; then
+      swapoff /swapfile 2>/dev/null || true
+      rm -f /swapfile
+    fi
     if ! fallocate -l "${SWAP_SIZE}M" /swapfile 2>/dev/null; then
       dd if=/dev/zero of=/swapfile bs=1M count="${SWAP_SIZE}" status=none
     fi
