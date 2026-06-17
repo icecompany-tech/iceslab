@@ -105,11 +105,17 @@ export class NodeNotFoundError extends Error {
 // assigned to (group_profiles -> group_members), deduped. Users are explicit
 // members of their squads (incl. the system "All" squad), so this also counts
 // the "All" reach. One aggregate for the list; a scoped count for a single one.
+//
+// Soft-deleted users keep their group_members rows (we only flip
+// users.deletedAt, the join row stays for restore-ability — same reason the
+// squad member count joins users). Without the users join below, a profile on
+// the "All" squad reports every ghost ever created, not the live reach.
 async function userReachByProfile(): Promise<Map<string, number>> {
   const rows = await prisma.$queryRaw<{ profile_id: string; user_count: number }[]>`
     SELECT gp.profile_id, COUNT(DISTINCT gm.user_id)::int AS user_count
     FROM group_profiles gp
     JOIN group_members gm ON gm.group_id = gp.group_id
+    JOIN users u ON u.id = gm.user_id AND u.deleted_at IS NULL
     GROUP BY gp.profile_id
   `;
   return new Map(rows.map((r) => [r.profile_id, r.user_count]));
@@ -120,6 +126,7 @@ async function userReachForProfile(profileId: string): Promise<number> {
     SELECT COUNT(DISTINCT gm.user_id)::int AS user_count
     FROM group_profiles gp
     JOIN group_members gm ON gm.group_id = gp.group_id
+    JOIN users u ON u.id = gm.user_id AND u.deleted_at IS NULL
     WHERE gp.profile_id = ${profileId}::uuid
   `;
   return rows[0]?.user_count ?? 0;
