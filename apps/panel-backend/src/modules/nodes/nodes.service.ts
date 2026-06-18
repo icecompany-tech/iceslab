@@ -306,14 +306,42 @@ export async function deleteNode(id: string): Promise<void> {
     select: { id: true, name: true, address: true },
   });
   if (!node) throw new NodeNotFoundError(id);
-  // Hard-cascade profile bindings (and their hosts via FK cascade) — leaving
-  // them around made re-installs look like the profile was bound twice (one
-  // to the soft-deleted node, one to the freshly-created replacement). The
-  // node row itself stays soft-deleted so audit-trail / lastStatusChange
-  // history isn't lost.
-  await prisma.profileNodeBinding.deleteMany({ where: { nodeId: id } });
-  await repo.softDelete(id);
+
+  // A cascade is a chain: drop one hop and it can't route. So deleting a node
+  // that's a hop deletes the whole cascade(s) it belongs to. We collect the
+  // OTHER members first to re-push them afterwards (they go back to plain
+  // nodes). Without this the hops dangle, pointing at a soft-deleted node that
+  // the cascade view renders as UNKNOWN forever.
+  const affectedCascades = await prisma.cascade.findMany({
+    where: { hops: { some: { nodeId: id } } },
+    select: { id: true, name: true, hops: { select: { nodeId: true } } },
+  });
+  const cascadeIds = affectedCascades.map((c) => c.id);
+  const survivorNodeIds = [
+    ...new Set(affectedCascades.flatMap((c) => c.hops.map((h) => h.nodeId))),
+  ].filter((nid) => nid !== id);
+
+  // One transaction: drop the cascades (their hops go via FK onDelete: Cascade),
+  // hard-delete this node's profile bindings (leaving them made a re-install
+  // look double-bound), and soft-delete the node row (kept for audit history).
+  await prisma.$transaction([
+    ...(cascadeIds.length > 0
+      ? [prisma.cascade.deleteMany({ where: { id: { in: cascadeIds } } })]
+      : []),
+    prisma.profileNodeBinding.deleteMany({ where: { nodeId: id } }),
+    prisma.node.update({ where: { id }, data: { deletedAt: new Date() } }),
+  ]);
+
+  // Re-render the surviving cascade members as plain nodes (drop link fragments).
+  if (survivorNodeIds.length > 0) {
+    eventBus.emit('cascade.changed', { nodeIds: survivorNodeIds });
+  }
+
   notifyTelegramAsync(
     `🗑 *Node deleted*\nname: \`${escapeMarkdown(node.name)}\`\naddress: \`${escapeMarkdown(node.address)}\``,
   );
+  if (affectedCascades.length > 0) {
+    const names = affectedCascades.map((c) => `\`${escapeMarkdown(c.name)}\``).join(', ');
+    notifyTelegramAsync(`🔗 *Cascade removed* (member node deleted): ${names}`);
+  }
 }
