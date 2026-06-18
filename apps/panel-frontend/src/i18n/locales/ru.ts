@@ -93,6 +93,13 @@ export default {
     editTitle: 'Редактировать ноду',
     layoutCards: 'Карточки',
     layoutCompact: 'Список',
+    viewNodes: 'Ноды',
+    viewCascades: 'Каскады',
+    filter: {
+      all: 'Все',
+      standalone: 'Отдельные',
+      cascade: 'В каскаде',
+    },
     empty: 'Нод ещё нет. Жми «Создать ноду».',
     deleteTitle: 'Удалить ноду «{{name}}»?',
     deleteBody:
@@ -528,6 +535,7 @@ export default {
     entry: 'вход',
     transit: 'транзит',
     exit: 'выход',
+    today: 'сегодня',
     deleted: 'Каскад удалён',
     saved: 'Каскад сохранён',
     editTitle: 'Правка {{name}}',

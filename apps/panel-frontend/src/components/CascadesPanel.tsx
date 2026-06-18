@@ -23,6 +23,7 @@ import {
   IconArrowUp,
   IconEdit,
   IconPlus,
+  IconRoute,
   IconTrash,
 } from '@tabler/icons-react';
 import {
@@ -36,6 +37,29 @@ import {
   type CascadeHopInput,
   type CascadeProtocol,
 } from '../lib/api';
+import { useOverview } from '../hooks/useOverview';
+import { countryFlag } from '../lib/countries';
+
+const HAIRLINE = '#1C2A3D';
+const CARD = '#0F1A28';
+const GROUND = '#0B1521';
+const SNOW = '#C8D4E3';
+const MIST = '#7A8BA3';
+const CYAN = '#7DD3FC';
+const MOSS = '#A7D8B9';
+const AMBER = '#F5B14C';
+const RED = '#E07A5F';
+const VIOLET = '#A78BFA';
+const MONO = { fontFamily: "'Geist Mono', monospace" } as const;
+
+const STATUS_ACCENT: Record<string, string> = {
+  online: MOSS,
+  unknown: MIST,
+  offline: RED,
+  unreachable: RED,
+  disabled: MIST,
+  degraded: AMBER,
+};
 
 const PROTOCOLS: { value: CascadeProtocol; label: string }[] = [
   { value: 'xray', label: 'xray' },
@@ -47,17 +71,34 @@ const PROTOCOLS: { value: CascadeProtocol; label: string }[] = [
   { value: 'mieru', label: 'mieru' },
 ];
 
-interface HopRow {
-  nodeId: string;
-  entryProtocol: string;
-  linkProtocol: string;
+function formatBytes(n: number): string {
+  if (!n || n === 0) return '0 B';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  const i = Math.min(Math.floor(Math.log2(Math.max(1, n)) / 10), units.length - 1);
+  const v = n / 1024 ** i;
+  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
 }
 
-export function CascadesPage() {
+interface ChainNode {
+  name: string;
+  countryCode: string | null;
+  status: string;
+  todayBytes: number | null;
+}
+
+/**
+ * The "Cascades" sub-view of the Nodes page. A cascade is a chain of nodes, so
+ * each hop is drawn as a real node card (flag / status / role / today's
+ * traffic), connected entry -> ... -> exit by arrows labelled with the link
+ * protocol. Self-contained: pulls its own cascades + node list + overview
+ * metrics (react-query dedupes the shared keys with NodesPage).
+ */
+export function CascadesPanel() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
   const nodesQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 200 }) });
+  const overviewQuery = useOverview();
 
   const nodeOptions = useMemo(
     () =>
@@ -65,15 +106,27 @@ export function CascadesPage() {
     [nodesQuery.data],
   );
 
+  // nodeId -> chain render data (status/flag/traffic) for the hop cards.
+  const nodesById = useMemo(() => {
+    const overviewById = new Map((overviewQuery.data?.nodes ?? []).map((n) => [n.id, n]));
+    const m = new Map<string, ChainNode>();
+    for (const n of nodesQuery.data?.nodes ?? []) {
+      const ov = overviewById.get(n.id);
+      m.set(n.id, {
+        name: n.name,
+        countryCode: n.countryCode,
+        status: ov?.status ?? n.status,
+        todayBytes: ov?.todayBytes ?? null,
+      });
+    }
+    return m;
+  }, [nodesQuery.data, overviewQuery.data]);
+
   const [editing, setEditing] = useState<Cascade | 'new' | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cascades'] });
   const onError = (err: unknown) =>
-    notifications.show({
-      color: 'red',
-      title: t('common.saveError'),
-      message: apiErrorMessage(err),
-    });
+    notifications.show({ color: 'red', title: t('common.saveError'), message: apiErrorMessage(err) });
 
   const deleteMutation = useMutation({
     mutationFn: deleteCascade,
@@ -87,30 +140,36 @@ export function CascadesPage() {
   const cascades = cascadesQuery.data?.cascades ?? [];
 
   return (
-    <Stack p="md" gap="md">
-      <Group justify="space-between">
-        <Text fw={600} size="lg">
-          {t('cascades.title')}
+    <Stack gap="md">
+      <Group justify="space-between" align="flex-start">
+        <Text size="xs" c="dimmed" maw={760}>
+          {t('cascades.help')}
         </Text>
         <Button leftSection={<IconPlus size={14} />} onClick={() => setEditing('new')}>
           {t('cascades.add')}
         </Button>
       </Group>
-      <Text size="xs" c="dimmed" maw={760}>
-        {t('cascades.help')}
-      </Text>
 
       {cascades.length === 0 && cascadesQuery.isFetched && (
-        <Text size="sm" c="dimmed">
+        <Text size="sm" c="dimmed" ta="center" py="lg">
           {t('cascades.empty')}
         </Text>
       )}
 
       {cascades.map((c) => (
-        <Card key={c.id} withBorder padding="sm" radius="sm">
-          <Group justify="space-between" wrap="nowrap">
+        <Card
+          key={c.id}
+          withBorder
+          padding="md"
+          radius="md"
+          style={{ backgroundColor: CARD, borderColor: HAIRLINE }}
+        >
+          <Group justify="space-between" wrap="nowrap" mb="sm">
             <Group gap="xs">
-              <Text fw={500}>{c.name}</Text>
+              <IconRoute size={16} style={{ color: VIOLET }} />
+              <Text fw={600} style={{ color: SNOW }}>
+                {c.name}
+              </Text>
               <Badge size="sm" color={c.enabled ? 'teal' : 'gray'} variant="light">
                 {c.enabled ? 'enabled' : 'disabled'}
               </Badge>
@@ -133,24 +192,81 @@ export function CascadesPage() {
               </Tooltip>
             </Group>
           </Group>
-          <Group gap={6} mt="xs" wrap="wrap">
+
+          <Group gap="sm" wrap="wrap" align="stretch">
             {c.hops.map((h, i) => {
               const role =
-                i === 0 ? t('cascades.entry') : i === c.hops.length - 1 ? t('cascades.exit') : t('cascades.transit');
-              const color = i === 0 ? 'blue' : i === c.hops.length - 1 ? 'green' : 'gray';
+                i === 0
+                  ? t('cascades.entry')
+                  : i === c.hops.length - 1
+                    ? t('cascades.exit')
+                    : t('cascades.transit');
+              const roleColor = i === 0 ? CYAN : i === c.hops.length - 1 ? MOSS : MIST;
+              const nd = nodesById.get(h.nodeId);
+              const status = nd?.status ?? 'unknown';
+              const accent = STATUS_ACCENT[status] ?? MIST;
               return (
-                <Group key={h.id} gap={6} wrap="nowrap">
-                  <Badge variant="light" color={color} radius="sm">
-                    {role}: {h.nodeName}
-                    {h.entryProtocol ? ` · ${h.entryProtocol}` : ''}
-                  </Badge>
+                <Group key={h.id} gap="sm" wrap="nowrap" align="center">
+                  <Box
+                    style={{
+                      border: `1px solid ${roleColor}44`,
+                      borderRadius: 8,
+                      background: GROUND,
+                      padding: '8px 10px',
+                      minWidth: 150,
+                    }}
+                  >
+                    <Group gap={6} wrap="nowrap" mb={4}>
+                      {nd?.countryCode && (
+                        <Text size="sm" lh={1}>
+                          {countryFlag(nd.countryCode)}
+                        </Text>
+                      )}
+                      <Text fw={600} size="sm" truncate style={{ color: SNOW, maxWidth: 120 }}>
+                        {nd?.name ?? h.nodeName}
+                      </Text>
+                    </Group>
+                    <Group gap={6} wrap="nowrap" mb={4}>
+                      <span
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '50%',
+                          background: accent,
+                          boxShadow: `0 0 6px ${accent}99`,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Text size="xs" style={{ ...MONO, color: accent, textTransform: 'uppercase' }}>
+                        {status}
+                      </Text>
+                    </Group>
+                    <Badge
+                      size="xs"
+                      variant="light"
+                      style={{
+                        backgroundColor: `${roleColor}1A`,
+                        color: roleColor,
+                        border: `1px solid ${roleColor}33`,
+                        textTransform: 'none',
+                      }}
+                    >
+                      {role}
+                      {h.entryProtocol ? ` · ${h.entryProtocol}` : ''}
+                    </Badge>
+                    {nd?.todayBytes != null && (
+                      <Text size="9px" mt={4} style={{ ...MONO, color: MIST }}>
+                        {formatBytes(nd.todayBytes)} {t('cascades.today')}
+                      </Text>
+                    )}
+                  </Box>
                   {i < c.hops.length - 1 && (
-                    <Group gap={2} wrap="nowrap" c="dimmed">
+                    <Stack gap={0} align="center" justify="center" style={{ color: MIST }}>
                       <Text size="9px" ff="monospace">
                         {h.linkProtocol}
                       </Text>
-                      <IconArrowRight size={12} />
-                    </Group>
+                      <IconArrowRight size={16} />
+                    </Stack>
                   )}
                 </Group>
               );
@@ -172,6 +288,12 @@ export function CascadesPage() {
       />
     </Stack>
   );
+}
+
+interface HopRow {
+  nodeId: string;
+  entryProtocol: string;
+  linkProtocol: string;
 }
 
 function CascadeFormModal({
@@ -226,7 +348,9 @@ function CascadeFormModal({
         nodeId: h.nodeId,
         position: i,
         ...(i === 0 && h.entryProtocol ? { entryProtocol: h.entryProtocol as CascadeProtocol } : {}),
-        ...(i < hops.length - 1 && h.linkProtocol ? { linkProtocol: h.linkProtocol as CascadeProtocol } : {}),
+        ...(i < hops.length - 1 && h.linkProtocol
+          ? { linkProtocol: h.linkProtocol as CascadeProtocol }
+          : {}),
       }));
       return cascade
         ? updateCascade(cascade.id, { name, enabled, hops: hopInputs })
@@ -287,7 +411,11 @@ function CascadeFormModal({
           {hops.map((h, i) => {
             const isEntry = i === 0;
             const isExit = i === hops.length - 1;
-            const role = isEntry ? t('cascades.entry') : isExit ? t('cascades.exit') : t('cascades.transit');
+            const role = isEntry
+              ? t('cascades.entry')
+              : isExit
+                ? t('cascades.exit')
+                : t('cascades.transit');
             return (
               <Card key={i} withBorder padding="xs" radius="sm">
                 <Group gap="xs" align="flex-end" wrap="nowrap">

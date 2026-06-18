@@ -89,6 +89,13 @@ export default {
     editTitle: 'Edit node',
     layoutCards: 'Cards',
     layoutCompact: 'Compact',
+    viewNodes: 'Nodes',
+    viewCascades: 'Cascades',
+    filter: {
+      all: 'All',
+      standalone: 'Standalone',
+      cascade: 'In cascade',
+    },
     empty: 'No nodes yet. Click "Create node".',
     deleteTitle: 'Delete node "{{name}}"?',
     deleteBody:
@@ -523,6 +530,7 @@ export default {
     entry: 'entry',
     transit: 'transit',
     exit: 'exit',
+    today: 'today',
     deleted: 'Cascade deleted',
     saved: 'Cascade saved',
     editTitle: 'Edit {{name}}',

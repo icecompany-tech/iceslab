@@ -18,6 +18,7 @@ import {
   IconDownload,
   IconEdit,
   IconKey,
+  IconRoute,
   IconServer2,
   IconTrash,
   IconUpload,
@@ -53,6 +54,9 @@ interface CardNode {
   metrics: DashboardNode['metrics'];
   rawId: string;
   address: string;
+  /** When this node is a hop in a cascade: "<cascade name> · <role>" for the
+   *  chain badge. Null when the node is standalone. */
+  cascadeLabel?: string | null;
 }
 
 interface Props {
@@ -169,6 +173,25 @@ export function NodeCard({
                   {node.address}
                 </Text>
               </Tooltip>
+              {node.cascadeLabel && (
+                <Badge
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconRoute size={10} />}
+                  style={{
+                    marginTop: 4,
+                    alignSelf: 'flex-start',
+                    maxWidth: '100%',
+                    backgroundColor: `${VIOLET}1A`,
+                    color: VIOLET,
+                    border: `1px solid ${VIOLET}33`,
+                    textTransform: 'none',
+                    fontFamily: "'Geist Mono', monospace",
+                  }}
+                >
+                  {node.cascadeLabel}
+                </Badge>
+              )}
             </Stack>
           </Group>
           <Group gap={4} wrap="nowrap">

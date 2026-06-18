@@ -24,6 +24,8 @@ import {
   IconLayoutList,
   IconPlus,
   IconRefresh,
+  IconRoute,
+  IconServer2,
   IconTrash,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +33,7 @@ import {
   createBinding,
   createNode,
   deleteNode,
+  listCascades,
   listNodes,
   listRegions,
   refreshNodeBootstrap,
@@ -44,6 +47,7 @@ import { NodeFormModal } from '../components/NodeFormModal';
 import { NodeEditModal } from '../components/NodeEditModal';
 import { NodePayloadModal } from '../components/NodePayloadModal';
 import { NodeCard } from '../components/NodeCard';
+import { CascadesPanel } from '../components/CascadesPanel';
 import { countryFlag } from '../lib/countries';
 import { parseNodeAgentPort, pickFreeQuickDeployPort } from '../lib/ports';
 import { PageHero } from '../components/PageHero';
@@ -80,6 +84,14 @@ function formatBytes(n: number): string {
 type LayoutMode = 'cards' | 'compact';
 const LAYOUT_KEY = 'iceslab:nodes-layout';
 
+// Nodes page top-level view: the flat node inventory, or the cascades (chains of
+// those same nodes). A node can be standalone AND a cascade hop, so cascades are
+// a SECOND view of one inventory, not a second list.
+type NodesView = 'nodes' | 'cascades';
+const VIEW_KEY = 'iceslab:nodes-view';
+// In the "nodes" view, slice the inventory by cascade membership.
+type MembershipFilter = 'all' | 'standalone' | 'cascade';
+
 export function NodesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -99,6 +111,17 @@ export function NodesPage() {
     setLayout(m);
     if (typeof window !== 'undefined') window.localStorage.setItem(LAYOUT_KEY, m);
   }
+
+  const [view, setView] = useState<NodesView>(
+    (typeof window !== 'undefined' &&
+      (window.localStorage.getItem(VIEW_KEY) as NodesView | null)) ||
+      'nodes',
+  );
+  function setViewPersist(v: NodesView) {
+    setView(v);
+    if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_KEY, v);
+  }
+  const [membership, setMembership] = useState<MembershipFilter>('all');
 
   // Slice 27.5 - region filter (URL chip below header). 'all' = no filter.
   const [regionFilter, setRegionFilter] = useState<string>('all');
@@ -123,6 +146,27 @@ export function NodesPage() {
   // per node + today's traffic + inboundCount. Refetch every 15s to keep
   // cards in sync with the agent metrics-poll cron.
   const overviewQuery = useOverview();
+  // Cascade membership drives the ⛓ badge + the standalone/in-cascade filter.
+  const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
+
+  // nodeId -> the cascade it belongs to + its role (entry/transit/exit). A node
+  // can be in at most one cascade (v1 model).
+  const nodeCascadeMap = useMemo(() => {
+    const m = new Map<string, { name: string; role: string }>();
+    for (const c of cascadesQuery.data?.cascades ?? []) {
+      const last = c.hops.length - 1;
+      c.hops.forEach((h, i) => {
+        const role =
+          i === 0
+            ? t('cascades.entry')
+            : i === last
+              ? t('cascades.exit')
+              : t('cascades.transit');
+        m.set(h.nodeId, { name: c.name, role });
+      });
+    }
+    return m;
+  }, [cascadesQuery.data, t]);
 
   // Merge raw nodes (canonical source for actions / address) with dashboard
   // metrics (CPU/RAM/disk/today). Indexed by id for O(1) join.
@@ -135,6 +179,14 @@ export function NodesPage() {
       overview: overviewById.get(n.id) ?? null,
     }));
   }, [nodesQuery.data, overviewQuery.data]);
+
+  // In the "nodes" view, slice the inventory by cascade membership.
+  const visibleNodes = useMemo(() => {
+    if (membership === 'all') return enrichedNodes;
+    return enrichedNodes.filter((n) =>
+      membership === 'cascade' ? nodeCascadeMap.has(n.id) : !nodeCascadeMap.has(n.id),
+    );
+  }, [enrichedNodes, membership, nodeCascadeMap]);
 
   const createMutation = useMutation({
     mutationFn: createNode,
@@ -272,6 +324,38 @@ export function NodesPage() {
           </Group>
         }
       />
+
+      <SegmentedControl
+        size="sm"
+        value={view}
+        onChange={(v) => setViewPersist(v as NodesView)}
+        style={{ alignSelf: 'flex-start' }}
+        data={[
+          {
+            value: 'nodes',
+            label: (
+              <Group gap={6} wrap="nowrap">
+                <IconServer2 size={14} />
+                <Text size="sm">{t('nodes.viewNodes')}</Text>
+              </Group>
+            ),
+          },
+          {
+            value: 'cascades',
+            label: (
+              <Group gap={6} wrap="nowrap">
+                <IconRoute size={14} />
+                <Text size="sm">{t('nodes.viewCascades')}</Text>
+              </Group>
+            ),
+          },
+        ]}
+      />
+
+      {view === 'cascades' && <CascadesPanel />}
+
+      {view === 'nodes' && (
+        <>
       <Group justify="space-between" align="center">
         <Group gap={8}>
           <SegmentedControl
@@ -306,6 +390,7 @@ export function NodesPage() {
               onClick={() => {
                 qc.invalidateQueries({ queryKey: ['nodes'] });
                 qc.invalidateQueries({ queryKey: ['dashboard'] });
+                qc.invalidateQueries({ queryKey: ['cascades'] });
               }}
               loading={nodesQuery.isFetching || overviewQuery.isFetching}
               style={{ color: MIST }}
@@ -315,6 +400,32 @@ export function NodesPage() {
           </Tooltip>
         </Group>
       </Group>
+
+      {/* Cascade-membership filter. Only shown once at least one node is a
+          cascade hop (no clutter for operators not using cascades). */}
+      {nodeCascadeMap.size > 0 && (
+        <Group gap="xs" wrap="wrap">
+          {[
+            { f: 'all' as const, label: t('nodes.filter.all') },
+            { f: 'standalone' as const, label: t('nodes.filter.standalone') },
+            { f: 'cascade' as const, label: t('nodes.filter.cascade') },
+          ].map(({ f, label }) => (
+            <Badge
+              key={f}
+              component="button"
+              type="button"
+              variant={membership === f ? 'filled' : 'light'}
+              color={f === 'cascade' ? 'violet' : 'gray'}
+              size="lg"
+              aria-pressed={membership === f}
+              style={{ cursor: 'pointer', textTransform: 'none' }}
+              onClick={() => setMembership(f)}
+            >
+              {label}
+            </Badge>
+          ))}
+        </Group>
+      )}
 
       {/* Slice 27.5 - region filter row. Hidden when admin hasn't created
           any regions yet (no clutter on a fresh panel). */}
@@ -350,13 +461,13 @@ export function NodesPage() {
         </Group>
       )}
 
-      {enrichedNodes.length === 0 ? (
+      {visibleNodes.length === 0 ? (
         <Text ta="center" py="xl" style={{ color: MIST }}>
           {t('nodes.empty')}
         </Text>
       ) : layout === 'cards' ? (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
-          {enrichedNodes.map((n) => {
+          {visibleNodes.map((n) => {
             // Synthesise a DashboardNode shape if metrics haven't arrived yet -
             // card still renders with status from /api/nodes, just shows
             // metrics placeholder.
@@ -373,6 +484,7 @@ export function NodesPage() {
             const regionLabel = n.regionId
               ? (regionsById.get(n.regionId)?.code ?? null)
               : null;
+            const cascade = nodeCascadeMap.get(n.id);
             return (
               <NodeCard
                 key={n.id}
@@ -381,6 +493,7 @@ export function NodesPage() {
                   rawId: n.id,
                   address: n.address,
                   regionLabel,
+                  cascadeLabel: cascade ? `${cascade.name} · ${cascade.role}` : null,
                   maxUsers: n.maxUsers ?? null,
                   // approxUsers: capacity bar source. Real per-node user
                   // counter lands with slice 28; here we reuse the today's
@@ -418,9 +531,10 @@ export function NodesPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {enrichedNodes.map((n) => {
+              {visibleNodes.map((n) => {
                 const accent = STATUS_ACCENT[n.status] ?? MIST;
                 const isOffline = n.status === 'offline' || n.status === 'unreachable';
+                const cascade = nodeCascadeMap.get(n.id);
                 return (
                   <Table.Tr
                     key={n.id}
@@ -442,6 +556,13 @@ export function NodesPage() {
                           }}
                         />
                         <Text fw={500} style={{ color: SNOW }}>{n.name}</Text>
+                        {cascade && (
+                          <Tooltip label={`${cascade.name} · ${cascade.role}`} withArrow>
+                            <span style={{ display: 'inline-flex', color: '#A78BFA', flexShrink: 0 }}>
+                              <IconRoute size={13} />
+                            </span>
+                          </Tooltip>
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>
@@ -517,6 +638,8 @@ export function NodesPage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+      )}
+        </>
       )}
 
       <NodeFormModal

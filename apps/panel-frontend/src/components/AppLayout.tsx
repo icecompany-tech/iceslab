@@ -17,7 +17,6 @@ import {
   IconSettings,
   IconSearch,
   IconRss,
-  IconRoute,
   type Icon,
 } from '@tabler/icons-react';
 import { useAuth } from '../stores/auth';
@@ -435,7 +434,6 @@ export function AppLayout() {
                 // With 0 online the dot was misleadingly green (looks healthy).
                 countDot={nodesOnline !== undefined && nodesOnline > 0}
               />
-              <NavItem to="/cascades" label={t('sidebar.cascades')} icon={IconRoute} />
             </Stack>
 
             {/* Subscription group — everything that shapes the client-facing
