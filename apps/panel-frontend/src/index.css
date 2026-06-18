@@ -42,6 +42,19 @@ html:root {
   --mantine-color-cyan-filled-hover: #1F75A6;
 }
 
+/* Belt-and-suspenders for the three checked controls. Each sets its checked
+   color var INLINE on its own root via the component vars resolver
+   (getThemeColor -> var(--mantine-color-cyan-filled), which the html:root block
+   above already recolors). Re-asserting it on the element with !important is the
+   guaranteed win: !important beats the inline value, so the calm fill holds even
+   if a cached build or selector specificity ever shadows the root override.
+   Checkbox: input :checked reads var(--checkbox-color). Radio: the dot reads
+   var(--radio-color). Switch: the checked track's --switch-bg = var(--switch-
+   color). All inherit the var from their root. */
+.mantine-Checkbox-root { --checkbox-color: #2A93D1 !important; }
+.mantine-Radio-root { --radio-color: #2A93D1 !important; }
+.mantine-Switch-root { --switch-color: #2A93D1 !important; }
+
 /* De-glow selectable Chips (xray protocol / transport / security pickers).
    Mantine fills the checked chip with the resolved accent, which "glows" on the
    dark surface and sinks the label contrast. Render selection the FilterChip
