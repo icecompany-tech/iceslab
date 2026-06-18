@@ -272,6 +272,7 @@ interface Labels {
   copy: string;
   copied: string;
   copyKey: string;
+  subTarget: string;
   setup: string;
   pickPlatform: string;
   recommended: string;
@@ -303,6 +304,7 @@ const L: Record<'ru' | 'en', Labels> = {
     copy: 'Copy',
     copied: 'Copied',
     copyKey: 'Copy key',
+    subTarget: 'Subscription',
     setup: 'Set up',
     pickPlatform: 'Pick your device, then open or import in an app below.',
     recommended: 'recommended',
@@ -337,6 +339,7 @@ const L: Record<'ru' | 'en', Labels> = {
     copy: 'Копировать',
     copied: 'Скопировано',
     copyKey: 'Скопировать ключ',
+    subTarget: 'Подписка',
     setup: 'Установка',
     pickPlatform: 'Выберите устройство и откройте или импортируйте в приложении ниже.',
     recommended: 'рекомендуем',
@@ -471,32 +474,71 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 
   const protocolChips = data.protocols.map((p) => `<span class="proto">${esc(p)}</span>`).join('');
 
-  // QR cards. Embedded raw (trusted, server-generated SVG); never escaped.
-  const qrCards: string[] = [];
-  if (data.subUrlQrSvg) {
-    qrCards.push(
-      `<figure class="qr"><div class="qbx">${data.subUrlQrSvg}</div><figcaption>${esc(t.scanSubHint)}</figcaption></figure>`,
+  // Compact import widget: ONE QR shown at a time. A server selector picks the
+  // AmneziaWG node (no more one-tower-of-QRs-per-node sprawl), an AmneziaVPN /
+  // AmneziaWG toggle swaps the vpn:// key QR vs the .conf QR, and the proxy
+  // subscription QR is just another selectable target. Every QR SVG is embedded
+  // once; the inline script shows/hides by (target, app). All SVG is trusted
+  // (server-generated), so embedded raw, never escaped.
+  const hasProxy = data.protocols.some((p) => p !== 'amneziawg');
+  const showSub = !!data.subUrlQrSvg && hasProxy;
+
+  interface ImportTarget {
+    id: string;
+    label: string;
+  }
+  const targets: ImportTarget[] = [];
+  if (showSub) targets.push({ id: 'sub', label: t.subTarget });
+  for (const n of awgNodes) targets.push({ id: `awg:${n.nodeName}`, label: n.nodeName });
+
+  const figures: string[] = [];
+  if (showSub) {
+    figures.push(
+      `<figure class="qrf on" data-target="sub"><div class="qbx">${data.subUrlQrSvg}</div><figcaption>${esc(t.scanSubHint)}</figcaption></figure>`,
     );
   }
-  for (const n of awgNodes) {
-    const suffix = multiAwg ? ` · ${esc(n.nodeName)}` : '';
+  awgNodes.forEach((n, ni) => {
+    // The first AWG node's vpn:// QR is the default view when there is no proxy
+    // subscription QR to lead with.
+    const vpnOn = !showSub && ni === 0 ? ' on' : '';
     if (n.vpnQrSvg) {
       const copyBtn = n.vpnKey
         ? `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`
         : '';
-      qrCards.push(
-        `<figure class="qr qr-vpn"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN${suffix}</figcaption>${copyBtn}</figure>`,
+      figures.push(
+        `<figure class="qrf${vpnOn}" data-target="awg:${esc(n.nodeName)}" data-app="vpn"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN</figcaption>${copyBtn}</figure>`,
       );
     }
     if (n.confQrSvg) {
-      qrCards.push(
-        `<figure class="qr"><div class="qbx">${n.confQrSvg}</div><figcaption>AmneziaWG${suffix}</figcaption></figure>`,
+      figures.push(
+        `<figure class="qrf" data-target="awg:${esc(n.nodeName)}" data-app="conf"><div class="qbx">${n.confQrSvg}</div><figcaption>AmneziaWG</figcaption></figure>`,
       );
     }
-  }
+  });
+
+  const targetSel =
+    targets.length > 1
+      ? `<div class="segs tgsel" role="tablist">${targets
+          .map(
+            (tg, i) =>
+              `<button class="seg${i === 0 ? ' on' : ''}" data-target="${esc(tg.id)}">${esc(tg.label)}</button>`,
+          )
+          .join('')}</div>`
+      : '';
+  // AmneziaVPN / AmneziaWG toggle, only meaningful for an AWG target. Hidden at
+  // first when the default target is the proxy subscription QR; the script
+  // reveals it the moment an AWG server is selected.
+  const appSel = hasAwg
+    ? `<div class="segs appsel"${showSub ? ' style="display:none"' : ''} role="tablist"><button class="seg on" data-app="vpn">AmneziaVPN</button><button class="seg" data-app="conf">AmneziaWG</button></div>`
+    : '';
   const scanSection =
-    qrCards.length > 0
-      ? `<section class="card" id="scan"><div class="lbl">${esc(t.scanTitle)}</div><div class="qrs">${qrCards.join('')}</div></section>`
+    figures.length > 0
+      ? `<section class="card" id="scan">
+    <div class="lbl">${esc(t.scanTitle)}</div>
+    ${targetSel}
+    ${appSel}
+    <div class="qrview">${figures.join('')}</div>
+  </section>`
       : '';
 
   const supportRow = data.supportUrl
@@ -623,24 +665,25 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .act.primary{background:var(--cyan2); color:var(--ground); border-color:var(--cyan2); font-weight:600;}
   .empty{color:var(--mist); font-size:13px; padding:6px 2px;}
 
-  /* QR + downloads */
-  .qrs{display:flex; flex-wrap:wrap; gap:18px; justify-content:center;}
-  .qr{margin:0; flex:0 1 210px; text-align:center;}
-  /* Big QR: a phone camera scanning a screen needs ~3px per module, so the .conf
-     QR renders large. The vpn:// key is too data-dense to ever be reliable as a
-     single QR, hence the copy-key button below it. */
-  .qbx{background:#fff; border-radius:12px; padding:11px; display:inline-block; line-height:0;
+  /* Compact import widget: segmented selectors + one QR shown at a time. */
+  .segs{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;}
+  .seg{cursor:pointer; background:var(--ground2); border:1px solid var(--hair); color:var(--mist);
+    border-radius:8px; padding:7px 13px; font-size:12px; font-family:var(--mono); font-weight:500;
+    transition:color .15s, border-color .15s, background .15s;}
+  .seg:hover{color:var(--snow);}
+  .seg.on{color:var(--ground); background:var(--cyan2); border-color:var(--cyan2);}
+  .appsel{margin-top:-6px;}
+  /* min-height reserves the QR row so switching target/app never reflows the page. */
+  .qrview{display:flex; justify-content:center; min-height:286px;}
+  .qrf{display:none; margin:0; flex-direction:column; align-items:center; text-align:center;}
+  .qrf.on{display:flex; animation:fade .25s ease both;}
+  .qbx{background:#fff; border-radius:12px; padding:11px; line-height:0;
     box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
-  .qbx svg{display:block; width:200px; height:200px;}
-  /* The vpn:// key packs a whole compressed config (QR version ~24), so it needs
-     a bigger symbol than the .conf QR to clear ~2.7px per module on a phone
-     camera. It takes its own row. The copy-key button is the foolproof fallback. */
-  .qr-vpn{flex-basis:100%;}
-  .qr-vpn .qbx svg{width:300px; height:300px;}
-  .qr figcaption{color:var(--mist); font-size:11px; margin-top:10px; font-family:var(--mono);}
-  .copyk{display:inline-block; margin-top:8px; cursor:pointer; font-size:12px; font-weight:500;
+  .qbx svg{display:block; width:240px; height:240px;}
+  .qrf figcaption{color:var(--mist); font-size:11px; margin-top:10px; font-family:var(--mono);}
+  .copyk{display:inline-block; margin-top:10px; cursor:pointer; font-size:12px; font-weight:500; text-decoration:none;
     border:1px solid var(--hair); background:var(--ground2); color:var(--cyan);
-    border-radius:8px; padding:6px 12px;}
+    border-radius:8px; padding:7px 14px;}
   .copyk:hover{border-color:var(--cyan2);}
   .dls{display:flex; flex-wrap:wrap; gap:8px;}
   .dl{text-decoration:none; font-size:13px; color:var(--snow); background:var(--ground2);
@@ -742,6 +785,32 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
         else { fallback(); }
       });
     });
+    // Compact import widget: server selector + AmneziaVPN/AmneziaWG toggle,
+    // one QR visible at a time. All QR figures are embedded; we just toggle .on.
+    (function () {
+      var figs = [].slice.call(document.querySelectorAll('.qrf'));
+      if (figs.length < 2) return; // single QR — nothing to switch
+      var tgBtns = [].slice.call(document.querySelectorAll('.tgsel .seg'));
+      var appBtns = [].slice.call(document.querySelectorAll('.appsel .seg'));
+      var appSel = document.querySelector('.appsel');
+      var onFig = figs.filter(function (f) { return f.classList.contains('on'); })[0] || figs[0];
+      var curTarget = onFig.getAttribute('data-target');
+      var curApp = 'vpn';
+      function isAwg(x) { return !!x && x.indexOf('awg:') === 0; }
+      function render() {
+        if (appSel) appSel.style.display = isAwg(curTarget) ? '' : 'none';
+        figs.forEach(function (f) {
+          var show = f.getAttribute('data-target') === curTarget &&
+            (!isAwg(curTarget) || f.getAttribute('data-app') === curApp);
+          f.classList.toggle('on', show);
+        });
+        tgBtns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-target') === curTarget); });
+        appBtns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-app') === curApp); });
+      }
+      tgBtns.forEach(function (b) { b.addEventListener('click', function () { curTarget = b.getAttribute('data-target'); render(); }); });
+      appBtns.forEach(function (b) { b.addEventListener('click', function () { curApp = b.getAttribute('data-app'); render(); }); });
+      render();
+    })();
     // Platform tabs.
     var tabs = [].slice.call(document.querySelectorAll('.tab'));
     var panels = [].slice.call(document.querySelectorAll('.panel'));

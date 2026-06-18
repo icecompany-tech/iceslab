@@ -38,7 +38,7 @@ describe('buildSubscriptionPage', () => {
     expect(withAwg).toContain('format=wgconf&node=awg');
   });
 
-  it('renders one labelled QR pair per AmneziaWG node (multi-node)', () => {
+  it('multi-node: a server selector + one QR per (node, app), not a stacked tower', () => {
     const html = buildSubscriptionPage(
       base({
         protocols: ['amneziawg'],
@@ -48,14 +48,21 @@ describe('buildSubscriptionPage', () => {
         ],
       }),
     );
-    // each node's QRs are present...
+    // every node's QRs are embedded (shown/hidden client-side)...
     for (const id of ['vpn-nl', 'conf-nl', 'vpn-de', 'conf-de']) {
       expect(html).toContain(`<svg id="${id}"></svg>`);
     }
-    // ...labelled by app + node so the user picks the right server.
-    expect(html).toContain('AmneziaVPN · awg-de');
-    expect(html).toContain('AmneziaWG · awg-de');
-    // and a per-node .conf download for each.
+    // ...behind a per-node server selector...
+    expect(html).toContain('class="segs tgsel"');
+    expect(html).toContain('data-target="awg:awg"');
+    expect(html).toContain('data-target="awg:awg-de"');
+    // ...and an AmneziaVPN / AmneziaWG app toggle.
+    expect(html).toContain('data-app="vpn"');
+    expect(html).toContain('data-app="conf"');
+    // figures are keyed by (node, app) so the script can swap them in place.
+    expect(html).toContain('data-target="awg:awg-de" data-app="vpn"');
+    expect(html).toContain('data-target="awg:awg-de" data-app="conf"');
+    // per-node .conf download still offered in the downloads card.
     expect(html).toContain('format=wgconf&node=awg-de');
   });
 
@@ -123,21 +130,25 @@ describe('buildSubscriptionPage', () => {
     );
   });
 
-  it('renders the scan card only when at least one QR SVG is provided', () => {
-    expect(buildSubscriptionPage(base())).not.toContain('class="qrs"');
+  it('renders the scan card only when at least one QR is provided', () => {
+    expect(buildSubscriptionPage(base())).not.toContain('class="qrview"');
+    // proxy protocol + a subscription QR → the QR is a selectable target
     const withQr = buildSubscriptionPage(base({ subUrlQrSvg: '<svg id="sub"></svg>' }));
-    expect(withQr).toContain('class="qrs"');
+    expect(withQr).toContain('class="qrview"');
     // QR SVG markup is embedded raw (trusted, server-generated), not escaped.
     expect(withQr).toContain('<svg id="sub"></svg>');
   });
 
-  it('single AWG node: QR captions omit the node-name suffix', () => {
+  it('single AWG node: no server selector, caption is just the app name', () => {
     const html = buildSubscriptionPage(
-      base({ awgNodes: [{ nodeName: 'awg', vpnQrSvg: '<svg id="vpn"></svg>' }] }),
+      base({ protocols: ['amneziawg'], awgNodes: [{ nodeName: 'awg', vpnQrSvg: '<svg id="vpn"></svg>' }] }),
     );
     expect(html).toContain('<svg id="vpn"></svg>');
-    // brand caption, but no " · awg" suffix when there is only one node
-    expect(html).toContain('>AmneziaVPN<');
-    expect(html).not.toContain('AmneziaVPN · awg');
+    // figure caption is the app name, never a "· awg" node suffix (the node
+    // lives in the selector now)
+    expect(html).toContain('<figcaption>AmneziaVPN</figcaption>');
+    expect(html).not.toContain('· awg');
+    // a single target → no server selector segment
+    expect(html).not.toContain('class="segs tgsel"');
   });
 });
