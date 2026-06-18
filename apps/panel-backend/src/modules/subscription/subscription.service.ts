@@ -10,6 +10,7 @@ import {
 // kept on the User row for backwards-compat but never filters subscription
 // output.
 import { allocatePeer } from '../amneziawg/amneziawg.service.js';
+import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
 import {
@@ -245,6 +246,19 @@ export async function generateSubscription(
     const t = a.node.createdAt.getTime() - b.node.createdAt.getTime();
     return t !== 0 ? t : a.port - b.port;
   });
+
+  // Cascade leak fix: a non-entry hop (transit/exit) of an enabled cascade is
+  // chain-internal and must NOT be a directly-connectable endpoint, else the
+  // client bypasses the chain straight to the exit. Drop those bindings here -
+  // after the squad-keyed binding-cache read, so the cache stays cascade-blind
+  // and a cascade toggle doesn't need to bust it. Done before the topN ranker
+  // so a hidden exit can't be ranked in.
+  const hiddenCascadeNodes = await getHiddenCascadeNodeIds();
+  if (hiddenCascadeNodes.size > 0) {
+    const kept = bindings.filter((b) => !hiddenCascadeNodes.has(b.node.id));
+    bindings.length = 0;
+    bindings.push(...kept);
+  }
 
   // Slice 28 — smart node selection. When the route passed topN+cfCountry,
   // we rank distinct nodes by region match + utilization, take the top-N,

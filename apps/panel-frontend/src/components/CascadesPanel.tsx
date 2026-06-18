@@ -71,6 +71,10 @@ const PROTOCOLS: { value: CascadeProtocol; label: string }[] = [
   { value: 'mieru', label: 'mieru' },
 ];
 
+// Max hops per cascade. Mirrors the backend cap (cascade.schemas MAX_CASCADE_HOPS);
+// keep the two in sync. Each hop adds latency + an inter-hop UFW link port.
+const MAX_HOPS = 5;
+
 function formatBytes(n: number): string {
   if (!n || n === 0) return '0 B';
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -367,7 +371,9 @@ function CascadeFormModal({
     setHops((prev) => prev.map((h, i) => (i === idx ? { ...h, ...patch } : h)));
   }
   function addHop() {
-    setHops((prev) => [...prev, { nodeId: '', entryProtocol: '', linkProtocol: 'xray' }]);
+    setHops((prev) =>
+      prev.length >= MAX_HOPS ? prev : [...prev, { nodeId: '', entryProtocol: '', linkProtocol: 'xray' }],
+    );
   }
   function removeHop(idx: number) {
     setHops((prev) => (prev.length <= 2 ? prev : prev.filter((_, i) => i !== idx)));
@@ -404,9 +410,14 @@ function CascadeFormModal({
           onChange={(e) => setEnabled(e.currentTarget.checked)}
         />
 
-        <Text size="sm" fw={500} mt="xs">
-          {t('cascades.hops')}
-        </Text>
+        <Group justify="space-between" align="center" mt="xs">
+          <Text size="sm" fw={500}>
+            {t('cascades.hops')}
+          </Text>
+          <Text size="xs" ff="monospace" c={hops.length >= MAX_HOPS ? 'orange' : 'dimmed'}>
+            {hops.length}/{MAX_HOPS}
+          </Text>
+        </Group>
         <Stack gap={6}>
           {hops.map((h, i) => {
             const isEntry = i === 0;
@@ -480,7 +491,13 @@ function CascadeFormModal({
             );
           })}
         </Stack>
-        <Button variant="light" size="xs" leftSection={<IconPlus size={12} />} onClick={addHop}>
+        <Button
+          variant="light"
+          size="xs"
+          leftSection={<IconPlus size={12} />}
+          onClick={addHop}
+          disabled={hops.length >= MAX_HOPS}
+        >
           {t('cascades.addHop')}
         </Button>
 

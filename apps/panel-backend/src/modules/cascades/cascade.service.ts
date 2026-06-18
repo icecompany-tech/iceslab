@@ -52,6 +52,44 @@ async function assertNodesExist(nodeIds: string[]): Promise<void> {
   }
 }
 
+// ───── Subscription exposure (cascade leak fix) ─────
+//
+// A node that is a NON-ENTRY hop (position > 0) of an ENABLED cascade is
+// chain-internal: users reach the cascade through the ENTRY node only, so a
+// transit/exit node must never be a directly-connectable subscription endpoint
+// - otherwise the client bypasses the chain and connects straight to the exit
+// (the leak we hit in the field: Happ connecting directly to the DE exit).
+// generateSubscription drops these node ids from a user's endpoint list. A node
+// that is ALSO an entry of some enabled cascade stays exposed (entries are the
+// reachable surface; v1 keeps a node in <=1 cascade, the subtraction is
+// defensive). Cached in-process (cascades change rarely) + busted on every
+// cascade write.
+let hiddenNodesCache: { value: Set<string>; expiresAt: number } | null = null;
+const HIDDEN_NODES_TTL_MS = 60_000;
+
+export function invalidateHiddenCascadeNodeCache(): void {
+  hiddenNodesCache = null;
+}
+
+export async function getHiddenCascadeNodeIds(): Promise<Set<string>> {
+  if (hiddenNodesCache && Date.now() < hiddenNodesCache.expiresAt) {
+    return hiddenNodesCache.value;
+  }
+  const hops = await prisma.cascadeHop.findMany({
+    where: { cascade: { enabled: true } },
+    select: { nodeId: true, position: true },
+  });
+  const entry = new Set<string>();
+  const nonEntry = new Set<string>();
+  for (const h of hops) {
+    if (h.position === 0) entry.add(h.nodeId);
+    else nonEntry.add(h.nodeId);
+  }
+  for (const id of entry) nonEntry.delete(id);
+  hiddenNodesCache = { value: nonEntry, expiresAt: Date.now() + HIDDEN_NODES_TTL_MS };
+  return nonEntry;
+}
+
 export async function listCascades(): Promise<CascadeDto[]> {
   const rows = await prisma.cascade.findMany({
     include: hopInclude,
@@ -101,6 +139,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
     // edit. inbounds.events re-syncs each node's inbound set, where
     // getCascadeFragmentsForNode injects the link-in/out + routing.
     eventBus.emit('cascade.changed', { nodeIds: hops.map((h) => h.nodeId) });
+    invalidateHiddenCascadeNodeCache();
     return mapCascade(c);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -163,6 +202,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
     // `hops` input, so newNodeIds is empty and we re-push the existing hops.
     const newNodeIds = hops ? hops.map((h) => h.nodeId) : [];
     eventBus.emit('cascade.changed', { nodeIds: [...new Set([...oldNodeIds, ...newNodeIds])] });
+    invalidateHiddenCascadeNodeCache();
     return mapCascade(c);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -262,4 +302,5 @@ export async function deleteCascade(id: string): Promise<void> {
   if (existing && existing.hops.length > 0) {
     eventBus.emit('cascade.changed', { nodeIds: existing.hops.map((h) => h.nodeId) });
   }
+  invalidateHiddenCascadeNodeCache();
 }
