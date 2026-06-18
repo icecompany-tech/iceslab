@@ -485,7 +485,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
         ? `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`
         : '';
       qrCards.push(
-        `<figure class="qr"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN${suffix}</figcaption>${copyBtn}</figure>`,
+        `<figure class="qr qr-vpn"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN${suffix}</figcaption>${copyBtn}</figure>`,
       );
     }
     if (n.confQrSvg) {
@@ -622,6 +622,11 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .qbx{background:#fff; border-radius:12px; padding:11px; display:inline-block; line-height:0;
     box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
   .qbx svg{display:block; width:200px; height:200px;}
+  /* The vpn:// key packs a whole compressed config (QR version ~24), so it needs
+     a bigger symbol than the .conf QR to clear ~2.7px per module on a phone
+     camera. It takes its own row. The copy-key button is the foolproof fallback. */
+  .qr-vpn{flex-basis:100%;}
+  .qr-vpn .qbx svg{width:300px; height:300px;}
   .qr figcaption{color:var(--mist); font-size:11px; margin-top:10px; font-family:var(--mono);}
   .copyk{display:inline-block; margin-top:8px; cursor:pointer; font-size:12px; font-weight:500;
     border:1px solid var(--hair); background:var(--ground2); color:var(--cyan);
