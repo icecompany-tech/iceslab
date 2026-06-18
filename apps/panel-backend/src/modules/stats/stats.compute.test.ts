@@ -189,6 +189,75 @@ describe('computeNodeStatsWrites (B3)', () => {
     ]);
     expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 5n, bytesOut: 0n }]);
   });
+
+  // nodeTotalIsCumulative (xray): node-level history comes from the cumulative
+  // inbound-counter delta, decoupled from the per-user sum, so a cascade link-in
+  // (traffic with no per-user email) is counted while billing stays per-user.
+  it('cumulative node total: node history from inbound delta, per-user billed separately', () => {
+    const w = computeNodeStatsWrites({
+      users: [{ userId: 'u1', bytesIn: 100, bytesOut: 50 }], // already a per-poll delta
+      multiplier: 2,
+      isPresenceOnlyProtocol: false,
+      totalBytesIn: 5000, // cumulative inbound counter
+      totalBytesOut: 2000,
+      prevSnapshot: { in: 4200n, out: 1500n },
+      nodeTotalIsCumulative: true,
+    });
+    // per-user billing unchanged (scaled by multiplier)
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 300n }]);
+    expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 200n, bytesOut: 100n }]);
+    // node history is the inbound delta (5000-4200, 2000-1500), NOT the per-user
+    // bytes (100/50) and NOT both summed.
+    expect(w.nodeUpload).toBe(800n);
+    expect(w.nodeDownload).toBe(500n);
+    expect(w.newSnapshot).toEqual({ in: 5000n, out: 2000n });
+  });
+
+  it('cumulative node total counts a cascade exit relay with zero tracked users', () => {
+    const w = computeNodeStatsWrites({
+      users: [], // pure relay: no direct users, only the link-in inbound
+      multiplier: 1,
+      isPresenceOnlyProtocol: false,
+      totalBytesIn: 700,
+      totalBytesOut: 1200,
+      prevSnapshot: { in: 200n, out: 200n },
+      nodeTotalIsCumulative: true,
+    });
+    expect(w.userTrafficRows).toEqual([]);
+    expect(w.nodeUpload).toBe(500n); // 700 - 200
+    expect(w.nodeDownload).toBe(1000n); // 1200 - 200
+    expect(w.newSnapshot).toEqual({ in: 700n, out: 1200n });
+  });
+
+  it('cumulative node total first sight baselines to zero (in-memory snapshot cleared on restart)', () => {
+    const w = computeNodeStatsWrites({
+      users: [],
+      multiplier: 1,
+      isPresenceOnlyProtocol: false,
+      totalBytesIn: 9_000_000, // big since-start lifetime counter
+      totalBytesOut: 4_000_000,
+      prevSnapshot: undefined, // first poll after a backend restart
+      nodeTotalIsCumulative: true,
+    });
+    // no spike: baseline only, then the NEXT poll deltas correctly
+    expect(w.nodeUpload).toBe(0n);
+    expect(w.nodeDownload).toBe(0n);
+    expect(w.newSnapshot).toEqual({ in: 9_000_000n, out: 4_000_000n });
+  });
+
+  it('cumulative node total re-baselines on a counter reset (xray restart)', () => {
+    const w = computeNodeStatsWrites({
+      users: [],
+      multiplier: 1,
+      isPresenceOnlyProtocol: false,
+      totalBytesIn: 300,
+      totalBytesOut: 0,
+      prevSnapshot: { in: 10_000n, out: 0n },
+      nodeTotalIsCumulative: true,
+    });
+    expect(w.nodeUpload).toBe(0n); // dropped below snapshot -> zero delta
+    expect(w.newSnapshot).toEqual({ in: 300n, out: 0n }); // re-baselined
+  });
 });
 
 describe('computeUserDeltas (#5 - non-destructive cumulative)', () => {

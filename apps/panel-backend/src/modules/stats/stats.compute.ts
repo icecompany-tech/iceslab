@@ -38,6 +38,16 @@ export interface NodeStatsInput {
    * caller can warn. undefined = no ceiling (back-compat; existing tests).
    */
   maxUserDeltaBytes?: number;
+  /**
+   * When true, node-level history (node_usage_history) is derived from the
+   * cumulative `totalBytesIn/Out` delta against `prevSnapshot`, NOT from the
+   * per-user byte sum. Set for cores whose node total includes traffic with no
+   * tracked user, e.g. an xray cascade link-in inbound that relays for the next
+   * hop. Per-user billing still comes from `users`. First sight (no prevSnapshot,
+   * e.g. after a backend restart clears the in-memory snapshot) baselines to a
+   * zero delta instead of billing the whole since-start cumulative as one spike.
+   */
+  nodeTotalIsCumulative?: boolean;
 }
 
 /** One per-user `user_traffic` increment (used+lifetime). 0 = presence touch. */
@@ -172,9 +182,13 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
       clamped.push({ userId: u.userId, bytesIn: Number(inB), bytesOut: Number(outB) });
       continue;
     }
-    // Node-level totals are raw, unscaled bytes across the wire.
-    nodeUpload += inB;
-    nodeDownload += outB;
+    // Node-level totals are raw, unscaled bytes across the wire. Skipped when
+    // the node total comes from the cumulative inbound counter instead (that
+    // path adds the node delta below), so per-user bytes aren't double-counted.
+    if (!input.nodeTotalIsCumulative) {
+      nodeUpload += inB;
+      nodeDownload += outB;
+    }
     const delta = inB + outB;
     if (delta === 0n) {
       // Presence-only adapters (mtproto): the user appearing in the response is
@@ -218,21 +232,27 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
   userTrafficRows.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
   historyRows.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
 
-  // Single-counter fallback (mtproto-style): no per-user bytes at all, so roll
-  // the node's cumulative totals into a per-poll delta against the snapshot.
-  // first-sight (no prev) records the full cumulative as a delta - preserved
-  // from the original; this is node-level dashboard history, not per-user
-  // quota, so a restart spike here doesn't burn anyone's traffic.
+  // Node-total path, two callers:
+  //   - nodeTotalIsCumulative (xray): the node total is a cumulative inbound
+  //     counter; always run, since the per-user sum was skipped above.
+  //   - single-counter fallback (mtproto): no per-user bytes at all, so roll the
+  //     node's cumulative totals into a per-poll delta.
+  // Either way: delta against the stored snapshot, and a counter that dropped
+  // below the snapshot means the core restarted, so re-baseline with a 0 delta.
   let newSnapshot: { in: bigint; out: bigint } | null = null;
-  if (nodeDownload === 0n && nodeUpload === 0n) {
+  if (input.nodeTotalIsCumulative || (nodeDownload === 0n && nodeUpload === 0n)) {
     const cumIn = BigInt(input.totalBytesIn || 0);
     const cumOut = BigInt(input.totalBytesOut || 0);
     if (cumIn > 0n || cumOut > 0n) {
+      const hasPrev = input.prevSnapshot !== undefined;
       const prev = input.prevSnapshot ?? { in: 0n, out: 0n };
-      // Counter dropped below the snapshot => interface restarted (kernel
-      // counters reset). Treat as zero delta and re-baseline.
-      const dIn = cumIn > prev.in ? cumIn - prev.in : 0n;
-      const dOut = cumOut > prev.out ? cumOut - prev.out : 0n;
+      // First sight with a cumulative inbound counter: baseline only, don't bill
+      // the whole since-start total as one spike (the in-memory snapshot clears
+      // on every backend restart). The legacy single-counter fallback keeps its
+      // original first-sight-records-full behavior (mtproto, dashboard-only).
+      const baselineOnly = !hasPrev && input.nodeTotalIsCumulative === true;
+      const dIn = baselineOnly ? 0n : cumIn > prev.in ? cumIn - prev.in : 0n;
+      const dOut = baselineOnly ? 0n : cumOut > prev.out ? cumOut - prev.out : 0n;
       newSnapshot = { in: cumIn, out: cumOut };
       nodeUpload += dIn;
       nodeDownload += dOut;

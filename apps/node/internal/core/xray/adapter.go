@@ -289,18 +289,20 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	}
 }
 
-// GetStats reports per-user byte counters via Xray's StatsService.
+// GetStats reports two things from xray's StatsService, read non-destructively
+// (no -reset) over the loopback gRPC inbound so both stay cumulative and the
+// panel deltas them against its own snapshots:
 //
-// Slice 24c: shells out to `xray api statsquery -reset` over the loopback
-// gRPC inbound (see config.go's renderConfig). The `-reset` flag drains
-// counters on read so the panel ingests deltas — never has to track
-// "what was the value last time" itself.
+//   - Users[]: per-user cumulative counters for billing. Queried only when there
+//     are tracked users.
+//   - TotalBytesIn/Out: the node's inbound total (load), summed across all
+//     inbounds except the api inbound. Queried whenever xray is up, even with no
+//     tracked users, so a cascade exit node still reports the traffic it relayed
+//     through a link-in inbound that has no per-user email.
 //
-// Degradation: in config-only mode (no BinaryPath), or when xray hasn't
-// finished bringing up the api inbound yet, returns the tracked user list
-// with zero counters instead of erroring. The panel's ingest worker treats
-// zero-byte deltas as no-op, so a transient stats failure doesn't corrupt
-// `user_traffic`.
+// Degrades softly: config-only mode (no BinaryPath) or a failed query returns
+// what it can rather than erroring, so one bad poll doesn't stall the panel's
+// stats loop or corrupt user_traffic.
 func (a *Adapter) GetStats() (*core.Stats, error) {
 	a.mu.Lock()
 	binary := a.cfg.BinaryPath
@@ -320,40 +322,48 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		return &core.Stats{Users: users}, nil
 	}
 
-	// N2 - no tracked users means nothing to count; skip forking the xray
-	// binary entirely. A freshly-provisioned or drained node otherwise paid a
-	// full `xray api statsquery` exec every 30s forever for an empty result.
-	if len(users) == 0 {
-		return &core.Stats{Users: users}, nil
-	}
+	ctx := context.Background()
 
-	counters, err := queryUserStats(context.Background(), run, binary, apiPort)
-	if err != nil {
-		// Soft-fail — log and return zero counters. Hard error would block
-		// the panel's stats poller and starve every other adapter on this
-		// node from delivering its numbers.
-		a.logger.Warn("xray GetStats: statsquery failed, reporting zero counters", "err", err)
-		return &core.Stats{Users: users}, nil
-	}
-
+	// Per-user counters (billing). N2: skip the fork when there are no tracked
+	// users, a drained node otherwise paid a statsquery exec every poll for an
+	// empty result.
 	out := make([]core.UserStats, 0, len(users))
-	var totalIn, totalOut int64
-	for _, u := range users {
-		c := counters[u.UserID]
-		out = append(out, core.UserStats{
-			UserID:   u.UserID,
-			BytesIn:  c.UplinkBytes,
-			BytesOut: c.DownlinkBytes,
-		})
-		totalIn += c.UplinkBytes
-		totalOut += c.DownlinkBytes
+	var userIn, userOut int64
+	if len(users) > 0 {
+		counters, err := queryUserStats(ctx, run, binary, apiPort)
+		if err != nil {
+			// Soft-fail: emit NO per-user rows this poll, not zero-counter rows.
+			// Zero-counter rows would read as a cumulative drop to 0 and re-baseline
+			// the panel's per-user snapshots, spiking each user's quota on recovery.
+			// The node total below still reports via the inbound query.
+			a.logger.Warn("xray GetStats: user statsquery failed, skipping per-user this poll", "err", err)
+		} else {
+			for _, u := range users {
+				c := counters[u.UserID]
+				out = append(out, core.UserStats{UserID: u.UserID, BytesIn: c.UplinkBytes, BytesOut: c.DownlinkBytes})
+				userIn += c.UplinkBytes
+				userOut += c.DownlinkBytes
+			}
+		}
 	}
+
+	// Node load = inbound total (counts a cascade link-in inbound that the
+	// per-user query can't see). Queried even with zero tracked users.
+	totalIn, totalOut, inErr := queryInboundStats(ctx, run, binary, apiPort)
+	if inErr != nil {
+		// Fall back to the per-user cumulative sum so a transient inbound-query
+		// failure doesn't report a spurious zero node total, which the panel
+		// would read as a counter reset and then spike on recovery.
+		a.logger.Warn("xray GetStats: inbound statsquery failed, using per-user sum for node total", "err", inErr)
+		totalIn, totalOut = userIn, userOut
+	}
+
 	return &core.Stats{
 		Users:         out,
 		TotalBytesIn:  totalIn,
 		TotalBytesOut: totalOut,
-		// #5 - non-destructive read (no -reset): Users[] are cumulative, so the
-		// panel computes deltas against its per-(node,user) snapshot.
+		// Non-destructive read (no -reset): Users[] and the inbound total are
+		// cumulative, so the panel computes deltas against its snapshots.
 		Cumulative: true,
 	}, nil
 }

@@ -8,10 +8,15 @@ import (
 	"time"
 )
 
-// statsQueryTimeout caps the runtime of `xray api statsquery`. Generous —
-// the call is local IPC, but the binary may be momentarily blocked during
-// a config reload.
+// statsQueryTimeout caps the runtime of `xray api statsquery`. Generous, the
+// call is local IPC, but the binary may be momentarily blocked during a config
+// reload.
 const statsQueryTimeout = 5 * time.Second
+
+// apiInboundTag is the loopback management inbound (see config.go renderConfig).
+// Its byte counters are xray's own API traffic, not node load, so the inbound
+// total excludes it.
+const apiInboundTag = "api-in"
 
 // xrayStatsResponse mirrors the JSON returned by:
 //
@@ -125,6 +130,74 @@ func parseStatName(name string) (userID, direction string, ok bool) {
 	const sep = ">>>"
 	parts := strings.Split(name, sep)
 	if len(parts) != 4 || parts[0] != "user" || parts[2] != "traffic" {
+		return "", "", false
+	}
+	if parts[3] != "uplink" && parts[3] != "downlink" {
+		return "", "", false
+	}
+	return parts[1], parts[3], true
+}
+
+// queryInboundStats invokes `xray api statsquery -pattern inbound` (no -reset)
+// and returns the node's cumulative-since-start uplink/downlink summed across
+// every inbound tag except the loopback management inbound (api-in).
+//
+// This is the true node load. Unlike the per-user query it also counts an
+// inbound that carries traffic with no per-user email, e.g. a cascade link-in
+// relaying for the next hop, so an exit node with zero direct users still
+// reports the bytes it forwarded. The read is non-destructive; the panel deltas
+// it against a stored node snapshot.
+func queryInboundStats(
+	ctx context.Context,
+	run RunCmdFunc,
+	binary string,
+	apiPort int,
+) (uplink, downlink int64, err error) {
+	if binary == "" {
+		return 0, 0, fmt.Errorf("xray binary path is empty")
+	}
+	ctx, cancel := context.WithTimeout(ctx, statsQueryTimeout)
+	defer cancel()
+
+	out, err := run(ctx, binary,
+		"api", "statsquery",
+		"-server", fmt.Sprintf("127.0.0.1:%d", apiPort),
+		"-pattern", "inbound",
+	)
+	if err != nil {
+		return 0, 0, fmt.Errorf("xray api statsquery -pattern inbound: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	var resp xrayStatsResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return 0, 0, fmt.Errorf("parse inbound statsquery output: %w (raw: %s)", err, strings.TrimSpace(string(out)))
+	}
+
+	for _, e := range resp.Stat {
+		tag, dir, ok := parseInboundStatName(e.Name)
+		if !ok || tag == apiInboundTag {
+			continue
+		}
+		bytes, ok := statEntryInt64(e.Value)
+		if !ok {
+			continue
+		}
+		switch dir {
+		case "uplink":
+			uplink += bytes
+		case "downlink":
+			downlink += bytes
+		}
+	}
+	return uplink, downlink, nil
+}
+
+// parseInboundStatName extracts (tag, "uplink"|"downlink") from a stat key like
+// `inbound>>><tag>>>traffic>>>uplink`. Returns ok=false on any other shape.
+func parseInboundStatName(name string) (tag, direction string, ok bool) {
+	const sep = ">>>"
+	parts := strings.Split(name, sep)
+	if len(parts) != 4 || parts[0] != "inbound" || parts[2] != "traffic" {
 		return "", "", false
 	}
 	if parts[3] != "uplink" && parts[3] != "downlink" {

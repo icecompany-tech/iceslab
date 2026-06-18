@@ -153,3 +153,86 @@ func TestQueryUserStats_HandlesEmptyResponse(t *testing.T) {
 		t.Errorf("expected empty map, got %+v", got)
 	}
 }
+
+func TestParseInboundStatName(t *testing.T) {
+	cases := []struct {
+		in        string
+		tag       string
+		direction string
+		ok        bool
+	}{
+		{"inbound>>>vless-in>>>traffic>>>uplink", "vless-in", "uplink", true},
+		{"inbound>>>cascade-link-in>>>traffic>>>downlink", "cascade-link-in", "downlink", true},
+		{"inbound>>>api-in>>>traffic>>>uplink", "api-in", "uplink", true}, // caller filters this tag
+		{"user>>>u-1>>>traffic>>>uplink", "", "", false},                  // wrong prefix
+		{"inbound>>>x>>>other>>>uplink", "", "", false},                   // non-traffic
+		{"inbound>>>x>>>traffic>>>sideways", "", "", false},               // unknown direction
+		{"inbound>>>x>>>traffic", "", "", false},                          // too few parts
+		{"", "", "", false},
+	}
+	for _, c := range cases {
+		tag, dir, ok := parseInboundStatName(c.in)
+		if tag != c.tag || dir != c.direction || ok != c.ok {
+			t.Errorf("parseInboundStatName(%q) = (%q,%q,%v) want (%q,%q,%v)",
+				c.in, tag, dir, ok, c.tag, c.direction, c.ok)
+		}
+	}
+}
+
+func TestQueryInboundStats_SumsAllInboundsExceptApi(t *testing.T) {
+	mockOutput := []byte(`{"stat":[
+		{"name":"inbound>>>vless-in>>>traffic>>>uplink","value":"1000"},
+		{"name":"inbound>>>vless-in>>>traffic>>>downlink","value":"2000"},
+		{"name":"inbound>>>cascade-link-in>>>traffic>>>uplink","value":"500"},
+		{"name":"inbound>>>cascade-link-in>>>traffic>>>downlink","value":"700"},
+		{"name":"inbound>>>api-in>>>traffic>>>uplink","value":"9999"},
+		{"name":"inbound>>>api-in>>>traffic>>>downlink","value":"8888"}
+	]}`)
+	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "/usr/local/bin/xray" {
+			t.Errorf("expected xray binary, got %q", name)
+		}
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, "api statsquery") {
+			t.Errorf("expected `api statsquery`, got %v", args)
+		}
+		if !strings.Contains(joined, "-pattern inbound") {
+			t.Errorf("expected `-pattern inbound`, got %v", args)
+		}
+		// Non-destructive: the panel deltas the cumulative total itself.
+		if strings.Contains(joined, "-reset") {
+			t.Errorf("did not expect `-reset`, got %v", args)
+		}
+		if !strings.Contains(joined, "127.0.0.1:8080") {
+			t.Errorf("expected 127.0.0.1:8080, got %v", args)
+		}
+		return mockOutput, nil
+	}
+
+	uplink, downlink, err := queryInboundStats(context.Background(), run, "/usr/local/bin/xray", 8080)
+	if err != nil {
+		t.Fatalf("queryInboundStats: %v", err)
+	}
+	// api-in (9999/8888) must be excluded; the rest summed.
+	if uplink != 1500 {
+		t.Errorf("uplink: got %d want 1500 (vless 1000 + link 500, api-in excluded)", uplink)
+	}
+	if downlink != 2700 {
+		t.Errorf("downlink: got %d want 2700 (vless 2000 + link 700, api-in excluded)", downlink)
+	}
+}
+
+func TestQueryInboundStats_ErrorPropagates(t *testing.T) {
+	run := func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		return []byte("connection refused"), errors.New("exit status 1")
+	}
+	if _, _, err := queryInboundStats(context.Background(), run, "xray", 8080); err == nil {
+		t.Errorf("expected error from failing run, got nil")
+	}
+}
+
+func TestQueryInboundStats_RejectsEmptyBinary(t *testing.T) {
+	if _, _, err := queryInboundStats(context.Background(), nil, "", 8080); err == nil {
+		t.Errorf("expected error when binary path empty")
+	}
+}

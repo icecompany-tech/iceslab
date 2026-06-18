@@ -128,16 +128,19 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
         }
 
         // All the delta math (scaling, zero-delta skip, presence-only signal,
-        // single-counter fallback) lives in the pure, unit-tested helper. For
-        // cumulative agents the node totals are cumulative too, so we drop them
-        // here: node-level history comes from the per-user deltas, and the
-        // totals-fallback is only for presence-only single-counter cores.
+        // node-total delta) lives in the pure, unit-tested helper. Cumulative
+        // agents (xray) report the node total as a cumulative inbound counter:
+        // pass it through with nodeTotalIsCumulative so node-level history counts
+        // ALL inbound traffic, including a cascade link-in that has no per-user
+        // email, while per-user billing still comes from the deltas above. Legacy
+        // delta agents pass their totals through for the presence-only fallback.
         const w = computeNodeStatsWrites({
           users: userList,
           multiplier: Number(node.consumptionMultiplier ?? 1) || 1,
           isPresenceOnlyProtocol: node.protocol === 'mtproto',
-          totalBytesIn: res.cumulative ? undefined : res.totalBytesIn,
-          totalBytesOut: res.cumulative ? undefined : res.totalBytesOut,
+          totalBytesIn: res.totalBytesIn,
+          totalBytesOut: res.totalBytesOut,
+          nodeTotalIsCumulative: !!res.cumulative,
           prevSnapshot: totalSnapshot.get(node.id),
           maxUserDeltaBytes: NODE_STATS_MAX_USER_DELTA_BYTES,
         });
