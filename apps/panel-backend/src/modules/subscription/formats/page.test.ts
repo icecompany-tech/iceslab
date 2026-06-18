@@ -102,6 +102,20 @@ describe('buildSubscriptionPage', () => {
     expect(buildSubscriptionPage(base({ lang: 'ru' }))).toContain('Ссылка подписки');
   });
 
+  it('renders an in-page RU/EN selector marking the active locale', () => {
+    const en = buildSubscriptionPage(base({ lang: 'en' }));
+    // both links present (server-side re-render via ?lang=, no JS)
+    expect(en).toContain('href="?lang=ru"');
+    expect(en).toContain('href="?lang=en"');
+    // active locale is the filled one
+    expect(en).toContain('class="lng on" href="?lang=en"');
+    expect(en).not.toContain('class="lng on" href="?lang=ru"');
+
+    const ru = buildSubscriptionPage(base({ lang: 'ru' }));
+    expect(ru).toContain('class="lng on" href="?lang=ru"');
+    expect(ru).not.toContain('class="lng on" href="?lang=en"');
+  });
+
   it('emits a support link only when supportUrl is set', () => {
     expect(buildSubscriptionPage(base({ supportUrl: null }))).not.toContain('class="support"');
     expect(buildSubscriptionPage(base({ supportUrl: 'https://t.me/support' }))).toContain(

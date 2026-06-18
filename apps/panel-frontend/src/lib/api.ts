@@ -1268,6 +1268,10 @@ export interface UpdateSettingsInput {
     proxy?: string[];
     block?: string[];
   } | null;
+  /** Subscription landing-page default language, mirrored from the panel's UI
+   *  language (set by the LanguageSwitcher). The /sub page has its own RU/EN
+   *  selector that overrides this per visitor. */
+  defaultLocale?: 'ru' | 'en';
 }
 
 /** Fetch public-flagged settings, no auth required. Used by LoginPage so

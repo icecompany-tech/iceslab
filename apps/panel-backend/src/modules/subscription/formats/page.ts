@@ -550,6 +550,16 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   }
   .brand{font-size:19px; font-weight:600; letter-spacing:-.01em; line-height:1.1;}
   .sub{color:var(--mist); font-size:12px; margin-top:2px; font-family:var(--mono);}
+  /* Language selector — RU/EN pill, pushed to the header's right edge. Each is
+     a plain link to ?lang=, so toggling re-renders the page server-side (no JS).
+     The active locale is filled. */
+  .lang{margin-left:auto; flex:0 0 auto; display:flex; gap:2px; padding:2px;
+    border:1px solid var(--hair); border-radius:9px; background:var(--card);}
+  .lng{text-decoration:none; color:var(--mist); font-family:var(--mono); font-weight:600;
+    font-size:11px; letter-spacing:.04em; padding:4px 9px; border-radius:7px;
+    transition:color .15s, background .15s;}
+  .lng:hover{color:var(--snow);}
+  .lng.on{color:var(--ground); background:var(--cyan2);}
   .live{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--moss);
     box-shadow:0 0 0 0 rgba(167,216,185,.5); animation:pulse 2.4s infinite; margin-right:5px; vertical-align:middle;}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(167,216,185,.45)}70%{box-shadow:0 0 0 6px rgba(167,216,185,0)}100%{box-shadow:0 0 0 0 rgba(167,216,185,0)}}
@@ -661,6 +671,10 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       <div class="brand">${esc(data.brandTitle)}</div>
       <div class="sub"><span class="live"></span>${esc(t.subtitle)} · ${esc(u.username)}</div>
     </div>
+    <nav class="lang" aria-label="Language">
+      <a class="lng${data.lang === 'ru' ? ' on' : ''}" href="?lang=ru" hreflang="ru"${data.lang === 'ru' ? ' aria-current="true"' : ''}>RU</a>
+      <a class="lng${data.lang === 'en' ? ' on' : ''}" href="?lang=en" hreflang="en"${data.lang === 'en' ? ' aria-current="true"' : ''}>EN</a>
+    </nav>
   </div>
 
   <section class="card">

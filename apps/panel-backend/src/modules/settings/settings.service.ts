@@ -25,6 +25,10 @@ export interface SubscriptionSettings {
   /** R3 - operator-defined custom domain lists (direct/proxy/block), or null
    *  when every bucket is empty. Emitted into xray/xkeen + clash routing rules. */
   customDomainLists: { direct: string[]; proxy: string[]; block: string[] } | null;
+  /** Subscription landing-page default language, mirrored from the panel's UI
+   *  language. NULL = fall back to the visitor's Accept-Language. The /sub page
+   *  has an in-page RU/EN selector (?lang=) that overrides this per visitor. */
+  defaultLocale: 'ru' | 'en' | null;
 }
 
 // B5 - in-process cache for the subscription settings. `/sub/:token` is hit on
@@ -98,6 +102,12 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
       })()
     : null;
 
+  // Subscription page default language. Only the two known locales are honoured;
+  // a missing / hand-edited garbage row yields null so /sub falls back to the
+  // visitor's Accept-Language (legacy behaviour).
+  const localeRaw = asString('defaultLocale');
+  const defaultLocale = localeRaw === 'ru' || localeRaw === 'en' ? localeRaw : null;
+
   const value: SubscriptionSettings = {
     profileTitle: asString('subscriptionProfileTitle'),
     updateIntervalHours: asInt('subscriptionUpdateIntervalHours', 24),
@@ -108,6 +118,7 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
     tlsFragment,
     customRoutingRules,
     customDomainLists,
+    defaultLocale,
   };
   settingsCache = { value, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
   return value;

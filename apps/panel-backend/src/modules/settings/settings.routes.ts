@@ -71,6 +71,12 @@ const UpsertInput = z.object({
     })
     .nullable()
     .optional(),
+  // Subscription landing-page default language. The panel's LanguageSwitcher
+  // mirrors its UI language here so the human /sub page defaults to the same
+  // language the operator runs the panel in. The page also carries an in-page
+  // RU/EN selector (?lang=) that overrides per visitor, so this is the default,
+  // not a hard lock.
+  defaultLocale: z.enum(['ru', 'en']).optional(),
 });
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {

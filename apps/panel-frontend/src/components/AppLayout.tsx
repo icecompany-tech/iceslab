@@ -280,7 +280,7 @@ export function AppLayout() {
               },
             }}
           />
-          <LanguageSwitcher />
+          <LanguageSwitcher persist />
         </Box>
       </AppShell.Header>
 

@@ -67,6 +67,10 @@ const QuerySchema = z.object({
   // each pinned with `?node=<node name>`. Matched against the endpoint's
   // nodeName (unique among active nodes). Omitted = first AWG endpoint.
   node: z.string().min(1).max(64).optional(),
+  // Human landing-page language override. The page renders an in-page RU/EN
+  // selector that links here; it wins over the panel default and the
+  // Accept-Language guess. Only meaningful for the HTML page.
+  lang: z.enum(['ru', 'en']).optional(),
 });
 
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
@@ -473,7 +477,13 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
-            lang: pickLang(request.headers['accept-language'] as string | undefined),
+            // Language priority: in-page ?lang selector (per visitor) > panel
+            // default (mirrored from the operator's UI language) > the visitor's
+            // Accept-Language guess.
+            lang:
+              query.lang ??
+              settings.defaultLocale ??
+              pickLang(request.headers['accept-language'] as string | undefined),
             subUrl,
             supportUrl: settings.supportUrl,
             user: result.json.user,
