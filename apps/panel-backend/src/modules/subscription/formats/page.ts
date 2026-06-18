@@ -32,7 +32,14 @@ export interface SubscriptionPageData {
    *  "vpn://" key (for the AmneziaVPN app) and the native .conf (for the
    *  AmneziaWG app). Single-tunnel-per-key, so a user with several AWG servers
    *  gets one labelled QR pair per server instead of just the first node's. */
-  awgNodes?: Array<{ nodeName: string; confQrSvg?: string; vpnQrSvg?: string }>;
+  awgNodes?: Array<{
+    nodeName: string;
+    confQrSvg?: string;
+    vpnQrSvg?: string;
+    /** Raw AmneziaVPN vpn:// key for a copy button (the dense key QR is
+     *  unreliable on screen, so paste-the-key is the robust import path). */
+    vpnKey?: string;
+  }>;
 }
 
 function esc(s: string): string {
@@ -264,6 +271,7 @@ interface Labels {
   subLink: string;
   copy: string;
   copied: string;
+  copyKey: string;
   setup: string;
   pickPlatform: string;
   recommended: string;
@@ -294,6 +302,7 @@ const L: Record<'ru' | 'en', Labels> = {
     subLink: 'Subscription link',
     copy: 'Copy',
     copied: 'Copied',
+    copyKey: 'Copy key',
     setup: 'Set up',
     pickPlatform: 'Pick your device, then open or import in an app below.',
     recommended: 'recommended',
@@ -327,6 +336,7 @@ const L: Record<'ru' | 'en', Labels> = {
     subLink: 'Ссылка подписки',
     copy: 'Копировать',
     copied: 'Скопировано',
+    copyKey: 'Скопировать ключ',
     setup: 'Установка',
     pickPlatform: 'Выберите устройство и откройте или импортируйте в приложении ниже.',
     recommended: 'рекомендуем',
@@ -471,8 +481,11 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   for (const n of awgNodes) {
     const suffix = multiAwg ? ` · ${esc(n.nodeName)}` : '';
     if (n.vpnQrSvg) {
+      const copyBtn = n.vpnKey
+        ? `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`
+        : '';
       qrCards.push(
-        `<figure class="qr"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN${suffix}</figcaption></figure>`,
+        `<figure class="qr"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN${suffix}</figcaption>${copyBtn}</figure>`,
       );
     }
     if (n.confQrSvg) {
@@ -601,12 +614,19 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .empty{color:var(--mist); font-size:13px; padding:6px 2px;}
 
   /* QR + downloads */
-  .qrs{display:flex; flex-wrap:wrap; gap:14px;}
-  .qr{margin:0; flex:1; min-width:150px; text-align:center;}
-  .qbx{background:#fff; border-radius:10px; padding:9px; display:inline-block; line-height:0;
-    box-shadow:0 1px 0 rgba(255,255,255,.04), 0 8px 24px rgba(0,0,0,.35);}
-  .qbx svg{display:block; width:148px; height:148px;}
-  .qr figcaption{color:var(--mist); font-size:11px; margin-top:9px; font-family:var(--mono);}
+  .qrs{display:flex; flex-wrap:wrap; gap:18px; justify-content:center;}
+  .qr{margin:0; flex:0 1 210px; text-align:center;}
+  /* Big QR: a phone camera scanning a screen needs ~3px per module, so the .conf
+     QR renders large. The vpn:// key is too data-dense to ever be reliable as a
+     single QR, hence the copy-key button below it. */
+  .qbx{background:#fff; border-radius:12px; padding:11px; display:inline-block; line-height:0;
+    box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
+  .qbx svg{display:block; width:200px; height:200px;}
+  .qr figcaption{color:var(--mist); font-size:11px; margin-top:10px; font-family:var(--mono);}
+  .copyk{display:inline-block; margin-top:8px; cursor:pointer; font-size:12px; font-weight:500;
+    border:1px solid var(--hair); background:var(--ground2); color:var(--cyan);
+    border-radius:8px; padding:6px 12px;}
+  .copyk:hover{border-color:var(--cyan2);}
   .dls{display:flex; flex-wrap:wrap; gap:8px;}
   .dl{text-decoration:none; font-size:13px; color:var(--snow); background:var(--ground2);
     border:1px solid var(--hair); border-radius:9px; padding:9px 13px;}
@@ -693,6 +713,16 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
         } else { document.execCommand('copy'); done(); }
       });
     }
+    // Copy AmneziaVPN vpn:// keys (paste into the app "add by key").
+    [].slice.call(document.querySelectorAll('.copyk')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-key') || '';
+        var done = function () { var o = btn.textContent; btn.textContent = ${JSON.stringify(t.copied)}; setTimeout(function () { btn.textContent = o; }, 1500); };
+        var fallback = function () { var ta = document.createElement('textarea'); ta.value = key; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); done(); };
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(key).then(done).catch(fallback); }
+        else { fallback(); }
+      });
+    });
     // Platform tabs.
     var tabs = [].slice.call(document.querySelectorAll('.tab'));
     var panels = [].slice.call(document.querySelectorAll('.panel'));

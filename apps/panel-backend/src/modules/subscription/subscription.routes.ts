@@ -465,6 +465,9 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               nodeName: e.nodeName,
               confQrSvg: conf ? qrSvg(conf, 'L') : undefined,
               vpnQrSvg: vpn ? qrSvg(vpn, 'L') : undefined,
+              // Raw vpn:// key for a copy button: the AmneziaVPN key QR is dense
+              // enough to be unreliable on screen, so paste-the-key is the robust path.
+              vpnKey: vpn || undefined,
             };
           });
         return reply.type('text/html; charset=utf-8').send(
@@ -534,20 +537,19 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             .type('application/json')
             .send(buildSingboxJson(filtered, { bundle: sbBundle, routingPreset }));
         }
-        case 'wgconf':
-          // Content-Disposition with .conf suffix so browser saves the
-          // file as `<username>.conf` rather than the raw token path.
-          // AmneziaVPN / wg-quick / Hiddify file-pickers all filter by
-          // *.conf — without the suffix admin gets an extensionless
-          // download that fails the picker filter on Windows / macOS.
-          // Caught live cycle #6 2026-05-13 (operator's iPhone test).
+        case 'wgconf': {
+          // Filename = `<username>-<node>.conf` so a user with several AWG
+          // servers can tell the downloaded files apart (the browser otherwise
+          // saves test.conf, test(1).conf, ...). The .conf suffix matters: the
+          // AmneziaWG / wg-quick / Hiddify file-pickers filter by *.conf, so an
+          // extensionless name fails the picker on Windows / macOS.
+          const nodePart = query.node ? `-${sanitizeFilename(query.node)}` : '';
+          const fname = `${sanitizeFilename(result.json.user.username)}${nodePart}.conf`;
           return reply
             .type('text/plain; charset=utf-8')
-            .header(
-              'Content-Disposition',
-              `attachment; filename="${sanitizeFilename(result.json.user.username)}.conf"`,
-            )
+            .header('Content-Disposition', `attachment; filename="${fname}"`)
             .send(buildWgQuickConf(filtered, query.node));
+        }
         case 'xrayjson': {
           const xjBundle: 'flat' | 'balancer' | undefined =
             query.bundle === 'balancer' || query.bundle === 'flat'
