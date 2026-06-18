@@ -61,6 +61,11 @@ const QuerySchema = z.object({
   // it on, `0` forces it off. Only meaningful for the xrayjson format - the
   // fragment outbound + dialerProxy is an Xray-native technique.
   fragment: z.enum(['0', '1']).optional(),
+  // Node selector for single-node formats (wgconf). wg-quick holds one tunnel
+  // per file, so a user with several AmneziaWG nodes gets one link per node,
+  // each pinned with `?node=<node name>`. Matched against the endpoint's
+  // nodeName (unique among active nodes). Omitted = first AWG endpoint.
+  node: z.string().min(1).max(64).optional(),
 });
 
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
@@ -525,7 +530,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               'Content-Disposition',
               `attachment; filename="${sanitizeFilename(result.json.user.username)}.conf"`,
             )
-            .send(buildWgQuickConf(filtered));
+            .send(buildWgQuickConf(filtered, query.node));
         case 'xrayjson': {
           const xjBundle: 'flat' | 'balancer' | undefined =
             query.bundle === 'balancer' || query.bundle === 'flat'

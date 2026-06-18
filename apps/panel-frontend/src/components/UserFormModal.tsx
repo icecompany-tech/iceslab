@@ -899,8 +899,13 @@ function DirectEndpointRow({
   const hasUri = endpoint.uri.length > 0;
   // For AWG there's no URI scheme - give admin the subscription URL with
   // ?format=wgconf. Both AmneziaVPN desktop ("File with config") and
-  // Hiddify Next accept that URL directly (they fetch+parse).
-  const wgconfUrl = !hasUri && subUrl ? `${subUrl}?format=wgconf` : '';
+  // Hiddify Next accept that URL directly (they fetch+parse). Pin &node=<name>
+  // so a user with several AWG nodes gets THIS node's tunnel (wg-quick is one
+  // peer per file); without it every AWG row resolves to the first node.
+  const wgconfUrl =
+    !hasUri && subUrl
+      ? `${subUrl}?format=wgconf&node=${encodeURIComponent(endpoint.nodeName)}`
+      : '';
 
   async function handleCopy() {
     const toCopy = hasUri ? endpoint.uri : wgconfUrl;

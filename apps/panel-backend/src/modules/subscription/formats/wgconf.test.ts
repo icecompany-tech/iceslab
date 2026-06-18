@@ -62,7 +62,7 @@ describe('buildWgQuickConf', () => {
     expect(out).not.toContain('hy-secret');
   });
 
-  it('emits only the first AmneziaWG endpoint when multiple exist', () => {
+  it('emits the first AmneziaWG endpoint when multiple exist and no node is named', () => {
     const second: SubscriptionEndpoint = {
       ...awgEp,
       nodeName: 'us-1',
@@ -72,6 +72,26 @@ describe('buildWgQuickConf', () => {
     const out = buildWgQuickConf([awgEp, second]);
     expect(out).toContain('Endpoint = n1.example.com:51820');
     expect(out).not.toContain('n2.example.com');
+  });
+
+  // Regression: a user with two AmneziaWG nodes got the FIRST node's config from
+  // every per-node link because they all hit bare ?format=wgconf. The per-node
+  // link now pins ?node=<nodeName>, which must select that node's tunnel.
+  it('selects the AmneziaWG endpoint matching nodeName', () => {
+    const second: SubscriptionEndpoint = {
+      ...awgEp,
+      nodeName: 'us-1',
+      host: 'n2.example.com',
+      allowedIp: '10.0.0.43/32',
+    };
+    const out = buildWgQuickConf([awgEp, second], 'us-1');
+    expect(out).toContain('Endpoint = n2.example.com:51820');
+    expect(out).toContain('Address = 10.0.0.43/32');
+    expect(out).not.toContain('n1.example.com');
+  });
+
+  it('returns empty when the named node has no AmneziaWG endpoint', () => {
+    expect(buildWgQuickConf([awgEp], 'no-such-node')).toBe('');
   });
 
   it('output is byte-deterministic for the same input', () => {
