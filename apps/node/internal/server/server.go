@@ -416,6 +416,9 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		// so the exact same logic also runs on boot (ensureFirewallFromStore),
 		// not only when a push lands.
 		s.ensureInboundFirewall(r.Context(), ib)
+		// And for the cascade inter-hop link port (buried in the xray cascade
+		// fragment, not a top-level inbound, so ensureInboundFirewall misses it).
+		s.ensureCascadeFirewall(r.Context(), ib)
 		applied++
 	}
 
@@ -453,6 +456,37 @@ func (s *Server) ensureInboundFirewall(ctx context.Context, ib dto.InboundDto) {
 	}
 }
 
+// ensureCascadeFirewall opens UFW for the inter-hop cascade link port carried in
+// an xray inbound's cascade fragment. The link-in inbound listens on a high port
+// (LINK_PORT_BASE+i) that install-time rules and ensureInboundFirewall don't know
+// about - it lives inside the cascade fragment, not as a top-level inbound - so
+// without this the previous hop's dial is silently dropped at the firewall and
+// the cascade never forwards (the manual `ufw allow from <entry-ip> ...` step).
+// Restricted to the peer hop's address (resolved to IP inside firewall.AllowFrom,
+// fail-open if it can't be pinned). No-op for plain inbounds and non-xray cores.
+func (s *Server) ensureCascadeFirewall(ctx context.Context, ib dto.InboundDto) {
+	if ib.Protocol != dto.ProtocolXray || len(ib.Config) == 0 {
+		return
+	}
+	var cfg struct {
+		Cascade *struct {
+			LinkIngressPort int      `json:"linkIngressPort"`
+			LinkAllowFrom   []string `json:"linkAllowFrom"`
+		} `json:"cascade"`
+	}
+	if err := json.Unmarshal(ib.Config, &cfg); err != nil {
+		return
+	}
+	if cfg.Cascade == nil || cfg.Cascade.LinkIngressPort == 0 {
+		return
+	}
+	// The vless link rides TCP; the ss2022 link cell is tcp+udp. Open both so
+	// either cell works - both stay restricted to the peer source.
+	for _, proto := range []string{"tcp", "udp"} {
+		firewall.AllowFrom(ctx, s.logger, cfg.Cascade.LinkIngressPort, proto, cfg.Cascade.LinkAllowFrom)
+	}
+}
+
 // ensureFirewallFromStore re-opens UFW for every persisted inbound port on boot.
 // The applyInbounds handler opens ports too, but only when a push lands; a node
 // that restarts (or whose ufw rule was lost to a reimage, or to a transient
@@ -475,6 +509,7 @@ func (s *Server) ensureFirewallFromStore(ctx context.Context) {
 	}
 	for _, ib := range inbounds {
 		s.ensureInboundFirewall(ctx, ib)
+		s.ensureCascadeFirewall(ctx, ib)
 	}
 	if len(inbounds) > 0 {
 		s.logger.Info("ensureFirewallFromStore: re-ensured firewall for persisted inbounds", "count", len(inbounds))

@@ -46,3 +46,20 @@ func TestParseUfwStatus_InactiveOrEmpty(t *testing.T) {
 		t.Errorf("empty output should yield no ports, got %+v", got)
 	}
 }
+
+// TestIsLiteralSource: a bare IP or CIDR is something `ufw allow from <x>`
+// accepts verbatim; a hostname (or junk) is not and must be resolved first.
+func TestIsLiteralSource(t *testing.T) {
+	literal := []string{"45.151.102.209", "10.0.0.0/8", "::1", "2001:db8::/32"}
+	notLiteral := []string{"aeza-rus-01.icepath.tech", "", "not an ip", "1.2.3"}
+	for _, s := range literal {
+		if !isLiteralSource(s) {
+			t.Errorf("isLiteralSource(%q) = false, want true", s)
+		}
+	}
+	for _, s := range notLiteral {
+		if isLiteralSource(s) {
+			t.Errorf("isLiteralSource(%q) = true, want false", s)
+		}
+	}
+}

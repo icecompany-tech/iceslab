@@ -127,6 +127,19 @@ describe('buildCascadeConfigs (vless->vless)', () => {
     expect(two.map((h) => h.role)).toEqual(['entry', 'exit']);
     expect((two[1]!.inbounds[0] as any).port).toBe(24000);
   });
+
+  it('exposes the link-in port + previous-hop address for the agent firewall', () => {
+    const [entry, transit, exit] = buildCascadeConfigs(hops, creds);
+    // entry has no link-in -> nothing for the agent to firewall
+    expect(entry!.linkIngressPort).toBeUndefined();
+    expect(entry!.linkAllowFrom).toBeUndefined();
+    // transit listens on the entry's link, restricted to the entry's host
+    expect(transit!.linkIngressPort).toBe(24000);
+    expect(transit!.linkAllowFrom).toEqual(['ru.example.com']);
+    // exit listens on the transit's link, restricted to the transit's host
+    expect(exit!.linkIngressPort).toBe(24001);
+    expect(exit!.linkAllowFrom).toEqual(['transit.example.com']);
+  });
 });
 
 describe('buildCascadeConfigs (shadowsocks link cell, C3b)', () => {

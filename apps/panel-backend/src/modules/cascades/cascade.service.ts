@@ -237,6 +237,10 @@ export async function getCascadeFragmentsForNode(
     inbounds: mine.inbounds,
     outbounds: mine.outbounds.filter((o) => o.tag !== 'direct'),
     routingRules: mine.routingRules,
+    // Carry the link port + peer address so the node-agent can open UFW for the
+    // inter-hop link itself (was a manual `ufw allow from <entry-ip>` step).
+    linkIngressPort: mine.linkIngressPort,
+    linkAllowFrom: mine.linkAllowFrom,
   };
 }
 

@@ -248,6 +248,14 @@ type CascadeFragments struct {
 	Inbounds     []json.RawMessage `json:"inbounds"`
 	Outbounds    []json.RawMessage `json:"outbounds"`
 	RoutingRules []json.RawMessage `json:"routingRules"`
+	// LinkIngressPort is the inter-hop link-IN port this node listens on (the
+	// previous hop dials it). The node-agent opens UFW for it; renderConfig
+	// ignores these two fields (the port already lives inside the Inbounds JSON).
+	// 0 on the entry hop (no link-in).
+	LinkIngressPort int `json:"linkIngressPort,omitempty"`
+	// LinkAllowFrom is the source IP/CIDR/host allowed to reach LinkIngressPort
+	// (the previous hop's address). Empty -> the agent opens the port to anywhere.
+	LinkAllowFrom []string `json:"linkAllowFrom,omitempty"`
 }
 
 // renderConfig produces a complete Xray config.json blob for the given users.

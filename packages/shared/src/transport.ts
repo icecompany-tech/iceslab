@@ -162,6 +162,15 @@ export interface XrayCascadeFragments {
    *  routes link-in → link-out; exit routes link-in → direct. Appended after
    *  the node's base block/DNS rules on the node side. */
   routingRules: unknown[];
+  /** Inter-hop link-IN port this node listens on (the previous hop dials it).
+   *  The node-agent opens UFW for it, restricted to linkAllowFrom, since this
+   *  high port is not a top-level inbound and install-time rules miss it.
+   *  Absent on the entry hop (no link-in). */
+  linkIngressPort?: number;
+  /** Source IP/CIDR/host allowed to reach linkIngressPort (the previous hop's
+   *  address). Hostnames are resolved agent-side; empty → port opens to anyone
+   *  (still UUID/PSK-gated). */
+  linkAllowFrom?: string[];
 }
 
 export interface HysteriaInboundCfg {

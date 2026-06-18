@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -78,6 +79,100 @@ func Allow(ctx context.Context, logger *slog.Logger, port int, proto string) {
 	allowedSpecs[spec] = struct{}{}
 	allowedMu.Unlock()
 	logger.Info("firewall.Allow: rule ensured", "spec", spec)
+}
+
+// isLiteralSource reports whether s is a bare IP or a CIDR block - something
+// `ufw allow from <s>` accepts verbatim (a hostname is not). Pure + unit-tested.
+func isLiteralSource(s string) bool {
+	if net.ParseIP(s) != nil {
+		return true
+	}
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
+}
+
+// AllowFrom opens an inbound UFW rule for (port, proto) restricted to the given
+// source IPs/CIDRs: `ufw allow from <src> to any port <port> proto <proto>`.
+// Used for the cascade inter-hop link port, which only the previous hop should
+// reach (not the world). Hostname sources (a node address is often an FQDN) are
+// resolved to IPs best-effort. If NO usable source remains the rule falls open
+// to anywhere - a closed link port silently breaks the cascade, and the link is
+// still UUID/PSK-gated, so fail-open is the safer default.
+func AllowFrom(ctx context.Context, logger *slog.Logger, port int, proto string, sources []string) {
+	if port <= 0 || port > 65535 {
+		logger.Warn("firewall.AllowFrom: invalid port, skipping", "port", port)
+		return
+	}
+	if proto != "tcp" && proto != "udp" {
+		logger.Warn("firewall.AllowFrom: invalid proto, skipping", "proto", proto)
+		return
+	}
+
+	seen := map[string]struct{}{}
+	valid := make([]string, 0, len(sources))
+	add := func(s string) {
+		if _, dup := seen[s]; dup {
+			return
+		}
+		seen[s] = struct{}{}
+		valid = append(valid, s)
+	}
+	for _, raw := range sources {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			continue
+		}
+		if isLiteralSource(s) {
+			add(s)
+			continue
+		}
+		// Hostname -> resolve best-effort so we can still pin the rule to an IP.
+		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		ips, err := net.DefaultResolver.LookupHost(rctx, s)
+		cancel()
+		if err != nil {
+			logger.Debug("firewall.AllowFrom: cannot resolve source host", "host", s, "err", err)
+			continue
+		}
+		for _, ip := range ips {
+			if net.ParseIP(ip) != nil {
+				add(ip)
+			}
+		}
+	}
+
+	if len(valid) == 0 {
+		logger.Info("firewall.AllowFrom: no usable source, opening port to anywhere",
+			"port", port, "proto", proto)
+		Allow(ctx, logger, port, proto)
+		return
+	}
+	if _, err := exec.LookPath("ufw"); err != nil {
+		logger.Debug("firewall.AllowFrom: ufw not installed, skipping", "port", port)
+		return
+	}
+	for _, src := range valid {
+		spec := fmt.Sprintf("from-%s-%d/%s", src, port, proto)
+		allowedMu.Lock()
+		_, cached := allowedSpecs[spec]
+		allowedMu.Unlock()
+		if cached {
+			continue
+		}
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		out, err := exec.CommandContext(cctx, "ufw", "allow", "from", src,
+			"to", "any", "port", strconv.Itoa(port), "proto", proto).CombinedOutput()
+		cancel()
+		if err != nil {
+			logger.Warn("firewall.AllowFrom: ufw allow failed",
+				"src", src, "port", port, "proto", proto, "err", err, "out", string(out))
+			continue
+		}
+		allowedMu.Lock()
+		allowedSpecs[spec] = struct{}{}
+		allowedMu.Unlock()
+		logger.Info("firewall.AllowFrom: rule ensured", "src", src, "port", port, "proto", proto)
+	}
 }
 
 // AllowedPort is a single ufw-allowed inbound rule (G4 probe-exposure).

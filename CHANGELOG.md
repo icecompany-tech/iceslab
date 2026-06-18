@@ -29,6 +29,13 @@ count that ignores deleted users, and a batch of form and stats polish.
   and never pushed to the hop nodes until some unrelated profile or binding edit
   fired a re-sync. The cascade service now re-pushes every node that is or was a
   hop (so disabled or removed hops also drop their fragments).
+- **The node-agent opens the cascade link port itself.** The inter-hop link
+  listens on a high port that install-time firewall rules do not know about, so
+  it previously had to be opened by hand (`ufw allow from <entry-ip> ...`) or the
+  forward was silently dropped. The panel now sends the link port and the peer
+  hop's address with the cascade fragment, and the agent opens UFW for it,
+  restricted to that peer (resolving a hostname to its IP, falling open only if
+  it cannot be pinned). Applied on push and re-ensured on boot.
 - **A node reporting one user twice no longer rolls back its stats.** When a node
   reported the same user on two protocols (for example VLESS plus Shadowsocks),
   the cumulative-snapshot upsert received a duplicate row and Postgres aborted the

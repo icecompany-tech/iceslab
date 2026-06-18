@@ -118,6 +118,11 @@ export interface HopConfig {
   inbounds: Record<string, unknown>[];
   outbounds: Record<string, unknown>[];
   routingRules: Record<string, unknown>[];
+  /** Link-IN port this hop listens on (transit/exit). The node-agent firewalls
+   *  it to the previous hop. Undefined on the entry hop (no link-in). */
+  linkIngressPort?: number;
+  /** Address(es) of the previous hop allowed to reach linkIngressPort. */
+  linkAllowFrom?: string[];
 }
 
 const LINK_IN_TAG = 'cascade-link-in';
@@ -208,6 +213,20 @@ export function buildCascadeConfigs(
       routingRules.push({ type: 'field', inboundTag: [LINK_IN_TAG], outboundTag: DIRECT_TAG });
     }
 
-    return { nodeId: hop.nodeId, position: hop.position, role, inbounds, outbounds, routingRules };
+    // The link-in (when present) is dialed by the PREVIOUS hop, so the agent
+    // firewalls this hop's link port to that hop's host.
+    const linkIngressPort = linkIn ? linkIn.port : undefined;
+    const linkAllowFrom = linkIn ? [sorted[i - 1]!.nodeHost] : undefined;
+
+    return {
+      nodeId: hop.nodeId,
+      position: hop.position,
+      role,
+      inbounds,
+      outbounds,
+      routingRules,
+      linkIngressPort,
+      linkAllowFrom,
+    };
   });
 }
