@@ -33,7 +33,7 @@ func TestN1_AddUser_LivePathCallsAdu(t *testing.T) {
 		},
 		RunCmd: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			calls = append(calls, append([]string{name}, args...))
-			return []byte("ok"), nil
+			return []byte("Added 1 user(s) in total. Removed 1 user(s) in total."), nil
 		},
 	}, logger)
 
@@ -83,7 +83,7 @@ func TestN1_RemoveUser_LivePathCallsRmu(t *testing.T) {
 		},
 		RunCmd: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			calls = append(calls, append([]string{name}, args...))
-			return []byte("ok"), nil
+			return []byte("Added 1 user(s) in total. Removed 1 user(s) in total."), nil
 		},
 	}, logger)
 	// Pre-seed a tracked user (directly; AddUser would also work but we don't
@@ -127,32 +127,60 @@ func TestN1_BuildAduInbound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAduInbound: %v", err)
 	}
+	// adu input must be a full config with a top-level "inbounds" array.
 	var doc struct {
-		Tag      string `json:"tag"`
-		Protocol string `json:"protocol"`
-		Settings struct {
-			Method   string `json:"method"`
-			Password string `json:"password"`
-			Network  string `json:"network"`
-			Clients  []struct {
+		Inbounds []struct {
+			Tag      string `json:"tag"`
+			Protocol string `json:"protocol"`
+			Settings struct {
+				Method   string `json:"method"`
 				Password string `json:"password"`
-				Email    string `json:"email"`
-			} `json:"clients"`
-		} `json:"settings"`
+				Network  string `json:"network"`
+				Clients  []struct {
+					Password string `json:"password"`
+					Email    string `json:"email"`
+				} `json:"clients"`
+			} `json:"settings"`
+		} `json:"inbounds"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, data)
 	}
-	if doc.Tag != "ss-in" || doc.Protocol != "shadowsocks" {
-		t.Errorf("tag/proto: got %q / %q", doc.Tag, doc.Protocol)
+	if len(doc.Inbounds) != 1 {
+		t.Fatalf("inbounds: got %d want 1\n%s", len(doc.Inbounds), data)
 	}
-	if doc.Settings.Method != "2022-blake3-aes-256-gcm" || doc.Settings.Password != "server-psk" {
-		t.Errorf("method/serverPSK: got %q / %q", doc.Settings.Method, doc.Settings.Password)
+	ib := doc.Inbounds[0]
+	if ib.Tag != "ss-in" || ib.Protocol != "shadowsocks" {
+		t.Errorf("tag/proto: got %q / %q", ib.Tag, ib.Protocol)
 	}
-	if len(doc.Settings.Clients) != 1 ||
-		doc.Settings.Clients[0].Password != "user-pw" ||
-		doc.Settings.Clients[0].Email != "alice" {
-		t.Errorf("client: got %+v", doc.Settings.Clients)
+	if ib.Settings.Method != "2022-blake3-aes-256-gcm" || ib.Settings.Password != "server-psk" {
+		t.Errorf("method/serverPSK: got %q / %q", ib.Settings.Method, ib.Settings.Password)
+	}
+	if len(ib.Settings.Clients) != 1 ||
+		ib.Settings.Clients[0].Password != "user-pw" ||
+		ib.Settings.Clients[0].Email != "alice" {
+		t.Errorf("client: got %+v", ib.Settings.Clients)
+	}
+}
+
+// TestLiveOpSucceeded guards the adu/rmu success check: xray exits 0 even when
+// it adds/removes nobody, so success is read from the "<verb> N user(s)" count.
+func TestLiveOpSucceeded(t *testing.T) {
+	cases := []struct {
+		out  string
+		verb string
+		want bool
+	}{
+		{"Added 1 user(s) in total.", "Added", true},
+		{"Added 0 user(s) in total.", "Added", false},
+		{"Removed 1 user(s) in total.", "Removed", true},
+		{"Removed 0 user(s) in total.", "Removed", false},
+		{"garbage", "Added", false},
+	}
+	for _, c := range cases {
+		if got := liveOpSucceeded([]byte(c.out), c.verb); got != c.want {
+			t.Errorf("liveOpSucceeded(%q, %q) = %v, want %v", c.out, c.verb, got, c.want)
+		}
 	}
 }
 

@@ -28,7 +28,7 @@ func TestN1_AddUser_LivePathCallsAdu(t *testing.T) {
 		Inbound:    validInbound(),
 		RunCmd: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			calls = append(calls, append([]string{name}, args...))
-			return []byte("ok"), nil
+			return []byte("Added 1 user(s) in total. Removed 1 user(s) in total."), nil
 		},
 	}, logger)
 
@@ -71,7 +71,7 @@ func TestN1_RemoveUser_LivePathCallsRmu(t *testing.T) {
 		Inbound:    validInbound(),
 		RunCmd: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			calls = append(calls, append([]string{name}, args...))
-			return []byte("ok"), nil
+			return []byte("Added 1 user(s) in total. Removed 1 user(s) in total."), nil
 		},
 	}, logger)
 	// Pre-seed a tracked user (directly; AddUser would also work but we don't
@@ -125,36 +125,43 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAduInbound: %v", err)
 	}
+	// adu input must be a full config with a top-level "inbounds" array.
 	var doc struct {
-		Tag      string `json:"tag"`
-		Protocol string `json:"protocol"`
-		Settings struct {
-			Clients []struct {
-				ID    string `json:"id"`
-				Email string `json:"email"`
-				Flow  string `json:"flow"`
-			} `json:"clients"`
-			Decryption string `json:"decryption"`
-		} `json:"settings"`
+		Inbounds []struct {
+			Tag      string `json:"tag"`
+			Protocol string `json:"protocol"`
+			Settings struct {
+				Clients []struct {
+					ID    string `json:"id"`
+					Email string `json:"email"`
+					Flow  string `json:"flow"`
+				} `json:"clients"`
+				Decryption string `json:"decryption"`
+			} `json:"settings"`
+		} `json:"inbounds"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, data)
 	}
-	if doc.Tag != "vless-in" {
-		t.Errorf("tag: got %q want vless-in", doc.Tag)
+	if len(doc.Inbounds) != 1 {
+		t.Fatalf("inbounds: got %d want 1\n%s", len(doc.Inbounds), data)
 	}
-	if doc.Protocol != "vless" {
-		t.Errorf("protocol: got %q want vless", doc.Protocol)
+	ib := doc.Inbounds[0]
+	if ib.Tag != "vless-in" {
+		t.Errorf("tag: got %q want vless-in", ib.Tag)
 	}
-	if len(doc.Settings.Clients) != 1 {
-		t.Fatalf("clients: got %d want 1", len(doc.Settings.Clients))
+	if ib.Protocol != "vless" {
+		t.Errorf("protocol: got %q want vless", ib.Protocol)
 	}
-	c := doc.Settings.Clients[0]
+	if len(ib.Settings.Clients) != 1 {
+		t.Fatalf("clients: got %d want 1", len(ib.Settings.Clients))
+	}
+	c := ib.Settings.Clients[0]
 	if c.ID != "uuid-a" || c.Email != "alice" || c.Flow != "xtls-rprx-vision" {
 		t.Errorf("client: got %+v", c)
 	}
-	if doc.Settings.Decryption != "none" {
-		t.Errorf("vless decryption: got %q want none", doc.Settings.Decryption)
+	if ib.Settings.Decryption != "none" {
+		t.Errorf("vless decryption: got %q want none", ib.Settings.Decryption)
 	}
 }
 
@@ -168,26 +175,87 @@ func TestN1_BuildAduInbound_Trojan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAduInbound: %v", err)
 	}
+	// adu input must be a full config with a top-level "inbounds" array.
 	var doc struct {
-		Tag      string `json:"tag"`
-		Protocol string `json:"protocol"`
-		Settings struct {
-			Clients []struct {
-				Password string `json:"password"`
-				Email    string `json:"email"`
-			} `json:"clients"`
-		} `json:"settings"`
+		Inbounds []struct {
+			Tag      string `json:"tag"`
+			Protocol string `json:"protocol"`
+			Settings struct {
+				Clients []struct {
+					Password string `json:"password"`
+					Email    string `json:"email"`
+				} `json:"clients"`
+			} `json:"settings"`
+		} `json:"inbounds"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("unmarshal: %v\n%s", err, data)
 	}
-	if doc.Protocol != "trojan" || doc.Tag != "trojan-in" {
-		t.Errorf("tag/proto: got %q / %q", doc.Tag, doc.Protocol)
+	if len(doc.Inbounds) != 1 {
+		t.Fatalf("inbounds: got %d want 1\n%s", len(doc.Inbounds), data)
 	}
-	if len(doc.Settings.Clients) != 1 ||
-		doc.Settings.Clients[0].Password != "secret-pass" ||
-		doc.Settings.Clients[0].Email != "bob" {
-		t.Errorf("trojan client: got %+v", doc.Settings.Clients)
+	ib := doc.Inbounds[0]
+	if ib.Protocol != "trojan" || ib.Tag != "trojan-in" {
+		t.Errorf("tag/proto: got %q / %q", ib.Tag, ib.Protocol)
+	}
+	if len(ib.Settings.Clients) != 1 ||
+		ib.Settings.Clients[0].Password != "secret-pass" ||
+		ib.Settings.Clients[0].Email != "bob" {
+		t.Errorf("trojan client: got %+v", ib.Settings.Clients)
+	}
+}
+
+// TestLiveOpSucceeded guards the adu/rmu success check: xray exits 0 even when
+// it adds/removes nobody (bad payload or a per-user gRPC error printed then
+// skipped), so success is read from the "<verb> N user(s)" count, not the exit
+// code. N=0 must read as failure so the caller falls back to a restart.
+func TestLiveOpSucceeded(t *testing.T) {
+	cases := []struct {
+		out  string
+		verb string
+		want bool
+	}{
+		{"Added 1 user(s) in total.", "Added", true},
+		{"result: ok\nAdded 1 user(s) in total.", "Added", true},
+		{"Added 12 user(s) in total.", "Added", true},
+		{"Added 0 user(s) in total.", "Added", false},                       // accepted nothing
+		{"User alice already exists.\nAdded 0 user(s) in total.", "Added", false}, // per-user error, exit 0
+		{"Removed 1 user(s) in total.", "Removed", true},
+		{"Removed 0 user(s) in total.", "Removed", false},
+		{"garbage", "Added", false},
+		{"", "Added", false},
+	}
+	for _, c := range cases {
+		if got := liveOpSucceeded([]byte(c.out), c.verb); got != c.want {
+			t.Errorf("liveOpSucceeded(%q, %q) = %v, want %v", c.out, c.verb, got, c.want)
+		}
+	}
+}
+
+// TestN1_LiveAdd_FallsBackWhenAduAddsNobody: when `xray api adu` exits 0 but the
+// summary says it added nobody, liveUpdateUser must return false so AddUser
+// falls back to a restart that actually applies the user (the silent-no-op bug).
+func TestN1_LiveAdd_FallsBackWhenAduAddsNobody(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a := New(Config{
+		BinaryPath: "/usr/bin/xray",
+		ConfigPath: filepath.Join(dir, "config.json"),
+		Inbound:    validInbound(),
+		RunCmd: func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+			return []byte("User alice already exists.\nAdded 0 user(s) in total."), nil
+		},
+	}, logger)
+	a.proc = subprocess.New(subprocess.Config{
+		Name: "xray-stub", Binary: "/bin/sleep", Args: []string{"30"}, Logger: logger,
+	})
+	if err := a.proc.Start(context.Background()); err != nil {
+		t.Fatalf("start stub: %v", err)
+	}
+	defer func() { _ = a.proc.Stop(context.Background()) }()
+
+	if a.liveUpdateUser(context.Background(), liveAdd, xrayClient{ID: "uuid-a", Email: "alice"}) {
+		t.Errorf("liveUpdateUser must return false when adu added 0 users (force restart fallback)")
 	}
 }
 

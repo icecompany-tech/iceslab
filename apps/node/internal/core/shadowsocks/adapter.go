@@ -161,16 +161,23 @@ const (
 	liveRemove
 )
 
-// buildAduInbound renders the single-inbound JSON `xray api adu` consumes for a
-// Shadowsocks inbound: the inbound tag + protocol + a settings block carrying
-// just the one user. Reuses buildUserInboundSettings so the client shape
-// (password + email) can't drift from what the full config emits.
+// buildAduInbound renders the JSON `xray api adu` consumes for a Shadowsocks
+// inbound. It MUST be a full config with a top-level "inbounds" array: adu reads
+// conf.InboundConfigs (the "inbounds" key), so a bare {tag,protocol,settings}
+// object decodes to ZERO inbounds and xray adds nobody yet exits 0 (silent
+// no-op). The single inbound carries tag + protocol + a settings block with just
+// the one user; buildUserInboundSettings keeps the client shape (password +
+// email) identical to the full config.
 func buildAduInbound(inbound InboundConfig, target ssClient) ([]byte, error) {
 	c := inbound.withDefaults()
 	return json.Marshal(map[string]any{
-		"tag":      c.Tag,
-		"protocol": "shadowsocks",
-		"settings": buildUserInboundSettings(c, []ssClient{target}),
+		"inbounds": []any{
+			map[string]any{
+				"tag":      c.Tag,
+				"protocol": "shadowsocks",
+				"settings": buildUserInboundSettings(c, []ssClient{target}),
+			},
+		},
 	})
 }
 
@@ -228,17 +235,33 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target ssClient
 		if err := tmp.Close(); err != nil {
 			return false
 		}
-		if out, err := run(cctx, binPath, "api", "adu", server, tmpPath); err != nil {
+		out, err := runLiveOp(cctx, run, binPath, "api", "adu", server, tmpPath)
+		if err != nil {
 			a.logger.Warn("ss api adu failed; falling back to restart",
 				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		// adu exits 0 even when it adds nobody (bad payload, per-user gRPC error,
+		// or a single-user SS inbound that isn't a live UserManager). Trust the
+		// "Added N user(s)" count, not the exit code, so a silent no-op still
+		// falls back to the restart that actually applies the user.
+		if !liveOpSucceeded(out, "Added") {
+			a.logger.Warn("ss api adu added no user (exit 0); falling back to restart",
+				"email", target.Email, "out", strings.TrimSpace(string(out)))
 			return false
 		}
 		a.logger.Info("shadowsocks user added live (no restart)", "email", target.Email)
 		return true
 	case liveRemove:
-		if out, err := run(cctx, binPath, "api", "rmu", server, "-tag="+cfg.Tag, target.Email); err != nil {
+		out, err := runLiveOp(cctx, run, binPath, "api", "rmu", server, "-tag="+cfg.Tag, target.Email)
+		if err != nil {
 			a.logger.Warn("ss api rmu failed; falling back to restart",
 				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		if !liveOpSucceeded(out, "Removed") {
+			a.logger.Warn("ss api rmu removed no user (exit 0); falling back to restart",
+				"email", target.Email, "out", strings.TrimSpace(string(out)))
 			return false
 		}
 		a.logger.Info("shadowsocks user removed live (no restart)", "email", target.Email)
@@ -246,6 +269,47 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target ssClient
 	default:
 		return false
 	}
+}
+
+// runLiveOp runs an `xray api` subcommand, retrying briefly on a process-level
+// failure. Right after a restart xray is up (proc.Running()) but may not yet be
+// listening on the loopback api port, so the first adu/rmu gets connection-
+// refused; a short bounded retry rides out that window instead of falling back
+// to a connection-dropping restart. The caller's context caps total time.
+func runLiveOp(ctx context.Context, run RunCmdFunc, binary string, args ...string) ([]byte, error) {
+	var out []byte
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		out, err = run(ctx, binary, args...)
+		if err == nil {
+			return out, nil
+		}
+		select {
+		case <-ctx.Done():
+			return out, err
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return out, err
+}
+
+// liveOpSucceeded parses xray's "<verb> N user(s) in total." summary line and
+// reports whether N >= 1. `xray api adu`/`rmu` print per-user errors but still
+// exit 0, so the exit code is not a success signal; the count is. verb is
+// "Added" (adu) or "Removed" (rmu).
+func liveOpSucceeded(out []byte, verb string) bool {
+	s := string(out)
+	idx := strings.Index(s, verb+" ")
+	if idx < 0 {
+		return false
+	}
+	rest := s[idx+len(verb)+1:]
+	n, seen := 0, false
+	for i := 0; i < len(rest) && rest[i] >= '0' && rest[i] <= '9'; i++ {
+		n = n*10 + int(rest[i]-'0')
+		seen = true
+	}
+	return seen && n >= 1
 }
 
 // inboundCfgWire mirrors `ShadowsocksInboundCfg` in

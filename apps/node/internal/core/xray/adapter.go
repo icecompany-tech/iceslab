@@ -194,17 +194,25 @@ const (
 	liveRemove
 )
 
-// buildAduInbound renders the single-inbound JSON that `xray api adu` consumes:
-// the inbound tag + protocol + a settings block carrying just the one user.
-// Reuses buildUserInboundSettings so the shape can't drift from what the full
-// config emits (vless -> clients[{id,email,flow}], trojan -> clients[{password,
-// email}], etc).
+// buildAduInbound renders the JSON that `xray api adu` consumes. It MUST be a
+// full config with a top-level "inbounds" array: adu parses the file via
+// serial.DecodeJSONConfig and reads conf.InboundConfigs (the "inbounds" key). A
+// bare {tag,protocol,settings} object decodes to ZERO inbounds, so xray adds
+// nobody yet exits 0 (prints "Added 0 user(s)"), which silently no-ops the live
+// add. The single inbound carries the tag + protocol + a settings block with
+// just the one user; buildUserInboundSettings keeps the client shape identical
+// to the full config (vless -> clients[{id,email,flow}], trojan -> clients[
+// {password,email}], etc).
 func buildAduInbound(inbound InboundConfig, target xrayClient) ([]byte, error) {
 	c := inbound.withDefaults()
 	return json.Marshal(map[string]any{
-		"tag":      c.Tag,
-		"protocol": userInboundProtocol(c),
-		"settings": buildUserInboundSettings(c, []xrayClient{target}),
+		"inbounds": []any{
+			map[string]any{
+				"tag":      c.Tag,
+				"protocol": userInboundProtocol(c),
+				"settings": buildUserInboundSettings(c, []xrayClient{target}),
+			},
+		},
 	})
 }
 
@@ -269,17 +277,34 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 		if err := tmp.Close(); err != nil {
 			return false
 		}
-		if out, err := run(cctx, binPath, "api", "adu", server, tmpPath); err != nil {
+		out, err := runLiveOp(cctx, run, binPath, "api", "adu", server, tmpPath)
+		if err != nil {
 			a.logger.Warn("xray api adu failed; falling back to restart",
 				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		// adu exits 0 even when it adds nobody (bad payload, per-user gRPC error).
+		// Trust the "Added N user(s)" count, not the exit code, or a silent no-op
+		// would skip the restart fallback and the user would never go live.
+		if !liveOpSucceeded(out, "Added") {
+			a.logger.Warn("xray api adu added no user (exit 0); falling back to restart",
+				"email", target.Email, "out", strings.TrimSpace(string(out)))
 			return false
 		}
 		a.logger.Info("xray user added live (no restart)", "email", target.Email)
 		return true
 	case liveRemove:
-		if out, err := run(cctx, binPath, "api", "rmu", server, "-tag="+cfg.Tag, target.Email); err != nil {
+		out, err := runLiveOp(cctx, run, binPath, "api", "rmu", server, "-tag="+cfg.Tag, target.Email)
+		if err != nil {
 			a.logger.Warn("xray api rmu failed; falling back to restart",
 				"email", target.Email, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+		// Same as adu: rmu exits 0 even on a per-user failure (e.g. the inbound
+		// isn't a live UserManager). A restart actually applies the removal.
+		if !liveOpSucceeded(out, "Removed") {
+			a.logger.Warn("xray api rmu removed no user (exit 0); falling back to restart",
+				"email", target.Email, "out", strings.TrimSpace(string(out)))
 			return false
 		}
 		a.logger.Info("xray user removed live (no restart)", "email", target.Email)
@@ -287,6 +312,47 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	default:
 		return false
 	}
+}
+
+// runLiveOp runs an `xray api` subcommand, retrying briefly on a process-level
+// failure. Right after a restart xray is up (proc.Running()) but may not yet be
+// listening on the loopback api port, so the first adu/rmu gets connection-
+// refused; a short bounded retry rides out that window instead of falling back
+// to a connection-dropping restart. The caller's context caps total time.
+func runLiveOp(ctx context.Context, run RunCmdFunc, binary string, args ...string) ([]byte, error) {
+	var out []byte
+	var err error
+	for attempt := 0; attempt < 6; attempt++ {
+		out, err = run(ctx, binary, args...)
+		if err == nil {
+			return out, nil
+		}
+		select {
+		case <-ctx.Done():
+			return out, err
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return out, err
+}
+
+// liveOpSucceeded parses xray's "<verb> N user(s) in total." summary line and
+// reports whether N >= 1. `xray api adu`/`rmu` print per-user errors but still
+// exit 0, so the process exit code is not a success signal; the count is. verb
+// is "Added" (adu) or "Removed" (rmu).
+func liveOpSucceeded(out []byte, verb string) bool {
+	s := string(out)
+	idx := strings.Index(s, verb+" ")
+	if idx < 0 {
+		return false
+	}
+	rest := s[idx+len(verb)+1:]
+	n, seen := 0, false
+	for i := 0; i < len(rest) && rest[i] >= '0' && rest[i] <= '9'; i++ {
+		n = n*10 + int(rest[i]-'0')
+		seen = true
+	}
+	return seen && n >= 1
 }
 
 // GetStats reports two things from xray's StatsService, read non-destructively
