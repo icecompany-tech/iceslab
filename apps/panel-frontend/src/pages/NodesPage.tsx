@@ -61,6 +61,7 @@ const CYAN = '#7DD3FC';
 const MOSS = '#A7D8B9';
 const AMBER = '#F5B14C';
 const RED = '#E07A5F';
+const VIOLET = '#A78BFA';
 
 const MONO = { fontFamily: "'Geist Mono', monospace" };
 
@@ -406,24 +407,36 @@ export function NodesPage() {
       {nodeCascadeMap.size > 0 && (
         <Group gap="xs" wrap="wrap">
           {[
-            { f: 'all' as const, label: t('nodes.filter.all') },
-            { f: 'standalone' as const, label: t('nodes.filter.standalone') },
-            { f: 'cascade' as const, label: t('nodes.filter.cascade') },
-          ].map(({ f, label }) => (
-            <Badge
-              key={f}
-              component="button"
-              type="button"
-              variant={membership === f ? 'filled' : 'light'}
-              color={f === 'cascade' ? 'violet' : 'gray'}
-              size="lg"
-              aria-pressed={membership === f}
-              style={{ cursor: 'pointer', textTransform: 'none' }}
-              onClick={() => setMembership(f)}
-            >
-              {label}
-            </Badge>
-          ))}
+            { f: 'all' as const, label: t('nodes.filter.all'), accent: MIST },
+            { f: 'standalone' as const, label: t('nodes.filter.standalone'), accent: MIST },
+            { f: 'cascade' as const, label: t('nodes.filter.cascade'), accent: VIOLET },
+          ].map(({ f, label, accent }) => {
+            const on = membership === f;
+            return (
+              <Badge
+                key={f}
+                component="button"
+                type="button"
+                size="lg"
+                aria-pressed={on}
+                // Selected = subtle tint + accent border + bright text, NOT a
+                // bright filled block (which "glows" on the dark page and sinks
+                // the label). The accent (violet for cascade) lives in the
+                // border/tint, the text stays readable.
+                style={{
+                  cursor: 'pointer',
+                  textTransform: 'none',
+                  fontWeight: on ? 600 : 500,
+                  backgroundColor: on ? `${accent}1F` : 'transparent',
+                  color: on ? SNOW : MIST,
+                  border: `1px solid ${on ? accent : HAIRLINE}`,
+                }}
+                onClick={() => setMembership(f)}
+              >
+                {label}
+              </Badge>
+            );
+          })}
         </Group>
       )}
 
