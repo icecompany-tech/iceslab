@@ -82,16 +82,22 @@ describe('buildAmneziaVpnLink', () => {
     expect(inner.psk_key).toBe(''); // no preshared key by default
   });
 
-  it('emits the I1-I5 mimicry params when set and empty strings when not', () => {
+  it('emits I1-I5 only when set, OMITTING empty slots (empty strings break the rebuilt [Interface])', () => {
     const withI = buildAmneziaVpnLink({ ...baseOpts, i1: 'aabb', i3: 'ccdd' });
     const env = decodeVpnKey(withI) as { containers: Array<{ awg: Record<string, unknown> }> };
     const awg = env.containers[0]!.awg;
     expect(awg.I1).toBe('aabb');
-    expect(awg.I2).toBe(''); // unset slot -> empty (always present)
     expect(awg.I3).toBe('ccdd');
+    // Unset slots are ABSENT, not ''. On connect the AmneziaVPN daemon rebuilds
+    // the [Interface] from these structured keys and treats '' as a present
+    // (blank) value, injecting `I2 = ` lines that break the AmneziaWG handshake.
+    expect('I2' in awg).toBe(false);
+    expect('I4' in awg).toBe(false);
+    expect('I5' in awg).toBe(false);
     const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
     expect(inner.I1).toBe('aabb');
-    // the inline .conf only carries the non-empty I-lines (empty ones break import)
+    expect('I2' in inner).toBe(false);
+    // the inline .conf likewise carries only the non-empty I-lines
     expect(inner.config as string).toContain('I1 = aabb');
     expect(inner.config as string).not.toContain('I2 =');
   });
