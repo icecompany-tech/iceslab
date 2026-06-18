@@ -1502,7 +1502,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
               <Button
                 type="submit"
                 loading={loading}
-                style={{ backgroundColor: '#7DD3FC', color: '#08101A', fontWeight: 500 }}
+                style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
               >
                 {isEdit ? t('profiles.form.submitEdit') : t('profiles.form.submitCreate')}
               </Button>

@@ -408,7 +408,7 @@ export function SquadFormModal({
                   type="submit"
                   loading={loading}
                   leftSection={<IconCheck size={16} />}
-                  style={{ backgroundColor: '#7DD3FC', color: '#08101A', fontWeight: 500 }}
+                  style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
                 >
                   {isEdit ? t('squads.form.submitEdit') : t('squads.form.submitCreate')}
                 </Button>

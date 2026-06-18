@@ -1,7 +1,11 @@
 import { Button, type ButtonProps } from '@mantine/core';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
-const CYAN = '#7DD3FC';
+// Calmed primary cyan (palette shade 6), matching the --mantine-color-cyan-filled
+// override in index.css. The neon #7DD3FC was eye-searing as a solid CTA fill on
+// the dark surface; the deeper tone still reads as the primary action and keeps
+// dark GROUND text legible (~5.5:1).
+const CYAN = '#2A93D1';
 const GROUND = '#08101A';
 
 interface Props extends Omit<ButtonProps, 'children'>, Omit<ComponentPropsWithoutRef<'button'>, keyof ButtonProps | 'children'> {

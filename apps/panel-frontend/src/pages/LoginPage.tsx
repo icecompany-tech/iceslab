@@ -347,7 +347,10 @@ export function LoginPage() {
                   loading={submitMutation.isPending}
                   fullWidth
                   style={{
-                    backgroundColor: CYAN,
+                    // calmed primary cyan (matches the --mantine-color-cyan-filled
+                    // override + PrimaryButton); the neon CYAN stays only on the
+                    // small accent dots above.
+                    backgroundColor: '#2A93D1',
                     color: GROUND,
                     fontWeight: 500,
                     height: 48,

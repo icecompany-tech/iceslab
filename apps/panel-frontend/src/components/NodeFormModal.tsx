@@ -427,7 +427,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
                 </Button>
                 <Button
                   onClick={nextStep}
-                  style={{ backgroundColor: '#7DD3FC', color: '#08101A', fontWeight: 500 }}
+                  style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
                 >
                   {t('modal.stepNext')}
                 </Button>
@@ -499,7 +499,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
                   onClick={handleFinalSubmit}
                   loading={loading}
                   leftSection={<IconServer2 size={14} />}
-                  style={{ backgroundColor: '#7DD3FC', color: '#08101A', fontWeight: 500 }}
+                  style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
                 >
                   {isEdit
                     ? t('nodes.form.submitEdit')

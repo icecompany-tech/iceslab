@@ -506,7 +506,7 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                 type="submit"
                 loading={loading}
                 leftSection={<IconCheck size={16} />}
-                style={{ backgroundColor: '#7DD3FC', color: '#08101A', fontWeight: 500 }}
+                style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
               >
                 {isEdit ? t('users.form.submitEdit') : t('users.form.submitCreate')}
               </Button>

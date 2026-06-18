@@ -21,6 +21,27 @@ body {
   --mantine-color-dimmed: #7A8BA3;
 }
 
+/* Calm the primary-cyan FILL on controls. The theme's primary is a very light
+   neon cyan (#7DD3FC); as a solid fill it "glows" / is eye-searing on the dark
+   surface (switch ON, checkbox/radio checked, stepper, filled buttons). Drop the
+   filled tone to a deeper, calmer cyan (palette shade 6/7) - still clearly "on",
+   just not neon. Both the primary alias and the cyan-specific filled var are
+   overridden because Switch/Checkbox/Radio read --mantine-primary-color-filled
+   while filled Buttons read --mantine-color-cyan-filled. Text/icon accents are
+   untouched: they use the lighter shade vars, not *-filled. Bonus: the white
+   checkbox checkmark reads better on the deeper fill than on the neon shade.
+
+   Selector is html:root (specificity 0,1,1) not plain :root (0,1,0): these are
+   theme-derived color vars that MantineProvider injects at RUNTIME under :root,
+   appended after this stylesheet, so a plain :root override could lose on source
+   order. The extra type selector wins regardless of injection order. */
+html:root {
+  --mantine-primary-color-filled: #2A93D1;
+  --mantine-primary-color-filled-hover: #1F75A6;
+  --mantine-color-cyan-filled: #2A93D1;
+  --mantine-color-cyan-filled-hover: #1F75A6;
+}
+
 /* De-glow selectable Chips (xray protocol / transport / security pickers).
    Mantine fills the checked chip with the resolved accent, which "glows" on the
    dark surface and sinks the label contrast. Render selection the FilterChip
