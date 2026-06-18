@@ -467,7 +467,7 @@ function ProtocolGroup({
           {protocolLabelCompact(protocol)}
         </Text>
         <Badge
-          variant={allSelected ? 'filled' : 'light'}
+          variant="light"
           color={allSelected ? 'teal' : 'gray'}
           size="sm"
         >

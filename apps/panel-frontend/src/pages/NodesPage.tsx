@@ -52,6 +52,7 @@ import { countryFlag } from '../lib/countries';
 import { parseNodeAgentPort, pickFreeQuickDeployPort } from '../lib/ports';
 import { PageHero } from '../components/PageHero';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { FilterChip } from '../components/FilterChip';
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
@@ -410,33 +411,16 @@ export function NodesPage() {
             { f: 'all' as const, label: t('nodes.filter.all'), accent: MIST },
             { f: 'standalone' as const, label: t('nodes.filter.standalone'), accent: MIST },
             { f: 'cascade' as const, label: t('nodes.filter.cascade'), accent: VIOLET },
-          ].map(({ f, label, accent }) => {
-            const on = membership === f;
-            return (
-              <Badge
-                key={f}
-                component="button"
-                type="button"
-                size="lg"
-                aria-pressed={on}
-                // Selected = subtle tint + accent border + bright text, NOT a
-                // bright filled block (which "glows" on the dark page and sinks
-                // the label). The accent (violet for cascade) lives in the
-                // border/tint, the text stays readable.
-                style={{
-                  cursor: 'pointer',
-                  textTransform: 'none',
-                  fontWeight: on ? 600 : 500,
-                  backgroundColor: on ? `${accent}1F` : 'transparent',
-                  color: on ? SNOW : MIST,
-                  border: `1px solid ${on ? accent : HAIRLINE}`,
-                }}
-                onClick={() => setMembership(f)}
-              >
-                {label}
-              </Badge>
-            );
-          })}
+          ].map(({ f, label, accent }) => (
+            <FilterChip
+              key={f}
+              active={membership === f}
+              accent={accent}
+              onClick={() => setMembership(f)}
+            >
+              {label}
+            </FilterChip>
+          ))}
         </Group>
       )}
 
@@ -444,32 +428,22 @@ export function NodesPage() {
           any regions yet (no clutter on a fresh panel). */}
       {(regionsQuery.data?.regions ?? []).length > 0 && (
         <Group gap="xs" wrap="wrap">
-          <Badge
-            component="button"
-            type="button"
-            variant={regionFilter === 'all' ? 'filled' : 'light'}
-            color="blue"
-            size="lg"
-            aria-pressed={regionFilter === 'all'}
-            style={{ cursor: 'pointer', textTransform: 'none' }}
+          <FilterChip
+            active={regionFilter === 'all'}
+            accent={MIST}
             onClick={() => setRegionFilter('all')}
           >
             {t('nodes.regionFilterAll')}
-          </Badge>
+          </FilterChip>
           {(regionsQuery.data?.regions ?? []).map((r) => (
-            <Badge
+            <FilterChip
               key={r.id}
-              component="button"
-              type="button"
-              variant={regionFilter === r.id ? 'filled' : 'light'}
-              color="cyan"
-              size="lg"
-              aria-pressed={regionFilter === r.id}
-              style={{ cursor: 'pointer', textTransform: 'none' }}
+              active={regionFilter === r.id}
+              accent={CYAN}
               onClick={() => setRegionFilter(r.id)}
             >
               {r.code} · {r.name}
-            </Badge>
+            </FilterChip>
           ))}
         </Group>
       )}

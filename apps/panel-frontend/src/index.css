@@ -21,6 +21,17 @@ body {
   --mantine-color-dimmed: #7A8BA3;
 }
 
+/* De-glow selectable Chips (xray protocol / transport / security pickers).
+   Mantine fills the checked chip with the resolved accent, which "glows" on the
+   dark surface and sinks the label contrast. Render selection the FilterChip
+   way instead: a subtle accent tint + accent border + bright label (the check
+   icon keeps the accent). Unlayered so it wins over Mantine's @layer styles. */
+.mantine-Chip-label[data-checked]:not([data-disabled]) {
+  background-color: rgba(125, 211, 252, 0.16);
+  color: #C8D4E3;
+  border: 1px solid #7DD3FC;
+}
+
 /* Hairline scrollbar */
 ::-webkit-scrollbar {
   width: 10px;

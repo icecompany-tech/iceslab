@@ -50,7 +50,6 @@ import { PrimaryButton } from '../components/PrimaryButton';
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
-const GROUND = '#08101A';
 const SNOW = '#C8D4E3';
 const MIST = '#7A8BA3';
 const CYAN = '#7DD3FC';
@@ -324,13 +323,18 @@ function ProtocolFilterChip({
   return (
     <UnstyledButton
       onClick={onClick}
+      aria-pressed={active}
       style={{
         padding: '6px 12px',
         borderRadius: 999,
         fontSize: 12,
-        fontWeight: 500,
-        backgroundColor: active ? accent : `${accent}1A`,
-        color: active ? GROUND : accent,
+        // Selected = subtle accent tint + accent border + bright label, NOT a
+        // bright accent fill (which "glows" on the dark page and sinks the
+        // text). The per-protocol accent stays in the border/tint; inactive
+        // chips keep their faint color identity.
+        fontWeight: active ? 600 : 500,
+        backgroundColor: active ? `${accent}29` : `${accent}14`,
+        color: active ? SNOW : accent,
         border: `1px solid ${active ? accent : `${accent}33`}`,
         transition: 'all 120ms',
       }}
