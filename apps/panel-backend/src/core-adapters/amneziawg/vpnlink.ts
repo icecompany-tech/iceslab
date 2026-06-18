@@ -72,7 +72,14 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   const allowed = opts.clientAllowedIps?.length ? opts.clientAllowedIps : ['0.0.0.0/0', '::/0'];
 
   // Obfuscation params as strings (the app serializes them as JSON strings),
-  // present both at the awg-server level and inside last_config.
+  // present both at the awg-server level and inside last_config. CRITICAL: on
+  // connect the AmneziaVPN daemon REBUILDS the [Interface] from these structured
+  // keys (it ignores the embedded .conf text), and it treats an empty string as
+  // "present" - so emitting I1="".."I5="" injects blank `I1 = ` lines that break
+  // the AmneziaWG handshake. THIS is why the key imported but would not connect
+  // while the raw .conf (which omits empty I-fields) did. Mirror buildWgQuickConf:
+  // emit I-fields ONLY when non-empty. S1-S4 stay (the working .conf carries
+  // S3/S4 even at 0).
   const obf: Record<string, string> = {
     Jc: String(opts.jc),
     Jmin: String(opts.jmin),
@@ -85,12 +92,10 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     H2: String(opts.h2),
     H3: String(opts.h3),
     H4: String(opts.h4),
-    I1: opts.i1 ?? '',
-    I2: opts.i2 ?? '',
-    I3: opts.i3 ?? '',
-    I4: opts.i4 ?? '',
-    I5: opts.i5 ?? '',
   };
+  [opts.i1, opts.i2, opts.i3, opts.i4, opts.i5].forEach((v, idx) => {
+    if (v && v.length > 0) obf[`I${idx + 1}`] = v;
+  });
 
   // Inner client config. `config` (the .conf text) is required; an empty one is
   // the schema half of "error 900". last_config is DOUBLE-encoded (a stringified
