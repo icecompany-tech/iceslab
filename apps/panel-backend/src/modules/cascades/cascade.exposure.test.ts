@@ -14,7 +14,13 @@ let seq = 0;
 async function node(name: string): Promise<string> {
   seq += 1;
   const n = await prisma.node.create({
-    data: { name: `${name}-${seq}`, address: `${name}-${seq}.test:1337` },
+    // heartbeatSecret is required (Bytes, no default - normally minted by the
+    // node service); any 32 bytes is fine, this test never reads it.
+    data: {
+      name: `${name}-${seq}`,
+      address: `${name}-${seq}.test:1337`,
+      heartbeatSecret: Buffer.alloc(32),
+    },
   });
   return n.id;
 }
