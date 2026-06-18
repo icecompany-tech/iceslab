@@ -32,10 +32,12 @@ export interface SubscriptionPageData {
    *  wg-quick config text for scanning into AmneziaVPN directly. Either may
    *  be omitted (e.g. no AWG endpoint, or QR generation failed). */
   subUrlQrSvg?: string;
-  awgQrSvg?: string;
-  /** AmneziaVPN-app "vpn://" key QR (distinct from awgQrSvg, the AmneziaWG-app
-   *  .conf QR). Omitted when there's no AWG endpoint. */
-  awgVpnQrSvg?: string;
+  /** One entry per AmneziaWG node, each with its two QRs: the AmneziaVPN
+   *  "vpn://" key (for the AmneziaVPN app) and the native .conf (for the
+   *  AmneziaWG app). wg-quick / vpn:// are single-tunnel-per-key, so a user with
+   *  several AWG servers gets one labelled QR pair per server instead of just
+   *  the first node's. */
+  awgNodes?: Array<{ nodeName: string; confQrSvg?: string; vpnQrSvg?: string }>;
 }
 
 function esc(s: string): string {
@@ -78,8 +80,6 @@ interface Labels {
   support: string;
   scanTitle: string;
   scanSubHint: string;
-  scanAwgHint: string;
-  scanAmneziaVpnHint: string;
   statusValues: Record<string, string>;
 }
 
@@ -103,10 +103,6 @@ const L: Record<'ru' | 'en', Labels> = {
     support: 'Support',
     scanTitle: 'Scan to add',
     scanSubHint: 'Subscription: scan with Hiddify, v2rayNG, Streisand, etc.',
-    // Native AmneziaWG .conf QR. Read by the AmneziaWG app (and wg-quick aware
-    // clients), NOT the AmneziaVPN app, which only scans its own vpn:// keys.
-    scanAwgHint: 'AmneziaWG: scan with the AmneziaWG app.',
-    scanAmneziaVpnHint: 'AmneziaVPN: scan with the AmneziaVPN app.',
     statusValues: {
       active: 'active',
       disabled: 'disabled',
@@ -133,10 +129,6 @@ const L: Record<'ru' | 'en', Labels> = {
     support: 'Поддержка',
     scanTitle: 'Сканировать',
     scanSubHint: 'Подписка: сканируйте в Hiddify, v2rayNG, Streisand и т.п.',
-    // Нативный AmneziaWG .conf QR. Читает приложение AmneziaWG (и wg-quick
-    // клиенты), но НЕ приложение AmneziaVPN (оно сканирует только свои vpn://).
-    scanAwgHint: 'AmneziaWG: сканируйте в приложении AmneziaWG.',
-    scanAmneziaVpnHint: 'AmneziaVPN: сканируйте в приложении AmneziaVPN.',
     statusValues: {
       active: 'активна',
       disabled: 'отключена',
@@ -180,7 +172,8 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   const statusColor =
     u.status === 'active' ? '#A7D8B9' : u.status === 'limited' ? '#F5B14C' : '#E07A5F';
 
-  const hasAwg = data.protocols.includes('amneziawg');
+  const awgNodes = data.awgNodes ?? [];
+  const multiAwg = awgNodes.length > 1;
   const hasXray = data.protocols.includes('xray');
   const hasSs = data.protocols.includes('shadowsocks');
   const proxyDownloads: { label: string; fmt: string }[] = [
@@ -210,10 +203,14 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     )
     .join('');
 
+  // One .conf download per AWG node, pinned with &node= so a multi-AWG user can
+  // grab each server's tunnel (the node name is shown only when there's >1).
+  const awgDownloadBtns = awgNodes.map((n) => {
+    const label = multiAwg ? `${esc(t.awgConf)} · ${esc(n.nodeName)}` : esc(t.awgConf);
+    return `<a class="btn dl" href="${esc(data.subUrl)}?format=wgconf&node=${encodeURIComponent(n.nodeName)}">${label}</a>`;
+  });
   const downloadBtns = [
-    ...(hasAwg
-      ? [`<a class="btn dl" href="${esc(data.subUrl)}?format=wgconf">${esc(t.awgConf)}</a>`]
-      : []),
+    ...awgDownloadBtns,
     ...proxyDownloads.map(
       (d) =>
         `<a class="btn dl" href="${esc(data.subUrl)}?format=${d.fmt}">${esc(d.label)}</a>`,
@@ -236,15 +233,21 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       `<div class="qr"><div class="qrbox">${data.subUrlQrSvg}</div><div class="hint">${esc(t.scanSubHint)}</div></div>`,
     );
   }
-  if (data.awgQrSvg) {
-    qrCards.push(
-      `<div class="qr"><div class="qrbox">${data.awgQrSvg}</div><div class="hint">${esc(t.scanAwgHint)}</div></div>`,
-    );
-  }
-  if (data.awgVpnQrSvg) {
-    qrCards.push(
-      `<div class="qr"><div class="qrbox">${data.awgVpnQrSvg}</div><div class="hint">${esc(t.scanAmneziaVpnHint)}</div></div>`,
-    );
+  // Per AWG node: the AmneziaVPN vpn:// QR (flagship app) and the native .conf
+  // QR (AmneziaWG app). Captioned by app + node name so a multi-AWG user picks
+  // the right server. The node suffix is dropped when there's a single node.
+  for (const n of awgNodes) {
+    const suffix = multiAwg ? ` · ${esc(n.nodeName)}` : '';
+    if (n.vpnQrSvg) {
+      qrCards.push(
+        `<div class="qr"><div class="qrbox">${n.vpnQrSvg}</div><div class="hint">AmneziaVPN${suffix}</div></div>`,
+      );
+    }
+    if (n.confQrSvg) {
+      qrCards.push(
+        `<div class="qr"><div class="qrbox">${n.confQrSvg}</div><div class="hint">AmneziaWG${suffix}</div></div>`,
+      );
+    }
   }
   const scanCard =
     qrCards.length > 0

@@ -449,12 +449,24 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         const settings = await getSubscriptionSettings();
         const subUrl = `${config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
-        // Two AmneziaWG QRs (each returns '' when no AWG endpoint -> QR omitted):
-        //   - awgConf: native wg-quick .conf text, for the AmneziaWG app.
-        //   - awgVpn:  AmneziaVPN "vpn://" key, for the flagship AmneziaVPN app
-        //     (its scanner only reads vpn:// keys, never a raw .conf).
-        const awgConf = buildWgQuickConf(filtered);
-        const awgVpn = buildAwgVpnLink(filtered);
+        // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
+        // are single-tunnel-per-key, so a user with several AWG servers gets each
+        // server's own labelled QR (.conf for the AmneziaWG app, vpn:// for the
+        // AmneziaVPN app) instead of only the first node's. ecl 'L' keeps the long
+        // payloads scannable.
+        const awgSeen = new Set<string>();
+        const awgNodes = filtered
+          .filter((e) => e.protocol === 'amneziawg')
+          .filter((e) => !awgSeen.has(e.nodeName) && !!awgSeen.add(e.nodeName))
+          .map((e) => {
+            const conf = buildWgQuickConf(filtered, e.nodeName);
+            const vpn = buildAwgVpnLink(filtered, e.nodeName);
+            return {
+              nodeName: e.nodeName,
+              confQrSvg: conf ? qrSvg(conf, 'L') : undefined,
+              vpnQrSvg: vpn ? qrSvg(vpn, 'L') : undefined,
+            };
+          });
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
@@ -464,9 +476,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             user: result.json.user,
             protocols,
             subUrlQrSvg: qrSvg(subUrl),
-            // ecl 'L' - both payloads are long; lower EC keeps them scannable.
-            awgQrSvg: awgConf ? qrSvg(awgConf, 'L') : undefined,
-            awgVpnQrSvg: awgVpn ? qrSvg(awgVpn, 'L') : undefined,
+            awgNodes,
           }),
         );
       }

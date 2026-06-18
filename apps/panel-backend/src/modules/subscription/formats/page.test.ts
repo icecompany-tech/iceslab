@@ -27,12 +27,36 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('alice');
   });
 
-  it('shows the AmneziaWG .conf download only when an awg endpoint exists', () => {
+  it('shows a per-node AmneziaWG .conf download only when an awg node exists', () => {
     const without = buildSubscriptionPage(base({ protocols: ['hysteria'] }));
     expect(without).not.toContain('format=wgconf');
 
-    const withAwg = buildSubscriptionPage(base({ protocols: ['hysteria', 'amneziawg'] }));
-    expect(withAwg).toContain('format=wgconf');
+    const withAwg = buildSubscriptionPage(
+      base({ protocols: ['hysteria', 'amneziawg'], awgNodes: [{ nodeName: 'awg' }] }),
+    );
+    // .conf download is pinned to the node with &node=.
+    expect(withAwg).toContain('format=wgconf&node=awg');
+  });
+
+  it('renders one labelled QR pair per AmneziaWG node (multi-node)', () => {
+    const html = buildSubscriptionPage(
+      base({
+        protocols: ['amneziawg'],
+        awgNodes: [
+          { nodeName: 'awg', vpnQrSvg: '<svg id="vpn-nl"></svg>', confQrSvg: '<svg id="conf-nl"></svg>' },
+          { nodeName: 'awg-de', vpnQrSvg: '<svg id="vpn-de"></svg>', confQrSvg: '<svg id="conf-de"></svg>' },
+        ],
+      }),
+    );
+    // each node's QRs are present...
+    for (const id of ['vpn-nl', 'conf-nl', 'vpn-de', 'conf-de']) {
+      expect(html).toContain(`<svg id="${id}"></svg>`);
+    }
+    // ...labelled by app + node so the user picks the right server.
+    expect(html).toContain('AmneziaVPN · awg-de');
+    expect(html).toContain('AmneziaWG · awg-de');
+    // and a per-node .conf download for each.
+    expect(html).toContain('format=wgconf&node=awg-de');
   });
 
   it('always offers the generic proxy format downloads', () => {
@@ -93,13 +117,13 @@ describe('buildSubscriptionPage', () => {
     expect(withQr).toContain('<svg id="sub"></svg>');
   });
 
-  it('shows the AWG QR only when awgQrSvg is provided', () => {
-    const both = buildSubscriptionPage(
-      base({ subUrlQrSvg: '<svg id="sub"></svg>', awgQrSvg: '<svg id="awg"></svg>' }),
+  it('single AWG node: QR captions omit the node-name suffix', () => {
+    const html = buildSubscriptionPage(
+      base({ awgNodes: [{ nodeName: 'awg', vpnQrSvg: '<svg id="vpn"></svg>' }] }),
     );
-    expect(both).toContain('<svg id="awg"></svg>');
-    // The AWG scan hint names the AmneziaWG app (native .conf QR target), not
-    // AmneziaVPN (which only scans its own vpn:// keys).
-    expect(both).toContain('AmneziaWG');
+    expect(html).toContain('<svg id="vpn"></svg>');
+    // brand caption, but no " · awg" suffix when there is only one node
+    expect(html).toContain('>AmneziaVPN<');
+    expect(html).not.toContain('AmneziaVPN · awg');
   });
 });
