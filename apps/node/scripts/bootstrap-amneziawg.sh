@@ -6,7 +6,7 @@
 #   Ubuntu 24.04 (noble) and later:   PPA doesn't register for noble, so we
 #     install via DKMS from the upstream GitHub source + build awg-tools.
 #
-# Idempotent — safe to rerun.
+# Idempotent, safe to rerun.
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -34,33 +34,33 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 KERNEL_VER=$(uname -r)
 log "Running kernel: $KERNEL_VER"
 DEBIAN_FRONTEND=noninteractive apt-get install -y "linux-headers-${KERNEL_VER}" || \
-  warn "linux-headers-${KERNEL_VER} not found — DKMS build may fail"
+  warn "linux-headers-${KERNEL_VER} not found, DKMS build may fail"
 
 # ───── 3. Kernel module via DKMS ─────
 AWG_MODULE_REPO=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
 AWG_MODULE_DIR=/usr/src/amneziawg-src
 
 if lsmod | grep -q '^amneziawg\b'; then
-  log "amneziawg kernel module already loaded — skipping module install"
+  log "amneziawg kernel module already loaded, skipping module install"
 else
   log "Installing amneziawg kernel module via DKMS from $AWG_MODULE_REPO"
 
-  # Fresh clone (don't specify branch — use repo default which may be master)
+  # Fresh clone, no branch pin (repo default may be master)
   rm -rf "$AWG_MODULE_DIR"
   git clone --depth 1 "$AWG_MODULE_REPO" "$AWG_MODULE_DIR"
 
-  # Find dkms.conf — may be at root or one level deep
+  # dkms.conf may be at root or one level deep
   DKMS_CONF=$(find "$AWG_MODULE_DIR" -maxdepth 2 -name 'dkms.conf' | head -1)
   if [[ -z "$DKMS_CONF" ]]; then
-    fail "dkms.conf not found in $AWG_MODULE_DIR — repo structure may have changed"
+    fail "dkms.conf not found in $AWG_MODULE_DIR (repo structure may have changed)"
   fi
   log "Found dkms.conf at: $DKMS_CONF"
 
-  # Parse version; fallback to a known good version
+  # Parse version, fall back to a known good one
   AWG_VER=$(grep 'PACKAGE_VERSION' "$DKMS_CONF" | head -1 | grep -oP '"[^"]+"' | tr -d '"')
   if [[ -z "$AWG_VER" ]]; then
     AWG_VER="1.0.0"
-    warn "Could not parse version from dkms.conf — using fallback $AWG_VER"
+    warn "Could not parse version from dkms.conf, using fallback $AWG_VER"
   fi
   log "amneziawg module version: $AWG_VER"
 
@@ -78,7 +78,7 @@ else
   dkms install "amneziawg/${AWG_VER}"
 
   log "Loading amneziawg kernel module"
-  modprobe amneziawg || warn "modprobe amneziawg failed — try rebooting"
+  modprobe amneziawg || warn "modprobe amneziawg failed, try rebooting"
 fi
 
 # ───── 4. AWG userspace tools ─────
@@ -106,7 +106,7 @@ command -v awg-quick >/dev/null || fail "awg-quick binary not found after instal
 
 DKMS_OK=true
 if ! lsmod | grep -q '^amneziawg\b'; then
-  warn "amneziawg module not loaded — DKMS build may have failed or reboot needed"
+  warn "amneziawg module not loaded, DKMS build may have failed or reboot needed"
   DKMS_OK=false
 fi
 

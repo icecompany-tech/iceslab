@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# deploy.sh — full panel re-deploy (slice 34 ops)
+# deploy.sh: full panel re-deploy
 #
-# Pulls the latest code, applies any new Prisma migrations, rebuilds all
-# containers (--no-cache by default so the same nginx.conf / dist / env
-# change never lands on a stale layer), and prints status + a tail of
-# the backend log so you can spot a startup error before tabbing away.
+# Pulls latest code, applies new Prisma migrations, rebuilds all containers
+# (--no-cache by default so an nginx.conf / dist / env change never lands on
+# a stale layer), then prints status and a tail of the backend log so you can
+# catch a startup error before tabbing away.
 #
 # Usage:
-#   ./scripts/deploy.sh             # standard re-deploy (--no-cache default)
-#   ./scripts/deploy.sh --cache     # opt out of --no-cache for a faster
-#                                     deploy when you trust Docker's layer
-#                                     hashing (i.e. you only changed code,
-#                                     not nginx.conf / Dockerfile)
-#   ./scripts/deploy.sh --cleanup   # also prune old images/build cache
-#                                     after the rebuild lands
+#   ./scripts/deploy.sh             # re-deploy (--no-cache default)
+#   ./scripts/deploy.sh --cache     # skip --no-cache for a faster deploy when
+#                                     you only changed code, not nginx.conf or
+#                                     the Dockerfile
+#   ./scripts/deploy.sh --cleanup   # also prune old images/build cache after
+#                                     the rebuild lands
 #
 # Run from the panel project root (where docker-compose.prod.yml lives).
 
@@ -26,7 +25,7 @@ trap 'on_err $LINENO' ERR
 
 # ───── Args ─────
 CLEANUP_AFTER=0
-NO_CACHE=1   # default ON — paid ~30s for "what I see is what shipped"
+NO_CACHE=1   # default on: ~30s cost buys "what I see is what shipped"
 for arg in "$@"; do
     case "$arg" in
         --cleanup|--prune) CLEANUP_AFTER=1 ;;
@@ -48,10 +47,10 @@ ENV_FILE=".env.production"
 require_compose_root
 
 # ───── Safety: snapshot the secrets file before touching anything ─────
-# .env.production is the ONLY copy of JWT_SECRET, POSTGRES_PASSWORD and the
+# .env.production is the only copy of JWT_SECRET, POSTGRES_PASSWORD and the
 # node mTLS CA on this host. A bad edit or git op could wipe it, taking every
-# node's trust + every admin session with it. Keep a short ring of timestamped
-# copies (last 5) next to it. `cp -p` preserves the 600 perms.
+# node's trust and every admin session with it. Keep a ring of timestamped
+# copies (last 5) next to it. cp -p preserves the 600 perms.
 if [[ -f "$ENV_FILE" ]]; then
     cp -p "$ENV_FILE" "${ENV_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
     ls -1t "${ENV_FILE}".bak.* 2>/dev/null | tail -n +6 | xargs -r rm -f
@@ -68,18 +67,18 @@ STEP_TOTAL=5
 step 1 "sync source (ICESLAB_REF=${ICESLAB_REF:-current branch})"
 git_sync_to_ref
 if [[ "$SHA_BEFORE" == "$SHA_AFTER" ]]; then
-    log_info "  ${SYNC_TARGET}: no new commits — re-deploying ${SHA_AFTER}"
+    log_info "  ${SYNC_TARGET}: no new commits, re-deploying ${SHA_AFTER}"
 else
     log_info "  ${SYNC_TARGET}: ${SHA_BEFORE} -> ${SHA_AFTER}"
 fi
 step_done
 
 # ───── Step 2: rebuild (BEFORE migrate) ─────
-# Build first. The `migrate` one-shot below runs the SAME
-# iceslab-backend:latest image, so the migration files baked into it must
-# already be the new ones. If migrate ran first (against the previous image),
-# a deploy that adds a migration would silently skip it and the freshly-built
-# backend would then boot against an un-migrated DB. So: build, then migrate.
+# Build first. The migrate one-shot below runs the same iceslab-backend:latest
+# image, so the migration files baked into it must already be the new ones.
+# If migrate ran first against the previous image, a deploy that adds a
+# migration would skip it and the fresh backend would boot on an un-migrated
+# DB. So: build, then migrate.
 if [[ $NO_CACHE -eq 1 ]]; then
     step 2 "rebuild backend + frontend (--no-cache)"
     "${DC[@]}" build --no-cache backend frontend
@@ -91,11 +90,11 @@ step_done
 
 # ───── Step 3: prisma migrate deploy ─────
 step 3 "prisma migrate deploy"
-# Ensure postgres is up first (some compose backends — notably podman's
-# docker shim — don't attach `run --rm` containers to the project network
-# reliably, which makes `postgres:5432` unresolvable). Bringing up postgres
-# first + using `up --abort-on-container-exit` for the one-shot migrate
-# sidesteps it. Runs the image built in step 2, so new migrations are present.
+# Bring postgres up first: some compose backends (notably podman's docker shim)
+# don't reliably attach `run --rm` containers to the project network, which
+# makes postgres:5432 unresolvable. Starting postgres first and using
+# `up --abort-on-container-exit` for the one-shot migrate sidesteps that.
+# Runs the image built in step 2, so new migrations are present.
 "${DC[@]}" up -d postgres
 "${DC[@]}" up --abort-on-container-exit --exit-code-from migrate migrate
 "${DC[@]}" rm -fsv migrate >/dev/null 2>&1 || true
@@ -106,7 +105,7 @@ step 4 "restart all services"
 "${DC[@]}" up -d --build
 step_done
 
-# ───── Step 5: status + smoke ─────
+# ───── Step 5: status + backend tail ─────
 step 5 "status + backend tail"
 "${DC[@]}" ps
 echo
@@ -117,10 +116,10 @@ step_done
 # ───── Optional cleanup ─────
 if [[ $CLEANUP_AFTER -eq 1 ]]; then
     echo
-    log_info "running cleanup …"
+    log_info "running cleanup"
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     "$SCRIPT_DIR/cleanup.sh"
 fi
 
 echo
-log_ok "deploy complete in $(elapsed_total) — now serving ${SHA_AFTER}"
+log_ok "deploy complete in $(elapsed_total), now serving ${SHA_AFTER}"

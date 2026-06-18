@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs once when the dev container is created. Mirrors the CI setup so a fresh
-# container is immediately able to typecheck, test and run the panel.
+# Runs once when the dev container is created. Mirrors CI so a fresh container
+# can typecheck, test and run the panel right away.
 set -euo pipefail
 
 cd /workspaces/iceslab
@@ -12,13 +12,12 @@ corepack prepare pnpm@10.33.2 --activate
 echo "==> Installing workspace dependencies"
 pnpm install --frozen-lockfile
 
-echo "==> Generating Prisma client (this is what fixes the 'stale client' type errors)"
+echo "==> Generating Prisma client (clears stale-client type errors)"
 ( cd apps/panel-backend && pnpm exec prisma generate )
 
-# The dev SERVER (pnpm dev) reads the repo-root .env via --env-file. Inside the
-# container the database/redis hosts are compose service names, not localhost.
-# Create a container-pointed .env only if one does not already exist, so we
-# never clobber a host .env the operator is keeping.
+# The dev server (pnpm dev) reads the repo-root .env via --env-file. Inside the
+# container the db/redis hosts are compose service names, not localhost. Only
+# write a container-pointed .env if none exists, to avoid clobbering a host one.
 if [ ! -f .env ]; then
   echo "==> Writing repo-root .env for the container"
   cat > .env <<'EOF'
@@ -40,7 +39,7 @@ XRAY_FLOW=xtls-rprx-vision
 XRAY_FINGERPRINT=chrome
 EOF
 else
-  echo "==> .env already exists - leaving it untouched."
+  echo "==> .env already exists, leaving it untouched."
   echo "    To run the dev SERVER in-container, make sure it uses the service names:"
   echo "      DATABASE_URL=postgres://iceslab:iceslab_dev@postgres:5432/iceslab"
   echo "      REDIS_URL=redis://redis:6379"

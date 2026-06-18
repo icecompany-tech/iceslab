@@ -5,7 +5,7 @@
 # is set. This script only places the binary at /usr/local/bin/mtg and verifies
 # it works.
 #
-# Idempotent — safe to rerun.
+# Idempotent, safe to rerun.
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -19,7 +19,7 @@ INSTALL_PATH=/usr/local/bin/mtg
 # ───── 1. Already installed? ─────
 if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$("$INSTALL_PATH" --version 2>&1 | head -1 || echo "unknown")
-  log "mtg already installed: $CURRENT — skipping download"
+  log "mtg already installed: $CURRENT, skipping download"
   log "To upgrade, remove $INSTALL_PATH and rerun."
   exit 0
 fi

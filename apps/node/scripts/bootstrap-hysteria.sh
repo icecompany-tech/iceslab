@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Install the Hysteria 2 binary on a fresh Ubuntu/Debian VPS.
 #
-# The node-agent (iceslab-node) spawns hysteria as a child process —
-# no separate systemd unit is needed. This script only places the binary
-# at /usr/local/bin/hysteria and verifies it works.
+# The node-agent (iceslab-node) spawns hysteria as a child process, so no
+# separate systemd unit is needed. This script only places the binary at
+# /usr/local/bin/hysteria and verifies it works.
 #
-# Idempotent — safe to rerun.
+# Idempotent, safe to rerun.
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -19,7 +19,7 @@ INSTALL_PATH=/usr/local/bin/hysteria
 # ───── 1. Already installed? ─────
 if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$("$INSTALL_PATH" version 2>&1 | grep -oP 'v[\d.]+' | head -1 || echo "unknown")
-  log "hysteria already installed: $CURRENT — skipping download"
+  log "hysteria already installed: $CURRENT, skipping download"
   log "To upgrade, remove $INSTALL_PATH and rerun."
   echo
   log "hysteria is ready at $INSTALL_PATH"
@@ -56,7 +56,7 @@ chmod +x "$TMP"
 
 # ───── 5. Smoke-test ─────
 VERSION=$("$TMP" version 2>&1 | grep -oP 'v[\d.]+' | head -1 || echo "unknown")
-log "Downloaded hysteria $VERSION — OK"
+log "Downloaded hysteria $VERSION, OK"
 
 # ───── 6. Install ─────
 mv "$TMP" "$INSTALL_PATH"

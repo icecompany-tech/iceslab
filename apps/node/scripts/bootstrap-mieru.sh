@@ -2,11 +2,11 @@
 # Install the Mieru server (`mita`) on a fresh Ubuntu/Debian VPS.
 #
 # The node-agent (iceslab-node) invokes `mita apply config <path>` and
-# `mita reload` to manage user lists — mita itself runs as a separate
-# systemd service on most installs (mita's package handles that). For
-# a config-only install, this script just lays down the binary.
+# `mita reload` to manage user lists. mita runs as its own systemd
+# service on most installs (the package handles that); here we only
+# lay down the binary.
 #
-# Idempotent — safe to rerun.
+# Idempotent, safe to rerun.
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -20,7 +20,7 @@ INSTALL_DIR=/usr/local/bin
 # ───── 1. Already installed? ─────
 if [[ -x "$INSTALL_DIR/mita" ]]; then
   CURRENT=$("$INSTALL_DIR/mita" version 2>&1 | head -1 || echo "unknown")
-  log "mita already installed: $CURRENT — skipping download"
+  log "mita already installed: $CURRENT (skipping download)"
   log "To upgrade, remove $INSTALL_DIR/mita and rerun."
   exit 0
 fi
@@ -58,7 +58,7 @@ curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMPDIR/$DEB"
 # ───── 5. Install via dpkg ─────
 log "Installing $DEB via dpkg..."
 dpkg -i "$TMPDIR/$DEB" || {
-  warn "dpkg returned non-zero — attempting `apt-get install -f` to fix deps"
+  warn "dpkg returned non-zero, running apt-get install -f to fix deps"
   apt-get install -f -y
 }
 
@@ -81,7 +81,7 @@ echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
 echo "    MITA_BINARY=$INSTALL_DIR/mita"
 echo "    MITA_CONFIG=/etc/mita/server.json"
 echo "    MITA_PORT=2012"
-echo "    MITA_MTU=1400        # min 1280 — drop to 1280 on PPPoE / weird VPN paths"
+echo "    MITA_MTU=1400        # min 1280; drop to 1280 on PPPoE / odd VPN paths"
 echo "Then: systemctl restart iceslab-node"
 echo
 warn "If your distro doesn't ship a mita systemd unit by default, the .deb"

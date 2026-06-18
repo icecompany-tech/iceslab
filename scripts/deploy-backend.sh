@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# deploy-backend.sh — backend-only re-deploy.
+# deploy-backend.sh: backend-only re-deploy.
 #
 # Pulls latest, applies pending migrations, rebuilds + restarts backend.
-# Frontend stays untouched. --no-cache is ON by default — pays ~20s
-# extra rebuild for "what I see is what shipped". Pass --cache to opt
-# into Docker layer cache when you trust the diff.
+# Frontend stays untouched. --no-cache is on by default: costs ~20s extra
+# rebuild so what you see is what shipped. Pass --cache to use the Docker
+# layer cache when you trust the diff.
 #
 # Usage:
 #   ./scripts/deploy-backend.sh           # default --no-cache
@@ -42,12 +42,12 @@ DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 STEP_TOTAL=4
 
 # ───── Step 1: sync source to ICESLAB_REF ─────
-# Honors ICESLAB_REF (branch or pinned tag); defaults to the current branch.
-# See git_sync_to_ref in _lib.sh (replaces the bare `git pull` detached-HEAD trap).
+# Honors ICESLAB_REF (branch or pinned tag), defaults to the current branch.
+# See git_sync_to_ref in _lib.sh; it avoids the bare `git pull` detached-HEAD trap.
 step 1 "sync source (ICESLAB_REF=${ICESLAB_REF:-current branch})"
 git_sync_to_ref
 if [[ "$SHA_BEFORE" == "$SHA_AFTER" ]]; then
-    log_info "  ${SYNC_TARGET}: no new commits — re-deploying ${SHA_AFTER}"
+    log_info "  ${SYNC_TARGET}: no new commits, re-deploying ${SHA_AFTER}"
 else
     log_info "  ${SYNC_TARGET}: ${SHA_BEFORE} -> ${SHA_AFTER}"
 fi
@@ -56,8 +56,8 @@ step_done
 # ───── Step 2: rebuild backend (BEFORE migrate) ─────
 # Build first: the migrate one-shot below runs the same iceslab-backend:latest
 # image, so its migrations must be the new ones. Migrate-first (against the old
-# image) would silently skip a freshly-added migration. See deploy.sh for the
-# full rationale.
+# image) silently skips a freshly-added migration. See deploy.sh for the full
+# rationale.
 if [[ $NO_CACHE -eq 1 ]]; then
     step 2 "rebuild backend (--no-cache)"
     "${DC[@]}" build --no-cache backend
@@ -69,7 +69,7 @@ step_done
 
 # ───── Step 3: prisma migrate deploy ─────
 step 3 "prisma migrate deploy"
-# Same trick as deploy.sh — use `up --abort-on-container-exit` instead of
+# Same trick as deploy.sh: use `up --abort-on-container-exit` instead of
 # `run --rm` so the migrate container reliably joins the project network
 # (podman compose backends have a known regression with `run`). Runs the image
 # built in step 2 so new migrations are present.
@@ -89,4 +89,4 @@ log_info "backend tail (last 40 lines):"
 step_done
 
 echo
-log_ok "backend deploy complete in $(elapsed_total) — now serving ${SHA_AFTER}"
+log_ok "backend deploy complete in $(elapsed_total), now serving ${SHA_AFTER}"

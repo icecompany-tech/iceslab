@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# iceslab-backup.sh — slice 34
+# iceslab-backup.sh
 #
 # Single-file backup of the Iceslab control plane:
-#   - Postgres dump  (pg_dump inside iceslab-prod-postgres → SQL)
+#   - Postgres dump  (pg_dump inside iceslab-prod-postgres, SQL)
 #   - Redis dump     (BGSAVE then copy dump.rdb out of iceslab-prod-redis)
 #   - .env.production (host-side, contains JWT_SECRET, POSTGRES_PASSWORD, etc)
 #
-# All three artefacts go into a single timestamped tar.gz at the path you
-# choose (default `./backups/`). With `--password <pw>` the tarball is
-# AES-256 encrypted via `openssl enc` — the CA private key, JWT secret,
-# user creds and node mTLS material all sit inside, so encrypting at rest
-# is the right default for off-host storage (S3, rsync to friend's box).
+# All three go into one timestamped tar.gz under the chosen path (default
+# `./backups/`). With `--password <pw>` the tarball is AES-256 encrypted via
+# `openssl enc`. The CA private key, JWT secret, user creds and node mTLS
+# material all sit inside, so encrypt at rest for off-host storage.
 #
 # Usage:
 #   ./scripts/iceslab-backup.sh [--out /path/to/dir] [--password <pw>]
@@ -68,15 +67,14 @@ require_compose_root
 
 mkdir -p "$OUT_DIR"
 
-# Pull POSTGRES_USER / POSTGRES_DB from the env file so we don't hard-code them.
+# Pull POSTGRES_USER / POSTGRES_DB from the env file instead of hard-coding.
 # shellcheck disable=SC1090
 source <(grep -E '^(POSTGRES_USER|POSTGRES_DB)=' "$ENV_FILE")
 : "${POSTGRES_USER:?missing POSTGRES_USER in $ENV_FILE}"
 : "${POSTGRES_DB:?missing POSTGRES_DB in $ENV_FILE}"
 
-# Sanity-check both containers are up — running pg_dump against a stopped
-# DB is the most common mistake when this is wired into a cron the night
-# after a deploy that never finished.
+# Both containers must be up. pg_dump against a stopped DB is the usual
+# failure when this runs from cron the night after a deploy that stalled.
 if ! docker ps --format '{{.Names}}' | grep -q "^${POSTGRES_CONTAINER}$"; then
     log_err "container ${POSTGRES_CONTAINER} is not running"
     exit 1
@@ -90,7 +88,7 @@ fi
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
-# Re-install the ERR trap — EXIT trap above replaced the one set by _lib.
+# Re-install the ERR trap: the EXIT trap above replaced the one from _lib.
 trap 'on_err $LINENO' ERR
 
 STEP_TOTAL=4
@@ -107,10 +105,9 @@ step_done
 # ───── Step 2: redis BGSAVE + copy ─────
 step 2 "redis BGSAVE → ${STAGE}/redis.rdb"
 docker exec "$REDIS_CONTAINER" redis-cli BGSAVE >/dev/null
-# BGSAVE is async; wait for the timestamp on LASTSAVE to advance.
-# Previously this loop silently gave up after 30s and proceeded with
-# whatever rdb happened to be on disk — could ship a STALE snapshot.
-# Now we fail loudly so the operator knows the backup is no good.
+# BGSAVE is async; wait for LASTSAVE to advance. This loop used to give up
+# after 30s and copy whatever rdb was on disk, shipping a stale snapshot.
+# Now it fails loudly instead.
 prev_lastsave="$(docker exec "$REDIS_CONTAINER" redis-cli LASTSAVE)"
 bgsave_ok=0
 for _ in $(seq 1 30); do
@@ -122,7 +119,7 @@ for _ in $(seq 1 30); do
     fi
 done
 if [[ $bgsave_ok -ne 1 ]]; then
-    log_err "BGSAVE did not advance LASTSAVE within 30s — backup would be stale"
+    log_err "BGSAVE did not advance LASTSAVE within 30s, backup would be stale"
     log_err "  check redis health: docker logs ${REDIS_CONTAINER} --tail=50"
     exit 1
 fi
@@ -134,7 +131,7 @@ step_done
 step 3 "env file + manifest"
 cp "$ENV_FILE" "${STAGE}/env"
 
-# Pack the manifest so restore can sanity-check what it's about to overwrite.
+# Manifest lets restore sanity-check what it's about to overwrite.
 cat > "${STAGE}/manifest.json" <<EOF
 {
   "createdAt": "${TS}",

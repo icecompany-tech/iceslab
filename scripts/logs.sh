@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# logs.sh — quick log inspector for the panel stack.
+# logs.sh: log inspector for the panel stack.
 #
 # Default (no args) prints the last 100 lines of every Docker service
 # (backend / frontend / postgres / redis) plus a tail of the host's
-# Caddy systemd unit when it's installed (Caddy runs as a native
-# systemd service, not a docker container — install-iceslab.sh does
+# Caddy systemd unit when it's installed. Caddy runs as a native
+# systemd service, not a docker container (install-iceslab.sh does
 # `apt-get install caddy` in domain mode).
 #
 # Modes:
@@ -31,9 +31,9 @@ require_compose_root
 
 DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 
-# Resolve short alias → either a compose service name (Docker logs) or
-# the literal string "caddy" (systemd path). Stays in sync with
-# docker-compose.prod.yml — update if services rename.
+# Resolve short alias to either a compose service name (Docker logs) or
+# the literal string "caddy" (systemd path). Keep in sync with
+# docker-compose.prod.yml if services rename.
 SERVICE=""
 FOLLOW=0
 TAIL_N=100
@@ -58,7 +58,7 @@ for arg in "$@"; do
     esac
 done
 
-# Caddy lives outside Docker — it's a host-side systemd unit set up by
+# Caddy lives outside Docker: it's a host-side systemd unit set up by
 # install-iceslab.sh. Route its logs through journalctl instead of
 # `docker compose logs`.
 caddy_logs() {
@@ -66,9 +66,9 @@ caddy_logs() {
     if [[ $FOLLOW -eq 1 ]]; then follow_flag="-f"; fi
     if command -v journalctl >/dev/null 2>&1; then
         journalctl -u caddy $follow_flag --no-pager -n "$TAIL_N" 2>/dev/null \
-            || log_warn "caddy systemd unit not found — bare-IP install, skipping"
+            || log_warn "caddy systemd unit not found (bare-IP install), skipping"
     else
-        log_warn "journalctl not available — can't read caddy logs"
+        log_warn "journalctl not available, can't read caddy logs"
     fi
 }
 
@@ -87,8 +87,8 @@ if [[ -n "$SERVICE" ]]; then
     exit $?
 fi
 
-# All-services mode — one block per service. Printing them grouped is
-# easier to skim than the interleaved default.
+# All-services mode: one block per service. Grouped output is easier to
+# skim than the interleaved default.
 for s in backend frontend postgres redis; do
     printf '\n%b═══════════════════════════════════════════════════════════%b\n' "$C_INFO" "$C_RST"
     printf '%b  %s%b %b(last %s lines)%b\n' "$C_INFO" "$s" "$C_RST" "$C_DIM" "$TAIL_N" "$C_RST"
@@ -97,9 +97,8 @@ for s in backend frontend postgres redis; do
         || log_warn "service '$s' not running"
 done
 
-# Caddy block at the end so even an all-services tail covers TLS
-# issues. Output stays empty + a friendly note when bare-IP mode skipped
-# the install.
+# Caddy block last so an all-services tail still covers TLS issues.
+# Output is empty plus a note when bare-IP mode skipped the install.
 printf '\n%b═══════════════════════════════════════════════════════════%b\n' "$C_INFO" "$C_RST"
 printf '%b  caddy%b %b(systemd, last %s lines)%b\n' "$C_INFO" "$C_RST" "$C_DIM" "$TAIL_N" "$C_RST"
 printf '%b═══════════════════════════════════════════════════════════%b\n' "$C_INFO" "$C_RST"

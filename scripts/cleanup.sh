@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# cleanup.sh — reclaim disk from old Docker images / build cache.
+# cleanup.sh: reclaim disk from old Docker images / build cache.
 #
-# After every `--build` Docker keeps the previous image as an untagged
-# dangling layer "for rollback". After ~5-10 deploys this accumulates
-# into multi-GB of `/var/lib/docker` waste. This script removes:
+# Every `--build` leaves the previous image as an untagged dangling layer
+# kept "for rollback". Over ~5-10 deploys that fills `/var/lib/docker` with
+# multi-GB of waste.
 #
-#   - Dangling / unused images (anything not referenced by a running
-#     container or by a current tag)
+# Removes:
+#   - Dangling / unused images (not referenced by a running container or
+#     a current tag)
 #   - Build cache layers
-#   - Stopped containers (panel-* lifecycle uses `--rm` for the
-#     migrate one-shot already; stopped panel-backend/frontend after
-#     a crash get cleared)
+#   - Stopped containers (the migrate one-shot already uses `--rm`; this
+#     clears panel-backend/frontend left stopped after a crash)
 #
-# It does NOT touch:
-#   - Named volumes (postgres_prod_data + redis_prod_data — the live
-#     DATABASE).  `docker volume prune` is a foot-cannon, never call it
-#     blind on this host.
-#   - Networks (left alone — recreating them is cheap)
+# Does NOT touch:
+#   - Named volumes (postgres_prod_data + redis_prod_data, the live DB).
+#     `docker volume prune` is a foot-cannon, never run it blind on this
+#     host.
+#   - Networks (recreating them is cheap)
 #
 # Usage:    ./scripts/cleanup.sh
 #           ./scripts/cleanup.sh --dry      # preview only, no deletion
@@ -48,7 +48,7 @@ for arg in "$@"; do
 done
 
 if [[ $DRY -eq 1 ]]; then
-    log_info "DRY-RUN mode — nothing will be deleted"
+    log_info "DRY-RUN mode, nothing will be deleted"
 fi
 
 run() {
@@ -61,7 +61,7 @@ run() {
 
 STEP_TOTAL=3
 
-# ───── Step 1: disk before ─────
+# ───── Disk before ─────
 log_info "disk usage before:"
 df -h /var/lib/docker 2>/dev/null || df -h /
 
@@ -86,5 +86,5 @@ df -h /var/lib/docker 2>/dev/null || df -h /
 
 echo
 log_ok "cleanup complete in $(elapsed_total)"
-log_info "volumes (postgres + redis data) — UNTOUCHED:"
+log_info "volumes (postgres + redis data) left untouched:"
 docker volume ls --filter 'name=iceslab'

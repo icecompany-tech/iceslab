@@ -4,20 +4,20 @@
 # What it does:
 #   1. Verifies Go + git (installs them on Ubuntu/Debian if missing)
 #   2. Clones repo into $ICESLAB_NODE_DIR (default /opt/iceslab-node)
-#   3. Builds the static node-agent binary → /usr/local/bin/iceslab-node
+#   3. Builds the static node-agent binary -> /usr/local/bin/iceslab-node
 #   4. (per --protocol) chains the protocol-specific bootstrap:
-#        hysteria     → installs official hysteria via get.hy2.sh
-#        xray         → installs official xray via XTLS install-script
-#        amneziawg    → runs apps/node/scripts/bootstrap-amneziawg.sh
-#        naive        → runs apps/node/scripts/bootstrap-naive.sh (xcaddy + plugin)
-#        shadowsocks  → reuses xray-core (SS2022 multi-user runs inside xray)
-#        mtproto      → runs apps/node/scripts/bootstrap-mtg.sh (9seconds/mtg)
-#        mieru        → runs apps/node/scripts/bootstrap-mieru.sh (enfein/mieru)
+#        hysteria     -> installs official hysteria via get.hy2.sh
+#        xray         -> installs official xray via XTLS install-script
+#        amneziawg    -> runs apps/node/scripts/bootstrap-amneziawg.sh
+#        naive        -> runs apps/node/scripts/bootstrap-naive.sh (xcaddy + plugin)
+#        shadowsocks  -> reuses xray-core (SS2022 multi-user runs inside xray)
+#        mtproto      -> runs apps/node/scripts/bootstrap-mtg.sh (9seconds/mtg)
+#        mieru        -> runs apps/node/scripts/bootstrap-mieru.sh (enfein/mieru)
 #   5. Drops a systemd unit at /etc/systemd/system/iceslab-node.service
 #   6. Writes /etc/iceslab-node/env with NODE_PAYLOAD + protocol env
 #   7. Enables + starts the service, waits for /healthz
 #
-# Usage (as root). RECOMMENDED — bootstrap-token flow (single command, no
+# Usage (as root). Recommended: bootstrap-token flow (single command, no
 # manual file transfer needed):
 #
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
@@ -26,23 +26,23 @@
 #     --protocol xray
 #
 # Get the bootstrap token + ready-made command by clicking "Create node"
-# in the panel UI — the modal shows a copy-pastable single-liner. Token is
+# in the panel UI: the modal shows a copy-pastable single-liner. Token is
 # valid 15 min, single-use; if it expires, click "Refresh bootstrap" in
 # the panel UI to mint a new one.
 #
 # Security note: `--bootstrap <tok>` exposes the token in /proc/<pid>/cmdline
 # for the lifetime of the install (any local unprivileged process can read
 # it). For shared VPS or audit-logged hosts, write the token to a 0600 file
-# and pass `--bootstrap-file /path/to/token` instead — token never enters
-# argv. Convention matches --payload-file.
+# and pass `--bootstrap-file /path/to/token` instead, so the token never
+# enters argv. Convention matches --payload-file.
 #
 # === ONE-COMMAND PROTOCOL SETUP ===
 #
-# For a fully-configured node — node-agent + protocol server + systemd unit
-# + ACME cert — pass per-protocol flags. Otherwise install-iceslab-node.sh installs
+# For a fully-configured node (node-agent + protocol server + systemd unit
+# + ACME cert) pass per-protocol flags. Otherwise install-iceslab-node.sh installs
 # the binaries and you have to drop config files manually.
 #
-# Hysteria 2 — auto-configure server with LE-issued cert + masquerade:
+# Hysteria 2, auto-configure server with LE-issued cert + masquerade:
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_xxx \
@@ -51,11 +51,11 @@
 #     --hysteria-email admin@example.com
 #   # Optional: --hysteria-masquerade-url https://en.wikipedia.org/
 #   #           --hysteria-obfs-password <salamander-pwd>
-#   #           --hysteria-port-range 20000-50000   (slice 31.5 port-hopping;
+#   #           --hysteria-port-range 20000-50000   (port-hopping;
 #   #             defeats RU TSPU UDP/443 throttle. Pass "" to disable.)
 #
-# Xray — pre-fill REALITY env so adapter starts immediately. Get keypair
-# from the inbound creation form (panel UI → Inbounds → Create → Generate):
+# Xray, pre-fill REALITY env so adapter starts immediately. Get keypair
+# from the inbound creation form (panel UI: Inbounds > Create > Generate):
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_xxx \
@@ -66,7 +66,7 @@
 #     --xray-reality-dest www.cloudflare.com:443
 #   # Optional: --xray-port 443
 #
-# AmneziaWG / NaiveProxy / Shadowsocks / MTProto / Mieru — these protocols
+# AmneziaWG / NaiveProxy / Shadowsocks / MTProto / Mieru: these protocols
 # take no install-time flags; they start idle and wait for the panel to push
 # inbound config via applyInbounds. Set protocol-specific fields (domain,
 # email, masquerade, etc.) on the panel-side Profile via the admin UI.
@@ -85,15 +85,15 @@
 #     --panel-url https://panel.example.com --bootstrap bs_xxx --protocol xray \
 #     --harden-ufw --fail2ban --ssh-allowlist 203.0.113.4,10.0.0.0/8
 #
-# Alternative flows (file-based — for air-gapped or self-hosted gist setups):
+# Alternative flows (file-based, for air-gapped or self-hosted gist setups):
 #   bash <(curl -fsSL .../install-iceslab-node.sh) --protocol xray --payload-file /tmp/payload.b64
 #   bash <(curl -fsSL .../install-iceslab-node.sh) --protocol xray --payload "@/tmp/payload.b64"
 #
 # Or interactive:
 #   bash <(curl -fsSL .../install-iceslab-node.sh)
-# (asks for protocol, then payload — accepts `@/path/to/file` syntax).
+# (asks for protocol, then payload; accepts `@/path/to/file` syntax).
 #
-# **Don't paste the raw payload string into the terminal directly.** Linux
+# Don't paste the raw payload string into the terminal directly. Linux
 # TTY canonical-mode truncates pastes at 4096 bytes; real payloads are ~6-7
 # KB, so the tail gets silently dropped and the node fails with a confusing
 # `json unmarshal: unexpected end of JSON input`.
@@ -175,7 +175,7 @@ on_error() {
       | sed "s/^/    /" >&2
     printf '\n' >&2
   fi
-  printf '  Re-run with the same flags — install is idempotent.\n' >&2
+  printf '  Re-run with the same flags; install is idempotent.\n' >&2
   exit "$exit_code"
 }
 trap 'on_error $LINENO "$BASH_COMMAND"' ERR
@@ -196,9 +196,9 @@ banner() {
 banner
 
 # ───── Concurrency + apt lock hygiene ─────
-# Same protections as install-iceslab.sh — flock against concurrent runs,
-# graceful wait on apt locks via DPkg::Lock::Timeout, stale-lock cleanup
-# for the orphan-apt-process case. See install-iceslab.sh for the rationale.
+# Same protections as install-iceslab.sh: flock against concurrent runs,
+# wait on apt locks via DPkg::Lock::Timeout, stale-lock cleanup for the
+# orphan-apt-process case. See install-iceslab.sh for the rationale.
 exec 9>/var/run/iceslab-node-install.lock || fail "cannot open install lockfile"
 if ! flock -n 9; then
   fail "another install-iceslab-node.sh is already running. Wait, or remove /var/run/iceslab-node-install.lock if you're sure it crashed."
@@ -213,7 +213,7 @@ cleanup_stale_apt_locks() {
     [[ -e "$lockfile" ]] || continue
     lock_holder=$(fuser "$lockfile" 2>/dev/null || true)
     if [[ -z "$lock_holder" ]]; then
-      log "stale apt lock at $lockfile — removing"
+      log "stale apt lock at $lockfile, removing"
       rm -f "$lockfile"
     fi
   done
@@ -228,16 +228,16 @@ ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.1.7}
 # ───── Third-party installer pinning (supply-chain) ─────
 #
 # Hysteria and Xray installers previously ran as `bash <(curl get.hy2.sh)`
-# and `XTLS/Xray-install/raw/main/...` — both unpinned, executing whatever
+# and `XTLS/Xray-install/raw/main/...`, both unpinned, executing whatever
 # the upstream `main`/HTTP host serves at the moment of install. A
 # compromise of either upstream (or a DNS hijack on the box) gave the
 # attacker root.
 #
-# Pinning: fetch the installer from a specific tag/commit, OPTIONALLY
+# Pinning: fetch the installer from a specific tag/commit, optionally
 # verify a sha256, then run. Operators who want full supply-chain
-# hardening set the *_SHA env var; default is tag-pin only (still a huge
-# improvement over `main`). To bump: pick a new tag, run the installer
-# once with --dry-pin to print the sha, paste it back here.
+# hardening set the *_SHA env var; default is tag-pin only (still better
+# than `main`). To bump: pick a new tag, run the installer once with
+# --dry-pin to print the sha, paste it back here.
 # Hysteria: apernet/hysteria releases the server/client under the `app/v*`
 # tag prefix (their `v*` tags are for the legacy hysteria-v1 lineage and
 # do NOT have the server install script). Bump to a later app/* tag as
@@ -246,12 +246,12 @@ HYSTERIA_INSTALLER_REF=${HYSTERIA_INSTALLER_REF:-app/v2.9.1}
 HYSTERIA_INSTALLER_SHA=${HYSTERIA_INSTALLER_SHA:-}
 HYSTERIA_VERSION=${HYSTERIA_VERSION:-}   # passed as --version to the script; empty = installer default
 
-# Xray-install: XTLS/Xray-install publishes ZERO tags/releases — only a
+# Xray-install: XTLS/Xray-install publishes no tags/releases, only a
 # `main` branch. We pin to a specific commit SHA so a hostile commit to
 # main doesn't auto-deploy. Bump by reading `git rev-parse main` on the
 # upstream repo and updating both this default and SECURITY.md. The
 # `pinned_fetch` SHA-256 knob (XRAY_INSTALLER_SHA) is the second line of
-# defence — production operators should set it.
+# defence; production operators should set it.
 XRAY_INSTALLER_REF=${XRAY_INSTALLER_REF:-e741a4f56d368afbb9e5be3361b40c4552d3710d}
 XRAY_INSTALLER_SHA=${XRAY_INSTALLER_SHA:-}
 
@@ -269,21 +269,21 @@ pinned_fetch() {
     actual_sha=$(sha256sum "$out" | awk '{print $1}')
     if [[ "$actual_sha" != "$expect_sha" ]]; then
       rm -f "$out"
-      fail "pinned_fetch: sha256 mismatch for $url (expected $expect_sha, got $actual_sha) — upstream tampered or you need to bump the pin"
+      fail "pinned_fetch: sha256 mismatch for $url (expected $expect_sha, got $actual_sha): upstream tampered or you need to bump the pin"
     fi
     log "pinned_fetch: sha256 verified for $(basename "$out")"
   else
-    log "pinned_fetch: $(basename "$out") fetched (tag-pinned, sha256 NOT verified — set the *_SHA env to harden)"
+    log "pinned_fetch: $(basename "$out") fetched (tag-pinned, sha256 NOT verified; set the *_SHA env to harden)"
   fi
 }
 NODE_HOST=${NODE_HOST:-0.0.0.0}
-# 1337 since wave-13 (2026-05-21). Pre-wave default was 8443, which is the
-# canonical HTTPS-alt port and the first thing every bot probes after 443.
-# 1337 stays out of standard scanner profiles AND frees 8443 for actual
+# Default moved to 1337 (2026-05-21). The old 8443 is the canonical
+# HTTPS-alt port and the first thing every bot probes after 443. 1337
+# stays out of standard scanner profiles and frees 8443 for actual
 # user-protocol bindings (xray-on-8443 is a common Cloudflare-friendly
-# fallback). Pre-wave installs are NOT migrated automatically — their
+# fallback). Old installs are not migrated automatically: their
 # node.address in DB is still :8443 and the systemd unit is still :8443.
-# Operators on existing nodes can either leave as-is or re-bootstrap with
+# Operators on existing nodes can leave as-is or re-bootstrap with
 # `--reset --port 1337` to align with the new default.
 NODE_PORT=${NODE_PORT:-1337}
 
@@ -293,13 +293,13 @@ PANEL_URL=""
 BOOTSTRAP_TOKEN=""
 RESET=0
 UNINSTALL=0
-# Slice S7 — UFW lock-down. When set, only this IP/CIDR (or comma-list)
-# is allowed to reach :NODE_PORT. Without it the mTLS port is open to the
-# whole internet — mTLS rejects everyone, but bots still spend our CPU on
-# TLS handshakes and our agent leaks "I'm Iceslab" via the cert SAN.
+# UFW lock-down. When set, only this IP/CIDR (or comma-list) is allowed to
+# reach :NODE_PORT. Without it the mTLS port is open to the whole internet:
+# mTLS rejects everyone, but bots still spend our CPU on TLS handshakes and
+# the agent leaks "I'm Iceslab" via the cert SAN.
 PANEL_IP=""
 
-# G (Zashchita / hardening) - probe-resistance toggles pushed from the panel's
+# Zashchita (hardening): probe-resistance toggles pushed from the panel's
 # node "Zashchita" wizard. Each maps 1:1 to a key in nodes.hardening (jsonb).
 # All default off so a node without hardening installs byte-identically.
 #   --harden-ufw         : rate-limit SSH (`ufw limit`), tighten the firewall
@@ -318,27 +318,27 @@ SSH_ALLOWLIST=""   # comma-list of IP/CIDR; empty = keep world-open 22/tcp
 
 # Hysteria 2 server config (only used with --protocol hysteria). When DOMAIN
 # is given, the script writes /etc/hysteria/config.yaml + a hysteria systemd
-# unit and starts the server — admin gets a fully-configured node from one
+# unit and starts the server, so the admin gets a configured node from one
 # command, no manual SSH editing.
 HY_DOMAIN=""
 HY_EMAIL=""
 HY_MASQUERADE_URL="https://www.bing.com/"
 HY_OBFS_PASSWORD=""
-# Slice 31.5 — port-hopping. iptables NAT-REDIRECT for a UDP port range so
-# clients can rotate destination ports per connection (mport=START-END in
-# the URI). Defeats RU TSPU / IR / CN fixed-port UDP/443 throttle. The
-# default range is wide enough to give clients lots of room without
-# colliding with common service ports. Admin can narrow / widen via flag.
-# The range here must be a SUPERSET of any per-profile range emitted in
-# the panel — otherwise the panel-emitted ports rotate outside the
-# iptables redirect and never reach hysteria.
+# Port-hopping. iptables NAT-REDIRECT for a UDP port range so clients can
+# rotate destination ports per connection (mport=START-END in the URI).
+# Defeats RU TSPU / IR / CN fixed-port UDP/443 throttle. The default range
+# is wide enough to give clients room without colliding with common service
+# ports. Admin can narrow or widen via flag. The range here must be a
+# superset of any per-profile range emitted in the panel, otherwise the
+# panel-emitted ports rotate outside the iptables redirect and never reach
+# hysteria.
 HY_PORT_RANGE="20000-50000"
 
-# Xray REALITY inbound params (only used with --protocol xray). When all the
+# Xray REALITY inbound params (only used with --protocol xray). When the
 # required ones are passed, they're written into /etc/iceslab-node/env so
-# the node-agent's xray adapter spawns a working REALITY listener at startup.
+# the node-agent's xray adapter spawns a REALITY listener at startup.
 # Without these flags the Xray adapter stays disabled until the admin edits
-# the env file manually (slice 24 will auto-push these from the panel).
+# the env file manually (panel will auto-push these later).
 XR_PRIVATE_KEY=""
 XR_PUBLIC_KEY=""
 XR_SHORT_IDS=""
@@ -348,17 +348,17 @@ XR_PORT="443"
 
 # Resolve a payload value: if it starts with "@", treat the rest as a path
 # and read the file content. Otherwise return as-is. Mirrors curl's `-d @file`
-# convention. Critical for long payloads — Linux TTY canonical-mode buffer
+# convention. Matters for long payloads: Linux TTY canonical-mode buffer
 # truncates pastes at 4096 bytes, so anything pasted directly into the
 # terminal (or via `--payload "..."` with the user shell-pasting into the
 # command line) gets cut. File-backed payload sidesteps the TTY entirely.
 # Wipe everything install-iceslab-node.sh creates: systemd unit, binary, source
-# checkout, env dir, UFW allow-rule for the mTLS port, AND the per-
-# protocol config the script generates (hysteria/xray service config).
-# We deliberately keep upstream binaries (the `hysteria` / `xray` exes
-# from their official installers) — only the config files, which are
-# tied to the panel's domain/email/keys, get wiped so a re-install
-# regenerates them cleanly. Idempotent — safe on a half-installed VPS.
+# checkout, env dir, UFW allow-rule for the mTLS port, and the per-protocol
+# config the script generates (hysteria/xray service config).
+# Keep upstream binaries (the `hysteria` / `xray` exes from their official
+# installers); only the config files, which are tied to the panel's
+# domain/email/keys, get wiped so a re-install regenerates them cleanly.
+# Idempotent, safe on a half-installed VPS.
 do_uninstall() {
   log "Stopping iceslab-node service (if running)"
   systemctl stop iceslab-node 2>/dev/null || true
@@ -378,9 +378,9 @@ do_uninstall() {
   rm -f /etc/hysteria/config.yaml
   rm -f /etc/xray/config.json
 
-  # Slice 31.5 — port-hopping cleanup. Stopping the systemd unit fires
-  # its ExecStop= which calls `iceslab-hyhop down` to remove the
-  # iptables rule. After that we can safely remove the script + unit.
+  # Port-hopping cleanup. Stopping the systemd unit fires its ExecStop=
+  # which calls `iceslab-hyhop down` to remove the iptables rule. After
+  # that we can remove the script + unit.
   systemctl stop iceslab-hyhop 2>/dev/null || true
   systemctl disable iceslab-hyhop 2>/dev/null || true
   rm -f /etc/systemd/system/iceslab-hyhop.service
@@ -393,7 +393,7 @@ do_uninstall() {
   log "Removing env directory (/etc/iceslab-node)"
   rm -rf /etc/iceslab-node
 
-  # G3 fail2ban: remove only OUR jail/filter (leave the fail2ban package
+  # fail2ban: remove only our jail/filter (leave the fail2ban package
   # installed, it may protect other services). jail.local is the legacy
   # path written by older versions of this script.
   rm -f /etc/fail2ban/jail.d/iceslab.local \
@@ -422,8 +422,8 @@ resolve_payload() {
   fi
 }
 
-# Wave-14 #5: bootstrap token passed as `--bootstrap <tok>` ends up in
-# /proc/<pid>/cmdline for the lifetime of the install — any unprivileged
+# A bootstrap token passed as `--bootstrap <tok>` ends up in
+# /proc/<pid>/cmdline for the lifetime of the install: any unprivileged
 # local process can grab it and (within the 15-min TTL) issue a full mTLS
 # keypair against the panel for this node. Reading from a file avoids the
 # argv exposure; same shape as resolve_payload's @file convention.
@@ -444,16 +444,16 @@ while [[ $# -gt 0 ]]; do
     --bootstrap)         BOOTSTRAP_TOKEN="$2"; shift 2 ;;
     --bootstrap-file)    BOOTSTRAP_TOKEN=$(resolve_bootstrap "$2"); shift 2 ;;
     --port)          NODE_PORT="$2"; shift 2 ;;
-    # Hysteria 2 — auto-configure server (config.yaml + systemd unit)
+    # Hysteria 2: auto-configure server (config.yaml + systemd unit)
     --hysteria-domain)         HY_DOMAIN="$2"; shift 2 ;;
     --hysteria-email)          HY_EMAIL="$2"; shift 2 ;;
     --hysteria-masquerade-url) HY_MASQUERADE_URL="$2"; shift 2 ;;
     --hysteria-obfs-password)  HY_OBFS_PASSWORD="$2"; shift 2 ;;
-    # Slice 31.5 — port-hopping iptables redirect range. Accepts
-    # `START-END` (hyphen). Pass empty string to disable port-hopping
-    # on this node (then iptables stays untouched).
+    # Port-hopping iptables redirect range. Accepts `START-END` (hyphen).
+    # Pass empty string to disable port-hopping on this node (then iptables
+    # stays untouched).
     --hysteria-port-range)     HY_PORT_RANGE="$2"; shift 2 ;;
-    # Xray REALITY — pre-fill env so the adapter starts immediately
+    # Xray REALITY: pre-fill env so the adapter starts immediately
     --xray-reality-private-key)  XR_PRIVATE_KEY="$2"; shift 2 ;;
     --xray-reality-public-key)   XR_PUBLIC_KEY="$2"; shift 2 ;;
     --xray-reality-short-ids)    XR_SHORT_IDS="$2"; shift 2 ;;
@@ -461,14 +461,14 @@ while [[ $# -gt 0 ]]; do
     --xray-reality-dest)         XR_DEST="$2"; shift 2 ;;
     --xray-port)                 XR_PORT="$2"; shift 2 ;;
     # Re-installation flow on a VPS that already hosts a previous agent:
-    #   --reset      → wipe prior state silently before installing
-    #   --uninstall  → wipe prior state and exit (no install)
+    #   --reset      : wipe prior state silently before installing
+    #   --uninstall  : wipe prior state and exit (no install)
     # Without either flag, a detected prior install triggers an interactive
     # "overwrite? [y/N]" prompt; non-interactive runs (no tty) abort.
     --reset)         RESET=1; shift ;;
     --uninstall)     UNINSTALL=1; shift ;;
     --panel-ip)      PANEL_IP="$2"; shift 2 ;;
-    # G (Zashchita / hardening) - see the HARDEN_UFW/FAIL2BAN block above.
+    # Zashchita (hardening): see the HARDEN_UFW/FAIL2BAN block above.
     --harden-ufw)         HARDEN_UFW=1; shift ;;
     --fail2ban)           FAIL2BAN=1; shift ;;
     --realistic-fallback) REALISTIC_FALLBACK=1; shift ;;
@@ -482,34 +482,33 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ───── -1. Uninstall fast-path ─────
-# Run BEFORE bootstrap-token redemption — otherwise `--uninstall` would
+# Run BEFORE bootstrap-token redemption, otherwise `--uninstall` would
 # pointlessly consume a one-shot bootstrap token.
 if [[ $UNINSTALL -eq 1 ]]; then
   if [[ -f /etc/iceslab-node/env || -x /usr/local/bin/iceslab-node ]]; then
-    log "Uninstalling previous iceslab-node …"
+    log "Uninstalling previous iceslab-node"
     do_uninstall
-    log "✅ Uninstall complete. Rerun install-iceslab-node.sh to set up a fresh agent."
+    ok "Uninstall complete. Rerun install-iceslab-node.sh to set up a fresh agent."
   else
-    log "Nothing to uninstall — no prior iceslab-node found."
+    log "Nothing to uninstall: no prior iceslab-node found."
   fi
   exit 0
 fi
 
 # If both --panel-url and --bootstrap given, redeem the bootstrap token to
-# fetch the full payload from panel over HTTP. This is the recommended flow
-# — it sidesteps the 4 KB TTY paste limit because the long payload travels
+# fetch the full payload from panel over HTTP. This is the recommended flow:
+# it sidesteps the 4 KB TTY paste limit because the long payload travels
 # over a plain HTTP body, not through the user's shell.
 if [[ -n "$BOOTSTRAP_TOKEN" && -n "$PANEL_URL" ]]; then
   log "Redeeming bootstrap token at $PANEL_URL"
   TMP_PAYLOAD=$(mktemp)
-  # Cycle #6 fix 2026-05-12 — was `curl -f ... || echo 000`. `-f` makes curl
-  # exit non-zero on HTTP 4xx/5xx, which triggered the `|| echo 000` and
-  # appended "000" to whatever http_code -w already wrote → "410" became
-  # "410000" and missed the case-410 branch, falling through to "*" with
-  # the misleading "Unexpected HTTP 410000" message. Drop -f so curl exits 0
-  # on every reply where the response was actually parsed (we use http_code
-  # to distinguish); separate || fallback covers only the network-down
-  # case where curl couldn't connect at all.
+  # No -f here. With `curl -f ... || echo 000`, -f makes curl exit non-zero
+  # on HTTP 4xx/5xx, which triggered the `|| echo 000` and appended "000" to
+  # whatever http_code -w already wrote, so "410" became "410000" and missed
+  # the case-410 branch, falling through to "*" with a misleading "Unexpected
+  # HTTP 410000". Drop -f so curl exits 0 on every reply that was actually
+  # parsed (we use http_code to distinguish); the separate || fallback covers
+  # only the network-down case where curl couldn't connect at all.
   # --proto =https forbids the URL from being http://; --max-redirs 0
   # blocks an attacker-controlled redirect that would otherwise let
   # `--panel-url http://attacker/` 302 to the real panel and MITM the
@@ -524,12 +523,12 @@ if [[ -n "$BOOTSTRAP_TOKEN" && -n "$PANEL_URL" ]]; then
     "$PANEL_URL/api/internal/bootstrap/$BOOTSTRAP_TOKEN" 2>/dev/null) || HTTP_CODE="000"
   case "$HTTP_CODE" in
     200) PAYLOAD=$(tr -d '\n\r \t' < "$TMP_PAYLOAD"); rm -f "$TMP_PAYLOAD" ;;
-    404) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token not found at $PANEL_URL — typo or expired+purged" ;;
-    410) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token already consumed or expired — issue a fresh one in the panel UI" ;;
-    000) rm -f "$TMP_PAYLOAD"; fail "Cannot reach panel at $PANEL_URL — check the URL, TLS cert, firewall" ;;
-    *)   rm -f "$TMP_PAYLOAD"; fail "Unexpected HTTP $HTTP_CODE from panel — see panel logs" ;;
+    404) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token not found at $PANEL_URL: typo or expired+purged" ;;
+    410) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token already consumed or expired: issue a fresh one in the panel UI" ;;
+    000) rm -f "$TMP_PAYLOAD"; fail "Cannot reach panel at $PANEL_URL: check the URL, TLS cert, firewall" ;;
+    *)   rm -f "$TMP_PAYLOAD"; fail "Unexpected HTTP $HTTP_CODE from panel: see panel logs" ;;
   esac
-  log "Bootstrap successful — fetched ${#PAYLOAD} bytes of payload"
+  log "Bootstrap successful: fetched ${#PAYLOAD} bytes of payload"
 elif [[ -n "$BOOTSTRAP_TOKEN" || -n "$PANEL_URL" ]]; then
   fail "--panel-url and --bootstrap must be passed TOGETHER (got only one)"
 fi
@@ -538,10 +537,10 @@ prompt_protocol() {
   cat <<'EOF'
 
 Pick a protocol for this node (one protocol per VPS is the recommended
-pattern — resource isolation, simpler firewall):
+pattern: resource isolation, simpler firewall):
 
   1) Xray          VLESS+REALITY+Vision (TCP/443, raw/xhttp/ws/grpc transports)
-  2) Hysteria 2    UDP/443, QUIC, Brutal CC — best throughput on lossy links
+  2) Hysteria 2    UDP/443, QUIC, Brutal CC, best throughput on lossy links
   3) AmneziaWG     DPI-resistant WireGuard fork (needs kernel module + DKMS)
   4) NaiveProxy    Caddy fork with klzgrad/forwardproxy@naive (≥2 GB RAM build)
   5) Shadowsocks   SS2022 multi-user via xray-core (TCP+UDP/443, no separate bin)
@@ -551,7 +550,7 @@ pattern — resource isolation, simpler firewall):
 EOF
   local choice
   while true; do
-    read -rp "Select [1-7]: " choice </dev/tty || fail "no /dev/tty — pass --protocol explicitly"
+    read -rp "Select [1-7]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -569,44 +568,44 @@ EOF
 prompt_payload() {
   cat <<'EOF'
 
-The panel issued a one-time base64 payload when you created this Node — it
-contains the mTLS keypair. Find it in the panel UI: Nodes → Create node →
+The panel issued a one-time base64 payload when you created this Node; it
+contains the mTLS keypair. Find it in the panel UI: Nodes > Create node >
 the modal that pops up after submit.
 
 Two ways to enter it here:
 
-  1. Paste the base64 string directly. WORKS ONLY for payloads under
-     ~4 KB — Linux TTY truncates longer pastes at 4096 bytes. Real
+  1. Paste the base64 string directly. Works only for payloads under
+     ~4 KB; Linux TTY truncates longer pastes at 4096 bytes. Real
      payloads are ~6-7 KB, so this almost never works.
 
   2. Save the payload to a file first (download via panel UI button, or
      scp from your laptop, or `cat > /tmp/payload.b64` if your terminal
-     allows). Then enter `@/path/to/file` here — the script reads the
+     allows). Then enter `@/path/to/file` here: the script reads the
      file content directly without any TTY buffering.
 
 EOF
   local input
-  read -rp "Payload (or @/path/to/file): " input </dev/tty || fail "no /dev/tty — pass --payload explicitly"
+  read -rp "Payload (or @/path/to/file): " input </dev/tty || fail "no /dev/tty; pass --payload explicitly"
   PAYLOAD=$(resolve_payload "$input")
   if [[ -z "$PAYLOAD" ]]; then
     fail "empty payload"
   fi
-  # Sanity-check length: real payload is base64 of a ~3 KB JSON, so ≥4 KB
+  # Sanity-check length: real payload is base64 of a ~3 KB JSON, so >=4 KB
   # base64. Anything shorter is almost certainly truncated and we'll fail
-  # later with a confusing JSON-decode error. Loudly warn now.
+  # later with a confusing JSON-decode error. Warn now.
   if [[ ${#PAYLOAD} -lt 4000 ]]; then
-    warn "payload is only ${#PAYLOAD} chars — typical payloads are 6-7 KB."
+    warn "payload is only ${#PAYLOAD} chars; typical payloads are 6-7 KB."
     warn "If you pasted directly into the terminal, you likely hit the 4096-byte"
     warn "TTY paste limit. Re-run with --payload @/path/to/file for the full thing."
   fi
 }
 
 # ───── 0. Existing-install handling ─────
-# Detect a prior installation. The env file is the canonical marker — if
-# it's there, the agent has at least been bootstrapped against *some*
-# panel before. Re-using it against a different (or freshly-rebuilt)
-# panel is the #1 source of "panel can't reach node" support tickets,
-# because the old server cert won't validate against the new panel CA.
+# Detect a prior installation. The env file is the canonical marker: if
+# it's there, the agent has at least been bootstrapped against some panel
+# before. Re-using it against a different (or freshly-rebuilt) panel is the
+# top source of "panel can't reach node" support tickets, because the old
+# server cert won't validate against the new panel CA.
 EXISTING_INSTALL=0
 if [[ -f /etc/iceslab-node/env || -x /usr/local/bin/iceslab-node ]]; then
   EXISTING_INSTALL=1
@@ -614,18 +613,18 @@ fi
 
 if [[ $EXISTING_INSTALL -eq 1 ]]; then
   if [[ $RESET -eq 1 ]]; then
-    log "--reset given — wiping previous installation"
+    log "--reset given: wiping previous installation"
     do_uninstall
   elif [[ -e /dev/tty ]]; then
     warn "Detected previous iceslab-node install on this VPS."
     warn "Re-installing against a different panel without wiping state will"
     warn "cause mTLS verification to fail (old server cert vs new panel CA)."
-    # Cycle #6 reality-check 2026-05-12 — `read -rp "..." ans </dev/tty`
-    # silently lost the keypress in the `bash <(curl ...)` process-substitution
-    # flow (the prompt printed but the subsequent read returned empty, hitting
-    # the `*` branch with "Aborted by user" even though `y` was typed). Splitting
-    # the prompt print and the read fixes it — `read` then has /dev/tty as a
-    # proper terminal handle without the prompt-print racing the input side.
+    # `read -rp "..." ans </dev/tty` silently lost the keypress in the
+    # `bash <(curl ...)` process-substitution flow: the prompt printed but
+    # the read returned empty, hitting the `*` branch with "Aborted by user"
+    # even when `y` was typed. Splitting the prompt print from the read fixes
+    # it, so read has /dev/tty as a clean terminal handle without the
+    # prompt-print racing the input side.
     printf '\033[1;33mWipe previous installation and continue? [y/N]:\033[0m '
     if ! read -r ans </dev/tty; then
       ans=""
@@ -659,7 +658,7 @@ case "${ID:-}" in
 esac
 ok "$PRETTY_NAME · protocol=$PROTOCOL"
 
-# RAM / swap check — same insurance as install-iceslab.sh. Go build itself is
+# RAM / swap check, same insurance as install-iceslab.sh. Go build itself is
 # light, but the protocol bootstrap scripts (xcaddy compile for Naive, DKMS
 # build for AmneziaWG) can spike past 1 GB. Tiny VPS without swap gets killed.
 TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
@@ -744,7 +743,7 @@ if $NEED_GO; then
 fi
 export PATH=/usr/local/go/bin:$PATH
 
-# Persist `go` in PATH for future SSH sessions — symlink into /usr/local/bin
+# Persist `go` in PATH for future SSH sessions: symlink into /usr/local/bin
 # (which is on every distro's default PATH) so admins can rebuild the agent
 # manually after a `git pull` without having to re-run install-iceslab-node.sh.
 ln -sf /usr/local/go/bin/go /usr/local/bin/go
@@ -763,17 +762,17 @@ else
     if [[ "${FORCE_RESET:-0}" != "1" ]]; then
       fail "Checkout at $ICESLAB_NODE_DIR has uncommitted changes. Re-run with FORCE_RESET=1 to discard them, or stash before retrying."
     fi
-    log "FORCE_RESET=1 — discarding local edits in $ICESLAB_NODE_DIR"
+    log "FORCE_RESET=1: discarding local edits in $ICESLAB_NODE_DIR"
   fi
   git -C "$ICESLAB_NODE_DIR" fetch --depth 1 origin "$ICESLAB_NODE_REF"
   git -C "$ICESLAB_NODE_DIR" reset --hard "origin/$ICESLAB_NODE_REF" || true
 fi
 
-# Wave-14 #4: see install-iceslab.sh for the threat model. Pin SHA for prod.
+# See install-iceslab.sh for the threat model. Pin SHA for prod.
 if [[ -n "${ICESLAB_NODE_REF_SHA:-}" ]]; then
   actual_sha=$(git -C "$ICESLAB_NODE_DIR" rev-parse HEAD)
   if [[ "$actual_sha" != "$ICESLAB_NODE_REF_SHA" ]]; then
-    fail "ICESLAB_NODE_REF_SHA mismatch: tag $ICESLAB_NODE_REF resolved to $actual_sha, expected $ICESLAB_NODE_REF_SHA. Tag may have been re-pointed upstream — abort."
+    fail "ICESLAB_NODE_REF_SHA mismatch: tag $ICESLAB_NODE_REF resolved to $actual_sha, expected $ICESLAB_NODE_REF_SHA. Tag may have been re-pointed upstream; abort."
   fi
   ok "commit SHA verified ($actual_sha)"
 fi
@@ -816,8 +815,8 @@ case "$PROTOCOL" in
         "$XRAY_INSTALLER_SHA"
       # XTLS/Xray-install's install-release.sh takes the operation as its
       # first positional arg ('install', 'install-geodata', 'remove', etc).
-      # An earlier copy of this line had `@ install` — the stray `@` made
-      # the installer print "unknown option -- -" and abort. Just pass the
+      # An earlier copy of this line had `@ install`; the stray `@` made
+      # the installer print "unknown option -- -" and abort. Pass the
       # operation directly.
       bash "$XR_TMP" install
       rm -f "$XR_TMP"
@@ -825,10 +824,10 @@ case "$PROTOCOL" in
       log "xray already present: $(xray version | head -1)"
     fi
     # XTLS installer creates its own xray.service that conflicts with our
-    # node-agent's subprocess management. Disable it — iceslab-node owns xray.
+    # node-agent's subprocess management. Disable it: iceslab-node owns xray.
     systemctl stop xray.service  >/dev/null 2>&1 || true
     systemctl disable xray.service >/dev/null 2>&1 || true
-    log "XTLS xray.service disabled — iceslab-node manages xray directly"
+    log "XTLS xray.service disabled; iceslab-node manages xray directly"
     PROTO_BINARY=$(command -v xray)
     PROTO_CONFIG=/usr/local/etc/xray/config.json
     ;;
@@ -845,7 +844,7 @@ case "$PROTOCOL" in
     PROTO_CONFIG=/etc/caddy/Caddyfile
     ;;
   shadowsocks)
-    # SS2022 multi-user runs INSIDE xray-core (slice 24d). No separate binary.
+    # SS2022 multi-user runs inside xray-core. No separate binary.
     # Reuse the xray install path; the SS adapter on the node-agent shells out
     # to its own xray-api inbound on 127.0.0.1:8081 (one above the VLESS
     # adapter's :8080 to avoid collision when both adapters live on one node).
@@ -858,8 +857,8 @@ case "$PROTOCOL" in
         "$XRAY_INSTALLER_SHA"
       # XTLS/Xray-install's install-release.sh takes the operation as its
       # first positional arg ('install', 'install-geodata', 'remove', etc).
-      # An earlier copy of this line had `@ install` — the stray `@` made
-      # the installer print "unknown option -- -" and abort. Just pass the
+      # An earlier copy of this line had `@ install`; the stray `@` made
+      # the installer print "unknown option -- -" and abort. Pass the
       # operation directly.
       bash "$XR_TMP" install
       rm -f "$XR_TMP"
@@ -868,7 +867,7 @@ case "$PROTOCOL" in
     fi
     systemctl stop xray.service  >/dev/null 2>&1 || true
     systemctl disable xray.service >/dev/null 2>&1 || true
-    log "XTLS xray.service disabled — iceslab-node manages xray directly"
+    log "XTLS xray.service disabled; iceslab-node manages xray directly"
     PROTO_BINARY=$(command -v xray)
     PROTO_CONFIG=/etc/xray/shadowsocks.json
     ;;
@@ -891,8 +890,8 @@ ENV_DIR=/etc/iceslab-node
 mkdir -p "$ENV_DIR"
 
 # ProtectSystem=strict in our systemd unit makes /etc read-only except for
-# explicit ReadWritePaths. ReadWritePaths can't *create* directories, only
-# permit writes inside existing ones — so we pre-create every per-protocol
+# explicit ReadWritePaths. ReadWritePaths can't create directories, only
+# permit writes inside existing ones, so we pre-create every per-protocol
 # config dir here, even if the protocol isn't installed on this node.
 mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita
 ENV_FILE="$ENV_DIR/env"
@@ -912,7 +911,7 @@ NODE_PAYLOAD=${PAYLOAD}
 NODE_HOST=${NODE_HOST}
 NODE_PORT=${NODE_PORT}
 EOF
-  # G (Zashchita / hardening) - record realistic-fallback intent for the agent.
+  # Zashchita (hardening): record realistic-fallback intent for the agent.
   # The agent reads REALISTIC_FALLBACK when generating the REALITY/Caddy
   # fallback so an active probe hits a real-looking site instead of a bare
   # reset. The flag is recorded here; the protocol-specific fallback wiring is
@@ -931,8 +930,8 @@ EOF
       # Pass domain + email through to the agent so subsequent ApplyInbound
       # pushes can rewrite the Hysteria config without losing identity.
       # Without these, the agent's hysteria adapter falls back to defaults
-      # ("your.domain.net") on the next config write — exactly the bug we
-      # just chased on the first ice-hys2-test install.
+      # ("your.domain.net") on the next config write; caught live on the
+      # first ice-hys2-test install.
       if [[ -n "$HY_DOMAIN" ]]; then
         echo "HYSTERIA_HOSTNAME=${HY_DOMAIN}" >> "$ENV_FILE"
       fi
@@ -942,15 +941,15 @@ EOF
       # Tell the agent we're delegating hysteria's lifecycle to systemd
       # (the install just wrote /etc/systemd/system/hysteria.service).
       # Without this, the agent's adapter assumes "spawn-mode" and tries
-      # to fork its own hysteria process — which then fights the systemd-
+      # to fork its own hysteria process, which then fights the systemd-
       # managed copy for :443/udp and dies with "address already in use".
       echo "HYSTERIA_SERVICE_UNIT=hysteria" >> "$ENV_FILE"
-      # Cycle #6 reality-check 2026-05-12 — traffic API endpoint. Without
-      # this hysteria-server doesn't expose per-user uplink/downlink and
-      # the panel UI is stuck on "0 B today" for every Hysteria node even
-      # under multi-MiB load. Generate a random secret here so adapter
-      # (poller) and hysteria-server (validator) share the same value;
-      # bind loopback-only so the endpoint is unreachable from outside.
+      # Traffic API endpoint. Without this hysteria-server doesn't expose
+      # per-user uplink/downlink and the panel UI is stuck on "0 B today" for
+      # every Hysteria node even under multi-MiB load. Generate a random
+      # secret here so adapter (poller) and hysteria-server (validator) share
+      # the same value; bind loopback-only so the endpoint is unreachable
+      # from outside.
       HYSTERIA_STATS_SECRET=$(openssl rand -hex 24 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 48)
       {
         echo "HYSTERIA_STATS_LISTEN=127.0.0.1:9999"
@@ -1005,7 +1004,7 @@ MTG_BINARY=${PROTO_BINARY}
 MTG_CONFIG=${PROTO_CONFIG}
 MTG_PORT=443
 MTG_STATS_PORT=3129
-# Fake-TLS masquerade domain — must be a real, popular HTTPS host. Filled
+# Fake-TLS masquerade domain: must be a real, popular HTTPS host. Filled
 # in via panel UI when you create the MTProto inbound; safe default below.
 # MTG_DOMAIN=www.cloudflare.com
 EOF
@@ -1019,7 +1018,7 @@ EOF
   esac
   chmod 600 "$ENV_FILE"
 else
-  log "$ENV_FILE exists — keeping current payload (pass --payload to overwrite)"
+  log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"
 fi
 
 step "Firewall (ufw)"
@@ -1027,7 +1026,7 @@ step "Firewall (ufw)"
 # then flip defaults to deny + enable. Skip with SKIP_FIREWALL=1.
 if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
   log "ufw: SSH + panel-mTLS:$NODE_PORT + protocol-specific"
-  # SSH FIRST (the lockout-safety rule above). G/Zashchita: when an
+  # SSH FIRST (the lockout-safety rule above). Zashchita: when an
   # --ssh-allowlist is given, lock 22/tcp to those IP/CIDRs only (mirror of
   # the --panel-ip loop below) instead of world-open. --harden-ufw additionally
   # rate-limits SSH (`ufw limit`) to slow brute-force scanners. The two compose:
@@ -1066,11 +1065,11 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
   else
     ufw allow 22/tcp                     >/dev/null 2>&1 || true
   fi
-  # Slice S7 — restrict mTLS port to the panel's IP if --panel-ip given,
-  # otherwise (--panel-ip not set) fall back to world-open with a loud warn.
+  # Restrict mTLS port to the panel's IP if --panel-ip given, otherwise
+  # (--panel-ip not set) fall back to world-open with a loud warn.
   # Resolving --panel-url's host into a candidate IP would help, but DNS
   # changes (CF rotations, panel migrations) would silently break the
-  # control plane — we'd rather make the operator type it explicitly.
+  # control plane, so we make the operator type it explicitly.
   if [[ -n "$PANEL_IP" ]]; then
     log "Restricting :${NODE_PORT}/tcp to PANEL_IP=$PANEL_IP (use comma-list for multiple)"
     IFS=',' read -ra _PANEL_IPS <<< "$PANEL_IP"
@@ -1079,7 +1078,7 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
     done
     unset _PANEL_IPS
   else
-    warn "no --panel-ip given — mTLS port :${NODE_PORT}/tcp opened to the WORLD."
+    warn "no --panel-ip given; mTLS port :${NODE_PORT}/tcp opened to the WORLD."
     warn "mTLS still rejects unknown clients, but you waste CPU on bot handshakes"
     warn "and leak 'this is Iceslab' via the server cert SAN. Pass --panel-ip <ip>"
     warn "next time (panel public IP) to lock it down. You can also fix it now:"
@@ -1101,15 +1100,15 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
       # masquerade) and 1234 (recommended by upstream as an example
       # low-port alternative). Admin can pick either in the panel Profile
       # UI; or open another port manually if they prefer something else.
-      # 51820 deliberately NOT opened — operators who really need it can
-      # `ufw allow 51820/udp` themselves. Caught live cycle #6 2026-05-12.
+      # 51820 deliberately NOT opened: operators who really need it can
+      # `ufw allow 51820/udp` themselves. Caught live.
       ufw allow 443/udp                  >/dev/null 2>&1 || true
       ufw allow 1234/udp                 >/dev/null 2>&1 || true
       # UFW defaults DEFAULT_FORWARD_POLICY=DROP, but AmneziaWG is a routed
-      # VPN — packets enter on awg0 and must FORWARD to the WAN. Without
-      # this flip clients reach "Connected" and handshake completes, but
-      # the FORWARD chain silently drops their decrypted traffic.
-      # Caught live 2026-05-13 on a production node.
+      # VPN: packets enter on awg0 and must FORWARD to the WAN. Without this
+      # flip clients reach "Connected" and the handshake completes, but the
+      # FORWARD chain silently drops their decrypted traffic. Caught live
+      # on a production node.
       if [[ -f /etc/default/ufw ]]; then
         sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
       fi
@@ -1125,7 +1124,7 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
       ufw allow 443/udp                  >/dev/null 2>&1 || true
       ;;
     mtproto)
-      # mtg Fake-TLS handshake mimics HTTPS — TCP/443 is the canonical port.
+      # mtg Fake-TLS handshake mimics HTTPS; TCP/443 is the canonical port.
       ufw allow 443/tcp                  >/dev/null 2>&1 || true
       ;;
     mieru)
@@ -1141,8 +1140,8 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
   log "ufw status: $(ufw status | head -1)"
 fi
 
-# ───── Optional: fail2ban (G3) ─────
-# G (Zashchita / hardening): fail2ban. Gated on --fail2ban so the base install
+# ───── Optional: fail2ban ─────
+# Zashchita (hardening): fail2ban. Gated on --fail2ban so the base install
 # stays lean (fail2ban is intentionally NOT in the apt prereqs line) and an
 # install without the flag (FAIL2BAN=0, the default) is byte-identical.
 # Installs fail2ban + jails for sshd and the Iceslab agent's Hysteria
@@ -1216,24 +1215,24 @@ EnvironmentFile=${ENV_FILE}
 ExecStart=/usr/local/bin/iceslab-node
 Restart=always
 RestartSec=5
-# Slice 38 — heartbeat self-destruct exits with code 42 to signal "panel
-# disowned this node, don't restart me." Any other exit (crash, panic,
-# ENV typo, transient OOM-kill) goes through Restart=always as before.
+# Heartbeat self-destruct exits with code 42 to signal "panel disowned this
+# node, don't restart me." Any other exit (crash, panic, ENV typo, transient
+# OOM-kill) goes through Restart=always as before.
 RestartPreventExitStatus=42
 LimitNOFILE=1048576
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-# /run is needed for ufw's lockfile (/run/ufw.lock) — without it the agent's
+# /run is needed for ufw's lockfile (/run/ufw.lock); without it the agent's
 # firewall.Allow() helper crashes with "Read-only file system" because
 # ProtectSystem=strict forbids /run writes by default. /run/xtables.lock
-# matters too — iptables uses it from awg-quick PostUp.
+# matters too, iptables uses it from awg-quick PostUp.
 # /etc/iptables/ for netfilter-persistent users (rules.v4 rewrites).
-# Caught live 2026-05-13 on a production node after fresh install.
+# Caught live on a production node after fresh install.
 ReadWritePaths=-/var/log -/etc/iceslab-node -/etc/hysteria -/etc/xray -/usr/local/etc/xray -/etc/amnezia/amneziawg -/etc/caddy -/etc/mtg -/etc/mita -/var/lib/mita -/run -/etc/iptables
 PrivateTmp=true
 
-# Journald log limits — without these a node running for months can balloon
+# Journald log limits; without these a node running for months can balloon
 # /var/log/journal toward the disk-fill threshold. Cap roughly at ~50 MB
 # total for this unit, age out older entries first.
 LogRateLimitIntervalSec=30s
@@ -1265,28 +1264,28 @@ systemctl restart iceslab-node.service
 # When admin passes --hysteria-domain + --hysteria-email, we lay down a full
 # Hysteria 2 server config and systemd unit. Without this, the admin would
 # have to SSH in and write /etc/hysteria/config.yaml by hand after running
-# install-iceslab-node.sh — caught during the 2026-05-06 VPS test as a friction
-# point. Skipped silently if either flag is missing or if the protocol
-# isn't hysteria.
+# install-iceslab-node.sh, a friction point caught during a VPS test.
+# Skipped silently if either flag is missing or if the protocol isn't
+# hysteria.
 if [[ "$PROTOCOL" == "hysteria" && -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
   HY_CONFIG=/etc/hysteria/config.yaml
 
-  # Cycle #6 reality-check (2026-05-12): the official get.hy2.sh script
-  # that runs earlier in this installer writes a placeholder config.yaml
-  # with `your.domain.net` / `your@email.com` BEFORE we get here. The
-  # previous "skip if file exists" behaviour then kept that placeholder
-  # and silently ignored the admin's --hysteria-domain / --hysteria-email
-  # flags — hysteria came up trying to obtain a cert for `your.domain.net`
-  # and crashlooped. Detect the placeholder pattern and overwrite when
-  # we have real values to write; only skip when the existing config
-  # already mentions OUR domain (genuine admin-customized state).
+  # The official get.hy2.sh script that runs earlier in this installer
+  # writes a placeholder config.yaml with `your.domain.net` /
+  # `your@email.com` before we get here. The old "skip if file exists"
+  # behaviour kept that placeholder and silently ignored the admin's
+  # --hysteria-domain / --hysteria-email flags, so hysteria came up trying
+  # to obtain a cert for `your.domain.net` and crashlooped. Detect the
+  # placeholder and overwrite when we have real values to write; only skip
+  # when the existing config already mentions our domain (genuine
+  # admin-customized state).
   SHOULD_WRITE_CFG=1
   if [[ -f "$HY_CONFIG" ]]; then
     if grep -q "${HY_DOMAIN}" "$HY_CONFIG"; then
       SHOULD_WRITE_CFG=0
-      log "Hysteria config already mentions ${HY_DOMAIN} — keeping admin-customized state"
+      log "Hysteria config already mentions ${HY_DOMAIN}; keeping admin-customized state"
     else
-      log "Hysteria config at $HY_CONFIG exists but doesn't reference ${HY_DOMAIN} (likely placeholder from get.hy2.sh) — overwriting"
+      log "Hysteria config at $HY_CONFIG exists but doesn't reference ${HY_DOMAIN} (likely placeholder from get.hy2.sh); overwriting"
     fi
   fi
   if [[ $SHOULD_WRITE_CFG -eq 1 ]]; then
@@ -1316,20 +1315,19 @@ bandwidth:
   up: 1 gbps
   down: 1 gbps
 
-# Cycle #5 ground truth: clients (Hiddify iOS, NekoBox, Streisand) often
-# negotiate up=0 with Brutal CC at session start, leading to "tunnel
-# handshakes but tx=0, websites don't load". Forcing BBR here removes
-# the dependency on a sane client-side bandwidth declaration. Clients
-# that DO emit valid upmbps/downmbps via subscription URI still benefit
-# from Brutal because we re-render this section on ApplyInbound from
-# the panel.
+# Clients (Hiddify iOS, NekoBox, Streisand) often negotiate up=0 with
+# Brutal CC at session start, leading to "tunnel handshakes but tx=0,
+# websites don't load". Forcing BBR here removes the dependency on a sane
+# client-side bandwidth declaration. Clients that do emit valid
+# upmbps/downmbps via subscription URI still benefit from Brutal because
+# we re-render this section on ApplyInbound from the panel.
 ignoreClientBandwidth: true
 
-# Cycle #6 traffic stats endpoint. Bind loopback-only so it isn't
-# reachable from outside; the agent polls it from the same host with
-# the matching secret from /etc/iceslab-node/env (HYSTERIA_STATS_SECRET).
-# Without this block, the agent's GetStats returns zero counters and
-# the panel UI shows "0 B today" for every Hysteria node.
+# Traffic stats endpoint. Bind loopback-only so it isn't reachable from
+# outside; the agent polls it from the same host with the matching secret
+# from /etc/iceslab-node/env (HYSTERIA_STATS_SECRET). Without this block,
+# the agent's GetStats returns zero counters and the panel UI shows
+# "0 B today" for every Hysteria node.
 trafficStats:
   listen: 127.0.0.1:9999
   secret: ${HYSTERIA_STATS_SECRET}
@@ -1377,14 +1375,14 @@ EOF
     systemctl daemon-reload
   fi
   # ───── IPv6 sanity-check for hysteria's outbound resolver ─────
-  # Cycle #5 finding: many VPS providers route IPv4 cleanly but leave IPv6
-  # half-configured (AAAA records resolve, but the host can't actually reach
-  # IPv6 destinations). Hysteria proxies a client-requested DNS name and
-  # Go's net resolver tries IPv6 first by default — when AAAA wins, every
-  # request times out at the v6 hop and the user sees "client connected
-  # but YouTube doesn't load." Force IPv4 preference via gai.conf so the
-  # libc resolver returns A records first; IPv6 still works if it works,
-  # this just demotes it from the default winner.
+  # Many VPS providers route IPv4 cleanly but leave IPv6 half-configured
+  # (AAAA records resolve, but the host can't actually reach IPv6
+  # destinations). Hysteria proxies a client-requested DNS name and Go's
+  # net resolver tries IPv6 first by default: when AAAA wins, every request
+  # times out at the v6 hop and the user sees "client connected but YouTube
+  # doesn't load." Force IPv4 preference via gai.conf so the libc resolver
+  # returns A records first; IPv6 still works if it works, this just demotes
+  # it from the default winner.
   if ! grep -q '^precedence ::ffff:0:0/96  100' /etc/gai.conf 2>/dev/null; then
     log "Configuring /etc/gai.conf to prefer IPv4 for hysteria's outbound resolver"
     echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
@@ -1392,9 +1390,9 @@ EOF
 
   systemctl enable hysteria.service >/dev/null 2>&1 || true
   systemctl restart hysteria.service
-  log "Hysteria 2 started — first run will obtain the LE certificate via HTTP-01"
+  log "Hysteria 2 started; first run will obtain the LE certificate via HTTP-01"
 
-  # ───── Slice 31.5 — Hysteria port-hopping (iptables REDIRECT) ─────
+  # ───── Hysteria port-hopping (iptables REDIRECT) ─────
   # We install a tiny up/down helper + systemd unit that owns a single
   # NAT-PREROUTING rule redirecting `udp --dport START:END → :443`. The
   # unit is `Type=oneshot RemainAfterExit=yes` with ExecStart=up and
@@ -1407,7 +1405,7 @@ EOF
   #   3. iptables is present on the system
   if [[ -n "$HY_PORT_RANGE" ]] && command -v iptables >/dev/null 2>&1; then
     # Validate format BEFORE we substitute the value into the generated
-    # helper script — the script runs as root and a careless typo (or a
+    # helper script: the script runs as root and a careless typo (or a
     # tampered upstream install pipeline) would otherwise get baked in
     # verbatim. Format: `START-END` where both are 1024..65535 and END>START.
     if ! [[ "$HY_PORT_RANGE" =~ ^([0-9]{4,5})-([0-9]{4,5})$ ]]; then
@@ -1430,7 +1428,7 @@ EOF
     cat > "$HYHOP_BIN" <<EOF
 #!/usr/bin/env bash
 # Iceslab Hysteria 2 port-hopping helper. Managed by systemd unit
-# iceslab-hyhop.service — do not edit by hand. To change the range,
+# iceslab-hyhop.service, do not edit by hand. To change the range,
 # re-run install-iceslab-node.sh with --hysteria-port-range START-END.
 set -euo pipefail
 RANGE_IPT='${HY_RANGE_IPT}'
@@ -1481,17 +1479,17 @@ EOF
     log "Port-hopping active. Profile-side range MUST be a subset of ${HY_PORT_RANGE}."
   else
     [[ -z "$HY_PORT_RANGE" ]] && log "Port-hopping disabled by --hysteria-port-range ''"
-    command -v iptables >/dev/null 2>&1 || warn "iptables not installed — skipping port-hopping setup"
+    command -v iptables >/dev/null 2>&1 || warn "iptables not installed; skipping port-hopping setup"
   fi
 elif [[ "$PROTOCOL" == "hysteria" ]]; then
-  warn "Hysteria server NOT auto-configured — pass --hysteria-domain <fqdn> --hysteria-email <addr> next time"
+  warn "Hysteria server NOT auto-configured; pass --hysteria-domain <fqdn> --hysteria-email <addr> next time"
   warn "Or manually write /etc/hysteria/config.yaml + systemd unit (see Hysteria 2 upstream docs at v2.hysteria.network)"
 fi
 
 step "Wait for node-agent ready"
-# Ask systemd directly (Cycle #6 fix): mTLS HTTPS server rejects probes
-# without a client cert, so `curl /healthz` always reports "didn't respond"
-# even when the agent is perfectly healthy.
+# Ask systemd directly: the mTLS HTTPS server rejects probes without a
+# client cert, so `curl /healthz` always reports "didn't respond" even when
+# the agent is healthy.
 READY=false
 for i in $(seq 1 30); do
   if systemctl is-active --quiet iceslab-node 2>/dev/null; then
@@ -1503,9 +1501,9 @@ for i in $(seq 1 30); do
   sleep 1
 done
 if $READY; then
-  ok "iceslab-node active in ${i}s — panel will poll over mTLS within ~30s"
+  ok "iceslab-node active in ${i}s; panel will poll over mTLS within ~30s"
 else
-  warn "iceslab-node did NOT reach active state — check:"
+  warn "iceslab-node did NOT reach active state. Check:"
   warn "  systemctl status iceslab-node"
   warn "  journalctl -u iceslab-node -f"
 fi
@@ -1525,7 +1523,7 @@ printf '  Public IP    %s\n' "$PUBLIC_IP"
 printf '  mTLS port    %s/tcp  (panel connects here)\n' "$NODE_PORT"
 printf '  Env file     %s  (chmod 600)\n' "$ENV_FILE"
 printf '\n'
-printf '  Next:  panel UI → Nodes tab → status flips to "connected" in a few seconds\n'
+printf '  Next:  panel UI > Nodes tab; status flips to "connected" in a few seconds\n'
 printf '\n'
 printf '  Logs       journalctl -u iceslab-node -f -o short-iso\n'
 printf '  Restart    systemctl restart iceslab-node\n'

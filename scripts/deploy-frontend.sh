@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# deploy-frontend.sh — fast path for SPA-only changes.
+# deploy-frontend.sh: fast path for SPA-only changes.
 #
-# Skips Prisma migrate + backend rebuild. Use this when you only edited
-# anything under apps/panel-frontend/. --no-cache is ON by default — the
-# Vite bundle is content-hashed but the COPY layer occasionally hits a
-# Docker cache hit that lands a stale dist/ in the image. ~30s slower
-# but trades for "what I see is what shipped."
+# Skips Prisma migrate + backend rebuild. Use when you only edited files
+# under apps/panel-frontend/. --no-cache is ON by default: the Vite bundle
+# is content-hashed, but the COPY layer occasionally gets a Docker cache hit
+# that lands a stale dist/ in the image. Roughly 30s slower, but what you see
+# is what shipped.
 #
 # Usage:
 #   ./scripts/deploy-frontend.sh           # default --no-cache
-#   ./scripts/deploy-frontend.sh --cache   # opt back into Docker layer
-#                                            cache (faster, occasionally
-#                                            stale — only use when you
+#   ./scripts/deploy-frontend.sh --cache   # use Docker layer cache (faster,
+#                                            occasionally stale; only when you
 #                                            trust the diff)
 
 set -euo pipefail
@@ -47,11 +46,11 @@ STEP_TOTAL=3
 
 # ───── Step 1: sync source to ICESLAB_REF ─────
 # Honors ICESLAB_REF (branch or pinned tag); defaults to the current branch.
-# See git_sync_to_ref in _lib.sh (replaces the bare `git pull` detached-HEAD trap).
+# git_sync_to_ref in _lib.sh avoids the detached-HEAD trap that bare `git pull` hits.
 step 1 "sync source (ICESLAB_REF=${ICESLAB_REF:-current branch})"
 git_sync_to_ref
 if [[ "$SHA_BEFORE" == "$SHA_AFTER" ]]; then
-    log_info "  ${SYNC_TARGET}: no new commits — re-deploying ${SHA_AFTER}"
+    log_info "  ${SYNC_TARGET}: no new commits, re-deploying ${SHA_AFTER}"
 else
     log_info "  ${SYNC_TARGET}: ${SHA_BEFORE} -> ${SHA_AFTER}"
 fi
@@ -74,4 +73,4 @@ step 3 "status"
 step_done
 
 echo
-log_ok "frontend deploy complete in $(elapsed_total) — now serving ${SHA_AFTER}"
+log_ok "frontend deploy complete in $(elapsed_total), now serving ${SHA_AFTER}"

@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 #
-# _lib.sh — shared helpers for ops scripts (deploy*, cleanup, logs, backup,
-# restore). NOT meant to be executed directly. Source it from a script that
+# _lib.sh: shared helpers for ops scripts (deploy*, cleanup, logs, backup,
+# restore). Not meant to be executed directly. Source it from a script that
 # has already set LIB_PREFIX:
 #
 #   LIB_PREFIX="deploy"
@@ -17,13 +17,12 @@
 #   - git_short_sha  (current HEAD hash, "no-git" if not a repo)
 #
 # Install scripts (install-iceslab.sh, install-iceslab-node.sh) deliberately
-# do NOT source this — they're curl-piped standalone and must work without
+# do not source this: they're curl-piped standalone and must work without
 # the rest of the scripts/ directory present.
 
 # ───── Colors ─────
-# Only emit escape codes when stdout is an interactive TTY. CI logs,
-# pipes, and journalctl capture as plain text, so noisy escapes
-# would clutter them.
+# Only emit escape codes on an interactive TTY. CI logs, pipes, and
+# journalctl capture as plain text, so escapes would just clutter them.
 if [[ -t 1 ]]; then
     C_INFO=$'\033[1;36m'   # cyan
     C_OK=$'\033[1;32m'     # green
@@ -36,14 +35,13 @@ else
 fi
 
 # ───── Timing ─────
-# Use SECONDS (bash builtin, monotonic-ish) to avoid spawning `date`
-# on every log line. Subtraction gives wall-clock seconds since the
-# library was sourced.
+# Use SECONDS (bash builtin) to avoid spawning `date` on every log line.
+# Subtraction gives wall-clock seconds since the library was sourced.
 _LIB_START_SECONDS=$SECONDS
 _LIB_STEP_SECONDS=$SECONDS
 
 fmt_duration() {
-    # Pretty-print seconds as "Xs" / "XmYs" / "XhYm" depending on scale.
+    # Format seconds as "Xs" / "XmYs" / "XhYm" by scale.
     local s=$1
     if (( s < 60 )); then
         printf '%ds' "$s"
@@ -68,9 +66,8 @@ log_warn() { printf '%b[%s]%b %b%s%b\n' "$C_INFO" "$LIB_PREFIX" "$C_RST" "$C_WAR
 log_err()  { printf '%b[%s]%b %b%s%b\n' "$C_INFO" "$LIB_PREFIX" "$C_RST" "$C_ERR" "$*" "$C_RST" >&2; }
 
 # ───── Numbered steps ─────
-# Operators want to see "step 3 of 7" + how long each step took, so a long
-# deploy doesn't feel like it's hanging. Mirrors the [N/M] pattern used
-# in install-iceslab.sh.
+# Show "step 3 of 7" + per-step timing so a long deploy doesn't look hung.
+# Mirrors the [N/M] pattern in install-iceslab.sh.
 #
 #   STEP_TOTAL=4
 #   step 1 "git pull"
@@ -98,10 +95,9 @@ step_done() {
 
 # ───── Error context ─────
 # Without an ERR trap, `set -e` aborts on the failing command but the
-# operator only sees the line that exit'd — no idea what step or which
-# command. This trap prints exit code + line number + the actual command
-# text (read back from the script source) so debugging from journalctl
-# doesn't require staring at line numbers.
+# operator only sees the line that exited, with no idea which command.
+# This trap prints exit code + line number + the command text (read back
+# from the script source) so journalctl debugging shows the actual command.
 #
 # Caller installs:
 #   trap 'on_err $LINENO' ERR
@@ -138,10 +134,10 @@ require_compose_root() {
     if [[ -f "$compose" && -f "$env" ]]; then
         return 0
     fi
-    # Not in the project root. Operators naturally `cd scripts && ./deploy.sh`;
-    # auto-resolve to the dir above this lib (scripts/.. == project root) and
-    # re-check, so the ops scripts work from either location instead of just
-    # erroring out. Caught live 2026-06-09: deploy run from /opt/iceslab/scripts.
+    # Not in the project root. Operators tend to `cd scripts && ./deploy.sh`,
+    # so resolve to the dir above this lib (scripts/.. == project root) and
+    # re-check before erroring. Caught live 2026-06-09: deploy run from
+    # /opt/iceslab/scripts.
     local root
     root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)" || root=""
     if [[ -n "$root" && -f "$root/$compose" && -f "$root/$env" ]]; then
@@ -149,7 +145,7 @@ require_compose_root() {
         log_info "switched to project root: $root"
         return 0
     fi
-    log_err "run from panel project root — missing $compose or $env"
+    log_err "run from panel project root, missing $compose or $env"
     log_err "  (try: cd /opt/iceslab)"
     exit 1
 }
@@ -161,20 +157,20 @@ git_short_sha() {
 
 git_short_sha_or_die() {
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        log_err "not a git repository — git_short_sha_or_die"
+        log_err "git_short_sha_or_die: not a git repository"
         exit 1
     fi
     git rev-parse --short HEAD
 }
 
 # git_sync_to_ref: bring the checkout to ICESLAB_REF (a branch like `main`, or a
-# pinned tag like v0.1.4). Defaults to the current branch when ICESLAB_REF is
-# unset. Replaces a bare `git pull --ff-only`, which was a trap: the installer
-# leaves a tag-pinned DETACHED HEAD where pull silently no-ops, so operators
-# rebuilt STALE code believing they had updated (caught live 2026-06-10, a panel
-# stuck rebuilding v0.1.2). This fetches ALL branches + tags (overriding the
-# single-branch refspec a shallow install clone leaves behind), then checks out
-# the target explicitly, erroring loudly when the intent is ambiguous.
+# pinned tag like v0.1.4), defaulting to the current branch when ICESLAB_REF is
+# unset. Replaces a bare `git pull --ff-only`, which silently no-ops on the
+# tag-pinned detached HEAD the installer leaves, so operators rebuilt stale code
+# thinking they had updated (caught live 2026-06-10, a panel stuck rebuilding
+# v0.1.2). Fetches all branches + tags (overriding the single-branch refspec a
+# shallow install clone leaves), then checks out the target explicitly and
+# errors loudly when the intent is ambiguous.
 #
 # Sets globals for the caller to log: SHA_BEFORE, SHA_AFTER, SYNC_TARGET.
 # Honors FORCE_RESET=1 to discard local edits. Exits non-zero on bad state.
@@ -196,10 +192,10 @@ git_sync_to_ref() {
         log_err "Commit or stash them, or re-run with FORCE_RESET=1 to discard."
         exit 1
     fi
-    # --force on the fetch: a history rewrite (or any re-pointed tag) makes plain
-    # `--tags` report "would clobber existing tag" and exit non-zero, which under
-    # `set -e` aborts the whole deploy at the sync step. Forcing tags to match
-    # origin (the source of truth for a deploy) keeps re-deploys unblocked.
+    # --force on the fetch: a re-pointed tag makes plain `--tags` report "would
+    # clobber existing tag" and exit non-zero, which under `set -e` aborts the
+    # deploy at the sync step. Force tags to match origin (the deploy's source of
+    # truth) so re-deploys stay unblocked.
     git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' --tags --prune
     if git show-ref --verify --quiet "refs/remotes/origin/${SYNC_TARGET}"; then
         git checkout -B "$SYNC_TARGET" "origin/$SYNC_TARGET"   # branch: track + advance
