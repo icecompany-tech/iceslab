@@ -98,6 +98,8 @@ describe('buildSubscriptionPage', () => {
       base({ subUrlQrSvg: '<svg id="sub"></svg>', awgQrSvg: '<svg id="awg"></svg>' }),
     );
     expect(both).toContain('<svg id="awg"></svg>');
-    expect(both).toContain('AmneziaVPN');
+    // The AWG scan hint names the AmneziaWG app (native .conf QR target), not
+    // AmneziaVPN (which only scans its own vpn:// keys).
+    expect(both).toContain('AmneziaWG');
   });
 });

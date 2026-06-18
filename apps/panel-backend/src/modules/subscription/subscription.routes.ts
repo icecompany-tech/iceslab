@@ -6,6 +6,7 @@ import * as service from './subscription.service.js';
 import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
 import { buildWgQuickConf } from './formats/wgconf.js';
+import { buildAwgVpnLink } from './formats/amneziavpn.js';
 import { buildXrayJson } from './formats/xrayjson.js';
 import { buildOutlineJson } from './formats/outline.js';
 import { buildSurgeConf } from './formats/surge.js';
@@ -239,7 +240,7 @@ function pickLang(acceptLanguage: string | undefined): 'ru' | 'en' {
 // the QR as optional) so a too-large payload or any qrcode-svg edge never
 // breaks the whole subscription page. `join` collapses modules into one path
 // for a much smaller SVG. ecl=M balances density vs scan robustness.
-function qrSvg(content: string): string | undefined {
+function qrSvg(content: string, ecl: 'L' | 'M' | 'Q' | 'H' = 'M'): string | undefined {
   if (!content) return undefined;
   try {
     const svg = new QRCode({
@@ -247,7 +248,10 @@ function qrSvg(content: string): string | undefined {
       padding: 0,
       width: 160,
       height: 160,
-      ecl: 'M',
+      // ecl 'L' for long payloads (the AmneziaWG .conf with obfuscation params):
+      // less error correction means fewer modules for the same data, so the QR
+      // stays scannable at 160px instead of degrading into an unreadable mesh.
+      ecl,
       join: true,
     }).svg();
     // Strip the leading `<?xml ...?>` prolog — it's valid in a standalone
@@ -445,11 +449,12 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         const settings = await getSubscriptionSettings();
         const subUrl = `${config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
-        // Slice 2: QR for the subscription URL (proxy clients scan to import)
-        // and, when an AWG endpoint exists, a QR of the wg-quick config text
-        // (AmneziaVPN scans the config directly, not a URL). buildWgQuickConf
-        // returns '' when no AWG endpoint, so awgQr stays undefined.
+        // Two AmneziaWG QRs (each returns '' when no AWG endpoint -> QR omitted):
+        //   - awgConf: native wg-quick .conf text, for the AmneziaWG app.
+        //   - awgVpn:  AmneziaVPN "vpn://" key, for the flagship AmneziaVPN app
+        //     (its scanner only reads vpn:// keys, never a raw .conf).
         const awgConf = buildWgQuickConf(filtered);
+        const awgVpn = buildAwgVpnLink(filtered);
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
@@ -459,7 +464,9 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             user: result.json.user,
             protocols,
             subUrlQrSvg: qrSvg(subUrl),
-            awgQrSvg: awgConf ? qrSvg(awgConf) : undefined,
+            // ecl 'L' - both payloads are long; lower EC keeps them scannable.
+            awgQrSvg: awgConf ? qrSvg(awgConf, 'L') : undefined,
+            awgVpnQrSvg: awgVpn ? qrSvg(awgVpn, 'L') : undefined,
           }),
         );
       }

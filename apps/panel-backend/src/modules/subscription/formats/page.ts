@@ -33,6 +33,9 @@ export interface SubscriptionPageData {
    *  be omitted (e.g. no AWG endpoint, or QR generation failed). */
   subUrlQrSvg?: string;
   awgQrSvg?: string;
+  /** AmneziaVPN-app "vpn://" key QR (distinct from awgQrSvg, the AmneziaWG-app
+   *  .conf QR). Omitted when there's no AWG endpoint. */
+  awgVpnQrSvg?: string;
 }
 
 function esc(s: string): string {
@@ -76,6 +79,7 @@ interface Labels {
   scanTitle: string;
   scanSubHint: string;
   scanAwgHint: string;
+  scanAmneziaVpnHint: string;
   statusValues: Record<string, string>;
 }
 
@@ -99,7 +103,10 @@ const L: Record<'ru' | 'en', Labels> = {
     support: 'Support',
     scanTitle: 'Scan to add',
     scanSubHint: 'Subscription: scan with Hiddify, v2rayNG, Streisand, etc.',
-    scanAwgHint: 'AmneziaWG: scan with the AmneziaVPN app.',
+    // Native AmneziaWG .conf QR. Read by the AmneziaWG app (and wg-quick aware
+    // clients), NOT the AmneziaVPN app, which only scans its own vpn:// keys.
+    scanAwgHint: 'AmneziaWG: scan with the AmneziaWG app.',
+    scanAmneziaVpnHint: 'AmneziaVPN: scan with the AmneziaVPN app.',
     statusValues: {
       active: 'active',
       disabled: 'disabled',
@@ -126,7 +133,10 @@ const L: Record<'ru' | 'en', Labels> = {
     support: 'Поддержка',
     scanTitle: 'Сканировать',
     scanSubHint: 'Подписка: сканируйте в Hiddify, v2rayNG, Streisand и т.п.',
-    scanAwgHint: 'AmneziaWG: сканируйте в приложении AmneziaVPN.',
+    // Нативный AmneziaWG .conf QR. Читает приложение AmneziaWG (и wg-quick
+    // клиенты), но НЕ приложение AmneziaVPN (оно сканирует только свои vpn://).
+    scanAwgHint: 'AmneziaWG: сканируйте в приложении AmneziaWG.',
+    scanAmneziaVpnHint: 'AmneziaVPN: сканируйте в приложении AmneziaVPN.',
     statusValues: {
       active: 'активна',
       disabled: 'отключена',
@@ -229,6 +239,11 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   if (data.awgQrSvg) {
     qrCards.push(
       `<div class="qr"><div class="qrbox">${data.awgQrSvg}</div><div class="hint">${esc(t.scanAwgHint)}</div></div>`,
+    );
+  }
+  if (data.awgVpnQrSvg) {
+    qrCards.push(
+      `<div class="qr"><div class="qrbox">${data.awgVpnQrSvg}</div><div class="hint">${esc(t.scanAmneziaVpnHint)}</div></div>`,
     );
   }
   const scanCard =
