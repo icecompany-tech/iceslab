@@ -32,9 +32,15 @@ import {
  */
 
 // Container-type literal. `amnezia-awg` is the canonical string in Amnezia's
-// own configKeys.h and what the app's export/import round-trips. AmneziaWG v2
-// nodes may instead want `amnezia-awg2` + protocolVersion "2"; flip here if a
-// generated key imports but won't connect.
+// own configKeys.h and what the app's export/import round-trips. The app tags a
+// plain `amnezia-awg` config "AmneziaWG Legacy" UNLESS isThirdPartyConfig is set
+// (both display checks - containersModel.cpp + serverDescription.cpp - are gated
+// on `&& !isThirdPartyConfig`); we set that flag below. It is accurate (this is
+// an externally generated config) and removes the deprecation nag while keeping
+// the v1 wire protocol our amneziawg-go / kernel nodes actually speak (a real
+// AWG handshake completes - verified in the app log). `amnezia-awg2` is genuine
+// AmneziaWG 2.0 (ranged H1-H4 + active S3/S4) and would need a node-side core
+// upgrade + regenerated peers, so do NOT switch to it for our v1 nodes.
 const AWG_CONTAINER = 'amnezia-awg';
 
 export interface AmneziaVpnLinkOpts extends AmneziawgClientConfigOpts {
@@ -98,6 +104,7 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     client_pub_key: '',
     config: conf,
     hostName: opts.host,
+    isThirdPartyConfig: true,
     mtu: String(opts.mtu ?? 1280),
     persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
     port: opts.port,
@@ -107,6 +114,10 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
 
   const awg = {
     ...obf,
+    // Suppresses the "AmneziaWG Legacy" label/nag (see AWG_CONTAINER note). Set
+    // at both the awg-container level (where serverDescription reads it) and
+    // inside last_config, since the app parses isThirdPartyConfig from both.
+    isThirdPartyConfig: true,
     last_config: JSON.stringify(lastConfig),
     port: String(opts.port),
     transport_proto: 'udp',
