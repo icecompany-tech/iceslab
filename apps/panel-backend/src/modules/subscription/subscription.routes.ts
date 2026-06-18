@@ -258,9 +258,16 @@ function qrSvg(content: string, ecl: 'L' | 'M' | 'Q' | 'H' = 'M'): string | unde
       ecl,
       join: true,
     }).svg();
-    // Strip the leading `<?xml ...?>` prolog — it's valid in a standalone
-    // SVG file but noise when embedded inline in an HTML document.
-    return svg.replace(/^<\?xml[^>]*\?>\s*/, '');
+    // qrcode-svg emits `<svg width="160" height="160">` with NO viewBox, so a
+    // CSS width/height (e.g. the 300px vpn:// QR) resizes the viewport but NOT
+    // the 160-unit drawing - the code ends up crammed in the top-left corner
+    // with dead white space around it. Swap the svg tag's fixed size for a
+    // viewBox so any CSS size scales the whole code uniformly. The non-greedy
+    // capture stays inside the opening tag, leaving the 160x160 background
+    // <rect> untouched. Also strip the `<?xml ...?>` prolog (noise inline).
+    return svg
+      .replace(/^<\?xml[^>]*\?>\s*/, '')
+      .replace(/(<svg\b[^>]*?)\s*width="160"\s+height="160"/, '$1 viewBox="0 0 160 160"');
   } catch {
     return undefined;
   }
