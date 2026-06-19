@@ -5,12 +5,21 @@
  * main.tsx behind `DEMO_MODE`, via a dynamic import, so none of this (nor the
  * fixtures) is bundled into the production panel.
  */
+import i18n from '../i18n';
 import { api } from '../lib/api';
 import { queryClient } from '../lib/queryClient';
 import { useAuth } from '../stores/auth';
 import { demoAdapter } from './adapter';
 
 export function installDemoMode(): void {
+  // Starting language from the embedding iframe's ?lang= (en|ru). The site
+  // passes the page language as /panel-demo/index.html?lang=en. The in-app
+  // RU/EN switcher keeps working afterward.
+  const lang = new URLSearchParams(window.location.search).get('lang');
+  if (lang === 'en' || lang === 'ru') {
+    void i18n.changeLanguage(lang);
+  }
+
   // All requests resolve from local fixtures - zero network.
   api.defaults.adapter = demoAdapter;
 
