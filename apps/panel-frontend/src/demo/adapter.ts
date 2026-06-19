@@ -8,6 +8,7 @@
  * Only ships in the demo build.
  */
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { now } from '../lib/demoFlag';
 import {
   AUTH_STATUS,
   BINDINGS,
@@ -89,8 +90,8 @@ export const demoAdapter: AxiosAdapter = (config) => {
   const stub = {
     id: `demo-${Math.random().toString(36).slice(2, 10)}`,
     ...parseBody(config.data),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: new Date(now()).toISOString(),
+    updatedAt: new Date(now()).toISOString(),
   };
   return Promise.resolve(respond(config, stub));
 };

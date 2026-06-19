@@ -23,9 +23,12 @@ import type {
   SystemVersion,
   User,
 } from '../lib/api';
+import { DEMO_NOW } from '../lib/demoFlag';
 
 const GiB = 1024 ** 3;
-const BASE = Date.parse('2026-06-19T05:55:00.000Z');
+// Anchor every relative timestamp to the same frozen "now" the UI reads via
+// now() (lib/demoFlag), so the demo never drifts out of sync.
+const BASE = DEMO_NOW;
 const iso = (msAgo: number): string => new Date(BASE - msAgo).toISOString();
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;

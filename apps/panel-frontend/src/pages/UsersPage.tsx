@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { now } from '../lib/demoFlag';
 import {
   ActionIcon,
   Badge,
@@ -92,7 +93,7 @@ function computedStatus(u: User): ComputedStatus {
   if (u.status === 'limited') return 'limited';
   if (u.status === 'disabled') return 'disabled';
   if (!u.lastOnlineAt) return 'offline';
-  const sinceMs = Date.now() - new Date(u.lastOnlineAt).getTime();
+  const sinceMs = now() - new Date(u.lastOnlineAt).getTime();
   return sinceMs < 5 * 60 * 1000 ? 'online' : 'offline';
 }
 
@@ -124,7 +125,7 @@ function relativeTime(
   t: TFn,
 ): { text: string; tone: 'fresh' | 'stale' | 'never' } {
   if (!iso) return { text: t('userTime.never'), tone: 'never' };
-  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMs = now() - new Date(iso).getTime();
   const sec = Math.round(diffMs / 1000);
   const tone: 'fresh' | 'stale' = sec < 5 * 60 ? 'fresh' : 'stale';
   if (sec < 60) return { text: t('userTime.sAgo', { n: sec }), tone };
@@ -141,7 +142,7 @@ function expireRelative(
   t: TFn,
 ): { text: string; tone: 'good' | 'warn' | 'bad' | 'never' } {
   if (!iso) return { text: t('userTime.noExpiry'), tone: 'never' };
-  const diffMs = new Date(iso).getTime() - Date.now();
+  const diffMs = new Date(iso).getTime() - now();
   const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
   if (days < 0) return { text: t('userTime.expiredAgo', { days: -days }), tone: 'bad' };
   if (days === 0) return { text: t('userTime.expiresToday'), tone: 'bad' };

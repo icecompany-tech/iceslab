@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { now } from '../lib/demoFlag';
 import {
   Badge,
   Box,
@@ -110,7 +111,7 @@ function formatDelta(
 }
 
 function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMs = now() - new Date(iso).getTime();
   const sec = Math.round(diffMs / 1000);
   if (sec < 60) return `${sec}s ago`;
   const min = Math.round(sec / 60);
@@ -235,8 +236,8 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
   const todayDelta = formatDelta(traffic.todayBytes, traffic.yesterdayBytes);
   const todaySplit = splitBytes(traffic.todayBytes);
 
-  const now = new Date();
-  const timeLabel = now.toLocaleString('en-GB', {
+  const nowDate = new Date(now());
+  const timeLabel = nowDate.toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -696,7 +697,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
           </Text>
         </Group>
         <Text style={{ ...MONO_LABEL }}>
-          {new Date().toLocaleString('en-GB', {
+          {new Date(now()).toLocaleString('en-GB', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -747,7 +748,7 @@ function SystemHealth({ host }: { host: DashboardOverview['host'] }) {
           {t('pageHero.uptimeLabel').toUpperCase()}{' '}
           {formatUptime(host.process.uptimeSeconds).toUpperCase()} ·{' '}
           {t('pageHero.sampledLabel').toUpperCase()}{' '}
-          {new Date().toLocaleTimeString('en-GB', { hour12: false })}
+          {new Date(now()).toLocaleTimeString('en-GB', { hour12: false })}
         </Text>
       </Group>
 
