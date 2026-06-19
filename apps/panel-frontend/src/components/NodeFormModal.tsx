@@ -20,7 +20,9 @@ import {
   Text,
   TextInput,
   ThemeIcon,
+  Tooltip,
 } from '@mantine/core';
+import { DEMO_MODE } from '../lib/demoFlag';
 import { useForm, type UseFormReturnType } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
 import { IconBolt, IconRocket, IconServer2, IconShieldLock } from '@tabler/icons-react';
@@ -495,18 +497,21 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
                 <Button variant="default" onClick={() => setStep(0)}>
                   ← {t('common.back')}
                 </Button>
-                <Button
-                  onClick={handleFinalSubmit}
-                  loading={loading}
-                  leftSection={<IconServer2 size={14} />}
-                  style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
-                >
-                  {isEdit
-                    ? t('nodes.form.submitEdit')
-                    : selectedProfileIds.length > 0
-                      ? t('nodes.form.submitWithBindings', { count: selectedProfileIds.length })
-                      : t('nodes.form.submitCreate')}
-                </Button>
+                <Tooltip label="Read-only demo" disabled={!DEMO_MODE} withArrow>
+                  <Button
+                    onClick={handleFinalSubmit}
+                    loading={loading}
+                    disabled={DEMO_MODE}
+                    leftSection={<IconServer2 size={14} />}
+                    style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
+                  >
+                    {isEdit
+                      ? t('nodes.form.submitEdit')
+                      : selectedProfileIds.length > 0
+                        ? t('nodes.form.submitWithBindings', { count: selectedProfileIds.length })
+                        : t('nodes.form.submitCreate')}
+                  </Button>
+                </Tooltip>
               </Group>
             </Group>
           </Stack>

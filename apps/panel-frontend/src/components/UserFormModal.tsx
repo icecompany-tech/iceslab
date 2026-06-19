@@ -24,6 +24,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { DEMO_MODE } from '../lib/demoFlag';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import {
@@ -502,14 +503,17 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
               <Button variant="default" onClick={onClose} disabled={loading}>
                 {t('common.cancel')}
               </Button>
-              <Button
-                type="submit"
-                loading={loading}
-                leftSection={<IconCheck size={16} />}
-                style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
-              >
-                {isEdit ? t('users.form.submitEdit') : t('users.form.submitCreate')}
-              </Button>
+              <Tooltip label="Read-only demo" disabled={!DEMO_MODE} withArrow>
+                <Button
+                  type="submit"
+                  loading={loading}
+                  disabled={DEMO_MODE}
+                  leftSection={<IconCheck size={16} />}
+                  style={{ backgroundColor: '#2A93D1', color: '#08101A', fontWeight: 500 }}
+                >
+                  {isEdit ? t('users.form.submitEdit') : t('users.form.submitCreate')}
+                </Button>
+              </Tooltip>
             </Group>
           </Group>
         </Stack>

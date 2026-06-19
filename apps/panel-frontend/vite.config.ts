@@ -10,9 +10,18 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')
   version: string
 }
 
+// Demo build (VITE_DEMO_MODE=true) is served from a sub-path inside an iframe
+// on the marketing site, so assets must resolve under /panel-demo/. The normal
+// build stays at root.
+const isDemo = process.env.VITE_DEMO_MODE === 'true'
+
 export default defineConfig({
+  base: isDemo ? '/panel-demo/' : '/',
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    // Real boolean literal so `if (DEMO_MODE)` folds away and the demo module +
+    // fixtures are tree-shaken from the normal build.
+    __DEMO_MODE__: isDemo,
   },
 })
