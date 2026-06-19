@@ -8,6 +8,27 @@
 
 Self-hosted панель для прокси, которая запускает настоящий апстрим-бинарник каждого протокола вместо того чтобы оборачивать всё через Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru: каждый это реальный бинарь проекта, под управлением Go node-agent через общий интерфейс `CoreAdapter`.
 
+## Скриншоты
+
+[![Панель оператора](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
+
+<sub>Обзор оператора - флот, трафик, пользователи и живая телеметрия хоста, обновление каждые 10 секунд.</sub>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/node-cards.png" alt="Флот нод"><br><sub>Мульти-нода флот с живыми CPU / RAM / диск, доставка по mTLS.</sub></td>
+    <td width="50%"><img src="docs/screenshots/profiles-settings.png" alt="Профили протоколов"><br><sub>Управляемая настройка протоколов с учётом DPI. Ручная правка всегда доступна.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/users.png" alt="Пользователи"><br><sub>Одна ссылка-подписка на пользователя. Отключение, лимит или отзыв без вмешательства в слой протокола.</sub></td>
+    <td width="50%"><img src="docs/screenshots/cascade.png" alt="Каскады"><br><sub>Многохоповые каскады: цепочка нод от входа к выходу для слоистой маршрутизации.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/squads.png" alt="Сквады"><br><sub>Сквады это срезы доступа: какие инбаунды видит пользователь в своей подписке.</sub></td>
+    <td width="50%"><img src="docs/screenshots/login.png" alt="Консоль оператора Iceslab"><br><sub>Одна панель. Все протоколы. Нативные ядра. mTLS-агенты.</sub></td>
+  </tr>
+</table>
+
 ## Установка
 
 Ubuntu 22.04+ или Debian 12+, root, идемпотентно.
@@ -185,7 +206,7 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 ## Политики проекта
 
 - **Контрибуция**: см. [CONTRIBUTING.md](./CONTRIBUTING.md). PR принимаются под AGPL-3.0 inbound = outbound, коммиты squash'ятся при merge.
-- **Безопасность**: уязвимости на `learntoowork@outlook.com`. Детали и таймлайн раскрытия в [SECURITY.md](./SECURITY.md).
+- **Безопасность**: уязвимости на `security@icecompany.tech`. Детали и таймлайн раскрытия в [SECURITY.md](./SECURITY.md).
 - **Торговая марка**: имя "Iceslab" ограничено к использованию, политика в [TRADEMARK.md](./TRADEMARK.md). AGPL-права на код не затрагивает, форкай свободно, просто переименуй если шипишь публично.
 
 ## Лицензия

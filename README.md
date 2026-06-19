@@ -8,6 +8,27 @@ English · [Русский](./README.ru.md)
 
 Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru: each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
 
+## Screenshots
+
+[![Operator dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
+
+<sub>Operator overview - fleet, traffic, users and live host telemetry, refreshed every 10s.</sub>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/node-cards.png" alt="Node fleet"><br><sub>Multi-node fleet with live CPU / RAM / disk, pushed over mTLS.</sub></td>
+    <td width="50%"><img src="docs/screenshots/profiles-settings.png" alt="Protocol profiles"><br><sub>Guided, DPI-aware protocol setup. Manual edits always available.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/users.png" alt="Users"><br><sub>One subscription URL per user. Disable, throttle or revoke without touching the protocol layer.</sub></td>
+    <td width="50%"><img src="docs/screenshots/cascade.png" alt="Cascades"><br><sub>Multi-hop cascades: chain nodes entry to exit for layered routing.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/squads.png" alt="Squads"><br><sub>Squads are access slices: which inbounds each user sees in their subscription.</sub></td>
+    <td width="50%"><img src="docs/screenshots/login.png" alt="Iceslab operator console"><br><sub>One panel. Every protocol. Native cores. mTLS agents.</sub></td>
+  </tr>
+</table>
+
 ## Install
 
 Ubuntu 22.04+ or Debian 12+, root, idempotent.
@@ -185,7 +206,7 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 ## Project policies
 
 - **Contributing**: see [CONTRIBUTING.md](./CONTRIBUTING.md). PRs accepted under AGPL-3.0 inbound = outbound; commits squashed on merge.
-- **Security**: vulnerabilities to `learntoowork@outlook.com`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
+- **Security**: vulnerabilities to `security@icecompany.tech`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
 - **Trademark**: the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected: fork freely, just rename if you ship publicly.
 
 ## License
