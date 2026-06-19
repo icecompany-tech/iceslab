@@ -14,6 +14,23 @@ pnpm --filter @iceslab/panel-backend dev     # backend on :3000
 pnpm --filter @iceslab/panel-frontend dev    # SPA on :5173
 ```
 
+## Demo data (screenshots / live demo)
+
+To fill a LOCAL database with a clean, screenshot-ready dataset (8 online
+nodes, ~10 users, 4 profiles, 2 squads, a cascade, and 48h of traffic history,
+all on `*.example.com` addresses in UTC):
+
+```bash
+DEMO=1 pnpm --filter @iceslab/panel-backend seed:demo
+```
+
+The script refuses to run unless `DEMO=1` and the database looks local/demo, so
+it can't clobber a production DB. It wipes only the demo content tables (nodes,
+users, profiles, groups, cascades, history), never the admin login or brand
+settings. Run the panel itself with `DEMO=1` too: that gates off the node
+health/metrics/stats pollers so the fake nodes stay online and their telemetry
+doesn't expire while you shoot. Re-run the seed any time to reset cleanly.
+
 ## Branches
 
 - `main` - what installer scripts pull. Tagged releases (`v0.1.0`, `v0.1.1`, ...).

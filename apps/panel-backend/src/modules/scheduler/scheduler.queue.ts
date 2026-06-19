@@ -33,6 +33,18 @@ interface CronJobSpec {
   pattern: string; // cron-выражение
 }
 
+// Demo mode: when DEMO=1 the panel is pointed at a seeded demo DB whose nodes
+// are fake (*.example.com) and never answer mTLS. The three node pollers would
+// flip those seeded-online nodes to "unreachable" within 30s and let the
+// telemetry TTL out, so the dashboard would go cold mid-screenshot. Gate them
+// off so a `seed:demo` dataset stays lively for as long as the demo runs.
+const DEMO_MODE = process.env['DEMO'] === '1';
+const NODE_POLL_JOBS = new Set([
+  'node-healthcheck-poll',
+  'node-metrics-poll',
+  'node-stats-poll',
+]);
+
 const CRON_JOBS: CronJobSpec[] = [
   { name: 'reset-traffic-daily',            pattern: '5 0 * * *'  }, // 00:05 каждый день
   { name: 'reset-traffic-monthly-rolling',  pattern: '10 0 * * *' }, // 00:10 каждый день (rolling 30d)
@@ -51,7 +63,8 @@ const CRON_JOBS: CronJobSpec[] = [
 // ───── Регистрация (вызывается один раз при бутстрапе) ─────
 
 export async function registerCronJobs(): Promise<void> {
-  for (const job of CRON_JOBS) {
+  const jobs = DEMO_MODE ? CRON_JOBS.filter((j) => !NODE_POLL_JOBS.has(j.name)) : CRON_JOBS;
+  for (const job of jobs) {
     await cronTasksQueue.add(
       job.name,
       {},
@@ -62,7 +75,13 @@ export async function registerCronJobs(): Promise<void> {
       },
     );
   }
-  getLogger().info(`[scheduler] registered ${CRON_JOBS.length} cron jobs`);
+  if (DEMO_MODE) {
+    // Leftover node-poll schedules from a prior non-demo run (same Redis) are
+    // neutralised by the worker-level guard below, so we don't fight BullMQ's
+    // version-specific removeRepeatable signature here.
+    getLogger().info('[scheduler] DEMO=1 - node health/metrics/stats polls gated off');
+  }
+  getLogger().info(`[scheduler] registered ${jobs.length} cron jobs`);
 }
 
 // ───── Worker ─────
@@ -71,6 +90,10 @@ export function startCronTasksWorker(): Worker {
   return new Worker(
     QUEUE_NAME,
     async (job: Job) => {
+      // DEMO=1 safety net: even if a node-poll schedule survives in Redis from
+      // a prior non-demo run, make it a no-op so seeded demo nodes never flip
+      // to "unreachable" and their telemetry never gets re-polled away.
+      if (DEMO_MODE && NODE_POLL_JOBS.has(job.name)) return;
       switch (job.name) {
         case 'reset-traffic-daily': {
           const n = await resetTrafficForStrategy('day');
