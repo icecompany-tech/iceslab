@@ -8,6 +8,15 @@ English · [Русский](./README.ru.md)
 
 Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru: each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
 
+## Why Iceslab
+
+- 7 protocols, real binaries - no lowest-common-denominator reimplementation.
+- Push over mTLS - the panel pushes config to agents, they apply and report back. No SSH into nodes.
+- Built for hostile networks - REALITY self-steal, multi-hop cascades, DPI-aware setup recipes, routing presets.
+- One subscription URL per user - disable, throttle, or revoke without touching the protocol layer. Every client format from one link (clash, sing-box, xray-json, wireguard, base64).
+- Operator-grade - live fleet telemetry, per-user HWID limits and quotas, analytics, Telegram bot, admin 2FA.
+- Self-hosted, AGPL-3.0 - your nodes, your data. One-command install via Docker Compose.
+
 ## Screenshots
 
 [![Operator dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)

@@ -5,7 +5,7 @@
 If you've found a vulnerability in Iceslab, please don't open a public issue. Instead:
 
 - Open a private advisory at https://github.com/icecompany-tech/iceslab/security/advisories/new
-- Or email the maintainer (see commit history for the contact address)
+- Or email security@icecompany.tech
 
 Include:
 
@@ -14,7 +14,7 @@ Include:
 - The impact you observed
 - Your suggested fix if you have one
 
-Expect an initial reply within ~72 hours.
+Expect an initial reply within a few days.
 
 ## What's in scope
 
