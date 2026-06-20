@@ -26,6 +26,13 @@ export class UserNotFoundError extends Error {
   }
 }
 
+export class SubscriptionTokenTakenError extends Error {
+  constructor(public token: string) {
+    super('Subscription token already in use');
+    this.name = 'SubscriptionTokenTakenError';
+  }
+}
+
 // ───── Helpers ─────
 
 const BYTES_PER_GB = 1_073_741_824n;
@@ -59,6 +66,16 @@ export async function createUser(input: CreateUserInput): Promise<PublicUserDto>
     throw new UserAlreadyExistsError(input.username);
   }
 
+  // Optional sub-token import (migration cut-over): reject up front if the
+  // requested token is already taken, so the caller gets a clear 409 instead
+  // of an ambiguous P2002.
+  if (input.subscriptionToken) {
+    const tokenClash = await repo.findBySubscriptionToken(input.subscriptionToken);
+    if (tokenClash) {
+      throw new SubscriptionTokenTakenError(input.subscriptionToken);
+    }
+  }
+
   const creds = generateUserCredentials();
 
   let user;
@@ -66,7 +83,7 @@ export async function createUser(input: CreateUserInput): Promise<PublicUserDto>
     user = await repo.create({
       username: input.username,
       shortId: creds.shortId,
-      subscriptionToken: creds.subscriptionToken,
+      subscriptionToken: input.subscriptionToken ?? creds.subscriptionToken,
 
       hysteriaPassword:    creds.hysteriaPassword,
       naivePassword:       creds.naivePassword,

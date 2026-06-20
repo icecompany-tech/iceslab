@@ -77,6 +77,9 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof usersService.UserAlreadyExistsError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      if (err instanceof usersService.SubscriptionTokenTakenError) {
+        return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      }
       throw err;
     }
   });

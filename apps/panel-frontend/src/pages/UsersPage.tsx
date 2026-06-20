@@ -23,6 +23,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  IconBan,
   IconChevronLeft,
   IconChevronRight,
   IconCircleCheck,
@@ -35,6 +36,7 @@ import {
   IconExternalLink,
   IconPlus,
   IconRefresh,
+  IconReload,
   IconSearch,
   IconTrash,
   IconUserOff,
@@ -48,6 +50,9 @@ import {
   listUsers,
   subscriptionUrl,
   updateUser,
+  revokeUserSubscription,
+  rotateUserSubscription,
+  resetUserTraffic,
   type CreateUserInput,
   type UpdateUserInput,
   type User,
@@ -336,6 +341,73 @@ export function UsersPage() {
         message: err instanceof Error ? err.message : String(err),
       }),
   });
+
+  const revokeMutation = useMutation({
+    mutationFn: revokeUserSubscription,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      notifications.show({ color: 'green', message: t('users.notify.revoked') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: rotateUserSubscription,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      notifications.show({ color: 'green', message: t('users.notify.rotated') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  const resetTrafficMutation = useMutation({
+    mutationFn: resetUserTraffic,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      notifications.show({ color: 'green', message: t('users.notify.trafficReset') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        message: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  function handleRevoke(user: User) {
+    modals.openConfirmModal({
+      title: t('users.revokeTitle', { name: user.username }),
+      children: <Text size="sm">{t('users.revokeBody')}</Text>,
+      labels: { confirm: t('usersTable.actionRevoke'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => revokeMutation.mutate(user.id),
+    });
+  }
+
+  function handleRotate(user: User) {
+    modals.openConfirmModal({
+      title: t('users.rotateTitle', { name: user.username }),
+      children: <Text size="sm">{t('users.rotateBody')}</Text>,
+      labels: { confirm: t('usersTable.actionRotate'), cancel: t('common.cancel') },
+      onConfirm: () => rotateMutation.mutate(user.id),
+    });
+  }
+
+  function handleResetTraffic(user: User) {
+    modals.openConfirmModal({
+      title: t('users.resetTrafficTitle', { name: user.username }),
+      children: <Text size="sm">{t('users.resetTrafficBody')}</Text>,
+      labels: { confirm: t('usersTable.actionResetTraffic'), cancel: t('common.cancel') },
+      onConfirm: () => resetTrafficMutation.mutate(user.id),
+    });
+  }
 
   function handleDelete(user: User) {
     modals.openConfirmModal({
@@ -686,6 +758,25 @@ export function UsersPage() {
                           </Menu.Item>
                           <Menu.Item leftSection={<IconEdit size={14} />} onClick={() => setEditing(u)}>
                             {t('usersTable.actionEdit')}
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconRefresh size={14} />}
+                            onClick={() => handleRotate(u)}
+                          >
+                            {t('usersTable.actionRotate')}
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconReload size={14} />}
+                            onClick={() => handleResetTraffic(u)}
+                          >
+                            {t('usersTable.actionResetTraffic')}
+                          </Menu.Item>
+                          <Menu.Item
+                            color="red"
+                            leftSection={<IconBan size={14} />}
+                            onClick={() => handleRevoke(u)}
+                          >
+                            {t('usersTable.actionRevoke')}
                           </Menu.Item>
                           <Menu.Divider />
                           <Menu.Item

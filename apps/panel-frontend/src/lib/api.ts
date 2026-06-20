@@ -206,6 +206,9 @@ export interface UsersListResponse {
 
 export interface CreateUserInput {
   username: string;
+  /** Optional: import an existing subscription token (migration cut-over).
+   *  URL-safe, <=64 chars. Omit to let the backend mint a fresh one. */
+  subscriptionToken?: string;
   expireDays?: number | null;
   trafficLimitGb?: number | null;
   trafficLimitStrategy?: TrafficLimitStrategy;
@@ -260,6 +263,26 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
 
 export async function deleteUser(id: string): Promise<void> {
   await api.delete(`/api/users/${id}`);
+}
+
+/** Kill the user's current subscription link (leaked/abused). /sub then 403s
+ *  until the link is rotated. */
+export async function revokeUserSubscription(id: string): Promise<User> {
+  const { data } = await api.post<User>(`/api/users/${id}/revoke`);
+  return data;
+}
+
+/** Issue a fresh subscription token: the old link stops resolving and any
+ *  prior revoke is cleared so the new link works. */
+export async function rotateUserSubscription(id: string): Promise<User> {
+  const { data } = await api.post<User>(`/api/users/${id}/rotate-subscription`);
+  return data;
+}
+
+/** Zero used traffic + lift a traffic limit (period-billing top-up). */
+export async function resetUserTraffic(id: string): Promise<User> {
+  const { data } = await api.post<User>(`/api/users/${id}/reset-traffic`);
+  return data;
 }
 
 /** Helper to build a copy-pasteable subscription URL for a user.

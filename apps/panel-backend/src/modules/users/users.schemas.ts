@@ -29,6 +29,15 @@ const UsernameSchema = z
 
 export const CreateUserSchema = z.object({
   username: UsernameSchema,
+  // Migration cut-over: import an existing subscription token so a migrating
+  // operator's clients keep their current link instead of re-importing. URL-safe
+  // (base64url alphabet), <=64 to match the column. Omit to mint a fresh token.
+  subscriptionToken: z
+    .string()
+    .min(8)
+    .max(64)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Subscription token must be URL-safe (A-Z a-z 0-9 _ -)')
+    .optional(),
   trafficLimitGb: z.number().int().positive().nullish(),         // null/undefined = unlimited
   trafficLimitStrategy: TrafficLimitStrategy.default('no_reset'),
   expireDays: z.number().int().positive().nullish(),             // null/undefined = no expiry

@@ -20,6 +20,17 @@ export async function findActiveByUsername(username: string): Promise<User | nul
   });
 }
 
+export async function findBySubscriptionToken(
+  token: string,
+): Promise<{ id: string } | null> {
+  // subscription_token is globally @unique (incl. soft-deleted rows), so this
+  // catches an import clash against any existing user.
+  return prisma.user.findUnique({
+    where: { subscriptionToken: token },
+    select: { id: true },
+  });
+}
+
 export async function findActiveById(id: string): Promise<UserWithTraffic | null> {
   return prisma.user.findFirst({
     where: { id, deletedAt: null },
