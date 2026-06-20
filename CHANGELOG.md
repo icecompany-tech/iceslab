@@ -3,16 +3,36 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
-## Unreleased
+## v0.1.8
 
-Multi-hop cascades validated end to end on real nodes for the first time (RU
-entry to EU exit, the client's egress IP becomes the exit's), which surfaced and
-closed two real defects along the way. Plus the full set of well-known client
-detection rules, an inline enable toggle for those rules, a per-profile reach
-count that ignores deleted users, and a batch of form and stats polish.
+Operator production-readiness, surfaced by dogfooding a real paid service on
+Iceslab: kill or rotate a leaked subscription link, reset a user's traffic on
+demand, and scope API tokens to least privilege. Plus multi-hop cascades
+validated end to end on real nodes for the first time (RU entry to EU exit, the
+client's egress IP becomes the exit's), which surfaced and closed two real
+defects along the way, a read-only demo build of the panel for the landing page,
+the full set of well-known client detection rules with an inline enable toggle,
+a per-profile reach count that ignores deleted users, and a batch of form and
+stats polish.
 
 ### Added
 
+- **Revoke and rotate a subscription link.** Kill a leaked or abused link (it
+  returns 403 until rotated), or rotate it to issue a fresh token that kills the
+  old link immediately. From the Users page or the API.
+- **On-demand traffic reset.** Zero a user's used traffic and lift a traffic
+  limit in one action (period-billing top-up) without waiting for a cron reset;
+  a limited user goes straight back to active and is re-provisioned.
+- **API tokens enforce scopes.** A token can be least-privilege now: one scoped
+  to users plus subscription-read cannot reach settings, nodes, or token
+  management. Existing full-access tokens are unaffected; pick a scope preset
+  when creating a token.
+- **Import an existing subscription token on user create.** Operators migrating
+  in keep their clients' current links instead of forcing a re-import.
+- **Read-only demo build of the panel.** A VITE_DEMO_MODE build serves the real
+  UI from local fixtures (auto-login, every change a no-op) for embedding on a
+  landing page, and reads ?lang= for its start language. Tree-shaken out of the
+  normal build.
 - **All well-known subscription clients are seeded.** The User-Agent detection
   rules now cover the clients that previously had no rule and fell through to the
   base64 list they cannot parse: Surge and Surfboard, Quantumult X, Loon, Outline,

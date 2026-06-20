@@ -275,8 +275,8 @@ export const AUTH_STATUS: AuthStatusResponse = {
 };
 
 export const VERSION: SystemVersion = {
-  current: '0.1.7',
-  latest: '0.1.7',
+  current: '0.1.8',
+  latest: '0.1.8',
   updateAvailable: false,
   releaseUrl: null,
   checkedAt: iso(2 * HOUR),
