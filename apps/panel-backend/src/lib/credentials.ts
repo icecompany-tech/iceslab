@@ -83,3 +83,12 @@ export function generateUserCredentials(): UserCredentials {
     shortId:             randomBytes(8).toString('hex'), // 16 hex chars
   };
 }
+
+/**
+ * Fresh subscription token, same shape/entropy as the one minted at user
+ * creation (~43 base64url chars). Used by rotate-subscription to kill a leaked
+ * link and issue a new one.
+ */
+export function generateSubscriptionToken(): string {
+  return randomUrlSafe(32);
+}

@@ -33,6 +33,7 @@ import { systemRoutes } from './modules/system/system.routes.js';
 import { registerSecurityGate } from './lib/security-gate.js';
 import { registry as metricsRegistry, httpRequestDuration, routeLabel } from './lib/metrics.js';
 import { requireAuth } from './modules/auth/auth.hook.js';
+import { enforceScopes } from './modules/auth/scope.hook.js';
 
 /**
  * Build the Fastify instance with all plugins and routes registered.
@@ -114,6 +115,13 @@ export async function buildApp(): Promise<FastifyInstance> {
       elapsedSec,
     );
   });
+
+  // Enforce API-token scopes globally. preHandler runs after route-level
+  // requireAuth, so request.apiToken is populated. Admin-JWT sessions and
+  // full/legacy tokens (empty scopes) are unaffected; tokens with explicit
+  // scopes are least-privilege (default-deny on unmapped routes). Added before
+  // every route below so it covers /metrics and all plugin routes.
+  app.addHook('preHandler', enforceScopes);
 
   // /metrics — Prometheus scrape endpoint. Auth-gated so it isn't a free
   // info disclosure; Prometheus jobs use an `icp_*` API token in

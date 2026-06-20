@@ -1,5 +1,5 @@
 import type { Prisma } from '../../generated/prisma/client.js';
-import { generateUserCredentials } from '../../lib/credentials.js';
+import { generateUserCredentials, generateSubscriptionToken } from '../../lib/credentials.js';
 import { eventBus } from '../../lib/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import * as repo from './users.repository.js';
@@ -243,4 +243,69 @@ export async function deleteUser(id: string): Promise<void> {
   await repo.softDelete(id);
 
   eventBus.emit('user.deleted', { userId: id });
+}
+
+// ───── Subscription revoke / rotate (production-readiness) ─────
+
+/**
+ * Revoke the user's current subscription link: stamp subRevokedAt so
+ * /sub/:token returns 403 REVOKED. Does not disconnect live sessions (kills
+ * the link, not the creds); rotate to hand out a working link again.
+ */
+export async function revokeSubscription(id: string): Promise<PublicUserDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) {
+    throw new UserNotFoundError(id);
+  }
+  const updated = await repo.updateById(id, { subRevokedAt: new Date() });
+  eventBus.emit('user.updated', { userId: id, changes: ['subRevokedAt'] });
+  return mapUserToPublic(updated, updated.traffic);
+}
+
+/**
+ * Rotate the subscription token: the old link stops resolving (no user matches
+ * it -> /sub 404) and any prior revoke is cleared so the new link is live.
+ */
+export async function rotateSubscription(id: string): Promise<PublicUserDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) {
+    throw new UserNotFoundError(id);
+  }
+  // Token is 32 random bytes; a unique collision is astronomically unlikely,
+  // but retry on the off chance rather than surfacing a raw 500.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const updated = await repo.updateById(id, {
+        subscriptionToken: generateSubscriptionToken(),
+        subRevokedAt: null,
+      });
+      eventBus.emit('user.updated', {
+        userId: id,
+        changes: ['subscriptionToken', 'subRevokedAt'],
+      });
+      return mapUserToPublic(updated, updated.traffic);
+    } catch (err) {
+      if (isUniqueViolation(err)) continue;
+      throw err;
+    }
+  }
+  throw new Error('Failed to rotate subscription token after retries');
+}
+
+/**
+ * On-demand traffic reset (period-billing top-up): zero usedTrafficBytes and
+ * stamp lastTrafficResetAt, then emit user.traffic-reset. The existing handler
+ * (users.events.ts) lifts a traffic limit (limited -> active) and re-provisions
+ * nodes - same cascade the cron strategy reset uses.
+ */
+export async function resetUserTraffic(id: string): Promise<PublicUserDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) {
+    throw new UserNotFoundError(id);
+  }
+  const previousUsedBytes = existing.traffic?.usedTrafficBytes ?? 0n;
+  await repo.resetTraffic(id);
+  eventBus.emit('user.traffic-reset', { userId: id, previousUsedBytes });
+  const refreshed = await repo.findActiveById(id);
+  return mapUserToPublic(refreshed ?? existing, refreshed?.traffic ?? null);
 }

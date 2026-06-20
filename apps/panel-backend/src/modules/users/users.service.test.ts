@@ -6,6 +6,9 @@ import {
   getUserById,
   updateUser,
   deleteUser,
+  revokeSubscription,
+  rotateSubscription,
+  resetUserTraffic,
   UserAlreadyExistsError,
   UserNotFoundError,
 } from './users.service.js';
@@ -24,6 +27,7 @@ vi.mock('../../lib/credentials.js', () => ({
     subscriptionToken: 'subtok',
     shortId: 'shortabc',
   })),
+  generateSubscriptionToken: vi.fn(() => 'rotated-subtok'),
 }));
 
 const FAKE_ID = '22222222-2222-2222-2222-222222222222';
@@ -59,6 +63,81 @@ function makeFakeUser(overrides: Partial<repo.UserWithTraffic> = {}): repo.UserW
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('revokeSubscription', () => {
+  it('stamps subRevokedAt and emits user.updated', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(makeFakeUser({ subRevokedAt: null }));
+    vi.mocked(repo.updateById).mockResolvedValue(
+      makeFakeUser({ subRevokedAt: new Date('2026-06-20T00:00:00Z') }),
+    );
+
+    const dto = await revokeSubscription(FAKE_ID);
+
+    const arg = vi.mocked(repo.updateById).mock.calls[0]![1]!;
+    expect(arg.subRevokedAt).toBeInstanceOf(Date);
+    expect(dto.subRevokedAt).not.toBeNull();
+    expect(eventBus.emit).toHaveBeenCalledWith('user.updated', {
+      userId: FAKE_ID,
+      changes: ['subRevokedAt'],
+    });
+  });
+
+  it('throws UserNotFoundError for a missing user', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(null);
+    await expect(revokeSubscription(FAKE_ID)).rejects.toBeInstanceOf(UserNotFoundError);
+    expect(repo.updateById).not.toHaveBeenCalled();
+  });
+});
+
+describe('rotateSubscription', () => {
+  it('issues a fresh token and clears any prior revoke', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(
+      makeFakeUser({ subscriptionToken: 'subtok', subRevokedAt: new Date() }),
+    );
+    vi.mocked(repo.updateById).mockResolvedValue(
+      makeFakeUser({ subscriptionToken: 'rotated-subtok', subRevokedAt: null }),
+    );
+
+    const dto = await rotateSubscription(FAKE_ID);
+
+    const arg = vi.mocked(repo.updateById).mock.calls[0]![1]!;
+    expect(arg.subscriptionToken).toBe('rotated-subtok');
+    expect(arg.subRevokedAt).toBeNull();
+    expect(dto.subscriptionToken).toBe('rotated-subtok');
+    expect(dto.subRevokedAt).toBeNull();
+  });
+
+  it('throws UserNotFoundError for a missing user', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(null);
+    await expect(rotateSubscription(FAKE_ID)).rejects.toBeInstanceOf(UserNotFoundError);
+    expect(repo.updateById).not.toHaveBeenCalled();
+  });
+});
+
+describe('resetUserTraffic', () => {
+  it('resets traffic and emits user.traffic-reset with the previous usage', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(
+      makeFakeUser({
+        traffic: { usedTrafficBytes: 123n } as unknown as repo.UserWithTraffic['traffic'],
+      }),
+    );
+    vi.mocked(repo.resetTraffic).mockResolvedValue(undefined);
+
+    await resetUserTraffic(FAKE_ID);
+
+    expect(repo.resetTraffic).toHaveBeenCalledWith(FAKE_ID);
+    expect(eventBus.emit).toHaveBeenCalledWith('user.traffic-reset', {
+      userId: FAKE_ID,
+      previousUsedBytes: 123n,
+    });
+  });
+
+  it('throws UserNotFoundError for a missing user', async () => {
+    vi.mocked(repo.findActiveById).mockResolvedValue(null);
+    await expect(resetUserTraffic(FAKE_ID)).rejects.toBeInstanceOf(UserNotFoundError);
+    expect(repo.resetTraffic).not.toHaveBeenCalled();
+  });
 });
 
 describe('createUser', () => {

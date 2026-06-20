@@ -52,6 +52,16 @@ export async function updateById(
   });
 }
 
+export async function resetTraffic(userId: string): Promise<void> {
+  // upsert (not update) so a legacy user missing its UserTraffic row still
+  // resets cleanly instead of throwing P2025.
+  await prisma.userTraffic.upsert({
+    where: { userId },
+    update: { usedTrafficBytes: 0n, lastTrafficResetAt: new Date() },
+    create: { userId, usedTrafficBytes: 0n, lastTrafficResetAt: new Date() },
+  });
+}
+
 export async function softDelete(id: string): Promise<void> {
   await prisma.user.update({
     where: { id },

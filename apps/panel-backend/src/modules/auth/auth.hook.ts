@@ -94,8 +94,9 @@ async function tryApiToken(
   }
 
   const scopes = Array.isArray(row.scopes) ? (row.scopes as string[]) : [];
-  // API tokens act with admin role today (no scope-enforcement yet — that's
-  // a follow-up once we have call-sites that distinguish read vs write).
+  // API tokens act with admin role; per-route scope enforcement lives in the
+  // global enforceScopes preHandler (scope.hook.ts). Empty scopes = full admin
+  // (legacy / full token); explicit scopes are least-privilege.
   // adminId is the ISSUING admin's id (or null for legacy rows); previously
   // we lied here with row.id (the token's own PK), which broke /api/auth/me
   // and any FK column that tries to attribute actions to an admin.

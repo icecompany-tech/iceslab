@@ -177,4 +177,50 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       throw err;
     }
   });
+
+  // POST /api/users/:id/revoke — kill the current subscription link (leaked or
+  // abusive). /sub then returns 403 REVOKED until the link is rotated.
+  app.post('/api/users/:id/revoke', auth, async (request, reply) => {
+    const params = UserIdParamSchema.parse(request.params);
+    try {
+      const user = await usersService.revokeSubscription(params.id);
+      return reply.send(user);
+    } catch (err) {
+      if (err instanceof usersService.UserNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/users/:id/rotate-subscription — issue a fresh token (old link
+  // dies, prior revoke cleared so the new link works immediately).
+  app.post('/api/users/:id/rotate-subscription', auth, async (request, reply) => {
+    const params = UserIdParamSchema.parse(request.params);
+    try {
+      const user = await usersService.rotateSubscription(params.id);
+      return reply.send(user);
+    } catch (err) {
+      if (err instanceof usersService.UserNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // POST /api/users/:id/reset-traffic — zero used traffic + stamp the reset;
+  // the user.traffic-reset cascade lifts a traffic limit and re-provisions
+  // nodes. For period-billing ("bought a period -> counter reset").
+  app.post('/api/users/:id/reset-traffic', auth, async (request, reply) => {
+    const params = UserIdParamSchema.parse(request.params);
+    try {
+      const user = await usersService.resetUserTraffic(params.id);
+      return reply.send(user);
+    } catch (err) {
+      if (err instanceof usersService.UserNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
 }
