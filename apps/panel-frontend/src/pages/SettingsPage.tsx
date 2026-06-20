@@ -10,6 +10,7 @@ import {
   Group,
   Modal,
   Paper,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -371,7 +372,7 @@ function ApiTokensCard() {
         opened={createOpen}
         onClose={closeCreate}
         loading={createMutation.isPending}
-        onSubmit={(name) => createMutation.mutate({ name })}
+        onSubmit={(name, scopes) => createMutation.mutate({ name, scopes })}
       />
 
       <RevealTokenModal
@@ -390,11 +391,14 @@ function CreateApiTokenModal({
 }: {
   opened: boolean;
   onClose: () => void;
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string, scopes: string[]) => void;
   loading: boolean;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
+  // Scope preset for the token: 'full' = empty scopes (full admin, default),
+  // 'provision' = least-privilege (user CRUD + sub read), e.g. for icebot.
+  const [scopePreset, setScopePreset] = useState('full');
   return (
     <Modal opened={opened} onClose={onClose} title={t('settings.tokens.modalTitle')} size="md">
       <Stack>
@@ -406,6 +410,16 @@ function CreateApiTokenModal({
           required
           autoFocus
         />
+        <Select
+          label={t('settings.tokens.modalScopes')}
+          data={[
+            { value: 'full', label: t('settings.tokens.scopeFull') },
+            { value: 'provision', label: t('settings.tokens.scopeProvision') },
+          ]}
+          value={scopePreset}
+          onChange={(v) => setScopePreset(v ?? 'full')}
+          allowDeselect={false}
+        />
         <Alert color="yellow" variant="light">
           {t('settings.tokens.modalWarning')}
         </Alert>
@@ -416,8 +430,13 @@ function CreateApiTokenModal({
           <Button
             onClick={() => {
               if (name.trim().length === 0) return;
-              onSubmit(name.trim());
+              const scopes =
+                scopePreset === 'provision'
+                  ? ['users:read', 'users:write', 'sub:read']
+                  : [];
+              onSubmit(name.trim(), scopes);
               setName('');
+              setScopePreset('full');
             }}
             loading={loading}
             disabled={name.trim().length === 0}

@@ -81,6 +81,7 @@ function formatBytes(n: number): string {
 
 interface FormValues {
   username: string;
+  subscriptionToken: string;
   trafficLimitGb: number | '';
   trafficLimitStrategy: TrafficLimitStrategy;
   expireDays: number | '';
@@ -98,6 +99,7 @@ interface FormValues {
 function defaultValues(user: User | null): FormValues {
   return {
     username: user?.username ?? '',
+    subscriptionToken: '',
     trafficLimitGb:
       user?.trafficLimitBytes != null ? Math.round(user.trafficLimitBytes / GiB) : '',
     trafficLimitStrategy: user?.trafficLimitStrategy ?? 'no_reset',
@@ -209,6 +211,8 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
     } else {
       const input: CreateUserInput = {
         username: values.username,
+        // Optional migration import; blank -> backend mints a fresh token.
+        subscriptionToken: values.subscriptionToken.trim() || undefined,
         // 0 or empty GB both mean "unlimited" -> null (schema .positive() rejects 0).
         trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb) || null,
         trafficLimitStrategy: values.trafficLimitStrategy,
@@ -328,6 +332,15 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                     required
                     {...form.getInputProps('username')}
                   />
+                  {!isEdit && (
+                    <TextInput
+                      mt="sm"
+                      label={t('users.form.importToken')}
+                      description={t('users.form.importTokenDesc')}
+                      placeholder="(optional)"
+                      {...form.getInputProps('subscriptionToken')}
+                    />
+                  )}
                 </SectionCard>
               )}
 

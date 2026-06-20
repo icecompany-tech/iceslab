@@ -596,19 +596,26 @@ export function UsersPage() {
                       </Group>
                     </Table.Td>
                     <Table.Td>
-                      <Badge
-                        variant="light"
-                        style={{
-                          backgroundColor: `${statusAccent}1A`,
-                          color: statusAccent,
-                          border: `1px solid ${statusAccent}33`,
-                          textTransform: 'uppercase',
-                          ...MONO,
-                          letterSpacing: '0.08em',
-                        }}
-                      >
-                        {t(`userStatus.${compStatus}`)}
-                      </Badge>
+                      <Group gap={4} wrap="nowrap">
+                        <Badge
+                          variant="light"
+                          style={{
+                            backgroundColor: `${statusAccent}1A`,
+                            color: statusAccent,
+                            border: `1px solid ${statusAccent}33`,
+                            textTransform: 'uppercase',
+                            ...MONO,
+                            letterSpacing: '0.08em',
+                          }}
+                        >
+                          {t(`userStatus.${compStatus}`)}
+                        </Badge>
+                        {u.subRevokedAt && (
+                          <Badge variant="light" color="red" size="sm" style={{ ...MONO }}>
+                            {t('usersTable.revokedBadge')}
+                          </Badge>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       <Tooltip

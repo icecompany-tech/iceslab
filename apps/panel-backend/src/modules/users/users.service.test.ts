@@ -11,6 +11,7 @@ import {
   resetUserTraffic,
   UserAlreadyExistsError,
   UserNotFoundError,
+  SubscriptionTokenTakenError,
 } from './users.service.js';
 
 vi.mock('./users.repository.js');
@@ -141,6 +142,37 @@ describe('resetUserTraffic', () => {
 });
 
 describe('createUser', () => {
+  it('imports a provided subscription token', async () => {
+    vi.mocked(repo.findActiveByUsername).mockResolvedValue(null);
+    vi.mocked(repo.findBySubscriptionToken).mockResolvedValue(null);
+    vi.mocked(repo.create).mockResolvedValue(makeFakeUser());
+
+    await createUser({
+      username: 'testuser',
+      groupIds: [],
+      trafficLimitStrategy: 'no_reset',
+      subscriptionToken: 'imported-token',
+    });
+
+    const createArg = vi.mocked(repo.create).mock.calls[0]![0]!;
+    expect(createArg.subscriptionToken).toBe('imported-token');
+  });
+
+  it('throws SubscriptionTokenTakenError when the imported token is taken', async () => {
+    vi.mocked(repo.findActiveByUsername).mockResolvedValue(null);
+    vi.mocked(repo.findBySubscriptionToken).mockResolvedValue({ id: 'other' });
+
+    await expect(
+      createUser({
+        username: 'testuser',
+        groupIds: [],
+        trafficLimitStrategy: 'no_reset',
+        subscriptionToken: 'dup-token',
+      }),
+    ).rejects.toBeInstanceOf(SubscriptionTokenTakenError);
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
   it('throws UserAlreadyExistsError when username is taken', async () => {
     vi.mocked(repo.findActiveByUsername).mockResolvedValue(makeFakeUser());
 
