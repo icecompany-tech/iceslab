@@ -20,6 +20,13 @@
       "fast-uri": ">=3.1.2",
       "form-data": ">=4.0.6",
       "hono": ">=4.12.25"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "bcrypt",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma"
+    ]
   }
 }
