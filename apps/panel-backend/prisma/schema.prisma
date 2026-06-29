@@ -262,6 +262,14 @@ model Node {
   domain                String?   @db.VarChar(255)
   hardening             Json?
 
+  // WARP egress (feat/warp-native). When warpEnabled, this node's xray inbound
+  // gets a wireguard outbound to Cloudflare WARP + a routing rule (per-node
+  // egress v1). warpAccount holds the registered device creds (secretKey,
+  // address, reserved, endpoint, token, license, ...) as a blob - Json so the
+  // shape can evolve without a migration. See docs/studies/STUDY-warp-native.md.
+  warpEnabled           Boolean   @default(false) @map("warp_enabled")
+  warpAccount           Json?     @map("warp_account")
+
   // Slice 38 — heartbeat self-destruct. Random 32-byte secret, generated
   // at node creation. The bootstrap payload bundles a stateless HMAC token
   // (nodeId + sig over heartbeatSecret) that the agent presents on every

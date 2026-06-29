@@ -6,6 +6,7 @@ import { prisma } from '../../prisma.js';
 import * as repo from './nodes.repository.js';
 import { getPanelPublicIp } from './panel-ip.js';
 import { issueBootstrapToken } from './bootstrap.service.js';
+import { registerWarpDevice } from '../warp/warp.service.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
 import {
   mapNodeToPublic,
@@ -249,6 +250,34 @@ export async function listNodes(query: ListNodesQuery): Promise<{
 export async function getNodeById(id: string): Promise<PublicNodeDto> {
   const node = await repo.findActiveById(id);
   if (!node) throw new NodeNotFoundError(id);
+  return mapNodeToPublic(node);
+}
+
+/**
+ * Register (or re-register) a free Cloudflare WARP device for this node and turn
+ * on per-node WARP egress. Stores the creds blob in node.warpAccount and flips
+ * warpEnabled; the node renders the `warp` block on its next config push. The
+ * Cloudflare call is the live path of the registration spike (see warp.service).
+ */
+export async function registerNodeWarp(id: string): Promise<PublicNodeDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) throw new NodeNotFoundError(id);
+  const creds = await registerWarpDevice();
+  const node = await repo.updateById(id, {
+    warpEnabled: true,
+    warpAccount: creds as unknown as Prisma.InputJsonValue,
+  });
+  return mapNodeToPublic(node);
+}
+
+/**
+ * Turn off WARP egress for this node. Keeps the registered creds (warpAccount)
+ * so re-enabling is instant; the node reverts to direct egress on the next push.
+ */
+export async function disableNodeWarp(id: string): Promise<PublicNodeDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) throw new NodeNotFoundError(id);
+  const node = await repo.updateById(id, { warpEnabled: false });
   return mapNodeToPublic(node);
 }
 
