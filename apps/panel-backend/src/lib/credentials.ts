@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, generateKeyPairSync } from 'node:crypto';
+import { randomBytes, randomUUID, generateKeyPairSync, createHash } from 'node:crypto';
 
 /**
  * Random URL-safe string of approximately N*4/3 characters.
@@ -91,4 +91,15 @@ export function generateUserCredentials(): UserCredentials {
  */
 export function generateSubscriptionToken(): string {
   return randomUrlSafe(32);
+}
+
+/**
+ * Deterministic per-user TUIC password derived from the user's existing UUID.
+ * TUIC needs uuid + password; we reuse `xrayUuid` as the uuid and derive the
+ * password here rather than adding a DB column (same "don't grow the credential
+ * surface" approach as Shadowsocks/Mieru). The node receives it on the wire and
+ * the subscription generator derives the identical value, so both stay in sync.
+ */
+export function deriveTuicPassword(xrayUuid: string): string {
+  return createHash('sha256').update(`${xrayUuid}:tuic`).digest('base64url');
 }

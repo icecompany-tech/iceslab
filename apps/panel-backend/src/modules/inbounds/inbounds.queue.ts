@@ -7,6 +7,7 @@ import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
 import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
+import { deriveTuicPassword } from '../../lib/credentials.js';
 import { getLogger } from '../../lib/logger.js';
 
 // ───── Job data shapes ─────
@@ -374,6 +375,8 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
             amneziawgPublicKey: u.amneziawgPublicKey,
             amneziawgAllowedIp: awgIpByUser.get(u.id),
             naivePassword: u.naivePassword,
+            tuicUuid: u.xrayUuid,
+            tuicPassword: deriveTuicPassword(u.xrayUuid),
           },
         }),
       ),

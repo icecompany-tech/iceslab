@@ -3,6 +3,7 @@ import type { AddUserRequest, RemoveUserRequest } from '@iceslab/shared';
 import { redis } from '../../lib/redis.js';
 import { prisma } from '../../prisma.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
+import { deriveTuicPassword } from '../../lib/credentials.js';
 import { getLogger } from '../../lib/logger.js';
 
 // ───── Job data shapes ─────
@@ -129,6 +130,8 @@ async function syncAddUser(userId: string): Promise<void> {
       naivePassword: user.naivePassword,
       xrayUuid: user.xrayUuid,
       amneziawgPublicKey: user.amneziawgPublicKey,
+      tuicUuid: user.xrayUuid,
+      tuicPassword: deriveTuicPassword(user.xrayUuid),
     },
   };
 
@@ -237,6 +240,8 @@ async function syncBackfillNode(nodeId: string): Promise<void> {
               naivePassword: u.naivePassword,
               xrayUuid: u.xrayUuid,
               amneziawgPublicKey: u.amneziawgPublicKey,
+              tuicUuid: u.xrayUuid,
+              tuicPassword: deriveTuicPassword(u.xrayUuid),
             },
           };
           return transport.addUser(req);
