@@ -13,7 +13,7 @@ import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
-import { deriveTuicPassword, deriveAnytlsPassword } from '../../lib/credentials.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveSsPassword } from '../../lib/credentials.js';
 import {
   buildAnytlsUri,
   buildHysteriaUri,
@@ -583,11 +583,16 @@ export async function generateSubscription(
         method: ShadowsocksMethod;
         serverPsk?: string;
       };
-      // Slice 24d (fix 2026-05-07): SS2022 multi-user requires
-      // ServerPSK:UserPSK colon-joined in the URI. Server PSK is per-
-      // inbound, generated at create-time and stored in inbound.config.
-      // Per-user PSK reuses user.xrayUuid (UUIDs have enough entropy;
-      // growing users.shadowsocksPsk just for this protocol is overkill).
+      // SS2022 multi-user: the per-user uPSK is DERIVED from xrayUuid - a raw
+      // UUID is not a valid base64 key, and the node derives the identical value
+      // (core.DeriveSsPassword). The client credential is ServerPSK:UserPSK
+      // colon-joined; the clash/sing-box/outline formats read endpoint.password
+      // directly, so set the combined value there and hand the parts to the URI
+      // builder (which joins them).
+      const ssUserPsk = deriveSsPassword(user.xrayUuid, ssCfg.method);
+      const ssClientPassword = ssCfg.serverPsk
+        ? `${ssCfg.serverPsk}:${ssUserPsk}`
+        : ssUserPsk;
       endpoints.push({
         protocol: 'shadowsocks',
         nodeName,
@@ -595,10 +600,10 @@ export async function generateSubscription(
         port,
         ...hostMeta,
         method: ssCfg.method,
-        password: user.xrayUuid,
+        password: ssClientPassword,
         uri: buildShadowsocksUri({
           method: ssCfg.method,
-          userPsk: user.xrayUuid,
+          userPsk: ssUserPsk,
           serverPsk: ssCfg.serverPsk,
           host,
           port,

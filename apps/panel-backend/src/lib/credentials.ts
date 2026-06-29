@@ -112,3 +112,21 @@ export function deriveTuicPassword(xrayUuid: string): string {
 export function deriveAnytlsPassword(xrayUuid: string): string {
   return createHash('sha256').update(`${xrayUuid}:anytls`).digest('base64url');
 }
+
+/**
+ * Deterministic per-user Shadowsocks-2022 PSK (uPSK) derived from the user's
+ * UUID. Unlike TUIC/AnyTLS, SS2022 keys MUST be **standard base64** of an exact
+ * length: 16 bytes for `2022-blake3-aes-128-gcm`, 32 for the other 2022-blake3
+ * ciphers. A raw UUID is not a valid key, so we hash it to the right length.
+ * The node derives the identical value (core.DeriveSsPassword:
+ * sha256(`${uuid}:ss`) -> first keyLen bytes -> standard base64), keeping the
+ * client URI and the node's SS config in lock-step regardless of engine.
+ */
+export function deriveSsPassword(xrayUuid: string, method: string): string {
+  const keyLen = method === '2022-blake3-aes-128-gcm' ? 16 : 32;
+  return createHash('sha256')
+    .update(`${xrayUuid}:ss`)
+    .digest()
+    .subarray(0, keyLen)
+    .toString('base64');
+}
