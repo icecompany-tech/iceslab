@@ -352,6 +352,8 @@ export interface Node {
   domain: string | null;
   // G - Zashchita hardening blob.
   hardening?: NodeHardening | null;
+  // WARP egress on/off (per-node). Creds are never sent to the client.
+  warpEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -378,6 +380,22 @@ export interface BootstrapInfo {
 export interface NodeWithPayload extends Node {
   payload: string;
   bootstrap: BootstrapInfo;
+}
+
+/**
+ * Register a free Cloudflare WARP device for this node and enable per-node WARP
+ * egress (the node's xray inbound starts routing out through WARP on next push).
+ * The Cloudflare call happens server-side; creds stay in the panel DB.
+ */
+export async function registerNodeWarp(id: string): Promise<Node> {
+  const { data } = await api.post<Node>(`/api/nodes/${id}/warp/register`);
+  return data;
+}
+
+/** Turn off WARP egress for this node (keeps creds for instant re-enable). */
+export async function disableNodeWarp(id: string): Promise<Node> {
+  const { data } = await api.delete<Node>(`/api/nodes/${id}/warp`);
+  return data;
 }
 
 export async function refreshNodeBootstrap(id: string): Promise<BootstrapInfo> {
