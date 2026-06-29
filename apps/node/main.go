@@ -332,6 +332,18 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			XrayStatsBin: singboxStatsBin,
 		}, logger))
 		logger.Info("singbox (shadowsocks) adapter registered")
+
+		// ShadowTLS (sing-box): TLS-camouflage wrapper that detours to an inner
+		// single-key shadowsocks. No cert/key (it fronts a real handshake to the
+		// camouflage site). Distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "shadowtls",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_SHADOWTLS_CONFIG", "/etc/sing-box/shadowtls.json"),
+			StatsListen:  getenv("SINGBOX_SHADOWTLS_API_LISTEN", "127.0.0.1:8087"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (shadowtls) adapter registered")
 	}
 
 	return adapters

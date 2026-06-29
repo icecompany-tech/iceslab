@@ -15,6 +15,7 @@ const (
 	ProtocolShadowsocks ProtocolName = "shadowsocks"
 	ProtocolTuic        ProtocolName = "tuic"
 	ProtocolAnytls      ProtocolName = "anytls"
+	ProtocolShadowtls   ProtocolName = "shadowtls"
 )
 
 // EngineName identifies the proxy core that renders an inbound. Most protocols
@@ -35,7 +36,7 @@ func NativeEngine(p ProtocolName) EngineName {
 	switch p {
 	case ProtocolShadowsocks:
 		return EngineXray
-	case ProtocolTuic, ProtocolAnytls:
+	case ProtocolTuic, ProtocolAnytls, ProtocolShadowtls:
 		return EngineSingbox
 	default:
 		return EngineName(p)
@@ -59,6 +60,9 @@ type ProtocolCredentials struct {
 	TuicPassword string `json:"tuicPassword,omitempty"`
 	// AnyTLS (sing-box engine): per-user password (password-only auth).
 	AnytlsPassword string `json:"anytlsPassword,omitempty"`
+	// ShadowTLS (sing-box engine): per-user password for the shadowtls v3
+	// users[] (the inner shadowsocks key is server-wide, in the inbound config).
+	ShadowtlsPassword string `json:"shadowtlsPassword,omitempty"`
 }
 
 // ───── POST /addUser ─────

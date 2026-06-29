@@ -254,3 +254,40 @@ func TestShadowsocksAdapter(t *testing.T) {
 		t.Errorf("ss adapter should ignore tuic-only creds, got %+v", stats.Users)
 	}
 }
+
+func TestShadowtlsAdapter(t *testing.T) {
+	a := New(Config{Protocol: "shadowtls"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if a.Name() != "shadowtls" || a.Engine() != "singbox" {
+		t.Fatalf("Name()/Engine() = %q/%q, want shadowtls/singbox", a.Name(), a.Engine())
+	}
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	// handshake + inner ss key are required.
+	if err := a.ApplyInbound(443, json.RawMessage(`{"ssPassword":"k"}`)); err == nil {
+		t.Error("missing handshake should error")
+	}
+	if err := a.ApplyInbound(443, json.RawMessage(`{"handshake":"www.microsoft.com:443"}`)); err == nil {
+		t.Error("missing ssPassword should error")
+	}
+	cfg := `{"handshake":"www.microsoft.com:443","ssMethod":"2022-blake3-aes-128-gcm","ssPassword":"INNER-KEY"}`
+	if err := a.ApplyInbound(443, json.RawMessage(cfg)); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.inbound.ShadowtlsHandshake != "www.microsoft.com:443" || a.inbound.ServerPSK != "INNER-KEY" {
+		t.Errorf("inbound not stored: %+v", a.inbound)
+	}
+	if err := a.AddUser(core.User{UserID: "u1", ShadowtlsPassword: "stpw1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats = %+v", stats.Users)
+	}
+	// A user with only tuic creds must be ignored by the shadowtls adapter.
+	if err := a.AddUser(core.User{UserID: "u2", TuicUUID: "x"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 {
+		t.Errorf("shadowtls adapter should ignore tuic-only creds, got %+v", stats.Users)
+	}
+}

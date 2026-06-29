@@ -164,6 +164,8 @@ func (a *Adapter) credsFor(user core.User) (uuid, password string) {
 		// Store the raw xray UUID; renderShadowsocksConfig derives the SS2022
 		// uPSK from it (method-aware). Empty xrayUuid -> AddUser guard skips.
 		return "", user.XrayUUID
+	case "shadowtls":
+		return "", user.ShadowtlsPassword
 	default: // tuic
 		return user.TuicUUID, user.TuicPassword
 	}
@@ -270,6 +272,16 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 			return fmt.Errorf("singbox ApplyInbound: %w", err)
 		}
 		newInbound = ic
+	case "shadowtls":
+		var wire shadowtlsWire
+		if err := json.Unmarshal(rawCfg, &wire); err != nil {
+			return fmt.Errorf("singbox ApplyInbound: parse shadowtls cfg: %w", err)
+		}
+		ic, err := wire.toInboundConfig(port)
+		if err != nil {
+			return fmt.Errorf("singbox ApplyInbound: %w", err)
+		}
+		newInbound = ic
 	default:
 		var wire inboundCfgWire
 		if err := json.Unmarshal(rawCfg, &wire); err != nil {
@@ -329,6 +341,8 @@ func (a *Adapter) regenerateAndRestart() error {
 		blob, err = renderHysteria2Config(certPath, keyPath, statsListen, inbound, users)
 	case "shadowsocks":
 		blob, err = renderShadowsocksConfig(statsListen, inbound, users)
+	case "shadowtls":
+		blob, err = renderShadowtlsConfig(statsListen, inbound, users)
 	default:
 		blob, err = renderConfig(certPath, keyPath, statsListen, inbound, users)
 	}
@@ -500,5 +514,35 @@ func (w ssFamilyWire) toInboundConfig(port int) (InboundConfig, error) {
 		ListenPort: port,
 		Method:     w.Method,
 		ServerPSK:  w.ServerPSK,
+	}, nil
+}
+
+// shadowtlsWire is the panel-pushed ShadowTLS config: the camouflage handshake
+// target plus the inner shadowsocks key (a single server-wide key, reused via
+// Method/ServerPSK). Per-user shadowtls passwords ride users[] from AddUser, not
+// this wire. There is no share-link for ShadowTLS - clients consume it via full
+// sing-box/clash config only.
+type shadowtlsWire struct {
+	Handshake  string `json:"handshake"`  // camouflage host[:port]
+	SsMethod   string `json:"ssMethod"`   // inner ss cipher; default 2022-blake3-aes-128-gcm
+	SsPassword string `json:"ssPassword"` // inner ss server key (panel-generated base64)
+}
+
+func (w shadowtlsWire) toInboundConfig(port int) (InboundConfig, error) {
+	if w.Handshake == "" {
+		return InboundConfig{}, fmt.Errorf("shadowtls handshake (camouflage domain) is required")
+	}
+	if w.SsPassword == "" {
+		return InboundConfig{}, fmt.Errorf("shadowtls ssPassword (inner shadowsocks key) is required")
+	}
+	method := w.SsMethod
+	if method == "" {
+		method = "2022-blake3-aes-128-gcm"
+	}
+	return InboundConfig{
+		ListenPort:         port,
+		ShadowtlsHandshake: w.Handshake,
+		Method:             method,
+		ServerPSK:          w.SsPassword,
 	}, nil
 }

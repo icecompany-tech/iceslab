@@ -351,3 +351,77 @@ func TestRenderShadowsocksConfig(t *testing.T) {
 		t.Error("shadowsocks config should not contain a tls field")
 	}
 }
+
+func TestRenderShadowtlsConfig(t *testing.T) {
+	users := map[string]userEntry{"u1": {Password: "stpw1"}}
+	blob, err := renderShadowtlsConfig("127.0.0.1:8087", InboundConfig{
+		ListenPort:         443,
+		ShadowtlsHandshake: "www.microsoft.com:443",
+		Method:             "2022-blake3-aes-128-gcm",
+		ServerPSK:          "INNER-SS-KEY",
+	}, users)
+	if err != nil {
+		t.Fatalf("renderShadowtlsConfig: %v", err)
+	}
+	// ShadowTLS does raw TLS camouflage - there is no tls block anywhere.
+	if strings.Contains(string(blob), `"tls":`) {
+		t.Error("shadowtls config should not contain a tls block")
+	}
+
+	var doc struct {
+		Inbounds []struct {
+			Type       string `json:"type"`
+			Tag        string `json:"tag"`
+			ListenPort int    `json:"listen_port"`
+			Version    int    `json:"version"`
+			Detour     string `json:"detour"`
+			StrictMode bool   `json:"strict_mode"`
+			Method     string `json:"method"`
+			Password   string `json:"password"`
+			Network    string `json:"network"`
+			Users      []struct {
+				Name     string `json:"name"`
+				Password string `json:"password"`
+			} `json:"users"`
+			Handshake *struct {
+				Server     string `json:"server"`
+				ServerPort int    `json:"server_port"`
+			} `json:"handshake"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(blob, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Inbounds) != 2 {
+		t.Fatalf("want 2 inbounds (shadowtls + inner ss), got %d", len(doc.Inbounds))
+	}
+
+	st := doc.Inbounds[0]
+	if st.Type != "shadowtls" || st.Version != 3 || st.Detour != "shadowtls-ss-in" || !st.StrictMode {
+		t.Errorf("shadowtls inbound = %+v", st)
+	}
+	if st.ListenPort != 443 {
+		t.Errorf("shadowtls listen_port = %d, want 443", st.ListenPort)
+	}
+	if st.Handshake == nil || st.Handshake.Server != "www.microsoft.com" || st.Handshake.ServerPort != 443 {
+		t.Errorf("handshake = %+v, want www.microsoft.com:443", st.Handshake)
+	}
+	if len(st.Users) != 1 || st.Users[0].Name != "u1" || st.Users[0].Password != "stpw1" {
+		t.Errorf("shadowtls users = %+v", st.Users)
+	}
+
+	ss := doc.Inbounds[1]
+	if ss.Type != "shadowsocks" || ss.Tag != "shadowtls-ss-in" || ss.Network != "tcp" {
+		t.Errorf("inner ss inbound = %+v", ss)
+	}
+	if ss.Method != "2022-blake3-aes-128-gcm" || ss.Password != "INNER-SS-KEY" {
+		t.Errorf("inner ss method/password = %q/%q", ss.Method, ss.Password)
+	}
+	// Inner ss is single-key (no users[]) and reached only via detour (no port).
+	if len(ss.Users) != 0 {
+		t.Errorf("inner ss must be single-key (no users[]), got %+v", ss.Users)
+	}
+	if ss.ListenPort != 0 {
+		t.Errorf("inner ss should omit listen_port, got %d", ss.ListenPort)
+	}
+}

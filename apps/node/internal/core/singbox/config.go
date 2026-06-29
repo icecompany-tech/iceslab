@@ -146,6 +146,11 @@ type InboundConfig struct {
 	// Zero for every other protocol.
 	Method    string // SS2022 cipher (2022-blake3-*)
 	ServerPSK string // SS2022 server-level iPSK
+
+	// ───── shadowtls-family fields (protocol shadowtls) ─────
+	// The inner shadowsocks reuses Method + ServerPSK above as a single
+	// server-wide key (no per-user uPSK - per-user auth is the shadowtls layer).
+	ShadowtlsHandshake string // camouflage "host[:port]" the shadowtls inbound fronts
 }
 
 // userEntry is the per-user TUIC credential the adapter tracks in memory,
@@ -438,6 +443,66 @@ func renderHysteria2Config(certPath, keyPath, statsListen string, inbound Inboun
 	}
 
 	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// renderShadowtlsConfig builds the sing-box config for a ShadowTLS v3 inbound.
+// ShadowTLS is a TLS-camouflage wrapper, not a transport itself: the shadowtls
+// inbound fronts a real TLS handshake to `handshake` (a whitelisted site) and
+// `detour`s decrypted traffic to an inner single-key shadowsocks inbound bound
+// to loopback. Per-user auth is the shadowtls users[] password; the inner ss
+// uses one server-wide key (panel-generated, valid base64), so this sidesteps
+// the per-user SS2022 key-format problem that blocks ss-via-singbox. Built with
+// maps because the two inbounds are heterogeneous (the inner ss carries no
+// users[]/tls/listen_port, which the shared sbInbound struct can't express).
+func renderShadowtlsConfig(statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+	ids := sortedIDs(users)
+	stUsers := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		stUsers = append(stUsers, map[string]any{"name": id, "password": users[id].Password})
+	}
+
+	host, port := splitHostPort(inbound.ShadowtlsHandshake, 443)
+
+	inbounds := []any{
+		map[string]any{
+			"type":        "shadowtls",
+			"tag":         "shadowtls-in",
+			"listen":      "0.0.0.0",
+			"listen_port": inbound.ListenPort,
+			"version":     3,
+			"users":       stUsers,
+			"handshake":   map[string]any{"server": host, "server_port": port},
+			"strict_mode": true,
+			"detour":      "shadowtls-ss-in",
+		},
+		// Inner shadowsocks: single server-wide key, loopback, no listen_port
+		// (reached only via the detour). 2022-blake3 ciphers need a base64 key of
+		// the cipher's length - the panel generates a valid one.
+		map[string]any{
+			"type":     "shadowsocks",
+			"tag":      "shadowtls-ss-in",
+			"listen":   "127.0.0.1",
+			"network":  "tcp",
+			"method":   inbound.Method,
+			"password": inbound.ServerPSK,
+		},
+	}
+
+	doc := map[string]any{
+		"log":       map[string]any{"level": "warn", "timestamp": true},
+		"inbounds":  inbounds,
+		"outbounds": []any{map[string]any{"type": "direct", "tag": "direct"}},
+	}
+	if statsListen != "" {
+		doc["experimental"] = map[string]any{
+			"v2ray_api": map[string]any{
+				"listen": statsListen,
+				"stats":  map[string]any{"enabled": true, "users": ids},
+			},
+		}
+	}
+
+	return json.MarshalIndent(doc, "", "  ")
 }
 
 // renderShadowsocksConfig builds the sing-box config for a shadowsocks (SS2022)
