@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
@@ -152,6 +153,11 @@ func (a *Adapter) credsFor(user core.User) (uuid, password string) {
 	switch a.protocol {
 	case "anytls":
 		return "", user.AnytlsPassword
+	case "xray":
+		// vless/vmess use the xray uuid as uuid; trojan uses it as password.
+		// Store it in both slots; renderXrayFamilyConfig picks the right one per
+		// subprotocol. Empty xrayUuid -> the AddUser guard skips this user.
+		return user.XrayUUID, user.XrayUUID
 	default: // tuic
 		return user.TuicUUID, user.TuicPassword
 	}
@@ -230,11 +236,24 @@ func (a *Adapter) Healthy() bool {
 // ApplyInbound parses the panel-pushed TUIC config, diffs against the last
 // applied inbound, and on change re-renders + restarts. Idempotent.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
-	var wire inboundCfgWire
-	if err := json.Unmarshal(rawCfg, &wire); err != nil {
-		return fmt.Errorf("singbox ApplyInbound: parse cfg: %w", err)
+	var newInbound InboundConfig
+	if a.protocol == "xray" {
+		var wire xrayFamilyWire
+		if err := json.Unmarshal(rawCfg, &wire); err != nil {
+			return fmt.Errorf("singbox ApplyInbound: parse xray cfg: %w", err)
+		}
+		ic, err := wire.toInboundConfig(port)
+		if err != nil {
+			return fmt.Errorf("singbox ApplyInbound: %w", err)
+		}
+		newInbound = ic
+	} else {
+		var wire inboundCfgWire
+		if err := json.Unmarshal(rawCfg, &wire); err != nil {
+			return fmt.Errorf("singbox ApplyInbound: parse cfg: %w", err)
+		}
+		newInbound = wire.toInboundConfig(port)
 	}
-	newInbound := wire.toInboundConfig(port)
 
 	a.mu.Lock()
 	if a.inbound == newInbound {
@@ -278,9 +297,12 @@ func (a *Adapter) regenerateAndRestart() error {
 
 	var blob []byte
 	var err error
-	if a.protocol == "anytls" {
+	switch a.protocol {
+	case "anytls":
 		blob, err = renderAnytlsConfig(certPath, keyPath, statsListen, inbound, users)
-	} else {
+	case "xray":
+		blob, err = renderXrayFamilyConfig(statsListen, inbound, users)
+	default:
 		blob, err = renderConfig(certPath, keyPath, statsListen, inbound, users)
 	}
 	if err != nil {
@@ -333,4 +355,75 @@ func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 		ServerName:        w.ServerName,
 		CongestionControl: w.CongestionControl,
 	}
+}
+
+// xrayFamilyWire is the subset of the xray inbound config (xrayInboundCfgWire in
+// the xray adapter / XrayInboundCfg in transport.ts) that the sing-box engine
+// can render for vless/vmess/trojan. Field tags match what the panel pushes.
+// Unsupported features are rejected in toInboundConfig so the operator gets a
+// clear "use the xray engine" error rather than a silently-wrong config.
+type xrayFamilyWire struct {
+	Subprotocol        string          `json:"subprotocol"`
+	Security           string          `json:"security"`
+	Network            string          `json:"network"`
+	RealityDest        string          `json:"realityDest"`
+	RealityServerNames []string        `json:"realityServerNames"`
+	RealityPrivateKey  string          `json:"realityPrivateKey"`
+	RealityShortIDs    []string        `json:"realityShortIds"`
+	RealityMaxTimeDiff int             `json:"realityMaxTimeDiff"`
+	RealityMode        string          `json:"realityMode"`
+	Flow               string          `json:"flow"`
+	Cascade            json.RawMessage `json:"cascade"`
+}
+
+// toInboundConfig validates the pushed xray config against what the sing-box
+// engine supports (EC2: vless/vmess/trojan, REALITY steal-others, network=raw)
+// and maps it to an InboundConfig. Everything else errors out by design.
+func (w xrayFamilyWire) toInboundConfig(port int) (InboundConfig, error) {
+	sub := w.Subprotocol
+	if sub == "" {
+		sub = "vless"
+	}
+	if sub != "vless" && sub != "vmess" && sub != "trojan" {
+		return InboundConfig{}, fmt.Errorf("subprotocol %q not supported via sing-box engine", sub)
+	}
+	// REALITY (steal-others) only. tls/none security needs operator-cert handling
+	// (deferred); self-steal needs the local TLS fallback the xray adapter runs;
+	// non-raw transports and cascade aren't mapped to sing-box yet.
+	if w.Security != "" && w.Security != "reality" {
+		return InboundConfig{}, fmt.Errorf("security %q not supported via sing-box engine (use the xray engine)", w.Security)
+	}
+	if w.RealityMode == "self-steal" {
+		return InboundConfig{}, fmt.Errorf("reality self-steal mode not supported via sing-box engine (use the xray engine)")
+	}
+	if w.Network != "" && w.Network != "raw" {
+		return InboundConfig{}, fmt.Errorf("transport %q not supported via sing-box engine (use the xray engine)", w.Network)
+	}
+	if len(w.Cascade) > 0 && string(w.Cascade) != "null" {
+		return InboundConfig{}, fmt.Errorf("cascade not supported via sing-box engine (use the xray engine)")
+	}
+	if w.RealityPrivateKey == "" {
+		return InboundConfig{}, fmt.Errorf("realityPrivateKey is required")
+	}
+	if len(w.RealityServerNames) == 0 {
+		return InboundConfig{}, fmt.Errorf("realityServerNames must have at least one entry")
+	}
+	if len(w.RealityShortIDs) == 0 {
+		return InboundConfig{}, fmt.Errorf("realityShortIds must have at least one entry")
+	}
+
+	flow := ""
+	if sub == "vless" {
+		flow = w.Flow // Vision is VLESS-only; vmess/trojan have no flow.
+	}
+	return InboundConfig{
+		ListenPort:         port,
+		Subprotocol:        sub,
+		RealityDest:        w.RealityDest,
+		RealityServerName:  w.RealityServerNames[0], // sing-box tls.server_name is single
+		RealityPrivateKey:  w.RealityPrivateKey,
+		RealityShortIDsCSV: strings.Join(w.RealityShortIDs, ","),
+		RealityMaxTimeDiff: w.RealityMaxTimeDiff,
+		Flow:               flow,
+	}, nil
 }

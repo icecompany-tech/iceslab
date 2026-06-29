@@ -140,3 +140,55 @@ func TestApplyInboundConfigOnly(t *testing.T) {
 		t.Fatalf("re-ApplyInbound: %v", err)
 	}
 }
+
+func TestXrayFamilyAdapter(t *testing.T) {
+	a := New(Config{Protocol: "xray"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if a.Name() != "xray" || a.Engine() != "singbox" {
+		t.Fatalf("Name()/Engine() = %q/%q, want xray/singbox", a.Name(), a.Engine())
+	}
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	cfg := `{"subprotocol":"vless","flow":"xtls-rprx-vision","realityDest":"www.cloudflare.com:443","realityPrivateKey":"k","realityServerNames":["www.cloudflare.com"],"realityShortIds":["ab"]}`
+	if err := a.ApplyInbound(443, json.RawMessage(cfg)); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.inbound.Subprotocol != "vless" || a.inbound.RealityServerName != "www.cloudflare.com" {
+		t.Errorf("inbound not stored: %+v", a.inbound)
+	}
+	// AddUser keyed on the xray uuid.
+	if err := a.AddUser(core.User{UserID: "u1", XrayUUID: "uuid-1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats = %+v", stats.Users)
+	}
+	// A user with only tuic creds must be ignored by the xray-family adapter.
+	if err := a.AddUser(core.User{UserID: "u2", TuicUUID: "x"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 {
+		t.Errorf("xray-family adapter should ignore tuic-only creds, got %+v", stats.Users)
+	}
+}
+
+func TestXrayFamilyApplyInboundGuards(t *testing.T) {
+	a := New(Config{Protocol: "xray"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	reality := `"realityPrivateKey":"k","realityServerNames":["a.example"],"realityShortIds":["ab"]`
+	cases := map[string]string{
+		"non-raw transport":   `{"subprotocol":"vless","network":"ws",` + reality + `}`,
+		"self-steal":          `{"subprotocol":"vless","realityMode":"self-steal",` + reality + `}`,
+		"cascade":             `{"subprotocol":"vless","cascade":{"x":1},` + reality + `}`,
+		"tls security":        `{"subprotocol":"vless","security":"tls",` + reality + `}`,
+		"bad subprotocol":     `{"subprotocol":"shadowtls",` + reality + `}`,
+		"missing reality key": `{"subprotocol":"vless","realityServerNames":["a.example"],"realityShortIds":["ab"]}`,
+	}
+	for name, cfg := range cases {
+		if err := a.ApplyInbound(443, json.RawMessage(cfg)); err == nil {
+			t.Errorf("%s: expected ApplyInbound to error, got nil", name)
+		}
+	}
+}

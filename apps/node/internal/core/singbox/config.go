@@ -2,7 +2,11 @@ package singbox
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // sing-box config structs — only the subset we render for a TUIC inbound.
@@ -34,14 +38,38 @@ type sbUser struct {
 	Name     string `json:"name"`
 	UUID     string `json:"uuid,omitempty"`
 	Password string `json:"password,omitempty"`
+	// Flow carries VLESS Vision ("xtls-rprx-vision") when the xray-family engine
+	// renders a vless inbound; empty/omitted for every other protocol.
+	Flow string `json:"flow,omitempty"`
+	// AlterID is emitted only for VMess users (pointer so an explicit 0 -
+	// "disable legacy MD5 auth" - serializes, while nil omits the key for
+	// tuic/anytls/vless/trojan).
+	AlterID *int `json:"alterId,omitempty"`
 }
 
 type sbTLS struct {
-	Enabled         bool     `json:"enabled"`
-	ServerName      string   `json:"server_name,omitempty"`
-	ALPN            []string `json:"alpn,omitempty"`
-	CertificatePath string   `json:"certificate_path,omitempty"`
-	KeyPath         string   `json:"key_path,omitempty"`
+	Enabled         bool       `json:"enabled"`
+	ServerName      string     `json:"server_name,omitempty"`
+	ALPN            []string   `json:"alpn,omitempty"`
+	CertificatePath string     `json:"certificate_path,omitempty"`
+	KeyPath         string     `json:"key_path,omitempty"`
+	Reality         *sbReality `json:"reality,omitempty"`
+}
+
+// sbReality is the inbound REALITY block (sing-box tls.reality). private_key is
+// the same x25519 key xray uses; short_id is an array of hex strings; handshake
+// is the camouflage target unverified probes are forwarded to.
+type sbReality struct {
+	Enabled           bool        `json:"enabled"`
+	Handshake         sbHandshake `json:"handshake"`
+	PrivateKey        string      `json:"private_key"`
+	ShortID           []string    `json:"short_id"`
+	MaxTimeDifference string      `json:"max_time_difference,omitempty"`
+}
+
+type sbHandshake struct {
+	Server     string `json:"server"`
+	ServerPort int    `json:"server_port"`
 }
 
 type sbOutbound struct {
@@ -73,6 +101,17 @@ type InboundConfig struct {
 	ListenPort        int
 	ServerName        string
 	CongestionControl string
+
+	// ───── xray-family fields (engine=singbox for vless/vmess/trojan) ─────
+	// All zero for tuic/anytls. Kept as scalars (short IDs as a CSV string) so
+	// InboundConfig stays comparable for the ApplyInbound `==` no-op diff.
+	Subprotocol        string // "vless" (default) | "vmess" | "trojan"
+	RealityDest        string // "host:port" camouflage target
+	RealityServerName  string // single SNI -> sing-box tls.server_name
+	RealityPrivateKey  string // x25519 private key (same format xray uses)
+	RealityShortIDsCSV string // comma-joined hex short IDs
+	RealityMaxTimeDiff int    // ms; 0 omits the field
+	Flow               string // "xtls-rprx-vision" for vless Vision; vless-only
 }
 
 // userEntry is the per-user TUIC credential the adapter tracks in memory,
@@ -189,4 +228,121 @@ func renderAnytlsConfig(certPath, keyPath, statsListen string, inbound InboundCo
 	}
 
 	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// renderXrayFamilyConfig builds the sing-box config for a vless/vmess/trojan
+// inbound served by the sing-box engine (engine-choice). Security is REALITY
+// (steal-others): the same x25519 key + short IDs + camouflage dest xray uses,
+// so a vless:// / vmess:// / trojan:// link works against either engine. Stats
+// wiring (v2ray_api) is identical to the other sing-box protocols.
+//
+// Per-protocol user shape:
+//   - vless: uuid + flow (Vision)
+//   - vmess: uuid + alterId 0
+//   - trojan: password (== the user's xray uuid, mirroring the xray adapter's
+//     reuse of user.xrayUuid as the trojan password)
+func renderXrayFamilyConfig(statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+	sub := inbound.Subprotocol
+	if sub == "" {
+		sub = "vless"
+	}
+
+	host, port := splitHostPort(inbound.RealityDest, 443)
+	tls := sbTLS{
+		Enabled:    true,
+		ServerName: inbound.RealityServerName,
+		Reality: &sbReality{
+			Enabled:    true,
+			Handshake:  sbHandshake{Server: host, ServerPort: port},
+			PrivateKey: inbound.RealityPrivateKey,
+			ShortID:    splitCSV(inbound.RealityShortIDsCSV),
+		},
+	}
+	if inbound.RealityMaxTimeDiff > 0 {
+		tls.Reality.MaxTimeDifference = fmt.Sprintf("%dms", inbound.RealityMaxTimeDiff)
+	}
+
+	ids := sortedIDs(users)
+	zero := 0
+	sbUsers := make([]sbUser, 0, len(ids))
+	for _, id := range ids {
+		e := users[id]
+		u := sbUser{Name: id} // Name = userId -> stable v2ray stats key.
+		switch sub {
+		case "trojan":
+			u.Password = e.Password
+		case "vmess":
+			u.UUID = e.UUID
+			u.AlterID = &zero
+		default: // vless
+			u.UUID = e.UUID
+			u.Flow = inbound.Flow // empty when Vision is off
+		}
+		sbUsers = append(sbUsers, u)
+	}
+
+	cfg := sbConfig{
+		Log: sbLog{Level: "warn", Timestamp: true},
+		Inbounds: []sbInbound{{
+			Type:       sub,
+			Tag:        sub + "-in",
+			Listen:     "0.0.0.0",
+			ListenPort: inbound.ListenPort,
+			Users:      sbUsers,
+			TLS:        tls,
+		}},
+		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
+	}
+
+	if statsListen != "" {
+		cfg.Experimental = &sbExperimental{
+			V2RayAPI: &sbV2RayAPI{
+				Listen: statsListen,
+				Stats:  sbStats{Enabled: true, Users: ids},
+			},
+		}
+	}
+
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// sortedIDs returns the user IDs sorted, for deterministic config output.
+func sortedIDs(users map[string]userEntry) []string {
+	ids := make([]string, 0, len(users))
+	for id := range users {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// splitCSV splits a comma-joined list, trimming blanks. Returns a non-nil empty
+// slice for "" so the rendered JSON carries `[]`, never `null`.
+func splitCSV(s string) []string {
+	out := []string{}
+	if s == "" {
+		return out
+	}
+	for _, p := range strings.Split(s, ",") {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// splitHostPort parses "host:port"; a missing/invalid port falls back to defPort.
+func splitHostPort(hostPort string, defPort int) (string, int) {
+	if hostPort == "" {
+		return "", defPort
+	}
+	host, portStr, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		return hostPort, defPort // no port present: whole value is the host
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port == 0 {
+		return host, defPort
+	}
+	return host, port
 }

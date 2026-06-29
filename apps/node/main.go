@@ -293,6 +293,18 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			XrayStatsBin: singboxStatsBin,
 		}, logger))
 		logger.Info("singbox (anytls) adapter registered")
+
+		// Engine-choice (EC2): vless/vmess/trojan via the sing-box engine. Inert
+		// until the panel pushes an xray inbound pinned to engine=singbox. No
+		// cert/key (REALITY carries its own key); distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "xray",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_XRAY_CONFIG", "/etc/sing-box/xray.json"),
+			StatsListen:  getenv("SINGBOX_XRAY_API_LISTEN", "127.0.0.1:8084"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (xray-family) adapter registered")
 	}
 
 	return adapters

@@ -151,3 +151,103 @@ func TestRenderConfigStatsBlock(t *testing.T) {
 		t.Errorf("stats.users = %v, want [u1]", api.Stats.Users)
 	}
 }
+
+func TestRenderXrayFamilyConfigVless(t *testing.T) {
+	users := map[string]userEntry{"u1": {UUID: "uuid-1", Password: "uuid-1"}}
+	blob, err := renderXrayFamilyConfig("127.0.0.1:8084", InboundConfig{
+		ListenPort:         443,
+		Subprotocol:        "vless",
+		RealityDest:        "www.cloudflare.com:443",
+		RealityServerName:  "www.cloudflare.com",
+		RealityPrivateKey:  "PRIVKEY",
+		RealityShortIDsCSV: "0123abcd,ff",
+		RealityMaxTimeDiff: 60000,
+		Flow:               "xtls-rprx-vision",
+	}, users)
+	if err != nil {
+		t.Fatalf("renderXrayFamilyConfig: %v", err)
+	}
+	var cfg sbConfig
+	if err := json.Unmarshal(blob, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	in := cfg.Inbounds[0]
+	if in.Type != "vless" {
+		t.Errorf("type = %q, want vless", in.Type)
+	}
+	if !in.TLS.Enabled || in.TLS.Reality == nil || !in.TLS.Reality.Enabled {
+		t.Fatalf("reality not enabled: %+v", in.TLS)
+	}
+	if in.TLS.ServerName != "www.cloudflare.com" {
+		t.Errorf("server_name = %q", in.TLS.ServerName)
+	}
+	if in.TLS.Reality.Handshake.Server != "www.cloudflare.com" || in.TLS.Reality.Handshake.ServerPort != 443 {
+		t.Errorf("handshake = %+v, want www.cloudflare.com:443", in.TLS.Reality.Handshake)
+	}
+	if in.TLS.Reality.PrivateKey != "PRIVKEY" {
+		t.Errorf("private_key = %q", in.TLS.Reality.PrivateKey)
+	}
+	if len(in.TLS.Reality.ShortID) != 2 || in.TLS.Reality.ShortID[0] != "0123abcd" {
+		t.Errorf("short_id = %v, want [0123abcd ff]", in.TLS.Reality.ShortID)
+	}
+	if in.TLS.Reality.MaxTimeDifference != "60000ms" {
+		t.Errorf("max_time_difference = %q, want 60000ms", in.TLS.Reality.MaxTimeDifference)
+	}
+	if len(in.Users) != 1 || in.Users[0].UUID != "uuid-1" || in.Users[0].Flow != "xtls-rprx-vision" {
+		t.Errorf("users = %+v (want uuid-1 + vision flow)", in.Users)
+	}
+	if in.Users[0].Password != "" || in.Users[0].AlterID != nil {
+		t.Errorf("vless user should carry no password/alterId: %+v", in.Users[0])
+	}
+}
+
+func TestRenderXrayFamilyConfigVmessTrojan(t *testing.T) {
+	base := InboundConfig{
+		ListenPort:         443,
+		RealityDest:        "a.example:443",
+		RealityServerName:  "a.example",
+		RealityPrivateKey:  "k",
+		RealityShortIDsCSV: "ab",
+	}
+
+	// vmess: uuid + alterId 0, no flow.
+	bv := base
+	bv.Subprotocol = "vmess"
+	blobV, err := renderXrayFamilyConfig("", bv, map[string]userEntry{"u1": {UUID: "uuid-1"}})
+	if err != nil {
+		t.Fatalf("vmess render: %v", err)
+	}
+	var cv sbConfig
+	if err := json.Unmarshal(blobV, &cv); err != nil {
+		t.Fatal(err)
+	}
+	if cv.Inbounds[0].Type != "vmess" {
+		t.Errorf("type = %q, want vmess", cv.Inbounds[0].Type)
+	}
+	uv := cv.Inbounds[0].Users[0]
+	if uv.UUID != "uuid-1" || uv.AlterID == nil || *uv.AlterID != 0 {
+		t.Errorf("vmess user = %+v, want uuid + alterId 0", uv)
+	}
+	if uv.Flow != "" {
+		t.Errorf("vmess user must have no flow, got %q", uv.Flow)
+	}
+
+	// trojan: password (no uuid).
+	bt := base
+	bt.Subprotocol = "trojan"
+	blobT, err := renderXrayFamilyConfig("", bt, map[string]userEntry{"u1": {Password: "pw"}})
+	if err != nil {
+		t.Fatalf("trojan render: %v", err)
+	}
+	var ct sbConfig
+	if err := json.Unmarshal(blobT, &ct); err != nil {
+		t.Fatal(err)
+	}
+	if ct.Inbounds[0].Type != "trojan" {
+		t.Errorf("type = %q, want trojan", ct.Inbounds[0].Type)
+	}
+	ut := ct.Inbounds[0].Users[0]
+	if ut.Password != "pw" || ut.UUID != "" {
+		t.Errorf("trojan user = %+v, want password-only", ut)
+	}
+}
