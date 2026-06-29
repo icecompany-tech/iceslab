@@ -13,6 +13,7 @@ import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
+import { deriveTuicPassword } from '../../lib/credentials.js';
 import {
   buildHysteriaUri,
   buildMieruUri,
@@ -21,6 +22,7 @@ import {
   buildShadowsocksUri,
   buildSubscriptionJson,
   buildTrojanRealityUri,
+  buildTuicUri,
   buildVlessRealityUri,
   buildVmessUri,
   encodePlainList,
@@ -620,6 +622,35 @@ export async function generateSubscription(
           password: user.naivePassword,
           host: naiveHost,
           port,
+          name: nodeName,
+        }),
+      });
+    } else if (ib.protocol === 'tuic' && user.xrayUuid) {
+      // TUIC v5 (sing-box engine). uuid = user.xrayUuid; password derived from
+      // it (deriveTuicPassword) - same value the node receives, no extra
+      // credential surface. Node serves a self-signed cert in the alpha, so the
+      // URI sets allow_insecure (client trusts it + the matching SNI).
+      const cfg = ib.config as unknown as { serverName?: string; congestionControl?: string };
+      const tuicSni = cfg.serverName || 'www.bing.com';
+      const tuicCc = cfg.congestionControl || 'bbr';
+      const tuicPassword = deriveTuicPassword(user.xrayUuid);
+      endpoints.push({
+        protocol: 'tuic',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        uuid: user.xrayUuid,
+        password: tuicPassword,
+        serverName: tuicSni,
+        congestionControl: tuicCc,
+        uri: buildTuicUri({
+          uuid: user.xrayUuid,
+          password: tuicPassword,
+          host,
+          port,
+          serverName: tuicSni,
+          congestionControl: tuicCc,
           name: nodeName,
         }),
       });

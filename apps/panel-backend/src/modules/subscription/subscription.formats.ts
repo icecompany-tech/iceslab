@@ -31,6 +31,7 @@ export {
   type MieruProfileOpts,
   type MieruProfileJson,
 } from '../../core-adapters/mieru/index.js';
+export { buildTuicUri, type TuicUriOpts } from '../../core-adapters/tuic/index.js';
 
 /**
  * Strip the optional `:port` suffix from a `host[:port]` string, returning the
@@ -204,6 +205,17 @@ export interface MieruSubscriptionEndpoint extends SubscriptionEndpointBase {
   mtu: number;
 }
 
+export interface TuicSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'tuic';
+  /** UUID (reuses user.xrayUuid) and derived password. */
+  uuid: string;
+  password: string;
+  /** TLS SNI the node's self-signed cert is issued for. */
+  serverName: string;
+  /** Congestion controller: bbr | cubic | new_reno. */
+  congestionControl: string;
+}
+
 export type SubscriptionEndpoint =
   | HysteriaSubscriptionEndpoint
   | XraySubscriptionEndpoint
@@ -211,7 +223,8 @@ export type SubscriptionEndpoint =
   | NaiveSubscriptionEndpoint
   | ShadowsocksSubscriptionEndpoint
   | MtprotoSubscriptionEndpoint
-  | MieruSubscriptionEndpoint;
+  | MieruSubscriptionEndpoint
+  | TuicSubscriptionEndpoint;
 
 export interface SubscriptionJsonResponse {
   user: {

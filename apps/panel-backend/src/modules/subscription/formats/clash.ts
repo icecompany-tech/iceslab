@@ -311,6 +311,25 @@ export function buildClashYaml(
           `    udp: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'tuic') {
+      // TUIC v5 (sing-box engine) -> mihomo `type: tuic`. Self-signed cert in
+      // the alpha so skip-cert-verify; uuid+password auth, native UDP relay.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: tuic`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    uuid: ${yamlString(e.uuid)}`,
+          `    password: ${yamlString(e.password)}`,
+          `    congestion-controller: ${yamlString(e.congestionControl || 'bbr')}`,
+          `    alpn: [h3]`,
+          `    sni: ${yamlString(e.serverName)}`,
+          `    udp-relay-mode: native`,
+          `    skip-cert-verify: true`,
+        ].join('\n'),
+      );
     }
   }
 

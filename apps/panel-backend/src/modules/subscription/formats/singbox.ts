@@ -305,6 +305,26 @@ export function buildSingboxJson(
         network: 'tcp',
         udp_over_tcp: false,
       });
+    } else if (e.protocol === 'tuic') {
+      // TUIC v5 (sing-box engine). QUIC + mandatory TLS; self-signed cert in
+      // the alpha so insecure=true. uuid+password auth, native UDP relay.
+      proxyTags.push(tag);
+      outbounds.push({
+        type: 'tuic',
+        tag,
+        server: e.host,
+        server_port: e.port,
+        uuid: e.uuid,
+        password: e.password,
+        congestion_control: e.congestionControl || 'bbr',
+        udp_relay_mode: 'native',
+        tls: {
+          enabled: true,
+          server_name: e.serverName,
+          alpn: ['h3'],
+          insecure: true,
+        },
+      });
     }
   }
 
