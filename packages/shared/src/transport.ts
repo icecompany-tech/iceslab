@@ -16,7 +16,8 @@ export type ProtocolName =
   | 'naive'
   | 'shadowsocks'
   | 'mtproto'
-  | 'mieru';
+  | 'mieru'
+  | 'tuic';
 
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
@@ -30,6 +31,9 @@ export interface ProtocolCredentials {
    * straight into the [Peer] AllowedIPs field as `<ip>/32`.
    */
   amneziawgAllowedIp?: string;
+  /** TUIC v5 (sing-box engine): per-user UUID + password. */
+  tuicUuid?: string;
+  tuicPassword?: string;
 }
 
 // ───── POST /addUser ─────
@@ -77,7 +81,8 @@ export interface InboundDto {
     | NaiveInboundCfg
     | ShadowsocksInboundCfg
     | MtprotoInboundCfg
-    | MieruInboundCfg;
+    | MieruInboundCfg
+    | TuicInboundCfg;
 }
 
 export interface XrayInboundCfg {
@@ -249,6 +254,17 @@ export interface MtprotoInboundCfg {
  */
 export interface MieruInboundCfg {
   mtu: number;
+}
+
+/**
+ * TUIC v5 inbound config (sing-box engine, slice singbox-S2). `serverName` is
+ * the TLS SNI the node's cert is issued for; `congestionControl` tunes the QUIC
+ * sender. TLS is the node's self-signed pair for the alpha (client connects
+ * with allow-insecure + this SNI). Per-user uuid+password live in credentials.
+ */
+export interface TuicInboundCfg {
+  serverName?: string;
+  congestionControl?: 'bbr' | 'cubic' | 'new_reno';
 }
 
 export interface ApplyInboundsRequest {

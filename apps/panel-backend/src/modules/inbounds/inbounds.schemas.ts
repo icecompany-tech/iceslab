@@ -321,6 +321,21 @@ export const MieruConfigSchema = z.object({
   mtu: z.number().int().min(576).max(1500).default(1400),
 });
 
+/**
+ * TUIC v5 config (sing-box engine, slice singbox-S2). `serverName` is the TLS
+ * SNI the node's self-signed cert is issued for; the client connects with it
+ * (+ allow-insecure for the alpha). `congestionControl` tunes the QUIC sender.
+ */
+export const TuicConfigSchema = z.object({
+  serverName: z
+    .string()
+    .min(1)
+    .max(253)
+    .regex(/^[a-zA-Z0-9.-]+$/, 'Hostname only (no scheme, no path)')
+    .default('www.bing.com'),
+  congestionControl: z.enum(['bbr', 'cubic', 'new_reno']).default('bbr'),
+});
+
 // Discriminated union over `protocol`. Used for create/update body validation.
 export const InboundConfigByProtocol = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('hysteria'), config: HysteriaConfigSchema }),
@@ -330,6 +345,7 @@ export const InboundConfigByProtocol = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('shadowsocks'), config: ShadowsocksConfigSchema }),
   z.object({ protocol: z.literal('mtproto'), config: MtprotoConfigSchema }),
   z.object({ protocol: z.literal('mieru'), config: MieruConfigSchema }),
+  z.object({ protocol: z.literal('tuic'), config: TuicConfigSchema }),
 ]);
 
 // Public-facing host the panel emits in client URIs. Must be a hostname or
@@ -387,11 +403,12 @@ export const PROTOCOL_CONFIG_SCHEMAS = {
   shadowsocks: ShadowsocksConfigSchema,
   mtproto: MtprotoConfigSchema,
   mieru: MieruConfigSchema,
+  tuic: TuicConfigSchema,
 } as const;
 
 export const ListInboundsQuerySchema = z.object({
   nodeId: z.uuid().optional(),
-  protocol: z.enum(['hysteria', 'xray', 'amneziawg', 'naive', 'shadowsocks', 'mtproto', 'mieru']).optional(),
+  protocol: z.enum(['hysteria', 'xray', 'amneziawg', 'naive', 'shadowsocks', 'mtproto', 'mieru', 'tuic']).optional(),
 });
 export type ListInboundsQuery = z.infer<typeof ListInboundsQuerySchema>;
 
