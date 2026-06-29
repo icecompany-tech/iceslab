@@ -19,6 +19,7 @@ export interface ProtocolOption {
 export const PROTOCOL_OPTIONS: ProtocolOption[] = [
   { value: 'xray', label: 'Xray' },
   { value: 'tuic', label: 'TUIC (sing-box)' },
+  { value: 'anytls', label: 'AnyTLS (sing-box)' },
   { value: 'hysteria', label: 'Hysteria 2' },
   { value: 'amneziawg', label: 'AmneziaWG' },
   { value: 'naive', label: 'NaiveProxy' },
@@ -34,6 +35,7 @@ const COMPACT: Record<string, string> = {
   hysteria: 'Hysteria 2',
   xray: 'Xray',
   tuic: 'TUIC',
+  anytls: 'AnyTLS',
   amneziawg: 'AmneziaWG',
   naive: 'NaiveProxy',
   shadowsocks: 'Shadowsocks',

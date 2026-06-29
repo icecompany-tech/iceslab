@@ -153,6 +153,9 @@ interface FormValues {
   // TUIC (sing-box)
   tuicServerName: string;
   tuicCongestion: 'bbr' | 'cubic' | 'new_reno';
+
+  // AnyTLS (sing-box)
+  anytlsServerName: string;
 }
 
 // Values bounded by upstream AmneziaWG v2.0 spec (docs.amnezia.org):
@@ -274,6 +277,8 @@ function defaults(profile: Profile | null): FormValues {
 
     tuicServerName: 'www.bing.com',
     tuicCongestion: 'bbr',
+
+    anytlsServerName: 'www.bing.com',
   };
 
   if (!profile) return base;
@@ -374,6 +379,11 @@ function defaults(profile: Profile | null): FormValues {
         ...base,
         tuicServerName: (cfg.serverName as string) ?? base.tuicServerName,
         tuicCongestion: ((cfg.congestionControl as FormValues['tuicCongestion']) ?? base.tuicCongestion),
+      };
+    case 'anytls':
+      return {
+        ...base,
+        anytlsServerName: (cfg.serverName as string) ?? base.anytlsServerName,
       };
     default:
       return base;
@@ -627,6 +637,9 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           serverName: values.tuicServerName,
           congestionControl: values.tuicCongestion,
         };
+        break;
+      case 'anytls':
+        config = { serverName: values.anytlsServerName };
         break;
     }
 
@@ -1508,6 +1521,17 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 data={['bbr', 'cubic', 'new_reno']}
                 allowDeselect={false}
                 {...form.getInputProps('tuicCongestion')}
+              />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'anytls' && (
+            <Stack>
+              <TextInput
+                label="TLS serverName (SNI)"
+                placeholder="www.bing.com"
+                description="SNI the node's self-signed cert is issued for. AnyTLS is password-only (per-user password is auto-derived)."
+                {...form.getInputProps('anytlsServerName')}
               />
             </Stack>
           )}
