@@ -546,11 +546,12 @@ pattern: resource isolation, simpler firewall):
   5) Shadowsocks   SS2022 multi-user via xray-core (TCP+UDP/443, no separate bin)
   6) MTProto       Telegram-only proxy via 9seconds/mtg (Fake-TLS over TCP/443)
   7) Mieru         Stealth proxy via enfein/mieru (mita server, TCP+UDP)
+  8) TUIC          QUIC proxy via sing-box engine (UDP, TUIC v5, self-signed TLS)
 
 EOF
   local choice
   while true; do
-    read -rp "Select [1-7]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
+    read -rp "Select [1-8]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -559,7 +560,8 @@ EOF
       5) PROTOCOL=shadowsocks; break ;;
       6) PROTOCOL=mtproto;     break ;;
       7) PROTOCOL=mieru;       break ;;
-      *) echo "  → invalid choice '$choice'; enter 1-7." ;;
+      8) PROTOCOL=tuic;        break ;;
+      *) echo "  → invalid choice '$choice'; enter 1-8." ;;
     esac
   done
   log "Selected protocol: $PROTOCOL"
@@ -639,15 +641,15 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
 fi
 
 case "$PROTOCOL" in
-  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru) ;;
+  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic) ;;
   "")
     if [[ -e /dev/tty ]]; then
       prompt_protocol
     else
-      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru (no /dev/tty for interactive menu)"
+      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic (no /dev/tty for interactive menu)"
     fi
     ;;
-  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru)" ;;
+  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic)" ;;
 esac
 
 step "Prerequisites"
@@ -883,6 +885,12 @@ case "$PROTOCOL" in
     PROTO_BINARY=/usr/local/bin/mita
     PROTO_CONFIG=/etc/mita/server.json
     ;;
+  tuic)
+    log "Chaining bootstrap-singbox.sh (TUIC via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/config.json
+    ;;
 esac
 
 step "Environment file (/etc/iceslab-node/env)"
@@ -893,7 +901,7 @@ mkdir -p "$ENV_DIR"
 # explicit ReadWritePaths. ReadWritePaths can't create directories, only
 # permit writes inside existing ones, so we pre-create every per-protocol
 # config dir here, even if the protocol isn't installed on this node.
-mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita
+mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita /etc/sing-box
 ENV_FILE="$ENV_DIR/env"
 
 # Honour --payload only if the env file doesn't exist OR the user passed one.
@@ -1013,6 +1021,19 @@ EOF
       cat >> "$ENV_FILE" <<EOF
 MITA_BINARY=${PROTO_BINARY}
 MITA_CONFIG=${PROTO_CONFIG}
+EOF
+      ;;
+    tuic)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_CONFIG=${PROTO_CONFIG}
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+SINGBOX_API_LISTEN=127.0.0.1:8082
+# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
+# Point SINGBOX_STATS_BIN at an xray binary to enable traffic counters; without
+# it TUIC still works but counters stay at zero. e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
 EOF
       ;;
   esac

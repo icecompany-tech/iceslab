@@ -271,8 +271,10 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			// Per-user stats: sing-box collects on this loopback v2ray_api;
 			// read via the xray binary (reused as a v2ray-stats gRPC client).
 			// No xray binary -> GetStats degrades to zero counters.
-			StatsListen:  getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
-			XrayStatsBin: os.Getenv("XRAY_BINARY"),
+			StatsListen: getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
+			// Stats client: a dedicated SINGBOX_STATS_BIN wins, else reuse
+			// XRAY_BINARY when the node also runs xray. Empty -> zero counters.
+			XrayStatsBin: getenv("SINGBOX_STATS_BIN", os.Getenv("XRAY_BINARY")),
 		}, logger))
 		logger.Info("singbox (tuic) adapter registered")
 	}
