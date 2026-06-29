@@ -54,17 +54,10 @@ const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];
 // path + host header apply to these transports (same URI param names).
 const PATH_HOST_TRANSPORTS = ['ws', 'xhttp', 'httpupgrade'];
 
-// Profile protocol dropdown = the real protocols + a disabled sing-box teaser
-// inserted right after xray (roadmap signal: sing-box engine is coming, not
-// selectable yet). Kept LOCAL to this form on purpose: the shared
-// PROTOCOL_OPTIONS drives squad per-protocol groupings, dividers, and
-// protocolLabel, where a fake protocol would create an empty "sing-box" group.
-// The sentinel value is non-selectable, so it never reaches form state.
-const PROFILE_PROTOCOL_SELECT_DATA = [
-  PROTOCOL_OPTIONS[0], // xray
-  { value: '__singbox_soon', label: 'sing-box (soon)', disabled: true },
-  ...PROTOCOL_OPTIONS.slice(1),
-];
+// Profile protocol dropdown. sing-box (TUIC) is now a real selectable protocol
+// in PROTOCOL_OPTIONS (right after xray), so the former disabled "sing-box
+// (soon)" teaser is gone.
+const PROFILE_PROTOCOL_SELECT_DATA = PROTOCOL_OPTIONS;
 
 type Mode = 'create' | 'edit';
 
@@ -156,6 +149,10 @@ interface FormValues {
 
   // Mieru
   mieruMtu: number | '';
+
+  // TUIC (sing-box)
+  tuicServerName: string;
+  tuicCongestion: 'bbr' | 'cubic' | 'new_reno';
 }
 
 // Values bounded by upstream AmneziaWG v2.0 spec (docs.amnezia.org):
@@ -274,6 +271,9 @@ function defaults(profile: Profile | null): FormValues {
 
     mtgDomain: 'www.cloudflare.com',
     mieruMtu: 1400,
+
+    tuicServerName: 'www.bing.com',
+    tuicCongestion: 'bbr',
   };
 
   if (!profile) return base;
@@ -368,6 +368,12 @@ function defaults(profile: Profile | null): FormValues {
       return {
         ...base,
         mieruMtu: ((cfg.mtu as number) ?? base.mieruMtu),
+      };
+    case 'tuic':
+      return {
+        ...base,
+        tuicServerName: (cfg.serverName as string) ?? base.tuicServerName,
+        tuicCongestion: ((cfg.congestionControl as FormValues['tuicCongestion']) ?? base.tuicCongestion),
       };
     default:
       return base;
@@ -615,6 +621,12 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
         break;
       case 'mieru':
         config = { mtu: values.mieruMtu === '' ? 1400 : Number(values.mieruMtu) };
+        break;
+      case 'tuic':
+        config = {
+          serverName: values.tuicServerName,
+          congestionControl: values.tuicCongestion,
+        };
         break;
     }
 
@@ -1479,6 +1491,23 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 min={576}
                 max={1500}
                 {...form.getInputProps('mieruMtu')}
+              />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'tuic' && (
+            <Stack>
+              <TextInput
+                label="TLS serverName (SNI)"
+                placeholder="www.bing.com"
+                description="SNI the node's self-signed cert is issued for. Clients connect with this name (allow-insecure for the alpha)."
+                {...form.getInputProps('tuicServerName')}
+              />
+              <Select
+                label="Congestion control"
+                data={['bbr', 'cubic', 'new_reno']}
+                allowDeselect={false}
+                {...form.getInputProps('tuicCongestion')}
               />
             </Stack>
           )}
