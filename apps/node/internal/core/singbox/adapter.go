@@ -158,6 +158,8 @@ func (a *Adapter) credsFor(user core.User) (uuid, password string) {
 		// Store it in both slots; renderXrayFamilyConfig picks the right one per
 		// subprotocol. Empty xrayUuid -> the AddUser guard skips this user.
 		return user.XrayUUID, user.XrayUUID
+	case "hysteria":
+		return "", user.HysteriaPassword
 	default: // tuic
 		return user.TuicUUID, user.TuicPassword
 	}
@@ -237,7 +239,8 @@ func (a *Adapter) Healthy() bool {
 // applied inbound, and on change re-renders + restarts. Idempotent.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var newInbound InboundConfig
-	if a.protocol == "xray" {
+	switch a.protocol {
+	case "xray":
 		var wire xrayFamilyWire
 		if err := json.Unmarshal(rawCfg, &wire); err != nil {
 			return fmt.Errorf("singbox ApplyInbound: parse xray cfg: %w", err)
@@ -247,7 +250,13 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 			return fmt.Errorf("singbox ApplyInbound: %w", err)
 		}
 		newInbound = ic
-	} else {
+	case "hysteria":
+		var wire hy2FamilyWire
+		if err := json.Unmarshal(rawCfg, &wire); err != nil {
+			return fmt.Errorf("singbox ApplyInbound: parse hysteria cfg: %w", err)
+		}
+		newInbound = wire.toInboundConfig(port)
+	default:
 		var wire inboundCfgWire
 		if err := json.Unmarshal(rawCfg, &wire); err != nil {
 			return fmt.Errorf("singbox ApplyInbound: parse cfg: %w", err)
@@ -302,6 +311,8 @@ func (a *Adapter) regenerateAndRestart() error {
 		blob, err = renderAnytlsConfig(certPath, keyPath, statsListen, inbound, users)
 	case "xray":
 		blob, err = renderXrayFamilyConfig(statsListen, inbound, users)
+	case "hysteria":
+		blob, err = renderHysteria2Config(certPath, keyPath, statsListen, inbound, users)
 	default:
 		blob, err = renderConfig(certPath, keyPath, statsListen, inbound, users)
 	}
@@ -426,4 +437,29 @@ func (w xrayFamilyWire) toInboundConfig(port int) (InboundConfig, error) {
 		RealityMaxTimeDiff: w.RealityMaxTimeDiff,
 		Flow:               flow,
 	}, nil
+}
+
+// hy2FamilyWire is the subset of the hysteria inbound config (inboundCfgWire in
+// the hysteria adapter / HysteriaConfigSchema in transport.ts) the sing-box
+// engine renders. All fields are optional; there are no unsupported-feature
+// guards (unlike the xray family) because obfs/masquerade/bandwidth all map 1:1.
+type hy2FamilyWire struct {
+	ObfsPassword   string `json:"obfsPassword"`
+	MasqueradeURL  string `json:"masqueradeUrl"`
+	BrutalUpMbps   int    `json:"brutalUpMbps"`
+	BrutalDownMbps int    `json:"brutalDownMbps"`
+	// ServerName is an optional SNI for the self-signed cert; the hysteria wire
+	// usually omits it (the xray-hysteria path is ACME-domain based).
+	ServerName string `json:"serverName"`
+}
+
+func (w hy2FamilyWire) toInboundConfig(port int) InboundConfig {
+	return InboundConfig{
+		ListenPort:     port,
+		ServerName:     w.ServerName,
+		ObfsPassword:   w.ObfsPassword,
+		MasqueradeURL:  w.MasqueradeURL,
+		BrutalUpMbps:   w.BrutalUpMbps,
+		BrutalDownMbps: w.BrutalDownMbps,
+	}
 }

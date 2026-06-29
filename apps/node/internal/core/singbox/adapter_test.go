@@ -192,3 +192,32 @@ func TestXrayFamilyApplyInboundGuards(t *testing.T) {
 		}
 	}
 }
+
+func TestHysteria2Adapter(t *testing.T) {
+	a := New(Config{Protocol: "hysteria"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if a.Name() != "hysteria" || a.Engine() != "singbox" {
+		t.Fatalf("Name()/Engine() = %q/%q, want hysteria/singbox", a.Name(), a.Engine())
+	}
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := a.ApplyInbound(443, json.RawMessage(`{"obfsPassword":"o","brutalUpMbps":50}`)); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.inbound.ObfsPassword != "o" || a.inbound.BrutalUpMbps != 50 {
+		t.Errorf("inbound not stored: %+v", a.inbound)
+	}
+	if err := a.AddUser(core.User{UserID: "u1", HysteriaPassword: "hp1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats = %+v", stats.Users)
+	}
+	// A user with only tuic creds must be ignored by the hysteria adapter.
+	if err := a.AddUser(core.User{UserID: "u2", TuicUUID: "x"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 {
+		t.Errorf("hysteria adapter should ignore tuic-only creds, got %+v", stats.Users)
+	}
+}

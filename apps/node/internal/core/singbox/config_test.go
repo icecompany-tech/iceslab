@@ -251,3 +251,59 @@ func TestRenderXrayFamilyConfigVmessTrojan(t *testing.T) {
 		t.Errorf("trojan user = %+v, want password-only", ut)
 	}
 }
+
+func TestRenderHysteria2Config(t *testing.T) {
+	users := map[string]userEntry{"u1": {Password: "hp1"}}
+	blob, err := renderHysteria2Config("/c.pem", "/k.pem", "127.0.0.1:8085", InboundConfig{
+		ListenPort:     443,
+		ObfsPassword:   "obfs-secret",
+		MasqueradeURL:  "https://www.bing.com",
+		BrutalUpMbps:   100,
+		BrutalDownMbps: 200,
+	}, users)
+	if err != nil {
+		t.Fatalf("renderHysteria2Config: %v", err)
+	}
+	var cfg sbConfig
+	if err := json.Unmarshal(blob, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	in := cfg.Inbounds[0]
+	if in.Type != "hysteria2" {
+		t.Errorf("type = %q, want hysteria2", in.Type)
+	}
+	if !in.TLS.Enabled || in.TLS.CertificatePath != "/c.pem" || in.TLS.KeyPath != "/k.pem" {
+		t.Errorf("tls = %+v", in.TLS)
+	}
+	if !in.IgnoreClientBandwidth {
+		t.Error("ignore_client_bandwidth should be true")
+	}
+	if in.UpMbps != 100 || in.DownMbps != 200 {
+		t.Errorf("bandwidth = %d/%d, want 100/200", in.UpMbps, in.DownMbps)
+	}
+	if in.Obfs == nil || in.Obfs.Type != "salamander" || in.Obfs.Password != "obfs-secret" {
+		t.Errorf("obfs = %+v", in.Obfs)
+	}
+	if in.Masquerade != "https://www.bing.com" {
+		t.Errorf("masquerade = %q", in.Masquerade)
+	}
+	if len(in.Users) != 1 || in.Users[0].Name != "u1" || in.Users[0].Password != "hp1" {
+		t.Errorf("users = %+v", in.Users)
+	}
+
+	// No obfs/masquerade -> those fields are omitted.
+	blob2, err := renderHysteria2Config("/c", "/k", "", InboundConfig{ListenPort: 443}, users)
+	if err != nil {
+		t.Fatalf("renderHysteria2Config (minimal): %v", err)
+	}
+	var cfg2 sbConfig
+	if err := json.Unmarshal(blob2, &cfg2); err != nil {
+		t.Fatal(err)
+	}
+	if cfg2.Inbounds[0].Obfs != nil {
+		t.Error("obfs should be nil when no password")
+	}
+	if cfg2.Inbounds[0].Masquerade != "" {
+		t.Error("masquerade should be empty when no url")
+	}
+}

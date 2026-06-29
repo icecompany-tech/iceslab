@@ -32,6 +32,19 @@ type sbInbound struct {
 	Users             []sbUser `json:"users"`
 	CongestionControl string   `json:"congestion_control,omitempty"`
 	TLS               sbTLS    `json:"tls"`
+
+	// hysteria2-only knobs (omitted for every other protocol).
+	UpMbps                int     `json:"up_mbps,omitempty"`
+	DownMbps              int     `json:"down_mbps,omitempty"`
+	IgnoreClientBandwidth bool    `json:"ignore_client_bandwidth,omitempty"`
+	Obfs                  *sbObfs `json:"obfs,omitempty"`
+	Masquerade            string  `json:"masquerade,omitempty"`
+}
+
+// sbObfs is the hysteria2 salamander QUIC obfuscation block.
+type sbObfs struct {
+	Type     string `json:"type"`
+	Password string `json:"password"`
 }
 
 type sbUser struct {
@@ -112,6 +125,14 @@ type InboundConfig struct {
 	RealityShortIDsCSV string // comma-joined hex short IDs
 	RealityMaxTimeDiff int    // ms; 0 omits the field
 	Flow               string // "xtls-rprx-vision" for vless Vision; vless-only
+
+	// ───── hy2-family fields (engine=singbox for hysteria2) ─────
+	// Zero for every other protocol. ServerName (above) doubles as the hy2 TLS
+	// SNI when the panel sends one.
+	ObfsPassword   string // salamander obfs password; empty disables obfs
+	MasqueradeURL  string // http(s) reverse-proxy masquerade; empty disables
+	BrutalUpMbps   int    // Brutal CC server up cap; 0 omits
+	BrutalDownMbps int    // Brutal CC server down cap; 0 omits
 }
 
 // userEntry is the per-user TUIC credential the adapter tracks in memory,
@@ -345,4 +366,63 @@ func splitHostPort(hostPort string, defPort int) (string, int) {
 		return host, defPort
 	}
 	return host, port
+}
+
+// renderHysteria2Config builds the sing-box config for a hysteria2 inbound
+// served by the sing-box engine (engine-choice). TLS is mandatory - it reuses
+// the self-signed cert/key from bootstrap-singbox.sh (like tuic/anytls), so the
+// client connects with cert verification off. Per-user auth is the inline
+// users[] password (= the user's HysteriaPassword), unlike the xray-hysteria
+// path which authenticates via an HTTP callback. ignore_client_bandwidth mirrors
+// that path's "just works even when a client negotiates up=0" default.
+func renderHysteria2Config(certPath, keyPath, statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+	ids := sortedIDs(users)
+	sbUsers := make([]sbUser, 0, len(ids))
+	for _, id := range ids {
+		sbUsers = append(sbUsers, sbUser{Name: id, Password: users[id].Password})
+	}
+
+	in := sbInbound{
+		Type:                  "hysteria2",
+		Tag:                   "hy2-in",
+		Listen:                "0.0.0.0",
+		ListenPort:            inbound.ListenPort,
+		Users:                 sbUsers,
+		IgnoreClientBandwidth: true,
+		TLS: sbTLS{
+			Enabled:         true,
+			ServerName:      inbound.ServerName,
+			CertificatePath: certPath,
+			KeyPath:         keyPath,
+		},
+	}
+	if inbound.BrutalUpMbps > 0 {
+		in.UpMbps = inbound.BrutalUpMbps
+	}
+	if inbound.BrutalDownMbps > 0 {
+		in.DownMbps = inbound.BrutalDownMbps
+	}
+	if inbound.ObfsPassword != "" {
+		in.Obfs = &sbObfs{Type: "salamander", Password: inbound.ObfsPassword}
+	}
+	if inbound.MasqueradeURL != "" {
+		in.Masquerade = inbound.MasqueradeURL
+	}
+
+	cfg := sbConfig{
+		Log:       sbLog{Level: "warn", Timestamp: true},
+		Inbounds:  []sbInbound{in},
+		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
+	}
+
+	if statsListen != "" {
+		cfg.Experimental = &sbExperimental{
+			V2RayAPI: &sbV2RayAPI{
+				Listen: statsListen,
+				Stats:  sbStats{Enabled: true, Users: ids},
+			},
+		}
+	}
+
+	return json.MarshalIndent(cfg, "", "  ")
 }

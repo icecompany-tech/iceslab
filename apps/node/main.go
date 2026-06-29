@@ -305,6 +305,20 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			XrayStatsBin: singboxStatsBin,
 		}, logger))
 		logger.Info("singbox (xray-family) adapter registered")
+
+		// Engine-choice (EC4): hysteria2 via the sing-box engine. TLS is
+		// mandatory; reuses the self-signed cert from bootstrap-singbox.sh (like
+		// tuic). Per-user password = HysteriaPassword. Distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "hysteria",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_HY2_CONFIG", "/etc/sing-box/hy2.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_HY2_API_LISTEN", "127.0.0.1:8085"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (hysteria2) adapter registered")
 	}
 
 	return adapters
