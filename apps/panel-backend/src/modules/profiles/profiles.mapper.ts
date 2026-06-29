@@ -7,6 +7,9 @@ export interface PublicProfileDto {
   id: string;
   name: string;
   protocol: string;
+  /** Proxy core that renders this profile's inbound. NULL = native core;
+   *  'singbox' = sing-box engine (engine-choice). */
+  engine: string | null;
   description: string | null;
   config: unknown;
   enabled: boolean;
@@ -42,6 +45,7 @@ export function mapProfile(
     id: profile.id,
     name: profile.name,
     protocol: profile.protocol,
+    engine: profile.engine,
     description: profile.description,
     config: profile.config,
     enabled: profile.enabled,

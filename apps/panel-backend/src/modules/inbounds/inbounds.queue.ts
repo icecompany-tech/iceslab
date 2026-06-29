@@ -123,7 +123,7 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     },
     include: {
       profile: {
-        select: { id: true, name: true, protocol: true, config: true },
+        select: { id: true, name: true, protocol: true, engine: true, config: true },
       },
     },
     orderBy: { port: 'asc' },
@@ -166,6 +166,9 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
       id: b.id,
       name: b.profile.name,
       protocol: b.profile.protocol as ProtocolName,
+      // Engine-choice (EC5): NULL profile.engine -> omit so the node resolves the
+      // protocol's native core; 'singbox' routes to the sing-box adapter.
+      engine: (b.profile.engine ?? undefined) as InboundDto['engine'],
       port: b.port,
       config,
     };

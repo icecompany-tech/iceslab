@@ -59,6 +59,23 @@ const PATH_HOST_TRANSPORTS = ['ws', 'xhttp', 'httpupgrade'];
 // (soon)" teaser is gone.
 const PROFILE_PROTOCOL_SELECT_DATA = PROTOCOL_OPTIONS;
 
+// Protocols that can run on an alternative engine (sing-box) besides their
+// native core. The engine selector only shows for these; everything else has a
+// single core. Mirrors the backend's ENGINE_OPTIONS.
+const ENGINE_CHOICE_PROTOCOLS = ['xray', 'hysteria', 'shadowsocks'];
+
+function engineOptions(protocol: string): { value: string; label: string }[] {
+  const nativeLabel: Record<string, string> = {
+    xray: 'Xray (native)',
+    shadowsocks: 'Xray-core (native)',
+    hysteria: 'Hysteria (native)',
+  };
+  return [
+    { value: 'native', label: nativeLabel[protocol] ?? 'Native' },
+    { value: 'singbox', label: 'sing-box' },
+  ];
+}
+
 type Mode = 'create' | 'edit';
 
 interface FormValues {
@@ -66,6 +83,8 @@ interface FormValues {
   name: string;
   description: string;
   enabled: boolean;
+  // Engine-choice: 'native' = the protocol's native core, 'singbox' = sing-box.
+  engine: 'native' | 'singbox';
 
   // Hysteria
   hyObfsPassword: string;
@@ -210,6 +229,7 @@ function defaults(profile: Profile | null): FormValues {
     name: profile?.name ?? '',
     description: profile?.description ?? '',
     enabled: profile?.enabled ?? true,
+    engine: profile?.engine === 'singbox' ? 'singbox' : 'native',
 
     hyObfsPassword: '',
     hyMasqueradeUrl: '',
@@ -643,11 +663,19 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
         break;
     }
 
+    // Engine-choice: only the shared protocols carry a non-native engine;
+    // everything else stays null (native). A 'native' selection -> null.
+    const engine: 'singbox' | null =
+      ENGINE_CHOICE_PROTOCOLS.includes(values.protocol) && values.engine === 'singbox'
+        ? 'singbox'
+        : null;
+
     if (isEdit) {
       const update: UpdateProfileInput = {
         name: values.name,
         description: values.description.trim() || null,
         enabled: values.enabled,
+        engine,
         config: config as never,
       };
       await onSubmit(update, mode);
@@ -657,6 +685,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
         name: values.name,
         description: values.description.trim() || null,
         enabled: values.enabled,
+        engine,
         config: config as never,
       };
       await onSubmit(create, mode);
@@ -737,6 +766,16 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           />
 
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
+
+          {ENGINE_CHOICE_PROTOCOLS.includes(form.values.protocol) && (
+            <Select
+              label="Engine"
+              description="Proxy core that serves this profile. sing-box is an alternative to the native core; the client subscription link is identical either way. Needs sing-box installed on the bound nodes."
+              data={engineOptions(form.values.protocol)}
+              allowDeselect={false}
+              {...form.getInputProps('engine')}
+            />
+          )}
 
           <Divider label={protocolLabel(form.values.protocol)} labelPosition="center" />
 

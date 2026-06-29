@@ -9,6 +9,7 @@ import { ensureDefaultHost } from '../hosts/hosts.service.js';
 import {
   generateSsServerPsk,
 } from './ss-helpers.js';
+import { engineValidForProtocol } from './profiles.schemas.js';
 import type {
   CreateBindingInput,
   CreateProfileInput,
@@ -152,6 +153,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
       data: {
         name: input.name,
         protocol: input.protocol,
+        engine: input.engine ?? null,
         description: input.description ?? null,
         config: configToStore as never,
         enabled: input.enabled,
@@ -205,6 +207,14 @@ export async function updateProfile(
   if (input.name !== undefined) data.name = input.name;
   if (input.description !== undefined) data.description = input.description;
   if (input.enabled !== undefined) data.enabled = input.enabled;
+  if (input.engine !== undefined) {
+    if (!engineValidForProtocol(existing.protocol, input.engine)) {
+      throw new Error(
+        `engine "${input.engine}" is not valid for protocol "${existing.protocol}"`,
+      );
+    }
+    data.engine = input.engine;
+  }
 
   if (input.config !== undefined) {
     const schema = PROTOCOL_CONFIG_SCHEMAS[
