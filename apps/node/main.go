@@ -319,6 +319,19 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			XrayStatsBin: singboxStatsBin,
 		}, logger))
 		logger.Info("singbox (hysteria2) adapter registered")
+
+		// Engine-choice (EC3): shadowsocks (SS2022) via the sing-box engine. No
+		// TLS (SS has its own AEAD). Per-user uPSK is derived on the node from
+		// xrayUuid (matches the xray SS adapter + the subscription URI). Distinct
+		// config + stats port; no cert needed.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "shadowsocks",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_SS_CONFIG", "/etc/sing-box/ss.json"),
+			StatsListen:  getenv("SINGBOX_SS_API_LISTEN", "127.0.0.1:8086"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (shadowsocks) adapter registered")
 	}
 
 	return adapters

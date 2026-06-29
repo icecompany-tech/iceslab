@@ -160,6 +160,10 @@ func (a *Adapter) credsFor(user core.User) (uuid, password string) {
 		return user.XrayUUID, user.XrayUUID
 	case "hysteria":
 		return "", user.HysteriaPassword
+	case "shadowsocks":
+		// Store the raw xray UUID; renderShadowsocksConfig derives the SS2022
+		// uPSK from it (method-aware). Empty xrayUuid -> AddUser guard skips.
+		return "", user.XrayUUID
 	default: // tuic
 		return user.TuicUUID, user.TuicPassword
 	}
@@ -256,6 +260,16 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 			return fmt.Errorf("singbox ApplyInbound: parse hysteria cfg: %w", err)
 		}
 		newInbound = wire.toInboundConfig(port)
+	case "shadowsocks":
+		var wire ssFamilyWire
+		if err := json.Unmarshal(rawCfg, &wire); err != nil {
+			return fmt.Errorf("singbox ApplyInbound: parse shadowsocks cfg: %w", err)
+		}
+		ic, err := wire.toInboundConfig(port)
+		if err != nil {
+			return fmt.Errorf("singbox ApplyInbound: %w", err)
+		}
+		newInbound = ic
 	default:
 		var wire inboundCfgWire
 		if err := json.Unmarshal(rawCfg, &wire); err != nil {
@@ -313,6 +327,8 @@ func (a *Adapter) regenerateAndRestart() error {
 		blob, err = renderXrayFamilyConfig(statsListen, inbound, users)
 	case "hysteria":
 		blob, err = renderHysteria2Config(certPath, keyPath, statsListen, inbound, users)
+	case "shadowsocks":
+		blob, err = renderShadowsocksConfig(statsListen, inbound, users)
 	default:
 		blob, err = renderConfig(certPath, keyPath, statsListen, inbound, users)
 	}
@@ -462,4 +478,27 @@ func (w hy2FamilyWire) toInboundConfig(port int) InboundConfig {
 		BrutalUpMbps:   w.BrutalUpMbps,
 		BrutalDownMbps: w.BrutalDownMbps,
 	}
+}
+
+// ssFamilyWire is the subset of the shadowsocks inbound config (inboundCfgWire
+// in the shadowsocks adapter / ShadowsocksConfigSchema in transport.ts) the
+// sing-box engine renders. method + serverPsk are required; per-user uPSKs are
+// derived on the node from each user's xray UUID (see renderShadowsocksConfig).
+type ssFamilyWire struct {
+	Method    string `json:"method"`
+	ServerPSK string `json:"serverPsk"`
+}
+
+func (w ssFamilyWire) toInboundConfig(port int) (InboundConfig, error) {
+	if w.Method == "" {
+		return InboundConfig{}, fmt.Errorf("shadowsocks method is required")
+	}
+	if w.ServerPSK == "" {
+		return InboundConfig{}, fmt.Errorf("shadowsocks serverPsk is required")
+	}
+	return InboundConfig{
+		ListenPort: port,
+		Method:     w.Method,
+		ServerPSK:  w.ServerPSK,
+	}, nil
 }

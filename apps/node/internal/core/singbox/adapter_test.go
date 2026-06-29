@@ -221,3 +221,36 @@ func TestHysteria2Adapter(t *testing.T) {
 		t.Errorf("hysteria adapter should ignore tuic-only creds, got %+v", stats.Users)
 	}
 }
+
+func TestShadowsocksAdapter(t *testing.T) {
+	a := New(Config{Protocol: "shadowsocks"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if a.Name() != "shadowsocks" || a.Engine() != "singbox" {
+		t.Fatalf("Name()/Engine() = %q/%q, want shadowsocks/singbox", a.Name(), a.Engine())
+	}
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := a.ApplyInbound(8388, json.RawMessage(`{"method":"2022-blake3-aes-256-gcm","serverPsk":"SPSK"}`)); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.inbound.Method != "2022-blake3-aes-256-gcm" || a.inbound.ServerPSK != "SPSK" {
+		t.Errorf("inbound not stored: %+v", a.inbound)
+	}
+	// method/serverPsk are required.
+	if err := a.ApplyInbound(8388, json.RawMessage(`{"method":"2022-blake3-aes-256-gcm"}`)); err == nil {
+		t.Error("missing serverPsk should error")
+	}
+	if err := a.AddUser(core.User{UserID: "u1", XrayUUID: "uuid-1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats = %+v", stats.Users)
+	}
+	// A user with only tuic creds must be ignored by the ss adapter.
+	if err := a.AddUser(core.User{UserID: "u2", TuicUUID: "x"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 {
+		t.Errorf("ss adapter should ignore tuic-only creds, got %+v", stats.Users)
+	}
+}

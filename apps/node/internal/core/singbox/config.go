@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
 // sing-box config structs — only the subset we render for a TUIC inbound.
@@ -31,7 +33,13 @@ type sbInbound struct {
 	ListenPort        int      `json:"listen_port"`
 	Users             []sbUser `json:"users"`
 	CongestionControl string   `json:"congestion_control,omitempty"`
-	TLS               sbTLS    `json:"tls"`
+	// TLS is a pointer so protocols without TLS (shadowsocks) omit the block
+	// entirely - sing-box strict-decodes and rejects a "tls" key on an ss inbound.
+	TLS *sbTLS `json:"tls,omitempty"`
+
+	// shadowsocks-only: cipher + server-level iPSK (omitted for others).
+	Method   string `json:"method,omitempty"`
+	Password string `json:"password,omitempty"`
 
 	// hysteria2-only knobs (omitted for every other protocol).
 	UpMbps                int     `json:"up_mbps,omitempty"`
@@ -133,6 +141,11 @@ type InboundConfig struct {
 	MasqueradeURL  string // http(s) reverse-proxy masquerade; empty disables
 	BrutalUpMbps   int    // Brutal CC server up cap; 0 omits
 	BrutalDownMbps int    // Brutal CC server down cap; 0 omits
+
+	// ───── ss-family fields (engine=singbox for shadowsocks) ─────
+	// Zero for every other protocol.
+	Method    string // SS2022 cipher (2022-blake3-*)
+	ServerPSK string // SS2022 server-level iPSK
 }
 
 // userEntry is the per-user TUIC credential the adapter tracks in memory,
@@ -179,7 +192,7 @@ func renderConfig(certPath, keyPath, statsListen string, inbound InboundConfig, 
 			ListenPort:        inbound.ListenPort,
 			Users:             sbUsers,
 			CongestionControl: cc,
-			TLS: sbTLS{
+			TLS: &sbTLS{
 				Enabled:         true,
 				ServerName:      inbound.ServerName,
 				ALPN:            []string{"h3"},
@@ -229,7 +242,7 @@ func renderAnytlsConfig(certPath, keyPath, statsListen string, inbound InboundCo
 			Listen:     "0.0.0.0",
 			ListenPort: inbound.ListenPort,
 			Users:      sbUsers,
-			TLS: sbTLS{
+			TLS: &sbTLS{
 				Enabled:         true,
 				ServerName:      inbound.ServerName,
 				CertificatePath: certPath,
@@ -310,7 +323,7 @@ func renderXrayFamilyConfig(statsListen string, inbound InboundConfig, users map
 			Listen:     "0.0.0.0",
 			ListenPort: inbound.ListenPort,
 			Users:      sbUsers,
-			TLS:        tls,
+			TLS:        &tls,
 		}},
 		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
 	}
@@ -389,7 +402,7 @@ func renderHysteria2Config(certPath, keyPath, statsListen string, inbound Inboun
 		ListenPort:            inbound.ListenPort,
 		Users:                 sbUsers,
 		IgnoreClientBandwidth: true,
-		TLS: sbTLS{
+		TLS: &sbTLS{
 			Enabled:         true,
 			ServerName:      inbound.ServerName,
 			CertificatePath: certPath,
@@ -412,6 +425,47 @@ func renderHysteria2Config(certPath, keyPath, statsListen string, inbound Inboun
 	cfg := sbConfig{
 		Log:       sbLog{Level: "warn", Timestamp: true},
 		Inbounds:  []sbInbound{in},
+		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
+	}
+
+	if statsListen != "" {
+		cfg.Experimental = &sbExperimental{
+			V2RayAPI: &sbV2RayAPI{
+				Listen: statsListen,
+				Stats:  sbStats{Enabled: true, Users: ids},
+			},
+		}
+	}
+
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// renderShadowsocksConfig builds the sing-box config for a shadowsocks (SS2022)
+// inbound served by the sing-box engine (engine-choice). No TLS - SS carries its
+// own AEAD encryption. Multi-user: a server-level iPSK (password) plus per-user
+// uPSKs (users[].password), each derived from the user's xray UUID via
+// core.DeriveSsPassword so the key matches the panel URI and the xray SS adapter.
+func renderShadowsocksConfig(statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+	ids := sortedIDs(users)
+	sbUsers := make([]sbUser, 0, len(ids))
+	for _, id := range ids {
+		sbUsers = append(sbUsers, sbUser{
+			Name:     id,
+			Password: core.DeriveSsPassword(users[id].Password, inbound.Method),
+		})
+	}
+
+	cfg := sbConfig{
+		Log: sbLog{Level: "warn", Timestamp: true},
+		Inbounds: []sbInbound{{
+			Type:       "shadowsocks",
+			Tag:        "ss-in",
+			Listen:     "0.0.0.0",
+			ListenPort: inbound.ListenPort,
+			Method:     inbound.Method,
+			Password:   inbound.ServerPSK,
+			Users:      sbUsers,
+		}},
 		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
 	}
 

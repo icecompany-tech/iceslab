@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
 func TestRenderConfigTuic(t *testing.T) {
@@ -305,5 +307,47 @@ func TestRenderHysteria2Config(t *testing.T) {
 	}
 	if cfg2.Inbounds[0].Masquerade != "" {
 		t.Error("masquerade should be empty when no url")
+	}
+}
+
+func TestRenderShadowsocksConfig(t *testing.T) {
+	users := map[string]userEntry{"u1": {Password: "uuid-1"}}
+	const method = "2022-blake3-aes-256-gcm"
+	blob, err := renderShadowsocksConfig("127.0.0.1:8086", InboundConfig{
+		ListenPort: 8388,
+		Method:     method,
+		ServerPSK:  "SERVER-PSK",
+	}, users)
+	if err != nil {
+		t.Fatalf("renderShadowsocksConfig: %v", err)
+	}
+	var cfg sbConfig
+	if err := json.Unmarshal(blob, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	in := cfg.Inbounds[0]
+	if in.Type != "shadowsocks" {
+		t.Errorf("type = %q, want shadowsocks", in.Type)
+	}
+	if in.Method != method {
+		t.Errorf("method = %q, want %q", in.Method, method)
+	}
+	if in.Password != "SERVER-PSK" {
+		t.Errorf("server password = %q, want SERVER-PSK", in.Password)
+	}
+	if in.TLS != nil {
+		t.Error("shadowsocks inbound must not carry a tls block")
+	}
+	want := core.DeriveSsPassword("uuid-1", method)
+	if len(in.Users) != 1 || in.Users[0].Name != "u1" || in.Users[0].Password != want {
+		t.Errorf("users = %+v, want derived uPSK %q", in.Users, want)
+	}
+	// The derived uPSK must NOT be the raw UUID (that was the SS2022 bug).
+	if in.Users[0].Password == "uuid-1" {
+		t.Error("user PSK must be derived, not the raw UUID")
+	}
+	// The raw JSON must not carry a "tls" key.
+	if strings.Contains(string(blob), `"tls"`) {
+		t.Error("shadowsocks config should not contain a tls field")
 	}
 }
