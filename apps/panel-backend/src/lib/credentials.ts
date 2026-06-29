@@ -103,3 +103,12 @@ export function generateSubscriptionToken(): string {
 export function deriveTuicPassword(xrayUuid: string): string {
   return createHash('sha256').update(`${xrayUuid}:tuic`).digest('base64url');
 }
+
+/**
+ * Deterministic per-user AnyTLS password derived from the user's UUID (same
+ * "don't grow the credential surface" approach as TUIC/Shadowsocks). AnyTLS is
+ * password-only; the node and the subscription generator derive the same value.
+ */
+export function deriveAnytlsPassword(xrayUuid: string): string {
+  return createHash('sha256').update(`${xrayUuid}:anytls`).digest('base64url');
+}

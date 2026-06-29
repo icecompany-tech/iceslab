@@ -13,8 +13,9 @@ import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
-import { deriveTuicPassword } from '../../lib/credentials.js';
+import { deriveTuicPassword, deriveAnytlsPassword } from '../../lib/credentials.js';
 import {
+  buildAnytlsUri,
   buildHysteriaUri,
   buildMieruUri,
   buildMtprotoTmeUri,
@@ -651,6 +652,29 @@ export async function generateSubscription(
           port,
           serverName: tuicSni,
           congestionControl: tuicCc,
+          name: nodeName,
+        }),
+      });
+    } else if (ib.protocol === 'anytls' && user.xrayUuid) {
+      // AnyTLS (sing-box engine). password-only; derived from xrayUuid (no extra
+      // credential surface). Self-signed cert in the alpha -> client uses
+      // allow-insecure + the matching SNI.
+      const cfg = ib.config as unknown as { serverName?: string };
+      const anytlsSni = cfg.serverName || 'www.bing.com';
+      const anytlsPassword = deriveAnytlsPassword(user.xrayUuid);
+      endpoints.push({
+        protocol: 'anytls',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        password: anytlsPassword,
+        serverName: anytlsSni,
+        uri: buildAnytlsUri({
+          password: anytlsPassword,
+          host,
+          port,
+          serverName: anytlsSni,
           name: nodeName,
         }),
       });

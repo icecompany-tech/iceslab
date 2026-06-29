@@ -330,6 +330,21 @@ export function buildClashYaml(
           `    skip-cert-verify: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'anytls') {
+      // AnyTLS (sing-box engine) -> mihomo `type: anytls`. Password-only auth;
+      // self-signed cert in the alpha so skip-cert-verify.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: anytls`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    password: ${yamlString(e.password)}`,
+          `    sni: ${yamlString(e.serverName)}`,
+          `    skip-cert-verify: true`,
+        ].join('\n'),
+      );
     }
   }
 

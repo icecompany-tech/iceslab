@@ -325,6 +325,22 @@ export function buildSingboxJson(
           insecure: true,
         },
       });
+    } else if (e.protocol === 'anytls') {
+      // AnyTLS (sing-box engine). TCP+TLS, password-only; self-signed cert in
+      // the alpha so insecure=true.
+      proxyTags.push(tag);
+      outbounds.push({
+        type: 'anytls',
+        tag,
+        server: e.host,
+        server_port: e.port,
+        password: e.password,
+        tls: {
+          enabled: true,
+          server_name: e.serverName,
+          insecure: true,
+        },
+      });
     }
   }
 

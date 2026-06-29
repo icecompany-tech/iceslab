@@ -32,6 +32,7 @@ export {
   type MieruProfileJson,
 } from '../../core-adapters/mieru/index.js';
 export { buildTuicUri, type TuicUriOpts } from '../../core-adapters/tuic/index.js';
+export { buildAnytlsUri, type AnytlsUriOpts } from '../../core-adapters/anytls/index.js';
 
 /**
  * Strip the optional `:port` suffix from a `host[:port]` string, returning the
@@ -216,6 +217,14 @@ export interface TuicSubscriptionEndpoint extends SubscriptionEndpointBase {
   congestionControl: string;
 }
 
+export interface AnytlsSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'anytls';
+  /** Per-user password (derived from user.xrayUuid). */
+  password: string;
+  /** TLS SNI the node's self-signed cert is issued for. */
+  serverName: string;
+}
+
 export type SubscriptionEndpoint =
   | HysteriaSubscriptionEndpoint
   | XraySubscriptionEndpoint
@@ -224,7 +233,8 @@ export type SubscriptionEndpoint =
   | ShadowsocksSubscriptionEndpoint
   | MtprotoSubscriptionEndpoint
   | MieruSubscriptionEndpoint
-  | TuicSubscriptionEndpoint;
+  | TuicSubscriptionEndpoint
+  | AnytlsSubscriptionEndpoint;
 
 export interface SubscriptionJsonResponse {
   user: {

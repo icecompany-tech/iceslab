@@ -17,7 +17,8 @@ export type ProtocolName =
   | 'shadowsocks'
   | 'mtproto'
   | 'mieru'
-  | 'tuic';
+  | 'tuic'
+  | 'anytls';
 
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
@@ -34,6 +35,8 @@ export interface ProtocolCredentials {
   /** TUIC v5 (sing-box engine): per-user UUID + password. */
   tuicUuid?: string;
   tuicPassword?: string;
+  /** AnyTLS (sing-box engine): per-user password (password-only auth). */
+  anytlsPassword?: string;
 }
 
 // ───── POST /addUser ─────
@@ -82,7 +85,8 @@ export interface InboundDto {
     | ShadowsocksInboundCfg
     | MtprotoInboundCfg
     | MieruInboundCfg
-    | TuicInboundCfg;
+    | TuicInboundCfg
+    | AnytlsInboundCfg;
 }
 
 export interface XrayInboundCfg {
@@ -265,6 +269,15 @@ export interface MieruInboundCfg {
 export interface TuicInboundCfg {
   serverName?: string;
   congestionControl?: 'bbr' | 'cubic' | 'new_reno';
+}
+
+/**
+ * AnyTLS inbound config (sing-box engine). TCP+TLS, password-only auth (the
+ * per-user password lives in credentials). `serverName` is the TLS SNI the
+ * node's self-signed cert is issued for (client uses allow-insecure in alpha).
+ */
+export interface AnytlsInboundCfg {
+  serverName?: string;
 }
 
 export interface ApplyInboundsRequest {

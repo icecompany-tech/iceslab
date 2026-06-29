@@ -336,6 +336,20 @@ export const TuicConfigSchema = z.object({
   congestionControl: z.enum(['bbr', 'cubic', 'new_reno']).default('bbr'),
 });
 
+/**
+ * AnyTLS config (sing-box engine). TCP+TLS, password-only (the password lives
+ * on the user, derived from xrayUuid). serverName = TLS SNI for the node's
+ * self-signed cert; client connects with it (+ allow-insecure in the alpha).
+ */
+export const AnytlsConfigSchema = z.object({
+  serverName: z
+    .string()
+    .min(1)
+    .max(253)
+    .regex(/^[a-zA-Z0-9.-]+$/, 'Hostname only (no scheme, no path)')
+    .default('www.bing.com'),
+});
+
 // Discriminated union over `protocol`. Used for create/update body validation.
 export const InboundConfigByProtocol = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('hysteria'), config: HysteriaConfigSchema }),
@@ -346,6 +360,7 @@ export const InboundConfigByProtocol = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('mtproto'), config: MtprotoConfigSchema }),
   z.object({ protocol: z.literal('mieru'), config: MieruConfigSchema }),
   z.object({ protocol: z.literal('tuic'), config: TuicConfigSchema }),
+  z.object({ protocol: z.literal('anytls'), config: AnytlsConfigSchema }),
 ]);
 
 // Public-facing host the panel emits in client URIs. Must be a hostname or
@@ -404,11 +419,12 @@ export const PROTOCOL_CONFIG_SCHEMAS = {
   mtproto: MtprotoConfigSchema,
   mieru: MieruConfigSchema,
   tuic: TuicConfigSchema,
+  anytls: AnytlsConfigSchema,
 } as const;
 
 export const ListInboundsQuerySchema = z.object({
   nodeId: z.uuid().optional(),
-  protocol: z.enum(['hysteria', 'xray', 'amneziawg', 'naive', 'shadowsocks', 'mtproto', 'mieru', 'tuic']).optional(),
+  protocol: z.enum(['hysteria', 'xray', 'amneziawg', 'naive', 'shadowsocks', 'mtproto', 'mieru', 'tuic', 'anytls']).optional(),
 });
 export type ListInboundsQuery = z.infer<typeof ListInboundsQuerySchema>;
 
