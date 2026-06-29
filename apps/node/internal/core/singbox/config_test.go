@@ -10,7 +10,7 @@ func TestRenderConfigTuic(t *testing.T) {
 		"u2": {UUID: "uuid-2", Password: "pw2", Username: "bob"},
 		"u1": {UUID: "uuid-1", Password: "pw1", Username: "alice"},
 	}
-	blob, err := renderConfig("/etc/sing-box/cert.pem", "/etc/sing-box/key.pem",
+	blob, err := renderConfig("/etc/sing-box/cert.pem", "/etc/sing-box/key.pem", "",
 		InboundConfig{ListenPort: 8443, ServerName: "www.bing.com"}, users)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
@@ -61,7 +61,7 @@ func TestRenderConfigTuic(t *testing.T) {
 }
 
 func TestRenderConfigCongestionOverride(t *testing.T) {
-	blob, err := renderConfig("c", "k", InboundConfig{ListenPort: 443, CongestionControl: "cubic"}, nil)
+	blob, err := renderConfig("c", "k", "", InboundConfig{ListenPort: 443, CongestionControl: "cubic"}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -75,5 +75,45 @@ func TestRenderConfigCongestionOverride(t *testing.T) {
 	// Empty user set must serialize as [] (not null) so sing-box accepts it.
 	if cfg.Inbounds[0].Users == nil {
 		t.Error("users should be an empty array, not null")
+	}
+}
+
+func TestRenderConfigStatsBlock(t *testing.T) {
+	users := map[string]userEntry{"u1": {UUID: "x", Password: "p"}}
+
+	// No statsListen -> no experimental block.
+	blob, err := renderConfig("c", "k", "", InboundConfig{ListenPort: 443}, users)
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	var c1 sbConfig
+	if err := json.Unmarshal(blob, &c1); err != nil {
+		t.Fatal(err)
+	}
+	if c1.Experimental != nil {
+		t.Error("no statsListen should omit the experimental block")
+	}
+
+	// With statsListen -> v2ray_api block with the user listed.
+	blob, err = renderConfig("c", "k", "127.0.0.1:8082", InboundConfig{ListenPort: 443}, users)
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	var c2 sbConfig
+	if err := json.Unmarshal(blob, &c2); err != nil {
+		t.Fatal(err)
+	}
+	if c2.Experimental == nil || c2.Experimental.V2RayAPI == nil {
+		t.Fatal("statsListen should emit experimental.v2ray_api")
+	}
+	api := c2.Experimental.V2RayAPI
+	if api.Listen != "127.0.0.1:8082" {
+		t.Errorf("v2ray_api.listen = %q, want 127.0.0.1:8082", api.Listen)
+	}
+	if !api.Stats.Enabled {
+		t.Error("stats.enabled should be true")
+	}
+	if len(api.Stats.Users) != 1 || api.Stats.Users[0] != "u1" {
+		t.Errorf("stats.users = %v, want [u1]", api.Stats.Users)
 	}
 }

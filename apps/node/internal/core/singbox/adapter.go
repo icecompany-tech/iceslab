@@ -38,6 +38,16 @@ type Config struct {
 	ConfigPath string // rendered config, passed to `sing-box run -c`
 	CertPath   string // TLS certificate file (TUIC requires TLS)
 	KeyPath    string // TLS private key file
+
+	// StatsListen is the loopback host:port for sing-box's experimental
+	// v2ray_api (e.g. "127.0.0.1:8082"). Empty disables stats collection.
+	StatsListen string
+	// XrayStatsBin is the xray binary used as a generic v2ray-stats gRPC
+	// client to read StatsListen (sing-box ships no stats CLI). Empty means
+	// GetStats degrades to zero counters.
+	XrayStatsBin string
+	// RunCmd runs the stats query; nil defaults to os/exec. Tests inject a fake.
+	RunCmd RunCmdFunc
 }
 
 type Adapter struct {
@@ -61,6 +71,9 @@ type Adapter struct {
 }
 
 func New(cfg Config, logger *slog.Logger) *Adapter {
+	if cfg.RunCmd == nil {
+		cfg.RunCmd = defaultRunCmd
+	}
 	return &Adapter{
 		cfg:    cfg,
 		logger: logger,
@@ -133,17 +146,46 @@ func (a *Adapter) RemoveUser(userID string) error {
 	return a.regenerateAndRestart()
 }
 
-// GetStats reports the registered user set. Per-user byte counters are wired in
-// a follow-up (S1b) via sing-box's v2ray-api StatsService, mirroring xray; for
-// now counters are zero so the panel still sees who is provisioned.
+// GetStats reports per-user cumulative byte counters, read from sing-box's
+// v2ray_api via the xray-binary stats client (see stats.go). Non-destructive
+// read -> Cumulative=true, so the panel computes deltas against its snapshot
+// (mirrors xray, #5). Degrades gracefully to zero counters when stats aren't
+// configured or the query fails, so a stats outage never poisons the poller.
 func (a *Adapter) GetStats() (*core.Stats, error) {
 	a.mu.Lock()
-	out := make([]core.UserStats, 0, len(a.users))
+	statsListen := a.cfg.StatsListen
+	bin := a.cfg.XrayStatsBin
+	run := a.cfg.RunCmd
+	userIDs := make([]string, 0, len(a.users))
 	for id := range a.users {
-		out = append(out, core.UserStats{UserID: id})
+		userIDs = append(userIDs, id)
 	}
 	a.mu.Unlock()
-	return &core.Stats{Users: out}, nil
+
+	zero := func() *core.Stats {
+		out := make([]core.UserStats, 0, len(userIDs))
+		for _, id := range userIDs {
+			out = append(out, core.UserStats{UserID: id})
+		}
+		return &core.Stats{Users: out}
+	}
+
+	if statsListen == "" || bin == "" || run == nil {
+		return zero(), nil
+	}
+
+	counters, err := queryUserStats(context.Background(), run, bin, statsListen)
+	if err != nil {
+		a.logger.Warn("singbox GetStats: statsquery failed", "err", err)
+		return zero(), nil
+	}
+
+	out := make([]core.UserStats, 0, len(userIDs))
+	for _, id := range userIDs {
+		c := counters[id]
+		out = append(out, core.UserStats{UserID: id, BytesIn: c.UplinkBytes, BytesOut: c.DownlinkBytes})
+	}
+	return &core.Stats{Users: out, Cumulative: true}, nil
 }
 
 // Healthy: agent must be started; if a TUIC inbound is configured and a binary
@@ -194,6 +236,7 @@ func (a *Adapter) regenerateAndRestart() error {
 	cfgPath := a.cfg.ConfigPath
 	certPath := a.cfg.CertPath
 	keyPath := a.cfg.KeyPath
+	statsListen := a.cfg.StatsListen
 	ctx := a.ctx
 	oldProc := a.proc
 	users := make(map[string]userEntry, len(a.users))
@@ -209,7 +252,7 @@ func (a *Adapter) regenerateAndRestart() error {
 		ctx = context.Background()
 	}
 
-	blob, err := renderConfig(certPath, keyPath, inbound, users)
+	blob, err := renderConfig(certPath, keyPath, statsListen, inbound, users)
 	if err != nil {
 		return fmt.Errorf("singbox: render config: %w", err)
 	}

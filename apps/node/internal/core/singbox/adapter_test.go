@@ -73,6 +73,36 @@ func TestHealthyConfigOnly(t *testing.T) {
 	}
 }
 
+func TestGetStatsViaFakeRunCmd(t *testing.T) {
+	a := New(Config{
+		StatsListen:  "127.0.0.1:8082",
+		XrayStatsBin: "/usr/local/bin/xray",
+		RunCmd: func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+			return []byte(`{"stat":[
+				{"name":"user>>>u1>>>traffic>>>uplink","value":"100"},
+				{"name":"user>>>u1>>>traffic>>>downlink","value":"200"}
+			]}`), nil
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := a.AddUser(core.User{UserID: "u1", TuicUUID: "uuid1", TuicPassword: "pw1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+
+	stats, err := a.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if !stats.Cumulative {
+		t.Error("Cumulative should be true (non-destructive read)")
+	}
+	if len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats.Users = %+v", stats.Users)
+	}
+	if stats.Users[0].BytesIn != 100 || stats.Users[0].BytesOut != 200 {
+		t.Errorf("counters = in %d out %d, want 100/200", stats.Users[0].BytesIn, stats.Users[0].BytesOut)
+	}
+}
+
 func TestApplyInboundConfigOnly(t *testing.T) {
 	a := testAdapter()
 	if err := a.Start(context.Background()); err != nil {

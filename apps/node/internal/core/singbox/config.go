@@ -9,9 +9,10 @@ import (
 // Full schema: https://sing-box.sagernet.org/configuration/
 
 type sbConfig struct {
-	Log       sbLog        `json:"log"`
-	Inbounds  []sbInbound  `json:"inbounds"`
-	Outbounds []sbOutbound `json:"outbounds"`
+	Log          sbLog           `json:"log"`
+	Inbounds     []sbInbound     `json:"inbounds"`
+	Outbounds    []sbOutbound    `json:"outbounds"`
+	Experimental *sbExperimental `json:"experimental,omitempty"`
 }
 
 type sbLog struct {
@@ -48,6 +49,23 @@ type sbOutbound struct {
 	Tag  string `json:"tag"`
 }
 
+// experimental.v2ray_api drives per-user traffic stats. sing-box implements the
+// V2Ray StatsService gRPC; we read it with the xray binary as a generic client
+// (sing-box ships no stats CLI; the node-agent is zero-dependency by design).
+type sbExperimental struct {
+	V2RayAPI *sbV2RayAPI `json:"v2ray_api,omitempty"`
+}
+
+type sbV2RayAPI struct {
+	Listen string  `json:"listen"`
+	Stats  sbStats `json:"stats"`
+}
+
+type sbStats struct {
+	Enabled bool     `json:"enabled"`
+	Users   []string `json:"users,omitempty"`
+}
+
 // InboundConfig is the panel-pushed TUIC inbound shape (subset of the
 // ApplyInbound config blob). All fields are comparable so the adapter can
 // diff old vs new with `==` and skip a restart on no-op pushes.
@@ -66,13 +84,13 @@ type userEntry struct {
 }
 
 // renderConfig builds the full sing-box config JSON for a single TUIC inbound.
-// Users are sorted by userId so the output is deterministic (stable across
-// re-renders, friendly to tests and to "did anything actually change" checks).
+// Users are sorted by userId so the output is deterministic. When statsListen
+// is non-empty, an experimental.v2ray_api block is emitted so sing-box counts
+// per-user traffic (read later via the xray-binary stats client).
 //
-// TLS is mandatory for TUIC (sing-box rejects a TUIC inbound without it); we
-// always emit the cert/key paths the bootstrap script generates, ALPN h3, and
+// TLS is mandatory for TUIC; we always emit the cert/key paths, ALPN h3, and
 // the panel-supplied server_name.
-func renderConfig(certPath, keyPath string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+func renderConfig(certPath, keyPath, statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
 	cc := inbound.CongestionControl
 	if cc == "" {
 		cc = "bbr"
@@ -87,8 +105,8 @@ func renderConfig(certPath, keyPath string, inbound InboundConfig, users map[str
 	sbUsers := make([]sbUser, 0, len(ids))
 	for _, id := range ids {
 		e := users[id]
-		// Name = userId so a future stats path (S1b, v2ray-api) can map
-		// per-user counters straight back to the panel's userId.
+		// Name = userId so the v2ray stats key (user>>><name>>>traffic>>>...)
+		// maps straight back to the panel's userId.
 		sbUsers = append(sbUsers, sbUser{Name: id, UUID: e.UUID, Password: e.Password})
 	}
 
@@ -111,5 +129,15 @@ func renderConfig(certPath, keyPath string, inbound InboundConfig, users map[str
 		}},
 		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
 	}
+
+	if statsListen != "" {
+		cfg.Experimental = &sbExperimental{
+			V2RayAPI: &sbV2RayAPI{
+				Listen: statsListen,
+				Stats:  sbStats{Enabled: true, Users: ids},
+			},
+		}
+	}
+
 	return json.MarshalIndent(cfg, "", "  ")
 }

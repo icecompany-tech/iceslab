@@ -268,6 +268,11 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			ConfigPath: getenv("SINGBOX_CONFIG", "/etc/sing-box/config.json"),
 			CertPath:   getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
 			KeyPath:    getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			// Per-user stats: sing-box collects on this loopback v2ray_api;
+			// read via the xray binary (reused as a v2ray-stats gRPC client).
+			// No xray binary -> GetStats degrades to zero counters.
+			StatsListen:  getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
+			XrayStatsBin: os.Getenv("XRAY_BINARY"),
 		}, logger))
 		logger.Info("singbox (tuic) adapter registered")
 	}
