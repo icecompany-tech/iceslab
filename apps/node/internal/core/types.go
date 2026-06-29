@@ -17,6 +17,7 @@ type User struct {
 	AmneziaWGAllowedIP string
 	TuicUUID           string
 	TuicPassword       string
+	AnytlsPassword     string
 }
 
 // UserStats are per-user traffic counters reported by a single core.

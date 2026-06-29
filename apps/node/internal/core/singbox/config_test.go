@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -75,6 +76,39 @@ func TestRenderConfigCongestionOverride(t *testing.T) {
 	// Empty user set must serialize as [] (not null) so sing-box accepts it.
 	if cfg.Inbounds[0].Users == nil {
 		t.Error("users should be an empty array, not null")
+	}
+}
+
+func TestRenderAnytlsConfig(t *testing.T) {
+	users := map[string]userEntry{"u1": {Password: "pw1"}}
+	blob, err := renderAnytlsConfig("c", "k", "", InboundConfig{ListenPort: 8443, ServerName: "www.bing.com"}, users)
+	if err != nil {
+		t.Fatalf("renderAnytlsConfig: %v", err)
+	}
+	var cfg sbConfig
+	if err := json.Unmarshal(blob, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	in := cfg.Inbounds[0]
+	if in.Type != "anytls" {
+		t.Errorf("type = %q, want anytls", in.Type)
+	}
+	if in.ListenPort != 8443 {
+		t.Errorf("listen_port = %d, want 8443", in.ListenPort)
+	}
+	if in.CongestionControl != "" {
+		t.Errorf("anytls must not emit congestion_control, got %q", in.CongestionControl)
+	}
+	if !in.TLS.Enabled || in.TLS.ServerName != "www.bing.com" {
+		t.Errorf("tls = %+v", in.TLS)
+	}
+	// AnyTLS is password-only: a user has a password and NO uuid.
+	if len(in.Users) != 1 || in.Users[0].Password != "pw1" || in.Users[0].UUID != "" {
+		t.Errorf("users = %+v (want password-only, no uuid)", in.Users)
+	}
+	// The raw JSON must not carry a uuid key for anytls users.
+	if strings.Contains(string(blob), `"uuid"`) {
+		t.Error("anytls config should not contain a uuid field")
 	}
 }
 

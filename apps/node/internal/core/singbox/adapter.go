@@ -34,6 +34,9 @@ const Name = "tuic"
 // mode (tests, or a node where sing-box isn't installed): the adapter accepts
 // users/inbounds in memory but never spawns a subprocess.
 type Config struct {
+	// Protocol this adapter serves = its Name() for the dispatcher. "tuic"
+	// (default) or "anytls". One sing-box engine, one adapter per protocol.
+	Protocol   string
 	BinaryPath string // path to the `sing-box` executable
 	ConfigPath string // rendered config, passed to `sing-box run -c`
 	CertPath   string // TLS certificate file (TUIC requires TLS)
@@ -51,8 +54,9 @@ type Config struct {
 }
 
 type Adapter struct {
-	cfg    Config
-	logger *slog.Logger
+	cfg      Config
+	protocol string
+	logger   *slog.Logger
 
 	// mu protects in-memory state (users, inbound, proc, started, ctx). Held
 	// ONLY for fast ops. The slow render + subprocess Stop/Start runs under
@@ -74,14 +78,18 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 	if cfg.RunCmd == nil {
 		cfg.RunCmd = defaultRunCmd
 	}
+	if cfg.Protocol == "" {
+		cfg.Protocol = Name
+	}
 	return &Adapter{
-		cfg:    cfg,
-		logger: logger,
-		users:  make(map[string]userEntry),
+		cfg:      cfg,
+		protocol: cfg.Protocol,
+		logger:   logger,
+		users:    make(map[string]userEntry),
 	}
 }
 
-func (a *Adapter) Name() string { return Name }
+func (a *Adapter) Name() string { return a.protocol }
 
 // Start records the lifetime ctx (reused for subprocess spawns) and, if an
 // inbound was already applied (e.g. persisted-store replay before Start),
@@ -114,23 +122,35 @@ func (a *Adapter) Stop(ctx context.Context) error {
 // the inbound's users[]. Idempotent: re-adding identical credentials is a no-op
 // (no restart).
 func (a *Adapter) AddUser(user core.User) error {
-	if user.TuicUUID == "" {
-		// No TUIC credentials — nothing to do for this protocol.
+	uuid, password := a.credsFor(user)
+	if uuid == "" && password == "" {
+		// No credentials for this protocol — nothing to do.
 		return nil
 	}
 	a.mu.Lock()
 	cur, ok := a.users[user.UserID]
-	if ok && cur.UUID == user.TuicUUID && cur.Password == user.TuicPassword {
+	if ok && cur.UUID == uuid && cur.Password == password {
 		a.mu.Unlock()
 		return nil
 	}
 	a.users[user.UserID] = userEntry{
-		UUID:     user.TuicUUID,
-		Password: user.TuicPassword,
+		UUID:     uuid,
+		Password: password,
 		Username: user.Username,
 	}
 	a.mu.Unlock()
 	return a.regenerateAndRestart()
+}
+
+// credsFor extracts (uuid, password) for the adapter's protocol from a user.
+// TUIC uses uuid+password; AnyTLS is password-only (uuid empty).
+func (a *Adapter) credsFor(user core.User) (uuid, password string) {
+	switch a.protocol {
+	case "anytls":
+		return "", user.AnytlsPassword
+	default: // tuic
+		return user.TuicUUID, user.TuicPassword
+	}
 }
 
 // RemoveUser drops a user and restarts sing-box. Idempotent: removing an
@@ -252,7 +272,13 @@ func (a *Adapter) regenerateAndRestart() error {
 		ctx = context.Background()
 	}
 
-	blob, err := renderConfig(certPath, keyPath, statsListen, inbound, users)
+	var blob []byte
+	var err error
+	if a.protocol == "anytls" {
+		blob, err = renderAnytlsConfig(certPath, keyPath, statsListen, inbound, users)
+	} else {
+		blob, err = renderConfig(certPath, keyPath, statsListen, inbound, users)
+	}
 	if err != nil {
 		return fmt.Errorf("singbox: render config: %w", err)
 	}
@@ -268,7 +294,7 @@ func (a *Adapter) regenerateAndRestart() error {
 		_ = oldProc.Stop(context.Background())
 	}
 	proc := subprocess.New(subprocess.Config{
-		Name:           Name,
+		Name:           a.protocol,
 		Binary:         binPath,
 		Args:           []string{"run", "-c", cfgPath},
 		Logger:         a.logger,

@@ -13,6 +13,7 @@ const (
 	ProtocolAmneziaWG ProtocolName = "amneziawg"
 	ProtocolNaive     ProtocolName = "naive"
 	ProtocolTuic      ProtocolName = "tuic"
+	ProtocolAnytls    ProtocolName = "anytls"
 )
 
 type ProtocolCredentials struct {
@@ -30,6 +31,8 @@ type ProtocolCredentials struct {
 	// to a tuic inbound.
 	TuicUUID     string `json:"tuicUuid,omitempty"`
 	TuicPassword string `json:"tuicPassword,omitempty"`
+	// AnyTLS (sing-box engine): per-user password (password-only auth).
+	AnytlsPassword string `json:"anytlsPassword,omitempty"`
 }
 
 // ───── POST /addUser ─────

@@ -32,7 +32,7 @@ type sbInbound struct {
 
 type sbUser struct {
 	Name     string `json:"name"`
-	UUID     string `json:"uuid"`
+	UUID     string `json:"uuid,omitempty"`
 	Password string `json:"password,omitempty"`
 }
 
@@ -123,6 +123,55 @@ func renderConfig(certPath, keyPath, statsListen string, inbound InboundConfig, 
 				Enabled:         true,
 				ServerName:      inbound.ServerName,
 				ALPN:            []string{"h3"},
+				CertificatePath: certPath,
+				KeyPath:         keyPath,
+			},
+		}},
+		Outbounds: []sbOutbound{{Type: "direct", Tag: "direct"}},
+	}
+
+	if statsListen != "" {
+		cfg.Experimental = &sbExperimental{
+			V2RayAPI: &sbV2RayAPI{
+				Listen: statsListen,
+				Stats:  sbStats{Enabled: true, Users: ids},
+			},
+		}
+	}
+
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// renderAnytlsConfig builds the sing-box config for a single AnyTLS inbound.
+// AnyTLS is TCP+TLS with password-only auth (no uuid, no congestion control);
+// padding_scheme is left at the sing-box default. TLS is required, so cert/key
+// are always emitted. Stats wiring is identical to TUIC.
+func renderAnytlsConfig(certPath, keyPath, statsListen string, inbound InboundConfig, users map[string]userEntry) ([]byte, error) {
+	ids := make([]string, 0, len(users))
+	for id := range users {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	sbUsers := make([]sbUser, 0, len(ids))
+	for _, id := range ids {
+		e := users[id]
+		// Name = userId for stable v2ray stats keys. AnyTLS is password-only,
+		// so UUID stays empty (omitted by `omitempty`).
+		sbUsers = append(sbUsers, sbUser{Name: id, Password: e.Password})
+	}
+
+	cfg := sbConfig{
+		Log: sbLog{Level: "warn", Timestamp: true},
+		Inbounds: []sbInbound{{
+			Type:       "anytls",
+			Tag:        "anytls-in",
+			Listen:     "0.0.0.0",
+			ListenPort: inbound.ListenPort,
+			Users:      sbUsers,
+			TLS: sbTLS{
+				Enabled:         true,
+				ServerName:      inbound.ServerName,
 				CertificatePath: certPath,
 				KeyPath:         keyPath,
 			},

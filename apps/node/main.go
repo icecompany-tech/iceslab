@@ -263,20 +263,36 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 	// self-signed TLS cert (TUIC requires TLS). Inert until the panel pushes a
 	// tuic inbound via ApplyInbound.
 	if os.Getenv("SINGBOX_BINARY") != "" {
+		singboxBin := os.Getenv("SINGBOX_BINARY")
+		// Stats client: a dedicated SINGBOX_STATS_BIN wins, else reuse XRAY_BINARY
+		// when the node also runs xray. Empty -> zero counters (graceful).
+		singboxStatsBin := getenv("SINGBOX_STATS_BIN", os.Getenv("XRAY_BINARY"))
+
+		// One sing-box engine, one adapter per protocol. On a node only the
+		// protocol whose inbound the panel pushes actually spawns sing-box;
+		// the other stays inert. Distinct config path + stats port so they
+		// never collide if both ever run on one host.
 		adapters = append(adapters, singbox.New(singbox.Config{
-			BinaryPath: os.Getenv("SINGBOX_BINARY"),
-			ConfigPath: getenv("SINGBOX_CONFIG", "/etc/sing-box/config.json"),
-			CertPath:   getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
-			KeyPath:    getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
-			// Per-user stats: sing-box collects on this loopback v2ray_api;
-			// read via the xray binary (reused as a v2ray-stats gRPC client).
-			// No xray binary -> GetStats degrades to zero counters.
-			StatsListen: getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
-			// Stats client: a dedicated SINGBOX_STATS_BIN wins, else reuse
-			// XRAY_BINARY when the node also runs xray. Empty -> zero counters.
-			XrayStatsBin: getenv("SINGBOX_STATS_BIN", os.Getenv("XRAY_BINARY")),
+			Protocol:     "tuic",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_CONFIG", "/etc/sing-box/config.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
+			XrayStatsBin: singboxStatsBin,
 		}, logger))
 		logger.Info("singbox (tuic) adapter registered")
+
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "anytls",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_ANYTLS_CONFIG", "/etc/sing-box/anytls.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_ANYTLS_API_LISTEN", "127.0.0.1:8083"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (anytls) adapter registered")
 	}
 
 	return adapters

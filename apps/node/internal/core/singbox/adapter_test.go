@@ -103,6 +103,27 @@ func TestGetStatsViaFakeRunCmd(t *testing.T) {
 	}
 }
 
+func TestAnytlsAdapter(t *testing.T) {
+	a := New(Config{Protocol: "anytls"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if a.Name() != "anytls" {
+		t.Fatalf("Name() = %q, want anytls", a.Name())
+	}
+	if err := a.AddUser(core.User{UserID: "u1", AnytlsPassword: "pw1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	stats, _ := a.GetStats()
+	if len(stats.Users) != 1 || stats.Users[0].UserID != "u1" {
+		t.Fatalf("stats = %+v", stats.Users)
+	}
+	// The anytls adapter must ignore a user that only carries TUIC creds.
+	if err := a.AddUser(core.User{UserID: "u2", TuicUUID: "x", TuicPassword: "y"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if stats, _ := a.GetStats(); len(stats.Users) != 1 {
+		t.Errorf("anytls adapter should ignore tuic-only creds, got %+v", stats.Users)
+	}
+}
+
 func TestApplyInboundConfigOnly(t *testing.T) {
 	a := testAdapter()
 	if err := a.Start(context.Background()); err != nil {
