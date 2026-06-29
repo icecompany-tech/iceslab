@@ -17,6 +17,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/mtproto"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/naive"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/shadowsocks"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core/singbox"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/xray"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/heartbeat"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
@@ -255,6 +256,20 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		}
 		adapters = append(adapters, naive.New(naiveCfg, logger))
 		logger.Info("naive adapter registered", "bin", caddyBinPath)
+	}
+
+	// sing-box engine — first protocol TUIC (slice singbox-S1). Registered when
+	// SINGBOX_BINARY is set; bootstrap-singbox.sh installs the binary plus a
+	// self-signed TLS cert (TUIC requires TLS). Inert until the panel pushes a
+	// tuic inbound via ApplyInbound.
+	if os.Getenv("SINGBOX_BINARY") != "" {
+		adapters = append(adapters, singbox.New(singbox.Config{
+			BinaryPath: os.Getenv("SINGBOX_BINARY"),
+			ConfigPath: getenv("SINGBOX_CONFIG", "/etc/sing-box/config.json"),
+			CertPath:   getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:    getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+		}, logger))
+		logger.Info("singbox (tuic) adapter registered")
 	}
 
 	return adapters

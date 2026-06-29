@@ -12,6 +12,7 @@ const (
 	ProtocolXray      ProtocolName = "xray"
 	ProtocolAmneziaWG ProtocolName = "amneziawg"
 	ProtocolNaive     ProtocolName = "naive"
+	ProtocolTuic      ProtocolName = "tuic"
 )
 
 type ProtocolCredentials struct {
@@ -24,6 +25,11 @@ type ProtocolCredentials struct {
 	// the peer block as `<ip>/32`. Only present when the user has access to
 	// an amneziawg inbound.
 	AmneziaWGAllowedIP string `json:"amneziawgAllowedIp,omitempty"`
+	// TUIC (sing-box engine): per-user UUID + password. Both required for a
+	// TUIC v5 client to authenticate. Only present when the user has access
+	// to a tuic inbound.
+	TuicUUID     string `json:"tuicUuid,omitempty"`
+	TuicPassword string `json:"tuicPassword,omitempty"`
 }
 
 // ───── POST /addUser ─────

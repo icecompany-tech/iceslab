@@ -37,7 +37,8 @@ import (
 //     both; mita supports either depending on per-port transport)
 func protoForInbound(p dto.ProtocolName) []string {
 	switch p {
-	case "hysteria", "amneziawg":
+	case "hysteria", "amneziawg", "tuic":
+		// tuic is QUIC (UDP-only), like hysteria.
 		return []string{"udp"}
 	case "shadowsocks", "mieru":
 		return []string{"tcp", "udp"}
@@ -294,6 +295,8 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 		NaivePassword:      req.Credentials.NaivePassword,
 		AmneziaWGPublicKey: req.Credentials.AmneziaWGPublicKey,
 		AmneziaWGAllowedIP: req.Credentials.AmneziaWGAllowedIP,
+		TuicUUID:           req.Credentials.TuicUUID,
+		TuicPassword:       req.Credentials.TuicPassword,
 	}
 
 	// Best-effort fanout. A failure on a dormant adapter (no ApplyInbound
