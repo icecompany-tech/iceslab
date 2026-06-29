@@ -113,6 +113,9 @@ func realRunCmd(ctx context.Context, name string, args ...string) ([]byte, error
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core (amneziawg has no alternate engine).
+func (a *Adapter) Engine() string { return "amneziawg" }
+
 // Start writes the initial (no-peer) config and brings the awg interface up.
 // In config-only mode (AwgQuickBin == "") it just writes the config.
 //

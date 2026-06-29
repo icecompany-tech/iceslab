@@ -20,6 +20,12 @@ export type ProtocolName =
   | 'tuic'
   | 'anytls';
 
+/** Which proxy core renders an inbound. Most protocols have a single native
+ *  core; the shared protocols (vless/vmess/trojan + ss on xray-core, hy2 on
+ *  hysteria) can alternatively be served by the sing-box engine. tuic/anytls
+ *  are singbox-only. Omit `engine` on an inbound to use the native core. */
+export type EngineName = 'xray' | 'hysteria' | 'singbox';
+
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
   xrayUuid?: string;
@@ -74,6 +80,10 @@ export interface InboundDto {
    *  hint, etc — purely informational on the node side). */
   name: string;
   protocol: ProtocolName;
+  /** Proxy core that renders this inbound. Omit -> the protocol's native core
+   *  (xray for vless/vmess/trojan/ss, hysteria for hy2, singbox for
+   *  tuic/anytls). Set to 'singbox' to serve a shared protocol via sing-box. */
+  engine?: EngineName;
   /** Listen port (UDP for hysteria/awg, TCP for xray/naive). */
   port: number;
   /** Per-protocol settings. The discriminant is `protocol` above. */

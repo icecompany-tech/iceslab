@@ -70,6 +70,9 @@ func defaultRunCmd(ctx context.Context, name string, args ...string) ([]byte, er
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core (mita; no alternate engine).
+func (a *Adapter) Engine() string { return "mieru" }
+
 // Start writes the initial config and brings mita up. We invoke
 // `mita apply config <path>` rather than spawning mita directly — mita's
 // own systemd unit owns the lifecycle. The adapter just rewrites config
@@ -146,7 +149,8 @@ type inboundCfgWire struct {
 // Wave-14 C1: port now flows from the panel binding to mieru's portBindings.
 // Pre-wave port was install-time only and admin port changes from the UI
 // were silently dropped. Fallback chain:
-//   panel-pushed port → install-time ListenPort → 2012 (mieru default).
+//
+//	panel-pushed port → install-time ListenPort → 2012 (mieru default).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {

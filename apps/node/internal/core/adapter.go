@@ -23,6 +23,13 @@ type CoreAdapter interface {
 	// Name returns the protocol identifier (matches dto.ProtocolName).
 	Name() string
 
+	// Engine returns the proxy-core identifier this adapter renders with
+	// ("xray", "hysteria", "singbox", ...). The dispatcher matches an inbound
+	// to an adapter by BOTH Name()==protocol AND Engine()==resolved-engine, so
+	// one protocol can be served by different cores (engine-choice). Native
+	// adapters return their single core; the sing-box adapter returns "singbox".
+	Engine() string
+
 	// Start launches the underlying core (subprocess, in-process server, ...).
 	// Returning nil means the launch was initiated; readiness is asynchronous.
 	Start(ctx context.Context) error

@@ -91,6 +91,10 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 
 func (a *Adapter) Name() string { return a.protocol }
 
+// Engine reports the proxy core: always "singbox" for this adapter, regardless
+// of which protocol (tuic/anytls/...) it currently renders.
+func (a *Adapter) Engine() string { return "singbox" }
+
 // Start records the lifetime ctx (reused for subprocess spawns) and, if an
 // inbound was already applied (e.g. persisted-store replay before Start),
 // brings sing-box up. Normally the first ApplyInbound triggers the spawn.
