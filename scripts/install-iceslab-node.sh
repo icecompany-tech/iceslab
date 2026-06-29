@@ -547,11 +547,12 @@ pattern: resource isolation, simpler firewall):
   6) MTProto       Telegram-only proxy via 9seconds/mtg (Fake-TLS over TCP/443)
   7) Mieru         Stealth proxy via enfein/mieru (mita server, TCP+UDP)
   8) TUIC          QUIC proxy via sing-box engine (UDP, TUIC v5, self-signed TLS)
+  9) AnyTLS        TLS proxy via sing-box engine (TCP, password-only, self-signed)
 
 EOF
   local choice
   while true; do
-    read -rp "Select [1-8]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
+    read -rp "Select [1-9]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -561,7 +562,8 @@ EOF
       6) PROTOCOL=mtproto;     break ;;
       7) PROTOCOL=mieru;       break ;;
       8) PROTOCOL=tuic;        break ;;
-      *) echo "  → invalid choice '$choice'; enter 1-8." ;;
+      9) PROTOCOL=anytls;      break ;;
+      *) echo "  → invalid choice '$choice'; enter 1-9." ;;
     esac
   done
   log "Selected protocol: $PROTOCOL"
@@ -641,15 +643,15 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
 fi
 
 case "$PROTOCOL" in
-  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic) ;;
+  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls) ;;
   "")
     if [[ -e /dev/tty ]]; then
       prompt_protocol
     else
-      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic (no /dev/tty for interactive menu)"
+      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls (no /dev/tty for interactive menu)"
     fi
     ;;
-  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic)" ;;
+  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls)" ;;
 esac
 
 step "Prerequisites"
@@ -891,6 +893,12 @@ case "$PROTOCOL" in
     PROTO_BINARY=/usr/local/bin/sing-box
     PROTO_CONFIG=/etc/sing-box/config.json
     ;;
+  anytls)
+    log "Chaining bootstrap-singbox.sh (AnyTLS via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/anytls.json
+    ;;
 esac
 
 step "Environment file (/etc/iceslab-node/env)"
@@ -1033,6 +1041,19 @@ SINGBOX_API_LISTEN=127.0.0.1:8082
 # Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
 # Point SINGBOX_STATS_BIN at an xray binary to enable traffic counters; without
 # it TUIC still works but counters stay at zero. e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
+EOF
+      ;;
+    anytls)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_ANYTLS_CONFIG=${PROTO_CONFIG}
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+SINGBOX_ANYTLS_API_LISTEN=127.0.0.1:8083
+# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
+# Point SINGBOX_STATS_BIN at an xray binary to enable; without it counters stay
+# at zero (AnyTLS still works). e.g.:
 # SINGBOX_STATS_BIN=/usr/local/bin/xray
 EOF
       ;;
