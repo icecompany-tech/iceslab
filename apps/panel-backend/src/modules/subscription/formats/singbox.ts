@@ -24,8 +24,10 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *     selector. `auto_detect_interface: true` lets sing-box hop networks
  *     without restart.
  *
- * No `inbounds`, no `dns`, no `experimental` — the client app fills them in.
- * That keeps the body short and avoids drift across sing-box versions.
+ * One minimal `tun` inbound is emitted (Happ / sing-box-CLI reject a body with
+ * none as "invalid JSON"); GUI clients override it with their own tun. No
+ * `dns`/`experimental` and no local proxy inbound — keeps the body short,
+ * avoids version drift, and never opens a localhost SOCKS/HTTP leak.
  */
 /**
  * Slice 29 — when `bundle === 'url-test'`, the formatter wraps proxy tags in
@@ -342,6 +344,23 @@ export function buildSingboxJson(
   // R3-b custom rules). xray/xkeen + clash carry the lists instead.
   const config = {
     log: { level: 'info', timestamp: true },
+    // Happ (and the sing-box CLI) reject a config with no `inbounds` as "invalid
+    // JSON", unlike Hiddify/NekoBox which inject their own tun. A single modern
+    // tun inbound makes the body complete for every sing-box client (GUI clients
+    // still override it with their own OS-managed tun) WITHOUT opening a local
+    // SOCKS/HTTP proxy — no `mixed`/`socks` inbound, so no localhost leak. This
+    // is what lets Happ show the named node list AND honour route rules at once;
+    // the old no-inbounds body forced Happ onto the plain (routing-less) format.
+    inbounds: [
+      {
+        type: 'tun',
+        tag: 'tun-in',
+        address: ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
+        auto_route: true,
+        strict_route: false,
+        stack: 'mixed',
+      },
+    ],
     outbounds,
     route: {
       ...(splitRules
