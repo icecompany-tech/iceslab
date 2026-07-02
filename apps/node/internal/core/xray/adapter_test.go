@@ -129,6 +129,8 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	var doc struct {
 		Inbounds []struct {
 			Tag      string `json:"tag"`
+			Listen   string `json:"listen"`
+			Port     int    `json:"port"`
 			Protocol string `json:"protocol"`
 			Settings struct {
 				Clients []struct {
@@ -150,6 +152,16 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	if ib.Tag != "vless-in" {
 		t.Errorf("tag: got %q want vless-in", ib.Tag)
 	}
+	// Regression: the adu payload MUST carry listen+port. Without a port xray's
+	// InboundDetour validation rejects it ("Listen on AnyIP but no Port(s) set"),
+	// adu adds 0 users, and the live add falls back to a full restart. These
+	// come from withDefaults() (0.0.0.0 / 443 here).
+	if ib.Listen != "0.0.0.0" {
+		t.Errorf("listen: got %q want 0.0.0.0", ib.Listen)
+	}
+	if ib.Port != 443 {
+		t.Errorf("port: got %d want 443 (withDefaults)", ib.Port)
+	}
 	if ib.Protocol != "vless" {
 		t.Errorf("protocol: got %q want vless", ib.Protocol)
 	}
@@ -162,6 +174,39 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	}
 	if ib.Settings.Decryption != "none" {
 		t.Errorf("vless decryption: got %q want none", ib.Settings.Decryption)
+	}
+}
+
+// TestN1_BuildAduInbound_PropagatesListenPort is the direct regression guard for
+// the "adu adds 0 users -> full restart on every add" bug: a panel-pushed port
+// (e.g. 8443 for a REALITY inbound) must flow into the adu payload verbatim, not
+// be dropped or defaulted. If port is missing, xray rejects the payload with
+// "Listen on AnyIP but no Port(s) set in InboundDetour".
+func TestN1_BuildAduInbound_PropagatesListenPort(t *testing.T) {
+	data, err := buildAduInbound(
+		InboundConfig{Subprotocol: "vless", ListenHost: "0.0.0.0", ListenPort: 8443},
+		xrayClient{ID: "uuid-a", Email: "alice", Flow: "xtls-rprx-vision"},
+	)
+	if err != nil {
+		t.Fatalf("buildAduInbound: %v", err)
+	}
+	var doc struct {
+		Inbounds []struct {
+			Listen string `json:"listen"`
+			Port   int    `json:"port"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, data)
+	}
+	if len(doc.Inbounds) != 1 {
+		t.Fatalf("inbounds: got %d want 1\n%s", len(doc.Inbounds), data)
+	}
+	if doc.Inbounds[0].Port != 8443 {
+		t.Errorf("port: got %d want 8443 (panel-pushed port must reach adu)", doc.Inbounds[0].Port)
+	}
+	if doc.Inbounds[0].Listen != "0.0.0.0" {
+		t.Errorf("listen: got %q want 0.0.0.0", doc.Inbounds[0].Listen)
 	}
 }
 
@@ -218,7 +263,7 @@ func TestLiveOpSucceeded(t *testing.T) {
 		{"Added 1 user(s) in total.", "Added", true},
 		{"result: ok\nAdded 1 user(s) in total.", "Added", true},
 		{"Added 12 user(s) in total.", "Added", true},
-		{"Added 0 user(s) in total.", "Added", false},                       // accepted nothing
+		{"Added 0 user(s) in total.", "Added", false},                             // accepted nothing
 		{"User alice already exists.\nAdded 0 user(s) in total.", "Added", false}, // per-user error, exit 0
 		{"Removed 1 user(s) in total.", "Removed", true},
 		{"Removed 0 user(s) in total.", "Removed", false},

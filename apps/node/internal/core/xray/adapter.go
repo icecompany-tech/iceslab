@@ -203,12 +203,22 @@ const (
 // just the one user; buildUserInboundSettings keeps the client shape identical
 // to the full config (vless -> clients[{id,email,flow}], trojan -> clients[
 // {password,email}], etc).
+//
+// listen+port are REQUIRED even though adu never binds the socket: xray parses
+// this payload through the same conf.InboundDetour validation as a full config,
+// which rejects "Listen on AnyIP but no Port(s) set in InboundDetour". Omitting
+// the port made adu add 0 users (exit 0) so liveUpdateUser fell back to a full
+// xray restart on EVERY user add — dropping all live connections on the node.
+// Mirror the full render (config.go) so the payload validates and the add stays
+// live.
 func buildAduInbound(inbound InboundConfig, target xrayClient) ([]byte, error) {
 	c := inbound.withDefaults()
 	return json.Marshal(map[string]any{
 		"inbounds": []any{
 			map[string]any{
 				"tag":      c.Tag,
+				"listen":   c.ListenHost,
+				"port":     c.ListenPort,
 				"protocol": userInboundProtocol(c),
 				"settings": buildUserInboundSettings(c, []xrayClient{target}),
 			},
