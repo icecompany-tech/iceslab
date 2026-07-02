@@ -690,6 +690,28 @@ if [[ "$TOTAL_RAM_MB" -lt 1500 && "$CURRENT_SWAP_MB" -lt 500 ]]; then
   fi
 fi
 
+# ───── 2a. Network tuning for QUIC / Hysteria2 ─────
+# Hysteria2 rides QUIC over UDP; on high-BDP paths (e.g. cross-continent) the
+# default net.core.rmem_max (~208 KiB) caps quic-go's receive buffer and
+# throttles throughput. Lift the UDP socket buffers to 16 MiB and switch to
+# BBR + fq (also helps the Reality TCP paths). The drop-in in /etc/sysctl.d
+# survives reboots; default_qdisc only applies to NEW qdiscs, so also swap the
+# live interface's qdisc to fq now.
+log "Applying QUIC/BBR network tuning (/etc/sysctl.d/99-iceslab-quic.conf)"
+modprobe tcp_bbr 2>/dev/null || true
+cat > /etc/sysctl.d/99-iceslab-quic.conf <<'SYSCTL'
+# iceslab hy2/QUIC + BBR tuning — large UDP buffers for Hysteria2, BBR+fq for TCP.
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+SYSCTL
+sysctl -p /etc/sysctl.d/99-iceslab-quic.conf >/dev/null 2>&1 || true
+_ICE_IFACE="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
+[[ -n "${_ICE_IFACE}" ]] && tc qdisc replace dev "${_ICE_IFACE}" root fq 2>/dev/null || true
+
 # ───── 2a. OS upgrade ─────
 # Pull pending security + package updates before laying down node-agent.
 # Opt-in: dist-upgrade is intrusive on alpha (reboots kernel, restarts sshd).
