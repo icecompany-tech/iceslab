@@ -296,14 +296,16 @@ describe('computeUserDeltas (#5 - non-destructive cumulative)', () => {
     expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 5200n, cumOut: 3100n }]);
   });
 
-  it('re-baselines on a counter reset (core restart): delta = new cumulative', () => {
+  it('re-baselines on a counter reset (core restart) with a ZERO delta, not the new cumulative', () => {
     const r = computeUserDeltas(
       [{ userId: 'u1', bytesIn: 40, bytesOut: 10 }],
       new Map([['u1', snap(5000n, 3000n)]]),
     );
-    // counter dropped below the snapshot -> xray restarted; the post-restart
-    // cumulative IS the delta, and we re-baseline to it.
-    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 40, bytesOut: 10 }]);
+    // counter dropped below the snapshot -> xray restarted; the pre-reset final
+    // delta is unknowable, so bill 0 and just re-baseline (matches the node-level
+    // cumulative path). Billing the post-restart cumulative here was the bug that
+    // spiked a user by GBs in one poll while the node recorded far less.
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 0, bytesOut: 0 }]);
     expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 40n, cumOut: 10n }]);
   });
 

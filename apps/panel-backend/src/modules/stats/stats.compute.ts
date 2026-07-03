@@ -107,13 +107,18 @@ export interface UserDeltaResult {
  * snapshot is not advanced on failure, so the next poll's delta re-includes the
  * missed bytes.
  *
- * Per-user rules (stricter than the node-level single-counter fallback, which
- * may spike on first sight because it is dashboard-only, not billing):
+ * Per-user rules — mirror the node-level cumulative path (computeNodeStatsWrites)
+ * so a per-user counter can never bill more than the node itself recorded:
  *   - first sight (no prior snapshot): delta 0, just baseline. We must NOT bill
  *     the whole accumulated-since-core-start counter to the user (it could be a
  *     long-running xray's lifetime traffic, or this snapshot table being new).
- *   - counter dropped below the snapshot: the core restarted (counters reset),
- *     so the new cumulative IS the delta; re-baseline to it.
+ *   - counter dropped below the snapshot (current < prev): the core restarted
+ *     and reset the counter — the pre-reset final delta is unknowable, so
+ *     re-baseline with a delta of 0 (NOT the whole new since-restart cumulative).
+ *     Billing `current` here was a real over-count: it spiked a user by the full
+ *     post-restart total in one poll (e.g. a 43 GB u1/Frankfurt-2 line while the
+ *     node itself only recorded 661 MB, because the node-level path already
+ *     clamps resets to 0 and the per-user path did not).
  *   - otherwise: delta = current - previous.
  */
 export function computeUserDeltas(
@@ -140,8 +145,11 @@ export function computeUserDeltas(
   const snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
   for (const [userId, { cumIn, cumOut }] of byUser) {
     const p = prev.get(userId);
-    const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : cumIn) : 0n;
-    const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : cumOut) : 0n;
+    // No prior snapshot (first sight) OR counter below snapshot (core restart)
+    // -> baseline with a 0 delta. Only a monotonic increase bills real bytes.
+    // Matches the node-level cumulative path so per-user can't exceed the node.
+    const dIn = p && cumIn >= p.cumIn ? cumIn - p.cumIn : 0n;
+    const dOut = p && cumOut >= p.cumOut ? cumOut - p.cumOut : 0n;
     deltas.push({ userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
     snapshots.push({ userId, cumIn, cumOut });
   }
