@@ -237,15 +237,23 @@ export function buildCascadeConfigs(
   });
 }
 
-// ───── C3-auto — latency/load-balanced cascade ─────
-// The "auto" node: one entry that dials EVERY exit (a link-out each), an
-// `observatory` that probes those link-outs by RTT, and a `leastLoad` balancer
-// routing each user connection through the lowest-cost exit. Per-exit capacity
-// weights (`costs`) start uniform here — buildBalancerCascadeConfigs is pure —
-// and an out-of-band controller refreshes them from live node metrics (CPU /
-// bandwidth / speed) without a fixed re-push cadence, so xray isn't restarted on
-// every metric tick. `selector: [LINK_OUT_TAG]` prefix-matches each
-// `cascade-link-out-<i>`.
+// ───── C3-auto — latency-balanced cascade (the "auto" / optimal-location node) ─────
+// One entry that dials EVERY exit (a link-out each), a top-level `observatory`
+// that probes those link-outs by RTT, and a `leastPing` balancer that routes
+// each user connection through the exit with the lowest *observed* RTT.
+//
+// Why leastPing (not leastLoad): in xray-core the top-level `observatory` feeds
+// `leastPing`; `leastLoad` ignores it and uses its own `burstObservatory` +
+// `costs`. This mirrors the proven subscription balancer (xrayjson.ts). We use
+// RTT deliberately: observed latency is the emergent load/capacity signal
+// (Peak-EWMA principle — a saturated, slow, or far exit probes slower and is
+// deprioritised automatically), so no server-side metric loop or per-tick config
+// re-push (which would restart the entry and drop its users) is needed. Node
+// up/down is handled the same way — a dead exit fails the probe and drops out of
+// the pool with zero panel involvement.
+//
+// `subjectSelector`/`selector: [LINK_OUT_TAG]` prefix-match each
+// `cascade-link-out-<i>` (xray selectors are prefix matches).
 const BALANCER_TAG = 'auto';
 const OBSERVATORY_PROBE_URL = 'https://www.gstatic.com/generate_204';
 const OBSERVATORY_PROBE_INTERVAL = '5m';
@@ -279,21 +287,23 @@ export function buildBalancerCascadeConfigs(
     role: 'entry',
     inbounds: [],
     outbounds: entryOutbounds,
-    // User traffic -> balancer (leastLoad picks the lowest-cost exit). Split-
+    // User traffic -> balancer (leastPing picks the lowest-RTT exit). Split-
     // routing presets can prepend direct/block rules ahead of this later.
     routingRules: [{ type: 'field', network: 'tcp,udp', balancerTag: BALANCER_TAG }],
     observatory: {
       subjectSelector: [LINK_OUT_TAG],
-      probeUrl: OBSERVATORY_PROBE_URL,
+      // xray-core json tag is `probeURL` (capital URL); a lowercase key is
+      // silently ignored and the probe falls back to xray's default target.
+      probeURL: OBSERVATORY_PROBE_URL,
       probeInterval: OBSERVATORY_PROBE_INTERVAL,
     },
     balancers: [
       {
         tag: BALANCER_TAG,
         selector: [LINK_OUT_TAG],
-        // leastLoad reads the observatory health/RTT; per-exit `costs` (capacity
-        // weights) are injected out-of-band by the metrics controller.
-        strategy: { type: 'leastLoad' },
+        // leastPing consumes the top-level observatory and routes each
+        // connection through the exit with the lowest observed RTT.
+        strategy: { type: 'leastPing' },
       },
     ],
   });

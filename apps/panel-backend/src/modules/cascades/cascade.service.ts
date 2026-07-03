@@ -106,10 +106,11 @@ export async function getCascade(id: string): Promise<CascadeDto> {
 }
 
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
-  const hops = validateCascadeHops(input.hops);
-  await assertNodesExist(hops.map((h) => h.nodeId));
   const mode = input.mode ?? 'chain';
   const isBalancer = mode === 'balancer';
+  // Validate topology in the effective mode (balancer exits carry no linkProtocol).
+  const hops = validateCascadeHops(input.hops, mode);
+  await assertNodesExist(hops.map((h) => h.nodeId));
   // Pre-generate inter-hop link creds.
   //   chain:    one cred per link, stored on each non-exit (originating) hop.
   //   balancer: one cred per exit link (entry→exit), stored on each EXIT hop;
@@ -170,11 +171,11 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // disable toggle) must also re-push so its now-stale fragments are removed.
   const oldNodeIds = existing.hops.map((h) => h.nodeId);
 
-  const hops = input.hops ? validateCascadeHops(input.hops) : null;
-  if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
   // Effective mode: an explicit input.mode wins, else keep the stored one.
-  const mode = input.mode ?? existing.mode;
+  const mode = (input.mode ?? existing.mode) as 'chain' | 'balancer';
   const isBalancer = mode === 'balancer';
+  const hops = input.hops ? validateCascadeHops(input.hops, mode) : null;
+  if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
   const creds = hops
     ? generateLinkCreds(
         isBalancer

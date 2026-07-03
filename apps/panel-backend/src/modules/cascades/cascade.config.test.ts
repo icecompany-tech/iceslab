@@ -32,13 +32,16 @@ describe('buildBalancerCascadeConfigs (auto node)', () => {
     expect(outTags).toContain('cascade-link-out-0');
     expect(outTags).toContain('cascade-link-out-1');
     expect(outTags).toContain('direct');
-    // observatory probes the link-out prefix
-    expect((e.observatory as Record<string, unknown>).subjectSelector).toEqual(['cascade-link-out']);
-    // balancer selects the same prefix via leastLoad
+    // observatory probes the link-out prefix (probeURL, not probeUrl — xray json tag)
+    const obs = e.observatory as Record<string, unknown>;
+    expect(obs.subjectSelector).toEqual(['cascade-link-out']);
+    expect(obs.probeURL).toBe('https://www.gstatic.com/generate_204');
+    expect(obs).not.toHaveProperty('probeUrl');
+    // balancer selects the same prefix via leastPing (consumes the observatory)
     const bal = (e.balancers as Record<string, unknown>[])[0]!;
     expect(bal.tag).toBe('auto');
     expect(bal.selector).toEqual(['cascade-link-out']);
-    expect((bal.strategy as Record<string, unknown>).type).toBe('leastLoad');
+    expect((bal.strategy as Record<string, unknown>).type).toBe('leastPing');
     // user rule targets the balancer, not a fixed outbound
     expect(e.routingRules[0]).toMatchObject({ balancerTag: 'auto' });
     expect(e.routingRules[0]).not.toHaveProperty('outboundTag');
