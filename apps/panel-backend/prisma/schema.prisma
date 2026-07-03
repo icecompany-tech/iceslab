@@ -699,6 +699,9 @@ model Cascade {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique @db.VarChar(64)
   enabled   Boolean  @default(true)
+  // 'chain' (sequential entry→…→exit, default/legacy) or 'balancer' (one entry
+  // that latency/load-balances across N parallel exits — the "auto" node).
+  mode      String   @default("chain") @db.VarChar(16)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

@@ -171,6 +171,13 @@ export interface XrayCascadeFragments {
    *  address). Hostnames are resolved agent-side; empty → port opens to anyone
    *  (still UUID/PSK-gated). */
   linkAllowFrom?: string[];
+  /** C3-auto — a latency-balanced ("auto") entry's top-level `observatory`
+   *  block (probes the link-out outbounds by RTT). Present only on the entry of
+   *  a `mode='balancer'` cascade. */
+  observatory?: unknown;
+  /** C3-auto — a balanced entry's `routing.balancers` entries; its user rule
+   *  targets one via `balancerTag`. Present only on that entry. */
+  balancers?: unknown[];
 }
 
 export interface HysteriaInboundCfg {
