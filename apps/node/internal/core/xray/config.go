@@ -248,6 +248,14 @@ type CascadeFragments struct {
 	Inbounds     []json.RawMessage `json:"inbounds"`
 	Outbounds    []json.RawMessage `json:"outbounds"`
 	RoutingRules []json.RawMessage `json:"routingRules"`
+	// Observatory is the optional top-level `observatory` block a latency-
+	// balanced ("auto") entry uses to probe its link-out outbounds by RTT. nil
+	// on a plain single-exit cascade — the config stays byte-identical then.
+	Observatory json.RawMessage `json:"observatory,omitempty"`
+	// Balancers are the optional `routing.balancers` entries a balanced entry
+	// exposes; its user routing rule targets one via `balancerTag` (instead of a
+	// fixed `outboundTag`), so Xray picks the lowest-ping exit per connection.
+	Balancers []json.RawMessage `json:"balancers,omitempty"`
 	// LinkIngressPort is the inter-hop link-IN port this node listens on (the
 	// previous hop dials it). The node-agent opens UFW for it; renderConfig
 	// ignores these two fields (the port already lives inside the Inbounds JSON).
@@ -393,6 +401,22 @@ func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade 
 		}
 	}
 
+	routing := map[string]any{
+		"domainStrategy": "IPIfNonMatch",
+		"rules":          rules,
+	}
+	// C3-auto — a latency-balanced entry ships `routing.balancers` (its user rule
+	// targets one via balancerTag) plus a top-level `observatory` that probes the
+	// link-out outbounds. Both are raw JSON the panel owns; nil = no balancer, so
+	// the output stays byte-identical to a plain cascade / non-cascade node.
+	if cascade != nil && len(cascade.Balancers) > 0 {
+		bals := make([]any, 0, len(cascade.Balancers))
+		for _, b := range cascade.Balancers {
+			bals = append(bals, b)
+		}
+		routing["balancers"] = bals
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{
 			"loglevel": "info",
@@ -416,10 +440,10 @@ func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade 
 		},
 		"inbounds":  inbounds,
 		"outbounds": outbounds,
-		"routing": map[string]any{
-			"domainStrategy": "IPIfNonMatch",
-			"rules":          rules,
-		},
+		"routing":   routing,
+	}
+	if cascade != nil && len(cascade.Observatory) > 0 {
+		doc["observatory"] = cascade.Observatory
 	}
 	return json.MarshalIndent(doc, "", "  ")
 }

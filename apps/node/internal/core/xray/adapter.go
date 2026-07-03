@@ -631,7 +631,9 @@ func cascadeEqual(a, b *CascadeFragments) bool {
 	}
 	return rawSliceEqual(a.Inbounds, b.Inbounds) &&
 		rawSliceEqual(a.Outbounds, b.Outbounds) &&
-		rawSliceEqual(a.RoutingRules, b.RoutingRules)
+		rawSliceEqual(a.RoutingRules, b.RoutingRules) &&
+		bytes.Equal(a.Observatory, b.Observatory) &&
+		rawSliceEqual(a.Balancers, b.Balancers)
 }
 
 func rawSliceEqual(a, b []json.RawMessage) bool {
