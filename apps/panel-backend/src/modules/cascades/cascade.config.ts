@@ -123,6 +123,12 @@ export interface HopConfig {
   linkIngressPort?: number;
   /** Address(es) of the previous hop allowed to reach linkIngressPort. */
   linkAllowFrom?: string[];
+  /** C3-auto — the balancer entry's top-level `observatory` (probes link-outs by
+   *  RTT). Undefined on chain hops / non-entry hops. */
+  observatory?: Record<string, unknown>;
+  /** C3-auto — the balancer entry's `routing.balancers` entries. Its user rule
+   *  targets one via `balancerTag`. Undefined on chain hops / non-entry hops. */
+  balancers?: Record<string, unknown>[];
 }
 
 const LINK_IN_TAG = 'cascade-link-in';
@@ -229,4 +235,83 @@ export function buildCascadeConfigs(
       linkAllowFrom,
     };
   });
+}
+
+// ───── C3-auto — latency/load-balanced cascade ─────
+// The "auto" node: one entry that dials EVERY exit (a link-out each), an
+// `observatory` that probes those link-outs by RTT, and a `leastLoad` balancer
+// routing each user connection through the lowest-cost exit. Per-exit capacity
+// weights (`costs`) start uniform here — buildBalancerCascadeConfigs is pure —
+// and an out-of-band controller refreshes them from live node metrics (CPU /
+// bandwidth / speed) without a fixed re-push cadence, so xray isn't restarted on
+// every metric tick. `selector: [LINK_OUT_TAG]` prefix-matches each
+// `cascade-link-out-<i>`.
+const BALANCER_TAG = 'auto';
+const OBSERVATORY_PROBE_URL = 'https://www.gstatic.com/generate_204';
+const OBSERVATORY_PROBE_INTERVAL = '5m';
+
+function linkOutboundTagged(host: string, cred: LinkCred, tag: string): Record<string, unknown> {
+  return { ...linkOutbound(host, cred), tag };
+}
+
+/**
+ * Build the entry + exit fragments for a BALANCER cascade (one entry, N parallel
+ * exits). `linkCreds[i]` is the entry->exits[i] link cred (each exit listens on
+ * its own link-in). Returns exactly 1 entry + N exit HopConfigs (no transit).
+ */
+export function buildBalancerCascadeConfigs(
+  entry: CascadeConfigHopInput,
+  exits: CascadeConfigHopInput[],
+  linkCreds: LinkCred[],
+): HopConfig[] {
+  const configs: HopConfig[] = [];
+
+  // Entry — one link-out per exit, all sharing the LINK_OUT_TAG prefix so the
+  // observatory/balancer selector matches them; plus freedom for split-routing.
+  const entryOutbounds: Record<string, unknown>[] = exits.map((ex, i) =>
+    linkOutboundTagged(ex.nodeHost, linkCreds[i]!, `${LINK_OUT_TAG}-${i}`),
+  );
+  entryOutbounds.push(freedomOutbound);
+
+  configs.push({
+    nodeId: entry.nodeId,
+    position: entry.position,
+    role: 'entry',
+    inbounds: [],
+    outbounds: entryOutbounds,
+    // User traffic -> balancer (leastLoad picks the lowest-cost exit). Split-
+    // routing presets can prepend direct/block rules ahead of this later.
+    routingRules: [{ type: 'field', network: 'tcp,udp', balancerTag: BALANCER_TAG }],
+    observatory: {
+      subjectSelector: [LINK_OUT_TAG],
+      probeUrl: OBSERVATORY_PROBE_URL,
+      probeInterval: OBSERVATORY_PROBE_INTERVAL,
+    },
+    balancers: [
+      {
+        tag: BALANCER_TAG,
+        selector: [LINK_OUT_TAG],
+        // leastLoad reads the observatory health/RTT; per-exit `costs` (capacity
+        // weights) are injected out-of-band by the metrics controller.
+        strategy: { type: 'leastLoad' },
+      },
+    ],
+  });
+
+  // Exits — each terminates the link and egresses via freedom.
+  exits.forEach((ex, i) => {
+    const cred = linkCreds[i]!;
+    configs.push({
+      nodeId: ex.nodeId,
+      position: ex.position,
+      role: 'exit',
+      inbounds: [linkInbound(cred)],
+      outbounds: [freedomOutbound],
+      routingRules: [{ type: 'field', inboundTag: [LINK_IN_TAG], outboundTag: DIRECT_TAG }],
+      linkIngressPort: cred.port,
+      linkAllowFrom: [entry.nodeHost],
+    });
+  });
+
+  return configs;
 }
