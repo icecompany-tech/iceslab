@@ -548,11 +548,12 @@ pattern: resource isolation, simpler firewall):
   7) Mieru         Stealth proxy via enfein/mieru (mita server, TCP+UDP)
   8) TUIC          QUIC proxy via sing-box engine (UDP, TUIC v5, self-signed TLS)
   9) AnyTLS        TLS proxy via sing-box engine (TCP, password-only, self-signed)
+ 10) ShadowTLS     TLS-camouflage wrapper via sing-box (fronts a whitelisted site)
 
 EOF
   local choice
   while true; do
-    read -rp "Select [1-9]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
+    read -rp "Select [1-10]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -563,7 +564,8 @@ EOF
       7) PROTOCOL=mieru;       break ;;
       8) PROTOCOL=tuic;        break ;;
       9) PROTOCOL=anytls;      break ;;
-      *) echo "  → invalid choice '$choice'; enter 1-9." ;;
+      10) PROTOCOL=shadowtls;  break ;;
+      *) echo "  → invalid choice '$choice'; enter 1-10." ;;
     esac
   done
   log "Selected protocol: $PROTOCOL"
@@ -643,15 +645,15 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
 fi
 
 case "$PROTOCOL" in
-  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls) ;;
+  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
   "")
     if [[ -e /dev/tty ]]; then
       prompt_protocol
     else
-      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls (no /dev/tty for interactive menu)"
+      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls (no /dev/tty for interactive menu)"
     fi
     ;;
-  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls)" ;;
+  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls)" ;;
 esac
 
 step "Prerequisites"
@@ -899,6 +901,12 @@ case "$PROTOCOL" in
     PROTO_BINARY=/usr/local/bin/sing-box
     PROTO_CONFIG=/etc/sing-box/anytls.json
     ;;
+  shadowtls)
+    log "Chaining bootstrap-singbox.sh (ShadowTLS via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/shadowtls.json
+    ;;
 esac
 
 step "Environment file (/etc/iceslab-node/env)"
@@ -1054,6 +1062,18 @@ SINGBOX_ANYTLS_API_LISTEN=127.0.0.1:8083
 # Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
 # Point SINGBOX_STATS_BIN at an xray binary to enable; without it counters stay
 # at zero (AnyTLS still works). e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
+EOF
+      ;;
+    shadowtls)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_SHADOWTLS_CONFIG=${PROTO_CONFIG}
+SINGBOX_SHADOWTLS_API_LISTEN=127.0.0.1:8087
+# ShadowTLS needs no local TLS cert - it fronts a real handshake to the
+# camouflage host. Per-user stats need a v2ray-stats gRPC client; point
+# SINGBOX_STATS_BIN at an xray binary to enable (counters stay at zero without
+# it; ShadowTLS still works). e.g.:
 # SINGBOX_STATS_BIN=/usr/local/bin/xray
 EOF
       ;;
