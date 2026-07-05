@@ -11,6 +11,8 @@ export interface CascadeDto {
   id: string;
   name: string;
   enabled: boolean;
+  /** 'chain' (sequential) or 'balancer' (one entry, N latency-balanced exits). */
+  mode: string;
   hops: CascadeHopDto[];
   createdAt: string;
   updatedAt: string;
@@ -20,6 +22,7 @@ interface CascadeRow {
   id: string;
   name: string;
   enabled: boolean;
+  mode: string;
   createdAt: Date;
   updatedAt: Date;
   hops: {
@@ -37,6 +40,7 @@ export function mapCascade(c: CascadeRow): CascadeDto {
     id: c.id,
     name: c.name,
     enabled: c.enabled,
+    mode: c.mode,
     hops: c.hops.map((h) => ({
       id: h.id,
       nodeId: h.nodeId,

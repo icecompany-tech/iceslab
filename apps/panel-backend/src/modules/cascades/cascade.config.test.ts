@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   generateLinkCreds,
   buildCascadeConfigs,
+  buildBalancerCascadeConfigs,
   normalizeLinkProtocol,
   serializeLinkCred,
   parseLinkCred,
@@ -9,6 +10,60 @@ import {
   type CascadeConfigHopInput,
   type LinkCred,
 } from './cascade.config.js';
+
+describe('buildBalancerCascadeConfigs (auto node)', () => {
+  const entry: CascadeConfigHopInput = { nodeId: 'n-entry', position: 0, nodeHost: 'ru.example.com' };
+  const exits: CascadeConfigHopInput[] = [
+    { nodeId: 'n-de', position: 1, nodeHost: 'de.example.com' },
+    { nodeId: 'n-nl', position: 2, nodeHost: 'nl.example.com' },
+  ];
+  const creds: LinkCred[] = [
+    { protocol: 'vless', port: 24000, uuid: 'uuid-de' },
+    { protocol: 'vless', port: 24001, uuid: 'uuid-nl' },
+  ];
+
+  it('emits 1 entry + N exits; the entry carries observatory + balancer', () => {
+    const cfgs = buildBalancerCascadeConfigs(entry, exits, creds);
+    expect(cfgs).toHaveLength(3);
+    const e = cfgs[0]!;
+    expect(e.role).toBe('entry');
+    // one link-out per exit (+ freedom), all sharing the cascade-link-out prefix
+    const outTags = e.outbounds.map((o) => o.tag);
+    expect(outTags).toContain('cascade-link-out-0');
+    expect(outTags).toContain('cascade-link-out-1');
+    expect(outTags).toContain('direct');
+    // observatory probes the link-out prefix (probeURL, not probeUrl: xray json tag)
+    const obs = e.observatory as Record<string, unknown>;
+    expect(obs.subjectSelector).toEqual(['cascade-link-out']);
+    expect(obs.probeURL).toBe('https://www.gstatic.com/generate_204');
+    expect(obs).not.toHaveProperty('probeUrl');
+    // balancer selects the same prefix via leastPing (consumes the observatory)
+    const bal = (e.balancers as Record<string, unknown>[])[0]!;
+    expect(bal.tag).toBe('auto');
+    expect(bal.selector).toEqual(['cascade-link-out']);
+    expect((bal.strategy as Record<string, unknown>).type).toBe('leastPing');
+    // user rule targets the balancer, not a fixed outbound
+    expect(e.routingRules[0]).toMatchObject({ balancerTag: 'auto' });
+    expect(e.routingRules[0]).not.toHaveProperty('outboundTag');
+  });
+
+  it('each exit terminates its link and egresses via freedom, firewalled to the entry', () => {
+    const cfgs = buildBalancerCascadeConfigs(entry, exits, creds);
+    const de = cfgs[1]!;
+    expect(de.role).toBe('exit');
+    expect(de.inbounds[0]).toMatchObject({ tag: 'cascade-link-in', port: 24000 });
+    expect(de.routingRules[0]).toMatchObject({ outboundTag: 'direct' });
+    expect(de.linkIngressPort).toBe(24000);
+    expect(de.linkAllowFrom).toEqual(['ru.example.com']);
+    expect(cfgs[2]!.linkIngressPort).toBe(24001);
+  });
+
+  it('does not leak the entry observatory/balancer onto exit hops', () => {
+    const cfgs = buildBalancerCascadeConfigs(entry, exits, creds);
+    expect(cfgs[1]!.observatory).toBeUndefined();
+    expect(cfgs[1]!.balancers).toBeUndefined();
+  });
+});
 
 describe('generateLinkCreds', () => {
   it('makes one cred per link, sequential ports, vless by default', () => {

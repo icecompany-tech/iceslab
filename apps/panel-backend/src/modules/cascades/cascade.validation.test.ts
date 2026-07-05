@@ -92,3 +92,45 @@ describe('validateCascadeHops', () => {
     expect(() => validateCascadeHops(hops)).toThrow(/more than once/);
   });
 });
+
+describe('validateCascadeHops (balancer mode)', () => {
+  // A balancer: one entry (carries the uniform exit-link protocol) fanning out
+  // to N parallel exits, none of which carry a linkProtocol.
+  function balancer(exitCount: number): CascadeHopInput[] {
+    const ids = [N1, N2, N3, N4, N5];
+    return Array.from({ length: exitCount + 1 }, (_, i) => ({
+      nodeId: ids[i]!,
+      position: i,
+      ...(i === 0 ? { entryProtocol: 'xray' as const, linkProtocol: 'xray' as const } : {}),
+    }));
+  }
+
+  it('accepts an entry + 2 parallel exits (chain mode would reject the middle exit)', () => {
+    expect(() => validateCascadeHops(balancer(2), 'balancer')).not.toThrow();
+    // The SAME topology is invalid in chain mode: the middle hop (pos 1) would
+    // need a linkProtocol. This is exactly the mode-blind bug the fix closes.
+    expect(() => validateCascadeHops(balancer(2), 'chain')).toThrow(/needs a linkProtocol/);
+  });
+
+  it('accepts a 2-hop balancer (entry + single exit)', () => {
+    expect(() => validateCascadeHops(balancer(1), 'balancer')).not.toThrow();
+  });
+
+  it('requires a linkProtocol on the balancer entry', () => {
+    const hops = balancer(2);
+    delete hops[0]!.linkProtocol;
+    expect(() => validateCascadeHops(hops, 'balancer')).toThrow(/entry hop needs a linkProtocol/);
+  });
+
+  it('rejects a linkProtocol on a balancer exit', () => {
+    const hops = balancer(2);
+    hops[1]!.linkProtocol = 'xray';
+    expect(() => validateCascadeHops(hops, 'balancer')).toThrow(/exits egress direct/);
+  });
+
+  it('rejects entryProtocol on a balancer exit', () => {
+    const hops = balancer(2);
+    hops[2]!.entryProtocol = 'xray';
+    expect(() => validateCascadeHops(hops, 'balancer')).toThrow(/only valid on the entry hop/);
+  });
+});

@@ -565,7 +565,11 @@ export default {
     node: 'Нода',
     entryProtocol: 'Протокол входа',
     linkProtocol: 'Линк на след',
+    linkProtocolBalancer: 'Протокол линка к выходам',
     addHop: 'Добавить хоп',
+    mode: 'Режим',
+    modeChain: 'Цепочка',
+    modeBalancer: 'Балансер (auto-выход)',
   },
   squads: {
     title: 'Внутренние сквады',

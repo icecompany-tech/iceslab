@@ -30,15 +30,22 @@ export const CascadeHopSchema = z.object({
   linkProtocol: CascadeProtocol.optional(),
 });
 
+/** 'chain' = sequential entry->...->exit (default/legacy). 'balancer' = one
+ *  entry that latency-balances across N parallel exits (the "auto" node): hop
+ *  position 0 is the entry, every hop position >=1 is a parallel exit. */
+export const CascadeMode = z.enum(['chain', 'balancer']);
+
 export const CreateCascadeSchema = z.object({
   name: z.string().min(1).max(64),
   enabled: z.boolean().default(true),
+  mode: CascadeMode.default('chain'),
   hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS),
 });
 
 export const UpdateCascadeSchema = z.object({
   name: z.string().min(1).max(64).optional(),
   enabled: z.boolean().optional(),
+  mode: CascadeMode.optional(),
   hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS).optional(),
 });
 

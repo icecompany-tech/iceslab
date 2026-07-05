@@ -295,6 +295,14 @@ type CascadeFragments struct {
 	// LinkAllowFrom is the source IP/CIDR/host allowed to reach LinkIngressPort
 	// (the previous hop's address). Empty -> the agent opens the port to anywhere.
 	LinkAllowFrom []string `json:"linkAllowFrom,omitempty"`
+	// Observatory is the optional top-level `observatory` block a latency-
+	// balanced ("auto") entry uses to probe its link-out outbounds by RTT. nil on
+	// a plain single-exit cascade, so the config stays byte-identical then.
+	Observatory json.RawMessage `json:"observatory,omitempty"`
+	// Balancers are the optional `routing.balancers` entries a balanced entry
+	// exposes; its user routing rule targets one via `balancerTag` (instead of a
+	// fixed `outboundTag`), so xray picks the lowest-ping exit per connection.
+	Balancers []json.RawMessage `json:"balancers,omitempty"`
 }
 
 // renderConfig produces a complete Xray config.json blob for the given users.
@@ -446,6 +454,22 @@ func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade 
 		})
 	}
 
+	// C3-auto: a latency-balanced entry ships `routing.balancers` (its user rule
+	// targets one via balancerTag) plus a top-level `observatory` probing the
+	// link-out outbounds. Both are raw JSON the panel owns; nil/empty = no
+	// balancer, so the output stays byte-identical to a plain / non-cascade node.
+	routing := map[string]any{
+		"domainStrategy": "IPIfNonMatch",
+		"rules":          rules,
+	}
+	if cascade != nil && len(cascade.Balancers) > 0 {
+		bals := make([]any, 0, len(cascade.Balancers))
+		for _, b := range cascade.Balancers {
+			bals = append(bals, b)
+		}
+		routing["balancers"] = bals
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{
 			"loglevel": "info",
@@ -469,10 +493,12 @@ func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade 
 		},
 		"inbounds":  inbounds,
 		"outbounds": outbounds,
-		"routing": map[string]any{
-			"domainStrategy": "IPIfNonMatch",
-			"rules":          rules,
-		},
+		"routing":   routing,
+	}
+	// A balanced entry also carries the top-level `observatory` (nil on every
+	// other node, so the key is simply absent there).
+	if cascade != nil && len(cascade.Observatory) > 0 {
+		doc["observatory"] = cascade.Observatory
 	}
 	return json.MarshalIndent(doc, "", "  ")
 }

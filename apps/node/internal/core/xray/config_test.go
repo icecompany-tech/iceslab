@@ -395,6 +395,80 @@ func TestRender_CascadeFragmentsMerged(t *testing.T) {
 	}
 }
 
+// TestRender_CascadeAutoBalancer covers the C3-auto path: a latency-balanced
+// entry ships a top-level `observatory` plus `routing.balancers`, and its user
+// rule targets the balancer via `balancerTag`. All three must land verbatim.
+func TestRender_CascadeAutoBalancer(t *testing.T) {
+	cascade := &CascadeFragments{
+		Outbounds: []json.RawMessage{
+			json.RawMessage(`{"tag":"cascade-link-out-0","protocol":"vless"}`),
+			json.RawMessage(`{"tag":"cascade-link-out-1","protocol":"vless"}`),
+		},
+		RoutingRules: []json.RawMessage{
+			json.RawMessage(`{"type":"field","network":"tcp,udp","balancerTag":"auto"}`),
+		},
+		Observatory: json.RawMessage(`{"subjectSelector":["cascade-link-out"],"probeURL":"https://www.gstatic.com/generate_204","probeInterval":"5m"}`),
+		Balancers: []json.RawMessage{
+			json.RawMessage(`{"tag":"auto","selector":["cascade-link-out"],"strategy":{"type":"leastPing"}}`),
+		},
+	}
+	blob, err := renderConfigWithCascade(validInbound(), []xrayClient{{ID: "u1", Email: "u1"}}, cascade)
+	if err != nil {
+		t.Fatalf("renderConfigWithCascade: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(blob, &m); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	obs, ok := m["observatory"].(map[string]any)
+	if !ok {
+		t.Fatalf("observatory missing/not an object: %v", m["observatory"])
+	}
+	if obs["probeURL"] != "https://www.gstatic.com/generate_204" {
+		t.Errorf("observatory probeURL not carried through: %v", obs)
+	}
+	routing := m["routing"].(map[string]any)
+	bals, ok := routing["balancers"].([]any)
+	if !ok || len(bals) != 1 {
+		t.Fatalf("routing.balancers missing/wrong len: %v", routing["balancers"])
+	}
+	if bals[0].(map[string]any)["tag"] != "auto" {
+		t.Errorf("balancer tag not carried: %v", bals[0])
+	}
+	var sawBal bool
+	for _, raw := range routing["rules"].([]any) {
+		if raw.(map[string]any)["balancerTag"] == "auto" {
+			sawBal = true
+		}
+	}
+	if !sawBal {
+		t.Errorf("balancerTag routing rule not merged: %v", routing["rules"])
+	}
+}
+
+// TestRender_CascadeNoBalancer_NoKeys: a plain cascade WITHOUT observatory/
+// balancers must NOT emit those keys, the balancer path is strictly additive.
+func TestRender_CascadeNoBalancer_NoKeys(t *testing.T) {
+	cascade := &CascadeFragments{
+		Outbounds:    []json.RawMessage{json.RawMessage(`{"tag":"cascade-link-out","protocol":"vless"}`)},
+		RoutingRules: []json.RawMessage{json.RawMessage(`{"type":"field","outboundTag":"cascade-link-out"}`)},
+	}
+	blob, err := renderConfigWithCascade(validInbound(), nil, cascade)
+	if err != nil {
+		t.Fatalf("renderConfigWithCascade: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(blob, &m); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if _, ok := m["observatory"]; ok {
+		t.Errorf("observatory must be absent when not provided")
+	}
+	if _, ok := m["routing"].(map[string]any)["balancers"]; ok {
+		t.Errorf("routing.balancers must be absent when not provided")
+	}
+}
+
 // TestCascadeEqual covers the restart-gate helper: nil==nil, nil!=non-nil, and
 // byte-equality of the raw fragments.
 func TestCascadeEqual(t *testing.T) {

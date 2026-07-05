@@ -5,6 +5,7 @@ import { eventBus } from '../../lib/event-bus.js';
 import { validateCascadeHops } from './cascade.validation.js';
 import {
   buildCascadeConfigs,
+  buildBalancerCascadeConfigs,
   generateLinkCreds,
   normalizeLinkProtocol,
   parseLinkCred,
@@ -105,18 +106,30 @@ export async function getCascade(id: string): Promise<CascadeDto> {
 }
 
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
-  const hops = validateCascadeHops(input.hops);
+  const mode = input.mode ?? 'chain';
+  const isBalancer = mode === 'balancer';
+  // Validate the topology in the effective mode (balancer exits carry no
+  // linkProtocol, which the chain rules would wrongly reject).
+  const hops = validateCascadeHops(input.hops, mode);
   await assertNodesExist(hops.map((h) => h.nodeId));
-  // C2/C3b - pre-generate inter-hop link creds (per the originating hop's
-  // linkProtocol); stored on each non-exit hop.
+  // Pre-generate inter-hop link creds.
+  //   chain:    one cred per link, stored on each non-exit (originating) hop.
+  //   balancer: one cred per exit link (entry->exit), stored on each EXIT hop;
+  //             every link uses the entry hop's linkProtocol (uniform DC-to-DC).
   const creds = generateLinkCreds(
-    hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
+    isBalancer
+      ? hops.slice(1).map(() => normalizeLinkProtocol(hops[0]!.linkProtocol))
+      : hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
   );
+  // Cred index for hop `idx`, or -1 if it carries no link cred.
+  const credIdx = (idx: number): number =>
+    isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < hops.length - 1 ? idx : -1;
   try {
     const c = await prisma.cascade.create({
       data: {
         name: input.name,
         enabled: input.enabled,
+        mode,
         hops: {
           create: hops.map((h, idx) => ({
             // Nested create uses the checked input -> connect the relation
@@ -127,8 +140,8 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
             linkProtocol: h.linkProtocol ?? null,
             // Fresh object literal so it's assignable to Prisma's Json input
             // (a typed LinkCred lacks the index signature Json requires).
-            ...(idx < hops.length - 1
-              ? { linkConfig: serializeLinkCred(creds[idx]!) }
+            ...(credIdx(idx) >= 0
+              ? { linkConfig: serializeLinkCred(creds[credIdx(idx)]!) }
               : {}),
           })),
         },
@@ -152,20 +165,28 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
 export async function updateCascade(id: string, input: UpdateCascadeInput): Promise<CascadeDto> {
   const existing = await prisma.cascade.findUnique({
     where: { id },
-    select: { id: true, hops: { select: { nodeId: true } } },
+    select: { id: true, mode: true, hops: { select: { nodeId: true } } },
   });
   if (!existing) throw new CascadeNotFoundError(id);
   // Capture the pre-update hop nodes: a node dropped from the cascade (or a
   // disable toggle) must also re-push so its now-stale fragments are removed.
   const oldNodeIds = existing.hops.map((h) => h.nodeId);
 
-  const hops = input.hops ? validateCascadeHops(input.hops) : null;
+  // Effective mode: an explicit input.mode wins, else keep the stored one.
+  const mode = (input.mode ?? existing.mode) as 'chain' | 'balancer';
+  const isBalancer = mode === 'balancer';
+  const hops = input.hops ? validateCascadeHops(input.hops, mode) : null;
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
   const creds = hops
     ? generateLinkCreds(
-        hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
+        isBalancer
+          ? hops.slice(1).map(() => normalizeLinkProtocol(hops[0]!.linkProtocol))
+          : hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
       )
     : [];
+  // Cred index for hop `idx` (of `n` total), or -1 if it carries no link cred.
+  const credIdx = (idx: number, n: number): number =>
+    isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < n - 1 ? idx : -1;
 
   try {
     const c = await prisma.$transaction(async (tx) => {
@@ -174,6 +195,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+          ...(input.mode !== undefined ? { mode: input.mode } : {}),
         },
       });
       if (hops) {
@@ -189,8 +211,8 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
             position: h.position,
             entryProtocol: h.entryProtocol ?? null,
             linkProtocol: h.linkProtocol ?? null,
-            ...(idx < hops.length - 1
-              ? { linkConfig: serializeLinkCred(creds[idx]!) }
+            ...(credIdx(idx, hops.length) >= 0
+              ? { linkConfig: serializeLinkCred(creds[credIdx(idx, hops.length)]!) }
               : {}),
           })),
         });
@@ -255,6 +277,33 @@ export async function getCascadeFragmentsForNode(
     // the link binds its own port (cred.port), so strip any agent port.
     nodeHost: h.node.address.split(':')[0]!,
   }));
+
+  // C3-auto: a `balancer` cascade fans one entry out to N parallel exits. The
+  // link creds live on the EXIT hops (hops[1..]); the entry dials each. The
+  // entry's fragments carry the observatory + balancer; each exit terminates its
+  // own link. The `direct` outbound is dropped (the node ships its own).
+  if (cascade.mode === 'balancer') {
+    const exitCreds: LinkCred[] = [];
+    for (const eh of cascade.hops.slice(1)) {
+      const cred = parseLinkCred(eh.linkConfig);
+      // Malformed/missing cred (data drift): ship nothing rather than a
+      // half-wired auto node that blackholes user traffic.
+      if (!cred) return null;
+      exitCreds.push(cred);
+    }
+    const configs = buildBalancerCascadeConfigs(hopInputs[0]!, hopInputs.slice(1), exitCreds);
+    const mine = configs.find((c) => c.nodeId === nodeId);
+    if (!mine) return null;
+    return {
+      inbounds: mine.inbounds,
+      outbounds: mine.outbounds.filter((o) => o.tag !== 'direct'),
+      routingRules: mine.routingRules,
+      linkIngressPort: mine.linkIngressPort,
+      linkAllowFrom: mine.linkAllowFrom,
+      observatory: mine.observatory,
+      balancers: mine.balancers,
+    };
+  }
 
   // Rebuild link creds from each originating hop's persisted linkConfig.
   // Hops are position-sorted; hops[0..n-2] each carry one linkConfig.

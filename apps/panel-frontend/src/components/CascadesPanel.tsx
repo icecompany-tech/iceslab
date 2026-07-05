@@ -177,6 +177,11 @@ export function CascadesPanel() {
               <Badge size="sm" color={c.enabled ? 'teal' : 'gray'} variant="light">
                 {c.enabled ? 'enabled' : 'disabled'}
               </Badge>
+              {c.mode === 'balancer' && (
+                <Badge size="sm" color="violet" variant="light">
+                  {t('cascades.modeBalancer')}
+                </Badge>
+              )}
             </Group>
             <Group gap={4} wrap="nowrap">
               <Tooltip label={t('common.edit')}>
@@ -199,13 +204,15 @@ export function CascadesPanel() {
 
           <Group gap="sm" wrap="wrap" align="stretch">
             {c.hops.map((h, i) => {
-              const role =
-                i === 0
-                  ? t('cascades.entry')
-                  : i === c.hops.length - 1
-                    ? t('cascades.exit')
-                    : t('cascades.transit');
-              const roleColor = i === 0 ? CYAN : i === c.hops.length - 1 ? MOSS : MIST;
+              // balancer: hop 0 is the entry, every hop >=1 is a parallel exit
+              // (no transit). chain: entry, transit(s), then the single exit.
+              const isExitHop = c.mode === 'balancer' ? i >= 1 : i === c.hops.length - 1;
+              const role = i === 0
+                ? t('cascades.entry')
+                : isExitHop
+                  ? t('cascades.exit')
+                  : t('cascades.transit');
+              const roleColor = i === 0 ? CYAN : isExitHop ? MOSS : MIST;
               const nd = nodesById.get(h.nodeId);
               const status = nd?.status ?? 'unknown';
               const accent = STATUS_ACCENT[status] ?? MIST;
@@ -264,10 +271,10 @@ export function CascadesPanel() {
                       </Text>
                     )}
                   </Box>
-                  {i < c.hops.length - 1 && (
+                  {(c.mode === 'balancer' ? i === 0 : i < c.hops.length - 1) && (
                     <Stack gap={0} align="center" justify="center" style={{ color: MIST }}>
                       <Text size="9px" ff="monospace">
-                        {h.linkProtocol}
+                        {c.mode === 'balancer' ? `${h.linkProtocol ?? 'link'} · auto` : h.linkProtocol}
                       </Text>
                       <IconArrowRight size={16} />
                     </Stack>
@@ -318,6 +325,7 @@ function CascadeFormModal({
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [mode, setMode] = useState<'chain' | 'balancer'>('chain');
   const [hops, setHops] = useState<HopRow[]>([]);
   const [lastFor, setLastFor] = useState<string | null | undefined>(undefined);
 
@@ -327,6 +335,7 @@ function CascadeFormModal({
     if (cascade) {
       setName(cascade.name);
       setEnabled(cascade.enabled);
+      setMode(cascade.mode === 'balancer' ? 'balancer' : 'chain');
       setHops(
         cascade.hops.map((h) => ({
           nodeId: h.nodeId,
@@ -337,6 +346,7 @@ function CascadeFormModal({
     } else {
       setName('');
       setEnabled(true);
+      setMode('chain');
       setHops([
         { nodeId: '', entryProtocol: 'xray', linkProtocol: 'xray' },
         { nodeId: '', entryProtocol: '', linkProtocol: '' },
@@ -348,17 +358,21 @@ function CascadeFormModal({
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const hopInputs: CascadeHopInput[] = hops.map((h, i) => ({
-        nodeId: h.nodeId,
-        position: i,
-        ...(i === 0 && h.entryProtocol ? { entryProtocol: h.entryProtocol as CascadeProtocol } : {}),
-        ...(i < hops.length - 1 && h.linkProtocol
-          ? { linkProtocol: h.linkProtocol as CascadeProtocol }
-          : {}),
-      }));
+      const isBalancer = mode === 'balancer';
+      const hopInputs: CascadeHopInput[] = hops.map((h, i) => {
+        // chain: every non-exit hop carries the link to the next. balancer: only
+        // the entry carries the (uniform) exit-link protocol; exits carry none.
+        const carriesLink = isBalancer ? i === 0 : i < hops.length - 1;
+        return {
+          nodeId: h.nodeId,
+          position: i,
+          ...(i === 0 && h.entryProtocol ? { entryProtocol: h.entryProtocol as CascadeProtocol } : {}),
+          ...(carriesLink && h.linkProtocol ? { linkProtocol: h.linkProtocol as CascadeProtocol } : {}),
+        };
+      });
       return cascade
-        ? updateCascade(cascade.id, { name, enabled, hops: hopInputs })
-        : createCascade({ name, enabled, hops: hopInputs });
+        ? updateCascade(cascade.id, { name, enabled, mode, hops: hopInputs })
+        : createCascade({ name, enabled, mode, hops: hopInputs });
     },
     onSuccess: () => {
       notifications.show({ color: 'green', message: t('cascades.saved') });
@@ -409,6 +423,16 @@ function CascadeFormModal({
           checked={enabled}
           onChange={(e) => setEnabled(e.currentTarget.checked)}
         />
+        <Select
+          label={t('cascades.mode')}
+          data={[
+            { value: 'chain', label: t('cascades.modeChain') },
+            { value: 'balancer', label: t('cascades.modeBalancer') },
+          ]}
+          value={mode}
+          onChange={(v) => setMode(v === 'balancer' ? 'balancer' : 'chain')}
+          w={260}
+        />
 
         <Group justify="space-between" align="center" mt="xs">
           <Text size="sm" fw={500}>
@@ -421,7 +445,10 @@ function CascadeFormModal({
         <Stack gap={6}>
           {hops.map((h, i) => {
             const isEntry = i === 0;
-            const isExit = i === hops.length - 1;
+            // balancer: every hop past the entry is a parallel exit (no transit).
+            const isExit = mode === 'balancer' ? i >= 1 : i === hops.length - 1;
+            // balancer: only the entry carries the (uniform) exit-link protocol.
+            const showLink = mode === 'balancer' ? isEntry : !isExit;
             const role = isEntry
               ? t('cascades.entry')
               : isExit
@@ -456,9 +483,13 @@ function CascadeFormModal({
                       w={150}
                     />
                   )}
-                  {!isExit && (
+                  {showLink && (
                     <Select
-                      label={t('cascades.linkProtocol')}
+                      label={
+                        mode === 'balancer'
+                          ? t('cascades.linkProtocolBalancer')
+                          : t('cascades.linkProtocol')
+                      }
                       data={PROTOCOLS}
                       value={h.linkProtocol || null}
                       onChange={(v) => setHop(i, { linkProtocol: v ?? '' })}

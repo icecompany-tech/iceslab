@@ -221,6 +221,14 @@ export interface XrayCascadeFragments {
    *  address). Hostnames are resolved agent-side; empty → port opens to anyone
    *  (still UUID/PSK-gated). */
   linkAllowFrom?: string[];
+  /** Latency-balanced ("auto") entry only: the top-level `observatory` block
+   *  that probes the link-out outbounds by RTT. Present on the entry of a
+   *  mode='balancer' cascade; absent otherwise. */
+  observatory?: unknown;
+  /** Latency-balanced entry only: `routing.balancers` entries. The entry's user
+   *  routing rule targets one via `balancerTag`, so xray picks the lowest-ping
+   *  exit per connection. Absent otherwise. */
+  balancers?: unknown[];
 }
 
 export interface HysteriaInboundCfg {

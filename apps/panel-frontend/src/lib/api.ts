@@ -787,6 +787,9 @@ export async function deleteSquad(id: string): Promise<void> {
 export type CascadeProtocol =
   | 'xray' | 'hysteria' | 'amneziawg' | 'naive' | 'shadowsocks' | 'mtproto' | 'mieru';
 
+/** 'chain' (sequential) or 'balancer' (one entry, N latency-balanced exits). */
+export type CascadeMode = 'chain' | 'balancer';
+
 export interface CascadeHop {
   id: string;
   nodeId: string;
@@ -800,6 +803,7 @@ export interface Cascade {
   id: string;
   name: string;
   enabled: boolean;
+  mode: CascadeMode;
   hops: CascadeHop[];
   createdAt: string;
   updatedAt: string;
@@ -815,12 +819,14 @@ export interface CascadeHopInput {
 export interface CreateCascadeInput {
   name: string;
   enabled?: boolean;
+  mode?: CascadeMode;
   hops: CascadeHopInput[];
 }
 
 export interface UpdateCascadeInput {
   name?: string;
   enabled?: boolean;
+  mode?: CascadeMode;
   hops?: CascadeHopInput[];
 }
 

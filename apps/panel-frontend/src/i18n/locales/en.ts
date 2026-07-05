@@ -560,7 +560,11 @@ export default {
     node: 'Node',
     entryProtocol: 'Entry protocol',
     linkProtocol: 'Link to next',
+    linkProtocolBalancer: 'Exit link protocol',
     addHop: 'Add hop',
+    mode: 'Mode',
+    modeChain: 'Chain (sequential)',
+    modeBalancer: 'Balancer (auto exit)',
   },
   squads: {
     title: 'Internal squads',
