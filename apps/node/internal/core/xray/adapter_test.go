@@ -129,6 +129,8 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	var doc struct {
 		Inbounds []struct {
 			Tag      string `json:"tag"`
+			Listen   string `json:"listen"`
+			Port     int    `json:"port"`
 			Protocol string `json:"protocol"`
 			Settings struct {
 				Clients []struct {
@@ -152,6 +154,12 @@ func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	}
 	if ib.Protocol != "vless" {
 		t.Errorf("protocol: got %q want vless", ib.Protocol)
+	}
+	// adu payload must carry listen+port, else adu rejects the AnyIP listener
+	// with no port and silently adds nobody (every add falls back to a full
+	// restart). Defaults from withDefaults(): 0.0.0.0 / 443.
+	if ib.Listen != "0.0.0.0" || ib.Port != 443 {
+		t.Errorf("adu listen/port: got %q/%d want 0.0.0.0/443", ib.Listen, ib.Port)
 	}
 	if len(ib.Settings.Clients) != 1 {
 		t.Fatalf("clients: got %d want 1", len(ib.Settings.Clients))
@@ -202,6 +210,36 @@ func TestN1_BuildAduInbound_Trojan(t *testing.T) {
 		ib.Settings.Clients[0].Password != "secret-pass" ||
 		ib.Settings.Clients[0].Email != "bob" {
 		t.Errorf("trojan client: got %+v", ib.Settings.Clients)
+	}
+}
+
+// TestN1_BuildAduInbound_PropagatesListenPort: a panel-pushed listen/port must
+// reach the adu payload verbatim (not just the defaults), mirroring the full
+// render. An 8443 REALITY inbound whose adu payload dropped the port would
+// re-validate as AnyIP-no-port and fall back to a restart on every add.
+func TestN1_BuildAduInbound_PropagatesListenPort(t *testing.T) {
+	data, err := buildAduInbound(
+		InboundConfig{Subprotocol: "vless", ListenHost: "10.0.0.5", ListenPort: 8443},
+		xrayClient{ID: "uuid-a", Email: "alice"},
+	)
+	if err != nil {
+		t.Fatalf("buildAduInbound: %v", err)
+	}
+	var doc struct {
+		Inbounds []struct {
+			Listen string `json:"listen"`
+			Port   int    `json:"port"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, data)
+	}
+	if len(doc.Inbounds) != 1 {
+		t.Fatalf("inbounds: got %d want 1\n%s", len(doc.Inbounds), data)
+	}
+	if doc.Inbounds[0].Listen != "10.0.0.5" || doc.Inbounds[0].Port != 8443 {
+		t.Errorf("adu listen/port: got %q/%d want 10.0.0.5/8443",
+			doc.Inbounds[0].Listen, doc.Inbounds[0].Port)
 	}
 }
 

@@ -208,10 +208,21 @@ const (
 // {password,email}], etc).
 func buildAduInbound(inbound InboundConfig, target xrayClient) ([]byte, error) {
 	c := inbound.withDefaults()
+	// listen+port must be present. adu re-validates this inbound through the
+	// same conf.InboundDetour path as a full config, which rejects an AnyIP
+	// listener with no port ("Listen on AnyIP but no Port(s) set in
+	// InboundDetour"). Without them adu exits 0 having added 0 users, so every
+	// live add silently no-ops into a full xray restart (dropping all live
+	// connections; on a cascade entry that tears down the whole chain).
+	// withDefaults() guarantees both (the real pushed port, else 443); adu never
+	// binds the socket, the port only has to satisfy config validation. Mirrors
+	// the full render in config.go.
 	return json.Marshal(map[string]any{
 		"inbounds": []any{
 			map[string]any{
 				"tag":      c.Tag,
+				"listen":   c.ListenHost,
+				"port":     c.ListenPort,
 				"protocol": userInboundProtocol(c),
 				"settings": buildUserInboundSettings(c, []xrayClient{target}),
 			},
@@ -666,7 +677,9 @@ func cascadeEqual(a, b *CascadeFragments) bool {
 	}
 	return rawSliceEqual(a.Inbounds, b.Inbounds) &&
 		rawSliceEqual(a.Outbounds, b.Outbounds) &&
-		rawSliceEqual(a.RoutingRules, b.RoutingRules)
+		rawSliceEqual(a.RoutingRules, b.RoutingRules) &&
+		bytes.Equal(a.Observatory, b.Observatory) &&
+		rawSliceEqual(a.Balancers, b.Balancers)
 }
 
 func rawSliceEqual(a, b []json.RawMessage) bool {
