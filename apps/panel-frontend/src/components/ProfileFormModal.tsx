@@ -175,6 +175,16 @@ interface FormValues {
 
   // AnyTLS (sing-box)
   anytlsServerName: string;
+
+  // ShadowTLS (sing-box)
+  shadowtlsHandshake: string;
+  shadowtlsSsMethod:
+    | '2022-blake3-aes-128-gcm'
+    | '2022-blake3-aes-256-gcm'
+    | '2022-blake3-chacha20-poly1305'
+    | 'chacha20-ietf-poly1305'
+    | 'aes-256-gcm'
+    | 'aes-128-gcm';
 }
 
 // Values bounded by upstream AmneziaWG v2.0 spec (docs.amnezia.org):
@@ -299,6 +309,9 @@ function defaults(profile: Profile | null): FormValues {
     tuicCongestion: 'bbr',
 
     anytlsServerName: 'www.bing.com',
+
+    shadowtlsHandshake: 'www.microsoft.com',
+    shadowtlsSsMethod: '2022-blake3-aes-128-gcm',
   };
 
   if (!profile) return base;
@@ -404,6 +417,12 @@ function defaults(profile: Profile | null): FormValues {
       return {
         ...base,
         anytlsServerName: (cfg.serverName as string) ?? base.anytlsServerName,
+      };
+    case 'shadowtls':
+      return {
+        ...base,
+        shadowtlsHandshake: (cfg.handshake as string) ?? base.shadowtlsHandshake,
+        shadowtlsSsMethod: ((cfg.ssMethod as FormValues['shadowtlsSsMethod']) ?? base.shadowtlsSsMethod),
       };
     default:
       return base;
@@ -660,6 +679,12 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
         break;
       case 'anytls':
         config = { serverName: values.anytlsServerName };
+        break;
+      case 'shadowtls':
+        config = {
+          handshake: values.shadowtlsHandshake,
+          ssMethod: values.shadowtlsSsMethod,
+        };
         break;
     }
 
@@ -1572,6 +1597,32 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 description="SNI the node's self-signed cert is issued for. AnyTLS is password-only (per-user password is auto-derived)."
                 {...form.getInputProps('anytlsServerName')}
               />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'shadowtls' && (
+            <Stack>
+              <TextInput
+                label="Handshake domain (camouflage SNI)"
+                placeholder="www.microsoft.com"
+                description="A whitelisted site the ShadowTLS layer fronts with a real TLS handshake. The inner Shadowsocks key is auto-generated; the per-user password is auto-derived."
+                {...form.getInputProps('shadowtlsHandshake')}
+              />
+              <Select
+                label="Inner Shadowsocks cipher"
+                data={[
+                  { value: '2022-blake3-aes-128-gcm', label: '2022-blake3-aes-128-gcm (recommended)' },
+                  { value: '2022-blake3-aes-256-gcm', label: '2022-blake3-aes-256-gcm' },
+                  { value: '2022-blake3-chacha20-poly1305', label: '2022-blake3-chacha20-poly1305' },
+                ]}
+                allowDeselect={false}
+                {...form.getInputProps('shadowtlsSsMethod')}
+              />
+              <Alert color="blue" variant="light">
+                <Text size="sm">
+                  ShadowTLS has no share link. It is emitted only in the sing-box and Clash (mihomo) subscription formats.
+                </Text>
+              </Alert>
             </Stack>
           )}
 
