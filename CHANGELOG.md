@@ -3,6 +3,95 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
+## v0.1.9
+
+The sing-box engine release. Iceslab gains a second proxy engine beside its
+native cores, three transports it unlocks (TUIC, AnyTLS, ShadowTLS), and a
+per-profile choice of which engine serves the mainstream protocols. Plus
+Cloudflare WARP as a per-node egress, a latency-balanced "auto" cascade that
+picks the fastest exit per connection, and a batch of node, stats and deploy
+fixes. The new transports, WARP and the balancer cascade ship functional with
+real-network field validation in progress (the alpha maturity bar).
+
+### Added
+
+- **sing-box engine.** A second proxy engine alongside the native cores. The
+  node-agent dispatches by (protocol, engine) pair, so a protocol can be served
+  by its native core or by sing-box, with per-user traffic stats read over the
+  v2ray API. Enabled on a node that has sing-box installed (`--with-singbox` in
+  the node installer).
+- **TUIC (v5).** A QUIC transport with mandatory TLS and native UDP relay, served
+  by the sing-box engine. New profile type, emitted into the `tuic://`, sing-box
+  and Clash subscription formats.
+- **AnyTLS.** A TCP-over-TLS, password-only transport via sing-box. New profile
+  type and subscription output.
+- **ShadowTLS v3.** A TLS-camouflage wrapper: the node performs a real TLS
+  handshake to a whitelisted domain (default `www.microsoft.com`) and tunnels
+  Shadowsocks underneath, so the connection looks like plain browsing to that
+  site. Per-user auth is the ShadowTLS password; the inner Shadowsocks key is
+  server-wide and auto-generated. No share-link URI (emitted only into the
+  sing-box and Clash formats, which carry the plugin natively).
+- **Engine choice per profile.** VLESS, VMess, Trojan, Shadowsocks and Hysteria2
+  can now run through the sing-box engine instead of their native core, chosen in
+  the profile form. Native stays the default, so existing profiles are unchanged.
+- **Cloudflare WARP egress, per node.** A node can route its inbound's user
+  traffic out through Cloudflare WARP (an Xray `wireguard` outbound), giving it a
+  Cloudflare egress IP. The panel registers a free WARP device and injects the
+  credentials into the node's config; opt-in per node via a toggle, existing
+  nodes keep direct egress.
+- **Latency-balanced cascade (the "auto" node).** A new cascade mode where one
+  entry balances across N parallel exits by round-trip time (an Xray observatory
+  feeding a `leastPing` balancer), so a client connects to a single node and each
+  connection is routed through the lowest-latency exit. Built as an "optimal
+  location" node for clients that have no client-side url-test. The sequential
+  chain mode is unchanged and stays the default; pick the mode in the cascade
+  form.
+
+### Changed
+
+- **Hysteria2 QUIC throughput tuning on the node.** The node installer now raises
+  the UDP socket buffers (`rmem_max` / `wmem_max` to 16 MiB) and switches the
+  qdisc and congestion control to `fq` + BBR, so a cross-continent Hysteria2 node
+  is no longer throttled to a fraction of its bandwidth by the distro-default
+  receive-buffer ceiling on high-BDP (fast and distant) links.
+
+### Fixed
+
+- **A live user-add no longer restarts Xray.** The runtime add payload omitted
+  the inbound's listen and port, so Xray re-validated it as an AnyIP listener
+  with no port, added nobody, and every add silently fell back to a full restart
+  that dropped all live connections (and on a cascade entry, the whole chain).
+  The payload now carries the port, so adds stay live.
+- **A reset per-user counter no longer spikes a quota.** When a user's per-poll
+  counter dropped below its stored snapshot (a core restart, or one of the user's
+  inbounds missing from a single poll), the panel billed the whole residual as
+  one delta, so a user line could jump tens of GB in one tick. It now re-baselines
+  to a zero delta, matching the node-level path.
+- **Shadowsocks 2022 keys served by sing-box are valid.** A sing-box Shadowsocks
+  user was handed the raw account UUID as its pre-shared key, which is not a valid
+  SS2022 key; the PSK is now derived correctly. Existing Shadowsocks users must
+  re-import their subscription (the key changed).
+- **sing-box subscriptions import on Happ and the CLI.** The sing-box config
+  shipped with no `inbounds`, which Happ and the sing-box CLI reject as invalid,
+  dropping them to the routing-less plain format. It now emits one minimal `tun`
+  inbound, with no local SOCKS/HTTP proxy inbound so there is no localhost leak
+  surface; GUI clients still override it with their own tun.
+- **A cascade exit's firewall rule lands under the hardened unit.** The
+  node-agent's `ProtectSystem=strict` service did not grant write access to
+  `/etc/ufw`, so a cascade exit's allow-from-entry rule was silently dropped and
+  the exit showed dead in the balancer. `/etc/ufw` is now in the unit's
+  ReadWritePaths.
+- **Unattended deploy needs no flags.** `deploy.sh` stopped on the detached HEAD
+  the installer leaves when `ICESLAB_REF` was unset. It now defaults to `main`
+  (and the checkout re-attaches HEAD to it), so a bare `deploy.sh` just tracks the
+  trunk; pin a release with `ICESLAB_REF=<tag>`.
+
+### Docs
+
+- **Contribution provenance.** CONTRIBUTING now asks contributors for their own
+  commit messages and PR descriptions with no AI co-author trailers, and the
+  stale `develop`-branch note is dropped (the project is trunk-based on `main`).
+
 ## v0.1.8
 
 Operator production-readiness, surfaced by dogfooding a real paid service on
