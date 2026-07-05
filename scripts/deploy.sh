@@ -64,7 +64,7 @@ STEP_TOTAL=5
 # Honors ICESLAB_REF (branch like `main`, or pinned tag like v0.1.4); defaults
 # to the current branch. See git_sync_to_ref in _lib.sh for why this replaced a
 # bare `git pull` (the tag-pinned detached-HEAD silent-no-op trap).
-step 1 "sync source (ICESLAB_REF=${ICESLAB_REF:-current branch})"
+step 1 "sync source (ICESLAB_REF=${ICESLAB_REF:-auto: branch or main})"
 git_sync_to_ref
 if [[ "$SHA_BEFORE" == "$SHA_AFTER" ]]; then
     log_info "  ${SYNC_TARGET}: no new commits, re-deploying ${SHA_AFTER}"

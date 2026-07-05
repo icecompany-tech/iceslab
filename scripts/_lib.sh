@@ -164,13 +164,14 @@ git_short_sha_or_die() {
 }
 
 # git_sync_to_ref: bring the checkout to ICESLAB_REF (a branch like `main`, or a
-# pinned tag like v0.1.4), defaulting to the current branch when ICESLAB_REF is
-# unset. Replaces a bare `git pull --ff-only`, which silently no-ops on the
-# tag-pinned detached HEAD the installer leaves, so operators rebuilt stale code
-# thinking they had updated (caught live 2026-06-10, a panel stuck rebuilding
-# v0.1.2). Fetches all branches + tags (overriding the single-branch refspec a
-# shallow install clone leaves), then checks out the target explicitly and
-# errors loudly when the intent is ambiguous.
+# pinned tag like v0.1.4). When ICESLAB_REF is unset it uses the checked-out
+# branch, or falls back to `main` when HEAD is detached (the state the installer
+# leaves), so an unattended `deploy.sh` just tracks the trunk with no flags.
+# Replaces a bare `git pull --ff-only`, which silently no-ops on that tag-pinned
+# detached HEAD, so operators rebuilt stale code thinking they had updated
+# (caught live 2026-06-10, a panel stuck rebuilding v0.1.2). Fetches all branches
+# + tags (overriding the single-branch refspec a shallow install clone leaves),
+# then checks out the target explicitly. Pin a release with ICESLAB_REF=<tag>.
 #
 # Sets globals for the caller to log: SHA_BEFORE, SHA_AFTER, SYNC_TARGET.
 # Honors FORCE_RESET=1 to discard local edits. Exits non-zero on bad state.
@@ -178,13 +179,15 @@ git_sync_to_ref() {
     SHA_BEFORE=$(git_short_sha)
     SYNC_TARGET="${ICESLAB_REF:-}"
     if [[ -z "$SYNC_TARGET" ]]; then
+        # Prefer the checked-out branch. If HEAD is detached (the installer pins a
+        # tag/sha, so a fresh box lands here) and no ICESLAB_REF was given, default
+        # to `main` instead of stopping: an unattended deploy should just track the
+        # trunk. The checkout below re-attaches HEAD to that branch, so this only
+        # fires once per detached box. Pin a release with ICESLAB_REF=<tag> to hold.
         SYNC_TARGET=$(git symbolic-ref --short -q HEAD || true)
         if [[ -z "$SYNC_TARGET" ]]; then
-            log_err "Detached HEAD (repo pinned to a tag/sha) and ICESLAB_REF unset."
-            log_err "Pick what to deploy, for example:"
-            log_err "    ICESLAB_REF=main   bash scripts/deploy.sh   # track latest"
-            log_err "    ICESLAB_REF=v0.1.4 bash scripts/deploy.sh   # pin a release"
-            exit 1
+            SYNC_TARGET="main"
+            log_warn "Detached HEAD and ICESLAB_REF unset; defaulting to 'main' (set ICESLAB_REF=<tag> to pin a release)."
         fi
     fi
     if [[ -n "$(git status --porcelain)" && "${FORCE_RESET:-0}" != "1" ]]; then
