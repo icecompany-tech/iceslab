@@ -147,7 +147,10 @@ export type ProtocolName =
   | 'naive'
   | 'shadowsocks'
   | 'mtproto'
-  | 'mieru';
+  | 'mieru'
+  | 'tuic'
+  | 'anytls'
+  | 'shadowtls';
 
 export type ShadowsocksMethod =
   | '2022-blake3-aes-128-gcm'
