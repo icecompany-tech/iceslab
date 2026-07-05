@@ -57,7 +57,7 @@ const shadowtlsEp: SubscriptionEndpoint = {
   uri: '',
 };
 
-function parse(out: string): { outbounds: any[]; route: any; log: any } {
+function parse(out: string): { inbounds: any[]; outbounds: any[]; route: any; log: any } {
   return JSON.parse(out);
 }
 
@@ -66,6 +66,16 @@ describe('buildSingboxJson', () => {
     const out = buildSingboxJson([hysteriaEp]);
     expect(out.endsWith('\n')).toBe(true);
     expect(() => JSON.parse(out)).not.toThrow();
+  });
+
+  it('emits exactly one tun inbound and no listening proxy inbound (no localhost leak)', () => {
+    const cfg = parse(buildSingboxJson([hysteriaEp]));
+    expect(cfg.inbounds).toHaveLength(1);
+    expect(cfg.inbounds[0].type).toBe('tun');
+    // Never a mixed/socks/http listener: that would open a localhost proxy port.
+    expect(
+      cfg.inbounds.some((i: any) => ['mixed', 'socks', 'http'].includes(i.type)),
+    ).toBe(false);
   });
 
   it('emits a hysteria2 outbound with mandatory fields', () => {

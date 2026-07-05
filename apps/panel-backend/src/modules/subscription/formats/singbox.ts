@@ -24,8 +24,9 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *     selector. `auto_detect_interface: true` lets sing-box hop networks
  *     without restart.
  *
- * No `inbounds`, no `dns`, no `experimental` — the client app fills them in.
- * That keeps the body short and avoids drift across sing-box versions.
+ * A single minimal `tun` inbound (see buildSingboxJson); no `dns`, no
+ * `experimental`, the client app fills those in. That keeps the body short and
+ * avoids drift across sing-box versions.
  */
 /**
  * Slice 29 — when `bundle === 'url-test'`, the formatter wraps proxy tags in
@@ -407,6 +408,21 @@ export function buildSingboxJson(
   // R3-b custom rules). xray/xkeen + clash carry the lists instead.
   const config = {
     log: { level: 'info', timestamp: true },
+    // A single minimal tun inbound. Happ and the sing-box CLI reject a config
+    // with no `inbounds` as invalid and fall back to the routing-less plain
+    // format; Hiddify/NekoBox inject their own OS-managed tun and override this,
+    // so they are unaffected. Deliberately NO mixed/socks/http inbound: that
+    // would open a listening localhost proxy port (a leak surface). tun only.
+    inbounds: [
+      {
+        type: 'tun',
+        tag: 'tun-in',
+        address: ['172.18.0.1/30', 'fdfe:dcba:9876::1/126'],
+        auto_route: true,
+        strict_route: false,
+        stack: 'mixed',
+      },
+    ],
     outbounds,
     route: {
       ...(splitRules
