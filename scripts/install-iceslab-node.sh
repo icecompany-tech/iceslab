@@ -473,6 +473,9 @@ while [[ $# -gt 0 ]]; do
     --fail2ban)           FAIL2BAN=1; shift ;;
     --realistic-fallback) REALISTIC_FALLBACK=1; shift ;;
     --ssh-allowlist)      SSH_ALLOWLIST="$2"; shift 2 ;;
+    # Install the sing-box engine on top of the primary protocol, so this node
+    # can also serve engine=singbox inbounds (vless/vmess/trojan/ss/hy2).
+    --with-singbox)       WITH_SINGBOX=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \?//'
       exit 0
@@ -909,6 +912,14 @@ case "$PROTOCOL" in
     ;;
 esac
 
+# --with-singbox: chain the sing-box engine install on top of the primary
+# protocol so an xray/hysteria/shadowsocks node can also serve engine=singbox
+# inbounds. No-op when the primary IS a sing-box protocol (already installed).
+if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
+  log "Chaining bootstrap-singbox.sh (--with-singbox: engine-choice enabled)"
+  bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+fi
+
 step "Environment file (/etc/iceslab-node/env)"
 ENV_DIR=/etc/iceslab-node
 mkdir -p "$ENV_DIR"
@@ -1078,6 +1089,31 @@ SINGBOX_SHADOWTLS_API_LISTEN=127.0.0.1:8087
 EOF
       ;;
   esac
+
+  # --with-singbox: add the sing-box engine env on top of the primary protocol's
+  # (skipped when the primary IS a sing-box protocol, which already wrote it).
+  # No cert/key needed for the engine-choice protocols (vless uses REALITY, ss
+  # its own AEAD, hy2 its own cert flow); we still write the shared self-signed
+  # cert paths so a tuic/anytls/shadowtls inbound later on this node works too.
+  if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
+    cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=/usr/local/bin/sing-box
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+EOF
+  fi
+
+  # Auto-wire sing-box per-user stats to the xray binary when both are present
+  # (sing-box ships no stats CLI; it reads v2ray-stats via an xray gRPC client).
+  # The agent also falls back to XRAY_BINARY, so this is belt-and-suspenders.
+  if grep -q '^SINGBOX_BINARY=' "$ENV_FILE" && ! grep -q '^SINGBOX_STATS_BIN=' "$ENV_FILE"; then
+    _sb_xray="$(command -v xray || true)"
+    if [ -n "$_sb_xray" ]; then
+      echo "SINGBOX_STATS_BIN=${_sb_xray}" >> "$ENV_FILE"
+      log "Auto-wired SINGBOX_STATS_BIN=${_sb_xray} (per-user sing-box stats)"
+    fi
+  fi
+
   chmod 600 "$ENV_FILE"
 else
   log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"
