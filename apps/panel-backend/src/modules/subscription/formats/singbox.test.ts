@@ -44,6 +44,19 @@ const ssEp: SubscriptionEndpoint = {
   uri: 'ss://...',
 };
 
+// ShadowTLS v3 — an ss outbound that detours through a shadowtls outbound.
+const shadowtlsEp: SubscriptionEndpoint = {
+  protocol: 'shadowtls',
+  nodeName: 'eu-1',
+  host: 'n1.example.com',
+  port: 443,
+  shadowtlsPassword: 'stls-user-pw',
+  handshake: 'www.microsoft.com',
+  ssMethod: '2022-blake3-aes-128-gcm',
+  ssPassword: 'inner-ss-key',
+  uri: '',
+};
+
 function parse(out: string): { outbounds: any[]; route: any; log: any } {
   return JSON.parse(out);
 }
@@ -111,6 +124,29 @@ describe('buildSingboxJson', () => {
     const a = buildSingboxJson([hysteriaEp, xrayEp]);
     const b = buildSingboxJson([hysteriaEp, xrayEp]);
     expect(a).toBe(b);
+  });
+
+  it('emits shadowtls: an ss outbound detouring through a shadowtls v3 outbound', () => {
+    const cfg = parse(buildSingboxJson([shadowtlsEp]));
+    // The selectable proxy is a shadowsocks outbound reached only via detour.
+    const ss = cfg.outbounds.find(
+      (o: any) => o.type === 'shadowsocks' && o.tag === 'eu-1-shadowtls',
+    );
+    expect(ss).toBeDefined();
+    expect(ss.method).toBe('2022-blake3-aes-128-gcm');
+    expect(ss.password).toBe('inner-ss-key');
+    expect(ss.detour).toBe('eu-1-shadowtls-stls');
+    expect(ss.server).toBeUndefined(); // reached via detour, not directly
+    // Its dialer is a shadowtls v3 outbound fronting the real handshake host.
+    const stls = cfg.outbounds.find((o: any) => o.type === 'shadowtls');
+    expect(stls).toBeDefined();
+    expect(stls.tag).toBe('eu-1-shadowtls-stls');
+    expect(stls.server).toBe('n1.example.com');
+    expect(stls.server_port).toBe(443);
+    expect(stls.version).toBe(3);
+    expect(stls.password).toBe('stls-user-pw');
+    expect(stls.tls.enabled).toBe(true);
+    expect(stls.tls.server_name).toBe('www.microsoft.com');
   });
 
   // ───── Slice 24c part 3a — Trojan subprotocol ─────

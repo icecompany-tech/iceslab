@@ -13,7 +13,9 @@ import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword, deriveSsPassword } from '../../lib/credentials.js';
 import {
+  buildAnytlsUri,
   buildHysteriaUri,
   buildMieruUri,
   buildMtprotoTmeUri,
@@ -21,6 +23,7 @@ import {
   buildShadowsocksUri,
   buildSubscriptionJson,
   buildTrojanRealityUri,
+  buildTuicUri,
   buildVlessRealityUri,
   buildVmessUri,
   encodePlainList,
@@ -580,11 +583,16 @@ export async function generateSubscription(
         method: ShadowsocksMethod;
         serverPsk?: string;
       };
-      // Slice 24d (fix 2026-05-07): SS2022 multi-user requires
-      // ServerPSK:UserPSK colon-joined in the URI. Server PSK is per-
-      // inbound, generated at create-time and stored in inbound.config.
-      // Per-user PSK reuses user.xrayUuid (UUIDs have enough entropy;
-      // growing users.shadowsocksPsk just for this protocol is overkill).
+      // SS2022 multi-user: the per-user uPSK is DERIVED from xrayUuid - a raw
+      // UUID is not a valid base64 key, and the node derives the identical value
+      // (core.DeriveSsPassword). The client credential is ServerPSK:UserPSK
+      // colon-joined; the clash/sing-box/outline formats read endpoint.password
+      // directly, so set the combined value there and hand the parts to the URI
+      // builder (which joins them).
+      const ssUserPsk = deriveSsPassword(user.xrayUuid, ssCfg.method);
+      const ssClientPassword = ssCfg.serverPsk
+        ? `${ssCfg.serverPsk}:${ssUserPsk}`
+        : ssUserPsk;
       endpoints.push({
         protocol: 'shadowsocks',
         nodeName,
@@ -592,10 +600,10 @@ export async function generateSubscription(
         port,
         ...hostMeta,
         method: ssCfg.method,
-        password: user.xrayUuid,
+        password: ssClientPassword,
         uri: buildShadowsocksUri({
           method: ssCfg.method,
-          userPsk: user.xrayUuid,
+          userPsk: ssUserPsk,
           serverPsk: ssCfg.serverPsk,
           host,
           port,
@@ -622,6 +630,80 @@ export async function generateSubscription(
           port,
           name: nodeName,
         }),
+      });
+    } else if (ib.protocol === 'tuic' && user.xrayUuid) {
+      // TUIC v5 (sing-box engine). uuid = user.xrayUuid; password derived from
+      // it (deriveTuicPassword) - same value the node receives, no extra
+      // credential surface. Node serves a self-signed cert in the alpha, so the
+      // URI sets allow_insecure (client trusts it + the matching SNI).
+      const cfg = ib.config as unknown as { serverName?: string; congestionControl?: string };
+      const tuicSni = cfg.serverName || 'www.bing.com';
+      const tuicCc = cfg.congestionControl || 'bbr';
+      const tuicPassword = deriveTuicPassword(user.xrayUuid);
+      endpoints.push({
+        protocol: 'tuic',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        uuid: user.xrayUuid,
+        password: tuicPassword,
+        serverName: tuicSni,
+        congestionControl: tuicCc,
+        uri: buildTuicUri({
+          uuid: user.xrayUuid,
+          password: tuicPassword,
+          host,
+          port,
+          serverName: tuicSni,
+          congestionControl: tuicCc,
+          name: nodeName,
+        }),
+      });
+    } else if (ib.protocol === 'anytls' && user.xrayUuid) {
+      // AnyTLS (sing-box engine). password-only; derived from xrayUuid (no extra
+      // credential surface). Self-signed cert in the alpha -> client uses
+      // allow-insecure + the matching SNI.
+      const cfg = ib.config as unknown as { serverName?: string };
+      const anytlsSni = cfg.serverName || 'www.bing.com';
+      const anytlsPassword = deriveAnytlsPassword(user.xrayUuid);
+      endpoints.push({
+        protocol: 'anytls',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        password: anytlsPassword,
+        serverName: anytlsSni,
+        uri: buildAnytlsUri({
+          password: anytlsPassword,
+          host,
+          port,
+          serverName: anytlsSni,
+          name: nodeName,
+        }),
+      });
+    } else if (ib.protocol === 'shadowtls' && user.xrayUuid) {
+      // ShadowTLS v3 (sing-box engine). Per-user shadowtls password derived from
+      // xrayUuid; the inner ss key (ssPassword) is server-wide, from the config.
+      // ShadowTLS has NO share-link -> uri:'' (encodePlainList drops it; emitted
+      // only in the sing-box / clash full-config formats).
+      const cfg = ib.config as unknown as {
+        handshake?: string;
+        ssMethod?: string;
+        ssPassword?: string;
+      };
+      endpoints.push({
+        protocol: 'shadowtls',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        shadowtlsPassword: deriveShadowtlsPassword(user.xrayUuid),
+        handshake: cfg.handshake || 'www.microsoft.com',
+        ssMethod: cfg.ssMethod || '2022-blake3-aes-128-gcm',
+        ssPassword: cfg.ssPassword || '',
+        uri: '',
       });
     }
     } // host-row loop

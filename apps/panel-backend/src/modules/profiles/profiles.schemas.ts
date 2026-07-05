@@ -37,6 +37,28 @@ export const ProtocolEnum = z.enum([
   'mieru',
 ]);
 
+// Engine-choice (EC5): which proxy core serves a profile. null = native.
+export const EngineEnum = z.enum(['xray', 'hysteria', 'singbox']);
+
+// Which engines each protocol may be served by. The shared protocols can run on
+// their native core OR sing-box; everything else has a single native core, so
+// its engine must stay null (native).
+const ENGINE_OPTIONS: Record<string, readonly string[]> = {
+  xray: ['xray', 'singbox'],
+  shadowsocks: ['xray', 'singbox'],
+  hysteria: ['hysteria', 'singbox'],
+};
+
+/** A null/undefined engine (native) is always valid; a set engine must be one
+ *  of the protocol's allowed cores. */
+export function engineValidForProtocol(
+  protocol: string,
+  engine: string | null | undefined,
+): boolean {
+  if (!engine) return true;
+  return (ENGINE_OPTIONS[protocol] ?? []).includes(engine);
+}
+
 // Discriminated union — same shape as the old InboundConfigByProtocol but
 // without the per-node `nodeId/port/publicHost` fields. Profile holds the
 // shared template only.
@@ -54,9 +76,21 @@ const ProfileBaseFields = z.object({
   name: NameSchema,
   description: z.string().max(500).nullish(),
   enabled: z.boolean().default(true),
+  /** Engine-choice (EC5): null/omitted = native core, 'singbox' = sing-box. */
+  engine: EngineEnum.nullish(),
 });
 
-export const CreateProfileSchema = z.intersection(ProfileBaseFields, ProfileConfigByProtocol);
+export const CreateProfileSchema = z
+  .intersection(ProfileBaseFields, ProfileConfigByProtocol)
+  .superRefine((val, ctx) => {
+    if (!engineValidForProtocol(val.protocol, val.engine ?? null)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `engine "${val.engine}" is not valid for protocol "${val.protocol}"`,
+        path: ['engine'],
+      });
+    }
+  });
 export type CreateProfileInput = z.infer<typeof CreateProfileSchema>;
 
 // Profile updates never change the protocol (would invalidate every
@@ -65,6 +99,8 @@ export const UpdateProfileSchema = z.object({
   name: NameSchema.optional(),
   description: z.string().max(500).nullable().optional(),
   enabled: z.boolean().optional(),
+  /** Engine-choice (EC5). Validated against the profile's protocol in service. */
+  engine: EngineEnum.nullable().optional(),
   /** Must match the profile's existing protocol. Validated in service. */
   config: z.unknown().optional(),
 });

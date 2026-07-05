@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
 func validInbound() InboundConfig {
@@ -120,8 +122,11 @@ func TestRender_ShadowsocksInboundShape(t *testing.T) {
 		t.Errorf("clients: got %d want 2", len(clients))
 	}
 	c0 := clients[0].(map[string]any)
-	if c0["password"] != "pw-a" || c0["email"] != "user-a" {
-		t.Errorf("client[0] mismatch: %+v", c0)
+	// uPSK is derived from the stored UUID (SS2022 needs a valid base64 key, not
+	// the raw value) - mirrors core.DeriveSsPassword on the panel + xray paths.
+	wantPw := core.DeriveSsPassword("pw-a", "2022-blake3-aes-256-gcm")
+	if c0["password"] != wantPw || c0["email"] != "user-a" {
+		t.Errorf("client[0] mismatch: %+v (want password %q)", c0, wantPw)
 	}
 }
 

@@ -91,6 +91,9 @@ func realRunCmd(ctx context.Context, name string, args ...string) ([]byte, error
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core (caddy-naive; no alternate engine).
+func (a *Adapter) Engine() string { return "naive" }
+
 // Start either launches caddy now (when bootstrap-time config already has
 // Hostname) or defers — same pattern as mtproto/amneziawg adapters that
 // wait for the panel's first ApplyInbound before they have enough to

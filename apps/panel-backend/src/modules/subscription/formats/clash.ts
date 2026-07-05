@@ -311,6 +311,62 @@ export function buildClashYaml(
           `    udp: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'tuic') {
+      // TUIC v5 (sing-box engine) -> mihomo `type: tuic`. Self-signed cert in
+      // the alpha so skip-cert-verify; uuid+password auth, native UDP relay.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: tuic`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    uuid: ${yamlString(e.uuid)}`,
+          `    password: ${yamlString(e.password)}`,
+          `    congestion-controller: ${yamlString(e.congestionControl || 'bbr')}`,
+          `    alpn: [h3]`,
+          `    sni: ${yamlString(e.serverName)}`,
+          `    udp-relay-mode: native`,
+          `    skip-cert-verify: true`,
+        ].join('\n'),
+      );
+    } else if (e.protocol === 'anytls') {
+      // AnyTLS (sing-box engine) -> mihomo `type: anytls`. Password-only auth;
+      // self-signed cert in the alpha so skip-cert-verify.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: anytls`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    password: ${yamlString(e.password)}`,
+          `    sni: ${yamlString(e.serverName)}`,
+          `    skip-cert-verify: true`,
+        ].join('\n'),
+      );
+    } else if (e.protocol === 'shadowtls') {
+      // ShadowTLS v3 -> mihomo `type: ss` with the `shadow-tls` plugin. The ss
+      // cipher/password is the inner key; plugin-opts carries the shadowtls host
+      // (camouflage SNI) + per-user password + version. shadow-tls does a real
+      // handshake to a valid host, so no skip-cert-verify.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: ss`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    cipher: ${yamlString(e.ssMethod)}`,
+          `    password: ${yamlString(e.ssPassword)}`,
+          `    plugin: shadow-tls`,
+          `    plugin-opts:`,
+          `      host: ${yamlString(e.handshake)}`,
+          `      password: ${yamlString(e.shadowtlsPassword)}`,
+          `      version: 3`,
+          `    udp: true`,
+        ].join('\n'),
+      );
     }
   }
 

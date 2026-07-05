@@ -98,6 +98,9 @@ func defaultRunCmd(ctx context.Context, name string, args ...string) ([]byte, er
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core (xray-core).
+func (a *Adapter) Engine() string { return "xray" }
+
 // Start writes the initial config to disk and spawns xray.
 // If REALITY keys are not yet configured (deferred via ApplyInbound), Start
 // is a no-op — the adapter will activate on the first ApplyInbound call.

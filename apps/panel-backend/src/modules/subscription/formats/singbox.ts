@@ -305,6 +305,71 @@ export function buildSingboxJson(
         network: 'tcp',
         udp_over_tcp: false,
       });
+    } else if (e.protocol === 'tuic') {
+      // TUIC v5 (sing-box engine). QUIC + mandatory TLS; self-signed cert in
+      // the alpha so insecure=true. uuid+password auth, native UDP relay.
+      proxyTags.push(tag);
+      outbounds.push({
+        type: 'tuic',
+        tag,
+        server: e.host,
+        server_port: e.port,
+        uuid: e.uuid,
+        password: e.password,
+        congestion_control: e.congestionControl || 'bbr',
+        udp_relay_mode: 'native',
+        tls: {
+          enabled: true,
+          server_name: e.serverName,
+          alpn: ['h3'],
+          insecure: true,
+        },
+      });
+    } else if (e.protocol === 'anytls') {
+      // AnyTLS (sing-box engine). TCP+TLS, password-only; self-signed cert in
+      // the alpha so insecure=true.
+      proxyTags.push(tag);
+      outbounds.push({
+        type: 'anytls',
+        tag,
+        server: e.host,
+        server_port: e.port,
+        password: e.password,
+        tls: {
+          enabled: true,
+          server_name: e.serverName,
+          insecure: true,
+        },
+      });
+    } else if (e.protocol === 'shadowtls') {
+      // ShadowTLS v3 (sing-box engine). The client uses a shadowsocks outbound
+      // that `detour`s through a shadowtls outbound (the latter does the real
+      // TLS handshake to the camouflage host). Two outbounds; the ss one is the
+      // selectable proxy, the shadowtls one is its dialer.
+      proxyTags.push(tag);
+      const stlsTag = `${tag}-stls`;
+      outbounds.push({
+        type: 'shadowsocks',
+        tag,
+        method: e.ssMethod,
+        password: e.ssPassword,
+        detour: stlsTag,
+        network: 'tcp',
+        udp_over_tcp: false,
+      });
+      outbounds.push({
+        type: 'shadowtls',
+        tag: stlsTag,
+        server: e.host,
+        server_port: e.port,
+        version: 3,
+        password: e.shadowtlsPassword,
+        tls: {
+          enabled: true,
+          server_name: e.handshake,
+          utls: { enabled: true, fingerprint: 'chrome' },
+        },
+      });
     }
   }
 

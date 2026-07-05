@@ -16,7 +16,16 @@ export type ProtocolName =
   | 'naive'
   | 'shadowsocks'
   | 'mtproto'
-  | 'mieru';
+  | 'mieru'
+  | 'tuic'
+  | 'anytls'
+  | 'shadowtls';
+
+/** Which proxy core renders an inbound. Most protocols have a single native
+ *  core; the shared protocols (vless/vmess/trojan + ss on xray-core, hy2 on
+ *  hysteria) can alternatively be served by the sing-box engine. tuic/anytls
+ *  are singbox-only. Omit `engine` on an inbound to use the native core. */
+export type EngineName = 'xray' | 'hysteria' | 'singbox';
 
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
@@ -30,6 +39,14 @@ export interface ProtocolCredentials {
    * straight into the [Peer] AllowedIPs field as `<ip>/32`.
    */
   amneziawgAllowedIp?: string;
+  /** TUIC v5 (sing-box engine): per-user UUID + password. */
+  tuicUuid?: string;
+  tuicPassword?: string;
+  /** AnyTLS (sing-box engine): per-user password (password-only auth). */
+  anytlsPassword?: string;
+  /** ShadowTLS v3 (sing-box engine): per-user password for the shadowtls
+   *  users[] (the inner shadowsocks key is server-wide, in the inbound config). */
+  shadowtlsPassword?: string;
 }
 
 // ───── POST /addUser ─────
@@ -67,6 +84,10 @@ export interface InboundDto {
    *  hint, etc — purely informational on the node side). */
   name: string;
   protocol: ProtocolName;
+  /** Proxy core that renders this inbound. Omit -> the protocol's native core
+   *  (xray for vless/vmess/trojan/ss, hysteria for hy2, singbox for
+   *  tuic/anytls). Set to 'singbox' to serve a shared protocol via sing-box. */
+  engine?: EngineName;
   /** Listen port (UDP for hysteria/awg, TCP for xray/naive). */
   port: number;
   /** Per-protocol settings. The discriminant is `protocol` above. */
@@ -77,7 +98,10 @@ export interface InboundDto {
     | NaiveInboundCfg
     | ShadowsocksInboundCfg
     | MtprotoInboundCfg
-    | MieruInboundCfg;
+    | MieruInboundCfg
+    | TuicInboundCfg
+    | AnytlsInboundCfg
+    | ShadowtlsInboundCfg;
 }
 
 export interface XrayInboundCfg {
@@ -275,6 +299,39 @@ export interface MtprotoInboundCfg {
  */
 export interface MieruInboundCfg {
   mtu: number;
+}
+
+/**
+ * TUIC v5 inbound config (sing-box engine, slice singbox-S2). `serverName` is
+ * the TLS SNI the node's cert is issued for; `congestionControl` tunes the QUIC
+ * sender. TLS is the node's self-signed pair for the alpha (client connects
+ * with allow-insecure + this SNI). Per-user uuid+password live in credentials.
+ */
+export interface TuicInboundCfg {
+  serverName?: string;
+  congestionControl?: 'bbr' | 'cubic' | 'new_reno';
+}
+
+/**
+ * AnyTLS inbound config (sing-box engine). TCP+TLS, password-only auth (the
+ * per-user password lives in credentials). `serverName` is the TLS SNI the
+ * node's self-signed cert is issued for (client uses allow-insecure in alpha).
+ */
+export interface AnytlsInboundCfg {
+  serverName?: string;
+}
+
+/**
+ * ShadowTLS v3 inbound config (sing-box engine). TLS-camouflage wrapper: the
+ * node fronts a real handshake to `handshake` (a whitelisted site) and detours
+ * to an inner single-key shadowsocks. `ssMethod` is the inner cipher; `ssPassword`
+ * is the inner ss server key (auto-generated panel-side, valid base64). Per-user
+ * auth is the shadowtls password (credentials). No share-link (sing-box/clash).
+ */
+export interface ShadowtlsInboundCfg {
+  handshake?: string;
+  ssMethod?: string;
+  ssPassword?: string;
 }
 
 export interface ApplyInboundsRequest {

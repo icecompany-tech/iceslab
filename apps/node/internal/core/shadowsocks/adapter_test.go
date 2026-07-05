@@ -156,10 +156,11 @@ func TestN1_BuildAduInbound(t *testing.T) {
 	if ib.Settings.Method != "2022-blake3-aes-256-gcm" || ib.Settings.Password != "server-psk" {
 		t.Errorf("method/serverPSK: got %q / %q", ib.Settings.Method, ib.Settings.Password)
 	}
+	wantPw := core.DeriveSsPassword("user-pw", "2022-blake3-aes-256-gcm")
 	if len(ib.Settings.Clients) != 1 ||
-		ib.Settings.Clients[0].Password != "user-pw" ||
+		ib.Settings.Clients[0].Password != wantPw ||
 		ib.Settings.Clients[0].Email != "alice" {
-		t.Errorf("client: got %+v", ib.Settings.Clients)
+		t.Errorf("client: got %+v (want password %q)", ib.Settings.Clients, wantPw)
 	}
 }
 

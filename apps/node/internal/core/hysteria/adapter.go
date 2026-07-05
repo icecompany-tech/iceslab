@@ -202,22 +202,26 @@ func defaultRunCmd(ctx context.Context, name string, args ...string) error {
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core. Hysteria2 runs on the hysteria binary;
+// engine-choice can alternatively route hy2 to the sing-box adapter.
+func (a *Adapter) Engine() string { return "hysteria" }
+
 // Start brings up the auth-callback server, then optionally spawns the
 // hysteria subprocess via the shared subprocess package.
 //
 // Two lifecycle modes:
 //
-//   ServiceUnit set    → hysteria runs as a systemd unit (install-iceslab-node.sh
-//                        wrote /etc/systemd/system/hysteria.service). The
-//                        agent only writes the config + reloads via
-//                        `systemctl restart <unit>` on ApplyInbound.
-//                        We MUST NOT also spawn an in-process copy or
-//                        the two compete for :443/udp and the second one
-//                        FATALs on "address already in use".
+//	ServiceUnit set    → hysteria runs as a systemd unit (install-iceslab-node.sh
+//	                     wrote /etc/systemd/system/hysteria.service). The
+//	                     agent only writes the config + reloads via
+//	                     `systemctl restart <unit>` on ApplyInbound.
+//	                     We MUST NOT also spawn an in-process copy or
+//	                     the two compete for :443/udp and the second one
+//	                     FATALs on "address already in use".
 //
-//   ServiceUnit empty  → "spawn mode" — agent owns the subprocess. Used
-//                        in tests + setups that don't want systemd in
-//                        the lifecycle loop.
+//	ServiceUnit empty  → "spawn mode" — agent owns the subprocess. Used
+//	                     in tests + setups that don't want systemd in
+//	                     the lifecycle loop.
 func (a *Adapter) Start(ctx context.Context) error {
 	if err := validateTrafficStatsListen(a.cfg.TrafficStatsListen); err != nil {
 		return fmt.Errorf("invalid TrafficStatsListen: %w", err)

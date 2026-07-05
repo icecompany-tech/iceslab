@@ -105,6 +105,7 @@ export const PROFILES: Profile[] = PROFILE_SEEDS.map((p) => ({
   id: p.id,
   name: p.name,
   protocol: p.protocol,
+  engine: null,
   description: `Demo ${p.name} profile`,
   // Config kept minimal - the demo never renders raw protocol config in lists.
   config: {} as Profile['config'],

@@ -15,6 +15,10 @@ type User struct {
 	NaivePassword      string
 	AmneziaWGPublicKey string
 	AmneziaWGAllowedIP string
+	TuicUUID           string
+	TuicPassword       string
+	AnytlsPassword     string
+	ShadowtlsPassword  string
 }
 
 // UserStats are per-user traffic counters reported by a single core.

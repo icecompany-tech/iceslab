@@ -93,6 +93,9 @@ func defaultRunCmd(ctx context.Context, name string, args ...string) ([]byte, er
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the native proxy core (mtg; no alternate engine).
+func (a *Adapter) Engine() string { return "mtproto" }
+
 // Start writes the initial config (if Domain+Secret are set) and spawns
 // mtg. If either is empty, defers — first ApplyInbound activates it.
 func (a *Adapter) Start(ctx context.Context) error {
@@ -156,8 +159,9 @@ type inboundCfgWire struct {
 // Wave-14 C1: port now flows from the panel binding into mtg's bind-to.
 // Pre-wave port was install-time only (MTG_PORT env, typically 443) and
 // admin port changes from the UI were silently dropped. Fallback chain:
-//   panel-pushed port → install-time ListenPort → 443 (mtg historic default
-//   applied by withDefaults at render).
+//
+//	panel-pushed port → install-time ListenPort → 443 (mtg historic default
+//	applied by withDefaults at render).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {

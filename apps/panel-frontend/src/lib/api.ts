@@ -147,7 +147,10 @@ export type ProtocolName =
   | 'naive'
   | 'shadowsocks'
   | 'mtproto'
-  | 'mieru';
+  | 'mieru'
+  | 'tuic'
+  | 'anytls'
+  | 'shadowtls';
 
 export type ShadowsocksMethod =
   | '2022-blake3-aes-128-gcm'
@@ -846,10 +849,15 @@ export async function deleteCascade(id: string): Promise<void> {
 // template (shared across nodes), a Binding deploys it to a specific node
 // with optional per-node overrides.
 
+export type EngineName = 'xray' | 'hysteria' | 'singbox';
+
 export interface Profile {
   id: string;
   name: string;
   protocol: ProtocolName;
+  /** Proxy core that serves this profile. null = native core; 'singbox' = the
+   *  sing-box engine (engine-choice). */
+  engine: string | null;
   description: string | null;
   config: InboundConfig;
   enabled: boolean;
@@ -877,6 +885,8 @@ export interface CreateProfileInput {
   name: string;
   protocol: ProtocolName;
   description?: string | null;
+  /** Engine-choice: null/omitted = native core, 'singbox' = sing-box. */
+  engine?: EngineName | null;
   config: InboundConfig;
   enabled?: boolean;
 }
@@ -885,6 +895,7 @@ export interface UpdateProfileInput {
   name?: string;
   description?: string | null;
   enabled?: boolean;
+  engine?: EngineName | null;
   config?: InboundConfig;
 }
 
