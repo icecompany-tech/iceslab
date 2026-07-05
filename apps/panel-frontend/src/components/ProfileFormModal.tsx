@@ -54,17 +54,27 @@ const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];
 // path + host header apply to these transports (same URI param names).
 const PATH_HOST_TRANSPORTS = ['ws', 'xhttp', 'httpupgrade'];
 
-// Profile protocol dropdown = the real protocols + a disabled sing-box teaser
-// inserted right after xray (roadmap signal: sing-box engine is coming, not
-// selectable yet). Kept LOCAL to this form on purpose: the shared
-// PROTOCOL_OPTIONS drives squad per-protocol groupings, dividers, and
-// protocolLabel, where a fake protocol would create an empty "sing-box" group.
-// The sentinel value is non-selectable, so it never reaches form state.
-const PROFILE_PROTOCOL_SELECT_DATA = [
-  PROTOCOL_OPTIONS[0], // xray
-  { value: '__singbox_soon', label: 'sing-box (soon)', disabled: true },
-  ...PROTOCOL_OPTIONS.slice(1),
-];
+// Profile protocol dropdown. sing-box (TUIC) is now a real selectable protocol
+// in PROTOCOL_OPTIONS (right after xray), so the former disabled "sing-box
+// (soon)" teaser is gone.
+const PROFILE_PROTOCOL_SELECT_DATA = PROTOCOL_OPTIONS;
+
+// Protocols that can run on an alternative engine (sing-box) besides their
+// native core. The engine selector only shows for these; everything else has a
+// single core. Mirrors the backend's ENGINE_OPTIONS.
+const ENGINE_CHOICE_PROTOCOLS = ['xray', 'hysteria', 'shadowsocks'];
+
+function engineOptions(protocol: string): { value: string; label: string }[] {
+  const nativeLabel: Record<string, string> = {
+    xray: 'Xray (native)',
+    shadowsocks: 'Xray-core (native)',
+    hysteria: 'Hysteria (native)',
+  };
+  return [
+    { value: 'native', label: nativeLabel[protocol] ?? 'Native' },
+    { value: 'singbox', label: 'sing-box' },
+  ];
+}
 
 type Mode = 'create' | 'edit';
 
@@ -73,6 +83,8 @@ interface FormValues {
   name: string;
   description: string;
   enabled: boolean;
+  // Engine-choice: 'native' = the protocol's native core, 'singbox' = sing-box.
+  engine: 'native' | 'singbox';
 
   // Hysteria
   hyObfsPassword: string;
@@ -156,6 +168,23 @@ interface FormValues {
 
   // Mieru
   mieruMtu: number | '';
+
+  // TUIC (sing-box)
+  tuicServerName: string;
+  tuicCongestion: 'bbr' | 'cubic' | 'new_reno';
+
+  // AnyTLS (sing-box)
+  anytlsServerName: string;
+
+  // ShadowTLS (sing-box)
+  shadowtlsHandshake: string;
+  shadowtlsSsMethod:
+    | '2022-blake3-aes-128-gcm'
+    | '2022-blake3-aes-256-gcm'
+    | '2022-blake3-chacha20-poly1305'
+    | 'chacha20-ietf-poly1305'
+    | 'aes-256-gcm'
+    | 'aes-128-gcm';
 }
 
 // Values bounded by upstream AmneziaWG v2.0 spec (docs.amnezia.org):
@@ -210,6 +239,7 @@ function defaults(profile: Profile | null): FormValues {
     name: profile?.name ?? '',
     description: profile?.description ?? '',
     enabled: profile?.enabled ?? true,
+    engine: profile?.engine === 'singbox' ? 'singbox' : 'native',
 
     hyObfsPassword: '',
     hyMasqueradeUrl: '',
@@ -274,6 +304,14 @@ function defaults(profile: Profile | null): FormValues {
 
     mtgDomain: 'www.cloudflare.com',
     mieruMtu: 1400,
+
+    tuicServerName: 'www.bing.com',
+    tuicCongestion: 'bbr',
+
+    anytlsServerName: 'www.bing.com',
+
+    shadowtlsHandshake: 'www.microsoft.com',
+    shadowtlsSsMethod: '2022-blake3-aes-128-gcm',
   };
 
   if (!profile) return base;
@@ -368,6 +406,23 @@ function defaults(profile: Profile | null): FormValues {
       return {
         ...base,
         mieruMtu: ((cfg.mtu as number) ?? base.mieruMtu),
+      };
+    case 'tuic':
+      return {
+        ...base,
+        tuicServerName: (cfg.serverName as string) ?? base.tuicServerName,
+        tuicCongestion: ((cfg.congestionControl as FormValues['tuicCongestion']) ?? base.tuicCongestion),
+      };
+    case 'anytls':
+      return {
+        ...base,
+        anytlsServerName: (cfg.serverName as string) ?? base.anytlsServerName,
+      };
+    case 'shadowtls':
+      return {
+        ...base,
+        shadowtlsHandshake: (cfg.handshake as string) ?? base.shadowtlsHandshake,
+        shadowtlsSsMethod: ((cfg.ssMethod as FormValues['shadowtlsSsMethod']) ?? base.shadowtlsSsMethod),
       };
     default:
       return base;
@@ -616,13 +671,36 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
       case 'mieru':
         config = { mtu: values.mieruMtu === '' ? 1400 : Number(values.mieruMtu) };
         break;
+      case 'tuic':
+        config = {
+          serverName: values.tuicServerName,
+          congestionControl: values.tuicCongestion,
+        };
+        break;
+      case 'anytls':
+        config = { serverName: values.anytlsServerName };
+        break;
+      case 'shadowtls':
+        config = {
+          handshake: values.shadowtlsHandshake,
+          ssMethod: values.shadowtlsSsMethod,
+        };
+        break;
     }
+
+    // Engine-choice: only the shared protocols carry a non-native engine;
+    // everything else stays null (native). A 'native' selection -> null.
+    const engine: 'singbox' | null =
+      ENGINE_CHOICE_PROTOCOLS.includes(values.protocol) && values.engine === 'singbox'
+        ? 'singbox'
+        : null;
 
     if (isEdit) {
       const update: UpdateProfileInput = {
         name: values.name,
         description: values.description.trim() || null,
         enabled: values.enabled,
+        engine,
         config: config as never,
       };
       await onSubmit(update, mode);
@@ -632,6 +710,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
         name: values.name,
         description: values.description.trim() || null,
         enabled: values.enabled,
+        engine,
         config: config as never,
       };
       await onSubmit(create, mode);
@@ -712,6 +791,16 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           />
 
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
+
+          {ENGINE_CHOICE_PROTOCOLS.includes(form.values.protocol) && (
+            <Select
+              label="Engine"
+              description="Proxy core that serves this profile. sing-box is an alternative to the native core; the client subscription link is identical either way. Needs sing-box installed on the bound nodes."
+              data={engineOptions(form.values.protocol)}
+              allowDeselect={false}
+              {...form.getInputProps('engine')}
+            />
+          )}
 
           <Divider label={protocolLabel(form.values.protocol)} labelPosition="center" />
 
@@ -1480,6 +1569,60 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
                 max={1500}
                 {...form.getInputProps('mieruMtu')}
               />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'tuic' && (
+            <Stack>
+              <TextInput
+                label="TLS serverName (SNI)"
+                placeholder="www.bing.com"
+                description="SNI the node's self-signed cert is issued for. Clients connect with this name (allow-insecure for the alpha)."
+                {...form.getInputProps('tuicServerName')}
+              />
+              <Select
+                label="Congestion control"
+                data={['bbr', 'cubic', 'new_reno']}
+                allowDeselect={false}
+                {...form.getInputProps('tuicCongestion')}
+              />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'anytls' && (
+            <Stack>
+              <TextInput
+                label="TLS serverName (SNI)"
+                placeholder="www.bing.com"
+                description="SNI the node's self-signed cert is issued for. AnyTLS is password-only (per-user password is auto-derived)."
+                {...form.getInputProps('anytlsServerName')}
+              />
+            </Stack>
+          )}
+
+          {form.values.protocol === 'shadowtls' && (
+            <Stack>
+              <TextInput
+                label="Handshake domain (camouflage SNI)"
+                placeholder="www.microsoft.com"
+                description="A whitelisted site the ShadowTLS layer fronts with a real TLS handshake. The inner Shadowsocks key is auto-generated; the per-user password is auto-derived."
+                {...form.getInputProps('shadowtlsHandshake')}
+              />
+              <Select
+                label="Inner Shadowsocks cipher"
+                data={[
+                  { value: '2022-blake3-aes-128-gcm', label: '2022-blake3-aes-128-gcm (recommended)' },
+                  { value: '2022-blake3-aes-256-gcm', label: '2022-blake3-aes-256-gcm' },
+                  { value: '2022-blake3-chacha20-poly1305', label: '2022-blake3-chacha20-poly1305' },
+                ]}
+                allowDeselect={false}
+                {...form.getInputProps('shadowtlsSsMethod')}
+              />
+              <Alert color="blue" variant="light">
+                <Text size="sm">
+                  ShadowTLS has no share link. It is emitted only in the sing-box and Clash (mihomo) subscription formats.
+                </Text>
+              </Alert>
             </Stack>
           )}
 

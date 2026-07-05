@@ -42,6 +42,18 @@ const ssEp: SubscriptionEndpoint = {
   uri: 'ss://...',
 };
 
+const shadowtlsEp: SubscriptionEndpoint = {
+  protocol: 'shadowtls',
+  nodeName: 'eu-1',
+  host: 'n1.example.com',
+  port: 443,
+  shadowtlsPassword: 'stls-user-pw',
+  handshake: 'www.microsoft.com',
+  ssMethod: '2022-blake3-aes-128-gcm',
+  ssPassword: 'inner-ss-key',
+  uri: '',
+};
+
 describe('buildClashYaml', () => {
   it('emits a hysteria2 proxy entry with mandatory fields', () => {
     const out = buildClashYaml([hysteriaEp]);
@@ -51,6 +63,18 @@ describe('buildClashYaml', () => {
     expect(out).toContain('server: n1.example.com');
     expect(out).toContain('port: 443');
     expect(out).toContain('password: hy-secret');
+  });
+
+  it('emits shadowtls as an ss proxy with the shadow-tls plugin', () => {
+    const out = buildClashYaml([shadowtlsEp]);
+    expect(out).toContain('- name: eu-1-shadowtls');
+    expect(out).toContain('type: ss');
+    expect(out).toContain('2022-blake3-aes-128-gcm'); // inner cipher
+    expect(out).toContain('inner-ss-key'); // inner ss key (cipher password)
+    expect(out).toContain('plugin: shadow-tls');
+    expect(out).toContain('www.microsoft.com'); // handshake host in plugin-opts
+    expect(out).toContain('stls-user-pw'); // per-user shadowtls password
+    expect(out).toContain('version: 3');
   });
 
   it('emits a vless reality proxy entry with reality-opts block', () => {

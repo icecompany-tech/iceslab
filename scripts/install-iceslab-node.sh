@@ -473,6 +473,9 @@ while [[ $# -gt 0 ]]; do
     --fail2ban)           FAIL2BAN=1; shift ;;
     --realistic-fallback) REALISTIC_FALLBACK=1; shift ;;
     --ssh-allowlist)      SSH_ALLOWLIST="$2"; shift 2 ;;
+    # Install the sing-box engine on top of the primary protocol, so this node
+    # can also serve engine=singbox inbounds (vless/vmess/trojan/ss/hy2).
+    --with-singbox)       WITH_SINGBOX=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \?//'
       exit 0
@@ -546,11 +549,14 @@ pattern: resource isolation, simpler firewall):
   5) Shadowsocks   SS2022 multi-user via xray-core (TCP+UDP/443, no separate bin)
   6) MTProto       Telegram-only proxy via 9seconds/mtg (Fake-TLS over TCP/443)
   7) Mieru         Stealth proxy via enfein/mieru (mita server, TCP+UDP)
+  8) TUIC          QUIC proxy via sing-box engine (UDP, TUIC v5, self-signed TLS)
+  9) AnyTLS        TLS proxy via sing-box engine (TCP, password-only, self-signed)
+ 10) ShadowTLS     TLS-camouflage wrapper via sing-box (fronts a whitelisted site)
 
 EOF
   local choice
   while true; do
-    read -rp "Select [1-7]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
+    read -rp "Select [1-10]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -559,7 +565,10 @@ EOF
       5) PROTOCOL=shadowsocks; break ;;
       6) PROTOCOL=mtproto;     break ;;
       7) PROTOCOL=mieru;       break ;;
-      *) echo "  → invalid choice '$choice'; enter 1-7." ;;
+      8) PROTOCOL=tuic;        break ;;
+      9) PROTOCOL=anytls;      break ;;
+      10) PROTOCOL=shadowtls;  break ;;
+      *) echo "  → invalid choice '$choice'; enter 1-10." ;;
     esac
   done
   log "Selected protocol: $PROTOCOL"
@@ -639,15 +648,15 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
 fi
 
 case "$PROTOCOL" in
-  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru) ;;
+  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
   "")
     if [[ -e /dev/tty ]]; then
       prompt_protocol
     else
-      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru (no /dev/tty for interactive menu)"
+      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls (no /dev/tty for interactive menu)"
     fi
     ;;
-  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru)" ;;
+  *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls)" ;;
 esac
 
 step "Prerequisites"
@@ -883,7 +892,33 @@ case "$PROTOCOL" in
     PROTO_BINARY=/usr/local/bin/mita
     PROTO_CONFIG=/etc/mita/server.json
     ;;
+  tuic)
+    log "Chaining bootstrap-singbox.sh (TUIC via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/config.json
+    ;;
+  anytls)
+    log "Chaining bootstrap-singbox.sh (AnyTLS via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/anytls.json
+    ;;
+  shadowtls)
+    log "Chaining bootstrap-singbox.sh (ShadowTLS via sing-box engine)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+    PROTO_BINARY=/usr/local/bin/sing-box
+    PROTO_CONFIG=/etc/sing-box/shadowtls.json
+    ;;
 esac
+
+# --with-singbox: chain the sing-box engine install on top of the primary
+# protocol so an xray/hysteria/shadowsocks node can also serve engine=singbox
+# inbounds. No-op when the primary IS a sing-box protocol (already installed).
+if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
+  log "Chaining bootstrap-singbox.sh (--with-singbox: engine-choice enabled)"
+  bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
+fi
 
 step "Environment file (/etc/iceslab-node/env)"
 ENV_DIR=/etc/iceslab-node
@@ -893,7 +928,7 @@ mkdir -p "$ENV_DIR"
 # explicit ReadWritePaths. ReadWritePaths can't create directories, only
 # permit writes inside existing ones, so we pre-create every per-protocol
 # config dir here, even if the protocol isn't installed on this node.
-mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita
+mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita /etc/sing-box
 ENV_FILE="$ENV_DIR/env"
 
 # Honour --payload only if the env file doesn't exist OR the user passed one.
@@ -1015,7 +1050,70 @@ MITA_BINARY=${PROTO_BINARY}
 MITA_CONFIG=${PROTO_CONFIG}
 EOF
       ;;
+    tuic)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_CONFIG=${PROTO_CONFIG}
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+SINGBOX_API_LISTEN=127.0.0.1:8082
+# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
+# Point SINGBOX_STATS_BIN at an xray binary to enable traffic counters; without
+# it TUIC still works but counters stay at zero. e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
+EOF
+      ;;
+    anytls)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_ANYTLS_CONFIG=${PROTO_CONFIG}
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+SINGBOX_ANYTLS_API_LISTEN=127.0.0.1:8083
+# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
+# Point SINGBOX_STATS_BIN at an xray binary to enable; without it counters stay
+# at zero (AnyTLS still works). e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
+EOF
+      ;;
+    shadowtls)
+      cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=${PROTO_BINARY}
+SINGBOX_SHADOWTLS_CONFIG=${PROTO_CONFIG}
+SINGBOX_SHADOWTLS_API_LISTEN=127.0.0.1:8087
+# ShadowTLS needs no local TLS cert - it fronts a real handshake to the
+# camouflage host. Per-user stats need a v2ray-stats gRPC client; point
+# SINGBOX_STATS_BIN at an xray binary to enable (counters stay at zero without
+# it; ShadowTLS still works). e.g.:
+# SINGBOX_STATS_BIN=/usr/local/bin/xray
+EOF
+      ;;
   esac
+
+  # --with-singbox: add the sing-box engine env on top of the primary protocol's
+  # (skipped when the primary IS a sing-box protocol, which already wrote it).
+  # No cert/key needed for the engine-choice protocols (vless uses REALITY, ss
+  # its own AEAD, hy2 its own cert flow); we still write the shared self-signed
+  # cert paths so a tuic/anytls/shadowtls inbound later on this node works too.
+  if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
+    cat >> "$ENV_FILE" <<EOF
+SINGBOX_BINARY=/usr/local/bin/sing-box
+SINGBOX_CERT=/etc/sing-box/cert.pem
+SINGBOX_KEY=/etc/sing-box/key.pem
+EOF
+  fi
+
+  # Auto-wire sing-box per-user stats to the xray binary when both are present
+  # (sing-box ships no stats CLI; it reads v2ray-stats via an xray gRPC client).
+  # The agent also falls back to XRAY_BINARY, so this is belt-and-suspenders.
+  if grep -q '^SINGBOX_BINARY=' "$ENV_FILE" && ! grep -q '^SINGBOX_STATS_BIN=' "$ENV_FILE"; then
+    _sb_xray="$(command -v xray || true)"
+    if [ -n "$_sb_xray" ]; then
+      echo "SINGBOX_STATS_BIN=${_sb_xray}" >> "$ENV_FILE"
+      log "Auto-wired SINGBOX_STATS_BIN=${_sb_xray} (per-user sing-box stats)"
+    fi
+  fi
+
   chmod 600 "$ENV_FILE"
 else
   log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"

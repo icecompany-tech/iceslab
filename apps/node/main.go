@@ -17,6 +17,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/mtproto"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/naive"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/shadowsocks"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core/singbox"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/xray"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/heartbeat"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
@@ -255,6 +256,94 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		}
 		adapters = append(adapters, naive.New(naiveCfg, logger))
 		logger.Info("naive adapter registered", "bin", caddyBinPath)
+	}
+
+	// sing-box engine — first protocol TUIC (slice singbox-S1). Registered when
+	// SINGBOX_BINARY is set; bootstrap-singbox.sh installs the binary plus a
+	// self-signed TLS cert (TUIC requires TLS). Inert until the panel pushes a
+	// tuic inbound via ApplyInbound.
+	if os.Getenv("SINGBOX_BINARY") != "" {
+		singboxBin := os.Getenv("SINGBOX_BINARY")
+		// Stats client: a dedicated SINGBOX_STATS_BIN wins, else reuse XRAY_BINARY
+		// when the node also runs xray. Empty -> zero counters (graceful).
+		singboxStatsBin := getenv("SINGBOX_STATS_BIN", os.Getenv("XRAY_BINARY"))
+
+		// One sing-box engine, one adapter per protocol. On a node only the
+		// protocol whose inbound the panel pushes actually spawns sing-box;
+		// the other stays inert. Distinct config path + stats port so they
+		// never collide if both ever run on one host.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "tuic",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_CONFIG", "/etc/sing-box/config.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_API_LISTEN", "127.0.0.1:8082"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (tuic) adapter registered")
+
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "anytls",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_ANYTLS_CONFIG", "/etc/sing-box/anytls.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_ANYTLS_API_LISTEN", "127.0.0.1:8083"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (anytls) adapter registered")
+
+		// Engine-choice (EC2): vless/vmess/trojan via the sing-box engine. Inert
+		// until the panel pushes an xray inbound pinned to engine=singbox. No
+		// cert/key (REALITY carries its own key); distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "xray",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_XRAY_CONFIG", "/etc/sing-box/xray.json"),
+			StatsListen:  getenv("SINGBOX_XRAY_API_LISTEN", "127.0.0.1:8084"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (xray-family) adapter registered")
+
+		// Engine-choice (EC4): hysteria2 via the sing-box engine. TLS is
+		// mandatory; reuses the self-signed cert from bootstrap-singbox.sh (like
+		// tuic). Per-user password = HysteriaPassword. Distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "hysteria",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_HY2_CONFIG", "/etc/sing-box/hy2.json"),
+			CertPath:     getenv("SINGBOX_CERT", "/etc/sing-box/cert.pem"),
+			KeyPath:      getenv("SINGBOX_KEY", "/etc/sing-box/key.pem"),
+			StatsListen:  getenv("SINGBOX_HY2_API_LISTEN", "127.0.0.1:8085"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (hysteria2) adapter registered")
+
+		// Engine-choice (EC3): shadowsocks (SS2022) via the sing-box engine. No
+		// TLS (SS has its own AEAD). Per-user uPSK is derived on the node from
+		// xrayUuid (matches the xray SS adapter + the subscription URI). Distinct
+		// config + stats port; no cert needed.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "shadowsocks",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_SS_CONFIG", "/etc/sing-box/ss.json"),
+			StatsListen:  getenv("SINGBOX_SS_API_LISTEN", "127.0.0.1:8086"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (shadowsocks) adapter registered")
+
+		// ShadowTLS (sing-box): TLS-camouflage wrapper that detours to an inner
+		// single-key shadowsocks. No cert/key (it fronts a real handshake to the
+		// camouflage site). Distinct config + stats port.
+		adapters = append(adapters, singbox.New(singbox.Config{
+			Protocol:     "shadowtls",
+			BinaryPath:   singboxBin,
+			ConfigPath:   getenv("SINGBOX_SHADOWTLS_CONFIG", "/etc/sing-box/shadowtls.json"),
+			StatsListen:  getenv("SINGBOX_SHADOWTLS_API_LISTEN", "127.0.0.1:8087"),
+			XrayStatsBin: singboxStatsBin,
+		}, logger))
+		logger.Info("singbox (shadowtls) adapter registered")
 	}
 
 	return adapters

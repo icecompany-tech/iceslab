@@ -37,7 +37,8 @@ import (
 //     both; mita supports either depending on per-port transport)
 func protoForInbound(p dto.ProtocolName) []string {
 	switch p {
-	case "hysteria", "amneziawg":
+	case "hysteria", "amneziawg", "tuic":
+		// tuic is QUIC (UDP-only), like hysteria.
 		return []string{"udp"}
 	case "shadowsocks", "mieru":
 		return []string{"tcp", "udp"}
@@ -294,6 +295,10 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 		NaivePassword:      req.Credentials.NaivePassword,
 		AmneziaWGPublicKey: req.Credentials.AmneziaWGPublicKey,
 		AmneziaWGAllowedIP: req.Credentials.AmneziaWGAllowedIP,
+		TuicUUID:           req.Credentials.TuicUUID,
+		TuicPassword:       req.Credentials.TuicPassword,
+		AnytlsPassword:     req.Credentials.AnytlsPassword,
+		ShadowtlsPassword:  req.Credentials.ShadowtlsPassword,
 	}
 
 	// Best-effort fanout. A failure on a dormant adapter (no ApplyInbound
@@ -394,16 +399,22 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		s.logger.Info("applyInbounds received",
 			"id", ib.ID, "name", ib.Name, "protocol", ib.Protocol, "port", ib.Port)
 
+		// Engine-choice: route by the (protocol, engine) pair, not protocol
+		// alone. An inbound that pins engine=singbox for a shared protocol
+		// (vless/vmess/trojan/ss/hy2) lands on the sing-box adapter instead of
+		// the native core. Empty engine resolves to the protocol's native core,
+		// so pre-engine-choice inbounds keep matching their original adapter.
+		wantEngine := ib.ResolvedEngine()
 		var matched core.CoreAdapter
 		for _, adapter := range s.cfg.Adapters {
-			if adapter.Name() == string(ib.Protocol) {
+			if adapter.Name() == string(ib.Protocol) && adapter.Engine() == string(wantEngine) {
 				matched = adapter
 				break
 			}
 		}
 		if matched == nil {
-			s.logger.Warn("applyInbounds: no adapter for protocol — config persisted but not applied live",
-				"protocol", ib.Protocol)
+			s.logger.Warn("applyInbounds: no adapter for protocol/engine — config persisted but not applied live",
+				"protocol", ib.Protocol, "engine", wantEngine)
 			continue
 		}
 		if err := matched.ApplyInbound(ib.Port, ib.Config); err != nil {

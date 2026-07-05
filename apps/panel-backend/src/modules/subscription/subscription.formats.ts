@@ -31,6 +31,8 @@ export {
   type MieruProfileOpts,
   type MieruProfileJson,
 } from '../../core-adapters/mieru/index.js';
+export { buildTuicUri, type TuicUriOpts } from '../../core-adapters/tuic/index.js';
+export { buildAnytlsUri, type AnytlsUriOpts } from '../../core-adapters/anytls/index.js';
 
 /**
  * Strip the optional `:port` suffix from a `host[:port]` string, returning the
@@ -204,6 +206,36 @@ export interface MieruSubscriptionEndpoint extends SubscriptionEndpointBase {
   mtu: number;
 }
 
+export interface TuicSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'tuic';
+  /** UUID (reuses user.xrayUuid) and derived password. */
+  uuid: string;
+  password: string;
+  /** TLS SNI the node's self-signed cert is issued for. */
+  serverName: string;
+  /** Congestion controller: bbr | cubic | new_reno. */
+  congestionControl: string;
+}
+
+export interface AnytlsSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'anytls';
+  /** Per-user password (derived from user.xrayUuid). */
+  password: string;
+  /** TLS SNI the node's self-signed cert is issued for. */
+  serverName: string;
+}
+
+export interface ShadowtlsSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'shadowtls';
+  /** Per-user ShadowTLS v3 password (derived from user.xrayUuid). */
+  shadowtlsPassword: string;
+  /** Camouflage handshake host the shadowtls layer fronts (also the SNI). */
+  handshake: string;
+  /** Inner shadowsocks cipher + server-wide key (the ss layer under shadowtls). */
+  ssMethod: string;
+  ssPassword: string;
+}
+
 export type SubscriptionEndpoint =
   | HysteriaSubscriptionEndpoint
   | XraySubscriptionEndpoint
@@ -211,7 +243,10 @@ export type SubscriptionEndpoint =
   | NaiveSubscriptionEndpoint
   | ShadowsocksSubscriptionEndpoint
   | MtprotoSubscriptionEndpoint
-  | MieruSubscriptionEndpoint;
+  | MieruSubscriptionEndpoint
+  | TuicSubscriptionEndpoint
+  | AnytlsSubscriptionEndpoint
+  | ShadowtlsSubscriptionEndpoint;
 
 export interface SubscriptionJsonResponse {
   user: {

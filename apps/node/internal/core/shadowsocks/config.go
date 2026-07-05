@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
 // InboundConfig is the static part of the SS inbound — generated once
@@ -108,13 +109,26 @@ type ssClient struct {
 // (password / email) can never drift between the two paths. Mirrors xray's
 // buildUserInboundSettings reuse.
 func buildUserInboundSettings(cfg InboundConfig, users []ssClient) map[string]any {
+	// Each client's stored Password is the user's raw xray UUID; derive the
+	// real SS2022 uPSK (valid base64 key) from it at render time so the key is
+	// method-aware (16 vs 32 bytes). The panel's subscription URI derives the
+	// same value (core.DeriveSsPassword), keeping client and server in sync.
+	// Pre-fix this emitted the raw UUID, which xray-core/sing-box reject as an
+	// invalid PSK length - SS2022 never actually authenticated.
+	clients := make([]map[string]any, 0, len(users))
+	for _, u := range users {
+		clients = append(clients, map[string]any{
+			"password": core.DeriveSsPassword(u.Password, cfg.Method),
+			"email":    u.Email,
+		})
+	}
 	return map[string]any{
 		"method": cfg.Method,
 		// Server-level PSK (slice 24d, fix 2026-05-07). xray-core requires this
 		// at settings.password for SS2022 multi-user inbounds; clients combine
 		// it with per-user PSK as `ServerPSK:UserPSK` in the URI.
 		"password": cfg.ServerPSK,
-		"clients":  users,
+		"clients":  clients,
 		"network":  "tcp,udp", // SS2022 supports UDP relay
 	}
 }

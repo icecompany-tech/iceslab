@@ -7,6 +7,7 @@ import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
 import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/credentials.js';
 import { getLogger } from '../../lib/logger.js';
 
 // ───── Job data shapes ─────
@@ -122,7 +123,7 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     },
     include: {
       profile: {
-        select: { id: true, name: true, protocol: true, config: true },
+        select: { id: true, name: true, protocol: true, engine: true, config: true },
       },
     },
     orderBy: { port: 'asc' },
@@ -165,6 +166,9 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
       id: b.id,
       name: b.profile.name,
       protocol: b.profile.protocol as ProtocolName,
+      // Engine-choice (EC5): NULL profile.engine -> omit so the node resolves the
+      // protocol's native core; 'singbox' routes to the sing-box adapter.
+      engine: (b.profile.engine ?? undefined) as InboundDto['engine'],
       port: b.port,
       config,
     };
@@ -374,6 +378,10 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
             amneziawgPublicKey: u.amneziawgPublicKey,
             amneziawgAllowedIp: awgIpByUser.get(u.id),
             naivePassword: u.naivePassword,
+            tuicUuid: u.xrayUuid,
+            tuicPassword: deriveTuicPassword(u.xrayUuid),
+            anytlsPassword: deriveAnytlsPassword(u.xrayUuid),
+            shadowtlsPassword: deriveShadowtlsPassword(u.xrayUuid),
           },
         }),
       ),

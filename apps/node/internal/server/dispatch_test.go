@@ -19,18 +19,31 @@ import (
 // fakeAdapter records calls and can be configured to fail on demand.
 type fakeAdapter struct {
 	name        string
+	engine      string
 	added       []core.User
 	removed     []string
+	applied     []appliedInbound
 	failOnAdd   bool
 	failOnStats bool
 	stats       *core.Stats
 }
 
-func (f *fakeAdapter) Name() string                       { return f.name }
-func (f *fakeAdapter) Start(_ context.Context) error      { return nil }
-func (f *fakeAdapter) Stop(_ context.Context) error       { return nil }
-func (f *fakeAdapter) Healthy() bool                      { return !f.failOnStats /* flag re-used to simulate unhealthy */ }
-func (f *fakeAdapter) ApplyInbound(_ int, _ json.RawMessage) error { return nil }
+// appliedInbound captures one ApplyInbound call so engine-routing tests can
+// assert which adapter a push landed on.
+type appliedInbound struct {
+	port int
+	cfg  json.RawMessage
+}
+
+func (f *fakeAdapter) Name() string                  { return f.name }
+func (f *fakeAdapter) Engine() string                { return f.engine }
+func (f *fakeAdapter) Start(_ context.Context) error { return nil }
+func (f *fakeAdapter) Stop(_ context.Context) error  { return nil }
+func (f *fakeAdapter) Healthy() bool                 { return !f.failOnStats /* flag re-used to simulate unhealthy */ }
+func (f *fakeAdapter) ApplyInbound(port int, cfg json.RawMessage) error {
+	f.applied = append(f.applied, appliedInbound{port: port, cfg: cfg})
+	return nil
+}
 func (f *fakeAdapter) AddUser(u core.User) error {
 	f.added = append(f.added, u)
 	if f.failOnAdd {
@@ -233,5 +246,52 @@ func TestHealthListsAllCores(t *testing.T) {
 	}
 	if !names["hysteria"] || !names["xray"] {
 		t.Errorf("missing core in healthcheck: %+v", resp.Cores)
+	}
+}
+
+// Engine-choice: two adapters share the protocol name "xray" but differ by
+// engine. A push pinning engine=singbox must land ONLY on the sing-box adapter.
+// port:0 keeps ensureInboundFirewall from shelling out to ufw during the test.
+func TestApplyInboundsRoutesByEngine(t *testing.T) {
+	native := &fakeAdapter{name: "xray", engine: "xray"}
+	sb := &fakeAdapter{name: "xray", engine: "singbox"}
+	srv := newServerWith(t, native, sb)
+
+	body := `{"inbounds":[{"id":"i1","name":"vless","protocol":"xray","port":0,"engine":"singbox","config":{}}]}`
+	req := httptest.NewRequest(http.MethodPost, "/applyInbounds", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if len(sb.applied) != 1 {
+		t.Errorf("singbox adapter should have received the engine=singbox inbound: %+v", sb.applied)
+	}
+	if len(native.applied) != 0 {
+		t.Errorf("native xray adapter should NOT have received the engine=singbox inbound: %+v", native.applied)
+	}
+}
+
+// An inbound with no engine field resolves to the protocol's native core, so a
+// pre-engine-choice push still lands on the native adapter, not the sing-box one.
+func TestApplyInboundsDefaultsToNativeEngine(t *testing.T) {
+	native := &fakeAdapter{name: "xray", engine: "xray"}
+	sb := &fakeAdapter{name: "xray", engine: "singbox"}
+	srv := newServerWith(t, native, sb)
+
+	body := `{"inbounds":[{"id":"i1","name":"vless","protocol":"xray","port":0,"config":{}}]}`
+	req := httptest.NewRequest(http.MethodPost, "/applyInbounds", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if len(native.applied) != 1 {
+		t.Errorf("native xray adapter should have received the engine-less inbound: %+v", native.applied)
+	}
+	if len(sb.applied) != 0 {
+		t.Errorf("singbox adapter should NOT have received the engine-less inbound: %+v", sb.applied)
 	}
 }

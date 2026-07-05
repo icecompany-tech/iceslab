@@ -95,6 +95,10 @@ model Profile {
   // the same template).
   name        String   @unique @db.VarChar(64)
   protocol    String   @db.VarChar(32)
+  // Engine-choice (EC5): which proxy core renders this profile's inbound. NULL =
+  // the protocol's native core; 'singbox' serves a shared protocol (vless/vmess/
+  // trojan/ss/hy2) via the sing-box engine. tuic/anytls are singbox-only.
+  engine      String?  @db.VarChar(16)
   description String?
   // Shared protocol config (for VLESS+REALITY: sni, publicKey, shortId,
   // flow, fingerprint, network; for Hysteria2: obfs, brutal CC, etc.).

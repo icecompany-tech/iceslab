@@ -8,11 +8,40 @@ import "encoding/json"
 type ProtocolName string
 
 const (
-	ProtocolHysteria  ProtocolName = "hysteria"
-	ProtocolXray      ProtocolName = "xray"
-	ProtocolAmneziaWG ProtocolName = "amneziawg"
-	ProtocolNaive     ProtocolName = "naive"
+	ProtocolHysteria    ProtocolName = "hysteria"
+	ProtocolXray        ProtocolName = "xray"
+	ProtocolAmneziaWG   ProtocolName = "amneziawg"
+	ProtocolNaive       ProtocolName = "naive"
+	ProtocolShadowsocks ProtocolName = "shadowsocks"
+	ProtocolTuic        ProtocolName = "tuic"
+	ProtocolAnytls      ProtocolName = "anytls"
+	ProtocolShadowtls   ProtocolName = "shadowtls"
 )
+
+// EngineName identifies the proxy core that renders an inbound. Most protocols
+// have a single native core; the shared protocols can additionally be served
+// by the sing-box engine (engine-choice).
+type EngineName string
+
+const (
+	EngineXray     EngineName = "xray"
+	EngineHysteria EngineName = "hysteria"
+	EngineSingbox  EngineName = "singbox"
+)
+
+// NativeEngine returns the default core for a protocol when an inbound does not
+// pin an explicit engine. Shadowsocks runs on xray-core; tuic/anytls are
+// singbox-only; every other protocol's native core shares the protocol's name.
+func NativeEngine(p ProtocolName) EngineName {
+	switch p {
+	case ProtocolShadowsocks:
+		return EngineXray
+	case ProtocolTuic, ProtocolAnytls, ProtocolShadowtls:
+		return EngineSingbox
+	default:
+		return EngineName(p)
+	}
+}
 
 type ProtocolCredentials struct {
 	HysteriaPassword   string `json:"hysteriaPassword,omitempty"`
@@ -24,6 +53,16 @@ type ProtocolCredentials struct {
 	// the peer block as `<ip>/32`. Only present when the user has access to
 	// an amneziawg inbound.
 	AmneziaWGAllowedIP string `json:"amneziawgAllowedIp,omitempty"`
+	// TUIC (sing-box engine): per-user UUID + password. Both required for a
+	// TUIC v5 client to authenticate. Only present when the user has access
+	// to a tuic inbound.
+	TuicUUID     string `json:"tuicUuid,omitempty"`
+	TuicPassword string `json:"tuicPassword,omitempty"`
+	// AnyTLS (sing-box engine): per-user password (password-only auth).
+	AnytlsPassword string `json:"anytlsPassword,omitempty"`
+	// ShadowTLS (sing-box engine): per-user password for the shadowtls v3
+	// users[] (the inner shadowsocks key is server-wide, in the inbound config).
+	ShadowtlsPassword string `json:"shadowtlsPassword,omitempty"`
 }
 
 // ───── POST /addUser ─────
@@ -50,11 +89,25 @@ type AddUserResponse struct {
 // avoids forcing every node-agent build to know every protocol's schema.
 
 type InboundDto struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	Protocol ProtocolName    `json:"protocol"`
-	Port     int             `json:"port"`
-	Config   json.RawMessage `json:"config"`
+	ID       string       `json:"id"`
+	Name     string       `json:"name"`
+	Protocol ProtocolName `json:"protocol"`
+	// Engine pins the proxy core that renders this inbound. Empty -> the
+	// protocol's NativeEngine. Lets a shared protocol (vless/vmess/trojan/ss/
+	// hy2) be served by the sing-box engine instead of its native core.
+	Engine EngineName      `json:"engine,omitempty"`
+	Port   int             `json:"port"`
+	Config json.RawMessage `json:"config"`
+}
+
+// ResolvedEngine returns the inbound's pinned engine, falling back to the
+// protocol's native core when none is set (backward-compat: inbounds created
+// before engine-choice carry no engine field).
+func (i InboundDto) ResolvedEngine() EngineName {
+	if i.Engine != "" {
+		return i.Engine
+	}
+	return NativeEngine(i.Protocol)
 }
 
 type ApplyInboundsRequest struct {

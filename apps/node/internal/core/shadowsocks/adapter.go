@@ -76,6 +76,10 @@ func defaultRunCmd(ctx context.Context, name string, args ...string) ([]byte, er
 
 func (a *Adapter) Name() string { return Name }
 
+// Engine reports the proxy core. Shadowsocks (SS2022) is served by xray-core,
+// so its native engine is "xray"; engine-choice can route ss to sing-box.
+func (a *Adapter) Engine() string { return "xray" }
+
 // Start writes the initial config and spawns xray. If the inbound has no
 // Method set (deferred via ApplyInbound), Start is a no-op.
 func (a *Adapter) Start(ctx context.Context) error {
