@@ -143,6 +143,100 @@ func TestRenderConfigPropagatesValidationError(t *testing.T) {
 	}
 }
 
+func TestRenderConfigWarpEgress(t *testing.T) {
+	cfg := validInbound()
+	cfg.Tag = "vless-in"
+	cfg.Warp = &WarpConfig{
+		SecretKey: "WARP-PRIV",
+		Address:   []string{"172.16.0.2/32", "2606:4700:110::/128"},
+		Reserved:  []int{240, 25, 146},
+	}
+	blob, err := renderConfig(cfg, []xrayClient{{ID: "u", Email: "u"}})
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(blob, &parsed); err != nil {
+		t.Fatal(err)
+	}
+
+	// The WARP wireguard outbound must be present with defaults filled in.
+	var warp map[string]any
+	for _, raw := range parsed["outbounds"].([]any) {
+		m := raw.(map[string]any)
+		if m["tag"] == "warp" {
+			warp = m
+			break
+		}
+	}
+	if warp == nil {
+		t.Fatalf("warp outbound not found: %v", parsed["outbounds"])
+	}
+	if warp["protocol"] != "wireguard" {
+		t.Errorf("warp protocol = %v, want wireguard", warp["protocol"])
+	}
+	s := warp["settings"].(map[string]any)
+	if s["secretKey"] != "WARP-PRIV" {
+		t.Errorf("secretKey = %v", s["secretKey"])
+	}
+	if s["mtu"].(float64) != 1280 {
+		t.Errorf("mtu = %v, want 1280 (default)", s["mtu"])
+	}
+	reserved := s["reserved"].([]any)
+	if len(reserved) != 3 || reserved[0].(float64) != 240 {
+		t.Errorf("reserved = %v, want [240 25 146]", reserved)
+	}
+	peer := s["peers"].([]any)[0].(map[string]any)
+	if peer["publicKey"] != warpDefaultPublicKey {
+		t.Errorf("peer publicKey = %v, want default", peer["publicKey"])
+	}
+	if peer["endpoint"] != warpDefaultEndpoint {
+		t.Errorf("peer endpoint = %v, want default", peer["endpoint"])
+	}
+
+	// A routing rule must send the user inbound's traffic to the warp outbound.
+	rules := parsed["routing"].(map[string]any)["rules"].([]any)
+	found := false
+	for _, raw := range rules {
+		m := raw.(map[string]any)
+		if m["outboundTag"] == "warp" {
+			tags := m["inboundTag"].([]any)
+			if len(tags) == 1 && tags[0] == "vless-in" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no routing rule sending vless-in -> warp: %v", rules)
+	}
+
+	// Without Warp the config must not mention warp at all (byte-stable).
+	plain, _ := renderConfig(validInbound(), nil)
+	if strings.Contains(string(plain), `"warp"`) {
+		t.Error("non-warp config should not mention warp")
+	}
+}
+
+func TestWarpValidation(t *testing.T) {
+	ok := validInbound()
+	ok.Warp = &WarpConfig{SecretKey: "k", Address: []string{"172.16.0.2/32"}}
+	if err := ok.validate(); err != nil {
+		t.Fatalf("valid warp should pass: %v", err)
+	}
+
+	noKey := validInbound()
+	noKey.Warp = &WarpConfig{Address: []string{"172.16.0.2/32"}}
+	if err := noKey.validate(); err == nil || !strings.Contains(err.Error(), "SecretKey") {
+		t.Errorf("missing SecretKey: got %v", err)
+	}
+
+	badReserved := validInbound()
+	badReserved.Warp = &WarpConfig{SecretKey: "k", Address: []string{"172.16.0.2/32"}, Reserved: []int{1, 2}}
+	if err := badReserved.validate(); err == nil || !strings.Contains(err.Error(), "Reserved") {
+		t.Errorf("bad reserved length: got %v", err)
+	}
+}
+
 func TestWriteConfigAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "subdir", "config.json")

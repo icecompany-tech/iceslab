@@ -500,6 +500,10 @@ type xrayInboundCfgWire struct {
 	// link-out outbound, routing rules). Generated panel-side by
 	// buildCascadeConfigs; nil/missing for plain (non-cascade) nodes.
 	Cascade *CascadeFragments `json:"cascade,omitempty"`
+
+	// Warp is the optional Cloudflare WARP egress (per-node v1). nil/absent =
+	// direct egress. Reuses the config.go WarpConfig type (json-tagged).
+	Warp *WarpConfig `json:"warp,omitempty"`
 }
 
 // ApplyInbound parses the panel-pushed Xray config, swaps it into the live
@@ -560,6 +564,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		XhttpMode:                               wire.XhttpMode,
 		XhttpPaddingBytes:                       wire.XhttpPaddingBytes,
 		GrpcMultiMode:                           wire.GrpcMultiMode,
+		Warp:                                    wire.Warp,
 	}
 
 	a.mu.Lock()
@@ -609,6 +614,33 @@ func inboundEqual(a, b InboundConfig) bool {
 	}
 	if !stringSliceEqual(a.RealityShortIDs, b.RealityShortIDs) {
 		return false
+	}
+	if !warpEqual(a.Warp, b.Warp) {
+		return false
+	}
+	return true
+}
+
+// warpEqual reports whether two WARP egress configs are equivalent, so
+// ApplyInbound can skip a restart when the WARP creds didn't change. nil == nil.
+func warpEqual(a, b *WarpConfig) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.SecretKey != b.SecretKey || a.PublicKey != b.PublicKey ||
+		a.Endpoint != b.Endpoint || a.MTU != b.MTU {
+		return false
+	}
+	if !stringSliceEqual(a.Address, b.Address) {
+		return false
+	}
+	if len(a.Reserved) != len(b.Reserved) {
+		return false
+	}
+	for i := range a.Reserved {
+		if a.Reserved[i] != b.Reserved[i] {
+			return false
+		}
 	}
 	return true
 }

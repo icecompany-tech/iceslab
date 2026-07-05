@@ -27,6 +27,8 @@ export interface PublicNodeDto {
   domain: string | null;
   // G - probe-resistance toggles (Zashchita wizard). NULL = no hardening.
   hardening: HardeningDto | null;
+  // WARP egress on/off (per-node). Creds (secretKey/token) are never exposed.
+  warpEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +52,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     maxUsers: node.maxUsers,
     domain: node.domain,
     hardening: (node.hardening as HardeningDto | null) ?? null,
+    warpEnabled: node.warpEnabled,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

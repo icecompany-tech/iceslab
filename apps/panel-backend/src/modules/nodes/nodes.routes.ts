@@ -158,6 +158,34 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // WARP egress (feat/warp-native): register a free Cloudflare WARP device for
+  // this node and enable per-node egress. The Cloudflare call lives in the warp
+  // service; this is the live path of the registration spike.
+  app.post('/api/nodes/:id/warp/register', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    try {
+      return reply.send(await nodesService.registerNodeWarp(params.id));
+    } catch (err) {
+      if (err instanceof nodesService.NodeNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // Turn off WARP egress (keeps the registered creds for instant re-enable).
+  app.delete('/api/nodes/:id/warp', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    try {
+      return reply.send(await nodesService.disableNodeWarp(params.id));
+    } catch (err) {
+      if (err instanceof nodesService.NodeNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
   app.get('/api/nodes', auth, async (request, reply) => {
     const query = ListNodesQuerySchema.parse(request.query);
     return reply.send(await nodesService.listNodes(query));

@@ -86,6 +86,7 @@ export const NODES: PanelNode[] = NODE_SEEDS.map((n) => ({
   maxUsers: 1000,
   domain: n.selfSteal ? n.host : null,
   hardening: n.selfSteal ? { ufwLockdown: true, fail2ban: true, realisticFallback: true } : null,
+  warpEnabled: false,
   createdAt: iso(50 * DAY),
   updatedAt: iso(3 * HOUR),
 }));

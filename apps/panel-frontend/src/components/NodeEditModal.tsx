@@ -31,6 +31,7 @@ import {
   IconAlertTriangle,
   IconBolt,
   IconCheck,
+  IconCloud,
   IconCpu,
   IconDatabase,
   IconDeviceFloppy,
@@ -52,6 +53,8 @@ import {
   listSquads,
   updateBinding,
   getNodeExposure,
+  registerNodeWarp,
+  disableNodeWarp,
   apiErrorMessage,
   type Host,
   type Node as PanelNode,
@@ -367,6 +370,28 @@ export function NodeEditModal({
       }),
   });
 
+  // WARP egress (feat/warp-native) - register a free Cloudflare WARP device for
+  // this node (enable) or turn egress off (disable). The Cloudflare call happens
+  // server-side; on success we refetch so the switch reflects the new state.
+  const warpMutation = useMutation({
+    mutationFn: (enable: boolean) =>
+      enable ? registerNodeWarp(node!.id) : disableNodeWarp(node!.id),
+    onSuccess: (_, enable) => {
+      qc.invalidateQueries({ queryKey: ['nodes'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      notifications.show({
+        color: 'green',
+        message: enable ? t('nodes.edit.warpEnabled') : t('nodes.edit.warpDisabled'),
+      });
+    },
+    onError: (e) =>
+      notifications.show({
+        color: 'red',
+        title: t('nodes.edit.warpFailed'),
+        message: apiErrorMessage(e),
+      }),
+  });
+
   if (!node) return null;
 
   async function handleSave() {
@@ -646,6 +671,35 @@ export function NodeEditModal({
                   />
                 </Stack>
               </Box>
+
+              {/* WARP egress (feat/warp-native) - per-node toggle. Egress lives
+                  in the xray wireguard outbound, so it's only shown on xray
+                  nodes. Toggling hits the panel API (register/disable); the
+                  Cloudflare device registration runs server-side, no form save. */}
+              {node.protocol === 'xray' && (
+                <Box mt="xs">
+                  <Group gap={8} mb="xs">
+                    <ThemeIcon size={26} radius="md" variant="light" color="orange">
+                      <IconCloud size={14} />
+                    </ThemeIcon>
+                    <Stack gap={0}>
+                      <Text fw={600} size="sm">
+                        {t('nodes.edit.warpSection')}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {t('nodes.edit.warpSectionDesc')}
+                      </Text>
+                    </Stack>
+                  </Group>
+                  <Switch
+                    checked={node.warpEnabled}
+                    disabled={warpMutation.isPending}
+                    onChange={(e) => warpMutation.mutate(e.currentTarget.checked)}
+                    label={t('nodes.edit.warpToggle')}
+                    description={t('nodes.edit.warpToggleDesc')}
+                  />
+                </Box>
+              )}
             </Stack>
           </Card>
 

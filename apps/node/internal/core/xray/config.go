@@ -131,7 +131,34 @@ type InboundConfig struct {
 	// B3 GrpcMultiMode (Network == "grpc"): multiplex several gRPC streams per
 	// connection. false (default) keeps the single-stream behaviour.
 	GrpcMultiMode bool
+
+	// Warp is the optional Cloudflare WARP egress (per-node egress v1). When
+	// non-nil, renderConfig adds a `wireguard` outbound to WARP and routes this
+	// inbound's user traffic through it instead of `direct`. nil = direct egress
+	// (default). See docs/studies/STUDY-warp-native.md.
+	Warp *WarpConfig
 }
+
+// WarpConfig holds Cloudflare WARP egress credentials from a wgcf-style device
+// registration, provisioned by the panel. PublicKey/Endpoint/MTU fall back to
+// Cloudflare's well-known defaults when empty. Reserved is the account client_id
+// as a 3-byte array (required in some regions); empty or exactly 3 bytes. The
+// json tags let this type double as the panel-pushed wire shape (inbound.warp).
+type WarpConfig struct {
+	SecretKey string   `json:"secretKey"`
+	Address   []string `json:"address"`
+	PublicKey string   `json:"publicKey,omitempty"`
+	Endpoint  string   `json:"endpoint,omitempty"`
+	Reserved  []int    `json:"reserved,omitempty"`
+	MTU       int      `json:"mtu,omitempty"`
+}
+
+const (
+	// warpDefault* are Cloudflare WARP's well-known peer parameters (see study).
+	warpDefaultPublicKey = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
+	warpDefaultEndpoint  = "162.159.192.1:2408"
+	warpDefaultMTU       = 1280
+)
 
 func (c *InboundConfig) withDefaults() InboundConfig {
 	out := *c
@@ -162,6 +189,18 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 }
 
 func (c *InboundConfig) validate() error {
+	// WARP egress is orthogonal to inbound security, so validate it first.
+	if c.Warp != nil {
+		if c.Warp.SecretKey == "" {
+			return errors.New("Warp.SecretKey is required when WARP egress is enabled")
+		}
+		if len(c.Warp.Address) == 0 {
+			return errors.New("Warp.Address must have at least one entry")
+		}
+		if len(c.Warp.Reserved) != 0 && len(c.Warp.Reserved) != 3 {
+			return errors.New("Warp.Reserved must be empty or exactly 3 bytes")
+		}
+	}
 	// security="none" is a plain transport (CDN-fronted ws/httpupgrade or local
 	// testing) with no REALITY material to validate.
 	if c.Security == "none" {
@@ -391,6 +430,20 @@ func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade 
 		for _, r := range cascade.RoutingRules {
 			rules = append(rules, r)
 		}
+	}
+
+	// WARP egress (per-node v1): add the Cloudflare WARP wireguard outbound and
+	// route this inbound's user traffic through it. Appended last so the DNS,
+	// BitTorrent/SMTP block, and cascade rules still take precedence (warp +
+	// cascade is out of v1 scope: cascade routing matches first, so the warp
+	// rule simply never fires on a cascade node).
+	if cfg.Warp != nil {
+		outbounds = append(outbounds, buildWarpOutbound(cfg.Warp))
+		rules = append(rules, map[string]any{
+			"type":        "field",
+			"inboundTag":  []string{cfg.Tag},
+			"outboundTag": "warp",
+		})
 	}
 
 	doc := map[string]any{
@@ -627,6 +680,43 @@ func buildStreamSettings(cfg InboundConfig) map[string]any {
 		}
 	}
 	return stream
+}
+
+// buildWarpOutbound renders the Cloudflare WARP wireguard outbound (tag "warp").
+// PublicKey/Endpoint/MTU fall back to Cloudflare's well-known defaults; reserved
+// (the account client_id, 3 bytes) is emitted only when present - required in
+// some regions, harmless elsewhere. Per docs/studies/STUDY-warp-native.md.
+func buildWarpOutbound(w *WarpConfig) map[string]any {
+	pub := w.PublicKey
+	if pub == "" {
+		pub = warpDefaultPublicKey
+	}
+	endpoint := w.Endpoint
+	if endpoint == "" {
+		endpoint = warpDefaultEndpoint
+	}
+	mtu := w.MTU
+	if mtu == 0 {
+		mtu = warpDefaultMTU
+	}
+	settings := map[string]any{
+		"secretKey": w.SecretKey,
+		"address":   w.Address,
+		"peers": []map[string]any{{
+			"publicKey":  pub,
+			"allowedIPs": []string{"0.0.0.0/0", "::/0"},
+			"endpoint":   endpoint,
+		}},
+		"mtu": mtu,
+	}
+	if len(w.Reserved) == 3 {
+		settings["reserved"] = w.Reserved
+	}
+	return map[string]any{
+		"protocol": "wireguard",
+		"tag":      "warp",
+		"settings": settings,
+	}
 }
 
 // writeConfig atomically writes the config to disk via the shared

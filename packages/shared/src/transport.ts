@@ -167,6 +167,32 @@ export interface XrayInboundCfg {
    *  nodes), and the per-role routing rules. Absent for plain (non-cascade)
    *  nodes, in which case the node renders exactly as before. */
   cascade?: XrayCascadeFragments;
+  /** Cloudflare WARP egress (per-node v1). When present, the node renders a
+   *  wireguard outbound to WARP and routes this inbound's user traffic through
+   *  it. Registered + provisioned panel-side. Absent = direct egress (default).
+   *  See docs/studies/STUDY-warp-native.md. */
+  warp?: WarpCfg;
+}
+
+/**
+ * Cloudflare WARP egress credentials the panel pushes to the node, which renders
+ * them as an xray `wireguard` outbound. publicKey/endpoint/mtu fall back to
+ * Cloudflare well-known defaults on the node when empty. reserved is the account
+ * client_id as a 3-byte array (empty or exactly 3).
+ */
+export interface WarpCfg {
+  /** WireGuard private key (base64). */
+  secretKey: string;
+  /** Assigned interface addresses, e.g. ["172.16.0.2/32", "<v6>/128"]. */
+  address: string[];
+  /** Cloudflare peer public key; node default if omitted. */
+  publicKey?: string;
+  /** Peer endpoint "host:port"; node default (162.159.192.1:2408) if omitted. */
+  endpoint?: string;
+  /** client_id first 3 bytes (xray/sing-box `reserved`); empty or exactly 3. */
+  reserved?: number[];
+  /** WireGuard MTU; node default 1280 if omitted. */
+  mtu?: number;
 }
 
 /**

@@ -233,6 +233,45 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     }
   }
 
+  // WARP egress (feat/warp-native) - if this node has WARP enabled, attach the
+  // registered creds to its xray inbound's config. The node renders a wireguard
+  // outbound to Cloudflare WARP + a routing rule (per-node egress v1). Like
+  // cascade, a node runs one xray config so the first xray inbound carries it.
+  // Only the node-relevant subset is sent (NOT the panel-only token/clientId/
+  // deviceId/license). Non-WARP nodes: no-op, wire stays byte-identical.
+  const warpXrayInbound = inbounds.find((i) => i.protocol === 'xray');
+  if (warpXrayInbound) {
+    const nodeWarp = await prisma.node.findUnique({
+      where: { id: nodeId },
+      select: { warpEnabled: true, warpAccount: true },
+    });
+    if (nodeWarp?.warpEnabled && nodeWarp.warpAccount) {
+      const acct = nodeWarp.warpAccount as {
+        secretKey?: string;
+        address?: string[];
+        publicKey?: string;
+        endpoint?: string;
+        reserved?: number[];
+      };
+      if (acct.secretKey && acct.address?.length) {
+        warpXrayInbound.config = {
+          ...(warpXrayInbound.config as Record<string, unknown>),
+          warp: {
+            secretKey: acct.secretKey,
+            address: acct.address,
+            publicKey: acct.publicKey,
+            endpoint: acct.endpoint,
+            reserved: acct.reserved,
+          },
+        } as InboundDto['config'];
+      } else {
+        getLogger().info(
+          `[inbound-sync] node ${nodeId} has warpEnabled but warpAccount is incomplete; WARP egress not applied`,
+        );
+      }
+    }
+  }
+
   return inbounds;
 }
 
