@@ -33,9 +33,9 @@ doesn't expire while you shoot. Re-run the seed any time to reset cleanly.
 
 ## Branches
 
-- `main` - what installer scripts pull. Tagged releases (`v0.1.0`, `v0.1.1`, ...).
-- `develop` - daily working branch. Most PRs land here.
-- Tagged releases happen via PR `develop` → `main` plus a new tag.
+- `main` is the trunk: what installer scripts pull and the daily working branch.
+  Tagged releases (`v0.1.0`, `v0.1.1`, ...) are cut straight from it.
+- Fork, branch off `main`, and open your PR back into `main`.
 
 ## Before opening a PR
 
@@ -60,6 +60,14 @@ feat(panel): add Mieru protocol support
 docs: document Hysteria port-hopping caveats
 chore(deps): bump prisma to 7.8
 ```
+
+Write your own commit messages and PR descriptions, in your own words. Using an
+AI assistant to help with the code is fine, but keep its fingerprints out of the
+history: no `Co-Authored-By: <assistant>` trailers, no "Generated with ..."
+footers, and no machine-generated boilerplate in the PR body. State the problem,
+the root cause, and what you changed, concisely. A PR that carries assistant
+attribution gets sent back for a clean rewrite before it lands, so starting
+clean saves everyone a round trip.
 
 ## Reporting bugs
 
