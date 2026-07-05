@@ -112,8 +112,12 @@ export interface UserDeltaResult {
  *   - first sight (no prior snapshot): delta 0, just baseline. We must NOT bill
  *     the whole accumulated-since-core-start counter to the user (it could be a
  *     long-running xray's lifetime traffic, or this snapshot table being new).
- *   - counter dropped below the snapshot: the core restarted (counters reset),
- *     so the new cumulative IS the delta; re-baseline to it.
+ *   - counter dropped below the snapshot: a core restart (counters reset) OR a
+ *     partial report (one of the user's inbounds missing this poll). Either way
+ *     the residual cumulative is not a real per-poll delta, so bill 0 and
+ *     re-baseline, matching the node-level cumulative path. Billing it would
+ *     spike the user's quota by the whole residual (phantom tens of GB in one
+ *     poll); losing one poll's post-restart bytes is the safe tradeoff.
  *   - otherwise: delta = current - previous.
  */
 export function computeUserDeltas(
@@ -140,8 +144,8 @@ export function computeUserDeltas(
   const snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
   for (const [userId, { cumIn, cumOut }] of byUser) {
     const p = prev.get(userId);
-    const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : cumIn) : 0n;
-    const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : cumOut) : 0n;
+    const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : 0n) : 0n;
+    const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : 0n) : 0n;
     deltas.push({ userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
     snapshots.push({ userId, cumIn, cumOut });
   }

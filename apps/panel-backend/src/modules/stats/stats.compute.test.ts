@@ -296,14 +296,15 @@ describe('computeUserDeltas (#5 - non-destructive cumulative)', () => {
     expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 5200n, cumOut: 3100n }]);
   });
 
-  it('re-baselines on a counter reset (core restart): delta = new cumulative', () => {
+  it('bills 0 and re-baselines when the counter drops below the snapshot', () => {
     const r = computeUserDeltas(
       [{ userId: 'u1', bytesIn: 40, bytesOut: 10 }],
       new Map([['u1', snap(5000n, 3000n)]]),
     );
-    // counter dropped below the snapshot -> xray restarted; the post-restart
-    // cumulative IS the delta, and we re-baseline to it.
-    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 40, bytesOut: 10 }]);
+    // A drop below the snapshot is a core restart or a partial report, not a
+    // real per-poll delta. Bill 0 (matching the node-level path) so a residual
+    // cumulative never spikes the user's quota; re-baseline to the new value.
+    expect(r.deltas).toEqual([{ userId: 'u1', bytesIn: 0, bytesOut: 0 }]);
     expect(r.snapshots).toEqual([{ userId: 'u1', cumIn: 40n, cumOut: 10n }]);
   });
 
