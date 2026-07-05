@@ -18,7 +18,8 @@ export type ProtocolName =
   | 'mtproto'
   | 'mieru'
   | 'tuic'
-  | 'anytls';
+  | 'anytls'
+  | 'shadowtls';
 
 /** Which proxy core renders an inbound. Most protocols have a single native
  *  core; the shared protocols (vless/vmess/trojan + ss on xray-core, hy2 on
@@ -43,6 +44,9 @@ export interface ProtocolCredentials {
   tuicPassword?: string;
   /** AnyTLS (sing-box engine): per-user password (password-only auth). */
   anytlsPassword?: string;
+  /** ShadowTLS v3 (sing-box engine): per-user password for the shadowtls
+   *  users[] (the inner shadowsocks key is server-wide, in the inbound config). */
+  shadowtlsPassword?: string;
 }
 
 // ───── POST /addUser ─────
@@ -96,7 +100,8 @@ export interface InboundDto {
     | MtprotoInboundCfg
     | MieruInboundCfg
     | TuicInboundCfg
-    | AnytlsInboundCfg;
+    | AnytlsInboundCfg
+    | ShadowtlsInboundCfg;
 }
 
 export interface XrayInboundCfg {
@@ -288,6 +293,19 @@ export interface TuicInboundCfg {
  */
 export interface AnytlsInboundCfg {
   serverName?: string;
+}
+
+/**
+ * ShadowTLS v3 inbound config (sing-box engine). TLS-camouflage wrapper: the
+ * node fronts a real handshake to `handshake` (a whitelisted site) and detours
+ * to an inner single-key shadowsocks. `ssMethod` is the inner cipher; `ssPassword`
+ * is the inner ss server key (auto-generated panel-side, valid base64). Per-user
+ * auth is the shadowtls password (credentials). No share-link (sing-box/clash).
+ */
+export interface ShadowtlsInboundCfg {
+  handshake?: string;
+  ssMethod?: string;
+  ssPassword?: string;
 }
 
 export interface ApplyInboundsRequest {

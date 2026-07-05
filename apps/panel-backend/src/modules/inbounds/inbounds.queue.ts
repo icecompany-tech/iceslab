@@ -7,7 +7,7 @@ import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
 import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
-import { deriveTuicPassword, deriveAnytlsPassword } from '../../lib/credentials.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/credentials.js';
 import { getLogger } from '../../lib/logger.js';
 
 // ───── Job data shapes ─────
@@ -381,6 +381,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
             tuicUuid: u.xrayUuid,
             tuicPassword: deriveTuicPassword(u.xrayUuid),
             anytlsPassword: deriveAnytlsPassword(u.xrayUuid),
+            shadowtlsPassword: deriveShadowtlsPassword(u.xrayUuid),
           },
         }),
       ),

@@ -114,6 +114,16 @@ export function deriveAnytlsPassword(xrayUuid: string): string {
 }
 
 /**
+ * Deterministic per-user ShadowTLS password (the shadowtls v3 users[] password).
+ * Arbitrary string - shadowtls does not constrain it - so we reuse the TUIC/AnyTLS
+ * approach (hash the UUID, no new credential surface). The node receives the same
+ * value via addUser; the subscription generator derives the identical one.
+ */
+export function deriveShadowtlsPassword(xrayUuid: string): string {
+  return createHash('sha256').update(`${xrayUuid}:shadowtls`).digest('base64url');
+}
+
+/**
  * Deterministic per-user Shadowsocks-2022 PSK (uPSK) derived from the user's
  * UUID. Unlike TUIC/AnyTLS, SS2022 keys MUST be **standard base64** of an exact
  * length: 16 bytes for `2022-blake3-aes-128-gcm`, 32 for the other 2022-blake3

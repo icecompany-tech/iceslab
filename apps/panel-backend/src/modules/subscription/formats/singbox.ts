@@ -341,6 +341,35 @@ export function buildSingboxJson(
           insecure: true,
         },
       });
+    } else if (e.protocol === 'shadowtls') {
+      // ShadowTLS v3 (sing-box engine). The client uses a shadowsocks outbound
+      // that `detour`s through a shadowtls outbound (the latter does the real
+      // TLS handshake to the camouflage host). Two outbounds; the ss one is the
+      // selectable proxy, the shadowtls one is its dialer.
+      proxyTags.push(tag);
+      const stlsTag = `${tag}-stls`;
+      outbounds.push({
+        type: 'shadowsocks',
+        tag,
+        method: e.ssMethod,
+        password: e.ssPassword,
+        detour: stlsTag,
+        network: 'tcp',
+        udp_over_tcp: false,
+      });
+      outbounds.push({
+        type: 'shadowtls',
+        tag: stlsTag,
+        server: e.host,
+        server_port: e.port,
+        version: 3,
+        password: e.shadowtlsPassword,
+        tls: {
+          enabled: true,
+          server_name: e.handshake,
+          utls: { enabled: true, fingerprint: 'chrome' },
+        },
+      });
     }
   }
 

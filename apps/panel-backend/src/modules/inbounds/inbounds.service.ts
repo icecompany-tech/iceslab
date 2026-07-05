@@ -109,6 +109,18 @@ export async function createInbound(input: CreateInboundInput): Promise<Inbound>
       };
     }
   }
+  // ShadowTLS: auto-generate the inner shadowsocks server key (ssPassword),
+  // same length rules as SS2022 serverPsk. Per-user auth is the shadowtls
+  // password (derived per user); this inner key is server-wide.
+  if (input.protocol === 'shadowtls') {
+    const stCfg = configToStore as { ssMethod: string; ssPassword?: string };
+    if (!stCfg.ssPassword) {
+      configToStore = {
+        ...stCfg,
+        ssPassword: generateSsServerPsk(stCfg.ssMethod),
+      };
+    }
+  }
 
   let created: Inbound;
   try {

@@ -13,7 +13,7 @@ import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds } from '../cascades/cascade.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
-import { deriveTuicPassword, deriveAnytlsPassword, deriveSsPassword } from '../../lib/credentials.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword, deriveSsPassword } from '../../lib/credentials.js';
 import {
   buildAnytlsUri,
   buildHysteriaUri,
@@ -682,6 +682,28 @@ export async function generateSubscription(
           serverName: anytlsSni,
           name: nodeName,
         }),
+      });
+    } else if (ib.protocol === 'shadowtls' && user.xrayUuid) {
+      // ShadowTLS v3 (sing-box engine). Per-user shadowtls password derived from
+      // xrayUuid; the inner ss key (ssPassword) is server-wide, from the config.
+      // ShadowTLS has NO share-link -> uri:'' (encodePlainList drops it; emitted
+      // only in the sing-box / clash full-config formats).
+      const cfg = ib.config as unknown as {
+        handshake?: string;
+        ssMethod?: string;
+        ssPassword?: string;
+      };
+      endpoints.push({
+        protocol: 'shadowtls',
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        shadowtlsPassword: deriveShadowtlsPassword(user.xrayUuid),
+        handshake: cfg.handshake || 'www.microsoft.com',
+        ssMethod: cfg.ssMethod || '2022-blake3-aes-128-gcm',
+        ssPassword: cfg.ssPassword || '',
+        uri: '',
       });
     }
     } // host-row loop

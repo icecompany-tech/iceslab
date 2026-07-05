@@ -225,6 +225,17 @@ export interface AnytlsSubscriptionEndpoint extends SubscriptionEndpointBase {
   serverName: string;
 }
 
+export interface ShadowtlsSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'shadowtls';
+  /** Per-user ShadowTLS v3 password (derived from user.xrayUuid). */
+  shadowtlsPassword: string;
+  /** Camouflage handshake host the shadowtls layer fronts (also the SNI). */
+  handshake: string;
+  /** Inner shadowsocks cipher + server-wide key (the ss layer under shadowtls). */
+  ssMethod: string;
+  ssPassword: string;
+}
+
 export type SubscriptionEndpoint =
   | HysteriaSubscriptionEndpoint
   | XraySubscriptionEndpoint
@@ -234,7 +245,8 @@ export type SubscriptionEndpoint =
   | MtprotoSubscriptionEndpoint
   | MieruSubscriptionEndpoint
   | TuicSubscriptionEndpoint
-  | AnytlsSubscriptionEndpoint;
+  | AnytlsSubscriptionEndpoint
+  | ShadowtlsSubscriptionEndpoint;
 
 export interface SubscriptionJsonResponse {
   user: {

@@ -345,6 +345,28 @@ export function buildClashYaml(
           `    skip-cert-verify: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'shadowtls') {
+      // ShadowTLS v3 -> mihomo `type: ss` with the `shadow-tls` plugin. The ss
+      // cipher/password is the inner key; plugin-opts carries the shadowtls host
+      // (camouflage SNI) + per-user password + version. shadow-tls does a real
+      // handshake to a valid host, so no skip-cert-verify.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: ss`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    cipher: ${yamlString(e.ssMethod)}`,
+          `    password: ${yamlString(e.ssPassword)}`,
+          `    plugin: shadow-tls`,
+          `    plugin-opts:`,
+          `      host: ${yamlString(e.handshake)}`,
+          `      password: ${yamlString(e.shadowtlsPassword)}`,
+          `      version: 3`,
+          `    udp: true`,
+        ].join('\n'),
+      );
     }
   }
 
