@@ -699,6 +699,31 @@ if [[ "$TOTAL_RAM_MB" -lt 1500 && "$CURRENT_SWAP_MB" -lt 500 ]]; then
   fi
 fi
 
+# ───── network tuning (QUIC buffers + BBR) ─────
+# Hysteria2 and TUIC ride QUIC over UDP; the distro-default net.core.rmem_max
+# (~208 KiB) caps quic-go's receive buffer and throttles throughput on high-BDP
+# (fast + distant) links, so cross-continent nodes feel slow despite headroom.
+# Raise the UDP socket buffers and switch qdisc/congestion control to fq + BBR
+# (also helps the TCP/REALITY paths). Idempotent drop-in, reboot-persistent;
+# every step guarded so a built-in-BBR kernel or a headless box never aborts.
+SYSCTL_DROPIN=/etc/sysctl.d/99-iceslab.conf
+log "Tuning kernel network buffers + BBR (drop-in $SYSCTL_DROPIN)"
+cat > "$SYSCTL_DROPIN" <<'EOF'
+# Iceslab node network tuning. Managed by install-iceslab-node.sh.
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+sysctl -p "$SYSCTL_DROPIN" >/dev/null 2>&1 || true
+# default_qdisc only affects qdiscs created after this point (a reboot). Swap the
+# live default-route interface to fq now so BBR is active without a reboot.
+_ICE_IFACE="$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')"
+if [[ -n "$_ICE_IFACE" ]]; then
+  tc qdisc replace dev "$_ICE_IFACE" root fq >/dev/null 2>&1 || true
+fi
+ok "network tuning applied (rmem/wmem 16 MiB, fq + BBR)"
+
 # ───── 2a. OS upgrade ─────
 # Pull pending security + package updates before laying down node-agent.
 # Opt-in: dist-upgrade is intrusive on alpha (reboots kernel, restarts sshd).
@@ -1326,8 +1351,13 @@ ProtectHome=true
 # ProtectSystem=strict forbids /run writes by default. /run/xtables.lock
 # matters too, iptables uses it from awg-quick PostUp.
 # /etc/iptables/ for netfilter-persistent users (rules.v4 rewrites).
+# /etc/ufw is where ufw persists user.rules/user6.rules. Without it the agent's
+# firewall.AllowFrom() fails with "/etc/ufw/user.rules is not writable" and the
+# allow-from-entry rule for a cascade link-in (port 24000+i) is silently
+# dropped, so the entry node can't reach the exit and it shows dead in the
+# observatory/balancer. Invisible on a single-node install (ports already open).
 # Caught live on a production node after fresh install.
-ReadWritePaths=-/var/log -/etc/iceslab-node -/etc/hysteria -/etc/xray -/usr/local/etc/xray -/etc/amnezia/amneziawg -/etc/caddy -/etc/mtg -/etc/mita -/var/lib/mita -/run -/etc/iptables
+ReadWritePaths=-/var/log -/etc/iceslab-node -/etc/hysteria -/etc/xray -/usr/local/etc/xray -/etc/amnezia/amneziawg -/etc/caddy -/etc/mtg -/etc/mita -/var/lib/mita -/run -/etc/iptables -/etc/ufw
 PrivateTmp=true
 
 # Journald log limits; without these a node running for months can balloon
