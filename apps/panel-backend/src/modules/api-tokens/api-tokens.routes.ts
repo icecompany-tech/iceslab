@@ -3,10 +3,18 @@ import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
 import { PermissiveUuid } from '../../lib/uuid-schema.js';
 import * as svc from './api-tokens.service.js';
+import { isKnownScope } from '../auth/scope.hook.js';
 
 const CreateInput = z.object({
   name: z.string().min(1).max(64),
-  scopes: z.array(z.string().max(64)).max(32).default([]),
+  scopes: z
+    .array(z.string().max(64))
+    .max(32)
+    .default([])
+    .refine((arr) => arr.every(isKnownScope), {
+      message:
+        'Unknown scope. Use <resource>:read|write, sub:read, or leave empty / "*" for full access',
+    }),
 });
 
 const IdParam = z.object({ id: PermissiveUuid });

@@ -28,6 +28,50 @@ export function requiredScopeFor(method: string, url: string | undefined): strin
 }
 
 /**
+ * Resources a scoped API token can legitimately be granted, i.e. the first
+ * path segment after `/api/` for every token-reachable route (see
+ * requiredScopeFor). Kept in sync with the routes by hand. `api-tokens`,
+ * `auth` and `internal` are omitted on purpose: tokens can never reach those
+ * (blockApiTokenAccess / login / node-only), so granting them would be a
+ * dead scope.
+ */
+const SCOPEABLE_RESOURCES = [
+  'users',
+  'nodes',
+  'profiles',
+  'bindings',
+  'hosts',
+  'squads',
+  'srr',
+  'regions',
+  'inbounds',
+  'cascades',
+  'hwid-devices',
+  'settings',
+  'recipes',
+  'dashboard',
+  'system',
+] as const;
+
+/**
+ * The set of scopes a token may carry: `*` (full), the special `sub:read`
+ * (the per-user endpoints route), and `<resource>:read|write` for every
+ * scopeable resource. Used to validate scopes at mint time so a typo like
+ * `user:read` (vs `users:read`) is rejected instead of silently producing a
+ * token that matches no route and 403s everywhere (a fail-closed footgun).
+ */
+export const KNOWN_SCOPES: ReadonlySet<string> = new Set<string>([
+  '*',
+  'sub:read',
+  ...SCOPEABLE_RESOURCES.flatMap((r) => [`${r}:read`, `${r}:write`]),
+]);
+
+/** True if `scope` is a scope the panel actually recognises (see KNOWN_SCOPES). */
+export function isKnownScope(scope: string): boolean {
+  return KNOWN_SCOPES.has(scope);
+}
+
+/**
  * Global preHandler that enforces API-token scopes. It runs AFTER route-level
  * `requireAuth` (onRequest), so `request.apiToken` is already populated when a
  * request authenticated via an `icp_*` token. No-op for:

@@ -1,6 +1,38 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { requiredScopeFor, enforceScopes } from './scope.hook.js';
+import { requiredScopeFor, enforceScopes, isKnownScope } from './scope.hook.js';
+
+describe('isKnownScope', () => {
+  it('accepts *, sub:read and every resource:verb', () => {
+    const good = [
+      '*',
+      'sub:read',
+      'users:read',
+      'users:write',
+      'nodes:write',
+      'recipes:read',
+      'hwid-devices:write',
+    ];
+    for (const s of good) {
+      expect(isKnownScope(s), s).toBe(true);
+    }
+  });
+
+  it('rejects typos and unknown / malformed scopes', () => {
+    const bad = [
+      'user:read', // typo: users
+      'users:reed', // typo: read
+      'users', // no verb
+      'admin', // not a resource
+      'users:*', // no wildcard verb
+      'api-tokens:read', // tokens can never reach this route
+      '',
+    ];
+    for (const s of bad) {
+      expect(isKnownScope(s), s).toBe(false);
+    }
+  });
+});
 
 describe('requiredScopeFor', () => {
   it('derives <resource>:<verb> from method + route template', () => {
