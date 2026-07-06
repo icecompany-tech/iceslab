@@ -79,6 +79,9 @@ export interface Recipe {
   verified?: boolean;
   /** Minimum panel semver; the backend hides recipes newer panels than ours. */
   minPanelVersion?: string;
+  /** Source this recipe was merged from (backend-stamped); absent on built-ins. */
+  sourceName?: string;
+  sourceId?: string;
   /** Provenance. Built-ins leave this undefined (treated as built-in). */
   source?: 'builtin' | 'registry';
 }
