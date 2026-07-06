@@ -274,6 +274,12 @@ model Node {
   warpEnabled           Boolean   @default(false) @map("warp_enabled")
   warpAccount           Json?     @map("warp_account")
 
+  // Engine-choice: opt this node into the sing-box engine alongside its native
+  // core, so vless/vmess/trojan/hy2/ss profiles with engine=singbox can run
+  // here. Surfaces as `--with-singbox` in the install command. Native protocol
+  // stays primary; tuic/anytls/shadowtls already run on sing-box (flag no-op).
+  singboxEngine         Boolean   @default(false) @map("singbox_engine")
+
   // Slice 38 — heartbeat self-destruct. Random 32-byte secret, generated
   // at node creation. The bootstrap payload bundles a stateless HMAC token
   // (nodeId + sig over heartbeatSecret) that the agent presents on every

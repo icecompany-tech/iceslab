@@ -360,6 +360,8 @@ export interface Node {
   hardening?: NodeHardening | null;
   // WARP egress on/off (per-node). Creds are never sent to the client.
   warpEnabled: boolean;
+  // Engine-choice: sing-box engine installed alongside the native core.
+  singboxEngine: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -426,6 +428,7 @@ export interface CreateNodeInput {
   maxUsers?: number | null;
   domain?: string | null;
   hardening?: NodeHardening | null;
+  singboxEngine?: boolean;
 }
 
 export interface UpdateNodeInput {
@@ -438,6 +441,7 @@ export interface UpdateNodeInput {
   maxUsers?: number | null;
   domain?: string | null;
   hardening?: NodeHardening | null;
+  singboxEngine?: boolean;
 }
 
 export async function listNodes(params?: {

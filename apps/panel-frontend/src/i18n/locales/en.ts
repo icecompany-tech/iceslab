@@ -135,6 +135,8 @@ export default {
       multiplierDesc: '1 = normal, > 1 premium',
       domain: 'Domain (FQDN, optional)',
       domainDesc: 'A-record this to the node IP. Used as REALITY serverName for self-steal profiles (SNI matches IP, survives RU DPI) and for ACME later.',
+      singboxEngine: 'Also install sing-box engine',
+      singboxEngineDesc: 'Adds --with-singbox to the install command, so this node can also serve vless/vmess/trojan/hy2/ss profiles that use the sing-box engine.',
       hardeningSection: 'Zashchita (hardening)',
       hardeningSectionDesc: 'Optional probe-resistance toggles applied at install. All off by default.',
       hardeningUfw: 'Firewall lockdown',

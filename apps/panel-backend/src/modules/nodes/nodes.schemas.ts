@@ -77,6 +77,8 @@ export const CreateNodeSchema = z.object({
   // B3/G
   domain: DomainSchema,
   hardening: HardeningSchema,
+  // Engine-choice: also install the sing-box engine (--with-singbox).
+  singboxEngine: z.boolean().default(false),
 });
 export type CreateNodeInput = z.infer<typeof CreateNodeSchema>;
 
@@ -90,6 +92,7 @@ export const UpdateNodeSchema = z.object({
   maxUsers: z.number().int().positive().max(100000).nullable().optional(),
   domain: DomainSchema,
   hardening: HardeningSchema,
+  singboxEngine: z.boolean().optional(),
 });
 export type UpdateNodeInput = z.infer<typeof UpdateNodeSchema>;
 

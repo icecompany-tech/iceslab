@@ -29,6 +29,8 @@ export interface PublicNodeDto {
   hardening: HardeningDto | null;
   // WARP egress on/off (per-node). Creds (secretKey/token) are never exposed.
   warpEnabled: boolean;
+  // Engine-choice: sing-box engine installed alongside the native core.
+  singboxEngine: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +55,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     domain: node.domain,
     hardening: (node.hardening as HardeningDto | null) ?? null,
     warpEnabled: node.warpEnabled,
+    singboxEngine: node.singboxEngine,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

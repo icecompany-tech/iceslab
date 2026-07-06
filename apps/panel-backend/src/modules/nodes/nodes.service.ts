@@ -82,6 +82,8 @@ export async function createNode(
       // create but JsonNull keeps "no hardening" explicit. Cast mirrors the
       // jsonb-write pattern in profiles.service.ts (typed object -> InputJsonValue).
       hardening: (input.hardening as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+      // Engine-choice: install sing-box alongside the native core when opted in.
+      singboxEngine: input.singboxEngine,
       // Slice 38 — heartbeat-self-destruct secret. 32 bytes of entropy is
       // overkill for HMAC-SHA256 keying, but stays well under the 64-byte
       // block size and matches our convention for symmetric secrets.
@@ -121,6 +123,7 @@ export async function createNode(
       node.protocol,
       node.address,
       input.hardening,
+      node.singboxEngine,
     ),
   };
 
@@ -169,12 +172,31 @@ export function appendHardeningFlags(
   }
 }
 
+/**
+ * Engine-choice: append `--with-singbox` when the node opts into the sing-box
+ * engine alongside its native core (vless/vmess/trojan/hy2/ss served via
+ * sing-box). Only the shared native protocols take it; tuic/anytls/shadowtls
+ * already run on sing-box, so the installer ignores the flag and we skip it.
+ * Shared by both renderers so they stay byte-identical.
+ */
+export function appendSingboxFlag(
+  lines: string[],
+  singboxEngine: boolean | undefined,
+  protocol: string,
+): void {
+  if (!singboxEngine) return;
+  if (!['xray', 'hysteria', 'shadowsocks'].includes(protocol)) return;
+  lines[lines.length - 1] += ' \\';
+  lines.push('  --with-singbox');
+}
+
 async function renderBootstrapCommand(
   panelUrl: string,
   token: string,
   protocol: string,
   nodeAddress?: string,
   hardening?: HardeningInput | null,
+  singboxEngine?: boolean,
 ): Promise<string> {
   // Slice S7 — auto-detect or accept env-override of the panel's egress
   // IP so the install command can lock the agent's UFW to it. See
@@ -219,6 +241,7 @@ async function renderBootstrapCommand(
   // G - node hardening flags. Shared helper keeps this byte-identical with
   // renderRefreshBootstrapCommand in nodes.routes.ts.
   appendHardeningFlags(lines, hardening);
+  appendSingboxFlag(lines, singboxEngine, protocol);
 
   return lines.join('\n');
 }
@@ -311,6 +334,7 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
     data.hardening =
       (input.hardening as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
   }
+  if (input.singboxEngine !== undefined) data.singboxEngine = input.singboxEngine;
 
   // A Node.domain change alters the per-node REALITY self-steal serverNames
   // pushed to the agent (inbounds.queue) and the client SNI (subscription).

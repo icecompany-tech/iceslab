@@ -10,7 +10,7 @@ import {
   type HardeningInput,
 } from './nodes.schemas.js';
 import * as nodesService from './nodes.service.js';
-import { appendHardeningFlags } from './nodes.service.js';
+import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
@@ -43,6 +43,7 @@ async function renderRefreshBootstrapCommand(
   protocol: string,
   nodeAddress: string,
   hardening?: HardeningInput | null,
+  singboxEngine?: boolean,
 ): Promise<string> {
   const panelIp = await getPanelPublicIp();
   const lines = [
@@ -74,6 +75,7 @@ async function renderRefreshBootstrapCommand(
   // G - node hardening flags. Shared helper keeps this byte-identical with
   // renderBootstrapCommand in nodes.service.ts.
   appendHardeningFlags(lines, hardening);
+  appendSingboxFlag(lines, singboxEngine, protocol);
 
   return lines.join('\n');
 }
@@ -148,6 +150,7 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
           node.protocol,
           node.address,
           node.hardening,
+          node.singboxEngine,
         ),
       });
     } catch (err) {

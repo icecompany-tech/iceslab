@@ -45,9 +45,23 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
   { value: 'shadowsocks', label: 'Shadowsocks 2022' },
   { value: 'mtproto', label: 'MTProto (Telegram-only)' },
   { value: 'mieru', label: 'Mieru (stealth proxy)' },
-  { value: 'tuic', label: 'TUIC (sing-box)' },
-  { value: 'anytls', label: 'AnyTLS (sing-box)' },
-  { value: 'shadowtls', label: 'ShadowTLS (sing-box)' },
+  { value: 'tuic', label: 'TUIC' },
+  { value: 'anytls', label: 'AnyTLS' },
+  { value: 'shadowtls', label: 'ShadowTLS' },
+];
+
+// The node protocol dropdown groups the sing-box-only cores under a "sing-box"
+// header; native cores stay ungrouped on top. Mirrors the profile form.
+const SINGBOX_NODE_PROTOCOLS: NodeProtocol[] = ['tuic', 'anytls', 'shadowtls'];
+// Native protocols that can additionally run on the sing-box engine (engine-
+// choice). The "+ sing-box engine" toggle only shows for these.
+const SINGBOX_ENGINE_CAPABLE: NodeProtocol[] = ['xray', 'hysteria', 'shadowsocks'];
+const NODE_PROTOCOL_GROUPED = [
+  ...PROTOCOL_OPTIONS.filter((p) => !SINGBOX_NODE_PROTOCOLS.includes(p.value)),
+  {
+    group: 'sing-box',
+    items: PROTOCOL_OPTIONS.filter((p) => SINGBOX_NODE_PROTOCOLS.includes(p.value)),
+  },
 ];
 
 // Default mTLS port the node-agent listens on. Hard-coded in
@@ -80,6 +94,9 @@ interface FormValues {
   hardenFail2ban: boolean;
   hardenRealisticFallback: boolean;
   hardenSshAllowlist: string[];
+  // Engine-choice: also install the sing-box engine (--with-singbox). Only
+  // meaningful for shared native protocols (xray/hysteria/shadowsocks).
+  singboxEngine: boolean;
 }
 
 /**
@@ -131,6 +148,7 @@ function defaults(node: Node | null): FormValues {
     hardenFail2ban: node?.hardening?.fail2ban ?? false,
     hardenRealisticFallback: node?.hardening?.realisticFallback ?? false,
     hardenSshAllowlist: node?.hardening?.sshAllowlist ?? [],
+    singboxEngine: node?.singboxEngine ?? false,
   };
 }
 
@@ -242,6 +260,9 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
         values.consumptionMultiplier === '' ? 1 : Number(values.consumptionMultiplier),
       domain: values.domain.trim() || null,
       hardening: buildHardening(values),
+      // Engine-choice: only send true for protocols that can run on sing-box.
+      singboxEngine:
+        SINGBOX_ENGINE_CAPABLE.includes(values.protocol) && values.singboxEngine,
     };
     if (isEdit) {
       await onSubmit(base satisfies UpdateNodeInput, selectedProfileIds);
@@ -346,11 +367,18 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
               <Select
                 label={t('nodes.form.protocol')}
                 description={t('nodes.form.protocolDesc')}
-                data={PROTOCOL_OPTIONS}
+                data={NODE_PROTOCOL_GROUPED}
                 allowDeselect={false}
                 {...form.getInputProps('protocol')}
               />
             </Group>
+            {SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && (
+              <Switch
+                label={t('nodes.form.singboxEngine')}
+                description={t('nodes.form.singboxEngineDesc')}
+                {...form.getInputProps('singboxEngine', { type: 'checkbox' })}
+              />
+            )}
             {/* Address split into host + port so admins see exactly what
                 port will be hit (default 1337, install-iceslab-node.sh hard-coded).
                 Backend recombines into host:port via handleFinalSubmit.
