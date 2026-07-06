@@ -59,7 +59,7 @@ run_action() {
     for i in "${!KEYS[@]}"; do
         if [[ "${KEYS[$i]}" == "$key" ]]; then
             log_info "running: ops/${RUN[$i]} $*"
-            exec "$SCRIPT_DIR/ops/${RUN[$i]}" "$@"
+            exec bash "$SCRIPT_DIR/ops/${RUN[$i]}" "$@"
         fi
     done
     log_err "unknown action: ${key}"
@@ -82,15 +82,60 @@ if [[ ! -t 0 ]]; then
     exit 2
 fi
 
-print_guide
-printf '\n'
-read -rp "$(printf '%b[iceslab]%b choose [1-%d / q]: ' "$C_INFO" "$C_RST" "${#KEYS[@]}")" choice
-case "$choice" in
-    q | Q | '') log_info "nothing to do"; exit 0 ;;
-esac
-if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#KEYS[@]} )); then
-    run_action "${KEYS[$((choice - 1))]}"
-else
-    log_err "invalid choice: ${choice}"
-    exit 2
-fi
+# Loop the menu: show it, run the pick, come back. Accept a number OR an action
+# name; q (or Ctrl-D) quits. A bad pick just re-prompts, and an action's failure
+# or a Ctrl-C drops back to the menu instead of killing this launcher.
+while true; do
+    print_guide
+    printf '\n'
+    read -rp "$(printf '%b[iceslab]%b number or name (q to quit): ' "$C_INFO" "$C_RST")" choice \
+        || { printf '\n'; break; }
+
+    case "$choice" in
+        q | Q | quit | exit) break ;;
+        '') continue ;;
+    esac
+
+    # Resolve the choice to an action key: 1..N, or the action name itself.
+    key=""
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#KEYS[@]} )); then
+        key="${KEYS[$((choice - 1))]}"
+    else
+        for k in "${KEYS[@]}"; do
+            if [[ "$k" == "$choice" ]]; then key="$k"; fi
+        done
+    fi
+    if [[ -z "$key" ]]; then
+        log_warn "unknown choice: ${choice} (pick 1-${#KEYS[@]}, an action name, or q)"
+        continue
+    fi
+
+    # Run as a child (not exec) so control returns here. Ignore INT in the
+    # launcher while it runs so Ctrl-C stops the action, not the menu; tolerate
+    # a non-zero exit.
+    for i in "${!KEYS[@]}"; do
+        if [[ "${KEYS[$i]}" == "$key" ]]; then
+            printf '\n'
+            log_info "running: ops/${RUN[$i]}"
+            trap ':' INT
+            set +e
+            bash "$SCRIPT_DIR/ops/${RUN[$i]}"
+            rc=$?
+            set -e
+            trap - INT
+            if (( rc == 0 )); then
+                log_ok "${key} finished"
+            else
+                log_warn "${key} stopped (exit ${rc})"
+            fi
+            break
+        fi
+    done
+
+    read -rp "$(printf '\n%b[iceslab]%b Enter for the menu, q to quit: ' "$C_INFO" "$C_RST")" cont \
+        || { printf '\n'; break; }
+    case "$cont" in
+        q | Q | quit | exit) break ;;
+    esac
+done
+log_info "bye"
