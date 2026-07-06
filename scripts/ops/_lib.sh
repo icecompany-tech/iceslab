@@ -238,7 +238,15 @@ git_sync_to_ref() {
     # truth) so re-deploys stay unblocked.
     git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' --tags --prune
     if git show-ref --verify --quiet "refs/remotes/origin/${SYNC_TARGET}"; then
-        git checkout -B "$SYNC_TARGET" "origin/$SYNC_TARGET"   # branch: track + advance
+        # branch: track + advance. FORCE_RESET adds -f so local dirt (e.g. a
+        # manual chmod on a Linux deploy box, which git sees as a mode change)
+        # can't block the branch checkout. Without FORCE_RESET the dirty-tree
+        # guard above already bailed, so this path only runs clean or forced.
+        if [[ "${FORCE_RESET:-0}" == "1" ]]; then
+            git checkout --force -B "$SYNC_TARGET" "origin/$SYNC_TARGET"
+        else
+            git checkout -B "$SYNC_TARGET" "origin/$SYNC_TARGET"
+        fi
     else
         git checkout --force "$SYNC_TARGET"                    # tag/sha: pinned checkout
     fi
