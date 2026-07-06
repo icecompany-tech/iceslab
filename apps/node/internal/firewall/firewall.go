@@ -37,6 +37,39 @@ var (
 	allowedSpecs = make(map[string]struct{})
 )
 
+// ufwLockRe matches the transient lock-contention message ufw surfaces when the
+// underlying xtables lock is held by another process. ufw shells out to
+// iptables, which takes a global lock; when the agent swaps a cascade entry it
+// re-applies several rules back-to-back, and a concurrent iptables run (ufw's
+// own reload, fail2ban, docker) can hold that lock. A single `ufw allow` then
+// exits non-zero and the rule it was adding — e.g. the cascade link-in AllowFrom
+// rule — silently never lands, breaking the hop until the next apply.
+var ufwLockRe = regexp.MustCompile(`(?i)(xtables lock|could not get lock|temporarily unavailable|resource temporarily)`)
+
+// runUfw runs `ufw <args>` and retries a few times when it fails on transient
+// xtables-lock contention. Non-lock failures return immediately, preserving the
+// original behavior. Each attempt gets its own 5s timeout derived from ctx; the
+// backoff is skipped if ctx is cancelled.
+func runUfw(ctx context.Context, args ...string) ([]byte, error) {
+	const attempts = 4
+	var out []byte
+	var err error
+	for i := 0; i < attempts; i++ {
+		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		out, err = exec.CommandContext(cctx, "ufw", args...).CombinedOutput()
+		cancel()
+		if err == nil || !ufwLockRe.Match(out) {
+			return out, err
+		}
+		select {
+		case <-ctx.Done():
+			return out, err
+		case <-time.After(time.Duration(150*(i+1)) * time.Millisecond):
+		}
+	}
+	return out, err
+}
+
 // Allow opens an inbound UFW rule for the given (port, proto).
 // proto must be "tcp" or "udp". Returns nil on success OR when ufw
 // isn't installed — agents on hosts without ufw shouldn't fail
@@ -66,9 +99,7 @@ func Allow(ctx context.Context, logger *slog.Logger, port int, proto string) {
 		logger.Debug("firewall.Allow: ufw not installed, skipping", "spec", spec)
 		return
 	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(cctx, "ufw", "allow", spec).CombinedOutput()
+	out, err := runUfw(ctx, "allow", spec)
 	if err != nil {
 		// Non-fatal — agent stays alive, admin can fix UFW manually.
 		logger.Warn("firewall.Allow: ufw allow failed",
@@ -159,10 +190,8 @@ func AllowFrom(ctx context.Context, logger *slog.Logger, port int, proto string,
 		if cached {
 			continue
 		}
-		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		out, err := exec.CommandContext(cctx, "ufw", "allow", "from", src,
-			"to", "any", "port", strconv.Itoa(port), "proto", proto).CombinedOutput()
-		cancel()
+		out, err := runUfw(ctx, "allow", "from", src,
+			"to", "any", "port", strconv.Itoa(port), "proto", proto)
 		if err != nil {
 			logger.Warn("firewall.AllowFrom: ufw allow failed",
 				"src", src, "port", port, "proto", proto, "err", err, "out", string(out))
@@ -223,9 +252,7 @@ func ListAllowed(ctx context.Context, logger *slog.Logger) ([]AllowedPort, error
 		logger.Debug("firewall.ListAllowed: ufw not installed, skipping")
 		return nil, nil
 	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(cctx, "ufw", "status").CombinedOutput()
+	out, err := runUfw(ctx, "status")
 	if err != nil {
 		return nil, fmt.Errorf("ufw status: %w (%s)", err, string(out))
 	}

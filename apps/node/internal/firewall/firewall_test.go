@@ -63,3 +63,29 @@ func TestIsLiteralSource(t *testing.T) {
 		}
 	}
 }
+
+// TestUfwLockRe checks the transient xtables-lock detector: it matches the
+// messages ufw/iptables print under lock contention (which runUfw retries on)
+// and leaves unrelated failures fail-fast (no retry, original behavior).
+func TestUfwLockRe(t *testing.T) {
+	retry := []string{
+		"ERROR: Could not get lock",
+		"Another app is currently holding the xtables lock; waiting",
+		"iptables: Resource temporarily unavailable.",
+	}
+	for _, s := range retry {
+		if !ufwLockRe.MatchString(s) {
+			t.Errorf("expected lock match for %q", s)
+		}
+	}
+	noRetry := []string{
+		"ERROR: Bad port",
+		"ERROR: Wrong number of arguments",
+		"Rules updated",
+	}
+	for _, s := range noRetry {
+		if ufwLockRe.MatchString(s) {
+			t.Errorf("did not expect lock match for %q", s)
+		}
+	}
+}
