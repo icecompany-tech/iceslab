@@ -35,7 +35,7 @@ import {
 } from '../lib/api';
 import { RecipePicker } from './RecipePicker';
 import { validateXrayConfig } from '../lib/recipes';
-import { PROTOCOL_OPTIONS, protocolLabel } from '../lib/protocols';
+import { protocolLabel } from '../lib/protocols';
 
 // Xray stream transports. The whole stack already handles all six (Zod schema,
 // node config.go renderer, client URI builder) - this is just the operator-
@@ -54,27 +54,63 @@ const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];
 // path + host header apply to these transports (same URI param names).
 const PATH_HOST_TRANSPORTS = ['ws', 'xhttp', 'httpupgrade'];
 
-// Profile protocol dropdown. sing-box (TUIC) is now a real selectable protocol
-// in PROTOCOL_OPTIONS (right after xray), so the former disabled "sing-box
-// (soon)" teaser is gone.
-const PROFILE_PROTOCOL_SELECT_DATA = PROTOCOL_OPTIONS;
+// Profile protocol dropdown. The sing-box engine is folded INTO this list
+// instead of a separate control: a protocol that runs on either core (xray /
+// hysteria / shadowsocks) appears once as a native entry and once in the
+// "sing-box" group, and the sing-box-only protocols (TUIC / AnyTLS / ShadowTLS)
+// live in that group too. Picking an item sets both the protocol and the engine.
 
-// Protocols that can run on an alternative engine (sing-box) besides their
-// native core. The engine selector only shows for these; everything else has a
-// single core. Mirrors the backend's ENGINE_OPTIONS.
+// Protocols that can run on the sing-box engine besides their native core.
+// Mirrors the backend's ENGINE_OPTIONS; also gates the engine field in buildConfig.
 const ENGINE_CHOICE_PROTOCOLS = ['xray', 'hysteria', 'shadowsocks'];
 
-function engineOptions(protocol: string): { value: string; label: string }[] {
-  const nativeLabel: Record<string, string> = {
-    xray: 'Xray (native)',
-    shadowsocks: 'Xray-core (native)',
-    hysteria: 'Hysteria (native)',
-  };
-  return [
-    { value: 'native', label: nativeLabel[protocol] ?? 'Native' },
-    { value: 'singbox', label: 'sing-box' },
-  ];
+interface ProfileKind {
+  key: string;
+  protocol: ProtocolName;
+  engine: 'native' | 'singbox';
+  label: string;
 }
+
+// One kind per selectable (protocol, engine). A shared protocol has two (native
+// + sing-box); native-only and sing-box-only protocols have one. The sing-box
+// variant of a shared protocol is keyed `<protocol>#singbox` to stay distinct.
+const PROFILE_KINDS: ProfileKind[] = [
+  { key: 'xray', protocol: 'xray', engine: 'native', label: 'Xray (native)' },
+  { key: 'hysteria', protocol: 'hysteria', engine: 'native', label: 'Hysteria 2 (native)' },
+  { key: 'shadowsocks', protocol: 'shadowsocks', engine: 'native', label: 'Shadowsocks 2022 (native)' },
+  { key: 'amneziawg', protocol: 'amneziawg', engine: 'native', label: 'AmneziaWG' },
+  { key: 'naive', protocol: 'naive', engine: 'native', label: 'NaiveProxy' },
+  { key: 'mtproto', protocol: 'mtproto', engine: 'native', label: 'MTProto (Telegram-only, mtg)' },
+  { key: 'mieru', protocol: 'mieru', engine: 'native', label: 'Mieru (stealth proxy)' },
+  { key: 'xray#singbox', protocol: 'xray', engine: 'singbox', label: 'Xray (VLESS/VMess/Trojan)' },
+  { key: 'hysteria#singbox', protocol: 'hysteria', engine: 'singbox', label: 'Hysteria 2' },
+  { key: 'shadowsocks#singbox', protocol: 'shadowsocks', engine: 'singbox', label: 'Shadowsocks 2022' },
+  { key: 'tuic', protocol: 'tuic', engine: 'singbox', label: 'TUIC' },
+  { key: 'anytls', protocol: 'anytls', engine: 'singbox', label: 'AnyTLS' },
+  { key: 'shadowtls', protocol: 'shadowtls', engine: 'singbox', label: 'ShadowTLS' },
+];
+
+const PROFILE_KIND_BY_KEY = new Map(PROFILE_KINDS.map((k) => [k.key, k] as const));
+
+// The Select key for a (protocol, engine) pair. Only a shared protocol on
+// sing-box gets the suffix; sing-box-only protocols key by their own name.
+function profileKindKey(protocol: string, engine: 'native' | 'singbox'): string {
+  return engine === 'singbox' && ENGINE_CHOICE_PROTOCOLS.includes(protocol)
+    ? `${protocol}#singbox`
+    : protocol;
+}
+
+// Grouped Select data (create mode): native cores first, then a sing-box group.
+const PROFILE_PROTOCOL_GROUPED = [
+  ...PROFILE_KINDS.filter((k) => k.engine === 'native').map((k) => ({ value: k.key, label: k.label })),
+  {
+    group: 'sing-box',
+    items: PROFILE_KINDS.filter((k) => k.engine === 'singbox').map((k) => ({
+      value: k.key,
+      label: k.label,
+    })),
+  },
+];
 
 type Mode = 'create' | 'edit';
 
@@ -774,10 +810,28 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
             <Select
               label={t('profiles.form.protocol')}
               description={isEdit ? t('profiles.form.protocolEdit') : undefined}
-              data={PROFILE_PROTOCOL_SELECT_DATA}
-              disabled={isEdit}
+              data={
+                isEdit
+                  ? PROFILE_KINDS.filter((k) => k.protocol === form.values.protocol).map((k) => ({
+                      value: k.key,
+                      label: k.label,
+                    }))
+                  : PROFILE_PROTOCOL_GROUPED
+              }
+              // Protocol is immutable on edit; only its engine variants stay
+              // selectable, so a single-engine protocol shows one locked option.
+              disabled={
+                isEdit &&
+                PROFILE_KINDS.filter((k) => k.protocol === form.values.protocol).length <= 1
+              }
               allowDeselect={false}
-              {...form.getInputProps('protocol')}
+              value={profileKindKey(form.values.protocol, form.values.engine)}
+              onChange={(val) => {
+                const kind = val ? PROFILE_KIND_BY_KEY.get(val) : undefined;
+                if (!kind) return;
+                form.setFieldValue('engine', kind.engine);
+                if (!isEdit) form.setFieldValue('protocol', kind.protocol);
+              }}
             />
           </Group>
 
@@ -791,16 +845,6 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           />
 
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
-
-          {ENGINE_CHOICE_PROTOCOLS.includes(form.values.protocol) && (
-            <Select
-              label="Engine"
-              description="Proxy core that serves this profile. sing-box is an alternative to the native core; the client subscription link is identical either way. Needs sing-box installed on the bound nodes."
-              data={engineOptions(form.values.protocol)}
-              allowDeselect={false}
-              {...form.getInputProps('engine')}
-            />
-          )}
 
           <Divider label={protocolLabel(form.values.protocol)} labelPosition="center" />
 
