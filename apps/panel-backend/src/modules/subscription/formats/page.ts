@@ -205,6 +205,16 @@ const APPS: AppDef[] = [
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'clash' },
   },
+  {
+    // INCY (incy-app.com). Cross-platform client; imports our subscription via
+    // its "add server from URL / QR". One-tap import needs its incy://crypt1
+    // deep link (AES-GCM payload from @incy/link-encoder); wire that up once the
+    // package is installed (see deeplinkHref). Until then: import via the link.
+    name: 'INCY',
+    platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
+    protocols: ['xray', 'shadowsocks', 'hysteria'],
+    action: { kind: 'manual' },
+  },
   // AmneziaWG-specific.
   {
     name: 'AmneziaVPN',
