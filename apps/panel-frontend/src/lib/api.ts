@@ -1,5 +1,11 @@
 import axios, { type AxiosError } from 'axios';
-import type { RoutingPresetId, RecipeRegistryResponse } from '@iceslab/shared';
+import type {
+  RoutingPresetId,
+  RecipeRegistryResponse,
+  RecipeSource,
+  RecipeSourceInput,
+  RecipeImportResponse,
+} from '@iceslab/shared';
 import { useAuth } from '../stores/auth';
 import { queryClient } from './queryClient';
 
@@ -76,6 +82,39 @@ export async function getRecipeRegistry(params?: {
     '/api/recipes/registry',
     { params },
   );
+  return data;
+}
+
+// Recipe sources (bring your own GitHub): operator-managed list the registry
+// merges from. The default (curated) source is seeded server-side.
+export async function getRecipeSources(): Promise<{ sources: RecipeSource[] }> {
+  const { data } = await api.get<{ sources: RecipeSource[] }>('/api/recipes/sources');
+  return data;
+}
+
+export async function addRecipeSource(input: RecipeSourceInput): Promise<RecipeSource> {
+  const { data } = await api.post<RecipeSource>('/api/recipes/sources', input);
+  return data;
+}
+
+export async function updateRecipeSource(
+  id: string,
+  patch: Partial<RecipeSourceInput>,
+): Promise<RecipeSource> {
+  const { data } = await api.patch<RecipeSource>(`/api/recipes/sources/${id}`, patch);
+  return data;
+}
+
+export async function deleteRecipeSource(id: string): Promise<void> {
+  await api.delete(`/api/recipes/sources/${id}`);
+}
+
+/** Ad-hoc import: validate recipes from a one-off URL or pasted JSON. */
+export async function importRecipes(body: {
+  url?: string;
+  json?: string;
+}): Promise<RecipeImportResponse> {
+  const { data } = await api.post<RecipeImportResponse>('/api/recipes/import', body);
   return data;
 }
 

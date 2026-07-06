@@ -16,6 +16,7 @@
  */
 
 import type { ProtocolName } from './api';
+import { RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
 import type {
   Recipe as WireRecipe,
   RecipeRandomize,
@@ -438,6 +439,85 @@ export function resolveRecipeApply(
  */
 export function fromWireRecipe(w: WireRecipe): Recipe {
   return { ...w, protocol: w.protocol as ProtocolName, source: 'registry' };
+}
+
+// ───── Export (author your own recipe from the current form) ─────
+
+/**
+ * Which ProfileForm fields are protocol-specific, derived from what the
+ * built-in recipes actually set. Doubles as the export allowlist: exporting
+ * the current config as a recipe pulls exactly these keys, never common
+ * fields like name/enabled. Thunks are called once for their KEYS only (the
+ * values are irrelevant here), so the module-load randomness does not matter.
+ */
+export const RECIPE_APPLY_KEYS: Record<string, string[]> = (() => {
+  const acc: Record<string, Set<string>> = {};
+  for (const r of RECIPES) {
+    const obj = typeof r.apply === 'function' ? r.apply() : r.apply;
+    const set = (acc[r.protocol] ??= new Set<string>());
+    for (const k of Object.keys(obj)) set.add(k);
+    for (const rz of r.randomize ?? []) set.add(rz.field);
+  }
+  const out: Record<string, string[]> = {};
+  for (const [proto, set] of Object.entries(acc)) out[proto] = [...set];
+  return out;
+})();
+
+export interface RecipeExportMeta {
+  id: string;
+  name: string;
+  description: string;
+  details?: string;
+  emoji?: string;
+  dpiResistance: number;
+  speed: number;
+  region?: string;
+}
+
+/**
+ * Build a shareable recipe from the current form values. Only the protocol's
+ * own fields (RECIPE_APPLY_KEYS) are captured, as a static snapshot: any
+ * value the operator randomised is frozen to what is in the form now.
+ */
+export function buildExportRecipe(
+  protocol: string,
+  values: Record<string, unknown>,
+  meta: RecipeExportMeta,
+): Recipe {
+  const apply: Record<string, string | number | boolean> = {};
+  for (const k of RECIPE_APPLY_KEYS[protocol] ?? []) {
+    const v = values[k];
+    if (typeof v === 'string' && v !== '') apply[k] = v;
+    else if (typeof v === 'number' || typeof v === 'boolean') apply[k] = v;
+  }
+  const clampRating = (n: number) =>
+    (Math.min(5, Math.max(1, Math.round(n))) as 1 | 2 | 3 | 4 | 5);
+  return {
+    schemaVersion: RECIPE_SCHEMA_VERSION,
+    id: meta.id,
+    protocol: protocol as ProtocolName,
+    emoji: meta.emoji || '⭐',
+    name: meta.name,
+    description: meta.description,
+    details: meta.details || meta.description,
+    dpiResistance: clampRating(meta.dpiResistance),
+    speed: clampRating(meta.speed),
+    apply,
+    region: meta.region,
+  };
+}
+
+/** Trigger a browser download of a recipe as pretty JSON. */
+export function downloadRecipeJson(recipe: Recipe): void {
+  const blob = new Blob([JSON.stringify(recipe, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${recipe.id || 'recipe'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ───── Live validator ─────

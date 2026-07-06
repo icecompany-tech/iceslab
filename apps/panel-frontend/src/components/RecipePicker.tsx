@@ -1,26 +1,48 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
+  Button,
   Card,
   Group,
   Loader,
+  Modal,
+  Paper,
   SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
+  Textarea,
+  TextInput,
   Tooltip,
 } from '@mantine/core';
-import { IconCheck, IconStar, IconStarFilled, IconWorld } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import {
+  IconCheck,
+  IconDownload,
+  IconStar,
+  IconStarFilled,
+  IconWorld,
+} from '@tabler/icons-react';
 import type { ProtocolName } from '../lib/api';
-import { getRecipeRegistry } from '../lib/api';
+import { apiErrorMessage, getRecipeRegistry, importRecipes } from '../lib/api';
 import { fromWireRecipe, recipesForProtocol, type Recipe } from '../lib/recipes';
 
 interface Props {
   protocol: ProtocolName;
   onPick: (recipe: Recipe) => void;
+}
+
+/**
+ * Stable identity across sources: two different sources can legitimately
+ * ship a recipe with the same `id`, so key and selection compare on
+ * sourceId:id (built-ins have no source and fall back to id).
+ */
+function recipeKey(r: Recipe): string {
+  return r.sourceId ? `${r.sourceId}:${r.id}` : r.id;
 }
 
 /**
@@ -66,6 +88,7 @@ export function RecipePicker({ protocol, onPick }: Props) {
   const { t } = useTranslation();
   const builtins = recipesForProtocol(protocol);
   const [picked, setPicked] = useState<Recipe | null>(null);
+  const [importOpen, importCtl] = useDisclosure(false);
 
   // Community registry for this protocol. The backend already filters by
   // protocol, validates + version-gates every entry and caches for 6h, so
@@ -109,20 +132,30 @@ export function RecipePicker({ protocol, onPick }: Props) {
             {t('recipes.subtitle')}
           </Text>
         </Stack>
-        {picked && (
-          <Badge variant="light" color="teal" leftSection={<IconCheck size={11} />}>
-            {t('recipes.appliedBadge')}
-          </Badge>
-        )}
+        <Group gap="xs">
+          {picked && (
+            <Badge variant="light" color="teal" leftSection={<IconCheck size={11} />}>
+              {t('recipes.appliedBadge')}
+            </Badge>
+          )}
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            leftSection={<IconDownload size={12} />}
+            onClick={importCtl.open}
+          >
+            {t('recipes.import.button')}
+          </Button>
+        </Group>
       </Group>
 
       {builtins.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xs">
           {builtins.map((r) => (
             <RecipeCard
-              key={r.id}
+              key={recipeKey(r)}
               recipe={r}
-              active={picked?.id === r.id}
+              active={!!picked && recipeKey(picked) === recipeKey(r)}
               onClick={() => handlePick(r)}
             />
           ))}
@@ -133,12 +166,142 @@ export function RecipePicker({ protocol, onPick }: Props) {
         recipes={registry}
         loading={registryQuery.isLoading}
         stale={stale}
-        pickedId={picked?.id ?? null}
+        pickedKey={picked ? recipeKey(picked) : null}
         onPick={handlePick}
       />
 
       {picked && <AppliedAlert recipe={picked} />}
+
+      <RecipeImportModal
+        opened={importOpen}
+        onClose={importCtl.close}
+        onPick={handlePick}
+      />
     </Stack>
+  );
+}
+
+/**
+ * Ad-hoc import: paste a raw URL (your gist / GitHub) or the recipe JSON
+ * directly. The backend validates it against the same schema, then the
+ * operator picks one to apply. Nothing is persisted; this is a one-off.
+ */
+function RecipeImportModal({
+  opened,
+  onClose,
+  onPick,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  onPick: (r: Recipe) => void;
+}) {
+  const { t } = useTranslation();
+  const [url, setUrl] = useState('');
+  const [json, setJson] = useState('');
+  const [results, setResults] = useState<Recipe[] | null>(null);
+
+  const reset = () => {
+    setUrl('');
+    setJson('');
+    setResults(null);
+  };
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const importMutation = useMutation({
+    mutationFn: () =>
+      importRecipes(url.trim() ? { url: url.trim() } : { json: json.trim() }),
+    onSuccess: (data) => {
+      const recipes = data.recipes.map(fromWireRecipe);
+      setResults(recipes);
+      if (recipes.length === 0) {
+        notifications.show({ color: 'yellow', message: t('recipes.import.none') });
+      }
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        title: t('recipes.import.failed'),
+        message: apiErrorMessage(err),
+      }),
+  });
+
+  return (
+    <Modal opened={opened} onClose={close} title={t('recipes.import.title')} size="lg">
+      <Stack>
+        <Text size="xs" c="dimmed">
+          {t('recipes.import.hint')}
+        </Text>
+        <TextInput
+          label={t('recipes.import.urlLabel')}
+          placeholder="https://raw.githubusercontent.com/you/recipes/main/xray-my.json"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.currentTarget.value);
+            setResults(null);
+          }}
+        />
+        <Textarea
+          label={t('recipes.import.jsonLabel')}
+          placeholder='{ "schemaVersion": 1, "id": "...", "protocol": "xray", ... }'
+          autosize
+          minRows={3}
+          maxRows={10}
+          value={json}
+          onChange={(e) => {
+            setJson(e.currentTarget.value);
+            setResults(null);
+          }}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={close}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            loading={importMutation.isPending}
+            disabled={!url.trim() && !json.trim()}
+            onClick={() => importMutation.mutate()}
+          >
+            {t('recipes.import.load')}
+          </Button>
+        </Group>
+
+        {results && results.length > 0 && (
+          <Stack gap={4}>
+            <Text size="xs" fw={600}>
+              {t('recipes.import.pick')}
+            </Text>
+            {results.map((r) => (
+              <Paper
+                key={recipeKey(r)}
+                withBorder
+                p="xs"
+                radius="sm"
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  onPick(r);
+                  close();
+                }}
+              >
+                <Group gap={8} wrap="nowrap">
+                  <Text size="lg">{r.emoji}</Text>
+                  <Stack gap={0} style={{ minWidth: 0 }}>
+                    <Text size="sm" fw={500} truncate>
+                      {r.name}
+                    </Text>
+                    <Text size="xs" c="dimmed" truncate>
+                      {r.description}
+                    </Text>
+                  </Stack>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        )}
+      </Stack>
+    </Modal>
   );
 }
 
@@ -151,13 +314,13 @@ function RegistrySection({
   recipes,
   loading,
   stale,
-  pickedId,
+  pickedKey,
   onPick,
 }: {
   recipes: Recipe[];
   loading: boolean;
   stale: boolean;
-  pickedId: string | null;
+  pickedKey: string | null;
   onPick: (r: Recipe) => void;
 }) {
   const { t } = useTranslation();
@@ -233,9 +396,9 @@ function RegistrySection({
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xs">
         {shown.map((r) => (
           <RecipeCard
-            key={r.id}
+            key={recipeKey(r)}
             recipe={r}
-            active={pickedId === r.id}
+            active={pickedKey === recipeKey(r)}
             onClick={() => onPick(r)}
           />
         ))}
@@ -326,9 +489,16 @@ function RecipeCard({
                 color="orange"
               />
             </Group>
-            {isRegistry && recipe.author && (
-              <Text size="10px" c="dimmed">
-                {t('recipes.registry.byAuthor', { author: recipe.author })}
+            {isRegistry && (recipe.sourceName || recipe.author) && (
+              <Text size="10px" c="dimmed" truncate>
+                {[
+                  recipe.sourceName,
+                  recipe.author
+                    ? t('recipes.registry.byAuthor', { author: recipe.author })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
             )}
           </Stack>

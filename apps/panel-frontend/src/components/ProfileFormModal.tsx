@@ -23,7 +23,8 @@ import {
 } from '@mantine/core';
 import { DEMO_MODE } from '../lib/demoFlag';
 import { useForm } from '@mantine/form';
-import { IconBolt, IconKey } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
+import { IconBolt, IconDownload, IconKey } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -34,6 +35,7 @@ import {
   type UpdateProfileInput,
 } from '../lib/api';
 import { RecipePicker } from './RecipePicker';
+import { RecipeExportModal } from './RecipeExportModal';
 import { resolveRecipeApply, validateXrayConfig } from '../lib/recipes';
 import { protocolLabel } from '../lib/protocols';
 
@@ -477,6 +479,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
   const { t } = useTranslation();
   const isEdit = profile !== null;
   const mode: Mode = isEdit ? 'edit' : 'create';
+  const [exportOpen, exportCtl] = useDisclosure(false);
 
   const form = useForm<FormValues>({
     initialValues: defaults(profile),
@@ -847,6 +850,24 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           <Switch label={t('common.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
 
           <Divider label={protocolLabel(form.values.protocol)} labelPosition="center" />
+
+          <Group justify="flex-end" mt={-4}>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              leftSection={<IconDownload size={12} />}
+              onClick={exportCtl.open}
+            >
+              {t('recipes.export.button')}
+            </Button>
+          </Group>
+
+          <RecipeExportModal
+            opened={exportOpen}
+            onClose={exportCtl.close}
+            protocol={form.values.protocol}
+            values={form.values as unknown as Record<string, unknown>}
+          />
 
           <RecipePicker
             protocol={form.values.protocol}

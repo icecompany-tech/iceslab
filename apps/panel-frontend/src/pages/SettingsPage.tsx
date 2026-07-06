@@ -13,6 +13,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   TextInput,
   ThemeIcon,
@@ -33,6 +34,7 @@ import {
   IconRefresh,
   IconWorld,
   IconTrash,
+  IconCloudDownload,
 } from '@tabler/icons-react';
 import { copyToClipboard } from '../lib/clipboard';
 import {
@@ -50,10 +52,15 @@ import {
   setup2fa,
   updateRegion,
   updateSettings,
+  getRecipeSources,
+  addRecipeSource,
+  updateRecipeSource,
+  deleteRecipeSource,
   type ApiToken,
   type Region,
   type TotpSetup,
 } from '../lib/api';
+import type { RecipeSource } from '@iceslab/shared';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -77,6 +84,7 @@ export function SettingsPage() {
         <TwoFactorCard />
       </SimpleGrid>
       <RegionsCard />
+      <RecipeSourcesCard />
     </Stack>
   );
 }
@@ -808,6 +816,181 @@ function RegionEditRow({
         </Button>
       </Group>
     </Paper>
+  );
+}
+
+// ───── Recipe sources (bring your own GitHub) ─────
+
+/**
+ * Operator-managed recipe sources. The panel merges recipes from every
+ * enabled source (plus the seeded curated default) into the RecipePicker's
+ * community section. A source is just an https URL to a registry index.json
+ * or a recipes JSON array on any GitHub, gist or self-host.
+ */
+function RecipeSourcesCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const sourcesQuery = useQuery({
+    queryKey: ['recipe-sources'],
+    queryFn: getRecipeSources,
+  });
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+
+  // Bust both the source list and the merged registry so the picker updates.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['recipe-sources'] });
+    qc.invalidateQueries({ queryKey: ['recipes'] });
+  };
+
+  const addMutation = useMutation({
+    mutationFn: () => addRecipeSource({ name: name.trim(), url: url.trim() }),
+    onSuccess: () => {
+      invalidate();
+      setName('');
+      setUrl('');
+      notifications.show({ color: 'green', message: t('settings.recipeSources.added') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        title: t('common.createError'),
+        message: apiErrorMessage(err),
+      }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      updateRecipeSource(id, { enabled }),
+    onSuccess: invalidate,
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        title: t('common.saveError'),
+        message: apiErrorMessage(err),
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteRecipeSource,
+    onSuccess: () => {
+      invalidate();
+      notifications.show({ color: 'green', message: t('settings.recipeSources.deleted') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: 'red',
+        title: t('common.deleteError'),
+        message: apiErrorMessage(err),
+      }),
+  });
+
+  function handleDelete(s: RecipeSource) {
+    modals.openConfirmModal({
+      title: t('settings.recipeSources.deleteTitle', { name: s.name }),
+      children: <Text size="sm">{t('settings.recipeSources.deleteBody')}</Text>,
+      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => deleteMutation.mutate(s.id),
+    });
+  }
+
+  const sources = sourcesQuery.data?.sources ?? [];
+
+  return (
+    <Card withBorder padding="lg" radius="md">
+      <Group gap="sm" mb="md">
+        <ThemeIcon size={32} radius="md" variant="light" color="teal">
+          <IconCloudDownload size={18} />
+        </ThemeIcon>
+        <Stack gap={0}>
+          <Text fw={600}>{t('settings.recipeSources.title')}</Text>
+          <Text size="xs" c="dimmed">
+            {t('settings.recipeSources.description')}
+          </Text>
+        </Stack>
+      </Group>
+
+      <Stack gap="sm" maw={760}>
+        {sources.length === 0 ? (
+          <Text size="xs" c="dimmed">
+            {t('settings.recipeSources.empty')}
+          </Text>
+        ) : (
+          <Stack gap={4}>
+            {sources.map((s) => (
+              <Paper key={s.id} withBorder p="xs" radius="sm">
+                <Group justify="space-between" wrap="nowrap">
+                  <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Switch
+                      checked={s.enabled}
+                      size="sm"
+                      onChange={(e) =>
+                        toggleMutation.mutate({
+                          id: s.id,
+                          enabled: e.currentTarget.checked,
+                        })
+                      }
+                    />
+                    <Stack gap={0} style={{ minWidth: 0 }}>
+                      <Group gap={6} wrap="nowrap">
+                        <Text size="sm" fw={500} truncate>
+                          {s.name}
+                        </Text>
+                        {s.trusted && (
+                          <Badge size="xs" variant="light" color="teal">
+                            {t('recipes.registry.official')}
+                          </Badge>
+                        )}
+                      </Group>
+                      <Text size="xs" c="dimmed" ff="monospace" truncate>
+                        {s.url}
+                      </Text>
+                    </Stack>
+                  </Group>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="sm"
+                    onClick={() => handleDelete(s)}
+                  >
+                    <IconTrash size={14} />
+                  </ActionIcon>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        )}
+
+        <Group gap="sm" align="flex-end">
+          <TextInput
+            label={t('settings.recipeSources.nameLabel')}
+            placeholder={t('settings.recipeSources.namePlaceholder')}
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            style={{ flex: 1 }}
+          />
+          <TextInput
+            label={t('settings.recipeSources.urlLabel')}
+            placeholder="https://raw.githubusercontent.com/you/recipes/main/index.json"
+            value={url}
+            onChange={(e) => setUrl(e.currentTarget.value)}
+            style={{ flex: 2 }}
+          />
+          <PrimaryButton
+            leftSection={<IconPlus size={14} />}
+            disabled={!name.trim() || !url.trim()}
+            loading={addMutation.isPending}
+            onClick={() => addMutation.mutate()}
+          >
+            {t('settings.recipeSources.add')}
+          </PrimaryButton>
+        </Group>
+        <Text size="xs" c="dimmed">
+          {t('settings.recipeSources.hint')}
+        </Text>
+      </Stack>
+    </Card>
   );
 }
 
