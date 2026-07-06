@@ -177,6 +177,25 @@ func validateAllowedIP(s string) error {
 	return nil
 }
 
+// validateIField enforces "looks like an AmneziaWG I-signature": a hex string
+// only (the panel validates the same shape with /^[0-9a-fA-F]*$/). Empty is
+// allowed and means "slot disabled". This is the same RCE class the WG-key and
+// AllowedIP validators guard against: I1-I5 arrive over the panel→node wire and
+// are written verbatim into the awg-quick INI's [Interface] block via
+// fmt.Fprintf. A value containing a newline (e.g. "aabb\nPostUp = curl … | sh")
+// closes the I-line and injects a PostUp directive that awg-quick evaluates as
+// a root shell command on interface bring-up. Restricting to hex kills the
+// newline and every shell metacharacter.
+func validateIField(name, s string) error {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return fmt.Errorf("%s must be a hex string (offending byte at index %d)", name, i)
+		}
+	}
+	return nil
+}
+
 func (c *InboundConfig) validate() error {
 	if c.PrivateKey == "" {
 		return errors.New("PrivateKey is required")
@@ -203,6 +222,14 @@ func (c *InboundConfig) validate() error {
 	}
 	if c.Jmin > c.Jmax {
 		return fmt.Errorf("Jmin (%d) must be <= Jmax (%d)", c.Jmin, c.Jmax)
+	}
+	for _, f := range []struct {
+		name string
+		val  string
+	}{{"I1", c.I1}, {"I2", c.I2}, {"I3", c.I3}, {"I4", c.I4}, {"I5", c.I5}} {
+		if err := validateIField(f.name, f.val); err != nil {
+			return err
+		}
 	}
 	return nil
 }
