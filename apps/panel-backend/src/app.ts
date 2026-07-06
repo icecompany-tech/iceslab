@@ -30,6 +30,7 @@ import { apiTokensRoutes } from './modules/api-tokens/api-tokens.routes.js';
 import { settingsRoutes } from './modules/settings/settings.routes.js';
 import { bullBoardRoutes } from './modules/admin/bull-board.routes.js';
 import { systemRoutes } from './modules/system/system.routes.js';
+import { recipesRoutes } from './modules/recipes/recipes.routes.js';
 import { registerSecurityGate } from './lib/security-gate.js';
 import { registry as metricsRegistry, httpRequestDuration, routeLabel } from './lib/metrics.js';
 import { requireAuth } from './modules/auth/auth.hook.js';
@@ -232,6 +233,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(settingsRoutes);
   await app.register(bullBoardRoutes);
   await app.register(systemRoutes);
+  await app.register(recipesRoutes);
 
   return app;
 }

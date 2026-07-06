@@ -1,5 +1,5 @@
 import axios, { type AxiosError } from 'axios';
-import type { RoutingPresetId } from '@iceslab/shared';
+import type { RoutingPresetId, RecipeRegistryResponse } from '@iceslab/shared';
 import { useAuth } from '../stores/auth';
 import { queryClient } from './queryClient';
 
@@ -62,6 +62,22 @@ export function apiErrorMessage(err: unknown): string {
 }
 
 // ───── Typed helpers for the endpoints we know about ─────
+
+/**
+ * Transport-recipe registry (community recipes pulled from GitHub). Best
+ * effort: the backend returns `stale: true` plus the last-good or empty set
+ * on failure, never an error, so the RecipePicker falls back to built-ins.
+ */
+export async function getRecipeRegistry(params?: {
+  protocol?: string;
+  region?: string;
+}): Promise<RecipeRegistryResponse> {
+  const { data } = await api.get<RecipeRegistryResponse>(
+    '/api/recipes/registry',
+    { params },
+  );
+  return data;
+}
 
 export interface AuthStatusResponse {
   authentication: { password: { enabled: boolean } };

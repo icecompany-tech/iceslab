@@ -754,6 +754,23 @@ export default {
     appliedAlert: 'Применён: {{name}}',
     dpiLabel: 'DPI',
     speedLabel: 'Speed',
+    registry: {
+      title: 'Реестр сообщества',
+      loading: 'Загрузка рецептов сообщества...',
+      offline: 'Реестр сообщества недоступен, только встроенные рецепты.',
+      staleBadge: 'кэш',
+      official: 'official',
+      community: 'community',
+      byAuthor: 'автор: {{author}}',
+      regionAll: 'Все',
+      region: {
+        GLOBAL: 'Глобал',
+        RU: 'RU',
+        IR: 'IR',
+        CN: 'CN',
+        BY: 'BY',
+      },
+    },
     cards: {
       'xray-reality-vision-raw': {
         name: 'REALITY + Vision (raw)',

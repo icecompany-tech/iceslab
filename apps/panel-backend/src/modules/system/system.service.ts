@@ -18,7 +18,7 @@ const FETCH_TIMEOUT_MS = 4000;
 
 let currentVersionCache: string | null = null;
 
-function readCurrentVersion(): string {
+export function readCurrentVersion(): string {
   if (currentVersionCache) return currentVersionCache;
   // The process runs with cwd = the backend package dir in both dev
   // (`pnpm --filter @iceslab/panel-backend start`) and the Docker image

@@ -16,6 +16,11 @@
  */
 
 import type { ProtocolName } from './api';
+import type {
+  Recipe as WireRecipe,
+  RecipeRandomize,
+  RecipeRandomizeKind,
+} from '@iceslab/shared';
 
 export interface Recipe {
   id: string;
@@ -57,6 +62,24 @@ export interface Recipe {
    * as info banners after apply.
    */
   notes?: string[];
+  /**
+   * Declarative click-time randomisation. Registry recipes use this (they
+   * are JSON, no thunk); built-ins use the thunk form of `apply` instead.
+   * Resolved values win over the matching `apply` key.
+   */
+  randomize?: RecipeRandomize[];
+  // ───── Registry metadata (absent on built-ins) ─────
+  schemaVersion?: number;
+  /** Region tag driving the registry filter chips. Absent means GLOBAL. */
+  region?: string;
+  /** Byline shown on registry cards. */
+  author?: string;
+  /** Curated/official flag stamped by the registry CI (informational badge). */
+  verified?: boolean;
+  /** Minimum panel semver; the backend hides recipes newer panels than ours. */
+  minPanelVersion?: string;
+  /** Provenance. Built-ins leave this undefined (treated as built-in). */
+  source?: 'builtin' | 'registry';
 }
 
 // Random path generator, REALITY+xhttp benefits from unpredictable paths
@@ -365,6 +388,56 @@ export const RECIPES: Recipe[] = [
 
 export function recipesForProtocol(protocol: ProtocolName): Recipe[] {
   return RECIPES.filter((r) => r.protocol === protocol);
+}
+
+// ───── Randomise resolvers ─────
+
+// 16-char base36 secret (Salamander obfs password and similar).
+function randPassword16(): string {
+  return (
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 10)
+  ).slice(0, 16);
+}
+
+/** Resolve one declarative randomize descriptor to a concrete value. */
+function randomValueFor(kind: RecipeRandomizeKind): string | number {
+  switch (kind) {
+    case 'token8':
+      return randServiceName();
+    case 'path':
+      return randPath();
+    case 'password16':
+      return randPassword16();
+    case 'awgHeader':
+      return randAwgHeader();
+  }
+}
+
+/**
+ * Collapse a recipe's overrides to a single field map. Built-ins may carry a
+ * thunk (per-click randomness); registry recipes carry a plain object plus a
+ * declarative `randomize` list. The consumer (ProfileFormModal) applies this
+ * map without caring which form the recipe used.
+ */
+export function resolveRecipeApply(
+  recipe: Recipe,
+): Record<string, string | number | boolean> {
+  const base =
+    typeof recipe.apply === 'function' ? recipe.apply() : { ...recipe.apply };
+  for (const r of recipe.randomize ?? []) {
+    base[r.field] = randomValueFor(r.kind);
+  }
+  return base;
+}
+
+/**
+ * Adapt a registry (wire) recipe to the frontend Recipe shape. The wire type
+ * is already assignable except for provenance, which we stamp so the card can
+ * badge it as community/official.
+ */
+export function fromWireRecipe(w: WireRecipe): Recipe {
+  return { ...w, protocol: w.protocol as ProtocolName, source: 'registry' };
 }
 
 // ───── Live validator ─────

@@ -34,7 +34,7 @@ import {
   type UpdateProfileInput,
 } from '../lib/api';
 import { RecipePicker } from './RecipePicker';
-import { validateXrayConfig } from '../lib/recipes';
+import { resolveRecipeApply, validateXrayConfig } from '../lib/recipes';
 import { protocolLabel } from '../lib/protocols';
 
 // Xray stream transports. The whole stack already handles all six (Zod schema,
@@ -851,16 +851,20 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           <RecipePicker
             protocol={form.values.protocol}
             onPick={async (recipe) => {
-              // Apply recipe field overrides first. `apply` may be a plain
-              // object (for static recipes) OR a thunk for recipes that
-               // need fresh randomness per click (Salamander password, AWG
-              // H1-H4, REALITY+xhttp path) - see Recipe.apply jsdoc. Resolve
-              // the union here so every click yields a new random where
-              // applicable, instead of the once-per-page-load value the
-              // static-object form would freeze.
-              const fields =
-                typeof recipe.apply === 'function' ? recipe.apply() : recipe.apply;
-              form.setValues((current) => ({ ...current, ...fields }));
+              // Resolve the recipe's field map. Built-ins may carry a thunk
+              // (fresh randomness per click: Salamander password, AWG H1-H4,
+              // REALITY+xhttp path); registry recipes carry a plain object plus
+              // a declarative randomize list. resolveRecipeApply collapses both.
+              // We then merge only keys that are real form fields, so an
+              // imported recipe can never inject an unknown key into the form.
+              const fields = resolveRecipeApply(recipe);
+              form.setValues((current) => {
+                const safe: Record<string, string | number | boolean> = {};
+                for (const [k, v] of Object.entries(fields)) {
+                  if (k in current) safe[k] = v;
+                }
+                return { ...current, ...safe };
+              });
 
               // Auto-fill missing crypto material so admin doesn't have to
               // chase 4 separate buttons (private key, public key, shortIds,
