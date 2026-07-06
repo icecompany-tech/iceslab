@@ -1,4 +1,21 @@
 import { prisma } from '../../prisma.js';
+import { config } from '../../config.js';
+
+/**
+ * Pick the effective ceiling on how many distinct device rows we're willing
+ * to persist for one user. The per-user/squad `limit` is the admin's policy;
+ * `systemMax` is an absolute backstop that applies even when there's no
+ * per-user limit. Returns whichever is smaller (a null per-user limit means
+ * "no policy limit", so the system backstop wins).
+ *
+ * Pure (no DB) so the ceiling decision is unit-testable without Postgres.
+ */
+export function effectiveDeviceCeiling(
+  limit: number | null,
+  systemMax: number,
+): number {
+  return limit === null ? systemMax : Math.min(limit, systemMax);
+}
 
 /**
  * Outcome of an HWID enforcement check on /sub/:token.
@@ -25,10 +42,14 @@ export interface HwidCheckResult {
  *
  * Behaviour:
  *   - hwid is null/empty → no enforcement, no row written.
- *   - user.hwidDeviceLimit is null → no enforcement, but device IS upserted
- *     so the audit log has it.
+ *   - user.hwidDeviceLimit is null → audit-only: a device row is recorded so
+ *     admins can see it, but only up to an absolute system ceiling
+ *     (`HWID_MAX_DEVICES_PER_USER`) so a client-controlled `x-hwid` can't grow
+ *     the table without bound. At the ceiling the request still succeeds; we
+ *     just stop recording new devices.
  *   - device already exists → bump `lastSeenAt`, return `allowed`.
- *   - new device + count would exceed limit → return `denied` WITHOUT
+ *   - new device + count would exceed the effective ceiling
+ *     (min of per-user limit and the system max) → return `denied` WITHOUT
  *     inserting the row (so re-trying with the same headers produces the
  *     same result and admins see the device that bumped the count, not
  *     blocked attempts).
@@ -47,56 +68,59 @@ export async function enforceHwid(
     return { status: 'disabled', active: 0, limit };
   }
 
-  // B13 — no per-user cap means nothing to enforce, so skip the
-  // findUnique+update+count (or advisory-lock tx) dance entirely. One upsert
-  // registers/touches the device for the audit log. This is the common case
-  // (most users have no HWID limit), so it keeps /sub off the multi-query hot
-  // path. `active` is left 0: the X-Hwid-Active numerator is cosmetic when the
-  // denominator is "unlimited".
-  if (limit === null) {
-    await prisma.hwidUserDevice.upsert({
-      where: { userId_hwid: { userId, hwid } },
-      create: { userId, hwid },
-      update: { lastSeenAt: new Date() },
-    });
-    return { status: 'allowed', active: 0, limit: null };
-  }
-
+  // A known device is always just a `lastSeenAt` touch — no new row, so it
+  // can't grow the table regardless of any ceiling. Fast-path it (one indexed
+  // update on the unique key) before any counting.
   const existing = await prisma.hwidUserDevice.findUnique({
     where: { userId_hwid: { userId, hwid } },
   });
 
   if (existing) {
-    // Known device — touch lastSeenAt; the count below is unaffected.
-    // We await to keep the response monotonic on retry.
     await prisma.hwidUserDevice.update({
       where: { id: existing.id },
       data: { lastSeenAt: new Date() },
     });
-    const active = await prisma.hwidUserDevice.count({ where: { userId } });
+    // For the unlimited (audit-only) path `active` stays cosmetic (0/unlimited);
+    // otherwise report the real device count for the X-Hwid-Active gauge.
+    const active = limit === null
+      ? 0
+      : await prisma.hwidUserDevice.count({ where: { userId } });
     return { status: 'allowed', active, limit };
   }
 
-  // Brand-new device. Two concurrent /sub requests with different HWIDs
-  // could both see `current < limit` and both insert — final count =
-  // limit + 1, bypassing the per-user device cap.
+  // Brand-new device. Two concurrent /sub requests with different HWIDs could
+  // both see `current < ceiling` and both insert, overshooting the cap by one.
+  // Serialize per-user via a Postgres transaction-scoped advisory lock keyed on
+  // a hash of userId; the lock auto-releases at tx end so unrelated users don't
+  // block each other.
   //
-  // Serialize per-user via a Postgres transaction-scoped advisory lock
-  // keyed on a hash of userId. The lock is auto-released at tx end, so
-  // unrelated users don't block each other.
+  // The ceiling is `min(per-user limit, HWID_MAX_DEVICES_PER_USER)`. The system
+  // backstop matters most on the `limit === null` path: `x-hwid` is a
+  // client-controlled header with unbounded distinct values, so without a hard
+  // cap one valid token could insert a never-pruned audit row per request until
+  // the disk fills. Above the cap we skip the insert (audit-only for unlimited
+  // users -> `allowed`; a real per-user limit -> `denied` so the client sees 403).
+  const ceiling = effectiveDeviceCeiling(limit, config.HWID_MAX_DEVICES_PER_USER);
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
     const current = await tx.hwidUserDevice.count({ where: { userId } });
 
-    if (limit !== null && current >= limit) {
-      // Over quota — DO NOT insert. Admin sees only devices that
-      // actually got through; otherwise spurious failed attempts
-      // pollute the list.
+    if (current >= ceiling) {
+      // At the ceiling — DO NOT insert. A real per-user limit reports the
+      // count and denies (403 upstream); the unlimited audit path just stops
+      // growing the table and still lets the client through.
+      if (limit === null) {
+        return { status: 'allowed' as const, active: 0, limit: null };
+      }
       return { status: 'denied' as const, active: current, limit };
     }
 
     await tx.hwidUserDevice.create({ data: { userId, hwid } });
-    return { status: 'allowed' as const, active: current + 1, limit };
+    return {
+      status: 'allowed' as const,
+      active: limit === null ? 0 : current + 1,
+      limit,
+    };
   });
 }
 
