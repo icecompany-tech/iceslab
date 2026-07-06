@@ -181,4 +181,46 @@ describe('pollNodeStats bulk upsert (B3, integration)', () => {
     expect(hist[0]!.bytesOut).toBe(55n);
     expect(hist[0]!.nodeId).toBe(nodeId);
   });
+
+  // Regression for the mixed cumulative+delta node bug: a node running BOTH a
+  // cumulative core (xray, non-destructive read) and a delta core (shadowsocks,
+  // statsquery -reset) OR's the response-level `cumulative` flag to true. Before
+  // the per-user flag fix, the panel snapshot-deltaed EVERY user, so the delta
+  // core's users were double-deltaed to ~zero and their traffic went unbilled.
+  // The cumulative user must baseline on first sight; the delta user must bill
+  // its bytes on every poll.
+  it('bills delta-core and cumulative-core users correctly on a mixed node', async () => {
+    await createNode('eu-6', '10.0.0.6:8443');
+    const cumUser = await createUser('grace'); // xray-style cumulative counters
+    const deltaUser = await createUser('heidi'); // ss-style per-poll deltas
+
+    const mixed = (cumBytes: number, deltaBytes: number): GetStatsResponse => ({
+      users: [
+        { userId: cumUser, bytesIn: cumBytes, bytesOut: 0, cumulative: true },
+        { userId: deltaUser, bytesIn: deltaBytes, bytesOut: 0, cumulative: false },
+      ],
+      uptime: 1,
+      totalBytesIn: 0,
+      totalBytesOut: 0,
+      cumulative: true, // response-level OR across the two cores
+    });
+
+    // Poll 1: cumulative user baselines (delta 0); delta user bills its 100.
+    mockStats(mixed(1000, 100));
+    await pollNodeStats();
+    let cum = await prisma.userTraffic.findUnique({ where: { userId: cumUser } });
+    let del = await prisma.userTraffic.findUnique({ where: { userId: deltaUser } });
+    expect(cum?.usedTrafficBytes).toBe(0n); // first sight of a cumulative counter
+    expect(del?.usedTrafficBytes).toBe(100n); // delta billed immediately
+
+    // Poll 2: cumulative grows 1000 -> 1500 (delta 500); delta core reports
+    // another 100 for this poll -> billed additively, NOT re-baselined to zero.
+    vi.restoreAllMocks();
+    mockStats(mixed(1500, 100));
+    await pollNodeStats();
+    cum = await prisma.userTraffic.findUnique({ where: { userId: cumUser } });
+    del = await prisma.userTraffic.findUnique({ where: { userId: deltaUser } });
+    expect(cum?.usedTrafficBytes).toBe(500n); // 0 + 500
+    expect(del?.usedTrafficBytes).toBe(200n); // 100 + 100 (was 100 pre-fix: unbilled)
+  });
 });

@@ -136,6 +136,15 @@ type UserStats struct {
 	UserID   string `json:"userId"`
 	BytesIn  int64  `json:"bytesIn"`
 	BytesOut int64  `json:"bytesOut"`
+	// Cumulative=true means THIS user's counters are cumulative-since-core-start
+	// (the producing adapter does a non-destructive read: xray / sing-box); false
+	// or omitted means they are already per-poll deltas (awg / hysteria / ss /
+	// mtproto). Set per-user so a node running BOTH a cumulative and a delta core
+	// reports each user correctly. Previously only the response-level Cumulative
+	// below existed, so a mixed node OR'd to true and the panel snapshot-deltaed
+	// the delta-core users down to ~zero (traffic under-count). Older panels
+	// ignore this field and fall back to the response-level flag.
+	Cumulative bool `json:"cumulative,omitempty"`
 }
 
 type GetStatsResponse struct {

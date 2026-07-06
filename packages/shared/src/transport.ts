@@ -370,6 +370,15 @@ export interface UserStats {
   userId: string;
   bytesIn: number;
   bytesOut: number;
+  /**
+   * True when THIS user's counters are cumulative-since-core-start (the
+   * producing adapter does a non-destructive read: xray / sing-box); false or
+   * omitted means they are already per-poll deltas (awg / hysteria / ss /
+   * mtproto). Set per-user by the node so a node running BOTH a cumulative and
+   * a delta core is billed correctly. Absent on legacy agents, in which case
+   * the panel falls back to the response-level `cumulative` flag.
+   */
+  cumulative?: boolean;
 }
 
 export interface GetStatsResponse {

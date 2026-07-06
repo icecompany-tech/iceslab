@@ -107,24 +107,38 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           );
         }
 
-        // #5 - cumulative-mode agents (xray non-destructive read) report per-user
-        // counters cumulative-since-core-start. Convert them to per-poll deltas
-        // against the stored snapshot here, then persist the new snapshot in the
-        // SAME transaction as the increments below, so a lost response or a
+        // #5 - cumulative-mode cores (xray/singbox non-destructive read) report
+        // per-user counters cumulative-since-core-start. Convert them to per-poll
+        // deltas against the stored snapshot here, then persist the new snapshot in
+        // the SAME transaction as the increments below, so a lost response or a
         // rolled-back commit never drops bytes. Legacy agents (no `cumulative`
         // flag) already send deltas and skip this path.
+        //
+        // Mixed-node fix: a node running BOTH a cumulative core (xray) and a delta
+        // core (shadowsocks/awg/hysteria) OR's to response-level cumulative=true,
+        // but each user now carries its own `cumulative` flag. Snapshot-delta ONLY
+        // the cumulative-tagged users; the delta-tagged ones are already per-poll
+        // deltas and must pass through untouched (else they get double-deltaed to
+        // ~zero and that traffic goes unbilled). When no user carries the flag
+        // (legacy agent) we fall back to treating the whole list as cumulative,
+        // so single-core and old-agent nodes stay byte-identical.
         let snapshotUpserts: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
         if (res.cumulative && userList.length > 0) {
-          const prevRows = await prisma.nodeUserTrafficSnapshot.findMany({
-            where: { nodeId: node.id, userId: { in: userList.map((u) => u.userId) } },
-            select: { userId: true, cumIn: true, cumOut: true },
-          });
-          const prev = new Map(
-            prevRows.map((r) => [r.userId, { cumIn: r.cumIn, cumOut: r.cumOut }]),
-          );
-          const d = computeUserDeltas(userList, prev);
-          userList = d.deltas;
-          snapshotUpserts = d.snapshots;
+          const tagged = userList.some((u) => u.cumulative !== undefined);
+          const cumulativeUsers = tagged ? userList.filter((u) => u.cumulative) : userList;
+          const deltaUsers = tagged ? userList.filter((u) => !u.cumulative) : [];
+          if (cumulativeUsers.length > 0) {
+            const prevRows = await prisma.nodeUserTrafficSnapshot.findMany({
+              where: { nodeId: node.id, userId: { in: cumulativeUsers.map((u) => u.userId) } },
+              select: { userId: true, cumIn: true, cumOut: true },
+            });
+            const prev = new Map(
+              prevRows.map((r) => [r.userId, { cumIn: r.cumIn, cumOut: r.cumOut }]),
+            );
+            const d = computeUserDeltas(cumulativeUsers, prev);
+            userList = [...d.deltas, ...deltaUsers];
+            snapshotUpserts = d.snapshots;
+          }
         }
 
         // All the delta math (scaling, zero-delta skip, presence-only signal,

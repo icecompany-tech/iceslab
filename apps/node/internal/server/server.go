@@ -615,6 +615,10 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 					UserID:   u.UserID,
 					BytesIn:  u.BytesIn,
 					BytesOut: u.BytesOut,
+					// Tag each user with the producing adapter's counter mode so the
+					// panel treats cumulative-core (xray/singbox) and delta-core
+					// (awg/hysteria/ss) users correctly on a mixed node.
+					Cumulative: stats.Cumulative,
 				})
 			}
 			results[i] = res
@@ -629,8 +633,10 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		allUsers = append(allUsers, res.users...)
 		totalIn += res.in
 		totalOut += res.out
-		// #5 - only xray fills Users[] and it reports cumulative; OR the flag so
-		// the panel uses the snapshot-delta path for this node's per-user counters.
+		// #5 - response-level flag stays as the OR across cores so older panels
+		// still enter the snapshot-delta path. New panels read the per-user
+		// dto.UserStats.Cumulative set above, which is what makes a mixed
+		// cumulative+delta node bill each user correctly.
 		cumulative = cumulative || res.cumulative
 	}
 	uptime := int64(time.Since(s.startedAt).Seconds())

@@ -16,6 +16,13 @@ export interface StatsUserEntry {
   userId: string;
   bytesIn?: number;
   bytesOut?: number;
+  /**
+   * Per-user counter mode from the agent (wire field `cumulative`). True =
+   * cumulative-since-core-start (xray/singbox non-destructive read), false/
+   * undefined = already a per-poll delta. The delta math here ignores it; the
+   * cron reads it to snapshot-delta only the cumulative users on a mixed node.
+   */
+  cumulative?: boolean;
 }
 
 export interface NodeStatsInput {
