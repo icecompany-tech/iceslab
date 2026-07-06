@@ -4,6 +4,8 @@ import { _resetBindingsCacheForTest } from '../../src/modules/subscription/subsc
 // Listed in the order they need truncating. CASCADE handles FKs but explicit
 // listing is documentation. Anything that references another table comes first.
 const TABLES = [
+  'cascade_hops',
+  'cascades',
   'amneziawg_peers',
   'subscription_events',
   'subscription_request_history',

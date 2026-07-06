@@ -7,7 +7,7 @@ import {
   SrrIdParamSchema,
   TestSrrSchema,
 } from './srr.schemas.js';
-import { matchFormatForUserAgent } from './srr.service.js';
+import { matchFormatForUserAgent, invalidateSrrCache } from './srr.service.js';
 
 export async function srrRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth (see users.routes.ts header comment).
@@ -28,6 +28,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
       const rule = await prisma.subscriptionResponseRule.create({
         data: input,
       });
+      invalidateSrrCache();
       return reply.code(201).send(rule);
     } catch (err) {
       if (isUniqueConstraintError(err)) {
@@ -49,6 +50,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
         where: { id: params.id },
         data: input,
       });
+      invalidateSrrCache();
       return reply.send(rule);
     } catch (err) {
       if (isRecordNotFoundError(err)) {
@@ -71,6 +73,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
       await prisma.subscriptionResponseRule.delete({
         where: { id: params.id },
       });
+      invalidateSrrCache();
       return reply.code(204).send();
     } catch (err) {
       if (isRecordNotFoundError(err)) {

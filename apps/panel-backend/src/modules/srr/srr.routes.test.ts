@@ -5,6 +5,7 @@ import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
+import { invalidateSrrCache } from './srr.service.js';
 
 let app: FastifyInstance;
 let token: string;
@@ -12,6 +13,7 @@ let token: string;
 beforeEach(async () => {
   app = await buildApp();
   await cleanDatabase();
+  invalidateSrrCache(); // the service caches compiled rules; reset between tests
   token = await registerAndLogin(app);
 });
 

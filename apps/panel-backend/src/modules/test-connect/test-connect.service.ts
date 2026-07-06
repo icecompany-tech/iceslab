@@ -1,7 +1,9 @@
-import { connect as netConnect } from 'node:net';
+import { connect as netConnect, isIP } from 'node:net';
 import { connect as tlsConnect } from 'node:tls';
+import { lookup } from 'node:dns/promises';
 import { prisma } from '../../prisma.js';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
+import { isPublicRoutableIp } from '../../lib/ip.js';
 
 export interface ProbeResult {
   bindingId: string;
@@ -120,6 +122,19 @@ async function probe(target: {
     port: target.port,
     kind: target.kind,
   };
+
+  // SSRF guard. The probe target is admin/profile-controlled (binding.publicHost,
+  // host.addressOverride, node.address, realityDest) and a scoped `profiles:write`
+  // API token can set it, so without this a token could aim test-connect at
+  // loopback / private / link-local / cloud-metadata (169.254.169.254) and read
+  // ok/latency/error as an internal port scanner + metadata oracle. Resolve the
+  // host and refuse any non-routable resolved address. (A public name that
+  // rebinds to a private IP between here and the connect is a documented
+  // residual; the win is blocking literal internal targets and internal names.)
+  const blockReason = await checkTargetRoutable(target.endpoint);
+  if (blockReason) {
+    return { ...base, probe: 'skip', ok: false, error: blockReason };
+  }
 
   // TLS probe: for REALITY/xray and Naive. We disable cert-chain validation
   // because (a) REALITY uses a borrowed cert chain we can't pre-trust, and
@@ -334,4 +349,30 @@ export async function testProfileConnect(profileId: string): Promise<ProbeResult
   // the worst-case latency of the response is ~1× timeout regardless of
   // how many bindings the profile has.
   return await Promise.all(targets.map((t) => probe(t)));
+}
+
+/**
+ * Return a refusal reason if a probe target host is NOT a publicly routable
+ * address, else null. IP literals are checked directly; hostnames are resolved
+ * (all addresses) and every resolved IP must be routable. A DNS failure is a
+ * refusal rather than an unchecked connect. Backs the SSRF guard in probe.
+ */
+async function checkTargetRoutable(host: string): Promise<string | null> {
+  let addrs: string[];
+  if (isIP(host)) {
+    addrs = [host];
+  } else {
+    try {
+      addrs = (await lookup(host, { all: true })).map((r) => r.address);
+    } catch {
+      return `could not resolve ${host}`;
+    }
+    if (addrs.length === 0) return `could not resolve ${host}`;
+  }
+  for (const a of addrs) {
+    if (!isPublicRoutableIp(a)) {
+      return `${host} resolves to a non-routable address (${a}); refused`;
+    }
+  }
+  return null;
 }

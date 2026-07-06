@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
-import { matchFormatForUserAgent } from './srr.service.js';
+import { invalidateSrrCache, matchFormatForUserAgent } from './srr.service.js';
 
 interface RuleSeed {
   name: string;
@@ -28,6 +28,7 @@ async function seed(rules: RuleSeed[]): Promise<void> {
 
 beforeEach(async () => {
   await cleanDatabase();
+  invalidateSrrCache(); // the service caches compiled rules; reset between tests
 });
 
 afterAll(async () => {
