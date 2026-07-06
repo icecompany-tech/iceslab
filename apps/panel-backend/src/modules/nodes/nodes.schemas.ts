@@ -60,6 +60,9 @@ const ProtocolSchema = z.enum([
   'shadowsocks',
   'mtproto',
   'mieru',
+  'tuic',
+  'anytls',
+  'shadowtls',
 ]);
 
 export const CreateNodeSchema = z.object({

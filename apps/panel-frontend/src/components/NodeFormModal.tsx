@@ -45,6 +45,9 @@ const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [
   { value: 'shadowsocks', label: 'Shadowsocks 2022' },
   { value: 'mtproto', label: 'MTProto (Telegram-only)' },
   { value: 'mieru', label: 'Mieru (stealth proxy)' },
+  { value: 'tuic', label: 'TUIC (sing-box)' },
+  { value: 'anytls', label: 'AnyTLS (sing-box)' },
+  { value: 'shadowtls', label: 'ShadowTLS (sing-box)' },
 ];
 
 // Default mTLS port the node-agent listens on. Hard-coded in

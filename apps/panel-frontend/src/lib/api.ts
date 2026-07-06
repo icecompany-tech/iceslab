@@ -326,7 +326,10 @@ export type NodeProtocol =
   | 'naive'
   | 'shadowsocks'
   | 'mtproto'
-  | 'mieru';
+  | 'mieru'
+  | 'tuic'
+  | 'anytls'
+  | 'shadowtls';
 
 // G (Zashchita / hardening) - probe-resistance toggles persisted to
 // nodes.hardening. Each maps 1:1 to an install-iceslab-node.sh flag. NULL on a

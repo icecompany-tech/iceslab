@@ -15,11 +15,13 @@ import { NodeTransport, NodeRequestError } from './nodes.transport.js';
  */
 
 /** Proto(s) ufw opens for a protocol, mirroring the node-agent's protoForInbound
- *  (server.go): hysteria/amneziawg = udp, shadowsocks/mieru = tcp+udp, else tcp. */
+ *  (server.go): hysteria/amneziawg/tuic = udp (tuic rides QUIC), shadowsocks/
+ *  mieru = tcp+udp, else tcp (xray/naive/mtproto/anytls/shadowtls). */
 export function protosForProtocol(protocol: string): ('tcp' | 'udp')[] {
   switch (protocol) {
     case 'hysteria':
     case 'amneziawg':
+    case 'tuic':
       return ['udp'];
     case 'shadowsocks':
     case 'mieru':
