@@ -84,6 +84,14 @@ const ConfigSchema = z.object({
   RATE_LIMIT_BOOTSTRAP_PER_MIN: z.coerce.number().int().min(1).default(10),
   RATE_LIMIT_HEARTBEAT_PER_MIN: z.coerce.number().int().min(1).default(120),
 
+  // Absolute ceiling on distinct HWID device rows recorded per user, applied
+  // even to users with no per-user/squad device limit (the common case, where
+  // /sub still upserts one audit row per distinct x-hwid header). The header
+  // is client-controlled and unbounded in distinct values, so without a hard
+  // cap a single valid token can grow hwid_user_devices one never-pruned row
+  // at a time until the disk fills. 1000 is far above any real device count.
+  HWID_MAX_DEVICES_PER_USER: z.coerce.number().int().min(1).default(1000),
+
   // K2 — outbound webhook bus. Domain events (user / profile / binding / node
   // lifecycle) are POSTed as signed JSON to these URLs so third parties
   // (billing bots, dashboards, CRMs) can react without polling. This is how an
