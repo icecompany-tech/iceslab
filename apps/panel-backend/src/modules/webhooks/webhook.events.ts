@@ -2,7 +2,7 @@ import { eventBus, type DomainEventMap } from '../../lib/event-bus.js';
 import { emitWebhook } from '../../lib/webhook.js';
 
 /**
- * K2 — forward externally-meaningful domain events to the webhook bus.
+ * K2: forward externally-meaningful domain events to the webhook bus.
  *
  * One subscriber; the events are already emitted onto the typed event bus by
  * the services, so there are no call-site changes. `inbound.*` and `binding.*`

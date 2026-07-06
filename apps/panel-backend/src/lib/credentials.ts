@@ -11,7 +11,7 @@ function randomUrlSafe(byteLength: number): string {
 /**
  * Generate a raw Curve25519 (X25519) keypair as 32-byte buffers. Node exports
  * X25519 keys in DER (PKCS8 for private, SPKI for public). The actual 32-byte
- * key sits at the END of the DER blob — slice the last 32.
+ * key sits at the END of the DER blob, slice the last 32.
  */
 function generateX25519Raw() {
   const { publicKey, privateKey } = generateKeyPairSync('x25519');
@@ -25,7 +25,7 @@ function generateX25519Raw() {
 
 /**
  * Curve25519 keypair as **standard base64** (with `+`/`/`, padded). Used by
- * WireGuard / AmneziaWG — matches `wg genkey` output, kernel module accepts.
+ * WireGuard / AmneziaWG: matches `wg genkey` output, kernel module accepts.
  */
 export function generateWireguardKeyPair(): {
   privateKey: string;
@@ -40,7 +40,7 @@ export function generateWireguardKeyPair(): {
 
 /**
  * Curve25519 keypair as **base64url** (`-`/`_`, no padding). Used by Xray
- * REALITY — `xray x25519` produces this form. The Xray config validator
+ * REALITY: `xray x25519` produces this form. The Xray config validator
  * rejects standard base64 (caught on VPS during slice-23 test on 2026-05-06).
  */
 export function generateRealityKeyPair(): {

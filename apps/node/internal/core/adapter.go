@@ -13,7 +13,7 @@ import (
 //
 // Contract notes:
 //   - All methods are expected to be goroutine-safe.
-//   - `AddUser` and `RemoveUser` MUST be idempotent — the panel may retry
+//   - `AddUser` and `RemoveUser` MUST be idempotent, the panel may retry
 //     a job after a partial failure, so re-applying the same operation is
 //     a no-op.
 //   - `Start` blocks only long enough to launch the underlying binary; it
@@ -58,7 +58,7 @@ type CoreAdapter interface {
 
 	// ApplyInbound takes the inbound port plus the protocol-specific config as
 	// raw JSON (the latter is the same shape the panel pushes via
-	// /applyInbounds — see dto.InboundDto.Config). Implementations parse what
+	// /applyInbounds, see dto.InboundDto.Config). Implementations parse what
 	// they need, regenerate their config file, and reload/restart the
 	// underlying server.
 	//
@@ -77,10 +77,10 @@ type CoreAdapter interface {
 	//     or the regenerate/reload step fails.
 	//   - When called with a config that doesn't match the adapter's protocol
 	//     (e.g. xray cfg pushed to hysteria adapter), implementations should
-	//     return nil — the dispatcher routes by protocol name, but defensive
+	//     return nil, the dispatcher routes by protocol name, but defensive
 	//     no-op is the safer contract.
 	//
-	// Slice 24b — replaces the env-var-only inbound config workflow that
+	// Slice 24b: replaces the env-var-only inbound config workflow that
 	// admins had to hand-edit on every change. Panel auto-pushes via
 	// /applyInbounds, dispatcher fans out to the matching adapter.
 	ApplyInbound(port int, cfg json.RawMessage) error

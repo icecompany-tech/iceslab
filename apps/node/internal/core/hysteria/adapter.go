@@ -9,7 +9,7 @@
 //   - When a client tries to connect, Hysteria POSTs to /auth on our local
 //     server with the supplied password; we look it up in the map.
 //
-// Adding/removing users does NOT restart Hysteria — the state map is updated
+// Adding/removing users does NOT restart Hysteria, the state map is updated
 // live and the next auth callback uses the new state.
 package hysteria
 
@@ -35,7 +35,7 @@ const Name = "hysteria"
 // Config holds per-instance settings. Defaults applied in New if zero.
 type Config struct {
 	// AuthCallbackHost is where the local /auth HTTP server binds.
-	// Default: "127.0.0.1" (loopback only — Hysteria subprocess on same host).
+	// Default: "127.0.0.1" (loopback only, Hysteria subprocess on same host).
 	AuthCallbackHost string
 
 	// AuthCallbackPort for the /auth HTTP server. Default: 9000.
@@ -51,7 +51,7 @@ type Config struct {
 	AuthCallbackPath string
 
 	// BinaryPath to the `hysteria` executable. If empty, the adapter runs in
-	// callback-only mode (no subprocess) — useful for tests and for slice 11
+	// callback-only mode (no subprocess), useful for tests and for slice 11
 	// before slice 13 wires real subprocess + config generation.
 	BinaryPath string
 
@@ -63,7 +63,7 @@ type Config struct {
 
 	// Hostname is the public FQDN that Hysteria's ACME (Let's Encrypt http-01)
 	// uses for cert issuance. Required for ApplyInbound to render config.yaml.
-	// Set at install time via env (HYSTERIA_HOSTNAME) — the panel never pushes
+	// Set at install time via env (HYSTERIA_HOSTNAME), the panel never pushes
 	// this; it's identity for the node, not per-inbound config.
 	Hostname string
 
@@ -75,7 +75,7 @@ type Config struct {
 
 	// ServiceUnit is the systemd unit name to restart after rewriting
 	// ConfigPath (slice 24b2). When empty, ApplyInbound writes the YAML but
-	// skips the restart — useful for tests, dry-runs, and the case where the
+	// skips the restart, useful for tests, dry-runs, and the case where the
 	// adapter manages hysteria as its own subprocess.
 	ServiceUnit string
 
@@ -102,7 +102,7 @@ type Config struct {
 	HTTPClient HTTPClient
 }
 
-// HTTPClient is the subset of *http.Client we use — keeps the adapter
+// HTTPClient is the subset of *http.Client we use, keeps the adapter
 // testable without dragging the full Client surface into mocks.
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -151,7 +151,7 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 }
 
 // randomHex returns n random bytes hex-encoded (2n chars). PANICs on RNG
-// failure — the auth-callback URL is a shared secret, an enumerable
+// failure, the auth-callback URL is a shared secret, an enumerable
 // time-derived fallback would defeat the whole defence (anyone with
 // approximate boot timestamp could guess the path). An agent that can't
 // read /dev/urandom should refuse to start; the panic propagates up
@@ -182,10 +182,10 @@ func validateTrafficStatsListen(listen string) error {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil {
-		return fmt.Errorf("TrafficStatsListen host %q is not an IP — refuse to bind unresolved", host)
+		return fmt.Errorf("TrafficStatsListen host %q is not an IP, refuse to bind unresolved", host)
 	}
 	if !ip.IsLoopback() {
-		return fmt.Errorf("TrafficStatsListen %q is not loopback — refuse to expose traffic API publicly", listen)
+		return fmt.Errorf("TrafficStatsListen %q is not loopback, refuse to expose traffic API publicly", listen)
 	}
 	return nil
 }
@@ -219,7 +219,7 @@ func (a *Adapter) Engine() string { return "hysteria" }
 //	                     the two compete for :443/udp and the second one
 //	                     FATALs on "address already in use".
 //
-//	ServiceUnit empty  → "spawn mode" — agent owns the subprocess. Used
+//	ServiceUnit empty  → "spawn mode", agent owns the subprocess. Used
 //	                     in tests + setups that don't want systemd in
 //	                     the lifecycle loop.
 func (a *Adapter) Start(ctx context.Context) error {
@@ -231,12 +231,12 @@ func (a *Adapter) Start(ctx context.Context) error {
 	}
 
 	if a.cfg.BinaryPath == "" {
-		a.logger.Info("hysteria binary not configured — callback-only mode")
+		a.logger.Info("hysteria binary not configured, callback-only mode")
 		return nil
 	}
 
 	if a.cfg.ServiceUnit != "" {
-		a.logger.Info("hysteria managed by systemd — skipping in-process spawn",
+		a.logger.Info("hysteria managed by systemd, skipping in-process spawn",
 			"unit", a.cfg.ServiceUnit,
 		)
 		return nil
@@ -283,7 +283,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 
 func (a *Adapter) AddUser(user core.User) error {
 	if user.HysteriaPassword == "" {
-		// User has no Hysteria credentials — nothing to do for this protocol.
+		// User has no Hysteria credentials, nothing to do for this protocol.
 		return nil
 	}
 	a.mu.Lock()
@@ -317,7 +317,7 @@ func (a *Adapter) RemoveUser(userID string) error {
 //	  "user-uuid-2": {"tx": 100,   "rx": 200}
 //	}
 //
-// We hit it with ?clear=1 so hysteria resets counters after read — that
+// We hit it with ?clear=1 so hysteria resets counters after read, that
 // way the panel can ingest deltas instead of computing them itself, same
 // model as xray's `statsquery -reset`.
 //
@@ -337,7 +337,7 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 
 	out := make([]core.UserStats, 0, len(users))
 
-	// Stats endpoint not configured (older agent OR explicitly disabled) —
+	// Stats endpoint not configured (older agent OR explicitly disabled),
 	// return the userId list with zero counters so the panel still sees
 	// who's registered even without traffic data.
 	if statsListen == "" || statsSecret == "" {
@@ -426,12 +426,12 @@ func (a *Adapter) Healthy() bool {
 //
 // Hysteria's runtime config lives under a separate systemd unit (typically
 // `hysteria-server.service`), not under node-agent. node-agent has the
-// privileges to rewrite the YAML and trigger `systemctl restart` — that's
+// privileges to rewrite the YAML and trigger `systemctl restart`, that's
 // what RunCmd does. The cross-unit dependency is intentional: the upstream
 // hysteria binary self-manages ACME, and we don't want to fight it.
 //
-// When ConfigPath is empty, the adapter logs and returns nil without writing
-// — useful for callback-only nodes (config managed by hand).
+// When ConfigPath is empty, the adapter logs and returns nil without writing,
+// useful for callback-only nodes (config managed by hand).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire inboundCfgWire
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
@@ -448,7 +448,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	}
 
 	if a.cfg.ConfigPath == "" {
-		a.logger.Info("hysteria ApplyInbound: ConfigPath not set — accepting in memory only",
+		a.logger.Info("hysteria ApplyInbound: ConfigPath not set, accepting in memory only",
 			"obfs", newInbound.ObfsPassword != "",
 			"masquerade", newInbound.MasqueradeURL != "")
 		a.inbound = newInbound
@@ -471,7 +471,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		"bandwidth", newInbound.BrutalUpMbps > 0 || newInbound.BrutalDownMbps > 0)
 
 	if a.cfg.ServiceUnit == "" {
-		a.logger.Info("hysteria ApplyInbound: ServiceUnit not set — skipping restart",
+		a.logger.Info("hysteria ApplyInbound: ServiceUnit not set, skipping restart",
 			"hint", "set HYSTERIA_SERVICE_UNIT to enable auto-restart")
 		return nil
 	}

@@ -2,7 +2,7 @@
 // log-streaming to slog, a graceful Stop with SIGTERM-then-SIGKILL deadline,
 // crash detection (a watcher goroutine on Wait() so Healthy() reflects
 // real subprocess liveness), and a `Running()` query. Hysteria, Xray,
-// NaiveProxy adapters all spawn an upstream binary — this package is the
+// NaiveProxy adapters all spawn an upstream binary, this package is the
 // shared lifecycle manager.
 package subprocess
 
@@ -60,7 +60,7 @@ type Config struct {
 // Concurrency model:
 //   - Start spawns the OS process AND a watcher goroutine that blocks in
 //     cmd.Wait(). When Wait returns, the watcher closes `exited` and stores
-//     the error under mu. This is the SINGLE writer for ProcessState — all
+//     the error under mu. This is the SINGLE writer for ProcessState, all
 //     reads (Running, Stop) take mu, so there's no data race even when the
 //     process crashes mid-Healthy poll.
 //   - Stop signals SIGTERM, blocks on either `exited`, the grace timeout,
@@ -86,7 +86,7 @@ func New(cfg Config) *Subprocess {
 }
 
 // Start spawns the process. Stdout/stderr are streamed line-by-line into the
-// configured logger. A watcher goroutine is spawned to call cmd.Wait() — its
+// configured logger. A watcher goroutine is spawned to call cmd.Wait(), its
 // return marks the process as exited, which is what Running() observes.
 //
 // Returns an error if the binary cannot be exec'd or if Start has already
@@ -150,7 +150,7 @@ func (s *Subprocess) watch(cmd *exec.Cmd, exited chan struct{}, ctx context.Cont
 
 	s.mu.Lock()
 	s.exitErr = err
-	// Only act if this watcher's cmd is still the active one — Stop() or an
+	// Only act if this watcher's cmd is still the active one, Stop() or an
 	// earlier restart may have already swapped it out. Compare by pointer.
 	isCurrent := s.cmd == cmd
 	if isCurrent {
@@ -163,7 +163,7 @@ func (s *Subprocess) watch(cmd *exec.Cmd, exited chan struct{}, ctx context.Cont
 	var attempt, maxR int
 	if isCurrent && !s.stopping && s.cfg.MaxRestarts > 0 {
 		if time.Since(s.lastSpawnAt) > restartResetWindow {
-			s.restartCount = 0 // stable run — fresh budget
+			s.restartCount = 0 // stable run, fresh budget
 		}
 		if s.restartCount < s.cfg.MaxRestarts {
 			s.restartCount++
@@ -204,7 +204,7 @@ func (s *Subprocess) watch(cmd *exec.Cmd, exited chan struct{}, ctx context.Cont
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// A Stop (or another Start) during the backoff window wins — don't respawn.
+	// A Stop (or another Start) during the backoff window wins, don't respawn.
 	if s.stopping || s.cmd != nil {
 		return
 	}
@@ -218,7 +218,7 @@ func (s *Subprocess) watch(cmd *exec.Cmd, exited chan struct{}, ctx context.Cont
 // or until ctx is cancelled, then SIGKILL. Returns nil if the process exited
 // cleanly within the grace window.
 //
-// Safe to call after the process has already crashed — exited is already
+// Safe to call after the process has already crashed, exited is already
 // closed, we just clear state and return.
 func (s *Subprocess) Stop(_ context.Context) error {
 	s.mu.Lock()
@@ -255,7 +255,7 @@ func (s *Subprocess) Stop(_ context.Context) error {
 		return nil
 	case <-time.After(StopGracePeriod):
 		_ = killGroup(cmd)
-		// Block until the watcher reaps the killed process — otherwise
+		// Block until the watcher reaps the killed process, otherwise
 		// the goroutine outlives Stop and ProcessState races with any
 		// later (mis-)use of cmd.
 		<-exited
@@ -264,7 +264,7 @@ func (s *Subprocess) Stop(_ context.Context) error {
 }
 
 // Running reports whether the process has been started and has not exited.
-// Safe to call concurrently with Stop / crash — the watcher goroutine is
+// Safe to call concurrently with Stop / crash, the watcher goroutine is
 // the single source of truth for "exited."
 func (s *Subprocess) Running() bool {
 	s.mu.Lock()

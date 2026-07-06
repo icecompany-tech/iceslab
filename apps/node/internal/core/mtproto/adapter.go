@@ -28,7 +28,7 @@ type Config struct {
 	ConfigPath string
 
 	// Inbound is the static settings (domain, secret, ports). The Secret
-	// must be set before mtg can bind — adapter waits on first ApplyInbound
+	// must be set before mtg can bind, adapter waits on first ApplyInbound
 	// from panel before starting.
 	Inbound InboundConfig
 
@@ -38,7 +38,7 @@ type Config struct {
 
 	// MetricsURL is the mtg Prometheus stats endpoint. mtg's config.toml
 	// hard-codes `bind-to = "127.0.0.1:3129"` per renderConfig, so this
-	// defaults to that — overridable for tests.
+	// defaults to that, overridable for tests.
 	MetricsURL string
 
 	// metricsClient is the HTTP client used for scraping. nil → default
@@ -50,7 +50,7 @@ type RunCmdFunc func(ctx context.Context, name string, args ...string) ([]byte, 
 
 // Adapter implements core.CoreAdapter for MTProto.
 //
-// Per-user state is intentionally absent — mtg is single-secret upstream,
+// Per-user state is intentionally absent, mtg is single-secret upstream,
 // so AddUser/RemoveUser are no-ops. The adapter just tracks which user
 // IDs are "associated with this inbound" for GetStats book-keeping.
 type Adapter struct {
@@ -97,13 +97,13 @@ func (a *Adapter) Name() string { return Name }
 func (a *Adapter) Engine() string { return "mtproto" }
 
 // Start writes the initial config (if Domain+Secret are set) and spawns
-// mtg. If either is empty, defers — first ApplyInbound activates it.
+// mtg. If either is empty, defers, first ApplyInbound activates it.
 func (a *Adapter) Start(ctx context.Context) error {
 	a.mu.Lock()
 	notReady := a.cfg.Inbound.Domain == "" || a.cfg.Inbound.Secret == ""
 	a.mu.Unlock()
 	if notReady {
-		a.logger.Info("mtproto adapter: domain or secret not set — waiting for ApplyInbound from panel")
+		a.logger.Info("mtproto adapter: domain or secret not set, waiting for ApplyInbound from panel")
 		return nil
 	}
 	return a.regenerateAndRestart(ctx)
@@ -126,7 +126,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 }
 
 // AddUser is a panel-side bookkeeping no-op for MTProto. The mtg server
-// has no per-user concept — every user with this inbound's URI uses the
+// has no per-user concept, every user with this inbound's URI uses the
 // same shared secret. We track userIDs so GetStats can report them as
 // "online" without claiming per-user byte counters we can't measure.
 func (a *Adapter) AddUser(user core.User) error {
@@ -147,7 +147,7 @@ func (a *Adapter) RemoveUser(userID string) error {
 type inboundCfgWire struct {
 	Domain string `json:"domain"`
 	// Secret is computed by the panel from the inbound ID + domain
-	// (DeriveSecret) and pushed here. The agent doesn't re-derive — it
+	// (DeriveSecret) and pushed here. The agent doesn't re-derive, it
 	// trusts the panel's value, so panel and agent stay in sync even if
 	// derivation logic ever changes.
 	Secret string `json:"secret"`
@@ -210,7 +210,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 //
 // Metric source: `mtg_telegram_traffic{direction="from_client"|"to_client",...}`
 // summed across all (dc, telegram_ip) label combinations. `mtg_domain_fronting_traffic`
-// is deliberately ignored — that's SNI-probe traffic from non-Telegram
+// is deliberately ignored, that's SNI-probe traffic from non-Telegram
 // scanners that mtg forwards to the cover domain as camouflage, not user
 // traffic.
 func (a *Adapter) GetStats() (*core.Stats, error) {
@@ -314,7 +314,7 @@ func (a *Adapter) Healthy() bool {
 }
 
 // regenerateAndRestartLocked must be called with a.mu held. mtg has no
-// SIGHUP-based hot reload for the secret — restart on every config
+// SIGHUP-based hot reload for the secret, restart on every config
 // change. Domain changes are infrequent (admin-driven) so the
 // brief downtime is acceptable.
 // regenerateAndRestart renders config + (re)starts mtg. Bug #1: must NOT be
@@ -348,7 +348,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 		return nil
 	}
 
-	// Restart cleanly — there's no graceful reload path in mtg for the
+	// Restart cleanly, there's no graceful reload path in mtg for the
 	// secret. ~1s downtime is fine; users' clients reconnect.
 	a.mu.Lock()
 	old := a.proc

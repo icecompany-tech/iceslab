@@ -6,16 +6,16 @@
  *   vless://<uuid>@<host>:<port>?<query>#<fragment>
  *
  * Query params we set (per Xray docs as of v24.9.30):
- *   type=raw          — network mode (renamed from `tcp` in v24.9.30)
- *   security=reality  — REALITY TLS replacement
- *   encryption=none   — VLESS does no payload crypto (TLS does it)
- *   pbk=<pubkey>      — REALITY public key (paired with server's privateKey)
- *   sid=<shortId>     — one of the inbound's REALITY shortIds
- *   sni=<host>        — REALITY target serverName the client claims
- *   fp=<fingerprint>  — TLS fingerprint (chrome/firefox/safari/...)
- *   flow=<flow>       — `xtls-rprx-vision` for Vision (REALITY-recommended)
+ *   type=raw          - network mode (renamed from `tcp` in v24.9.30)
+ *   security=reality  - REALITY TLS replacement
+ *   encryption=none   - VLESS does no payload crypto (TLS does it)
+ *   pbk=<pubkey>      - REALITY public key (paired with server's privateKey)
+ *   sid=<shortId>     - one of the inbound's REALITY shortIds
+ *   sni=<host>        - REALITY target serverName the client claims
+ *   fp=<fingerprint>  - TLS fingerprint (chrome/firefox/safari/...)
+ *   flow=<flow>       - `xtls-rprx-vision` for Vision (REALITY-recommended)
  *
- * Slice 17 — flat builder; slice 23 (inbound editor) will pull these from
+ * Slice 17: flat builder; slice 23 (inbound editor) will pull these from
  * the inbounds table per-instance.
  */
 
@@ -39,10 +39,10 @@ export interface VlessRealityUriOpts {
   hostHeader?: string;
   /** gRPC serviceName. Required when network=grpc. */
   serviceName?: string;
-  /** Slice 30.1 — per-host overrides emitted into the URI. */
+  /** Slice 30.1: per-host overrides emitted into the URI. */
   /** ALPN list (e.g. ['h2','http/1.1']). Joined by comma into `alpn` param. */
   alpn?: string[];
-  /** `?allowInsecure=1` flag — when the host fronts the inbound through a
+  /** `?allowInsecure=1` flag: when the host fronts the inbound through a
    *  self-signed CDN. Clients that don't honour the flag still try TLS verify
    *  and fail, but the flag is harmless to emit. */
   allowInsecure?: boolean;
@@ -56,10 +56,10 @@ export function buildVlessRealityUri(opts: VlessRealityUriOpts): string {
   const network: VlessNetwork = opts.network ?? 'raw';
   const flow = opts.flow ?? 'xtls-rprx-vision';
 
-  // Slice 30.1 — `securityLayer` host override. `tls` and `none` replace the
+  // Slice 30.1: `securityLayer` host override. `tls` and `none` replace the
   // adapter's default `reality`; `default` keeps the canonical REALITY layer.
   // `none` is used when the host fronts the inbound through a CDN that owns
-  // the TLS termination — the client speaks plain HTTP/2 to the CDN and the
+  // the TLS termination, the client speaks plain HTTP/2 to the CDN and the
   // CDN terminates TLS upstream.
   let security = 'reality';
   if (opts.securityLayer === 'tls') security = 'tls';
@@ -92,13 +92,13 @@ export function buildVlessRealityUri(opts: VlessRealityUriOpts): string {
   }
 
   // Vision is only meaningful with raw/xhttp. ws/grpc/httpupgrade/kcp don't
-  // accept it — most clients ignore it, but a few (Xray itself when strict)
+  // accept it, most clients ignore it, but a few (Xray itself when strict)
   // reject the URI.
   if (flow && (network === 'raw' || network === 'xhttp')) {
     params.set('flow', flow);
   }
 
-  // path + host header — same param names across ws/xhttp/httpupgrade per
+  // path + host header, same param names across ws/xhttp/httpupgrade per
   // VLESS URI convention. kcp doesn't carry path/host.
   if (network === 'ws' || network === 'xhttp' || network === 'httpupgrade') {
     if (opts.path) params.set('path', opts.path);
@@ -108,7 +108,7 @@ export function buildVlessRealityUri(opts: VlessRealityUriOpts): string {
     params.set('serviceName', opts.serviceName);
   }
   if (network === 'kcp') {
-    // header type — `none` is the safest default; admins picking obfuscated
+    // header type: `none` is the safest default; admins picking obfuscated
     // mTLS-like profiles (`wechat-video`, etc) can override the inbound
     // streamSettings on the node side, but URI surface stays minimal.
     params.set('headerType', 'none');

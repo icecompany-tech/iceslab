@@ -9,7 +9,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *
  * Scope: VLESS+REALITY+Vision endpoints only. Hysteria2 is reachable from
  * Xray (via the `hysteria2` outbound) but most Xray-native clients still
- * default to vmess/vless — users who want Hysteria pick the Sing-box format
+ * default to vmess/vless, users who want Hysteria pick the Sing-box format
  * or the plain hysteria2:// URI directly. Keeping this format VLESS-only
  * dodges the cross-protocol matrix and avoids subtle xray-version-coupled
  * outbound shape drift.
@@ -24,7 +24,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *     a different outbound by tag.
  */
 /**
- * Slice 29 follow-up — Xray `observatory + balancer` for auto-failover.
+ * Slice 29 follow-up: Xray `observatory + balancer` for auto-failover.
  * When `bundle === 'balancer'`, we emit an `observatory` block that periodically
  * probes every proxy outbound, and route through a balancer-tagged tag that
  * picks the lowest-latency one. Default ('flat') keeps the legacy "first
@@ -292,7 +292,7 @@ export function buildXrayJson(
     };
   });
 
-  // Slice 29 follow-up — when balancer is on AND we have ≥2 proxies, wrap
+  // Slice 29 follow-up: when balancer is on AND we have ≥2 proxies, wrap
   // the proxy tags in an `observatory` probe + `balancer` selector. With
   // <2 proxies it's pointless (and the balancer block would still work but
   // probe one outbound, wasting bandwidth) so we fall through to flat mode.

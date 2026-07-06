@@ -84,7 +84,7 @@ func TestWrite_NoTempLeak(t *testing.T) {
 
 func TestWrite_RefusesMissingParentDir(t *testing.T) {
 	// Helper is documented as "caller ensures parent dir exists". With no
-	// parent, CreateTemp fails — we should surface that, not silently no-op.
+	// parent, CreateTemp fails, we should surface that, not silently no-op.
 	dir := filepath.Join(t.TempDir(), "does", "not", "exist")
 	err := Write(filepath.Join(dir, "f"), []byte("x"), 0o600)
 	if err == nil {
@@ -114,7 +114,7 @@ func TestWrite_EmptyContent(t *testing.T) {
 }
 
 func TestWrite_BinaryContent(t *testing.T) {
-	// 256-byte all-bytes pattern — catches any accidental text-mode conversion
+	// 256-byte all-bytes pattern, catches any accidental text-mode conversion
 	// (Windows: CreateFile with O_TEXT vs O_BINARY).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "blob")

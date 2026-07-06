@@ -964,7 +964,7 @@ export async function createBinding(input: CreateBindingInput): Promise<Binding>
   return data;
 }
 
-/** F-P1-b — next free listen port for a new binding on `nodeId` (skips ports
+/** F-P1-b: next free listen port for a new binding on `nodeId` (skips ports
  *  already bound there). Pre-fills the deploy modal so it stops defaulting to
  *  443 and 409-ing on multi-protocol nodes. */
 export async function getNextFreePort(nodeId: string): Promise<number> {
@@ -994,14 +994,14 @@ export interface TestConnectResult {
   endpoint: string;
   port: number;
   probe: 'tcp' | 'tls' | 'skip';
-  // K10 — 'endpoint' = client-facing target; 'dest' = the REALITY masquerade
+  // K10: 'endpoint' = client-facing target; 'dest' = the REALITY masquerade
   // target the node borrows its TLS1.3 handshake from.
   kind: 'endpoint' | 'dest';
   sni?: string;
   ok: boolean;
   latencyMs?: number;
   certCn?: string;
-  // TLS-only — negotiated version. REALITY needs the dest to speak TLSv1.3.
+  // TLS-only: negotiated version. REALITY needs the dest to speak TLSv1.3.
   tlsVersion?: string;
   // H1 (dest) - negotiated ALPN (e.g. "h2"); a CDN-grade dest speaks HTTP/2.
   alpn?: string;

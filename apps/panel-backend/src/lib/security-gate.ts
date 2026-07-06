@@ -9,15 +9,15 @@ import { isPublicRoutableIp } from './ip.js';
  * Tier-1 security gate. Two layers, both registered as a single
  * `onRequest` hook so they run before any route handler:
  *
- *   1. IP blacklist check — if `sec:blacklist:<ip>` exists in Redis,
+ *   1. IP blacklist check, if `sec:blacklist:<ip>` exists in Redis,
  *      return 403 immediately. Set by the honeypot layer below.
  *
- *   2. Honey-route trap — well-known scanner paths (`/wp-admin`,
+ *   2. Honey-route trap: well-known scanner paths (`/wp-admin`,
  *      `/.env`, `/xmlrpc.php`, etc) get a plausible 200 fake response
  *      AND drop the source IP into the blacklist for HONEYPOT_BLACKLIST_TTL_SEC.
  *      First-burst alert on Telegram if configured.
  *
- *   3. Geo-block — admin-only paths (`/api/*` minus public surfaces)
+ *   3. Geo-block: admin-only paths (`/api/*` minus public surfaces)
  *      require `CF-IPCountry` to be in ADMIN_ALLOWED_COUNTRIES. Fail
  *      closed: missing header on a gated path = 403. Skipped entirely
  *      when the allowlist is empty (the default).
@@ -27,10 +27,10 @@ import { isPublicRoutableIp } from './ip.js';
  * we don't lose blacklist signal on a denied-country probe).
  *
  * Public surfaces NEVER hit geo-block:
- *   - `/sub/*`                 — subscription clients worldwide
- *   - `/api/internal/*`        — node agents (also worldwide)
- *   - `/api/auth/status`       — discovery used pre-login
- *   - `/health`, `/healthz`    — uptime checks
+ *   - `/sub/*`                 - subscription clients worldwide
+ *   - `/api/internal/*`        - node agents (also worldwide)
+ *   - `/api/auth/status`       - discovery used pre-login
+ *   - `/health`, `/healthz`    - uptime checks
  *
  * Honeypot paths are exact-match for `/.env` and prefix-match for the
  * directory-style PHP/WP paths. Tight matching keeps false positives
@@ -59,7 +59,7 @@ function isPublicPath(url: string): boolean {
 }
 
 function isHoneypotPath(url: string): boolean {
-  // Strip query string before matching — `/.env?x=1` is still a probe.
+  // Strip query string before matching, `/.env?x=1` is still a probe.
   // Lowercase the path before matching: scanners regularly probe with
   // mixed/upper casing (`/Wp-Admin`, `/.GIT/config`) and Linux file
   // systems are case-sensitive but our trap is a pure pattern match,
@@ -115,7 +115,7 @@ async function isBlacklisted(ip: string): Promise<boolean> {
 }
 
 async function blacklist(ip: string): Promise<boolean> {
-  // SET NX so we can detect the "first hit" — that's the one we alert on.
+  // SET NX so we can detect the "first hit", that's the one we alert on.
   // Returns 'OK' on insert, null when key already exists.
   const ok = await redis.set(
     BLACKLIST_KEY(ip),
@@ -135,12 +135,12 @@ export async function registerSecurityGate(app: FastifyInstance): Promise<void> 
     const ip = request.ip;
     const url = request.url;
 
-    // Layer 1 — blacklist short-circuit.
+    // Layer 1: blacklist short-circuit.
     if (await isBlacklisted(ip)) {
       return reply.code(403).send({ error: 'FORBIDDEN' });
     }
 
-    // Layer 2 — honeypot.
+    // Layer 2: honeypot.
     if (isHoneypotPath(url)) {
       honeypotHits.inc();
       // Only blacklist a genuinely public, routable source. A misconfigured
@@ -150,7 +150,7 @@ export async function registerSecurityGate(app: FastifyInstance): Promise<void> 
       // serve the plausible fake 404 for EVERY hit (below) so a spoofing scanner
       // learns nothing from the difference. Mirrors the honey-token guard in
       // subscription.routes.ts. (A forged *public* IP still needs a correct
-      // TRUST_PROXY_HOPS to be neutralised — see config.ts.)
+      // TRUST_PROXY_HOPS to be neutralised, see config.ts.)
       if (isPublicRoutableIp(ip)) {
         const firstHit = await blacklist(ip);
         if (firstHit) {
@@ -168,7 +168,7 @@ export async function registerSecurityGate(app: FastifyInstance): Promise<void> 
       );
     }
 
-    // Layer 3 — geo-block on gated (admin) paths.
+    // Layer 3: geo-block on gated (admin) paths.
     //
     // ⚠ Trust model: `CF-IPCountry` is only trustworthy when Cloudflare
     // owns the public edge AND the backend is reachable only through CF

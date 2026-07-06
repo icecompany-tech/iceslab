@@ -19,7 +19,7 @@ const Name = "naive"
 const defaultReloadTimeout = 15 * time.Second
 
 // caddyLivenessGrace is how long N7 waits after spawning caddy before checking
-// it's still running — long enough to catch an immediate config/port/ACME exit,
+// it's still running, long enough to catch an immediate config/port/ACME exit,
 // short enough not to stall the applyInbound RPC.
 const caddyLivenessGrace = 1500 * time.Millisecond
 
@@ -95,7 +95,7 @@ func (a *Adapter) Name() string { return Name }
 func (a *Adapter) Engine() string { return "naive" }
 
 // Start either launches caddy now (when bootstrap-time config already has
-// Hostname) or defers — same pattern as mtproto/amneziawg adapters that
+// Hostname) or defers, same pattern as mtproto/amneziawg adapters that
 // wait for the panel's first ApplyInbound before they have enough to
 // render a config. Caddy can't open a TLS site without the FQDN (it'd
 // fail ACME), and Hostname only arrives via applyInbound (set on the
@@ -109,7 +109,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 	noHost := a.cfg.Inbound.Hostname == ""
 	a.mu.Unlock()
 	if noHost {
-		a.logger.Info("naive adapter: hostname not set — waiting for ApplyInbound from panel")
+		a.logger.Info("naive adapter: hostname not set, waiting for ApplyInbound from panel")
 		return nil
 	}
 	// regenerateAndReload handles the cold-start path (proc==nil → spawn) as
@@ -134,7 +134,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 // credentials. Idempotent.
 //
 // Note: `caddy reload` is graceful (no session drop), but ALREADY-CONNECTED
-// clients keep their session until idle/tunnel timeout (~10 min) — that's
+// clients keep their session until idle/tunnel timeout (~10 min), that's
 // upstream NaiveProxy behaviour, not something we can shortcut. Disabling a
 // user blocks new connections only; document this in admin UI (slice 23).
 func (a *Adapter) AddUser(user core.User) error {
@@ -165,7 +165,7 @@ func (a *Adapter) RemoveUser(userID string) error {
 }
 
 // GetStats returns the tracked user list with zero counters. Per-user stats
-// require parsing Caddy access-logs (Phase 3) — upstream forwardproxy@naive
+// require parsing Caddy access-logs (Phase 3), upstream forwardproxy@naive
 // doesn't expose them via API.
 func (a *Adapter) GetStats() (*core.Stats, error) {
 	a.mu.Lock()
@@ -193,15 +193,15 @@ func (a *Adapter) Healthy() bool {
 
 // ApplyInbound parses panel-pushed Naive config, diffs vs the live
 // cfg.Inbound, and on change rewrites the Caddyfile + triggers `caddy reload`.
-// Reload is graceful — no in-flight session drop, but ALREADY-CONNECTED
-// clients keep their session until idle/tunnel timeout (~10 min) — that's
+// Reload is graceful, no in-flight session drop, but ALREADY-CONNECTED
+// clients keep their session until idle/tunnel timeout (~10 min), that's
 // upstream NaiveProxy behaviour, not something we can shortcut.
 //
 // Idempotent: byte-equivalent input → no-op (no rewrite, no reload).
 //
 // Hostname change is the gotcha: Caddy will request a fresh Let's Encrypt
 // cert for the new FQDN, and LE rate-limits 5 cert-issuances per 7 days per
-// FQDN. The adapter doesn't enforce that — UI should warn admins. If the
+// FQDN. The adapter doesn't enforce that, UI should warn admins. If the
 // limit is hit, `caddy reload` succeeds but new TLS handshakes fail until
 // the cooldown.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
@@ -234,7 +234,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		"hostname", newInbound.Hostname,
 		"masqueradeRoot", newInbound.MasqueradeRoot)
 
-	// Background context — caller's request may have a short deadline,
+	// Background context, caller's request may have a short deadline,
 	// but we want caddy to come back up even if the caller times out
 	// (matches the xray/hysteria/awg adapter pattern).
 	return a.regenerateAndReload(context.Background())
@@ -243,7 +243,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 // regenerateAndReloadLocked must be called with a.mu held. It writes the
 // current users-map to the Caddyfile and either:
 //   - cold-starts caddy if this is the first ApplyInbound (proc==nil)
-//   - tells the running caddy to reload via `caddy reload` — graceful,
+//   - tells the running caddy to reload via `caddy reload`, graceful,
 //     no session drop, no port re-bind
 //
 // Cold-start path matters: at install time the agent registers with no

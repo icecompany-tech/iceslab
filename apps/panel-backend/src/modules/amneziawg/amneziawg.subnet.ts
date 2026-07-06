@@ -1,4 +1,4 @@
-// Pure CIDR helpers for AmneziaWG IP allocation. IPv4 only — IPv6 inbounds
+// Pure CIDR helpers for AmneziaWG IP allocation. IPv4 only, IPv6 inbounds
 // can be added later without affecting this contract.
 
 export interface SubnetRange {

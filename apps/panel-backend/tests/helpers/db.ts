@@ -36,7 +36,7 @@ export async function cleanDatabase(): Promise<void> {
   // prior test's cached binding-set under the same key. Treat truncation as the
   // ultimate out-of-band change and clear the cache here, per test.
   _resetBindingsCacheForTest();
-  // Re-seed the "All" squad — slice 26 wired user-create to default to it,
+  // Re-seed the "All" squad, slice 26 wired user-create to default to it,
   // so an empty groups table makes every user-create fail with FK violation.
   // The seed migration installs this row in production; tests truncate it
   // away each turn and need it back before the next case runs.

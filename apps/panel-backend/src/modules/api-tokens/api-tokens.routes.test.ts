@@ -143,7 +143,7 @@ describe('Bearer icp_* auth', () => {
       headers: { authorization: `Bearer ${apiToken}` },
     });
 
-    // Update is fire-and-forget — give the event loop a tick to flush.
+    // Update is fire-and-forget, give the event loop a tick to flush.
     await new Promise((r) => setTimeout(r, 50));
 
     const reloaded = await prisma.apiToken.findUniqueOrThrow({

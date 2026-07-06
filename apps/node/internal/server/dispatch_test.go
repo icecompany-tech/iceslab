@@ -116,10 +116,10 @@ func TestAddUserReturns500WhenAdapterFails(t *testing.T) {
 }
 
 // Regression: wave-13 best-effort fanout. A failing adapter that's NOT
-// Healthy() (dormant — no ApplyInbound received yet) should be logged and
+// Healthy() (dormant, no ApplyInbound received yet) should be logged and
 // ignored, not 500'd. Otherwise BullMQ backfill against a fresh node loops
 // forever while one adapter is mid-init. fakeAdapter re-uses failOnStats as
-// "simulate unhealthy" — set both flags to model "dormant + buggy".
+// "simulate unhealthy", set both flags to model "dormant + buggy".
 func TestAddUserSucceedsWhenOnlyDormantAdapterFails(t *testing.T) {
 	dormantBuggy := &fakeAdapter{name: "xray", failOnAdd: true, failOnStats: true}
 	healthy := &fakeAdapter{name: "hysteria"}

@@ -14,19 +14,19 @@ export interface ProbeResult {
   port: number;
   // What kind of probe ran: tcp / tls / skip.
   probe: 'tcp' | 'tls' | 'skip';
-  // K10 — what we probed: the client-facing `endpoint`, or the REALITY
+  // K10: what we probed: the client-facing `endpoint`, or the REALITY
   // `dest` (the masquerade target the NODE borrows its handshake from).
   // A dead/non-TLS1.3 dest silently breaks REALITY (caught cdn3-87.yahoo.com
   // = NXDOMAIN live 2026-06-11), so we surface it before the admin deploys.
   kind: 'endpoint' | 'dest';
-  // For TLS probes — SNI we sent. Lets admins eyeball the masquerade target.
+  // For TLS probes: SNI we sent. Lets admins eyeball the masquerade target.
   sni?: string;
   ok: boolean;
   latencyMs?: number;
-  // TLS-only — peer cert subject CN. For REALITY this should match the
+  // TLS-only: peer cert subject CN. For REALITY this should match the
   // masquerade target (apple.com, etc), NOT the panel's own host.
   certCn?: string;
-  // TLS-only — negotiated protocol version (e.g. "TLSv1.3"). REALITY REQUIRES
+  // TLS-only: negotiated protocol version (e.g. "TLSv1.3"). REALITY REQUIRES
   // the dest to speak TLS 1.3; a 1.2-only dest is a silent mis-config.
   tlsVersion?: string;
   // H1 (dest only) - negotiated ALPN (e.g. "h2"). A CDN-grade REALITY dest
@@ -35,15 +35,15 @@ export interface ProbeResult {
   error?: string;
   // Hint for the UI when we couldn't run a real probe (UDP-based
   // protocols fall back to a TCP port reachability check, which is
-  // less informative — we annotate so admins don't misread a green tick).
+  // less informative, we annotate so admins don't misread a green tick).
   notes?: string;
 }
 
-/** Default for `?timeout=` — keep low so a hung probe doesn't stall the response. */
+/** Default for `?timeout=`, keep low so a hung probe doesn't stall the response. */
 const PROBE_TIMEOUT_MS = 5_000;
 
 /**
- * K10 — parse a REALITY dest string ("host:port") + the profile's serverNames
+ * K10: parse a REALITY dest string ("host:port") + the profile's serverNames
  * into a probe target. The SNI we claim is serverNames[0] (what the client
  * sends), falling back to the dest host. Exported for unit testing; the TLS
  * probe itself is network I/O and is validated in the field.
@@ -86,13 +86,13 @@ export function realityDestNote(
 }
 
 const TLS_PROTOCOLS = new Set(['xray', 'naive']);
-// UDP-based — TCP probe doesn't actually validate the protocol, but it does
+// UDP-based: TCP probe doesn't actually validate the protocol, but it does
 // check the route + firewall. Admin gets a yellow note pointing this out.
 const UDP_PROTOCOLS = new Set(['hysteria', 'amneziawg', 'mieru']);
 
 /**
  * Probe a single (binding, host) target. Returns within `PROBE_TIMEOUT_MS`
- * even on a hung peer — never throws.
+ * even on a hung peer, never throws.
  */
 async function probe(target: {
   bindingId: string;
@@ -121,7 +121,7 @@ async function probe(target: {
     kind: target.kind,
   };
 
-  // TLS probe — for REALITY/xray and Naive. We disable cert-chain validation
+  // TLS probe: for REALITY/xray and Naive. We disable cert-chain validation
   // because (a) REALITY uses a borrowed cert chain we can't pre-trust, and
   // (b) self-hosted Naive often runs ACME staging during development. The
   // useful signal is "did the handshake complete?" + the peer CN, not a
@@ -203,7 +203,7 @@ async function probe(target: {
     });
   }
 
-  // TCP probe — fallback for everything else. For UDP-based protocols we
+  // TCP probe: fallback for everything else. For UDP-based protocols we
   // attach a `notes` field so the UI doesn't lie about what was tested.
   const start = Date.now();
   return await new Promise<ProbeResult>((resolve) => {
@@ -218,7 +218,7 @@ async function probe(target: {
         probe: 'tcp',
         ok: false,
         error: `TCP connect timeout after ${PROBE_TIMEOUT_MS}ms`,
-        ...(target.isUdp ? { notes: 'UDP-based protocol — tested TCP port reachability only.' } : {}),
+        ...(target.isUdp ? { notes: 'UDP-based protocol: tested TCP port reachability only.' } : {}),
       });
     }, PROBE_TIMEOUT_MS);
     sock.once('connect', () => {
@@ -228,7 +228,7 @@ async function probe(target: {
         probe: 'tcp',
         ok: true,
         latencyMs: Date.now() - start,
-        ...(target.isUdp ? { notes: 'UDP-based protocol — TCP reachability only; for full validation install client and try connecting.' } : {}),
+        ...(target.isUdp ? { notes: 'UDP-based protocol: TCP reachability only; for full validation install client and try connecting.' } : {}),
       });
     });
     sock.once('error', (err) => {
@@ -238,7 +238,7 @@ async function probe(target: {
         probe: 'tcp',
         ok: false,
         error: err instanceof Error ? err.message : String(err),
-        ...(target.isUdp ? { notes: 'UDP-based protocol — tested TCP port reachability only.' } : {}),
+        ...(target.isUdp ? { notes: 'UDP-based protocol: tested TCP port reachability only.' } : {}),
       });
     });
   });
@@ -300,7 +300,7 @@ export async function testProfileConnect(profileId: string): Promise<ProbeResult
     }
   }
 
-  // K10 — probe the REALITY dest (the masquerade target the NODE borrows its
+  // K10: probe the REALITY dest (the masquerade target the NODE borrows its
   // TLS 1.3 handshake from). A dead domain (cdn3-87.yahoo.com was NXDOMAIN
   // live 2026-06-11) or a 1.2-only dest silently breaks REALITY; surface it
   // before deploy. One probe per profile (the dest is profile-level, shared
@@ -330,7 +330,7 @@ export async function testProfileConnect(profileId: string): Promise<ProbeResult
     }
   }
 
-  // Run all probes in parallel — each is bounded by PROBE_TIMEOUT_MS so
+  // Run all probes in parallel, each is bounded by PROBE_TIMEOUT_MS so
   // the worst-case latency of the response is ~1× timeout regardless of
   // how many bindings the profile has.
   return await Promise.all(targets.map((t) => probe(t)));

@@ -8,18 +8,18 @@ import { cronTasksQueue } from '../scheduler/scheduler.queue.js';
 import { nodeUsersQueue } from '../users/users.queue.js';
 
 /**
- * Slice 37 — Bull-board observability UI mounted at `/admin/queues`.
+ * Slice 37: Bull-board observability UI mounted at `/admin/queues`.
  *
  * Visualises BullMQ state across all three queues we run:
- *   - `node-users`     — per-node user CRUD push (slice 11+13).
- *   - `inbound-sync`   — auto-push inbound configs to nodes (slice 24a).
- *   - `cron-tasks`     — periodic schedulers (traffic resets, polls).
+ *   - `node-users`: per-node user CRUD push (slice 11+13).
+ *   - `inbound-sync`: auto-push inbound configs to nodes (slice 24a).
+ *   - `cron-tasks`: periodic schedulers (traffic resets, polls).
  *
  * Useful when a job is stuck (Redis down, agent offline, mTLS broken):
  * admins see waiting/active/failed counts at a glance and can drill into
  * a specific job's args + error stack instead of grepping pino output.
  *
- * Auth: protected by the same `requireAuth` hook used elsewhere — JWT
+ * Auth: protected by the same `requireAuth` hook used elsewhere, JWT
  * cookie OR `Bearer icp_*` API token. If unauthenticated, the static
  * UI assets and the JSON API both return 401.
  */

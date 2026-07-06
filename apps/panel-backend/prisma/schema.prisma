@@ -41,7 +41,7 @@ model ApiToken {
   scopes            Json      @default("[]")
   lastUsedAt        DateTime? @map("last_used_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  // Issuing admin — populated for tokens minted from /api/api-tokens since
+  // Issuing admin, populated for tokens minted from /api/api-tokens since
   // the FK was added. Nullable so legacy rows backfill cleanly; tryApiToken
   // leaves request.admin undefined for those, which means /me 401s but the
   // token still authorises the request itself.
@@ -53,12 +53,12 @@ model ApiToken {
 }
 
 // Singleton holding the panel's self-signed CA used to issue per-node mTLS
-// certificates. Always exactly one row (id = 1) — bootstrap on first start.
+// certificates. Always exactly one row (id = 1), bootstrap on first start.
 model KeygenCa {
   id            Int      @id @default(1)
   certPem       String   @map("cert_pem")
   privateKeyPem String   @map("private_key_pem")
-  // Slice S6 — separate panel-client cert (clientAuth-only, signed by CA).
+  // Slice S6: separate panel-client cert (clientAuth-only, signed by CA).
   // Used to be: panel presented the CA itself as its TLS leaf, which
   // collapsed any compromised node into root-equivalent on the rest of
   // the fleet. Now the CA private key never participates in a handshake.
@@ -76,12 +76,12 @@ model KeygenCa {
 // New model that replaces the per-node `Inbound` row. Inspired by Remnawave's
 // ConfigProfile + Host split, simplified for our 7-protocol topology:
 //
-//   Profile               — a logical inbound TEMPLATE with shared config
+//   Profile               - a logical inbound TEMPLATE with shared config
 //                           (e.g. one VLESS+REALITY profile reused on N nodes)
-//   ProfileNodeBinding    — m:n: which profile is deployed to which node, +
+//   ProfileNodeBinding    - m:n: which profile is deployed to which node, +
 //                           per-node overrides (port, publicHost, ACME domain,
 //                           server PSK, AmneziaWG private key, ...)
-//   GroupProfile          — squad ACL at the profile level (replaces
+//   GroupProfile          - squad ACL at the profile level (replaces
 //                           GroupInbound / group_inbounds)
 //
 // During the migration window both old (`inbounds`, `group_inbounds`) and new
@@ -171,7 +171,7 @@ model Host {
   bindingId         String   @map("binding_id") @db.Uuid
 
   // Human label shown next to the URL in the admin UI ("Direct", "EU-CDN",
-  // "Mobile-tuned"). Not surfaced in the subscription — purely admin-side.
+  // "Mobile-tuned"). Not surfaced in the subscription, purely admin-side.
   remark            String   @default("Default") @db.VarChar(64)
   // Subscription emission order. Lowest first. Drag-and-drop UI mutates this.
   priority          Int      @default(0)
@@ -194,11 +194,11 @@ model Host {
   // ALPN list emitted into client URI / config. Empty = adapter default.
   alpn              String[] @default([])
   // Skip cert verification on the client side (?allowInsecure=1). Useful for
-  // self-signed CDN front. Default off — admin opts in per host.
+  // self-signed CDN front. Default off, admin opts in per host.
   allowInsecure     Boolean  @default(false) @map("allow_insecure")
   // Forces client-side security layer. `default` = use protocol default
   // (REALITY for xray, TLS for naive, etc). `tls` / `none` are explicit
-  // overrides — only used when fronting REALITY through a CDN that
+  // overrides, only used when fronting REALITY through a CDN that
   // terminates TLS itself.
   securityLayer     String   @default("default") @map("security_layer") @db.VarChar(16)
 
@@ -233,7 +233,7 @@ model GroupProfile {
 
 model Node {
   id                    String    @id @default(uuid()) @db.Uuid
-  // `name` and `address` are unique only among ACTIVE rows — see the
+  // `name` and `address` are unique only among ACTIVE rows, see the
   // partial unique indexes `nodes_name_active_key` / `nodes_address_active_key`
   // applied via raw migration. Without that, soft-deleted rows would block
   // re-using the same name/address. App-level checks in nodes.service.ts
@@ -249,7 +249,7 @@ model Node {
   lastStatusMessage     String?   @map("last_status_message")
   consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
 
-  // Slice 27.5 — region grouping + capacity hint. Both NULL by default
+  // Slice 27.5: region grouping + capacity hint. Both NULL by default
   // so existing nodes need no backfill; UI shows them under "Без региона"
   // and skips the utilization bar.
   regionId              String?   @map("region_id") @db.Uuid
@@ -280,7 +280,7 @@ model Node {
   // stays primary; tuic/anytls/shadowtls already run on sing-box (flag no-op).
   singboxEngine         Boolean   @default(false) @map("singbox_engine")
 
-  // Slice 38 — heartbeat self-destruct. Random 32-byte secret, generated
+  // Slice 38: heartbeat self-destruct. Random 32-byte secret, generated
   // at node creation. The bootstrap payload bundles a stateless HMAC token
   // (nodeId + sig over heartbeatSecret) that the agent presents on every
   // heartbeat poll. Server-side verification looks the secret up here and
@@ -307,7 +307,7 @@ model Node {
   @@map("nodes")
 }
 
-// Slice 27.5 — logical grouping of nodes ("EU-West", "RU", "Asia").
+// Slice 27.5: logical grouping of nodes ("EU-West", "RU", "Asia").
 // Plain identity table; smart server-side selection (slice 28) will
 // score nodes by `region.code` against the user's GeoIP lookup.
 model Region {
@@ -315,7 +315,7 @@ model Region {
   // Free-text label shown in the admin UI ("Europe", "RU TSPU-zone").
   name      String   @unique @db.VarChar(64)
   // ISO 3166-2-ish short code for matching ("EU", "RU", "AS"). Free-form
-  // for now — slice 28 may tighten validation when GeoIP integration lands.
+  // for now, slice 28 may tighten validation when GeoIP integration lands.
   code      String   @unique @db.VarChar(16)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -333,7 +333,7 @@ model Inbound {
   port      Int
   config    Json
   enabled   Boolean  @default(true)
-  // publicHost / publicPort — slice 25. Until now the panel emitted client
+  // publicHost / publicPort: slice 25. Until now the panel emitted client
   // URIs using `hostFromAddress(node.address)` and `inbound.port` directly,
   // which forced admins to overload `node.address` (the mTLS control-plane
   // endpoint) with a public-facing FQDN. That broke the panel→node mTLS
@@ -427,7 +427,7 @@ model User {
   // only to the per-request ?routing= query.
   routingPreset String? @map("routing_preset") @db.VarChar(32)
 
-  // Slice 27.5 — sticky-affinity hint for subscription generator.
+  // Slice 27.5: sticky-affinity hint for subscription generator.
   // NULL = no preference (current behaviour). When set, the generator
   // may bias the URL ordering toward this node so the client's url-test
   // group settles on it first. Soft hint: not enforcement, the user's
@@ -522,7 +522,7 @@ model SubscriptionEvent {
 
 // One-time bootstrap token a node-installer redeems to fetch its mTLS
 // payload over HTTP at install time. Payload (cert + key + CA) is generated
-// on-redeem via keygen, NOT stored here — the token is just a short
+// on-redeem via keygen, NOT stored here, the token is just a short
 // identifier the node hands back, plus expiry/single-use machinery.
 //
 // Why this exists: the raw payload is ~6-7 KB base64. Linux TTY canonical
@@ -546,7 +546,7 @@ model NodeBootstrapToken {
   @@map("node_bootstrap_tokens")
 }
 
-// Subscription Response Rules — User-Agent → format auto-selection.
+// Subscription Response Rules: User-Agent → format auto-selection.
 // Slice 22 ships this for /sub/:token: when the client doesn't pass
 // `?format=` we walk the rules in `priority ASC` order and serve the
 // first whose `uaPattern` regex matches `User-Agent`. Default catch-all
@@ -555,7 +555,7 @@ model SubscriptionResponseRule {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique @db.VarChar(64)
   // Regex applied against the full User-Agent header. Match is case-
-  // sensitive — patterns include their own (?i) when needed. Length is
+  // sensitive, patterns include their own (?i) when needed. Length is
   // bounded by the route handler before regex execution to defang ReDoS.
   uaPattern String   @map("ua_pattern")
   // Must match the FormatEnum in subscription.routes.ts.
@@ -576,7 +576,7 @@ model SubscriptionResponseRule {
 // IP exhaustion before mutating the awg config.
 model AmneziawgPeer {
   id        String   @id @default(uuid()) @db.Uuid
-  // Slice 27 — was `inboundId` pointing at `inbounds`. After profiles
+  // Slice 27: was `inboundId` pointing at `inbounds`. After profiles
   // refactor, peer allocations are scoped to the logical profile. Same user
   // gets the same WG IP across every node a given profile is bound to
   // (separate WG processes per node never see each other, so no collision).
@@ -632,7 +632,7 @@ model NodeUsageHistory {
 
   @@id([nodeId, hour])
   @@index([nodeId, hour(sort: Desc)])
-  // Dashboard aggregates by `WHERE hour >= since` without nodeId — the
+  // Dashboard aggregates by `WHERE hour >= since` without nodeId, the
   // composite indexes above are leftmost on nodeId and useless for that.
   @@index([hour(sort: Desc)])
   @@map("node_usage_history")
@@ -658,12 +658,12 @@ model NodeUserTrafficSnapshot {
 // ───── Slice S2: HWID enforcement ────────────────────────────────────────
 //
 // Tracks which physical client devices have fetched a user's subscription.
-// Each row is a (userId, hwid) pair, populated lazily — on /sub/:token the
+// Each row is a (userId, hwid) pair, populated lazily, on /sub/:token the
 // middleware reads the `x-hwid` header (set by Hiddify/Streisand/Happ),
 // upserts this row, then counts how many devices the user has and 403s
 // if `count > user.hwidDeviceLimit`.
 //
-// Trust model: client-supplied HWID — this is a "concerned parent" gate,
+// Trust model: client-supplied HWID, this is a "concerned parent" gate,
 // not anti-cheat. Spoofing the header on the client trivially bypasses
 // it. Acceptable: the goal is preventing casual subscription sharing, not
 // hardening against adversarial users.
@@ -671,11 +671,11 @@ model HwidUserDevice {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @map("user_id") @db.Uuid
   hwid         String   @db.VarChar(255)
-  // First time we saw this device — for audit / "device added" UI later.
+  // First time we saw this device, for audit / "device added" UI later.
   firstSeenAt  DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
   // Updated on every /sub/:token hit so admins can see stale devices.
   lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
-  // Optional admin label ("Phone", "Laptop") — set via API later, NULL by default.
+  // Optional admin label ("Phone", "Laptop"), set via API later, NULL by default.
   label        String?  @db.VarChar(64)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

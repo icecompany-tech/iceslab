@@ -152,7 +152,7 @@ apps/node/iceslab-node
 apps/node/iceslab-node-*
 apps/node/iceslab-node.exe
 
-# Playwright MCP — screenshots, snapshots, console logs from review sessions
+# Playwright MCP: screenshots, snapshots, console logs from review sessions
 .playwright-mcp/
 
 # Smoke-test screenshots (Claude Code review artefacts, anywhere in tree)
@@ -202,7 +202,7 @@ $RECYCLE.BIN/
 .history/
 
 # ─────────────────────────────────────────────────────────────────────────
-# Secrets / credentials — never commit
+# Secrets / credentials: never commit
 # ─────────────────────────────────────────────────────────────────────────
 *.pem
 *.key
@@ -288,7 +288,7 @@ junit-*.xml
 **/__snapshots__/__diff_output__/
 
 # ─────────────────────────────────────────────────────────────────────────
-# Docker — local overrides + buildx cache
+# Docker: local overrides + buildx cache
 # ─────────────────────────────────────────────────────────────────────────
 docker-compose.override.yml
 docker-compose.override.yaml
@@ -326,7 +326,7 @@ bootstrap-*.txt
 bootstrap-*.json
 
 # ─────────────────────────────────────────────────────────────────────────
-# Misc — archives, profiling, local notes
+# Misc: archives, profiling, local notes
 # ─────────────────────────────────────────────────────────────────────────
 *.zip
 *.tar

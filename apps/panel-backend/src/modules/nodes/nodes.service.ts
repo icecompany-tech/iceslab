@@ -51,7 +51,7 @@ function buildSans(address: string): { type: 'dns' | 'ip'; value: string }[] {
 
 export interface CreateNodeContext {
   /** Public URL of the panel as seen by the admin browser (used to render
-   *  the bootstrap install command — node will hit this URL to fetch payload). */
+   *  the bootstrap install command, node will hit this URL to fetch payload). */
   panelUrl: string;
 }
 
@@ -84,14 +84,14 @@ export async function createNode(
       hardening: (input.hardening as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
       // Engine-choice: install sing-box alongside the native core when opted in.
       singboxEngine: input.singboxEngine,
-      // Slice 38 — heartbeat-self-destruct secret. 32 bytes of entropy is
+      // Slice 38: heartbeat-self-destruct secret. 32 bytes of entropy is
       // overkill for HMAC-SHA256 keying, but stays well under the 64-byte
       // block size and matches our convention for symmetric secrets.
       heartbeatSecret: randomBytes(32),
     });
   } catch (err) {
     // Catch DB-level UNIQUE violation. Soft-deleted rows still hold the
-    // unique value at the DB level — the app-level checks above only see
+    // unique value at the DB level, the app-level checks above only see
     // active rows, so a soft-deleted node with the same name/address
     // surfaces here as P2002. Slice 24 will replace these with partial
     // unique indexes (`WHERE deleted_at IS NULL`); until then we map the
@@ -198,7 +198,7 @@ async function renderBootstrapCommand(
   hardening?: HardeningInput | null,
   singboxEngine?: boolean,
 ): Promise<string> {
-  // Slice S7 — auto-detect or accept env-override of the panel's egress
+  // Slice S7: auto-detect or accept env-override of the panel's egress
   // IP so the install command can lock the agent's UFW to it. See
   // panel-ip.ts for resolution order. When all probes fail (offline
   // egress?) we still emit a non-shell-breaking placeholder; admin
@@ -224,7 +224,7 @@ async function renderBootstrapCommand(
   //
   // Naive / SS2022 / MTProto / Mieru stay idle after bootstrap and
   // wait for the panel's applyInbound payload. Domain, email,
-  // masquerade etc. live on the Profile — no install-time flags exist
+  // masquerade etc. live on the Profile, no install-time flags exist
   // for them in install-iceslab-node.sh, so don't emit any here.
   const acmeDomain = nodeAddress?.split(':')[0] ?? '';
   const acmeEmail = (process.env.ACME_DEFAULT_EMAIL ?? '').trim();

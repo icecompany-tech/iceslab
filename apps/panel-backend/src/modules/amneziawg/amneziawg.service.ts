@@ -4,7 +4,7 @@ import { intToIp, ipToInt, parseSubnet } from './amneziawg.subnet.js';
 import { Prisma } from '../../generated/prisma/client.js';
 
 // Default AmneziaWG subnet. Picked far from typical hosting-provider
-// infrastructure ranges — some budget VPS providers put their host gateway
+// infrastructure ranges, some budget VPS providers put their host gateway
 // on 10.0.0.1, so an AWG server tunnel-IP of 10.0.0.1/24 collides with the
 // host's default route and the VPS loses connectivity minutes after the
 // interface comes up (caught live cycle #6 2026-05-12). 10.66.66.0/24 is
@@ -37,11 +37,11 @@ export async function listPeers(profileId: string): Promise<AmneziawgPeer[]> {
 }
 
 /**
- * Allocate a stable IP for (profile, user). Idempotent — returns the existing
+ * Allocate a stable IP for (profile, user). Idempotent, returns the existing
  * row if one is already there. Picks the lowest unused address inside the
  * subnet (skipping network, server, and broadcast).
  *
- * Slice 27 — keyed on profile (the logical AmneziaWG inbound) instead of the
+ * Slice 27: keyed on profile (the logical AmneziaWG inbound) instead of the
  * old per-node inbound. Same user gets the same IP across every node a profile
  * is bound to; separate WG processes per node never see each other so this is
  * safe.
@@ -137,7 +137,7 @@ export async function allocatePeer(
     const taken = await prisma.amneziawgPeer.count({ where: { profileId } });
     const capacity = range.lastUsable - range.firstUsable + 1;
     if (taken >= capacity) throw new IpExhaustedError(profileId, subnet);
-    // Otherwise it was a race — retry. (ipToInt unused on this path but
+    // Otherwise it was a race, retry. (ipToInt unused on this path but
     // kept imported for tests / other call sites.)
     void ipToInt;
   }

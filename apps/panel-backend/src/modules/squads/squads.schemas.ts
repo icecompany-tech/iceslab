@@ -17,7 +17,7 @@ export const CreateSquadSchema = z.object({
   routingPreset: RoutingPresetField,
   // K7 - per-squad HWID device-limit default (null = none).
   hwidDeviceLimit: z.number().int().positive().nullish(),
-  /** Slice 27 — squad ACL is now profile-level. Initial profile assignment;
+  /** Slice 27: squad ACL is now profile-level. Initial profile assignment;
    *  admin can attach later via PUT. */
   profileIds: z.array(z.uuid()).default([]),
 });

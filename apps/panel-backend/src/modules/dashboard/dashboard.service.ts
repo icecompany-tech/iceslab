@@ -15,7 +15,7 @@ import { readCachedNodeMetrics } from '../nodes/nodes.cron.js';
 // + topUsers + events + host sample) ran every ~10s and pegged 1-vCPU hosts
 // to a visible burst. At 30s the recompute runs at most twice a minute no
 // matter how many tabs poll; clients in between get warm cache. Staleness
-// bound (30s) is fine for an operator dashboard — node status has its own
+// bound (30s) is fine for an operator dashboard, node status has its own
 // 30s cron and traffic counters are cumulative.
 const OVERVIEW_CACHE_KEY = 'dashboard:overview:v1';
 const OVERVIEW_CACHE_TTL_SECONDS = 30;
@@ -40,7 +40,7 @@ export interface DashboardOverview {
     last30dBytes: number;
     calendarMonthBytes: number;
     currentYearBytes: number;
-    // K1 — prior-period totals so the UI can render "vs previous" deltas
+    // K1: prior-period totals so the UI can render "vs previous" deltas
     // (today vs yesterday already covered by yesterdayBytes). Rolling windows
     // mirror their current-period counterparts; calendar month/year use
     // calendar boundaries.
@@ -55,7 +55,7 @@ export interface DashboardOverview {
     totalNodeCount: number;
   };
   // Wave-14 #18: sidebar inventory counts so AppLayout doesn't fire 4 separate
-  // count queries (listUsers/listProfiles/listSquads/listNodes — each pulling
+  // count queries (listUsers/listProfiles/listSquads/listNodes, each pulling
   // full row payloads only to read .length on the client) on every page load.
   // Computed cheap (4 × `prisma.X.count`) and ride the same Redis cache the
   // rest of the overview does.
@@ -126,7 +126,7 @@ function startOfCalendarMonth(): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
 
-// K1 — prior-period boundaries for "vs previous" deltas.
+// K1: prior-period boundaries for "vs previous" deltas.
 function daysAgo(n: number): Date {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
@@ -334,7 +334,7 @@ async function nodeMetrics(): Promise<{
 }
 
 async function protocolMetrics(): Promise<DashboardOverview['byProtocol']> {
-  // Slice 27 — protocols come from the profile table now. Profile×bindings
+  // Slice 27: protocols come from the profile table now. Profile×bindings
   // is m:n; we count distinct profiles per protocol so the "1 protocol = N
   // inbound rows on N nodes" duplication doesn't inflate the dashboard.
   const inboundCounts = await prisma.profile.groupBy({
@@ -344,7 +344,7 @@ async function protocolMetrics(): Promise<DashboardOverview['byProtocol']> {
 
   // Slice 27: per-protocol user count walks squad ACL → groupProfiles →
   // profile.protocol. The legacy users.enabled_protocols JSON column still
-  // exists (kept for migration window) but is no longer authoritative —
+  // exists (kept for migration window) but is no longer authoritative,
   // squad membership is. A user is counted under a protocol if at least
   // one of their squads has a profile of that protocol.
   const userByProto = await prisma.$queryRaw<{ protocol: string; count: bigint }[]>`
@@ -472,7 +472,7 @@ export async function getOverview(): Promise<DashboardOverview> {
     try {
       return JSON.parse(cached) as DashboardOverview;
     } catch {
-      // Corrupted cache — fall through and recompute.
+      // Corrupted cache, fall through and recompute.
     }
   }
 

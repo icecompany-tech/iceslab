@@ -1,6 +1,6 @@
 // Package atomicfile provides crash-safe file replacement for proxy-core
 // config files. Plain `os.WriteFile(tmp); os.Rename(tmp, path)` is NOT
-// crash-safe on Linux without explicit fsync — under power-loss the rename
+// crash-safe on Linux without explicit fsync, under power-loss the rename
 // can land in the directory entry while the tmp file's data pages are
 // still in the kernel cache, leaving a zero-length or torn config on next
 // boot.
@@ -20,7 +20,7 @@ import (
 // rename so the visible file never has a too-open mode briefly).
 //
 // Caller is responsible for ensuring `filepath.Dir(path)` already exists
-// (use os.MkdirAll separately if needed — this function refuses to create
+// (use os.MkdirAll separately if needed, this function refuses to create
 // missing parent dirs because it can't fsync them after the fact in a
 // well-ordered way).
 func Write(path string, data []byte, mode os.FileMode) error {
@@ -44,7 +44,7 @@ func Write(path string, data []byte, mode os.FileMode) error {
 		cleanup()
 		return fmt.Errorf("atomicfile: chmod %s: %w", tmpName, err)
 	}
-	// fsync the file BEFORE rename — flushes data pages to disk so the
+	// fsync the file BEFORE rename, flushes data pages to disk so the
 	// rename can't outrun the contents.
 	if err := tmp.Sync(); err != nil {
 		cleanup()
@@ -58,7 +58,7 @@ func Write(path string, data []byte, mode os.FileMode) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("atomicfile: rename %s -> %s: %w", tmpName, path, err)
 	}
-	// fsync the parent directory — without this, on power-loss the rename
+	// fsync the parent directory, without this, on power-loss the rename
 	// entry itself can be lost even though the file data is durable. Linux
 	// requires explicit dir-fsync for directory metadata.
 	dirF, err := os.Open(dir)

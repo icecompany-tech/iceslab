@@ -13,7 +13,7 @@ import {
   releasePeer,
 } from './amneziawg.service.js';
 
-// Slice 27 — peer allocation is keyed on profileId (the logical AmneziaWG
+// Slice 27: peer allocation is keyed on profileId (the logical AmneziaWG
 // inbound), not the per-node Inbound row. Tests now seed Profile rows.
 
 async function createProfile(name = 'awg0'): Promise<string> {

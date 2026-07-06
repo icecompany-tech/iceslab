@@ -18,7 +18,7 @@ import { getPanelPublicIp } from './panel-ip.js';
 /**
  * Derive the panel URL the admin is currently using to talk to the API.
  * Prefers PUBLIC_URL env var (set in docker-compose) over request-derived
- * heuristics — the heuristic breaks when Caddy doesn't forward X-Forwarded-Proto.
+ * heuristics, the heuristic breaks when Caddy doesn't forward X-Forwarded-Proto.
  */
 function publicUrlFromRequest(request: FastifyRequest): string {
   if (config.PUBLIC_URL) return config.PUBLIC_URL.replace(/\/$/, '');
@@ -34,7 +34,7 @@ function publicUrlFromRequest(request: FastifyRequest): string {
 const BootstrapTokenParam = z.object({ token: z.string().regex(/^bs_[A-Za-z0-9_-]+$/).max(64) });
 const auth = { onRequest: [requireAuth] };
 
-// Mirror of nodes.service.ts:renderBootstrapCommand — kept here because the
+// Mirror of nodes.service.ts:renderBootstrapCommand, kept here because the
 // /api/nodes/:id/bootstrap endpoint generates the command without going
 // through the service path. Should produce byte-identical output.
 async function renderRefreshBootstrapCommand(
@@ -81,7 +81,7 @@ async function renderRefreshBootstrapCommand(
 }
 
 export async function nodesRoutes(app: FastifyInstance): Promise<void> {
-  // Public bootstrap-redeem route — the token IS the credential (single-use,
+  // Public bootstrap-redeem route: the token IS the credential (single-use,
   // 15-min TTL). Per-route auth opt-in pattern matches auth.routes.ts and
   // avoids the addHook scope ambiguity that previously made this 401.
   app.get('/api/internal/bootstrap/:token', {
@@ -111,7 +111,7 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // Slice 38 — heartbeat self-destruct. Public-but-Bearer-authed; the
+  // Slice 38: heartbeat self-destruct. Public-but-Bearer-authed; the
   // bearer is an HMAC the agent received in its bootstrap payload.
   await app.register(
     async (s) => {

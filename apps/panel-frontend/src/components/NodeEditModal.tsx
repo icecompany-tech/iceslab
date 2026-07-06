@@ -210,7 +210,7 @@ export function NodeEditModal({
     enabled: opened,
   });
 
-  // Live host-metrics + traffic — same source the cards on /nodes use.
+  // Live host-metrics + traffic, same source the cards on /nodes use.
   // Wave-14 #19: removed the modal's own 10s refetchInterval. NodesPage
   // (the only entry point to this modal) already polls the SAME cache key
   // at 15s, so the modal's poll was net-burst on the dashboard endpoint

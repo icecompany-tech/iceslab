@@ -92,7 +92,7 @@ export async function findExpiredUsers(): Promise<number> {
   // exactly once (after the flip later ticks don't re-select them), so there
   // is no repeated-enqueue load to dedup. removeUser is idempotent node-side,
   // so an occasional duplicate (reconcile also enqueues) is harmless.
-  // B11: one addBulk instead of N awaited add()s — a 1000-user expiry batch
+  // B11: one addBulk instead of N awaited add()s, a 1000-user expiry batch
   // was 1000 sequential Redis round-trips; addBulk pipelines them.
   await prisma.user.updateMany({
     where: { id: { in: ids } },
@@ -103,7 +103,7 @@ export async function findExpiredUsers(): Promise<number> {
   );
 
   // Event handlers still fire (Telegram alerts, audit log) but they no
-  // longer carry the sync invariant — that's covered by the direct
+  // longer carry the sync invariant, that's covered by the direct
   // enqueue above.
   for (const id of ids) {
     eventBus.emit('user.status-changed', { userId: id, from: 'active', to: 'expired' });
@@ -160,7 +160,7 @@ export async function findExceededTrafficUsers(): Promise<number> {
  *     ~4M over 30d. Older orphans are assumed already-removed; if not,
  *     the next status-flip / admin action bumps updatedAt back into the
  *     window.
- *   - `lte: now - 15min`: skip users flipped in the last 15 minutes —
+ *   - `lte: now - 15min`: skip users flipped in the last 15 minutes,
  *     their primary removeUser job (enqueued by findExpired /
  *     findExceededTrafficUsers BEFORE the status update) is still
  *     within its retry budget (3 attempts × exponential backoff = ~7s

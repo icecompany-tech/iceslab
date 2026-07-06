@@ -26,7 +26,7 @@ const QUEUE_NAME = 'inbound-sync';
  *
  * Race the flag fixes: BullMQ's per-jobId dedupe rejects new enqueues for
  * jobs that are currently `active` (mid-push), so an admin edit landing
- * during the 5-30 s mTLS push window was silently dropped — the running
+ * during the 5-30 s mTLS push window was silently dropped, the running
  * worker never saw the change, and no new push got scheduled. Next push
  * had to wait for an unrelated event.
  *
@@ -53,7 +53,7 @@ export const inboundSyncQueue = new Queue<ApplyNodeInboundsJobData>(QUEUE_NAME, 
     removeOnComplete: true,
     // Coalescing uses `jobId: apply-<nodeId>` so duplicate enqueues collapse
     // into one push. BUT BullMQ's deduplication treats a failed job in the
-    // failed-set as still "owning" the jobId — new enqueues become silent
+    // failed-set as still "owning" the jobId, new enqueues become silent
     // no-ops until the failed job is reaped. With `age: 86400` that's a
     // 24-hour deadlock per node after a single transient failure (panel
     // rebuilds, network blips, mTLS hiccups during cert rotation).
@@ -111,10 +111,10 @@ async function fetchActiveUsers(): Promise<ActiveUser[]> {
 }
 
 export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]> {
-  // Slice 27 — walks ProfileNodeBinding rows joined to Profile, and resolves
+  // Slice 27: walks ProfileNodeBinding rows joined to Profile, and resolves
   // the deployable config for each. Replaces the old per-node `inbounds`
   // table read while keeping the wire format identical (the node-agent
-  // doesn't know about profile/binding split — it just gets a flat list).
+  // doesn't know about profile/binding split, it just gets a flat list).
   const bindings = await prisma.profileNodeBinding.findMany({
     where: {
       nodeId,
@@ -136,7 +136,7 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     const overrides = (b.overrides ?? {}) as Record<string, unknown>;
     let config = { ...baseConfig, ...overrides } as InboundDto['config'];
 
-    // Slice 41 — mtproto secret derived from (binding.id, domain). Both
+    // Slice 41: mtproto secret derived from (binding.id, domain). Both
     // the wire push (here) and subscription generator key on binding.id so
     // the secret stays in lock-step on both sides.
     if (b.profile.protocol === 'mtproto') {
@@ -153,7 +153,7 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     // the agent binds the awg-quick interface to the port the admin set
     // (typical 443 for stealth) instead of WireGuard's default 51820.
     // Without this, the wgconf subscription advertises Endpoint=:443 but
-    // the server actually listens on 51820 — handshake never completes.
+    // the server actually listens on 51820, handshake never completes.
     // Caught live awg-VPS cycle #6 2026-05-12.
     if (b.profile.protocol === 'amneziawg') {
       config = {
@@ -279,7 +279,7 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
  * Compute the current set of enabled inbounds for `nodeId` and push it to
  * that node-agent over mTLS. Idempotent (the node-side endpoint diffs).
  *
- * Slice 24 — replaces the manual `/etc/iceslab-node/env` editing dance
+ * Slice 24: replaces the manual `/etc/iceslab-node/env` editing dance
  * caught during the 2026-05-06 VPS test.
  */
 export async function applyInboundsForNode(nodeId: string): Promise<void> {
@@ -290,7 +290,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
 
   const node = await fetchNode(nodeId);
   if (!node) {
-    getLogger().info(`[worker:inbound-sync] applyInbounds ${nodeId} — node not active, skipping`);
+    getLogger().info(`[worker:inbound-sync] applyInbounds ${nodeId}: node not active, skipping`);
     return;
   }
 
@@ -298,7 +298,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   const req: ApplyInboundsRequest = { inbounds };
 
   getLogger().info(
-    `[worker:inbound-sync] applyInbounds ${node.name} — pushing ${inbounds.length} inbound(s)`,
+    `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,
   );
 
   const transport = new NodeTransport(node);
@@ -306,7 +306,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   try {
     const res = await transport.applyInbounds(req);
     getLogger().info(
-      `[worker:inbound-sync] applyInbounds ${node.name} ok — applied=${res.applied} skipped=${res.skipped}`,
+      `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied} skipped=${res.skipped}`,
     );
     inboundSyncJobs.inc({ result: 'ok' });
   } catch (err) {
@@ -325,16 +325,16 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   // an up-to-date client list. addUser is idempotent on the node side.
   if (inbounds.length === 0) return;
 
-  // Find the AmneziaWG profile bound to this node (at most one — single
+  // Find the AmneziaWG profile bound to this node (at most one, single
   // awg-quick interface per host). When present, every active user with
   // AWG creds needs an allocated IP inside the profile's subnet pushed
-  // alongside the public key — without it the node-agent silently
+  // alongside the public key, without it the node-agent silently
   // skips the peer (AmneziaWGAllowedIP=="" → no-op AddUser). Caught
   // live cycle #6 2026-05-12: addUser ok was logged but `awg show`
   // showed zero peers because IP was empty on the wire.
   //
   // Keyed on profileId (NOT binding.id) so a user gets the same IP on
-  // every node a profile is bound to — matches the subscription /
+  // every node a profile is bound to, matches the subscription /
   // wgconf path which also keys on profileId.
   const awgBinding = inbounds.find((i) => i.protocol === 'amneziawg');
   let awgProfileId: string | null = null;
@@ -357,7 +357,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   );
 
   // Wave-14 #13: pre-allocate AWG IPs serially (allocatePeer is racy under
-  // concurrency — IP slots aren't unique-indexed). Then fan out addUser in
+  // concurrency, IP slots aren't unique-indexed). Then fan out addUser in
   // bounded-parallel chunks. Pre-wave a 1000-user install did 1000 serial
   // mTLS round-trips (~50ms each) = ~50s of worker time blocked per node
   // push, which compounds when multiple nodes need re-push at once.
@@ -388,7 +388,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
           getLogger().info(
             `[worker:inbound-sync] allocatePeer ${u.username} on profile ${awgProfileId} FAILED: ${detail}`,
           );
-          // Fall through — addUser will silently skip the AWG portion on the
+          // Fall through, addUser will silently skip the AWG portion on the
           // node side, other protocols still work for this user.
           continue;
         }
@@ -471,7 +471,7 @@ export function startInboundSyncWorker(): Worker<ApplyNodeInboundsJobData> {
     },
     {
       connection: redis,
-      // One node at a time per worker — applyInbounds restarts the protocol
+      // One node at a time per worker, applyInbounds restarts the protocol
       // server, parallel restarts on the same node would race. Different
       // nodes can still go in parallel because they're distinct job IDs.
       concurrency: 5,

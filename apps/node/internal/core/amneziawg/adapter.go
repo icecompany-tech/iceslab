@@ -120,12 +120,12 @@ func (a *Adapter) Engine() string { return "amneziawg" }
 // In config-only mode (AwgQuickBin == "") it just writes the config.
 //
 // Special case: on a freshly-bootstrapped node, main.go can only fill in the
-// interface name and bin paths — every other field (PrivateKey, Address,
+// interface name and bin paths, every other field (PrivateKey, Address,
 // H1-H4, S1-S4, Jc/Jmin/Jmax) lives in panel-side `Profile.config` and only
 // arrives via the first `ApplyInbound` over mTLS. Calling `renderConfig`
 // here would fail validation with "PrivateKey is required" and crash the
 // agent in a loop. Detect that empty-config state and *defer* the bring-up
-// until ApplyInbound supplies real values — that handler already calls
+// until ApplyInbound supplies real values, that handler already calls
 // restartInterfaceLocked which writes the config + awg-quick up and flips
 // `started` to true. Caught live cycle #6 2026-05-12 on awg-VPS.
 func (a *Adapter) Start(ctx context.Context) error {
@@ -136,7 +136,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 	if a.cfg.Inbound.PrivateKey == "" {
 		iface := a.cfg.Inbound.Interface
 		a.mu.Unlock()
-		a.logger.Info("amneziawg adapter deferred — awaiting first ApplyInbound from panel",
+		a.logger.Info("amneziawg adapter deferred, awaiting first ApplyInbound from panel",
 			"interface", iface)
 		return nil
 	}
@@ -151,7 +151,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 
 	if managed {
 		if out, err := a.cfg.runCmd(ctx, a.cfg.AwgQuickBin, "up", inbound.Interface); err != nil {
-			// awg-quick up is idempotent-ish — failing because the iface is
+			// awg-quick up is idempotent-ish, failing because the iface is
 			// already up is fine. Anything else is a real error.
 			if !strings.Contains(strings.ToLower(string(out)), "already exists") {
 				return fmt.Errorf("awg-quick up %s failed: %w (%s)", inbound.Interface, err, strings.TrimSpace(string(out)))
@@ -240,7 +240,7 @@ func (a *Adapter) RemoveUser(userID string) error {
 // the last poll (xray meets that contract with `statsquery -reset`). So this
 // adapter snapshots the cumulative values (a.lastStats) and emits the per-poll
 // DELTA. Without this, the cron re-added each peer's entire lifetime total on
-// every tick — endless phantom traffic that drained user quotas (the runaway
+// every tick, endless phantom traffic that drained user quotas (the runaway
 // AWG accounting bug, 2026-06-11).
 //
 // Two edge cases are handled so we never emit a spurious spike:
@@ -284,7 +284,7 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 
 	users := make([]core.UserStats, 0, len(a.peers))
 	if err != nil {
-		// Interface may be down or never started — fall back to zero counters
+		// Interface may be down or never started, fall back to zero counters
 		// rather than failing the whole stats poll.
 		for id := range a.peers {
 			users = append(users, core.UserStats{UserID: id})
@@ -316,7 +316,7 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 				dTx = curTx
 			}
 		}
-		// else: first sight — baseline recorded above, count nothing this tick.
+		// else: first sight, baseline recorded above, count nothing this tick.
 
 		users = append(users, core.UserStats{
 			UserID:   id,
@@ -438,7 +438,7 @@ func (a *Adapter) probeHealth(iface string) bool {
 //   - diffSubnet (Address from subnet changed) → reject with error when
 //     peers are already allocated; admins must drain peers first
 //
-// Background context for the reload — the inbound HTTP request that triggered
+// Background context for the reload, the inbound HTTP request that triggered
 // this may have a short deadline, but we want the interface to come back up
 // even if the caller times out (matches the xray adapter pattern).
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
@@ -466,7 +466,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		a.mu.Unlock()
 		return fmt.Errorf("amneziawg ApplyInbound: %w", err)
 	}
-	// Preserve install-time PostUp/PostDown and Interface defaults — those
+	// Preserve install-time PostUp/PostDown and Interface defaults, those
 	// aren't in the panel wire. Interface name is install-time identity; if
 	// the wire expressed a new one it'd be a separate diffRestart anyway.
 	newInbound.PostUp = a.cfg.Inbound.PostUp
@@ -482,7 +482,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		if len(a.peers) > 0 {
 			n := len(a.peers)
 			a.mu.Unlock()
-			return fmt.Errorf("amneziawg ApplyInbound: subnet change rejected — %d peer(s) already allocated; drain peers before changing subnet", n)
+			return fmt.Errorf("amneziawg ApplyInbound: subnet change rejected, %d peer(s) already allocated; drain peers before changing subnet", n)
 		}
 		// No peers: subnet change is safe and only needs a full restart to
 		// re-attach the new IP to the interface.
@@ -520,7 +520,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 // (the awg-quick forks run lock-free; readiness is flipped via setStarted).
 //
 // In config-only mode (AwgQuickBin == "") we just rewrite the file and skip
-// the actual bounce — that's what the unit tests rely on, and what dev
+// the actual bounce, that's what the unit tests rely on, and what dev
 // machines without amneziawg installed need.
 func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundConfig, peers []Peer) error {
 	if err := a.writeConfigSnapshot(inbound, peers); err != nil {
@@ -535,7 +535,7 @@ func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundCo
 	defer cancel()
 
 	if out, err := a.cfg.runCmd(ctx, a.cfg.AwgQuickBin, "down", inbound.Interface); err != nil {
-		// "iface not running" is fine — we're about to bring it up.
+		// "iface not running" is fine, we're about to bring it up.
 		a.logger.Warn("awg-quick down returned non-zero (often safe)",
 			"err", err, "out", strings.TrimSpace(string(out)))
 	}

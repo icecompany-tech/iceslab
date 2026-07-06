@@ -6,15 +6,15 @@ import { testProfileConnect } from './test-connect.service.js';
 const ProfileIdParam = z.object({ id: z.uuid() });
 
 /**
- * Slice 31 — `POST /api/profiles/:id/test-connect` runs an outbound
+ * Slice 31: `POST /api/profiles/:id/test-connect` runs an outbound
  * reachability probe against every enabled binding × host of the profile.
  *
- * Returns one result per (binding, host) — TLS handshake (xray, naive)
+ * Returns one result per (binding, host): TLS handshake (xray, naive)
  * or TCP connect (everything else). Bounded latency: each probe times
  * out at 5s and they run concurrently, so the response always lands
  * within ~6s regardless of how many bindings the profile has.
  *
- * Auth: requireAuth — admin-only. The probes run from the panel
+ * Auth: requireAuth, admin-only. The probes run from the panel
  * container's network, so they validate the panel→public-internet path
  * (handy for catching firewall/DNS issues) but say nothing about the
  * client→public-internet path.

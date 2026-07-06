@@ -30,7 +30,7 @@ func validInbound() InboundConfig {
 }
 
 func TestInboundDefaults(t *testing.T) {
-	// Pass an explicitly-zero InboundConfig — withDefaults() should fill
+	// Pass an explicitly-zero InboundConfig, withDefaults() should fill
 	// install-time fallbacks (Interface, ListenPort, PostUp/Down) but
 	// MUST leave junk / magic-size / Address as-is (zero is a legitimate
 	// "obfuscation off" value from the panel UI; the panel is always the
@@ -138,7 +138,7 @@ func TestRenderConfigRejectsEmptyPeerFields(t *testing.T) {
 	}
 }
 
-// Wave-14 #1 regression — renderConfig must reject any panel-pushed peer
+// Wave-14 #1 regression, renderConfig must reject any panel-pushed peer
 // field that could break out of [Peer] and inject [Interface]/PostUp shell
 // commands (RCE-as-root via awg-quick). Whitelisted formats: 44-char base64
 // WG keys, valid CIDR strings.

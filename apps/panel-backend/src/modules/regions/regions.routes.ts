@@ -5,8 +5,8 @@ import { requireAuth } from '../auth/auth.hook.js';
 import { prisma } from '../../prisma.js';
 
 /**
- * Slice 27.5 — admin CRUD for `regions`. Plain identity table with
- * (name, code) — no business logic yet. Slice 28 will read `code`
+ * Slice 27.5: admin CRUD for `regions`. Plain identity table with
+ * (name, code), no business logic yet. Slice 28 will read `code`
  * against GeoIP at /sub/:token to score nodes; here we just give
  * admins the chair to create them.
  */
@@ -84,7 +84,7 @@ export async function regionsRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/regions/:id', auth, async (req, reply) => {
     const { id } = RegionIdParam.parse(req.params);
-    // Foreign-key on `nodes.region_id` is ON DELETE SET NULL — we don't
+    // Foreign-key on `nodes.region_id` is ON DELETE SET NULL, we don't
     // need to clear nodes manually; they just become "regionless" again.
     try {
       await prisma.region.delete({ where: { id } });

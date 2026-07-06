@@ -1,5 +1,5 @@
 # Production compose for the Iceslab control-plane (panel + DB + Redis).
-# Node-agents live on remote VPS hosts and are NOT part of this file —
+# Node-agents live on remote VPS hosts and are NOT part of this file,
 # provision them per the install instructions in README.md.
 #
 # Usage:
@@ -97,7 +97,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN}
       PUBLIC_URL: ${PUBLIC_URL}
       HYSTERIA_PUBLIC_PORT: ${HYSTERIA_PUBLIC_PORT:-443}
-      # Slice S7 — security knobs. Without these the strict per-route
+      # Slice S7: security knobs. Without these the strict per-route
       # rate limits, X-Forwarded-For trust hops, and node-install IP
       # auto-injection don't reach the running container even when set
       # in .env.production.
@@ -110,18 +110,18 @@ services:
       LOGIN_LOCKOUT_DURATION_MIN: ${LOGIN_LOCKOUT_DURATION_MIN:-5}
       LOGIN_LOCKOUT_WINDOW_MIN: ${LOGIN_LOCKOUT_WINDOW_MIN:-10}
       # ACME contact email auto-injected into Hysteria / Naive install
-      # commands. Optional — UI emits placeholder when unset.
+      # commands. Optional, UI emits placeholder when unset.
       ACME_DEFAULT_EMAIL: ${ACME_DEFAULT_EMAIL:-}
-      # Tier-1 security — Telegram alert webhook (cycle #6). Set both to
+      # Tier-1 security: Telegram alert webhook (cycle #6). Set both to
       # enable login / lockout / node-event push notifications. Get a bot
       # token from @BotFather; chat_id from @userinfobot.
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      # Tier-1 security — admin geo-block + honeypot. ADMIN_ALLOWED_COUNTRIES
+      # Tier-1 security: admin geo-block + honeypot. ADMIN_ALLOWED_COUNTRIES
       # empty → geo-block disabled. Requires Cloudflare orange-cloud (CF-IPCountry).
       ADMIN_ALLOWED_COUNTRIES: ${ADMIN_ALLOWED_COUNTRIES:-}
       HONEYPOT_BLACKLIST_TTL_SEC: ${HONEYPOT_BLACKLIST_TTL_SEC:-3600}
-      # Tier-1 — honey-user tripwire tokens (CSV). Caught live during cycle #6
+      # Tier-1: honey-user tripwire tokens (CSV). Caught live during cycle #6
       # reality-check 2026-05-12: was in config.ts schema + .env.production
       # template + subscription.routes.ts check, but the passthrough line in
       # this compose file was missing. Result: backend container had empty
@@ -142,11 +142,11 @@ services:
     restart: unless-stopped
     healthcheck:
       # Without this the frontend's `depends_on: backend` only waits for
-      # container-start, not /health — operators see "API offline" flashes
+      # container-start, not /health, operators see "API offline" flashes
       # on first boot. Backend's own /health pings Postgres+Redis and returns
       # {"status":"ok"}. (Note: /healthz is the node-agent endpoint, not panel.)
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      # interval was 5s — that's 12 health pings/min just for liveness,
+      # interval was 5s, that's 12 health pings/min just for liveness,
       # each one pings Postgres + Redis. On small VPS the load isn't
       # worth the faster failure detection. 15s catches dead backend
       # within 30s (2 retries × 15s) which is fine for an admin panel.

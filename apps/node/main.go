@@ -56,7 +56,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// Start every adapter before the HTTPS server — we want auth callbacks
+	// Start every adapter before the HTTPS server, we want auth callbacks
 	// listening before any addUser request can arrive.
 	for _, a := range adapters {
 		if err := a.Start(ctx); err != nil {
@@ -80,13 +80,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Slice 38 — heartbeat self-destruct. Runs in the background, polls
+	// Slice 38: heartbeat self-destruct. Runs in the background, polls
 	// the panel for "you are still wanted." On 410 Gone (3 in a row) it
 	// cancels the root context, which makes srv.Run return; the rest of
 	// shutdown happens via the existing stopAdapters path below. After
 	// stopAdapters we exit with code 42, which the systemd unit treats
 	// as "do not restart." Any other path falls through to a normal exit.
-	// Slice 38 follow-up — process-start identifier. Sent in every heartbeat
+	// Slice 38 follow-up: process-start identifier. Sent in every heartbeat
 	// so the panel can detect agent restart and re-issue applyInbounds +
 	// addUser fan-out. Unix-nano is per-host monotonic and unique enough;
 	// the panel side only byte-compares.
@@ -100,7 +100,7 @@ func main() {
 			CACertPem:      pld.CACertPem,
 			AgentStartTime: agentStartTime,
 			OnGone: func(reason string) {
-				logger.Warn("heartbeat triggered self-destruct — initiating shutdown", "reason", reason)
+				logger.Warn("heartbeat triggered self-destruct, initiating shutdown", "reason", reason)
 				selfDestruct = true
 				cancel()
 			},
@@ -116,7 +116,7 @@ func main() {
 	stopAdapters(adapters, logger)
 
 	if selfDestruct {
-		logger.Warn("self-destruct complete — exiting with code 42 (systemd will not restart)")
+		logger.Warn("self-destruct complete, exiting with code 42 (systemd will not restart)")
 		os.Exit(42)
 	}
 }
@@ -156,7 +156,7 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("xray adapter registered")
 	}
 
-	// Slice 24d — Shadowsocks shares the xray binary. We register the SS
+	// Slice 24d: Shadowsocks shares the xray binary. We register the SS
 	// adapter whenever XRAY_BINARY is set; the panel decides whether the
 	// node actually has an SS inbound by either sending an ApplyInbound or
 	// not. Adapter starts in deferred-method mode (no Method set) until the
@@ -175,7 +175,7 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("shadowsocks adapter registered")
 	}
 
-	// Slice 41 — MTProto via 9seconds/mtg. Adapter waits for the panel to
+	// Slice 41: MTProto via 9seconds/mtg. Adapter waits for the panel to
 	// push a Domain via ApplyInbound; until then it sits inert.
 	if os.Getenv("MTG_BINARY") != "" {
 		mtgCfg := mtproto.Config{
@@ -191,7 +191,7 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("mtproto adapter registered")
 	}
 
-	// Slice 40 — Mieru via enfein/mieru's `mita` server.
+	// Slice 40: Mieru via enfein/mieru's `mita` server.
 	if os.Getenv("MITA_BINARY") != "" {
 		mieruCfg := mieru.Config{
 			BinaryPath: os.Getenv("MITA_BINARY"),
@@ -208,8 +208,8 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("mieru adapter registered")
 	}
 
-	// Slice 19 — AmneziaWG (DPI-resistant WireGuard fork). Registered
-	// unconditionally when the `amneziawg` CLI exists on $PATH — that's
+	// Slice 19: AmneziaWG (DPI-resistant WireGuard fork). Registered
+	// unconditionally when the `amneziawg` CLI exists on $PATH, that's
 	// our "is this an AWG-capable node" probe. bootstrap-amneziawg.sh
 	// (called by install-iceslab-node.sh when --protocol amneziawg) installs the
 	// kernel module via DKMS and builds awg / awg-quick into /usr/bin.
@@ -218,7 +218,7 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 	//
 	// Caught live cycle #6 reality-check 2026-05-12: adapter code shipped
 	// with slice 19 but was never wired into the registry, so applyInbound
-	// for amneziawg landed with `no adapter for protocol — config persisted
+	// for amneziawg landed with `no adapter for protocol, config persisted
 	// but not applied live`. Hence the explicit registration here.
 	awgBinPath := getenv("AMNEZIAWG_BIN", "/usr/bin/awg")
 	awgQuickBinPath := getenv("AMNEZIAWG_QUICK_BIN", "/usr/bin/awg-quick")
@@ -235,15 +235,15 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("amneziawg adapter registered", "bin", awgBinPath)
 	}
 
-	// Slice 20 — NaiveProxy via Caddy + klzgrad/forwardproxy@naive plugin.
+	// Slice 20: NaiveProxy via Caddy + klzgrad/forwardproxy@naive plugin.
 	// bootstrap-naive.sh builds a custom Caddy at /usr/local/bin/caddy-naive
 	// (the upstream `caddy` package would lack the forward_proxy module).
-	// Register unconditionally when that binary exists — that's our
+	// Register unconditionally when that binary exists, that's our
 	// "naive-capable node" probe, same pattern as amneziawg.
 	//
 	// Caught live cycle #8 reality-check 2026-05-13: adapter code shipped
 	// with slice 20 but was never wired into the registry, so applyInbound
-	// for naive landed with `no adapter for protocol — config persisted
+	// for naive landed with `no adapter for protocol, config persisted
 	// but not applied live`. Hence the explicit registration here.
 	caddyBinPath := getenv("CADDY_NAIVE_BIN", "/usr/local/bin/caddy-naive")
 	if _, err := os.Stat(caddyBinPath); err == nil {
@@ -258,7 +258,7 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("naive adapter registered", "bin", caddyBinPath)
 	}
 
-	// sing-box engine — first protocol TUIC (slice singbox-S1). Registered when
+	// sing-box engine, first protocol TUIC (slice singbox-S1). Registered when
 	// SINGBOX_BINARY is set; bootstrap-singbox.sh installs the binary plus a
 	// self-signed TLS cert (TUIC requires TLS). Inert until the panel pushes a
 	// tuic inbound via ApplyInbound.

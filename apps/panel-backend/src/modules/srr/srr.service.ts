@@ -2,7 +2,7 @@ import { prisma } from '../../prisma.js';
 
 /**
  * Cap on User-Agent length before regex evaluation. Bounds runtime even when
- * an admin pastes a pathological pattern — together with the per-rule sandbox
+ * an admin pastes a pathological pattern, together with the per-rule sandbox
  * (we just `RegExp.test` here, no eval), the worst case is O(N*M) where
  * N = UA_MAX_LENGTH and M = number of enabled rules. Both are tiny.
  */
@@ -12,7 +12,7 @@ const UA_MAX_LENGTH = 256;
  * Walk enabled SRR rules in `priority ASC` order; return the first rule's
  * `format` whose `uaPattern` regex matches the (truncated) User-Agent.
  *
- * Returns null when there's no UA, no rules, or no rule matches — the route
+ * Returns null when there's no UA, no rules, or no rule matches, the route
  * handler then falls through to its existing Accept-header heuristic and
  * finally to `plain`.
  *
@@ -37,7 +37,7 @@ export async function matchFormatForUserAgent(
         return rule.format;
       }
     } catch {
-      // Bad regex — skip. UI should let admin spot and fix it.
+      // Bad regex, skip. UI should let admin spot and fix it.
     }
   }
   return null;

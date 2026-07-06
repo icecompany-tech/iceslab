@@ -7,7 +7,7 @@ import { prisma } from '../../prisma.js';
  * client apps (Hiddify, Streisand, V2RayNG, Happ, NekoBox) consume.
  *
  * All fields are nullable except `updateIntervalHours` which always has a
- * sensible default — the headers we emit are themselves optional, so a NULL
+ * sensible default, the headers we emit are themselves optional, so a NULL
  * value just means "do not emit this header".
  */
 export interface SubscriptionSettings {
@@ -129,7 +129,7 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
  * `{{DAYS_LEFT}}`, `{{SUPPORT_URL}}`. Empty/null template → empty string.
  *
  * Placeholders that resolve to NULL/undefined become an empty string
- * rather than the literal `{{X}}` — so a template like
+ * rather than the literal `{{X}}`, so a template like
  * `"Осталось {{DAYS_LEFT}} дней"` for an unlimited user reads
  * `"Осталось  дней"` (admin's problem to template around it).
  */

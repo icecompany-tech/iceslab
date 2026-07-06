@@ -10,7 +10,7 @@ const AddressSchema = z
   .string()
   .min(3, 'Address is required')
   .max(255, 'Address too long')
-  // host[:port] — host is IPv4 or DNS, port optional integer
+  // host[:port]: host is IPv4 or DNS, port optional integer
   .regex(
     /^[a-zA-Z0-9.-]+(:\d{1,5})?$/,
     'Address must be host or host:port (IPv4 or DNS, no scheme)',
@@ -49,7 +49,7 @@ export const HardeningSchema = z
   .nullish();
 export type HardeningInput = z.infer<typeof HardeningSchema>;
 
-// Slice 27 — keep parity with the inbound/profile protocol enum in
+// Slice 27: keep parity with the inbound/profile protocol enum in
 // inbounds.schemas.ts. Node.protocol is a label for "which adapter is the
 // primary / installed on this VPS"; the actual deployment is per-binding.
 const ProtocolSchema = z.enum([

@@ -13,7 +13,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *
  * Why HMAC over JWT: zero state on the panel side beyond the per-node
  * secret already in the DB row, no signing-key rotation concerns, no
- * extra dependency. The secret never leaves the panel — only the HMAC
+ * extra dependency. The secret never leaves the panel, only the HMAC
  * does.
  */
 export function signHeartbeatToken(nodeId: string, secret: Buffer): string {

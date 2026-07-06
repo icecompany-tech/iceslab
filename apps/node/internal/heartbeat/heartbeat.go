@@ -20,7 +20,7 @@
 //     a public CA-issued cert for `panel.example.com` could otherwise
 //     return 410 to the very first poll on every fresh agent and wipe
 //     the fleet within minutes. With the gate, the attacker would have
-//     to first impersonate "active" — which is harder with mTLS pinning
+//     to first impersonate "active", which is harder with mTLS pinning
 //     (see CACertPem below).
 //
 // Failsafe: setting ICESLAB_NODE_DISABLE_HEARTBEAT=1 disables the loop. Use
@@ -48,7 +48,7 @@ type Config struct {
 	PanelURL       string
 	HeartbeatToken string
 	// CACertPem is the PEM-encoded CA bundle from the bootstrap payload.
-	// When set, the heartbeat HTTP client trusts ONLY this CA — system
+	// When set, the heartbeat HTTP client trusts ONLY this CA, system
 	// trust store is bypassed. Without pinning, a MITM with a public-CA
 	// cert for the panel hostname could feed 410 responses and wipe the
 	// fleet via OnGone. Empty (legacy / older payloads) → fall back to
@@ -61,7 +61,7 @@ type Config struct {
 	// what's incoming, the panel re-issues applyInbounds + addUser fan-out
 	// without admin intervention.
 	//
-	// Slice 38 follow-up (2026-05-11) — closes the cycle-5 operational gap
+	// Slice 38 follow-up (2026-05-11): closes the cycle-5 operational gap
 	// where agent restart silently dropped iOS auth callbacks until an
 	// admin toggled a profile in the UI.
 	//
@@ -90,11 +90,11 @@ const (
 // buildHybridClient returns an http.Client whose TLS pool is (system roots)
 // ∪ (panel CA from bootstrap payload).
 //
-// Wave-13 (2026-05-21) — pre-wave the client was strictly panel-CA-only.
+// Wave-13 (2026-05-21): pre-wave the client was strictly panel-CA-only.
 // In a typical production deploy the panel sits behind Caddy/nginx serving
 // a Let's Encrypt cert on a public hostname (e.g. iceslab.example.com), so
 // EVERY heartbeat hit `tls: certificate signed by unknown authority` and
-// the loop ran with `seenActive == false` forever — orphaning nodes that
+// the loop ran with `seenActive == false` forever, orphaning nodes that
 // admins thought they'd deleted in the UI. Strict pinning was defense in
 // depth, not the only defense: pollOnce + the seenActive gate already
 // block first-contact-410 MITM.
@@ -103,7 +103,7 @@ const (
 // for the panel hostname plus a path to intercept node→panel traffic can,
 // over sustained MITM, walk the loop into honoring OnGone. The gate keeps
 // the bar at >1 forged "active" then `goneThreshold` consecutive forged
-// "gone" — order of 10+ minutes of sustained interception with no real
+// "gone", order of 10+ minutes of sustained interception with no real
 // panel response leaking through. Acceptable risk vs. orphaned nodes.
 //
 // Returns nil + nil if the PEM is empty (caller refuses to run); returns
@@ -115,7 +115,7 @@ func buildHybridClient(caPem string) (*http.Client, error) {
 	}
 	// Start from system roots so LE-served public panels (the common
 	// deployment) work without extra config. SystemCertPool returns
-	// nil + err on Windows pre-Go-1.18 — fall back to an empty pool
+	// nil + err on Windows pre-Go-1.18, fall back to an empty pool
 	// there, the panel-CA append below still works.
 	pool, err := x509.SystemCertPool()
 	if err != nil || pool == nil {
@@ -135,7 +135,7 @@ func buildHybridClient(caPem string) (*http.Client, error) {
 	}, nil
 }
 
-// Run blocks until ctx is cancelled. Returns nil — heartbeat failures
+// Run blocks until ctx is cancelled. Returns nil, heartbeat failures
 // are non-fatal and only logged; OnGone is the single way the agent
 // learns "you should stop."
 func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
@@ -168,7 +168,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 			// re-bootstrap (admin clicks "Refresh bootstrap" + re-runs
 			// install with --reset) to get a CACertPem in the payload.
 			// To force-disable cleanly, set ICESLAB_NODE_DISABLE_HEARTBEAT=1.
-			logger.Error("heartbeat: CACertPem missing from payload — refusing to start. Re-bootstrap the node, or set ICESLAB_NODE_DISABLE_HEARTBEAT=1 to silence this.")
+			logger.Error("heartbeat: CACertPem missing from payload, refusing to start. Re-bootstrap the node, or set ICESLAB_NODE_DISABLE_HEARTBEAT=1 to silence this.")
 			return
 		}
 	}
@@ -198,7 +198,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 		status, err := pollOnce(ctx, client, url, cfg.HeartbeatToken, cfg.AgentStartTime)
 		switch {
 		case err != nil:
-			// Network error / timeout / parse fail — DO NOT count as gone.
+			// Network error / timeout / parse fail: DO NOT count as gone.
 			logger.Warn("heartbeat: poll failed (panel unreachable, ignoring)", "err", err)
 		case status == "active":
 			if gone > 0 {
@@ -207,18 +207,18 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 			gone = 0
 			seenActive = true
 		case status == "disabled":
-			// Admin disabled the node — agent stays alive but logs at info
+			// Admin disabled the node, agent stays alive but logs at info
 			// so operator can see the state. No counter increment.
-			logger.Info("heartbeat: panel says disabled (node soft-paused — staying alive)")
+			logger.Info("heartbeat: panel says disabled (node soft-paused, staying alive)")
 			gone = 0
 			seenActive = true
 		case status == "gone":
 			gone++
 			if !seenActive {
-				// Refuse to act on a "gone" we've never been "active" against
-				// — first contact being 410 is the exact MITM-on-cold-boot
+				// Refuse to act on a "gone" we've never been "active" against,
+				// first contact being 410 is the exact MITM-on-cold-boot
 				// signature.
-				logger.Warn("heartbeat: panel says gone but we never saw active — ignoring (cold-boot MITM guard)",
+				logger.Warn("heartbeat: panel says gone but we never saw active, ignoring (cold-boot MITM guard)",
 					"consecutive", gone, "threshold", threshold)
 				break
 			}
@@ -238,7 +238,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) {
 // pollOnce returns the high-level status string the loop cares about:
 // "active", "disabled", "gone", or an error for everything else.
 //
-// 401 (bad token) is NOT mapped to "gone" — that case usually means the
+// 401 (bad token) is NOT mapped to "gone", that case usually means the
 // agent's payload is from a different panel install and the right thing
 // is to log loudly and let an admin re-bootstrap. Auto-destructing on
 // 401 would be too aggressive: any future panel-side bug that broke
@@ -266,7 +266,7 @@ func pollOnce(ctx context.Context, client *http.Client, url, token, agentStartTi
 		return "gone", nil
 	case http.StatusUnauthorized:
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return "", errors.New("panel returned 401 — token invalid (likely orphaned payload)")
+		return "", errors.New("panel returned 401, token invalid (likely orphaned payload)")
 	case http.StatusOK:
 		var body struct {
 			Status string `json:"status"`

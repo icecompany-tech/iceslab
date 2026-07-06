@@ -17,7 +17,7 @@ func TestValidateTrafficStatsListen_AcceptsLoopback(t *testing.T) {
 		"127.0.0.1:9999",
 		"127.0.0.1:8080",
 		"[::1]:9999",
-		":9999", // bare port — host is empty, treated as loopback by Go net
+		":9999", // bare port, host is empty, treated as loopback by Go net
 		"localhost:9999",
 	}
 	for _, listen := range cases {
@@ -55,7 +55,7 @@ func TestValidateTrafficStatsListen_RejectsPublic(t *testing.T) {
 func TestValidateTrafficStatsListen_RejectsMalformed(t *testing.T) {
 	cases := []string{
 		"not-a-host-port",
-		"hostname.example.com:9999", // hostname is not an IP — we don't resolve
+		"hostname.example.com:9999", // hostname is not an IP, we don't resolve
 	}
 	for _, listen := range cases {
 		t.Run(listen, func(t *testing.T) {

@@ -95,7 +95,7 @@ export async function updateSquad(
     if (dupe) throw new SquadAlreadyExistsError(input.name);
   }
 
-  // Profile set replacement — done via tx so concurrent updates can't leave
+  // Profile set replacement, done via tx so concurrent updates can't leave
   // half-applied state. Wipe the join rows, write the new ones.
   const row = await prisma.$transaction(async (tx) => {
     if (input.profileIds !== undefined) {
@@ -127,7 +127,7 @@ export async function deleteSquad(id: string): Promise<void> {
   if (!existing) throw new SquadNotFoundError(id);
 
   // Cascade is on for both group_profiles and group_members (see schema).
-  // Users who lose their last squad would be invisible to subscription —
+  // Users who lose their last squad would be invisible to subscription,
   // backstop them into "All" so they don't end up with empty subs.
   await prisma.$transaction(async (tx) => {
     const orphanedUserIds = await tx.groupMember

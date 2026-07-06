@@ -25,7 +25,7 @@ export const HysteriaConfigSchema = z.object({
    * IR / CN UDP/443 throttle that targets a single fixed port. Server still
    * listens on a single port (typically :443/udp); install-iceslab-node.sh sets up
    * iptables to REDIRECT the configured range → listen port. The range in
-   * the profile MUST be a subset of the range install-iceslab-node.sh applied —
+   * the profile MUST be a subset of the range install-iceslab-node.sh applied,
    * otherwise the redirect won't catch the rotating ports.
    *
    * Both fields must be set together (or both empty) and `end > start`.
@@ -57,19 +57,19 @@ export const XrayConfigSchema = z.object({
    *  Hardens against probing; off by default to stay lenient for plain probes. */
   tlsRejectUnknownSni: z.boolean().default(false),
   /**
-   * REALITY target — the legitimate site Xray forwards mismatched probes to.
+   * REALITY target: the legitimate site Xray forwards mismatched probes to.
    * Format `host:port`, e.g. "www.cloudflare.com:443". May be empty when
    * security is 'none'.
    */
   realityDest: z.string().regex(/^[a-zA-Z0-9.-]+:\d{1,5}$/).or(z.literal('')).default(''),
   realityServerNames: z.array(z.string().min(1).max(255)).max(8).default([]),
-  /** REALITY shortIds — hex strings, max 16 chars each. */
+  /** REALITY shortIds: hex strings, max 16 chars each. */
   realityShortIds: z
     .array(z.string().regex(/^[0-9a-fA-F]{0,16}$/))
     .max(8)
     .default([]),
   realityPrivateKey: z.string().max(128).default(''),
-  /** REALITY public key paired with privateKey — emitted in client URI. */
+  /** REALITY public key paired with privateKey, emitted in client URI. */
   realityPublicKey: z.string().max(128).default(''),
   /** REALITY protocol version mirrored to the upstream TLS dest. 0 (default)
    *  is the conservative choice; 1/2 enable newer REALITY handshake variants. */
@@ -113,12 +113,12 @@ export const XrayConfigSchema = z.object({
   /**
    * Stream transport. v24.9.30 names: `raw` (was `tcp`), `xhttp` (was
    * `splithttp`). REALITY+Vision canonical is `raw`. `ws`/`grpc`/`xhttp` work
-   * but Vision is incompatible with `ws`/`grpc` — the adapter doesn't enforce
+   * but Vision is incompatible with `ws`/`grpc`, the adapter doesn't enforce
    * this at write time, the operator must align flow + network themselves.
    *
    * Slice 24c part 2 added `httpupgrade` (CDN-friendly, no WebSocket
    * handshake overhead) and `kcp` (UDP-based, useful on lossy networks).
-   * `kcp` collides with Hysteria on the same UDP port — admin must avoid
+   * `kcp` collides with Hysteria on the same UDP port, admin must avoid
    * port overlap manually (the panel doesn't cross-validate today).
    */
   network: z.enum(['raw', 'xhttp', 'ws', 'grpc', 'httpupgrade', 'kcp']).default('raw'),
@@ -141,14 +141,14 @@ export const XrayConfigSchema = z.object({
   /**
    * Subprotocol carried over the same Xray binary + REALITY stack. Slice
    * 24c part 3:
-   *   - `vless`   — canonical: per-user UUID, optional Vision flow
-   *   - `trojan`  — per-user password (we reuse `user.xrayUuid` as the
-   *                 password — UUID is high-entropy random and admins are
+   *   - `vless`   - canonical: per-user UUID, optional Vision flow
+   *   - `trojan`  - per-user password (we reuse `user.xrayUuid` as the
+   *                 password, UUID is high-entropy random and admins are
    *                 already managing it). No Vision flow on Trojan.
-   * Same REALITY private/public key pair drives both — clients see the
+   * Same REALITY private/public key pair drives both, clients see the
    * difference only at the URI scheme level (`vless://` vs `trojan://`).
    *
-   * Shadowsocks (SS2022) is deferred to a follow-up — multi-user model
+   * Shadowsocks (SS2022) is deferred to a follow-up, multi-user model
    * differs (per-user keys + cipher selection) and benefits from its own
    * commit.
    */
@@ -159,7 +159,7 @@ export const XrayConfigSchema = z.object({
 // (docs.amnezia.org/documentation/amnezia-wg). Old TSPU presets from
 // v1.5 era (Jmin=40, S1=72) are out of v2.0's accepted ranges and
 // caused silent handshake failures with the current DKMS module
-// (1.0.20251009 — already v2.0-capable). Caught live cycle #6
+// (1.0.20251009, already v2.0-capable). Caught live cycle #6
 // 2026-05-13 after reading upstream docs.
 //   - Jc: junk-packet count before handshake init     (0..10)
 //   - Jmin/Jmax: junk-packet size range               (64..1024)
@@ -184,7 +184,7 @@ const ObfuscationSchema = z.object({
   h2: z.number().int().min(5).max(4294967295).default(200),
   h3: z.number().int().min(5).max(4294967295).default(300),
   h4: z.number().int().min(5).max(4294967295).default(400),
-  // Hex-encoded mimicry packets — optional, v2.0 feature. When empty,
+  // Hex-encoded mimicry packets: optional, v2.0 feature. When empty,
   // the kernel module skips that slot. Each up to 256 hex chars
   // (128 bytes) per upstream guidance.
   i1: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
@@ -199,7 +199,7 @@ export const AmneziawgConfigSchema = z
     /** Subnet handed to peers, e.g. "10.0.0.0/24". */
     subnet: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/),
     serverPrivateKey: z.string().min(1).max(128),
-    /** Public key paired with privateKey — emitted in client config. */
+    /** Public key paired with privateKey, emitted in client config. */
     serverPublicKey: z.string().min(1).max(128),
     obfuscation: ObfuscationSchema,
   })
@@ -246,7 +246,7 @@ export const NaiveConfigSchema = z.object({
     .string()
     .min(1)
     .max(255)
-    .regex(/^[a-zA-Z0-9.-]+$/, 'No spaces / scheme — hostname only'),
+    .regex(/^[a-zA-Z0-9.-]+$/, 'No spaces / scheme, hostname only'),
   tlsEmail: z.string().email(),
   masqueradeRoot: z.string().min(1).max(255).default('/var/www/html'),
 });
@@ -257,11 +257,11 @@ export const NaiveConfigSchema = z.object({
  * Why a curated list rather than free-text:
  *   - SS2022 ciphers (`2022-blake3-aes-...`) require Xray ≥ v1.8 and use a
  *     pre-shared key model that's incompatible with the legacy AEAD
- *     ciphers — clients fail silently if mismatched.
+ *     ciphers, clients fail silently if mismatched.
  *   - Legacy AEAD (`chacha20-ietf-poly1305`, `aes-256-gcm`) work with every
  *     SS client back to ~2018, but are increasingly fingerprintable. We
  *     keep them for compat with old client builds.
- *   - Other ciphers (AES-CFB, RC4-MD5, etc) are insecure — explicitly
+ *   - Other ciphers (AES-CFB, RC4-MD5, etc) are insecure, explicitly
  *     omitted from the enum to prevent admin misconfiguration.
  */
 export const ShadowsocksMethodSchema = z.enum([
@@ -278,7 +278,7 @@ export const ShadowsocksConfigSchema = z.object({
   method: ShadowsocksMethodSchema.default('2022-blake3-aes-256-gcm'),
 
   /**
-   * Server PSK — required by xray-core SS2022 at the `settings.password`
+   * Server PSK: required by xray-core SS2022 at the `settings.password`
    * level. SS2022 multi-user model uses ServerPSK for the inbound itself
    * plus per-user PSK (per `clients[]` entry); clients connect with
    * `base64url(method:ServerPSK:UserPSK)` joined.
@@ -288,7 +288,7 @@ export const ShadowsocksConfigSchema = z.object({
    * encoded as base64. Auto-generated on inbound create when empty.
    *
    * Verified against XTLS/Xray-examples Shadowsocks-2022/README on
-   * 2026-05-07 — server-side `clients[]` requires `settings.password`.
+   * 2026-05-07: server-side `clients[]` requires `settings.password`.
    */
   serverPsk: z.string().min(1).max(128).optional(),
 });
@@ -296,11 +296,11 @@ export const ShadowsocksConfigSchema = z.object({
 /**
  * MTProto Telegram-proxy config (slice 41). Uses `9seconds/mtg` server.
  *
- * Single tunable today: `domain` — the legitimate site mtg masquerades
+ * Single tunable today: `domain`, the legitimate site mtg masquerades
  * as during Fake-TLS handshake. Any reachable, plausible site works
  * (`www.cloudflare.com`, `www.google.com`, etc). Changing domain rotates
  * every user's secret because the domain is hex-baked into each per-user
- * secret string — UI must warn before save.
+ * secret string, UI must warn before save.
  */
 export const MtprotoConfigSchema = z.object({
   domain: z
@@ -383,7 +383,7 @@ export const InboundConfigByProtocol = z.discriminatedUnion('protocol', [
 ]);
 
 // Public-facing host the panel emits in client URIs. Must be a hostname or
-// IP — RFC 1123 hostname or IPv4 dotted-quad. Length capped at 253 (RFC).
+// IP: RFC 1123 hostname or IPv4 dotted-quad. Length capped at 253 (RFC).
 const PublicHostSchema = z
   .string()
   .min(1)
@@ -398,7 +398,7 @@ const BaseFields = z.object({
   name: NameSchema,
   port: PortSchema,
   enabled: z.boolean().default(true),
-  // Slice 25 — separate the public-facing client-URL host from the mTLS
+  // Slice 25: separate the public-facing client-URL host from the mTLS
   // control-plane endpoint (`node.address`). Empty string is treated like
   // null on the way in, so admins can clear the field in the UI.
   publicHost: PublicHostSchema.optional()
@@ -413,7 +413,7 @@ export type CreateInboundInput = z.infer<typeof CreateInboundSchema>;
 // Update never changes `protocol` (would invalidate per-protocol creds and
 // break already-issued client URIs). To switch protocols, delete + recreate.
 // The new config (if provided) must be the right shape for the existing
-// inbound's protocol — service.ts validates that before persisting.
+// inbound's protocol, service.ts validates that before persisting.
 export const UpdateInboundSchema = z.object({
   name: NameSchema.optional(),
   port: PortSchema.optional(),
@@ -424,7 +424,7 @@ export const UpdateInboundSchema = z.object({
     .or(z.literal('').transform(() => null))
     .optional(),
   publicPort: PortSchema.nullable().optional(),
-  /** Protocol-specific config — must match the existing inbound's protocol. */
+  /** Protocol-specific config, must match the existing inbound's protocol. */
   config: z.unknown().optional(),
 });
 export type UpdateInboundInput = z.infer<typeof UpdateInboundSchema>;

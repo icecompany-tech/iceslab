@@ -8,23 +8,23 @@ import { invalidateSubscriptionSettingsCache } from './settings.service.js';
 /**
  * Panel-wide settings (brand name, future feature flags). Two surfaces:
  *
- *   GET /api/settings/public   — no auth, returns public-flagged keys
+ *   GET /api/settings/public: no auth, returns public-flagged keys
  *                                only. LoginPage fetches this before the
  *                                user authenticates so the page can show
  *                                the right brand.
  *
- *   GET /api/settings          — requireAuth, returns ALL keys
- *   PUT /api/settings          — requireAuth, upsert keys
+ *   GET /api/settings: requireAuth, returns ALL keys
+ *   PUT /api/settings: requireAuth, upsert keys
  *
  * Keys we use today:
- *   - `brandName` (string, public)                — title shown on LoginPage + sidebar
- *   - `subscriptionProfileTitle` (string)         — Profile-Title header on /sub
+ *   - `brandName` (string, public): title shown on LoginPage + sidebar
+ *   - `subscriptionProfileTitle` (string): Profile-Title header on /sub
  *                                                   (NULL → fall back to brandName)
- *   - `subscriptionUpdateIntervalHours` (number)  — Profile-Update-Interval header,
+ *   - `subscriptionUpdateIntervalHours` (number): Profile-Update-Interval header,
  *                                                   default 24
- *   - `subscriptionSupportUrl` (string)           — Support-URL header + announce
+ *   - `subscriptionSupportUrl` (string): Support-URL header + announce
  *                                                   {{SUPPORT_URL}} placeholder
- *   - `subscriptionAnnounceTemplate` (string)     — Announce header template,
+ *   - `subscriptionAnnounceTemplate` (string): Announce header template,
  *                                                   placeholders: {{TRAFFIC_LEFT}},
  *                                                   {{DAYS_LEFT}}, {{SUPPORT_URL}}
  *   - `subscriptionRoutingPreset` (enum, R1a + H2) - routing rules emitted into
@@ -105,7 +105,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       for (const [key, value] of entries) {
         // Prisma's `Json` column accepts any JSON-serialisable value at the
         // SQL layer, but the TS surface insists on `Prisma.InputJsonValue`.
-        // Strings ARE valid JSON, so the cast is sound — TS just refuses
+        // Strings ARE valid JSON, so the cast is sound, TS just refuses
         // string→object without the explicit `unknown` step.
         const jsonValue = value as unknown as object;
         await prisma.appSetting.upsert({

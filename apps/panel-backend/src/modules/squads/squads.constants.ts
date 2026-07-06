@@ -5,7 +5,7 @@
  *
  * Why a constant UUID rather than a "name=All" lookup: cheap, refactor-safe,
  * lets us flag the row as system-owned in the UI ("All" is read-only for
- * humans — admins can't rename or delete it because user-creation always
+ * humans, admins can't rename or delete it because user-creation always
  * falls back here when no explicit groups are chosen).
  */
 export const ALL_SQUAD_ID = '00000000-0000-0000-0000-000000000001';

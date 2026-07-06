@@ -20,10 +20,10 @@ export interface PublicNodeDto {
   lastStatusChange: string | null;
   lastStatusMessage: string | null;
   consumptionMultiplier: string;
-  // Slice 27.5 — region grouping + capacity hint.
+  // Slice 27.5: region grouping + capacity hint.
   regionId: string | null;
   maxUsers: number | null;
-  // B3/G — FQDN for REALITY self-steal serverName + future ACME.
+  // B3/G: FQDN for REALITY self-steal serverName + future ACME.
   domain: string | null;
   // G - probe-resistance toggles (Zashchita wizard). NULL = no hardening.
   hardening: HardeningDto | null;
@@ -36,7 +36,7 @@ export interface PublicNodeDto {
 }
 
 /**
- * Public DTO for a node — strips internal cert/key material and lifecycle
+ * Public DTO for a node, strips internal cert/key material and lifecycle
  * fields (deletedAt, publicKey blob).
  */
 export function mapNodeToPublic(node: Node): PublicNodeDto {
@@ -74,7 +74,7 @@ export interface CreateNodeResponseDto extends PublicNodeDto {
   /**
    * Base64url-encoded one-time payload containing the node's mTLS cert+key
    * and the panel CA. Kept for the manual / air-gapped flow (Download +
-   * scp + `--payload-file`) — most admins should use the bootstrap-token
+   * scp + `--payload-file`), most admins should use the bootstrap-token
    * flow below instead.
    */
   payload: string;

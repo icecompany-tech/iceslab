@@ -26,7 +26,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
   const auth = { onRequest: [requireAuth] };
 
   // curve25519 keypair for REALITY (xray) or AmneziaWG. Same crypto, the
-  // alphabets differ — REALITY needs base64url, AWG needs standard base64.
+  // alphabets differ, REALITY needs base64url, AWG needs standard base64.
   app.post('/api/profiles/generate-keypair', auth, async (req, reply) => {
     const { protocol } = KeypairQuery.parse(req.query);
     const pair =
@@ -121,7 +121,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ bindings: await svc.listBindings(q) });
   });
 
-  // F-P1-b — suggest a free listen port for a NEW binding on a node, so the
+  // F-P1-b: suggest a free listen port for a NEW binding on a node, so the
   // deploy modal stops defaulting to 443 (which 409s the moment a node already
   // runs a protocol there). Static path wins over `:id` in find-my-way.
   app.get('/api/bindings/next-free-port', auth, async (req, reply) => {

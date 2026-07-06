@@ -3,7 +3,7 @@ import * as adminService from '../admin/admin.service.js';
 import { login, InvalidCredentialsError } from './auth.service.js';
 
 vi.mock('../admin/admin.service.js');
-// Slice S7 — login now touches Redis for username-lockout. Stub the
+// Slice S7 - login now touches Redis for username-lockout. Stub the
 // underlying client so unit tests don't need a live Redis. ioredis API
 // surface we hit: get / incr / expire / del / ttl.
 vi.mock('../../lib/redis.js', () => ({

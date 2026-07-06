@@ -3,7 +3,7 @@
 // uses syscall.Statfs for the filesystem.
 //
 // Production target is Linux VPS. The Windows build supplies a stub via
-// metrics_windows.go that returns zero values — keeps `go build ./...` green
+// metrics_windows.go that returns zero values, keeps `go build ./...` green
 // on dev laptops without dragging in OS-specific dependencies.
 package metrics
 
@@ -66,7 +66,7 @@ type cpuTimes struct {
 }
 
 // New creates a Collector. `diskPath` is the filesystem to report (typically
-// "/" — gives the rootfs of the node).
+// "/", gives the rootfs of the node).
 func New(diskPath string) *Collector {
 	if diskPath == "" {
 		diskPath = "/"

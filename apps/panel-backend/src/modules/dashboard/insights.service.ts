@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma.js';
 import { classifyClient } from './clients.js';
 
-// K1-b/c Insights — on-demand analytics over data we already store but never
+// K1-b/c Insights: on-demand analytics over data we already store but never
 // surfaced: subscription-request history (who polls the sub URL, with which
 // client, at what hour) and HWID device tracking (how many devices per user,
 // who's at their sharing cap). Distinct from the dashboard overview: that DTO

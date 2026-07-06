@@ -2,7 +2,7 @@
 # Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 #
 # Status: placeholders. Uncomment + fill in handles as you create accounts.
-# Until then the Sponsor button is hidden — repo ships with the file ready
+# Until then the Sponsor button is hidden, repo ships with the file ready
 # so flipping it on later is a 1-line edit.
 
 # ───── Direct channels (no fiscal host, no approval, instant) ─────
@@ -13,7 +13,7 @@
 #   # TON:         UQ<your-wallet-address>
 #   # Monero:      4<your-wallet-address>
 
-# ───── GitHub Sponsors (requires Stripe Connect — not available in RU; use
+# ───── GitHub Sponsors (requires Stripe Connect, not available in RU; use
 # Open Source Collective as fiscal host if you want to enable later) ─────
 # github: Taironpal
 

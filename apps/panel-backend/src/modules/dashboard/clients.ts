@@ -1,4 +1,4 @@
-// K1-b SRH Inspector — map a raw subscription-fetch User-Agent to a canonical
+// K1-b SRH Inspector: map a raw subscription-fetch User-Agent to a canonical
 // client family. The subscription endpoint records the UA verbatim in
 // subscription_request_history; this turns that high-cardinality string into a
 // small, chartable set ("Hiddify", "v2rayNG", "Clash.Meta", ...).
@@ -28,7 +28,7 @@ const CLIENT_PATTERNS: readonly (readonly [RegExp, string])[] = [
   [/quantumult/i, 'Quantumult'],
   [/throne/i, 'Throne'],
   [/foxray/i, 'FoXray'],
-  // Anything that looks like a browser or a scripted fetch — admins eyeballing
+  // Anything that looks like a browser or a scripted fetch, admins eyeballing
   // the panel sub URL, curl probes, uptime checks. Grouped so it doesn't
   // pollute the real-client breakdown.
   [/mozilla|chrome|safari|gecko|curl|wget|python|go-http|okhttp/i, 'Browser/Script'],

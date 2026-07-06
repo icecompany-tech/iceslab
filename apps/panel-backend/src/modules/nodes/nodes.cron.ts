@@ -37,7 +37,7 @@ export async function readCachedNodeMetrics(
  * `disabled` is admin-managed and never overwritten here. Soft-deleted nodes
  * are excluded by the same `deletedAt: null` filter we use for fan-out.
  *
- * Slice 23.1 — added after VPS test 2026-05-06, where the panel never lifted
+ * Slice 23.1, added after VPS test 2026-05-06, where the panel never lifted
  * a freshly-installed node out of `unknown` because no poller existed.
  */
 export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> {
@@ -59,7 +59,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       // Write to DB when status OR message changed since last tick. We also
       // compare lastStatusMessage so that a "degraded → ok" transition
       // actually clears the old degraded blurb from the UI. Pre-wave-13 the
-      // guard was `statusChanged || result.message` — which never re-wrote
+      // guard was `statusChanged || result.message`, which never re-wrote
       // when the new message was null, leaving stale `degraded: {...}` in
       // the row forever after the underlying subprocess came back.
       const statusChanged = result.status !== node.status;
@@ -77,7 +77,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       // Re-push inbounds when a node comes back up. Without this, any
       // applyInbounds attempts that happened while the node was offline
       // (e.g. auto-deploy at node creation, or binding edits during a
-      // network blip) get exhausted by BullMQ retries and never resume —
+      // network blip) get exhausted by BullMQ retries and never resume,
       // xray/etc would stay unconfigured even though the agent is alive.
       // Cheap: the node-agent dedupes identical pushes on its side.
       if (statusChanged && result.status === 'online') {
@@ -91,7 +91,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
             getLogger().error({ err }, `[cron] re-enqueue applyInbounds for ${node.name} failed`);
           });
       }
-      // Slice 32 — admin alerts on node status flips. Skip the initial
+      // Slice 32: admin alerts on node status flips. Skip the initial
       // `unknown → online` transition (new node coming up isn't an alert
       // event) but alert on every later flip in either direction. The
       // notifyTelegramAsync helper is a no-op when env isn't configured,
@@ -117,10 +117,10 @@ interface PollResult {
 /**
  * Pull /metrics from every online node in parallel and cache in Redis with
  * TTL 60s. Per-node failures are swallowed (we just won't have fresh metrics
- * for that node — the dashboard will show the previous sample until TTL or
- * "—" if it's the first run).
+ * for that node, the dashboard will show the previous sample until TTL or
+ * "-" if it's the first run).
  *
- * Runs on a 15-second tick. Disabled / unreachable nodes are skipped — no
+ * Runs on a 15-second tick. Disabled / unreachable nodes are skipped, no
  * point hammering them.
  */
 export async function pollNodeMetrics(): Promise<{ ok: number; failed: number }> {

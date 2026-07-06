@@ -29,7 +29,7 @@ const apiInboundTag = "api-in"
 //
 //	{"stat":[{"name":"user>>>...>>>uplink","value":"123"},...]}
 //
-// `value` is JSON string-of-number — xray uses int64 internally and JSON's
+// `value` is JSON string-of-number, xray uses int64 internally and JSON's
 // 53-bit float would lose precision past ~9 PB.
 type xrayStatsResponse struct {
 	Stat []xrayStatEntry `json:"stat"`
@@ -47,7 +47,7 @@ type xrayStatEntry struct {
 	Value json.RawMessage `json:"value"`
 }
 
-// statEntryInt64 returns (n, ok) — ok=false on malformed value. Accepts:
+// statEntryInt64 returns (n, ok), ok=false on malformed value. Accepts:
 //   - bare number              `123`
 //   - quoted number string     `"123"`
 //   - quoted garbage           `"not-a-number"`  → ok=false
@@ -106,7 +106,7 @@ func queryUserStats(
 	for _, e := range resp.Stat {
 		userID, dir, ok := parseStatName(e.Name)
 		if !ok {
-			continue // unknown shape — skip rather than fail the whole batch
+			continue // unknown shape, skip rather than fail the whole batch
 		}
 		bytes, ok := statEntryInt64(e.Value)
 		if !ok {

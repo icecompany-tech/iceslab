@@ -27,7 +27,7 @@ describe('mtprotoSecret (single-secret-per-inbound model)', () => {
     const a = mtprotoSecret('inbound-1', 'www.cloudflare.com');
     const b = mtprotoSecret('inbound-1', 'www.google.com');
     expect(a).not.toBe(b);
-    // Both head and tail differ — head because the seed includes the
+    // Both head and tail differ, head because the seed includes the
     // domain, tail because the domain is appended.
     // First 2 + 32 = 34 chars cover prefix + secret head.
     expect(a.slice(0, 34)).not.toBe(b.slice(0, 34));
@@ -50,7 +50,7 @@ describe('buildMtprotoUri', () => {
     expect(uri).toContain('secret=eeAA');
   });
 
-  // Regression: 2026-05-20 — Telegram iOS rejects tg://proxy URIs that
+  // Regression: 2026-05-20 - Telegram iOS rejects tg://proxy URIs that
   // carry a `#fragment` ("Некорректная ссылка на прокси"). Both forms
   // (tg:// and https://t.me/proxy) must stay fragment-free.
   it('emits no #fragment regardless of the name passed', () => {
@@ -69,7 +69,7 @@ describe('buildMtprotoTmeUri', () => {
     expect(uri.startsWith('https://t.me/proxy?')).toBe(true);
     expect(uri).toContain('server=proxy.example.com');
     expect(uri).toContain('secret=eeBB');
-    // t.me strips fragments — never emit one
+    // t.me strips fragments, never emit one
     expect(uri).not.toContain('#');
   });
 });

@@ -65,7 +65,7 @@ describe('buildShadowsocksUri', () => {
     expect(uri).toContain('#node%201%20%2F%20RU');
   });
 
-  it('supports legacy AEAD ciphers (single-tenant — no server PSK)', () => {
+  it('supports legacy AEAD ciphers (single-tenant, no server PSK)', () => {
     // Legacy AEAD doesn't have a server-PSK concept; pass undefined.
     const decoded = decodeUserinfo(buildShadowsocksUri({
       ...baseOpts,
@@ -73,7 +73,7 @@ describe('buildShadowsocksUri', () => {
       serverPsk: undefined,
     }));
     expect(decoded.startsWith('chacha20-ietf-poly1305:')).toBe(true);
-    // After the cipher prefix, just the user PSK — no extra colons.
+    // After the cipher prefix, just the user PSK, no extra colons.
     expect(decoded).toBe(`chacha20-ietf-poly1305:${baseOpts.userPsk}`);
   });
 });

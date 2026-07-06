@@ -56,7 +56,7 @@ describe('buildWgQuickConf', () => {
     expect(buildWgQuickConf([hysteriaEp])).toBe('');
   });
 
-  it('skips non-AmneziaWG endpoints — only the first awg endpoint is used', () => {
+  it('skips non-AmneziaWG endpoints, only the first awg endpoint is used', () => {
     const out = buildWgQuickConf([hysteriaEp, awgEp]);
     expect(out).toContain('Address = 10.0.0.42/32');
     expect(out).not.toContain('hy-secret');

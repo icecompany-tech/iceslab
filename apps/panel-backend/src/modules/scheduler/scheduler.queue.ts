@@ -17,7 +17,7 @@ import { getLogger } from '../../lib/logger.js';
 
 const QUEUE_NAME = 'cron-tasks';
 
-// Cron-задачи без полезной нагрузки — имя джоба сам себе данные.
+// Cron-задачи без полезной нагрузки, имя джоба сам себе данные.
 export const cronTasksQueue = new Queue(QUEUE_NAME, {
   connection: redis,
   defaultJobOptions: {
@@ -54,9 +54,9 @@ const CRON_JOBS: CronJobSpec[] = [
   { name: 'review-find-exceeded-traffic',   pattern: '*/45 * * * * *' }, // каждые 45 секунд
   { name: 'node-healthcheck-poll',          pattern: '*/30 * * * * *' }, // каждые 30 секунд
   { name: 'node-metrics-poll',              pattern: '*/15 * * * * *' }, // каждые 15 секунд
-  { name: 'node-stats-poll',                pattern: '*/30 * * * * *' }, // каждые 30 секунд — per-user/per-node traffic
-  { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут — catch-up for status-flip crashes / dropped jobs
-  { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день — B2 retention для append-only history-таблиц
+  { name: 'node-stats-poll',                pattern: '*/30 * * * * *' }, // каждые 30 секунд - per-user/per-node traffic
+  { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут - catch-up for status-flip crashes / dropped jobs
+  { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день - B2 retention для append-only history-таблиц
   { name: 'alert-near-expiry',              pattern: '0 9 * * *'  },     // 09:00 каждый день - K3 near-expiry/near-cap дайджест в Telegram
 ];
 
@@ -97,60 +97,60 @@ export function startCronTasksWorker(): Worker {
       switch (job.name) {
         case 'reset-traffic-daily': {
           const n = await resetTrafficForStrategy('day');
-          if (n > 0) getLogger().info(`[cron] reset-traffic-daily — reset ${n} users`);
+          if (n > 0) getLogger().info(`[cron] reset-traffic-daily - reset ${n} users`);
           break;
         }
         case 'reset-traffic-weekly': {
           const n = await resetTrafficForStrategy('week');
-          if (n > 0) getLogger().info(`[cron] reset-traffic-weekly — reset ${n} users`);
+          if (n > 0) getLogger().info(`[cron] reset-traffic-weekly - reset ${n} users`);
           break;
         }
         case 'reset-traffic-monthly': {
           const n = await resetTrafficForStrategy('month');
-          if (n > 0) getLogger().info(`[cron] reset-traffic-monthly — reset ${n} users`);
+          if (n > 0) getLogger().info(`[cron] reset-traffic-monthly - reset ${n} users`);
           break;
         }
         case 'reset-traffic-monthly-rolling': {
           const n = await resetTrafficRolling();
-          if (n > 0) getLogger().info(`[cron] reset-traffic-monthly-rolling — reset ${n} users`);
+          if (n > 0) getLogger().info(`[cron] reset-traffic-monthly-rolling - reset ${n} users`);
           break;
         }
         case 'review-find-expired': {
           const n = await findExpiredUsers();
-          if (n > 0) getLogger().info(`[cron] review-find-expired — flipped ${n} users → expired`);
+          if (n > 0) getLogger().info(`[cron] review-find-expired - flipped ${n} users → expired`);
           break;
         }
         case 'review-find-exceeded-traffic': {
           const n = await findExceededTrafficUsers();
-          if (n > 0) getLogger().info(`[cron] review-find-exceeded-traffic — flipped ${n} users → limited`);
+          if (n > 0) getLogger().info(`[cron] review-find-exceeded-traffic - flipped ${n} users → limited`);
           break;
         }
         case 'node-healthcheck-poll': {
           const { ok, down } = await pollNodeStatuses();
-          // Only log when something is actually unhealthy — quiet ticks keep
+          // Only log when something is actually unhealthy, quiet ticks keep
           // the journal readable. ok-counts don't matter unless you graph them.
           if (down > 0) {
-            getLogger().info(`[cron] node-healthcheck-poll — ${ok} online, ${down} unreachable`);
+            getLogger().info(`[cron] node-healthcheck-poll - ${ok} online, ${down} unreachable`);
           }
           break;
         }
         case 'node-metrics-poll': {
           const { failed } = await pollNodeMetrics();
           if (failed > 0) {
-            getLogger().info(`[cron] node-metrics-poll — ${failed} nodes failed to report metrics`);
+            getLogger().info(`[cron] node-metrics-poll - ${failed} nodes failed to report metrics`);
           }
           break;
         }
         case 'node-stats-poll': {
           const { failed } = await pollNodeStats();
           if (failed > 0) {
-            getLogger().info(`[cron] node-stats-poll — ${failed} nodes failed`);
+            getLogger().info(`[cron] node-stats-poll - ${failed} nodes failed`);
           }
           break;
         }
         case 'reconcile-orphan-users': {
           const n = await reconcileOrphanNodeUsers();
-          if (n > 0) getLogger().info(`[cron] reconcile-orphan-users — re-queued removeUser for ${n} users`);
+          if (n > 0) getLogger().info(`[cron] reconcile-orphan-users - re-queued removeUser for ${n} users`);
           break;
         }
         case 'alert-near-expiry': {
@@ -163,7 +163,7 @@ export function startCronTasksWorker(): Worker {
           const total = r.subscriptionRequests + r.nodeUserUsage + r.nodeUsage + r.bootstrapTokens;
           if (total > 0) {
             getLogger().info(
-              `[cron] prune-history — deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.bootstrapTokens} bootstrap-token rows`,
+              `[cron] prune-history - deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.bootstrapTokens} bootstrap-token rows`,
             );
           }
           break;

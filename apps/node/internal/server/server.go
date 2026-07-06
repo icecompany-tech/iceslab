@@ -108,24 +108,24 @@ func (s *Server) Run(ctx context.Context) error {
 		return errors.New("invalid CA pem in payload")
 	}
 
-	// Slice S6 — pin the panel-client cert by SHA-256 fingerprint. CA-trust
+	// Slice S6: pin the panel-client cert by SHA-256 fingerprint. CA-trust
 	// alone is not enough: with a single CA in the trust pool, ANY
 	// CA-signed leaf passes verification, including a leaf stolen from a
 	// compromised peer node. Pinning the panel-client cert collapses the
 	// blast radius back to "panel only."
 	//
 	// Backwards compat: payloads issued before S6 don't carry a fingerprint.
-	// Those agents fall back to "verify CA chain only" — same as before. To
+	// Those agents fall back to "verify CA chain only", same as before. To
 	// roll the fleet to pinning, re-issue bootstrap tokens (admin clicks
 	// "Refresh bootstrap" + reinstalls with --reset).
 	expectedFingerprint := strings.ToLower(s.cfg.Payload.PanelClientFingerprint)
 	if expectedFingerprint == "" {
 		// Pre-S6 payloads omitted the panel-client fingerprint, so the
-		// agent would fall back to "trust any CA-signed leaf" — which
+		// agent would fall back to "trust any CA-signed leaf", which
 		// means a stolen peer-node cert passes. For alpha we fail-closed:
 		// operator must re-bootstrap (admin clicks "Refresh bootstrap" +
 		// reinstalls with --reset) to get a payload that carries the pin.
-		return errors.New("payload missing PanelClientFingerprint — re-bootstrap required (panel admin: Refresh bootstrap, then re-run install with --reset)")
+		return errors.New("payload missing PanelClientFingerprint, re-bootstrap required (panel admin: Refresh bootstrap, then re-run install with --reset)")
 	}
 	verifyPeer := func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		if len(rawCerts) == 0 {
@@ -136,7 +136,7 @@ func (s *Server) Run(ctx context.Context) error {
 		// Wave-14 #8: subtle.ConstantTimeCompare to remove timing oracle on
 		// the pinned panel cert. SHA-256 hex space is huge so practical
 		// exploit is limited, but pinning is the last line of defence
-		// against a stolen CA-signed peer-node cert — make the comparison
+		// against a stolen CA-signed peer-node cert, make the comparison
 		// not leak partial-match info via byte-by-byte short-circuiting.
 		if subtle.ConstantTimeCompare([]byte(gotFingerprint), []byte(expectedFingerprint)) != 1 {
 			return fmt.Errorf("panel-client cert fingerprint mismatch (got %s, expected %s)", gotFingerprint, expectedFingerprint)
@@ -186,7 +186,7 @@ const maxRequestBodyBytes = 1 << 20
 
 // decodeJSONBody wraps json.NewDecoder + http.MaxBytesReader with proper
 // HTTP-status mapping. The body-too-large case is 413 (BODY_TOO_LARGE), not
-// 400 (INVALID_BODY) — distinguishing the two lets the panel side log
+// 400 (INVALID_BODY), distinguishing the two lets the panel side log
 // "agent rejected oversized push" separately from "agent rejected malformed
 // JSON," which means different operator-facing diagnoses.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
@@ -302,10 +302,10 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Best-effort fanout. A failure on a dormant adapter (no ApplyInbound
-	// received yet, not Healthy()) is logged at WARN and ignored — adapters
+	// received yet, not Healthy()) is logged at WARN and ignored, adapters
 	// cache users in memory regardless of started state, so a "not ready"
 	// AddUser still lands in the cache and gets flushed on next ApplyInbound.
-	// Only failures from already-Healthy() adapters propagate as 500 — those
+	// Only failures from already-Healthy() adapters propagate as 500, those
 	// are real (process up but rejected the user). Cycle #6 bug:
 	// pre-2026-05-21 ANY adapter error 500'd the request, which kept
 	// BullMQ retrying backfill against a fresh node where xray wasn't up yet
@@ -318,7 +318,7 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 				s.logger.Error("adapter addUser failed", "core", adapter.Name(), "err", err)
 				healthyFailed = append(healthyFailed, adapter.Name())
 			} else {
-				s.logger.Warn("adapter addUser failed (dormant — ignored)", "core", adapter.Name(), "err", err)
+				s.logger.Warn("adapter addUser failed (dormant, ignored)", "core", adapter.Name(), "err", err)
 			}
 		}
 	}
@@ -342,7 +342,7 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Same best-effort semantics as handleAddUser — see comment there.
+	// Same best-effort semantics as handleAddUser, see comment there.
 	var healthyFailed []string
 	for _, adapter := range s.cfg.Adapters {
 		isHealthy := adapter.Healthy()
@@ -351,7 +351,7 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 				s.logger.Error("adapter removeUser failed", "core", adapter.Name(), "err", err)
 				healthyFailed = append(healthyFailed, adapter.Name())
 			} else {
-				s.logger.Warn("adapter removeUser failed (dormant — ignored)", "core", adapter.Name(), "err", err)
+				s.logger.Warn("adapter removeUser failed (dormant, ignored)", "core", adapter.Name(), "err", err)
 			}
 		}
 	}
@@ -367,7 +367,7 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 
 // handleApplyInbounds receives the panel's full inbound set for this node
 // and persists it to disk so the next node-agent / adapter restart picks it
-// up. Slice 24 v1 — minimal version: persists + logs, no per-protocol live
+// up. Slice 24 v1, minimal version: persists + logs, no per-protocol live
 // reconfiguration yet (that's per-adapter follow-up work). Idempotent: the
 // `applied` / `skipped` counters in the response always reflect "everything
 // was overwritten", so the panel can use it as a generic ack.
@@ -391,7 +391,7 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 
 	// Dispatch each inbound to the matching adapter by protocol name. Adapters
 	// that don't recognise the protocol return nil (defensive no-op contract).
-	// Slice 24b — Xray has a real reconfig impl; the others are stubs that
+	// Slice 24b: Xray has a real reconfig impl; the others are stubs that
 	// log and rely on the persisted inbounds.json for next-restart pickup.
 	applied := 0
 	failed := 0
@@ -413,7 +413,7 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if matched == nil {
-			s.logger.Warn("applyInbounds: no adapter for protocol/engine — config persisted but not applied live",
+			s.logger.Warn("applyInbounds: no adapter for protocol/engine, config persisted but not applied live",
 				"protocol", ib.Protocol, "engine", wantEngine)
 			continue
 		}
@@ -532,7 +532,7 @@ func (s *Server) ensureFirewallFromStore(ctx context.Context) {
 // Mode 0600 because the configs may embed REALITY private keys / WireGuard
 // server keys.
 //
-// Previously had a bespoke tmp+rename without fsync — bypassed the Wave-4
+// Previously had a bespoke tmp+rename without fsync, bypassed the Wave-4
 // hardening the proxy-core writers got. Now consistent with them.
 func writeInboundsAtomically(path string, inbounds []dto.InboundDto) error {
 	dir := filepath.Dir(path)

@@ -5,7 +5,7 @@
 // supports SS2022 multi-user out of the box (`protocol: "shadowsocks"`
 // inbound + `clients: [{password, email}]`). Running a SECOND xray
 // process with just SS config is wasteful but architecturally simpler
-// than refactoring XrayAdapter to manage multiple inbound types — and
+// than refactoring XrayAdapter to manage multiple inbound types, and
 // Single-Protocol-Per-Node deployment (recommended in ROADMAP) means
 // most installs only run one of these adapters anyway.
 package shadowsocks
@@ -21,7 +21,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
-// InboundConfig is the static part of the SS inbound — generated once
+// InboundConfig is the static part of the SS inbound, generated once
 // from admin settings and kept constant across user mutations.
 type InboundConfig struct {
 	// Tag uniquely identifies the inbound inside Xray. Default: "ss-in".
@@ -31,17 +31,17 @@ type InboundConfig struct {
 	ListenHost string
 
 	// ListenPort is the public TCP port the SS server listens on.
-	// SS doesn't have a "canonical" port — admins pick whatever doesn't
+	// SS doesn't have a "canonical" port, admins pick whatever doesn't
 	// collide with their other inbounds.
 	ListenPort int
 
 	// Method is the SS cipher. SS2022 (`2022-blake3-*`) recommended for
-	// new deployments — legacy AEAD kept for compat with old clients.
+	// new deployments, legacy AEAD kept for compat with old clients.
 	Method string
 
 	// ServerPSK is xray-core's SS2022 server-level password (the `password`
 	// at the `settings.` level, distinct from per-user `clients[].password`).
-	// Required for multi-user SS2022 — verified against XTLS/Xray-examples
+	// Required for multi-user SS2022, verified against XTLS/Xray-examples
 	// on 2026-05-07. An earlier iteration of this file omitted it.
 	ServerPSK string
 
@@ -95,7 +95,7 @@ func (c *InboundConfig) validate() error {
 // ssClient mirrors xray's `clients` element for protocol=shadowsocks.
 // Per upstream xray-core, SS2022 multi-user requires `password` + `email`
 // per client (legacy SS uses inbound-level password, no per-user). We
-// always emit the SS2022 shape — clients on legacy ciphers tolerate the
+// always emit the SS2022 shape, clients on legacy ciphers tolerate the
 // extra `email` field.
 type ssClient struct {
 	Password string `json:"password"`
@@ -134,7 +134,7 @@ func buildUserInboundSettings(cfg InboundConfig, users []ssClient) map[string]an
 }
 
 // renderConfig produces an Xray config.json for an SS-only deployment.
-// Stats wiring mirrors the xray adapter (see ../xray/config.go) — same
+// Stats wiring mirrors the xray adapter (see ../xray/config.go), same
 // `stats:{}` + `policy.levels.0.statsUserUplink/Downlink` + `api-in`
 // dokodemo-door so `xray api statsquery` works.
 func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
@@ -211,7 +211,7 @@ func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
 
 // writeConfig atomically writes the config to disk via the shared
 // atomicfile helper (fsync(file) + fsync(dir) for power-loss durability).
-// Mode 0o600 — file contains all SS user passwords. Wave-14 #10: pre-wave
+// Mode 0o600, file contains all SS user passwords. Wave-14 #10: pre-wave
 // used a hand-rolled WriteFile+Rename with no fsync, contradicting every
 // other adapter's pattern and the atomicfile package's own docstring;
 // power-loss after rename could leave a torn config and dark SS users on

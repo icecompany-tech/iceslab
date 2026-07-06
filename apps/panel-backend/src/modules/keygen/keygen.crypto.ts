@@ -5,7 +5,7 @@ import * as x509 from '@peculiar/x509';
 import { webcrypto } from 'node:crypto';
 
 // @peculiar/x509 needs an explicit Crypto provider. Node 20+ ships native
-// webcrypto under node:crypto — we wire it once at module load.
+// webcrypto under node:crypto, we wire it once at module load.
 x509.cryptoProvider.set(webcrypto as unknown as Crypto);
 
 const ALGORITHM: RsaHashedKeyGenParams = {
@@ -50,7 +50,7 @@ function privateKeyDerToPem(der: ArrayBuffer): string {
 function pemToDer(pem: string): ArrayBuffer {
   const cleaned = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
   const buf = Buffer.from(cleaned, 'base64');
-  // Node's Buffer.from may return a slice into a shared internal pool — `.buffer`
+  // Node's Buffer.from may return a slice into a shared internal pool, `.buffer`
   // would expose the whole pool, not just our bytes. Copy into a standalone
   // ArrayBuffer so webcrypto.subtle.importKey sees only our DER blob.
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
@@ -75,7 +75,7 @@ async function exportPrivateKeyPem(key: Key): Promise<string> {
 
 function randomSerialHex(): string {
   const bytes = webcrypto.getRandomValues(new Uint8Array(16));
-  // Top bit must be 0 — ASN.1 INTEGER is signed.
+  // Top bit must be 0, ASN.1 INTEGER is signed.
   bytes[0]! &= 0x7f;
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -102,8 +102,8 @@ export async function generateCa(): Promise<CertBundle> {
       // CA-only: no leaf-cert capability bits, no digitalSignature. The
       // panel uses a *separate* clientAuth-only cert (see generatePanelClientCert)
       // for talking to nodes; the CA private key never appears in a TLS
-      // handshake. This prevents a compromised node — which holds the CA
-      // *cert* in clientCAs — from being able to mint or impersonate
+      // handshake. This prevents a compromised node, which holds the CA
+      // *cert* in clientCAs, from being able to mint or impersonate
       // anything under it.
       new x509.BasicConstraintsExtension(true, 0, true),
       new x509.KeyUsagesExtension(
@@ -121,7 +121,7 @@ export async function generateCa(): Promise<CertBundle> {
 
 // ───── Panel client cert (clientAuth-only, signed by CA) ─────
 //
-// Slice S6 — used to be: panel presented the CA cert itself as its TLS
+// Slice S6 - used to be: panel presented the CA cert itself as its TLS
 // leaf when calling node-agents. Any compromised node leaf could then
 // also identify as the CA, talk to other nodes, and steal credentials
 // fleet-wide.

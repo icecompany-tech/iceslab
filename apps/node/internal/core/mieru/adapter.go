@@ -74,12 +74,12 @@ func (a *Adapter) Name() string { return Name }
 func (a *Adapter) Engine() string { return "mieru" }
 
 // Start writes the initial config and brings mita up. We invoke
-// `mita apply config <path>` rather than spawning mita directly — mita's
+// `mita apply config <path>` rather than spawning mita directly, mita's
 // own systemd unit owns the lifecycle. The adapter just rewrites config
 // + tells mita to reload.
 //
 // In config-only mode (BinaryPath empty) Start writes the YAML and stops
-// there — useful for tests and for dev hosts without mita installed.
+// there, useful for tests and for dev hosts without mita installed.
 func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndReload(ctx)
 }
@@ -91,7 +91,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 	if a.cfg.BinaryPath == "" {
 		return nil
 	}
-	// Best-effort `mita stop` — if mita is run as a systemd unit, this is
+	// Best-effort `mita stop`, if mita is run as a systemd unit, this is
 	// a no-op. If it's running standalone, mita exits.
 	if _, err := a.cfg.RunCmd(ctx, a.cfg.BinaryPath, "stop"); err != nil {
 		a.logger.Warn("mita stop returned non-zero (often safe)", "err", err)
@@ -101,7 +101,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 
 // AddUser registers a user in mita's user list. Idempotent.
 //
-// Reload is graceful — existing sessions survive; new connections use the
+// Reload is graceful, existing sessions survive; new connections use the
 // updated user list.
 func (a *Adapter) AddUser(user core.User) error {
 	if user.XrayUUID == "" || user.Username == "" {
@@ -143,7 +143,7 @@ type inboundCfgWire struct {
 }
 
 // ApplyInbound updates the inbound settings (MTU + port). MTU change is
-// non-disruptive — existing sessions keep their negotiated MTU until
+// non-disruptive, existing sessions keep their negotiated MTU until
 // reconnect. Port change DOES restart the listener (new socket bind).
 //
 // Wave-14 C1: port now flows from the panel binding to mieru's portBindings.
@@ -179,7 +179,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 }
 
 // GetStats returns tracked users with zero counters. mita exposes
-// `mita get-metrics --output json` for real numbers — wiring that
+// `mita get-metrics --output json` for real numbers, wiring that
 // is a follow-up (mirrors the SS adapter's soft-fail philosophy).
 func (a *Adapter) GetStats() (*core.Stats, error) {
 	a.mu.Lock()

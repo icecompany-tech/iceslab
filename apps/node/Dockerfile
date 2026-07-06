@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
 # Multi-stage Dockerfile for the Iceslab Go node-agent.
-# Build context can be the apps/node/ directory or the monorepo root —
+# Build context can be the apps/node/ directory or the monorepo root:
 # we copy go.mod first then the source.
 #
 #   docker build -f apps/node/Dockerfile -t iceslab-node apps/node
 #
-# Runtime is `distroless/static:nonroot` — no shell, no package manager,
+# Runtime is `distroless/static:nonroot`, no shell, no package manager,
 # minimal attack surface. The Go binary is fully static (CGO_ENABLED=0).
 
 # golang is minor-pinned (1.22.x). distroless `nonroot` is a floating tag with

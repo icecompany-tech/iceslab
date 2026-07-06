@@ -142,7 +142,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // K1-b/c Insights — on-demand (not polled). `days` selects the SRH window;
+  // K1-b/c Insights: on-demand (not polled). `days` selects the SRH window;
   // the HWID stats are point-in-time and ignore it.
   app.get<{ Querystring: { days?: string } }>(
     '/api/dashboard/insights',

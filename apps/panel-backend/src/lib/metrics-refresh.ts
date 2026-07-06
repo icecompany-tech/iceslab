@@ -13,7 +13,7 @@ import { nodesGauge, usersGauge } from './metrics.js';
 const REFRESH_INTERVAL_MS = 30_000;
 
 async function refreshOnce(): Promise<void> {
-  // Reset before set — a previously-seen status that no longer has any
+  // Reset before set: a previously-seen status that no longer has any
   // rows would otherwise stay at its last value forever.
   nodesGauge.reset();
   usersGauge.reset();

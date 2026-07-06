@@ -16,11 +16,11 @@
  * the URI is the colon-joined `<ServerPSK>:<UserPSK>`. Server PSK is the
  * inbound-level secret (xray's `settings.password`); User PSK is the
  * per-client `clients[i].password`. Single-tenant SS (no `clients[]`) is
- * a degenerate case where you'd just pass UserPSK alone — pass empty
+ * a degenerate case where you'd just pass UserPSK alone, pass empty
  * `serverPsk` here and we'll skip the colon prefix.
  *
  * Legacy AEAD ciphers (`aes-256-gcm`, `chacha20-ietf-poly1305`) work with
- * just one password — pass the user's PSK as `userPsk`, leave
+ * just one password, pass the user's PSK as `userPsk`, leave
  * `serverPsk` empty.
  */
 
@@ -55,7 +55,7 @@ export function buildShadowsocksUri(opts: ShadowsocksUriOpts): string {
   return `ss://${userinfo}@${opts.host}:${opts.port}#${encodeURIComponent(opts.name)}`;
 }
 
-/** base64url without padding — the URI-safe encoding clients expect. */
+/** base64url without padding, the URI-safe encoding clients expect. */
 function base64UrlNoPad(input: string): string {
   // Node 22 has Buffer; tests run under Vitest+Node, panel runs under Node.
   return Buffer.from(input, 'utf8')

@@ -12,7 +12,7 @@ Dockerfile  text eol=lf
 *.toml      text eol=lf
 Makefile    text eol=lf
 
-# Source code — let git auto-detect, but normalize on commit.
+# Source code: let git auto-detect, but normalize on commit.
 *.ts        text
 *.tsx       text
 *.js        text
@@ -24,7 +24,7 @@ Makefile    text eol=lf
 *.html      text
 *.sql       text
 
-# Binary — never touch line endings.
+# Binary: never touch line endings.
 *.png       binary
 *.jpg       binary
 *.jpeg      binary

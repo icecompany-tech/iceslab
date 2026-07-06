@@ -97,7 +97,7 @@ func TestRenderConfig_RequiresACMEEmail(t *testing.T) {
 // Wave-14 #2 regression: renderConfig must reject panel-pushed ObfsPassword
 // or MasqueradeURL containing YAML metacharacters (newline, ':', '{', '[',
 // '#') because they can break out of the scalar value and inject top-level
-// YAML — e.g., disabling cert validation in acme: or swapping auth: source.
+// YAML, e.g., disabling cert validation in acme: or swapping auth: source.
 func TestRenderConfig_RejectsInjectedObfsAndMasquerade(t *testing.T) {
 	baseCfg := Config{Hostname: "h", ACMEEmail: "a@b", ListenPort: 443}
 	cases := []struct {
@@ -156,7 +156,7 @@ func TestInboundEqual(t *testing.T) {
 }
 
 func TestInboundCfgWireUnmarshal(t *testing.T) {
-	// Verify the wire matches HysteriaConfigSchema in the panel — this is the
+	// Verify the wire matches HysteriaConfigSchema in the panel, this is the
 	// contract surface between TS panel and Go agent.
 	in := InboundConfig{Port: 1234, ObfsPassword: "p", MasqueradeURL: "u", BrutalUpMbps: 10, BrutalDownMbps: 20}
 	w := inboundCfgWire{
@@ -166,7 +166,7 @@ func TestInboundCfgWireUnmarshal(t *testing.T) {
 		BrutalDownMbps: in.BrutalDownMbps,
 	}
 	// Port travels via the ApplyInbound function arg (slice 50), not via the
-	// wire JSON — toInboundConfig takes it as a second param.
+	// wire JSON, toInboundConfig takes it as a second param.
 	if got := w.toInboundConfig(in.Port); !inboundEqual(got, in) {
 		t.Errorf("wire roundtrip mismatch: got %+v want %+v", got, in)
 	}

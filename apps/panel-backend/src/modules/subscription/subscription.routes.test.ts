@@ -46,7 +46,7 @@ async function createUser(
 
 /**
  * Test helper: creates a node + a Hysteria profile-binding on port 443.
- * Slice 27 — inbounds split into Profile (template) + ProfileNodeBinding
+ * Slice 27: inbounds split into Profile (template) + ProfileNodeBinding
  * (per-node deployment). Each call creates a fresh profile so subscription
  * sees the binding through the auto-attached "All" squad.
  */
@@ -218,7 +218,7 @@ describe('GET /sub/:token (JSON format)', () => {
   });
 });
 
-describe('GET /sub/:token — SRR auto-format (slice 22)', () => {
+describe('GET /sub/:token - SRR auto-format (slice 22)', () => {
   it('selects format from a UA rule when no ?format= is given', async () => {
     const user = await createUser('alice');
     await createNode('eu-1', '10.0.0.1:8443');
@@ -278,7 +278,7 @@ describe('GET /sub/:token — SRR auto-format (slice 22)', () => {
   });
 });
 
-describe('GET /sub/:token — multi-format (slice 21)', () => {
+describe('GET /sub/:token - multi-format (slice 21)', () => {
   it('returns Clash YAML when ?format=clash', async () => {
     const user = await createUser('alice');
     await createNode('eu-1', '10.0.0.1:8443');
@@ -367,7 +367,7 @@ describe('GET /sub/:token — multi-format (slice 21)', () => {
   });
 });
 
-describe('GET /sub/:token — error cases', () => {
+describe('GET /sub/:token - error cases', () => {
   it('returns 404 for unknown token', async () => {
     const res = await app.inject({
       method: 'GET',
@@ -387,7 +387,7 @@ describe('GET /sub/:token — error cases', () => {
       method: 'GET',
       url: `/sub/${user.subscriptionToken}`,
     });
-    // soft-deleted user is invisible — looks like an unknown token (404)
+    // soft-deleted user is invisible, looks like an unknown token (404)
     expect(res.statusCode).toBe(404);
   });
 
@@ -452,7 +452,7 @@ describe('GET /sub/:token — error cases', () => {
   });
 });
 
-describe('GET /sub/:token — multi-protocol (slice 18)', () => {
+describe('GET /sub/:token - multi-protocol (slice 18)', () => {
   it('user with enabledProtocols=["hysteria","xray"] gets both endpoints per node', async () => {
     const user = await createUser('alice', ['hysteria', 'xray']);
     const nodeId = await createNode('eu-1', '10.0.0.1:8443');
@@ -506,7 +506,7 @@ describe('GET /sub/:token — multi-protocol (slice 18)', () => {
   });
 });
 
-describe('GET /sub/:token — audit', () => {
+describe('GET /sub/:token - audit', () => {
   it('writes a row to subscription_request_history', async () => {
     const user = await createUser('alice');
 

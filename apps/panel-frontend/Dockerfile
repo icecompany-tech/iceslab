@@ -17,7 +17,7 @@ ARG NGINX_VERSION=1.27-alpine
 
 # ───── Build stage ─────
 FROM node:${NODE_VERSION} AS builder
-# NODE_OPTIONS caps V8 heap for Vite build — without it Rollup can climb past
+# NODE_OPTIONS caps V8 heap for Vite build, without it Rollup can climb past
 # 2 GB during the bundle phase and OOM on small VPS. 1536 MB matches backend.
 # NPM_CONFIG_FETCH_* retries on flaky networks instead of hanging.
 ENV CI=true \

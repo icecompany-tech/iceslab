@@ -13,7 +13,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth (see users.routes.ts header comment).
   const auth = { onRequest: [requireAuth] };
 
-  // GET /api/srr — list rules in evaluation order (priority ASC)
+  // GET /api/srr: list rules in evaluation order (priority ASC)
   app.get('/api/srr', auth, async (_request, reply) => {
     const rules = await prisma.subscriptionResponseRule.findMany({
       orderBy: { priority: 'asc' },
@@ -80,7 +80,7 @@ export async function srrRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/srr/test — evaluate a UA against the current rule set
+  // POST /api/srr/test: evaluate a UA against the current rule set
   app.post('/api/srr/test', auth, async (request, reply) => {
     const input = TestSrrSchema.parse(request.body);
     const matched = await matchFormatForUserAgent(input.userAgent);

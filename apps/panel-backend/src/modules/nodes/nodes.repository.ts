@@ -27,7 +27,7 @@ export async function findActiveByAddress(address: string): Promise<Node | null>
 
 export async function create(data: Prisma.NodeUncheckedCreateInput): Promise<Node> {
   // Unchecked variant lets us set FKs by id (`regionId`) directly without
-  // the nested `region: { connect: ... }` ceremony — for service-layer
+  // the nested `region: { connect: ... }` ceremony, for service-layer
   // usage that's owning the FK assignment we prefer the flat shape.
   return prisma.node.create({ data });
 }

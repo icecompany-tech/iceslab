@@ -49,12 +49,12 @@ function hashApiToken(plaintext: string): string {
  * if found, treat the request as authenticated with admin-level access.
  *
  * Trade-offs vs JWT:
- *   - Stateless? No — every request hits api_tokens. Acceptable: the table
+ *   - Stateless? No, every request hits api_tokens. Acceptable: the table
  *     is tiny (admin-issued, dozens of rows max). Could memoize in Redis
  *     later if it becomes a hotspot.
  *   - Revocation? Instant via DELETE /api/api-tokens/:id. JWT can't do that
  *     short of rotating the signing secret.
- *   - Expiry? Tokens don't expire today — admin manually revokes when no
+ *   - Expiry? Tokens don't expire today, admin manually revokes when no
  *     longer needed.
  */
 async function tryApiToken(
@@ -62,7 +62,7 @@ async function tryApiToken(
 ): Promise<
   | {
       /** Issuing admin's id, or null for legacy tokens minted before the
-       *  FK existed. Callers MUST cope with null — handlers that need to
+       *  FK existed. Callers MUST cope with null, handlers that need to
        *  attribute the action to a specific admin should 401 in that case. */
       adminId: string | null;
       role: string;
@@ -82,7 +82,7 @@ async function tryApiToken(
   const row = await prisma.apiToken.findUnique({ where: { tokenHash } });
   if (!row) return null;
 
-  // Best-effort lastUsedAt — fire-and-forget so the request response time
+  // Best-effort lastUsedAt, fire-and-forget so the request response time
   // doesn't pay for the audit write. Debounce to once-per-60s per token:
   // a hot integration hitting 10 rps would otherwise pin api_tokens with
   // 864k UPDATEs/day for the same row.
@@ -113,12 +113,12 @@ export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  // Try API-token path first — when the header is unmistakably
+  // Try API-token path first, when the header is unmistakably
   // `Bearer icp_*` we skip jwtVerify entirely.
   const apiAuth = await tryApiToken(request);
   if (apiAuth) {
     // Only populate request.admin when the token has a real issuing-admin
-    // FK. Legacy tokens (pre-migration) carry null and stay token-only —
+    // FK. Legacy tokens (pre-migration) carry null and stay token-only,
     // /api/auth/me will 401 for those instead of returning random data.
     if (apiAuth.adminId) {
       request.admin = { id: apiAuth.adminId, role: apiAuth.role };

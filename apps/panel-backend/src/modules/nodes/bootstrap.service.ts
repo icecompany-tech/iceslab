@@ -23,7 +23,7 @@ export class BootstrapTokenError extends Error {
 
 /**
  * Issue a single-use bootstrap token for the given node. Token has a 15-min
- * TTL — admin is expected to copy the install command and run it on the
+ * TTL, admin is expected to copy the install command and run it on the
  * node within that window. After redemption (or expiry) it can no longer
  * be used; admin issues a fresh one if needed.
  */
@@ -61,7 +61,7 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
   if (row.expiresAt.getTime() < Date.now()) throw new BootstrapTokenError('EXPIRED', 410);
   if (row.node.deletedAt) throw new BootstrapTokenError('NOT_FOUND', 404);
 
-  // Mark consumed FIRST — race-safe single-use. Even a concurrent second
+  // Mark consumed FIRST: race-safe single-use. Even a concurrent second
   // redeem hits this same row's `consumedAt` and the unique-on-(id+null)
   // pattern below stops it.
   const claim = await prisma.nodeBootstrapToken.updateMany({
@@ -69,7 +69,7 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
     data: { consumedAt: new Date() },
   });
   if (claim.count === 0) {
-    // Lost the race — somebody else just consumed it.
+    // Lost the race, somebody else just consumed it.
     throw new BootstrapTokenError('CONSUMED', 410);
   }
 
@@ -77,10 +77,10 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
     commonName: row.node.name,
     sans: buildSans(row.node.address),
   });
-  // Slice 38 — bundle heartbeat-self-destruct credentials. The agent will
+  // Slice 38: bundle heartbeat-self-destruct credentials. The agent will
   // poll PANEL_URL/api/internal/nodes/me/status with this token and exit
   // on 410 Gone. heartbeat_secret was generated at node-create time (or
-  // backfilled by the migration) and never leaves the panel — only the
+  // backfilled by the migration) and never leaves the panel, only the
   // HMAC of it does.
   const secretBuf = Buffer.from(row.node.heartbeatSecret as Uint8Array);
   const panelClientFingerprint = await getPanelClientFingerprint();
@@ -100,7 +100,7 @@ function buildSans(address: string): { type: 'dns' | 'ip'; value: string }[] {
 }
 
 /**
- * Background-cleanup helper. Not wired to a cron yet — periodically delete
+ * Background-cleanup helper. Not wired to a cron yet, periodically delete
  * tokens past their TTL. Slice 24+ may schedule this every hour.
  */
 export async function purgeExpiredBootstrapTokens(): Promise<number> {

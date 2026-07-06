@@ -54,7 +54,7 @@ export class PortInUseError extends Error {
   }
 }
 
-// F-P1-b — candidate listen ports for a new binding, in preference order.
+// F-P1-b: candidate listen ports for a new binding, in preference order.
 // Common HTTPS-alt ports that survive most ISP egress filters and read as
 // ordinary TLS (good for REALITY / Hysteria masquerade). 443 first because it's
 // the least suspicious; the rest are Cloudflare-proxy ports. Replaces the old
@@ -102,13 +102,13 @@ export class NodeNotFoundError extends Error {
   }
 }
 
-// A5 — per-profile user reach: distinct users across every squad the profile is
+// A5 - per-profile user reach: distinct users across every squad the profile is
 // assigned to (group_profiles -> group_members), deduped. Users are explicit
 // members of their squads (incl. the system "All" squad), so this also counts
 // the "All" reach. One aggregate for the list; a scoped count for a single one.
 //
 // Soft-deleted users keep their group_members rows (we only flip
-// users.deletedAt, the join row stays for restore-ability — same reason the
+// users.deletedAt, the join row stays for restore-ability, same reason the
 // squad member count joins users). Without the users join below, a profile on
 // the "All" squad reports every ghost ever created, not the live reach.
 async function userReachByProfile(): Promise<Map<string, number>> {
@@ -139,7 +139,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
   const existing = await prisma.profile.findUnique({ where: { name: input.name } });
   if (existing) throw new ProfileNameTakenError(input.name);
 
-  // Slice 24d — auto-fill SS2022 server PSK if admin omitted it.
+  // Slice 24d: auto-fill SS2022 server PSK if admin omitted it.
   let configToStore: Record<string, unknown> = input.config as Record<string, unknown>;
   if (input.protocol === 'shadowsocks') {
     const ss = configToStore as { method: string; serverPsk?: string };
@@ -159,7 +159,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
         enabled: input.enabled,
       },
     });
-    // Slice 26 invariant — every new profile auto-attaches to "All" squad.
+    // Slice 26 invariant: every new profile auto-attaches to "All" squad.
     await tx.groupProfile.upsert({
       where: { groupId_profileId: { groupId: ALL_SQUAD_ID, profileId: p.id } },
       create: { groupId: ALL_SQUAD_ID, profileId: p.id },
@@ -281,7 +281,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
       enabled: input.enabled,
     },
   });
-  // Slice 30 — every new binding ships with one Default host so the
+  // Slice 30: every new binding ships with one Default host so the
   // subscription generator (which iterates bindings × hosts) has something
   // to emit. Admin can later add extras with different SNI / fingerprint.
   await ensureDefaultHost(created.id);
@@ -294,7 +294,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
 }
 
 export async function listBindings(q: ListBindingsQuery): Promise<PublicBindingDto[]> {
-  // Skip bindings whose node was soft-deleted — otherwise DeployProfileModal
+  // Skip bindings whose node was soft-deleted, otherwise DeployProfileModal
   // / profile cards would carry phantom rows from removed nodes.
   const where: Prisma.ProfileNodeBindingWhereInput = { node: { deletedAt: null } };
   if (q.nodeId) where.nodeId = q.nodeId;
@@ -372,7 +372,7 @@ export async function deleteBinding(id: string): Promise<void> {
  * queue when shipping configs to node-agents and by the subscription
  * generator when emitting client URIs.
  *
- * Shallow merge is intentional — overrides should mention specific top-level
+ * Shallow merge is intentional, overrides should mention specific top-level
  * fields (`acmeDomain`, `serverPsk`, etc.). Deep merge would silently mask
  * partial-array edits which is rarely what admins mean.
  */

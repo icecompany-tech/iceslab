@@ -87,7 +87,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 	noMethod := a.cfg.Inbound.Method == ""
 	a.mu.Unlock()
 	if noMethod {
-		a.logger.Info("shadowsocks adapter: no Method yet — waiting for ApplyInbound from panel")
+		a.logger.Info("shadowsocks adapter: no Method yet, waiting for ApplyInbound from panel")
 		return nil
 	}
 	return a.regenerateAndRestart(ctx)
@@ -109,12 +109,12 @@ func (a *Adapter) Stop(ctx context.Context) error {
 	return proc.Stop(ctx)
 }
 
-// AddUser registers a user. We use user.XrayUUID as the SS password —
+// AddUser registers a user. We use user.XrayUUID as the SS password,
 // matches what the panel emits in subscription URIs (see slice 24d notes).
 // Idempotent.
 func (a *Adapter) AddUser(user core.User) error {
 	if user.XrayUUID == "" {
-		// User has no shared credential — nothing to add for SS either.
+		// User has no shared credential, nothing to add for SS either.
 		return nil
 	}
 	a.mu.Lock()
@@ -127,7 +127,7 @@ func (a *Adapter) AddUser(user core.User) error {
 	started := a.started
 	a.mu.Unlock()
 	if !started {
-		// Not started yet — Method might not be configured. Cache the user
+		// Not started yet, Method might not be configured. Cache the user
 		// and let Start/ApplyInbound flush it later.
 		return nil
 	}
@@ -369,7 +369,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 }
 
 // GetStats reports per-user SS byte counters via xray's StatsService.
-// Same mechanism as the xray adapter (slice 24c part 1) — `xray api
+// Same mechanism as the xray adapter (slice 24c part 1), `xray api
 // statsquery -reset` over the loopback gRPC inbound. Soft-fails to zero
 // counters on error so a transient stats failure doesn't stall the panel
 // poller for the rest of the node's adapters.
@@ -391,12 +391,12 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		return &core.Stats{Users: users}, nil
 	}
 
-	// Cycle #6 (2026-05-12) — the SS adapter is registered whenever
+	// Cycle #6 (2026-05-12): the SS adapter is registered whenever
 	// XRAY_BINARY is set (because SS rides the xray binary), even on nodes
 	// that don't actually run an SS inbound. Polling stats every cron tick
 	// then hits `failed to dial 127.0.0.1:8081 (xray api inbound not up)`
 	// and spammed `WARN shadowsocks GetStats: statsquery failed` every 30s
-	// forever. Short-circuit when there are no SS users to query — that's
+	// forever. Short-circuit when there are no SS users to query, that's
 	// the only state we'd ever populate, so an empty stats response is
 	// semantically identical AND we never hit the dead API port.
 	if len(users) == 0 {
@@ -405,7 +405,7 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 
 	counters, err := queryUserStats(context.Background(), run, binary, apiPort)
 	if err != nil {
-		// Demote to Debug — operators on hysteria-only nodes shouldn't see
+		// Demote to Debug, operators on hysteria-only nodes shouldn't see
 		// SS-stats failures in their default `journalctl -u iceslab-node`
 		// view; the adapter is registered defensively for "maybe an SS
 		// inbound shows up later" and stats noise is operationally

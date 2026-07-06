@@ -96,7 +96,7 @@ func TestRenderCaddyfileShape(t *testing.T) {
 }
 
 func TestRenderCaddyfileSortsUsers(t *testing.T) {
-	// Same users in different order should produce byte-identical output —
+	// Same users in different order should produce byte-identical output,
 	// otherwise `caddy reload` flaps even on no-op user-set changes.
 	users1 := []User{{Username: "bob", Password: "b"}, {Username: "alice", Password: "a"}}
 	users2 := []User{{Username: "alice", Password: "a"}, {Username: "bob", Password: "b"}}
@@ -115,7 +115,7 @@ func TestRenderCaddyfileNoUsers(t *testing.T) {
 	// forward_proxy with probe_resistance + zero basic_auth lines fails
 	// Caddy validation ("probe resistance requires authentication"), so
 	// we skip the whole forward_proxy block when there are no users. The
-	// site is pure file_server masquerade — looks like a vanilla
+	// site is pure file_server masquerade, looks like a vanilla
 	// static-content host on probes. First AddUser triggers a reload
 	// that adds the forward_proxy block. Caught live cycle #8 2026-05-13.
 	if strings.Contains(out, "forward_proxy") {

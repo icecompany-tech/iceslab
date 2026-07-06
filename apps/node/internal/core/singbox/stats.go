@@ -68,7 +68,7 @@ func queryUserStats(ctx context.Context, run RunCmdFunc, binary, statsListen str
 	for _, e := range resp.Stat {
 		userID, dir, ok := parseStatName(e.Name)
 		if !ok {
-			continue // unknown shape — skip rather than fail the batch
+			continue // unknown shape, skip rather than fail the batch
 		}
 		n, ok := statEntryInt64(e.Value)
 		if !ok {

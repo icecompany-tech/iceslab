@@ -105,7 +105,7 @@ func TestCrashRecoveryAllowsRestart(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if proc.Running() {
-		t.Fatal("Running: still true 2s after /bin/true exit — watcher didn't fire")
+		t.Fatal("Running: still true 2s after /bin/true exit, watcher didn't fire")
 	}
 
 	// The fix: a second Start MUST succeed (was: "already started" pre-Wave-8).
@@ -234,7 +234,7 @@ func TestStopRespectsContext(t *testing.T) {
 	defer cancel()
 	err := proc.Stop(stopCtx)
 	if err == nil {
-		// Process may have caught SIGTERM and exited cleanly within 100ms — fine.
+		// Process may have caught SIGTERM and exited cleanly within 100ms, fine.
 		// Just assert it's no longer running.
 	}
 	if proc.Running() {

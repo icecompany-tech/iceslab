@@ -12,11 +12,11 @@ const CreateInput = z.object({
 const IdParam = z.object({ id: PermissiveUuid });
 
 /**
- * API-tokens management endpoints are admin-JWT-only — a leaked API token
+ * API-tokens management endpoints are admin-JWT-only, a leaked API token
  * shouldn't be able to mint or revoke other tokens (privilege escalation).
  * The session must come from a real admin login.
  *
- * Async hook signature is REQUIRED — a sync `function` without a `done`
+ * Async hook signature is REQUIRED, a sync `function` without a `done`
  * callback parameter hangs the request lifecycle in Fastify v5 (Fastify
  * waits forever for the hook to signal completion).
  */
@@ -27,14 +27,14 @@ async function blockApiTokenAccess(
   if (request.apiToken) {
     return reply.code(403).send({
       error: 'FORBIDDEN',
-      message: 'API tokens cannot manage other API tokens — log in as admin',
+      message: 'API tokens cannot manage other API tokens, log in as admin',
     });
   }
 }
 
 export async function apiTokensRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth + blockApiTokenAccess (see users.routes.ts
-  // header comment). Both hooks must fire on every route — order matters,
+  // header comment). Both hooks must fire on every route, order matters,
   // blockApiTokenAccess relies on requireAuth populating req.admin first.
   const auth = { onRequest: [requireAuth, blockApiTokenAccess] };
 

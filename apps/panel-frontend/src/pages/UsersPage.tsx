@@ -247,7 +247,7 @@ export function UsersPage() {
   });
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
   // Wave-14 #16: subscriptionUrl(token) without a second arg falls back to
-  // API_BASE_URL, which defaults to http://localhost:3000 — so a prod SPA
+  // API_BASE_URL, which defaults to http://localhost:3000, so a prod SPA
   // built without VITE_API_BASE_URL silently copies a localhost link to the
   // operator's clipboard. Same panel-metadata source UserFormModal uses.
   const authStatusQuery = useQuery({
@@ -257,7 +257,7 @@ export function UsersPage() {
   });
   // Wave-14 #17: full-install counters come from dashboard.users (cached
   // server-side, ~ N/A cost) instead of computed from the current page slice
-  // — the slice doesn't reflect total install state under server pagination.
+  // - the slice doesn't reflect total install state under server pagination.
   const dashQuery = useOverview();
   const squadNameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -429,7 +429,7 @@ export function UsersPage() {
         eyebrow={t('pageHero.usersEyebrow', {
           // `count` drives i18next pluralization (one/few/many/other for RU,
           // one/other for EN). Without it the eyebrow rendered "1 аккаунтов"
-          // on a single user — caught during the post-refactor audit.
+          // on a single user, caught during the post-refactor audit.
           count: stats.total,
           online: stats.active,
           limited:

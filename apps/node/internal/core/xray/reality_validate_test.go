@@ -10,7 +10,7 @@ func TestValidateRealityDest_Accepts(t *testing.T) {
 		"www.microsoft.com:443",
 		"example.com:8443",
 		"speedtest.net:443",
-		// IPv4 public — fine.
+		// IPv4 public, fine.
 		"8.8.8.8:443",
 	}
 	for _, dest := range cases {
@@ -23,7 +23,7 @@ func TestValidateRealityDest_Accepts(t *testing.T) {
 }
 
 func TestValidateRealityDest_RejectsBadShape(t *testing.T) {
-	// We don't pin the exact error message — net.SplitHostPort produces its
+	// We don't pin the exact error message, net.SplitHostPort produces its
 	// own wording for some cases ("missing port in address") and our explicit
 	// check fires for others. Just assert the call returns SOME error.
 	cases := []string{

@@ -4,11 +4,11 @@ export interface PublicSquadDto {
   id: string;
   name: string;
   description: string | null;
-  /** Slice 27 — squad ACL operates on profiles, not per-node inbounds. */
+  /** Slice 27: squad ACL operates on profiles, not per-node inbounds. */
   profileIds: string[];
-  /** R3-a — per-squad routing-preset override, or null to inherit the panel default. */
+  /** R3-a: per-squad routing-preset override, or null to inherit the panel default. */
   routingPreset: string | null;
-  /** K7 — per-squad HWID device-limit default (applies when user has no explicit limit). */
+  /** K7: per-squad HWID device-limit default (applies when user has no explicit limit). */
   hwidDeviceLimit: number | null;
   memberCount: number;
   createdAt: string;

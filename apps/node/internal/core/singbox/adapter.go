@@ -129,7 +129,7 @@ func (a *Adapter) Stop(ctx context.Context) error {
 func (a *Adapter) AddUser(user core.User) error {
 	uuid, password := a.credsFor(user)
 	if uuid == "" && password == "" {
-		// No credentials for this protocol — nothing to do.
+		// No credentials for this protocol, nothing to do.
 		return nil
 	}
 	a.mu.Lock()

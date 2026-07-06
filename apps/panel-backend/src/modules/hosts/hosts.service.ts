@@ -148,7 +148,7 @@ export async function reorderHosts(input: ReorderHostsInput): Promise<PublicHost
 /**
  * Auto-create the "Default" host for a freshly-minted binding. Called by
  * profiles.service.ts:createBinding so subscriptions still emit one URL per
- * binding by default. Idempotent — if a host already exists for this
+ * binding by default. Idempotent, if a host already exists for this
  * binding (e.g. backfilled by migration) this is a no-op.
  */
 export async function ensureDefaultHost(bindingId: string): Promise<void> {

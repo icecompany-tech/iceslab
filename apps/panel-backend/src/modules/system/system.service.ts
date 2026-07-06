@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * ROADMAP D1 — "update available" check. Compares the running panel version
+ * ROADMAP D1: "update available" check. Compares the running panel version
  * against the latest GitHub release tag. Best-effort by design: the panel must
  * never break (or even slow down a request) because GitHub is unreachable, so
  * every failure path degrades to `latest: null` / `updateAvailable: false`.
@@ -87,7 +87,7 @@ async function fetchLatest(): Promise<LatestCache> {
     const tag = body.tag_name?.trim() || null;
     return { latest: tag, releaseUrl: body.html_url ?? null, checkedAt };
   } catch {
-    // network / abort / parse — degrade silently.
+    // network / abort / parse: degrade silently.
     return { latest: null, releaseUrl: null, checkedAt };
   }
 }

@@ -13,7 +13,7 @@
 //     extra credential surface).
 //
 // Verified against `enfein/mieru/docs/operation.md` (and
-// `docs/server-install.md`) on 2026-05-07. Config is JSON, NOT YAML —
+// `docs/server-install.md`) on 2026-05-07. Config is JSON, NOT YAML:
 // an earlier iteration of this file emitted YAML and was wrong.
 package mieru
 
@@ -43,7 +43,7 @@ type InboundConfig struct {
 	// PPPoE / weird VPN paths.
 	MTU int
 
-	// LoggingLevel — INFO sane default; DEBUG logs per-connection events
+	// LoggingLevel: INFO sane default; DEBUG logs per-connection events
 	// (don't enable in prod, very noisy).
 	LoggingLevel string
 }
@@ -102,7 +102,7 @@ type serverConfig struct {
 
 // renderConfig produces a deterministic mita JSON config. mita applies
 // the file via `mita apply config <path.json>` and stores the result
-// internally as protobuf at `/etc/mita/server.conf.pb` — we never see
+// internally as protobuf at `/etc/mita/server.conf.pb`, we never see
 // or touch that file directly.
 func renderConfig(inbound InboundConfig, users []User) ([]byte, error) {
 	if err := inbound.validate(); err != nil {
@@ -134,7 +134,7 @@ func renderConfig(inbound InboundConfig, users []User) ([]byte, error) {
 }
 
 // writeConfig atomically writes mita's YAML via the shared atomicfile
-// helper (fsync(file) + fsync(dir)). Mode 0o600 — file contains every
+// helper (fsync(file) + fsync(dir)). Mode 0o600, file contains every
 // user's password.
 func writeConfig(path string, blob []byte) error {
 	dir := filepath.Dir(path)

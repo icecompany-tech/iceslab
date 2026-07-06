@@ -105,7 +105,7 @@ function defaultValues(user: User | null): FormValues {
     trafficLimitStrategy: user?.trafficLimitStrategy ?? 'no_reset',
     expireDays: '',
     // The edit form can only SET 'active' or 'disabled' (limited/expired are
-    // cron-managed, and UpdateUserSchema rejects them — sending them back 400s
+    // cron-managed, and UpdateUserSchema rejects them, sending them back 400s
     // every save). Map the cron-only states to 'active': editing a limited/
     // expired user and saving reactivates them, which is what an admin bumping
     // a quota-hit user's traffic expects. If they're still over quota, the
@@ -445,7 +445,7 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                         userCount={s.memberCount}
                         profileCount={s.profileIds.length}
                         checked={checked}
-                        // Earlier the All-row was disabled — operators couldn't
+                        // Earlier the All-row was disabled, operators couldn't
                         // remove a user from All even when they wanted to and
                         // pre-checking on edit was confusing. Now any squad
                         // (incl. All) is freely toggleable; if the admin clears
@@ -463,7 +463,7 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                   })}
                 </Stack>
                 {/* Visible nudge when admin has both All and another squad
-                    picked — used to silently double-count profiles on the
+                    picked, used to silently double-count profiles on the
                     dashboard and surprise admins. Now they at least see it. */}
                 {form.values.groupIds.includes(ALL_SQUAD_ID) &&
                   form.values.groupIds.length > 1 && (
@@ -946,7 +946,7 @@ function DirectEndpointRow({
       ? t('userForm.copyUri')
       : t('userForm.copyWgconfHint');
 
-  // mtg is single-secret upstream — every user of the inbound shares the
+  // mtg is single-secret upstream, every user of the inbound shares the
   // same wire identity, so per-user byte accounting is architecturally
   // impossible. The traffic counter and lastOnlineAt for MTProto-only
   // users will both look like the user never connected. Surface that

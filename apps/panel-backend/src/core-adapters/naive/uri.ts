@@ -5,8 +5,8 @@
  *   naive+https://<user>:<password>@<host>:<port>?<query>#<fragment>
  *
  * Query params:
- *   padding=true   — pad HTTP/2 frames to mask packet-size fingerprint.
- *                    Always on for Iceslab — without padding the inbound
+ *   padding=true   - pad HTTP/2 frames to mask packet-size fingerprint.
+ *                    Always on for Iceslab, without padding the inbound
  *                    fingerprints differently from real Chromium.
  *
  * Fragment is the human-readable node label shown by the client.

@@ -33,8 +33,8 @@ func TestNameMatchesProtocol(t *testing.T) {
 	}
 }
 
-// Per single-secret architecture, AddUser/RemoveUser are bookkeeping no-ops
-// — mtg has no per-user concept.
+// Per single-secret architecture, AddUser/RemoveUser are bookkeeping no-ops,
+// mtg has no per-user concept.
 func TestAddUser_BookkeepingOnly(t *testing.T) {
 	a := newConfigOnlyAdapter(t)
 	if err := a.AddUser(core.User{UserID: "u-1"}); err != nil {
@@ -164,7 +164,7 @@ func TestParseMtgTelegramTraffic_SumsAcrossLabels(t *testing.T) {
 }
 
 func TestParseMtgTelegramTraffic_IgnoresFrontingAndOtherMetrics(t *testing.T) {
-	// mtg_domain_fronting_traffic must NOT be counted — it's SNI-probe
+	// mtg_domain_fronting_traffic must NOT be counted, it's SNI-probe
 	// camouflage traffic, not user traffic.
 	in, _, err := parseMtgTelegramTraffic(fakeMtgMetrics)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestGetStats_ScrapesPrometheusAndPopulatesTotals(t *testing.T) {
 		t.Errorf("totals: got %d/%d want %d/%d",
 			stats.TotalBytesIn, stats.TotalBytesOut, wantIn, wantOut)
 	}
-	// Per-user counters remain zero — single-secret architecture.
+	// Per-user counters remain zero, single-secret architecture.
 	for _, u := range stats.Users {
 		if u.BytesIn != 0 || u.BytesOut != 0 {
 			t.Errorf("per-user counter must be zero for mtproto, got %+v", u)

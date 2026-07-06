@@ -69,7 +69,7 @@ const NODE_PROTOCOL_GROUPED = [
 // Wave-13 (2026-05-21) bumped from 8443 to 1337: 8443 is the canonical
 // HTTPS-alt scanned by every bot the moment 443 closes, 1337 is rare-enough
 // that random probes pass us by AND frees 8443 for user-protocol bindings.
-// Existing nodes installed before the bump stay on 8443 — their address is
+// Existing nodes installed before the bump stay on 8443, their address is
 // pinned in DB. Only fresh installs default to 1337.
 const DEFAULT_NODE_PORT = 1337;
 

@@ -20,9 +20,9 @@ export function effectiveDeviceCeiling(
 /**
  * Outcome of an HWID enforcement check on /sub/:token.
  *
- *   - `disabled`  — neither header nor user limit set; no enforcement run.
- *   - `allowed`   — device registered (upserted) and under quota.
- *   - `denied`    — device count exceeds user's limit. Caller emits 403.
+ *   - `disabled`: neither header nor user limit set; no enforcement run.
+ *   - `allowed`: device registered (upserted) and under quota.
+ *   - `denied`: device count exceeds user's limit. Caller emits 403.
  */
 export interface HwidCheckResult {
   status: 'disabled' | 'allowed' | 'denied';
@@ -36,7 +36,7 @@ export interface HwidCheckResult {
  * Validate the `x-hwid` header for this subscription request, register
  * the device if new, and decide whether to allow the response.
  *
- * Trust model: HWID is client-supplied — admins use this to deter casual
+ * Trust model: HWID is client-supplied, admins use this to deter casual
  * subscription sharing, not adversarial users. A user determined to share
  * can spoof the header; that's accepted as a non-goal.
  *
@@ -64,11 +64,11 @@ export async function enforceHwid(
 ): Promise<HwidCheckResult> {
   if (!hwid) {
     // No header → no enforcement, no row. Return `active=0` for the
-    // X-Hwid-Active header — clients display it as "0/N".
+    // X-Hwid-Active header, clients display it as "0/N".
     return { status: 'disabled', active: 0, limit };
   }
 
-  // A known device is always just a `lastSeenAt` touch — no new row, so it
+  // A known device is always just a `lastSeenAt` touch, no new row, so it
   // can't grow the table regardless of any ceiling. Fast-path it (one indexed
   // update on the unique key) before any counting.
   const existing = await prisma.hwidUserDevice.findUnique({
@@ -106,7 +106,7 @@ export async function enforceHwid(
     const current = await tx.hwidUserDevice.count({ where: { userId } });
 
     if (current >= ceiling) {
-      // At the ceiling — DO NOT insert. A real per-user limit reports the
+      // At the ceiling, DO NOT insert. A real per-user limit reports the
       // count and denies (403 upstream); the unlimited audit path just stops
       // growing the table and still lets the client through.
       if (limit === null) {

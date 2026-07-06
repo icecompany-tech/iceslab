@@ -1105,7 +1105,7 @@ export default {
     tooltipUsers: 'Users',
     tooltipProfiles: 'Profiles',
     mtprotoNoPerUserStats:
-      'MTProto (mtg) is single-secret — every user shares the same wire identity. Per-user traffic and quotas do not apply to MTProto bytes. Check the node card "Today" counter for actual usage.',
+      'MTProto (mtg) is single-secret, every user shares the same wire identity. Per-user traffic and quotas do not apply to MTProto bytes. Check the node card "Today" counter for actual usage.',
     devicesTitle: 'HWID Devices',
   },
 

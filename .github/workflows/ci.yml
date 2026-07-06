@@ -68,7 +68,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Slice 35 — npm audit gate. `--prod` ignores dev-only dependencies
+      # Slice 35: npm audit gate. `--prod` ignores dev-only dependencies
       # (vitest / @types/*) which historically carry lower-stakes
       # transitive vulns we'd rather not gate releases on. `--audit-level
       # high` lets known-medium issues in third-party deps pass while
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-          # No go.sum yet (zero external deps) — let setup-go skip cache wiring.
+          # No go.sum yet (zero external deps), let setup-go skip cache wiring.
           cache: false
 
       - name: Build
@@ -122,14 +122,14 @@ jobs:
         working-directory: apps/node
         run: go test ./...
 
-  # Slice 36 follow-up — build + publish container images to GHCR on every
+  # Slice 36 follow-up: build + publish container images to GHCR on every
   # push to main and on every tag. Pull requests build but don't publish
   # (no creds reach forked-PR jobs). Tag naming follows GHCR convention:
   #   ghcr.io/icecompany-tech/iceslab-backend:main         (rolling)
   #   ghcr.io/icecompany-tech/iceslab-backend:sha-<7c>     (every push)
   #   ghcr.io/icecompany-tech/iceslab-backend:v1.2.3       (only on `v*` tags)
   # The three Dockerfiles already exist (panel-backend / panel-frontend /
-  # node-agent) — this job just wraps them.
+  # node-agent), this job just wraps them.
   docker:
     name: docker (build + publish)
     runs-on: ubuntu-latest
@@ -182,7 +182,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache via GHA cache (free, ephemeral) — speeds up incremental
+          # Cache via GHA cache (free, ephemeral), speeds up incremental
           # builds dramatically without needing a paid registry tier.
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,scope=${{ matrix.image.name }},mode=max

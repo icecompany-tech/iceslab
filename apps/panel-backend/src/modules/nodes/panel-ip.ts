@@ -1,11 +1,11 @@
 import { config } from '../../config.js';
 
-// Slice S7 — auto-detected outbound IP of the panel, used to inject the
+// Slice S7: auto-detected outbound IP of the panel, used to inject the
 // `--panel-ip` flag into the node-install command so the agent's UFW
 // allows :1337/tcp ONLY from this address.
 //
 // Resolution order:
-//   1. PANEL_PUBLIC_IP env (operator override — wins always)
+//   1. PANEL_PUBLIC_IP env (operator override, wins always)
 //   2. Cached probe result (in-memory, refreshed every 30 min)
 //   3. Probe https://api.ipify.org / https://icanhazip.com (first to win)
 //   4. null  → renderBootstrapCommand emits a YOUR_PANEL_PUBLIC_IP token
@@ -21,7 +21,7 @@ const PROBES = [
   'https://icanhazip.com',
   'https://ifconfig.me/ip',
 ];
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — IPs are stable; tradeoff is recovery time after a re-IP
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min, IPs are stable; tradeoff is recovery time after a re-IP
 const PROBE_TIMEOUT_MS = 3_000;
 const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const IPV6_RE = /^[0-9a-fA-F:]+$/;
@@ -42,7 +42,7 @@ async function probeOnce(url: string): Promise<string | null> {
     });
     if (!res.ok) return null;
     const text = (await res.text()).trim();
-    // Sanity-check the response — these services are simple but a hijacked
+    // Sanity-check the response, these services are simple but a hijacked
     // proxy / DNS could return something else; we only trust IP-shaped tokens.
     if (IPV4_RE.test(text) || IPV6_RE.test(text)) {
       return text;
@@ -63,7 +63,7 @@ async function probeAll(): Promise<string | null> {
 
 /**
  * Returns the panel's egress IP (env override > cached probe > fresh probe).
- * Never throws — failures collapse to `null` and the caller falls back to
+ * Never throws, failures collapse to `null` and the caller falls back to
  * an instructional placeholder in the install command.
  */
 export async function getPanelPublicIp(): Promise<string | null> {
@@ -74,7 +74,7 @@ export async function getPanelPublicIp(): Promise<string | null> {
     return cache.ip;
   }
 
-  // Coalesce concurrent callers — one node-create burst shouldn't trigger
+  // Coalesce concurrent callers, one node-create burst shouldn't trigger
   // N parallel probes against ipify.
   if (inflight) return inflight;
   inflight = (async () => {

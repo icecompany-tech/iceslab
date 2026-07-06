@@ -28,7 +28,7 @@ describe('bootstrapCa', () => {
     expect(ca.privateKeyPem).toContain('-----END PRIVATE KEY-----');
   });
 
-  it('is idempotent — returns the same CA on subsequent calls', async () => {
+  it('is idempotent, returns the same CA on subsequent calls', async () => {
     const first = await bootstrapCa();
     const second = await bootstrapCa();
     expect(second.certPem).toEqual(first.certPem);
@@ -63,7 +63,7 @@ describe('issueNodeCert', () => {
       sans: [{ type: 'ip', value: '127.0.0.1' }],
     });
     // Look for an OctetString-encoded IP in the cert (rough check; real X.509
-    // parse is overkill here — we'll cover that in transport mTLS handshake).
+    // parse is overkill here, we'll cover that in transport mTLS handshake).
     expect(payload.nodeCertPem.length).toBeGreaterThan(500);
   });
 });

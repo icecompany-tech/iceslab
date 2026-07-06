@@ -26,7 +26,7 @@ const apiCallTimeout = 5 * time.Second
 // Config is the per-instance settings for an XrayAdapter.
 type Config struct {
 	// BinaryPath to the `xray` executable. If empty, the adapter runs in
-	// "config-only" mode (writes config.json but doesn't spawn xray) — useful
+	// "config-only" mode (writes config.json but doesn't spawn xray), useful
 	// for tests and dev environments without xray installed.
 	BinaryPath string
 
@@ -103,13 +103,13 @@ func (a *Adapter) Engine() string { return "xray" }
 
 // Start writes the initial config to disk and spawns xray.
 // If REALITY keys are not yet configured (deferred via ApplyInbound), Start
-// is a no-op — the adapter will activate on the first ApplyInbound call.
+// is a no-op, the adapter will activate on the first ApplyInbound call.
 func (a *Adapter) Start(ctx context.Context) error {
 	a.mu.Lock()
 	noKey := a.cfg.Inbound.RealityPrivateKey == ""
 	a.mu.Unlock()
 	if noKey {
-		a.logger.Info("xray adapter: no REALITY key yet — waiting for ApplyInbound from panel")
+		a.logger.Info("xray adapter: no REALITY key yet, waiting for ApplyInbound from panel")
 		return nil
 	}
 	return a.regenerateAndRestart(ctx)
@@ -146,12 +146,12 @@ func (a *Adapter) Stop(ctx context.Context) error {
 // Idempotent: re-adding the same user with the same UUID is a no-op.
 func (a *Adapter) AddUser(user core.User) error {
 	if user.XrayUUID == "" {
-		// User has no Xray credentials — nothing to do.
+		// User has no Xray credentials, nothing to do.
 		return nil
 	}
 	a.mu.Lock()
 	existing, exists := a.users[user.UserID]
-	// Empty flow is intentional for xhttp/ws/grpc/kcp/httpupgrade — Vision
+	// Empty flow is intentional for xhttp/ws/grpc/kcp/httpupgrade, Vision
 	// only works with raw (TCP). Earlier versions silently coerced empty to
 	// "xtls-rprx-vision" as a defensive default; that breaks non-raw
 	// transports because xray rejects clients with mismatched flow vs the
@@ -489,7 +489,7 @@ type xrayInboundCfgWire struct {
 	XhttpMode                               string `json:"xhttpMode,omitempty"`
 	XhttpPaddingBytes                       string `json:"xhttpPaddingBytes,omitempty"`
 	GrpcMultiMode                           bool   `json:"grpcMultiMode,omitempty"`
-	// Slice 24c part 3 — controls inbound `protocol` (vless vs trojan) and
+	// Slice 24c part 3, controls inbound `protocol` (vless vs trojan) and
 	// `settings.clients` shape. Empty/missing → vless (back-compat).
 	Subprotocol string `json:"subprotocol,omitempty"`
 	// Stream security: "reality" (default/empty), "none" (plain transport,
@@ -522,7 +522,7 @@ type xrayInboundCfgWire struct {
 // new InboundConfig is byte-identical to the current one, no restart fires.
 //
 // The wire shape is XrayInboundCfg in packages/shared/src/transport.ts. We
-// keep the parse local here so the adapter owns its protocol's contract —
+// keep the parse local here so the adapter owns its protocol's contract,
 // the dispatcher in server.go only routes raw JSON by protocol name.
 func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	var wire xrayInboundCfgWire
@@ -579,7 +579,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	}
 
 	a.mu.Lock()
-	// Idempotency check — same config → noop. Compare struct fields
+	// Idempotency check, same config → noop. Compare struct fields
 	// instead of byte-marshalling for speed; slice equality via reflect.
 	// C3: a cascade change alone (same inbound) must still trigger a restart,
 	// so factor the cascade fragments into the gate.
@@ -594,7 +594,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	a.logger.Info("xray ApplyInbound: config changed, regenerating and restarting",
 		"sni", wire.RealityServerNames, "shortIds", len(wire.RealityShortIDs))
 
-	// Use background context for the restart — the request that triggered
+	// Use background context for the restart, the request that triggered
 	// this call may have a short deadline and we want xray to keep coming
 	// back up even if the caller times out.
 	return a.regenerateAndRestart(context.Background())

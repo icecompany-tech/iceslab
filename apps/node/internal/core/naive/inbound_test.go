@@ -76,7 +76,7 @@ func newApplyAdapter(t *testing.T, runner *recordingRunner) *Adapter {
 	// proc as non-nil so regenerateAndReloadLocked skips the production
 	// cold-start branch that spawns a real subprocess (caddy binary isn't
 	// on PATH in CI). The zero-value subprocess is never invoked by the
-	// reload path — only its presence matters.
+	// reload path, only its presence matters.
 	a.proc = &subprocess.Subprocess{}
 	a.started = true
 	return a

@@ -88,7 +88,7 @@ func newManagedTestAdapter(t *testing.T, fake *fakeCLI) (*Adapter, string) {
 	a.started = true
 	// Non-nil proc forces regenerateAndReload into the reload branch (via
 	// injected runCmd) instead of the production cold-start path that shells
-	// out to subprocess.New — caddy binary isn't on PATH in CI.
+	// out to subprocess.New, caddy binary isn't on PATH in CI.
 	a.proc = &subprocess.Subprocess{}
 	return a, caddyfile
 }
@@ -270,7 +270,7 @@ func TestReload_NoReloadOnIdempotentAddUser(t *testing.T) {
 	a, _ := newManagedTestAdapter(t, fake)
 	user := core.User{UserID: "u", Username: "a", NaivePassword: "p"}
 	_ = a.AddUser(user)
-	// Repeat — must not invoke caddy reload again.
+	// Repeat, must not invoke caddy reload again.
 	_ = a.AddUser(user)
 	if got := len(fake.calls); got != 1 {
 		t.Errorf("expected 1 reload call total (no-op re-add must not trigger reload); got %d", got)
@@ -294,7 +294,7 @@ func TestReload_FailurePropagates(t *testing.T) {
 }
 
 func TestReload_HonoursTimeout(t *testing.T) {
-	// Reload that never returns — adapter should bail out at ReloadTimeout.
+	// Reload that never returns, adapter should bail out at ReloadTimeout.
 	fake := &fakeCLI{
 		handler: func(name string, args []string) ([]byte, error) {
 			time.Sleep(800 * time.Millisecond)

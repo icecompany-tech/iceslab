@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import { config } from '../config.js';
 
 /**
- * K2 — outbound webhook bus.
+ * K2: outbound webhook bus.
  *
  * Domain events flow through here as signed JSON POSTs to every configured
  * URL (`WEBHOOK_URLS`). Mirrors telegram-notify's contract: callers never

@@ -173,7 +173,7 @@ func TestApplyInbound_RestartPathOnS1(t *testing.T) {
 
 	// S1 change now routes through diffRestart (awg-quick down/up) because
 	// the amneziawg fork doesn't apply junk/magic-size changes via syncconf
-	// on a running interface — frozen at init time.
+	// on a running interface, frozen at init time.
 	body := wirePayload(t, func(m map[string]any) {
 		m["serverPrivateKey"] = testWGPrivKey
 		m["obfuscation"].(map[string]any)["s1"] = 88
@@ -235,7 +235,7 @@ func TestApplyInbound_RejectsSubnetChangeWithPeers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
-	runner.calls = nil // reset — AddUser also triggered a syncconf
+	runner.calls = nil // reset, AddUser also triggered a syncconf
 
 	body := wirePayload(t, func(m map[string]any) {
 		m["subnet"] = "172.16.0.0/24" // different subnet

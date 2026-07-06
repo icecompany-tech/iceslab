@@ -17,7 +17,7 @@ type xrayStatsResponse struct {
 }
 
 // `value` arrives as a bare JSON number (or stringified number, depending
-// on xray-core fork). json.Number absorbs both — string-typed Value would
+// on xray-core fork). json.Number absorbs both, string-typed Value would
 // fail strict-mode unmarshal on int input, killing the whole batch.
 type xrayStatEntry struct {
 	Name  string      `json:"name"`
@@ -30,7 +30,7 @@ type userByteCounters struct {
 }
 
 // queryUserStats invokes `xray api statsquery -reset` and returns per-user
-// counters. Mirror of the xray adapter's stats path — duplicated rather
+// counters. Mirror of the xray adapter's stats path, duplicated rather
 // than imported so the SS adapter has no compile-time dependency on the
 // xray adapter's internals.
 func queryUserStats(

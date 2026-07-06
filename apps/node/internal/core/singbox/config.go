@@ -11,7 +11,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
-// sing-box config structs — only the subset we render for a TUIC inbound.
+// sing-box config structs, only the subset we render for a TUIC inbound.
 // Full schema: https://sing-box.sagernet.org/configuration/
 
 type sbConfig struct {

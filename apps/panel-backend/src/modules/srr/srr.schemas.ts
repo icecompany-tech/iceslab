@@ -17,7 +17,7 @@ export const SrrFormat = z.enum([
 /**
  * Validate that a uaPattern compiles. Inline-flag prefix `(?i)` etc. is
  * stripped first to mirror the runtime matcher in srr.service.ts. We don't
- * try to enforce non-backtracking patterns — admins are trusted; the route
+ * try to enforce non-backtracking patterns, admins are trusted; the route
  * handler caps UA length to defang ReDoS.
  */
 function validateUaPattern(value: string): boolean {

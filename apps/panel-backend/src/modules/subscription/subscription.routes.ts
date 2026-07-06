@@ -39,7 +39,7 @@ type Format = z.infer<typeof FormatEnum>;
 
 const QuerySchema = z.object({
   format: FormatEnum.optional(),
-  // Slice 29 — outbound group flavour. Per-format semantics:
+  // Slice 29: outbound group flavour. Per-format semantics:
   //   sing-box   : 'selector' (default) | 'url-test'   (auto-failover)
   //   xray-json  : 'flat'     (default) | 'balancer'   (observatory+leastPing)
   //   clash      : already always emits url-test in its proxy-groups
@@ -47,7 +47,7 @@ const QuerySchema = z.object({
   // "smart auto-failover" form usually want it everywhere their clients
   // see it, not per-format.
   bundle: z.enum(['selector', 'url-test', 'flat', 'balancer']).optional(),
-  // Slice 28 — when set, cap subscription to top-N nodes ranked by region
+  // Slice 28: when set, cap subscription to top-N nodes ranked by region
   // match (CF-IPCountry) + current utilization. Default (omitted) keeps
   // legacy "return everything" behaviour so existing clients don't regress.
   // Capped at 32 to avoid pathological "give me 9999" requests.
@@ -82,28 +82,28 @@ function isFormat(value: string): value is Format {
 /**
  * Resolve which format the client wants, in this priority order:
  *   1. Explicit `?format=` always wins.
- *   2. SRR (Subscription Response Rules) — UA regex match against admin-
+ *   2. SRR (Subscription Response Rules): UA regex match against admin-
  *      defined rules in DB. Default seed rules cover Hiddify/Clash/v2rayN/
  *      sing-box/AmneziaWG-app + a `.*` catch-all → `plain`.
  *   3. Legacy Accept-header heuristic (`application/json` → `json`) for the
  *      IcePath-VPN bot integration that predates SRR.
- *   4. `plain` fallback (base64 URI list — universal).
+ *   4. `plain` fallback (base64 URI list, universal).
  */
 /**
- * Slice S1 — set the subscription-metadata HTTP headers most VPN clients
+ * Slice S1: set the subscription-metadata HTTP headers most VPN clients
  * read alongside the body. Conventions across Hiddify/V2RayNG/Streisand/
  * Happ/Mihomo:
  *
- *   Profile-Title              — display name in the client's profile list
- *   Profile-Update-Interval    — refresh cadence in HOURS (clients re-fetch
+ *   Profile-Title              - display name in the client's profile list
+ *   Profile-Update-Interval    - refresh cadence in HOURS (clients re-fetch
  *                                without admin intervention)
- *   Subscription-Userinfo      — `upload=N; download=N; total=N; expire=T`
+ *   Subscription-Userinfo      - `upload=N; download=N; total=N; expire=T`
  *                                (RFC-3339-ish), drives the quota gauge
- *   Support-URL                — clickable link in the profile detail page
- *   Announce                   — short banner shown to the user (rendered
+ *   Support-URL                - clickable link in the profile detail page
+ *   Announce                   - short banner shown to the user (rendered
  *                                template, supports {{TRAFFIC_LEFT}} etc.)
  *
- * Only well-formed values are emitted — admins can leave any setting NULL
+ * Only well-formed values are emitted, admins can leave any setting NULL
  * to omit the corresponding header.
  */
 async function applySubscriptionHeaders(
@@ -123,7 +123,7 @@ async function applySubscriptionHeaders(
 
   // Subscription-Userinfo. `upload+download === used`. We don't track
   // upload separately yet (per-user xray stats sum both directions),
-  // so attribute everything to `download` and report `upload=0` — clients
+  // so attribute everything to `download` and report `upload=0`, clients
   // sum them to derive used quota and the gauge stays correct.
   const used = Math.max(0, user.trafficUsedBytes);
   const total = user.trafficLimitBytes ?? 0;
@@ -136,7 +136,7 @@ async function applySubscriptionHeaders(
     `upload=0; download=${used}; total=${total}; expire=${expireUnix}`,
   );
 
-  // Announce — rendered template. Skip emission if template empty.
+  // Announce: rendered template. Skip emission if template empty.
   if (settings.announceTemplate) {
     const trafficLeft =
       user.trafficLimitBytes === null
@@ -161,7 +161,7 @@ async function applySubscriptionHeaders(
     });
     if (announce.length > 0) {
       // Some clients require base64 encoding for non-ASCII announce. We
-      // emit both forms — Happ reads `Announce-URL`-style raw, Hiddify
+      // emit both forms: Happ reads `Announce-URL`-style raw, Hiddify
       // base64. Stick with `Announce: base64:<...>` which both accept.
       reply.header(
         'Announce',
@@ -184,7 +184,7 @@ async function resolveFormat(
 }
 
 // Wave-14 #6: a browser navigating to /sub/<token> should see a human page,
-// not a base64 dump. Trigger on Accept: text/html with no explicit ?format —
+// not a base64 dump. Trigger on Accept: text/html with no explicit ?format,
 // VPN clients send their own UA/Accept and never hit this. An explicit
 // ?format= always wins (so `?format=plain` in a browser still returns raw).
 function wantsHtmlPage(
@@ -243,7 +243,7 @@ function sanitizeFilename(name: string): string {
 
 export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
   // Secondary IP-only ceiling. The route's primary rate-limit is keyed on
-  // (ip, token) — legit, but an attacker rotates tokens to dodge it. This
+  // (ip, token): legit, but an attacker rotates tokens to dodge it. This
   // hook caps total /sub hits per IP via a sliding Redis bucket, well
   // above legit shared-CGNAT polling so real users never feel it.
   async function ipRateLimitHook(
@@ -253,7 +253,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     const ip = request.ip;
     const key = `sec:sub-ip:${ip}`;
     // Atomic INCR + (set TTL if first). Prior version did INCR then EXPIRE
-    // in two round-trips — if the process crashed between them, the key
+    // in two round-trips, if the process crashed between them, the key
     // would live forever (until Redis maxmemory-policy evicted it). The
     // SET-NX-EX-1 below ensures TTL is established the moment the key
     // becomes non-empty, and ignored otherwise (NX). INCR then reads/bumps.
@@ -268,13 +268,13 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     }
   }
 
-  // GET /sub/:token — public (the token IS the credential).
+  // GET /sub/:token - public (the token IS the credential).
   // Two-bucket rate-limit:
   //   - per-(ip,token) bucket caps a legit client's polling rate
   //   - per-(ip) bucket via ipRateLimitHook catches token-rotation
   // Path prefix is admin-configurable via SUBSCRIPTION_PATH_PREFIX env
   // (default `/sub`). Lets operators mask Iceslab signature on the
-  // wire — e.g. `/v` so user links look like https://panel/v/<token>.
+  // wire, e.g. `/v` so user links look like https://panel/v/<token>.
   app.get(`${config.SUBSCRIPTION_PATH_PREFIX}/:token`, {
     onRequest: [ipRateLimitHook],
     config: {
@@ -306,7 +306,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     // canary list, the token by definition was leaked from where it was
     // planted (pastebin, screenshot, dropped USB, …). Alert immediately,
     // blacklist the source IP (same Redis key as the path-honeypot), and
-    // return a plausible-empty 200 — making the attacker believe their
+    // return a plausible-empty 200, making the attacker believe their
     // exfiltrated token is "just empty subscription" instead of "this is
     // a panel that knows it was leaked."
     if (config.HONEY_USER_TOKENS.includes(params.token)) {
@@ -329,7 +329,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      // Slice S2 — HWID enforcement runs BEFORE generateSubscription so
+      // Slice S2: HWID enforcement runs BEFORE generateSubscription so
       // a denied client doesn't burn a subscription_request_history row
       // or stress the binding query. Cost is one cheap user lookup.
       const hwidHeader = request.headers['x-hwid'];
@@ -355,7 +355,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           resolveSquadHwidLimit(userMin.groupMembers.map((m) => m.group.hwidDeviceLimit));
         const hwidResult = await enforceHwid(userMin.id, hwid, effectiveHwidLimit);
         // Always emit the gauge header so the client can render "2/3" in
-        // its profile detail UI — even on success, even when no limit set.
+        // its profile detail UI, even on success, even when no limit set.
         // HTTP headers are ISO-8859-1; use ASCII-only "unlimited" instead
         // of '∞' which throws on the wire.
         if (hwidResult.limit !== null) {
@@ -370,7 +370,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           );
         }
         if (hwidResult.status === 'denied') {
-          // 403 with a structured body — clients that don't read headers
+          // 403 with a structured body, clients that don't read headers
           // still get a parseable reason.
           return reply.code(403).send({
             error: 'HWID_LIMIT',
@@ -395,7 +395,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         cfCountry,
       });
 
-      // Slice 30 — host-level format gating. Each endpoint carries an
+      // Slice 30: host-level format gating. Each endpoint carries an
       // optional `disableForFormats[]` from its originating host row; we
       // filter before invoking the format-specific formatter so each
       // formatter can stay agnostic of host presence.
@@ -406,7 +406,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         .filter((e) => !(e.disableForFormats ?? []).includes('plain'))
         .map((e) => e.uri);
 
-      // Slice S1 — emit subscription-metadata HTTP headers every client
+      // Slice S1: emit subscription-metadata HTTP headers every client
       // app reads to set its profile name, refresh interval, quota gauge,
       // support link, and announce banner. Done after generateSubscription
       // so we have the user's traffic/expire snapshot.

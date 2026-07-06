@@ -6,10 +6,10 @@
  * 2026-05; community proposals exist but aren't standardised.
  *
  * What we ship:
- *   1. `buildMieruProfileJson(...)` — emits the JSON that mieru clients
+ *   1. `buildMieruProfileJson(...)`: emits the JSON that mieru clients
  *      import via "Add profile from file/clipboard". Subscription endpoint
  *      `/sub/<token>?format=mieru-json` returns this.
- *   2. `buildMieruUri(...)` — pseudo-URI for the plain-format subscription
+ *   2. `buildMieruUri(...)`: pseudo-URI for the plain-format subscription
  *      list. Form: `mieru://<password>@<host>:<port>?mtu=1400#<name>`. Not
  *      a real protocol scheme but matches our other URI shapes for client
  *      tooling that can fall back to "we don't know this URI but show it
@@ -76,7 +76,7 @@ export interface MieruUriOpts {
 
 /**
  * Pseudo-URI for plain-list and JSON subscription formats. Mieru-aware
- * clients won't auto-import this — they want the JSON profile — but it
+ * clients won't auto-import this, they want the JSON profile, but it
  * keeps our subscription emitter shape uniform.
  */
 export function buildMieruUri(opts: MieruUriOpts): string {

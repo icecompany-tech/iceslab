@@ -6,13 +6,13 @@
  *
  * Differences vs VLESS+REALITY (see uri.ts):
  *   - Scheme is `trojan://` not `vless://`
- *   - Auth is a password (we reuse user.xrayUuid as the password — UUIDs
+ *   - Auth is a password (we reuse user.xrayUuid as the password, UUIDs
  *     have plenty of entropy and admins are already managing them)
  *   - No `flow=` param: Trojan doesn't pair with Vision (xtls-rprx-vision
  *     is a VLESS-only inner protocol)
  *   - No `encryption=none`: Trojan defines no payload encryption beyond TLS
  *
- * Same REALITY private/public key pair drives both inbounds — clients only
+ * Same REALITY private/public key pair drives both inbounds, clients only
  * see the difference at the URI scheme level.
  */
 
@@ -31,7 +31,7 @@ export interface TrojanRealityUriOpts {
   path?: string;
   hostHeader?: string;
   serviceName?: string;
-  /** Slice 30.1 — per-host overrides. See VlessRealityUriOpts for semantics. */
+  /** Slice 30.1: per-host overrides. See VlessRealityUriOpts for semantics. */
   alpn?: string[];
   allowInsecure?: boolean;
   securityLayer?: 'default' | 'tls' | 'none';
@@ -79,7 +79,7 @@ export function buildTrojanRealityUri(opts: TrojanRealityUriOpts): string {
     params.set('headerType', 'none');
   }
 
-  // Password is the userinfo segment — must be URL-encoded for safety.
+  // Password is the userinfo segment, must be URL-encoded for safety.
   // UUIDs (which we use as passwords) don't actually need encoding, but
   // future arbitrary passwords might.
   return `trojan://${encodeURIComponent(opts.password)}@${opts.host}:${opts.port}?${params.toString()}#${encodeURIComponent(opts.name)}`;

@@ -17,7 +17,7 @@ export function isPublicRoutableIp(ip: string): boolean {
   if (!ip) return false;
   const v = isIP(ip);
   if (v === 0) return false;
-  // IPv4-mapped IPv6 (::ffff:1.2.3.4) — recurse into the v4 side so the
+  // IPv4-mapped IPv6 (::ffff:1.2.3.4), recurse into the v4 side so the
   // private-range guards below catch ::ffff:10.0.0.1 / ::ffff:127.0.0.1.
   // Otherwise an attacker spoofing X-Forwarded-For: ::ffff:10.0.0.1 would pass
   // isIP===6 and the v6 branch's loose-prefix checks miss it.
@@ -34,7 +34,7 @@ export function isPublicRoutableIp(ip: string): boolean {
     if (a === 172 && b >= 16 && b <= 31) return false;
     if (a === 192 && b === 168) return false;
     if (a === 0) return false;
-    // 100.64.0.0/10 — CGNAT. Not strictly "private" but operators sharing a
+    // 100.64.0.0/10: CGNAT. Not strictly "private" but operators sharing a
     // carrier-NAT range shouldn't be blacklisted by us either.
     if (a === 100 && b >= 64 && b <= 127) return false;
     return true;

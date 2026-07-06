@@ -3,7 +3,7 @@ package naive
 // inboundCfgWire mirrors NaiveConfigSchema in
 // apps/panel-backend/src/modules/inbounds/inbounds.schemas.ts. The agent
 // keeps the install-time `ListenPort` from its own Config (Caddyfile root
-// `:<port>`) — the panel never pushes it because it's identity for the node,
+// `:<port>`), the panel never pushes it because it's identity for the node,
 // not per-inbound.
 type inboundCfgWire struct {
 	Hostname       string `json:"hostname"`

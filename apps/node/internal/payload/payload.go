@@ -10,7 +10,7 @@ import (
 	"fmt"
 )
 
-// Payload is the agent's identity material — issued once at node creation
+// Payload is the agent's identity material, issued once at node creation
 // and stored on the node-agent host.
 //
 // Slice 38 fields (PanelURL/NodeID/HeartbeatToken) drive the heartbeat
@@ -24,7 +24,7 @@ type Payload struct {
 	PanelURL       string `json:"panelUrl,omitempty"`
 	NodeID         string `json:"nodeId,omitempty"`
 	HeartbeatToken string `json:"heartbeatToken,omitempty"`
-	// Slice S6 — SHA-256 fingerprint (lowercase hex, no colons) of the
+	// Slice S6: SHA-256 fingerprint (lowercase hex, no colons) of the
 	// panel-client cert. When present, the agent pins this in its TLS
 	// VerifyPeerCertificate hook and rejects any other leaf even if it's
 	// CA-signed. Pre-S6 payloads omit the field; agent falls back to

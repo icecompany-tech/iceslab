@@ -90,7 +90,7 @@ func TestAdapter_AddRemoveUser(t *testing.T) {
 		t.Errorf("config missing alice peer: %s", blob)
 	}
 
-	// Idempotent re-add — same data, should not error.
+	// Idempotent re-add, same data, should not error.
 	if err := a.AddUser(user); err != nil {
 		t.Fatalf("AddUser repeat: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestAdapter_AddRemoveUser(t *testing.T) {
 }
 
 func TestAdapter_AddUserWithCIDRIP(t *testing.T) {
-	// Caller passes CIDR form already — adapter should not double-suffix.
+	// Caller passes CIDR form already, adapter should not double-suffix.
 	a, cfgPath := newTestAdapter(t)
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -220,7 +220,7 @@ func TestAdapter_GetStats_ParsesDumpAndReportsDeltas(t *testing.T) {
 		t.Errorf("poll2 totals: got %d/%d, want 5610/152", stats.TotalBytesIn, stats.TotalBytesOut)
 	}
 
-	// Poll 3: interface bounced — counters reset below the snapshot. Delta must
+	// Poll 3: interface bounced, counters reset below the snapshot. Delta must
 	// restart from the current value (100/40), never go negative.
 	currentDump = strings.Replace(fakeAwgDump, "24390\t348", "100\t40", 1)
 	stats, err = a.GetStats()

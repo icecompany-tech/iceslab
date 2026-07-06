@@ -11,10 +11,10 @@ import { loginAttempts } from '../../lib/metrics.js';
 import { config } from '../../config.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/auth/status — public discovery: tells the frontend which auth
+  // GET /api/auth/status - public discovery: tells the frontend which auth
   // methods are enabled and whether bootstrap registration is still open.
   // Also returns the panel's public URL so the SPA can build full
-  // subscription links (`<publicUrl>/sub/<token>`) for copy-paste — pre-
+  // subscription links (`<publicUrl>/sub/<token>`) for copy-paste, pre-
   // cycle #6 admins saw only the path `/sub/...` and had to mentally
   // prepend the domain. Now the UI displays the ready-to-paste URL.
   app.get('/api/auth/status', async () => {
@@ -28,7 +28,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
       panel: {
         publicUrl: config.PUBLIC_URL.replace(/\/$/, ''),
-        // Subscription path prefix. Default `/sub` — admin can override
+        // Subscription path prefix. Default `/sub`, admin can override
         // via SUBSCRIPTION_PATH_PREFIX env to mask the Iceslab
         // signature (e.g. `/v` or `/get`). Always starts with `/`.
         subscriptionPathPrefix: config.SUBSCRIPTION_PATH_PREFIX,
@@ -36,7 +36,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // POST /api/auth/login — strict rate limit (anti-brute-force)
+  // POST /api/auth/login: strict rate limit (anti-brute-force)
   app.post(
     '/api/auth/login',
     {
@@ -56,17 +56,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           sub: admin.id,
           role: admin.role,
         });
-        // Slice 37 — also drop a same-origin cookie so server-rendered admin
+        // Slice 37 - also drop a same-origin cookie so server-rendered admin
         // tooling (Bull-board at /admin/queues) inherits the session without
         // requiring the SPA to manually copy localStorage to a header.
-        // HttpOnly + SameSite=Strict — cookie is unreadable to JS and only
+        // HttpOnly + SameSite=Strict, cookie is unreadable to JS and only
         // travels with first-party requests, so XSS can't exfil it and
         // CSRF can't ride it cross-site.
         reply.setCookie('iceslab_auth', token, {
           httpOnly: true,
           sameSite: 'strict',
           path: '/',
-          maxAge: 60 * 60 * 24, // 24h — matches default JWT_EXPIRES_IN.
+          maxAge: 60 * 60 * 24, // 24h, matches default JWT_EXPIRES_IN.
           // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
           // from .env but the actual process.env is empty (e.g. dotenv-only
           // setup with no shell-level export), this evaluated to false in
@@ -89,7 +89,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           // 429 + Retry-After is the canonical lockout response. Body
           // discloses retryAfter so a friendly UI can countdown, but the
           // 401 vs 429 distinction also tells legit users they aren't
-          // typing the wrong password — they're racing a stale lockout.
+          // typing the wrong password, they're racing a stale lockout.
           loginAttempts.inc({ result: 'locked' });
           if (config.TELEGRAM_NOTIFY_LOGIN_EVENTS) {
             notifyTelegramAsync(
@@ -132,7 +132,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/auth/register — bootstrap only (no admins exist) + strict rate limit
+  // POST /api/auth/register: bootstrap only (no admins exist) + strict rate limit
   app.post(
     '/api/auth/register',
     {
@@ -166,7 +166,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // GET /api/auth/me — protected: returns current admin from JWT
+  // GET /api/auth/me - protected: returns current admin from JWT
   app.get(
     '/api/auth/me',
     { onRequest: [requireAuth] },
@@ -179,7 +179,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ───── K8: 2FA (TOTP) management — all protected ─────
+  // ───── K8: 2FA (TOTP) management, all protected ─────
 
   // Map twofa service errors to HTTP. Shared by enable/disable/setup.
   function twofaError(reply: FastifyReply, err: unknown): FastifyReply | null {

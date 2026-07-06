@@ -26,14 +26,14 @@ const xrayEp: SubscriptionEndpoint = {
   uri: 'vless://...',
 };
 
-// Slice 24c part 3a — Trojan subprotocol over the same REALITY stack.
+// Slice 24c part 3a: Trojan subprotocol over the same REALITY stack.
 const trojanEp: SubscriptionEndpoint = {
   ...xrayEp,
   subprotocol: 'trojan',
   uri: 'trojan://...',
 };
 
-// Slice 24d — Shadowsocks 2022.
+// Slice 24d: Shadowsocks 2022.
 const ssEp: SubscriptionEndpoint = {
   protocol: 'shadowsocks',
   nodeName: 'eu-1',
@@ -44,7 +44,7 @@ const ssEp: SubscriptionEndpoint = {
   uri: 'ss://...',
 };
 
-// ShadowTLS v3 — an ss outbound that detours through a shadowtls outbound.
+// ShadowTLS v3: an ss outbound that detours through a shadowtls outbound.
 const shadowtlsEp: SubscriptionEndpoint = {
   protocol: 'shadowtls',
   nodeName: 'eu-1',
@@ -159,7 +159,7 @@ describe('buildSingboxJson', () => {
     expect(stls.tls.server_name).toBe('www.microsoft.com');
   });
 
-  // ───── Slice 24c part 3a — Trojan subprotocol ─────
+  // ───── Slice 24c part 3a: Trojan subprotocol ─────
 
   it('emits a trojan outbound when subprotocol=trojan; UUID becomes password', () => {
     const cfg = parse(buildSingboxJson([trojanEp]));
@@ -208,7 +208,7 @@ describe('buildSingboxJson', () => {
     expect(v.tls.reality).toBeUndefined();
   });
 
-  // ───── Slice 24d — Shadowsocks ─────
+  // ───── Slice 24d: Shadowsocks ─────
 
   it('emits a shadowsocks outbound with method+password and no TLS', () => {
     const cfg = parse(buildSingboxJson([ssEp]));
@@ -219,7 +219,7 @@ describe('buildSingboxJson', () => {
     expect(ss.server_port).toBe(8388);
     expect(ss.method).toBe('2022-blake3-aes-256-gcm');
     expect(ss.password).toBe('cabc78ae-94e3-4a16-936a-133d059acfac');
-    // SS doesn't carry TLS — that field would confuse sing-box's parser
+    // SS doesn't carry TLS, that field would confuse sing-box's parser
     expect(ss.tls).toBeUndefined();
   });
 
@@ -227,7 +227,7 @@ describe('buildSingboxJson', () => {
     const cfg = parse(buildSingboxJson([hysteriaEp, xrayEp, trojanEp, ssEp]));
     const sel = cfg.outbounds.find((o: any) => o.type === 'selector');
     // Note: xrayEp and trojanEp share tag 'eu-1-xray' since both have
-    // protocol='xray' — only the subprotocol differs. In real subscriptions
+    // protocol='xray', only the subprotocol differs. In real subscriptions
     // they'd be on different ports/inbounds with unique nodeNames so tags
     // wouldn't actually collide.
     expect(sel.outbounds).toContain('eu-1-hysteria');
@@ -236,7 +236,7 @@ describe('buildSingboxJson', () => {
     expect(sel.outbounds).toContain('direct');
   });
 
-  // ───── Slice 24c part 2 — transport branches ─────
+  // ───── Slice 24c part 2: transport branches ─────
 
   it('emits ws transport block with path + Host header', () => {
     const wsEp = { ...xrayEp, network: 'ws' as const, path: '/api', hostHeader: 'cdn.example.com' };

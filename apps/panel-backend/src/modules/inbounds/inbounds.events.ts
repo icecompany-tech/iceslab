@@ -8,7 +8,7 @@ import { redis } from '../../lib/redis.js';
  *
  * `inbound.{created,updated,deleted}` and `node.created` all collapse to a
  * single job: "recompute the full inbound set for this node and push it
- * through mTLS." Idempotent — re-firing for an unchanged set is a node-side
+ * through mTLS." Idempotent, re-firing for an unchanged set is a node-side
  * no-op, so we don't try to dedupe at the producer level.
  *
  * The job ID is per-node so multiple back-to-back inbound mutations on the
@@ -16,9 +16,9 @@ import { redis } from '../../lib/redis.js';
  */
 export function registerInboundEventHandlers(): void {
   const enqueue = (nodeId: string, reason: string): void => {
-    console.log(`[event] ${reason} — enqueue applyInbounds for node ${nodeId}`);
+    console.log(`[event] ${reason}: enqueue applyInbounds for node ${nodeId}`);
     // Set a dirty flag BEFORE enqueuing. If a worker is already mid-push
-    // for this node, BullMQ silently rejects the duplicate jobId — the
+    // for this node, BullMQ silently rejects the duplicate jobId, the
     // worker's end-of-job check sees this flag and re-enqueues so the
     // intermediate edit doesn't disappear. See applyInboundsForNode.
     void redis.set(inboundDirtyKey(nodeId), '1').catch(() => null);
@@ -46,7 +46,7 @@ export function registerInboundEventHandlers(): void {
     enqueue(nodeId, `inbound.deleted ${inboundId}`);
   });
 
-  // When a node is registered, also push its (currently empty) inbound set —
+  // When a node is registered, also push its (currently empty) inbound set,
   // sets the node-agent into a known good state (no leftover from a previous
   // re-bootstrap) and exercises the auto-push pipeline immediately.
   eventBus.on('node.created', ({ nodeId, nodeName }) => {
@@ -60,10 +60,10 @@ export function registerInboundEventHandlers(): void {
     enqueue(nodeId, `node.updated ${nodeName}`);
   });
 
-  // ───── Slice 27 — Profile + Binding events ─────
+  // ───── Slice 27: Profile + Binding events ─────
   //
-  // binding.* is per-(profile, node) — only that node needs re-push.
-  // profile.* changed shared config — every bound node needs re-push.
+  // binding.* is per-(profile, node), only that node needs re-push.
+  // profile.* changed shared config, every bound node needs re-push.
 
   eventBus.on('binding.created', ({ bindingId, nodeId }) => {
     enqueue(nodeId, `binding.created ${bindingId}`);

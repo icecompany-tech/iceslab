@@ -4,11 +4,11 @@ import {
   type CreateInboundInput,
 } from '../inbounds/inbounds.schemas.js';
 
-// We reuse per-protocol config schemas from the old inbounds module — they
+// We reuse per-protocol config schemas from the old inbounds module, they
 // describe the SHARED part of each profile's config and stay valid as
 // `Profile.config`. Per-node fields (ACME domain, AmneziaWG private key,
 // Shadowsocks server PSK, MTProto derived secret, ...) move to
-// ProfileNodeBinding.overrides — see resolveBindingConfig() in profiles.service.
+// ProfileNodeBinding.overrides: see resolveBindingConfig() in profiles.service.
 
 const NameSchema = z
   .string()
@@ -59,7 +59,7 @@ export function engineValidForProtocol(
   return (ENGINE_OPTIONS[protocol] ?? []).includes(engine);
 }
 
-// Discriminated union — same shape as the old InboundConfigByProtocol but
+// Discriminated union, same shape as the old InboundConfigByProtocol but
 // without the per-node `nodeId/port/publicHost` fields. Profile holds the
 // shared template only.
 const ProfileConfigByProtocol = z.discriminatedUnion('protocol', [
@@ -136,7 +136,7 @@ export type UpdateBindingInput = z.infer<typeof UpdateBindingSchema>;
 
 export const BulkBindSchema = z.object({
   /** Bind this profile to all of these nodes in one call. Existing bindings
-   *  for the same (profile, node) pair are skipped — idempotent. */
+   *  for the same (profile, node) pair are skipped, idempotent. */
   profileId: z.uuid(),
   nodeIds: z.array(z.uuid()).min(1).max(100),
   port: PortSchema,

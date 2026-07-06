@@ -4,11 +4,11 @@
 // any 1..65535 port for a binding. Without this auto-open, an admin
 // picking port 8080 in the UI sees the inbound config applied on the
 // agent side (server is listening) yet handshakes drop silently at
-// the firewall — exactly the cross-layer class of bug we burned 4 VPS
+// the firewall, exactly the cross-layer class of bug we burned 4 VPS
 // on during cycle #6 (subnet collision was its sibling).
 //
 // Idempotent by design: `ufw allow N/proto` is a no-op when the rule
-// already exists. We don't track old ports for cleanup — leftover
+// already exists. We don't track old ports for cleanup, leftover
 // ufw rules from past port changes are harmless (just a few extra
 // ALLOW lines). Add `--delete` logic only if a real operator
 // complains about firewall noise.
@@ -42,8 +42,8 @@ var (
 // iptables, which takes a global lock; when the agent swaps a cascade entry it
 // re-applies several rules back-to-back, and a concurrent iptables run (ufw's
 // own reload, fail2ban, docker) can hold that lock. A single `ufw allow` then
-// exits non-zero and the rule it was adding — e.g. the cascade link-in AllowFrom
-// rule — silently never lands, breaking the hop until the next apply.
+// exits non-zero and the rule it was adding, e.g. the cascade link-in AllowFrom
+// rule, silently never lands, breaking the hop until the next apply.
 var ufwLockRe = regexp.MustCompile(`(?i)(xtables lock|could not get lock|temporarily unavailable|resource temporarily)`)
 
 // runUfw runs `ufw <args>` and retries a few times when it fails on transient
@@ -72,7 +72,7 @@ func runUfw(ctx context.Context, args ...string) ([]byte, error) {
 
 // Allow opens an inbound UFW rule for the given (port, proto).
 // proto must be "tcp" or "udp". Returns nil on success OR when ufw
-// isn't installed — agents on hosts without ufw shouldn't fail
+// isn't installed, agents on hosts without ufw shouldn't fail
 // applyInbound just because of firewall management.
 func Allow(ctx context.Context, logger *slog.Logger, port int, proto string) {
 	if port <= 0 || port > 65535 {
@@ -101,7 +101,7 @@ func Allow(ctx context.Context, logger *slog.Logger, port int, proto string) {
 	}
 	out, err := runUfw(ctx, "allow", spec)
 	if err != nil {
-		// Non-fatal — agent stays alive, admin can fix UFW manually.
+		// Non-fatal: agent stays alive, admin can fix UFW manually.
 		logger.Warn("firewall.Allow: ufw allow failed",
 			"spec", spec, "err", err, "out", string(out))
 		return

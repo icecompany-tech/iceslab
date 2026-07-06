@@ -13,7 +13,7 @@ import { usersRoutes } from './modules/users/users.routes.js';
 import { nodesRoutes } from './modules/nodes/nodes.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { srrRoutes } from './modules/srr/srr.routes.js';
-// Slice 27 — `inboundsRoutes` retired. The new /api/profiles + /api/bindings
+// Slice 27: `inboundsRoutes` retired. The new /api/profiles + /api/bindings
 // pair from `profilesRoutes` replaces it. The inbounds module file is kept
 // in the tree for now because its config schemas are reused by profiles, but
 // no routes are mounted.
@@ -50,7 +50,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // X-Forwarded-For trust hops, gated by env. Zero (default) ignores
     // the header entirely so dev / single-host runs aren't spoofable.
     // Production behind Caddy + Cloudflare uses TRUST_PROXY_HOPS=2.
-    // Bumping this above the real hop count is a security bug — any
+    // Bumping this above the real hop count is a security bug, any
     // client can then forge X-Forwarded-For and dodge per-IP rate limits.
     trustProxy: config.TRUST_PROXY_HOPS,
   });
@@ -58,7 +58,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
       // Log the issues to stdout so admins can see *which field* failed
-      // without needing to open browser DevTools — caught by request log
+      // without needing to open browser DevTools, caught by request log
       // but with full issue array (path + message + code per offending
       // field) instead of just `statusCode: 400`.
       request.log.warn(
@@ -72,7 +72,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
 
-    // Honor explicit statusCode set by Fastify plugins — most importantly
+    // Honor explicit statusCode set by Fastify plugins, most importantly
     // @fastify/rate-limit, which throws Error{statusCode:429} when a route
     // exceeds its per-route or global budget. Before this branch existed,
     // every rate-limit hit fell through to the generic 500 path below: the
@@ -82,7 +82,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     // for what is normal protection. Caught live 2026-05-12 on cycle #6
     // reality-check while testing the login per-IP rate-limit (max=5/min).
     //
-    // We only special-case 4xx — 5xx-flagged plugin errors should still
+    // We only special-case 4xx, 5xx-flagged plugin errors should still
     // surface as our generic 500 because something IS broken and the log
     // entry has diagnostic value.
     const errWithCode = error as { statusCode?: number; message?: string };
@@ -101,7 +101,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     });
   });
 
-  // Slice 33 — HTTP request histogram. `onResponse` fires after the route
+  // Slice 33: HTTP request histogram. `onResponse` fires after the route
   // matched, so request.routeOptions.url is the templated path (low
   // cardinality), not the raw URL with embedded ids/tokens.
   app.addHook('onResponse', async (request, reply) => {
@@ -123,7 +123,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // every route below so it covers /metrics and all plugin routes.
   app.addHook('preHandler', enforceScopes);
 
-  // /metrics — Prometheus scrape endpoint. Auth-gated so it isn't a free
+  // /metrics: Prometheus scrape endpoint. Auth-gated so it isn't a free
   // info disclosure; Prometheus jobs use an `icp_*` API token in
   // Authorization: Bearer for scraping.
   app.get(
@@ -144,13 +144,13 @@ export async function buildApp(): Promise<FastifyInstance> {
     };
   });
 
-  // Compress JSON responses ≥1 KB. Dashboard overview is the obvious target —
+  // Compress JSON responses ≥1 KB. Dashboard overview is the obvious target,
   // the per-node metrics + nodes table + events array runs ~12 KB and gzips
   // to ~2 KB. Below threshold (small lists, error bodies) we skip compression
   // to avoid the CPU/latency cost on responses where the savings are noise.
   //
   // Restricted to application/json so subscription URIs (text/plain, YAML,
-  // wgconf) stay raw — those clients are mobile VPN apps that don't always
+  // wgconf) stay raw, those clients are mobile VPN apps that don't always
   // negotiate Accept-Encoding correctly, and the payloads are small.
   //
   // Skipped under NODE_ENV=test: vitest's app.inject() advertises
@@ -169,7 +169,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fastifyCors, {
     origin: config.CORS_ORIGIN.split(',').map((s) => s.trim()),
     credentials: true,
-    // Explicit methods — `@fastify/cors` defaults to GET/HEAD/POST only,
+    // Explicit methods, `@fastify/cors` defaults to GET/HEAD/POST only,
     // which silently breaks DELETE/PUT mutations from the SPA (browser
     // CORS preflight rejects them). Caught the first time admin tried to
     // delete a user via the UI.
@@ -197,7 +197,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fastifyJwt, {
     secret: config.JWT_SECRET,
     sign: { expiresIn: config.JWT_EXPIRES_IN },
-    // Slice 37 — also accept the JWT via cookie so server-rendered tools
+    // Slice 37: also accept the JWT via cookie so server-rendered tools
     // mounted on the panel origin (Bull-board UI at /admin/queues) can be
     // gated behind requireAuth without copy-pasting tokens. The SPA sets
     // this cookie on login alongside its localStorage copy.
@@ -209,7 +209,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Tier-1 security: blacklist + honeypot + geo-block. Mounted before
   // every route so a flagged IP can't even reach business logic. Skipped
-  // entirely under NODE_ENV=test — tests pose as random IPs and we don't
+  // entirely under NODE_ENV=test, tests pose as random IPs and we don't
   // want them tripping the honeypot when they probe `/.env` etc.
   if (config.NODE_ENV !== 'test') {
     await registerSecurityGate(app);

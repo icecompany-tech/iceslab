@@ -78,7 +78,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   // Existing bindings keep their port - admin edits them inline in
   // Nodes → Edit. Initialized to the profile default on each open.
   const [port, setPort] = useState<number>(defaultPort);
-  // F-P1-b — once the admin types a port, stop auto-suggesting so we don't
+  // F-P1-b: once the admin types a port, stop auto-suggesting so we don't
   // clobber their choice. Reset on each open.
   const [portTouched, setPortTouched] = useState(false);
   useEffect(() => {

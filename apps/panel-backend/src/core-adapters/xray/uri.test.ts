@@ -68,7 +68,7 @@ describe('buildVlessRealityUri', () => {
     expect(uri).toContain('type=ws');
     expect(uri).toContain('path=%2Fapi');
     expect(uri).toContain('host=cdn.example.com');
-    // Vision is incompatible with ws — must not be emitted.
+    // Vision is incompatible with ws, must not be emitted.
     expect(uri).not.toContain('flow=');
   });
 

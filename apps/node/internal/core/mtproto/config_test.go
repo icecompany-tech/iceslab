@@ -30,7 +30,7 @@ func TestDeriveSecret_DomainChangeRotates(t *testing.T) {
 	if a == b {
 		t.Errorf("Domain change MUST rotate the secret")
 	}
-	// Both head AND tail differ — head because the seed `inboundID:domain`
+	// Both head AND tail differ, head because the seed `inboundID:domain`
 	// includes the domain, tail because the domain hex is appended.
 }
 

@@ -3,7 +3,7 @@
 package core
 
 // User is the normalized form of dto.AddUserRequest. The dispatcher copies
-// only the protocol-specific credentials each adapter cares about — the rest
+// only the protocol-specific credentials each adapter cares about, the rest
 // are zero-valued and ignored.
 type User struct {
 	UserID   string

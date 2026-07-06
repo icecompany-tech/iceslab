@@ -70,7 +70,7 @@ func TestInboundDefaults(t *testing.T) {
 		t.Errorf("Method default: got %q", cfg.Method)
 	}
 	if cfg.ApiPort != 8081 {
-		t.Errorf("ApiPort default: got %d (want 8081 — one above xray's 8080 to avoid conflict)", cfg.ApiPort)
+		t.Errorf("ApiPort default: got %d (want 8081, one above xray's 8080 to avoid conflict)", cfg.ApiPort)
 	}
 }
 

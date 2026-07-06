@@ -8,7 +8,7 @@ import (
 // inboundCfgWire mirrors AmneziawgConfigSchema in
 // apps/panel-backend/src/modules/inbounds/inbounds.schemas.ts.
 //
-// On the agent side we don't need ServerPublicKey — it's emitted by the
+// On the agent side we don't need ServerPublicKey, it's emitted by the
 // panel into the wg-quick client conf, the server only ever uses the private
 // half. We accept the field on the wire so the JSON shape stays identical
 // and ignore it during mapping.
@@ -19,7 +19,7 @@ type inboundCfgWire struct {
 	Obfuscation      obfuscationCfg `json:"obfuscation"`
 	// ListenPort is the UDP port the awg-quick interface should bind to.
 	// Injected by panel-backend from inbound.port (binding-level field
-	// above the protocol config) — see apps/panel-backend/src/modules/
+	// above the protocol config), see apps/panel-backend/src/modules/
 	// inbounds/inbounds.queue.ts. When zero on the wire, we fall back to
 	// the caller-supplied listenPort (install-time default). Caught live
 	// cycle #6 2026-05-12: client wgconf advertised Endpoint=:443 but
@@ -88,7 +88,7 @@ func (w inboundCfgWire) toInboundConfig(iface string, listenPort int) (InboundCo
 }
 
 // serverAddressFromSubnet picks the first usable host of the subnet for the
-// server's tunnel IP — by convention `.1`. Input "10.0.0.0/24" → "10.0.0.1/24".
+// server's tunnel IP, by convention `.1`. Input "10.0.0.0/24" → "10.0.0.1/24".
 func serverAddressFromSubnet(subnet string) (string, error) {
 	ip, ipnet, err := net.ParseCIDR(subnet)
 	if err != nil {
@@ -107,11 +107,11 @@ func serverAddressFromSubnet(subnet string) (string, error) {
 
 // diffKind classifies a transition between two InboundConfig values:
 //   - diffNone: byte-equivalent, no work
-//   - diffSubnet: subnet/address changed — reject when peers exist (cannot
+//   - diffSubnet: subnet/address changed, reject when peers exist (cannot
 //     re-allocate without rotating every client)
-//   - diffSyncconf: only S1-S4 / Jc/Jmin/Jmax changed — `awg syncconf` reloads
+//   - diffSyncconf: only S1-S4 / Jc/Jmin/Jmax changed, `awg syncconf` reloads
 //     these without bouncing the interface
-//   - diffRestart: H1-H4 / PrivateKey / ListenPort / Interface changed —
+//   - diffRestart: H1-H4 / PrivateKey / ListenPort / Interface changed,
 //     these are interface-immutable, syncconf can't apply them, full restart
 //     required (admins are warned in panel UI)
 type diffKind int
@@ -124,19 +124,19 @@ const (
 )
 
 // classifyDiff compares old vs new and returns the strictest action required.
-// "Strictest" means: subnet > restart > syncconf > none — if multiple changes
+// "Strictest" means: subnet > restart > syncconf > none, if multiple changes
 // happen at once we pick the one demanding the heaviest reload.
 func classifyDiff(old, new InboundConfig) diffKind {
 	if old.Address != new.Address {
 		return diffSubnet
 	}
 	// AmneziaWG fork v1.0.20251009 does NOT apply Jc/Jmin/Jmax/S1-S4
-	// changes via `awg syncconf` to a running interface — they're frozen
+	// changes via `awg syncconf` to a running interface, they're frozen
 	// at interface init. Verified live cycle #6 2026-05-12: changed Jc 4→0
 	// via panel UI, syncconf returned success, but `awg show awg0` still
 	// reported jc=4 until awg-quick down/up bounced the interface. So
 	// treat junk/magic-size changes as diffRestart, same as H1-H4 / key /
-	// port — all interface-init-time-only fields.
+	// port, all interface-init-time-only fields.
 	if old.PrivateKey != new.PrivateKey ||
 		old.ListenPort != new.ListenPort ||
 		old.Interface != new.Interface ||

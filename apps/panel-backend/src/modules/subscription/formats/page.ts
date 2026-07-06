@@ -602,7 +602,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   }
   .brand{font-size:19px; font-weight:600; letter-spacing:-.01em; line-height:1.1;}
   .sub{color:var(--mist); font-size:12px; margin-top:2px; font-family:var(--mono);}
-  /* Language selector — RU/EN pill, pushed to the header's right edge. Each is
+  /* Language selector: RU/EN pill, pushed to the header's right edge. Each is
      a plain link to ?lang=, so toggling re-renders the page server-side (no JS).
      The active locale is filled. */
   .lang{margin-left:auto; flex:0 0 auto; display:flex; gap:2px; padding:2px;
@@ -799,7 +799,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     // one QR visible at a time. All QR figures are embedded; we just toggle .on.
     (function () {
       var figs = [].slice.call(document.querySelectorAll('.qrf'));
-      if (figs.length < 2) return; // single QR — nothing to switch
+      if (figs.length < 2) return; // single QR, nothing to switch
       var tgBtns = [].slice.call(document.querySelectorAll('.tgsel .seg'));
       var appBtns = [].slice.call(document.querySelectorAll('.appsel .seg'));
       var appSel = document.querySelector('.appsel');

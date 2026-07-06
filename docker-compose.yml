@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: iceslab_dev
       POSTGRES_DB: iceslab
     ports:
-      # Bind to loopback only — a laptop on hotel Wi-Fi with the dev compose
+      # Bind to loopback only, a laptop on hotel Wi-Fi with the dev compose
       # up otherwise exposes a weak-cred Postgres to the local network.
       - "127.0.0.1:5432:5432"
     volumes:
@@ -32,7 +32,7 @@ services:
     container_name: iceslab-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      # Loopback only — dev Redis has no auth at all.
+      # Loopback only, dev Redis has no auth at all.
       - "127.0.0.1:16379:6379"
     volumes:
       - redis_data:/data

@@ -2,7 +2,7 @@ import { redis } from '../../lib/redis.js';
 import { config } from '../../config.js';
 
 /**
- * Slice 28 — server-side smart node selection.
+ * Slice 28: server-side smart node selection.
  *
  * Why this exists (and why it's deliberately small):
  *   Real deployments with 10+ regions want to hand each subscriber the
@@ -11,11 +11,11 @@ import { config } from '../../config.js';
  *   to map client IP → country/region, which we haven't bundled yet.
  *
  *   What's shipped here:
- *     - `lookupClientCountry(ip)` — pluggable GeoIP backend with Redis cache
+ *     - `lookupClientCountry(ip)`: pluggable GeoIP backend with Redis cache
  *       (60s). Default backend reads `CF-IPCountry` header passed in by the
  *       Cloudflare front edge; when that's missing it returns null and the
  *       selection algo falls back to "all nodes" rather than guessing.
- *     - `rankNodesForUser(nodes, country, limit)` — pure function that scores
+ *     - `rankNodesForUser(nodes, country, limit)`: pure function that scores
  *       eligible nodes by region match + utilization slot. Caller provides
  *       the eligible set so we never re-do squad/binding filtering here.
  *
@@ -31,14 +31,14 @@ export interface NodeForRanking {
   id: string;
   name: string;
   /** Region.code on the node row (`EU`, `RU`, `AS`, ...). null when the
-   *  node hasn't been tagged with a region yet — these nodes still rank,
+   *  node hasn't been tagged with a region yet, these nodes still rank,
    *  just without the region-match bonus. */
   regionCode: string | null;
   /** Current active user count → divided by approximate capacity to derive
    *  a utilization score. Pass `null` when unknown (e.g. node just booted
    *  and stats haven't landed yet); the ranker treats null as zero load. */
   currentUsers?: number | null;
-  /** Soft cap above which utilization score drops to zero. Optional —
+  /** Soft cap above which utilization score drops to zero. Optional:
    *  default 500 below; admins can tune per node when slice 28-follow-up
    *  lands the `maxUsers` column. */
   maxUsers?: number | null;
@@ -57,7 +57,7 @@ const DEFAULT_MAX_USERS = 500;
  *   - utilization adds 0..50 (lower load = higher score)
  *
  * Composable: drop-in additional signals later by widening the score
- * function — clients of `rankNodesForUser` only see the final ordering.
+ * function, clients of `rankNodesForUser` only see the final ordering.
  */
 function scoreNode(n: NodeForRanking, country: string | null): number {
   const regionScore = country && n.regionCode === country ? 100 : 0;
@@ -93,7 +93,7 @@ const GEOIP_CACHE_TTL_SEC = 60;
 
 export interface ClientGeoSignals {
   /** `CF-IPCountry` header passed in from the front edge. Empty / `XX`
-   *  treated same as missing — Cloudflare emits `XX` when the resolver
+   *  treated same as missing, Cloudflare emits `XX` when the resolver
    *  fails. */
   cfCountry?: string;
 }
@@ -102,7 +102,7 @@ export async function lookupClientCountry(
   ip: string,
   signals: ClientGeoSignals,
 ): Promise<string | null> {
-  // Public flag — when admin disables smart selection by not configuring
+  // Public flag, when admin disables smart selection by not configuring
   // any allowed countries, we still want the function to short-circuit
   // cleanly without hitting Redis. (config.ADMIN_ALLOWED_COUNTRIES being
   // non-empty is incidentally a good proxy for "Cloudflare front edge in

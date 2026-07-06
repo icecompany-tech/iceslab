@@ -14,7 +14,7 @@ import (
 )
 
 // newTestServer builds a Server bound to a discardable logger and a dummy
-// payload. The PEM material here is never parsed — `routes()` only constructs
+// payload. The PEM material here is never parsed, `routes()` only constructs
 // the mux, not the TLS layer.
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
@@ -111,7 +111,7 @@ func TestHandleRemoveUser(t *testing.T) {
 
 func TestHandleStats(t *testing.T) {
 	srv := newTestServer(t)
-	// startedAt left at its newTestServer default — fine for this stub.
+	// startedAt left at its newTestServer default, fine for this stub.
 
 	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
 	rr := httptest.NewRecorder()

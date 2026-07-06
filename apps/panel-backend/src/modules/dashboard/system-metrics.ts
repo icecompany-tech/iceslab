@@ -4,13 +4,13 @@ import { getHeapStatistics } from 'node:v8';
 
 export interface SystemMetrics {
   cpu: {
-    /** % load — 1-min loadavg / cpu count, capped at 100. null on platforms
+    /** % load: 1-min loadavg / cpu count, capped at 100. null on platforms
      *  without loadavg (Windows returns 0,0,0). */
     loadPercent: number | null;
     /** Sampled CPU% across all cores between two snapshots ~250ms apart. */
     samplePercent: number;
     cores: number;
-    /** 1/5/15-min load averages — Linux/macOS. [0,0,0] on Windows. */
+    /** 1/5/15-min load averages, Linux/macOS. [0,0,0] on Windows. */
     loadavg: [number, number, number];
   };
   memory: {
@@ -33,7 +33,7 @@ export interface SystemMetrics {
     rssBytes: number;
     /** Heap used by V8. */
     heapUsedBytes: number;
-    /** V8 heap_size_limit — the real cap (set by --max-old-space-size). Use
+    /** V8 heap_size_limit: the real cap (set by --max-old-space-size). Use
      *  this as the denominator for "how close to OOM are we" percentages.
      *  Do NOT use heapTotal from process.memoryUsage(): that's V8's lazily-
      *  grown current allocation, which sits just above heapUsed and produces
@@ -61,7 +61,7 @@ function takeCpuSnapshot(): CpuSnapshot {
 
 async function sampleCpuPercent(): Promise<number> {
   // 500ms window (was 200ms): a wider delta is less jittery on low-core
-  // hosts. This sample is secondary detail now — the UI headlines the
+  // hosts. This sample is secondary detail now, the UI headlines the
   // load-average %; the extra 300ms is hidden behind the 30s overview cache.
   const a = takeCpuSnapshot();
   await new Promise((r) => setTimeout(r, 500));

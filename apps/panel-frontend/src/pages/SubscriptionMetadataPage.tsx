@@ -27,7 +27,7 @@ import { getSettings, updateSettings } from '../lib/api';
  * `{{DAYS_LEFT}}`, `{{SUPPORT_URL}}` placeholders rendered per request.
  *
  * Subscription-Userinfo (quota gauge) is auto-emitted from user state, not
- * configurable here. Lived under Settings before — promoted to its own
+ * configurable here. Lived under Settings before, promoted to its own
  * page under the Subscription section so operators stop hunting for it.
  */
 export function SubscriptionMetadataPage() {

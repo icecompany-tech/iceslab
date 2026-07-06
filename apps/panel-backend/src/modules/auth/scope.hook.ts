@@ -42,7 +42,7 @@ export async function enforceScopes(
   reply: FastifyReply,
 ): Promise<void> {
   const token = request.apiToken;
-  if (!token) return; // admin JWT or public route — not scope-restricted
+  if (!token) return; // admin JWT or public route, not scope-restricted
   const scopes = token.scopes;
   if (scopes.length === 0 || scopes.includes('*')) return; // full / legacy token
 

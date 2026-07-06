@@ -12,7 +12,7 @@ import {
 } from './inbounds.schemas.js';
 
 /**
- * Slice 24d (fix 2026-05-07) — auto-generate the SS2022 server-PSK at
+ * Slice 24d (fix 2026-05-07): auto-generate the SS2022 server-PSK at
  * inbound create. Length matches xray-core requirements:
  *   - `2022-blake3-aes-128-gcm`            → 16 bytes
  *   - `2022-blake3-aes-256-gcm`            → 32 bytes
@@ -64,7 +64,7 @@ export class InvalidPortHoppingRangeError extends Error {
 }
 
 /**
- * Slice 31.5 — cross-field validation for Hysteria port-hopping. Kept out of
+ * Slice 31.5: cross-field validation for Hysteria port-hopping. Kept out of
  * the Zod schema so HysteriaConfigSchema stays a plain ZodObject (required
  * for the discriminated union). Throws with a user-friendly message when
  * one bound is set without the other, or when end <= start.
@@ -93,7 +93,7 @@ export async function createInbound(input: CreateInboundInput): Promise<Inbound>
   });
   if (!node) throw new NodeNotFoundError();
 
-  // Slice 24d — auto-generate Server PSK for SS2022 inbounds when admin
+  // Slice 24d: auto-generate Server PSK for SS2022 inbounds when admin
   // didn't supply one. xray-core requires it for multi-user mode; nothing
   // useful comes from making the admin paste random bytes.
   let configToStore = input.config as Record<string, unknown>;
@@ -124,7 +124,7 @@ export async function createInbound(input: CreateInboundInput): Promise<Inbound>
 
   let created: Inbound;
   try {
-    // Slice 26 invariant — every new inbound gets attached to the "All" squad
+    // Slice 26 invariant: every new inbound gets attached to the "All" squad
     // synchronously, in the same transaction as the inbound row. Previously
     // this was an async fire-and-forget on the inbound.created event handler;
     // that opened a race window (inbound exists in DB but no group_inbound
@@ -207,7 +207,7 @@ export async function updateInbound(
         name: input.name ?? undefined,
         port: input.port ?? undefined,
         enabled: input.enabled ?? undefined,
-        // null clears, undefined keeps current — Prisma honours that semantic.
+        // null clears, undefined keeps current, Prisma honours that semantic.
         publicHost: input.publicHost === undefined ? undefined : input.publicHost,
         publicPort: input.publicPort === undefined ? undefined : input.publicPort,
         config: validatedConfig === undefined ? undefined : (validatedConfig as never),
@@ -225,7 +225,7 @@ export async function updateInbound(
 
 export async function deleteInbound(id: string): Promise<void> {
   // Look up nodeId BEFORE delete so the event payload still resolves the
-  // node binding — by the time the handler reads from DB the row is gone.
+  // node binding, by the time the handler reads from DB the row is gone.
   const existing = await prisma.inbound.findUnique({
     where: { id },
     select: { id: true, nodeId: true },

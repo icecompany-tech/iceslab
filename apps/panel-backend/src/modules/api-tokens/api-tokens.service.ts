@@ -46,7 +46,7 @@ function mapToken(t: {
 }
 
 /**
- * Create a new API token. Returns the plaintext token ONCE — admin must
+ * Create a new API token. Returns the plaintext token ONCE, admin must
  * copy it now, the panel never shows it again (only the SHA-256 hash is
  * stored). Subsequent reads return everything except the secret.
  */

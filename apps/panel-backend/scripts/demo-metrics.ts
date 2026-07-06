@@ -8,16 +8,16 @@
  *
  * Optional flags:
  *   --scenario=mixed    (default) each node drifts independently across
- *                       a different baseline — calm / busy / critical
+ *                       a different baseline: calm / busy / critical
  *   --scenario=calm     all nodes around 10-30%
  *   --scenario=busy     all nodes around 50-70%
- *   --scenario=critical all nodes around 85-98% — exercises red thresholds
+ *   --scenario=critical all nodes around 85-98%, exercises red thresholds
  *   --interval=5        seconds between pushes (default 5)
  *   --create=N          create N additional fake nodes in DB before starting,
  *                       cleaned up on Ctrl+C (only nodes this run created)
  *
- * Stops on Ctrl+C — Redis entries TTL out within 60s, so the dashboard goes
- * back to "—" automatically. If --create was used, those rows are deleted on
+ * Stops on Ctrl+C, Redis entries TTL out within 60s, so the dashboard goes
+ * back to "-" automatically. If --create was used, those rows are deleted on
  * exit.
  *
  * Note: this writes ONLY to Redis, never to NodeUsageHistory or any other
@@ -122,7 +122,7 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 function drift(base: number, phase: number, t: number, amp = 8): number {
-  // Smooth sine + small jitter — looks alive, never quite still.
+  // Smooth sine + small jitter, looks alive, never quite still.
   const wave = Math.sin((t / 7 + phase) * (Math.PI / 30)) * amp;
   const jitter = (Math.random() - 0.5) * 4;
   return clamp(base + wave + jitter, 1, 99);
@@ -137,7 +137,7 @@ async function pushSnapshot(
   const cpuPct = drift(p.baseCPU, p.phase, tickIndex);
   const memPct = drift(p.baseMem, p.phase + 30, tickIndex, 4);
   // Disk usage drifts slowly (rate of change of disk fill in the real world
-  // is on the order of MB/min, not %/sec) — small amplitude.
+  // is on the order of MB/min, not %/sec), small amplitude.
   const diskPct = drift(p.baseDisk, p.phase + 60, tickIndex, 1);
 
   const memUsed = Math.floor((memPct / 100) * p.totalRamBytes);

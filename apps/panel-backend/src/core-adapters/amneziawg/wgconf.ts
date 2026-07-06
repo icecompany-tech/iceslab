@@ -6,11 +6,11 @@
  * The official `awg` client and any AmneziaWG-aware app (Hiddify v2.4+,
  * AmneziaVPN-app, mobile clients) parse this directly.
  *
- * Output is a plain text blob — no URL form like vless/hysteria. Subscription
+ * Output is a plain text blob, no URL form like vless/hysteria. Subscription
  * generators wrap it in their preferred container (raw .conf file, base64
  * blob, JSON `endpoints[].config`).
  *
- * The obfuscation params MUST match the server inbound's interface block —
+ * The obfuscation params MUST match the server inbound's interface block,
  * the panel pulls them from the same source (env in slice 19, inbounds table
  * in slice 23).
  */
@@ -36,18 +36,18 @@ export interface AmneziawgClientConfigOpts {
   jmin: number;
   /** Max junk packet size. */
   jmax: number;
-  /** Magic header sizes — must match the inbound. */
+  /** Magic header sizes, must match the inbound. */
   s1: number;
   s2: number;
   s3: number;
   s4: number;
-  /** Magic header values — must match the inbound. */
+  /** Magic header values, must match the inbound. */
   h1: number;
   h2: number;
   h3: number;
   h4: number;
   /**
-   * I1-I5 — optional v2.0 mimicry packets (hex strings, empty = disabled).
+   * I1-I5: optional v2.0 mimicry packets (hex strings, empty = disabled).
    * MUST match the server inbound's values verbatim; the AmneziaWG
    * handshake hashes them in, so any mismatch silently breaks decryption.
    */
@@ -67,7 +67,7 @@ export interface AmneziawgClientConfigOpts {
    */
   dns?: string[];
   /**
-   * Persistent keepalive seconds. Default 25 — practical for NAT-traversal,
+   * Persistent keepalive seconds. Default 25, practical for NAT-traversal,
    * matches AmneziaVPN-app default.
    */
   persistentKeepalive?: number;
@@ -94,7 +94,7 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
   lines.push(`H2 = ${opts.h2}`);
   lines.push(`H3 = ${opts.h3}`);
   lines.push(`H4 = ${opts.h4}`);
-  // Emit I1-I5 only when set — empty values mean "no mimicry packet
+  // Emit I1-I5 only when set, empty values mean "no mimicry packet
   // for that slot" and the awg client rejects empty hex.
   for (const [idx, val] of [opts.i1, opts.i2, opts.i3, opts.i4, opts.i5].entries()) {
     if (val && val.length > 0) {

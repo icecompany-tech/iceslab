@@ -72,7 +72,7 @@ func readProcStat() (cpuTimes, error) {
 		}
 		total += v
 		// Field index 3 is `idle`, 4 is `iowait` (treated as idle on most
-		// modern systems — see Linux kernel docs).
+		// modern systems, see Linux kernel docs).
 		if i == 3 || i == 4 {
 			idle += v
 		}

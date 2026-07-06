@@ -20,7 +20,7 @@ async function startMockMtlsServer(): Promise<ServerHandle> {
     commonName: 'localhost',
     sans: [{ type: 'ip', value: '127.0.0.1' }],
   });
-  // Slice S6 — panel side now presents a clientAuth-only leaf, not the
+  // Slice S6: panel side now presents a clientAuth-only leaf, not the
   // CA itself. Build that here so the test exercises the same code path
   // production uses.
   const panelClient = await generatePanelClientCert(ca);
@@ -69,7 +69,7 @@ async function startMockMtlsServer(): Promise<ServerHandle> {
             return;
           }
           case '/slow': {
-            // never respond — used to trigger client timeout
+            // never respond, used to trigger client timeout
             return;
           }
           default: {
@@ -145,7 +145,7 @@ describe('NodeTransport (mTLS)', () => {
   it('throws NodeRequestError when the node returns 5xx', async () => {
     // Point the transport at a node whose `addUser` route is the mock's `/error`.
     // We expose this by giving the transport a target whose path-prefix lands on
-    // /error — easiest via URL bypass through a tiny subclass.
+    // /error, easiest via URL bypass through a tiny subclass.
     class ErrorRouteTransport extends NodeTransport {
       addUserViaError() {
         return (this as unknown as {

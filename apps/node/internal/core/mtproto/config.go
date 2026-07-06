@@ -1,7 +1,7 @@
 // Package mtproto implements CoreAdapter for the Telegram MTProto proxy
 // via 9seconds/mtg. Slice 41.
 //
-// IMPORTANT — single-secret architecture
+// IMPORTANT: single-secret architecture
 // =======================================
 // 9seconds/mtg deliberately rejects multi-secret support upstream
 // (quote from author: "I think that multiple secrets solve no problems
@@ -13,14 +13,14 @@
 //
 //   - No per-user traffic accounting on the agent side. mtg's Prometheus
 //     stats are global, not per-user.
-//   - No force-kick of one user — removing them from the panel just stops
+//   - No force-kick of one user, removing them from the panel just stops
 //     emitting their URI. Already-saved URIs still work for the lifetime
 //     of mtg + that secret.
-//   - Domain change rotates the secret — invalidates every cached URI
+//   - Domain change rotates the secret, invalidates every cached URI
 //     across every user.
 //   - For per-user MTProto isolation, run multiple mtg inbounds (one per
-//     user-bucket) on different ports. This adapter doesn't manage that
-//     — it's a panel-side modelling choice.
+//     user-bucket) on different ports. This adapter doesn't manage that,
+//     it's a panel-side modelling choice.
 //
 // Verified against `9seconds/mtg/example.config.toml` and README on
 // 2026-05-07. An earlier iteration of this file emitted a `secrets = [...]`
@@ -85,7 +85,7 @@ func (c *InboundConfig) validate() error {
 		return fmt.Errorf("Secret must start with `ee` (Fake-TLS marker), got %q", c.Secret[:min(len(c.Secret), 4)])
 	}
 	// Wave-14 #11: Secret is fmt.Fprintf'd directly into TOML between
-	// double-quotes — a stray `"` (or anything TOML treats as escape)
+	// double-quotes, a stray `"` (or anything TOML treats as escape)
 	// would break out of the string and let a hostile/buggy panel push
 	// inject arbitrary TOML directives (swap bind-to to loopback, point
 	// stats to attacker-controlled, etc). DeriveSecret produces pure hex
@@ -103,7 +103,7 @@ func (c *InboundConfig) validate() error {
 //
 // Format (Fake-TLS): `ee<16-byte-secret-hex><hex-encoded-domain>`
 //
-// The 16-byte length is spec-mandated — the Telegram client (mobile + desktop)
+// The 16-byte length is spec-mandated, the Telegram client (mobile + desktop)
 // rejects longer secrets with "Invalid proxy link" / "Некорректная ссылка на
 // прокси". Same length upstream `mtg generate-secret` emits. Caught live
 // 2026-05-13 on iPhone.
@@ -122,7 +122,7 @@ func DeriveSecret(inboundID, domain string) string {
 //
 // We hand-write the TOML rather than pulling in `pelletier/go-toml`
 // because the surface is small and string output is byte-stable for
-// golden-test friendly diffing. Only keys we actually use are emitted —
+// golden-test friendly diffing. Only keys we actually use are emitted,
 // mtg accepts a minimal config and uses defaults for everything else.
 func renderConfig(inbound InboundConfig) ([]byte, error) {
 	if err := inbound.validate(); err != nil {
@@ -137,7 +137,7 @@ func renderConfig(inbound InboundConfig) ([]byte, error) {
 	fmt.Fprintf(&b, "prefer-ip = \"prefer-ipv4\"\n")
 	b.WriteString("\n")
 
-	// Prometheus stats — nested table, NOT a flat `stats-bind-to` key.
+	// Prometheus stats: nested table, NOT a flat `stats-bind-to` key.
 	// (An earlier iteration of this file got that wrong.)
 	b.WriteString("[stats.prometheus]\n")
 	b.WriteString("enabled = true\n")
@@ -148,7 +148,7 @@ func renderConfig(inbound InboundConfig) ([]byte, error) {
 }
 
 // writeConfig atomically writes the TOML via the shared atomicfile helper
-// (fsync(file) + fsync(dir)). Mode 0o600 — file contains the inbound's
+// (fsync(file) + fsync(dir)). Mode 0o600, file contains the inbound's
 // MTProto secret.
 func writeConfig(path string, blob []byte) error {
 	dir := filepath.Dir(path)

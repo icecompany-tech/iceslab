@@ -56,7 +56,7 @@ func TestInboundDefaults(t *testing.T) {
 	if d.ListenPort != 443 {
 		t.Errorf("ListenPort default: got %d", d.ListenPort)
 	}
-	// Flow is no longer defaulted — empty is the canonical "no Vision"
+	// Flow is no longer defaulted, empty is the canonical "no Vision"
 	// value for non-raw transports. Panel sets it explicitly when needed.
 	if d.Flow != "" {
 		t.Errorf("Flow default: got %q, want empty", d.Flow)
@@ -79,7 +79,7 @@ func TestRenderConfigShape(t *testing.T) {
 	}
 
 	inbounds, ok := parsed["inbounds"].([]any)
-	// Slice 24c: render now emits two inbounds — the public VLESS one and a
+	// Slice 24c: render now emits two inbounds, the public VLESS one and a
 	// dedicated `api-in` (dokodemo-door on 127.0.0.1:8080) that exposes
 	// StatsService for `xray api statsquery`. Find the VLESS inbound by tag.
 	if !ok || len(inbounds) != 2 {
@@ -109,7 +109,7 @@ func TestRenderConfigShape(t *testing.T) {
 		t.Errorf("clients: got %d want 2", len(clients))
 	}
 
-	// Slice 24c — verify stats wiring is present
+	// Slice 24c, verify stats wiring is present
 	if _, ok := parsed["stats"]; !ok {
 		t.Errorf("stats block missing from rendered config")
 	}
@@ -765,7 +765,7 @@ func TestRender_B3_XhttpMode(t *testing.T) {
 func TestRender_B3_XhttpDefaultsToAutoNoPadding(t *testing.T) {
 	cfg := validInbound()
 	cfg.Network = "xhttp"
-	// XhttpMode / XhttpPaddingBytes left empty — must render as before B3.
+	// XhttpMode / XhttpPaddingBytes left empty, must render as before B3.
 	xh := vlessStream(t, renderToMap(t, cfg))["xhttpSettings"].(map[string]any)
 	if xh["mode"] != "auto" {
 		t.Errorf("xhttp default mode: got %v want auto", xh["mode"])

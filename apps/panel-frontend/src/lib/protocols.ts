@@ -2,7 +2,7 @@
  * Shared human-readable labels for the seven supported protocol enums.
  *
  * Without this, Mantine Selects and dividers were rendering the raw enum
- * values ("hysteria", "amneziawg", "mtproto") in lowercase — visible in
+ * values ("hysteria", "amneziawg", "mtproto") in lowercase, visible in
  * the Profile form Divider and the Squad form per-protocol group title.
  * Labels are product/protocol names, kept in English on purpose:
  * operators read xray / hysteria / AWG docs in English, translating

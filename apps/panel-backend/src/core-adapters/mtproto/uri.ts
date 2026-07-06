@@ -17,7 +17,7 @@
  *   ee<16-byte-secret-hex><hex-encoded-domain>
  *
  *   - Leading byte `0xee` (`ee`) selects Fake-TLS mode.
- *   - 16-byte random secret (32 hex chars). Spec-mandated length — TG client
+ *   - 16-byte random secret (32 hex chars). Spec-mandated length, TG client
  *     rejects anything longer. Same length upstream `mtg generate-secret` emits.
  *   - Trailing bytes are the masquerade domain ASCII bytes hex-encoded.
  */
@@ -30,8 +30,8 @@ export interface MtprotoUriOpts {
   host: string;
   port: number;
   /** Kept for backwards compatibility with the slice-41 signature. Telegram
-   *  no longer accepts a `#fragment` on tg://proxy URIs — it returns
-   *  "Некорректная ссылка на прокси" / "Invalid proxy link" — so we don't
+   *  no longer accepts a `#fragment` on tg://proxy URIs, it returns
+   *  "Некорректная ссылка на прокси" / "Invalid proxy link", so we don't
    *  append the name to the URI anymore. Caller still passes it; we ignore. */
   name: string;
 }
@@ -54,7 +54,7 @@ export function buildMtprotoUri(opts: MtprotoUriOpts): string {
  * (clickable in any browser/messenger) and Telegram's t.me service
  * redirects to the in-app proxy dialog.
  *
- * No `#fragment` — t.me strips it.
+ * No `#fragment`, t.me strips it.
  */
 export function buildMtprotoTmeUri(
   opts: Omit<MtprotoUriOpts, 'name'>,
@@ -74,7 +74,7 @@ export function buildMtprotoTmeUri(
  *   ee<32-hex-bytes-from-sha256(inboundId:domain)><hex-encoded-domain-ASCII>
  *
  * **Single-secret architecture (slice 41):** 9seconds/mtg upstream rejects
- * multi-secret support — one mtg instance == one secret. We follow that
+ * multi-secret support, one mtg instance == one secret. We follow that
  * constraint: secret is derived once per inbound, not per user. Every user
  * assigned to this inbound's squad receives the SAME URL.
  *
@@ -90,7 +90,7 @@ export function mtprotoSecret(inboundId: string, domain: string): string {
   // FakeTLS (`ee` prefix) wire format: 1-byte prefix + 16-byte random + hex
   // of the masquerade domain. Telegram's mtproto client (mobile + desktop)
   // strictly validates the 16-byte length and rejects 32-byte secrets with
-  // "Некорректная ссылка на прокси" / "Invalid proxy link" — same as
+  // "Некорректная ссылка на прокси" / "Invalid proxy link", same as
   // upstream `mtg generate-secret`. Caught live 2026-05-13 on iPhone test.
   const seed = `${inboundId}:${domain}`;
   const seedBytes = createHash('sha256').update(seed, 'utf8').digest().subarray(0, 16);

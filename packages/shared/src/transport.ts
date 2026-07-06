@@ -4,7 +4,7 @@
  * These types are the wire-format contract. The Go node-agent reimplements
  * matching structs with json tags; the panel-backend imports them directly.
  *
- * Byte counts are typed as `number` for ergonomics — values comfortably fit
+ * Byte counts are typed as `number` for ergonomics, values comfortably fit
  * in a JS double for any realistic single-period traffic. Lifetime totals
  * may eventually need string encoding; revisit when quotas exceed ~8 PB.
  */
@@ -67,21 +67,21 @@ export interface AddUserResponse {
 // Panel pushes the FULL set of inbounds bound to this node every time any
 // inbound is created/updated/deleted (or the node itself is registered).
 // Node-agent diffs against current state and regenerates the protocol's
-// config file accordingly. Idempotent — re-sending the same set is a no-op.
+// config file accordingly. Idempotent: re-sending the same set is a no-op.
 //
 // Replaces the manual `/etc/iceslab-node/env` editing that admins had to
 // do before slice 24. The XRAY_REALITY_*  / HY_DOMAIN env vars stay
 // supported as a fallback for nodes that haven't received their first
 // applyInbounds yet (or for air-gapped setups).
 
-/** Per-protocol inbound config — discriminated by `protocol`. The shape
+/** Per-protocol inbound config, discriminated by `protocol`. The shape
  *  mirrors `apps/panel-backend/src/modules/inbounds/inbounds.schemas.ts`
  *  but flattened (no Zod refinements). Panel sends, node decodes. */
 export interface InboundDto {
-  /** Stable UUID — node-agent uses it as the protocol-side `tag`. */
+  /** Stable UUID, node-agent uses it as the protocol-side `tag`. */
   id: string;
   /** Human-friendly name (becomes Xray inbound `tag`, Hysteria masquerade
-   *  hint, etc — purely informational on the node side). */
+   *  hint, etc, purely informational on the node side). */
   name: string;
   protocol: ProtocolName;
   /** Proxy core that renders this inbound. Omit -> the protocol's native core
@@ -244,7 +244,7 @@ export interface AmneziawgInboundCfg {
   /** Subnet in CIDR notation (e.g. "10.0.0.0/24"). Server takes .1, peers
    *  .2..N. Panel-side `amneziawg.service` does the per-user allocation. */
   subnet: string;
-  /** AmneziaWG obfuscation params — see reference_amneziawg.md for ranges. */
+  /** AmneziaWG obfuscation params, see reference_amneziawg.md for ranges. */
   jc: number;
   jmin: number;
   jmax: number;
@@ -268,7 +268,7 @@ export interface NaiveInboundCfg {
 
 /**
  * Shadowsocks 2022 inbound config (slice 24d). Method = AEAD/SS2022 cipher.
- * Per-user passwords are derived from `user.xrayUuid` on both sides — we
+ * Per-user passwords are derived from `user.xrayUuid` on both sides, we
  * don't grow the credential surface for a fifth protocol.
  *
  * `serverPsk` (Server PSK) is auto-generated at inbound create on the
@@ -297,7 +297,7 @@ export interface ShadowsocksInboundCfg {
  */
 export interface MtprotoInboundCfg {
   domain: string;
-  /** `ee<32-hex-bytes><hex-encoded-domain>` — Fake-TLS format. */
+  /** `ee<32-hex-bytes><hex-encoded-domain>`: Fake-TLS format. */
   secret: string;
 }
 

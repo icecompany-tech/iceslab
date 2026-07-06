@@ -5,7 +5,7 @@ import {
   rankNodesForUser,
   type NodeForRanking,
 } from './node-selection.js';
-// Slice 27 follow-up: enabledProtocols is no longer consulted — squad ACL is
+// Slice 27 follow-up: enabledProtocols is no longer consulted, squad ACL is
 // the single source of truth for which protocols a user sees. The column is
 // kept on the User row for backwards-compat but never filters subscription
 // output.
@@ -53,7 +53,7 @@ export class SubscriptionForbiddenError extends Error {
 export interface RequestContext {
   ip?: string | null;
   userAgent?: string | null;
-  /** Slice 28 — when set, limit subscription to top-N nodes ranked by
+  /** Slice 28: when set, limit subscription to top-N nodes ranked by
    *  region match (against `cfCountry`) and current utilization. <1 means
    *  "no filter" (default behaviour: return every eligible endpoint). */
   topN?: number;
@@ -121,7 +121,7 @@ interface AmneziawgObfuscation {
   h2: number;
   h3: number;
   h4: number;
-  /** I1-I5: v2.0 mimicry signature packets (hex). Optional — Zod
+  /** I1-I5: v2.0 mimicry signature packets (hex). Optional, Zod
    *  defaults to empty string when absent, so existing profiles
    *  saved before the v2.0 alignment still parse cleanly. */
   i1?: string;
@@ -183,7 +183,7 @@ export async function generateSubscription(
       throw new SubscriptionForbiddenError('DISABLED');
   }
 
-  // Slice 27 — Squad ACL is now profile-level. Visible bindings are the
+  // Slice 27: Squad ACL is now profile-level. Visible bindings are the
   // UNION of bindings of every profile attached to a group the user is a
   // member of. If the user has zero memberships the subscription is empty
   // (createUser auto-adds them to "All", so this is only reachable if
@@ -228,13 +228,13 @@ export async function generateSubscription(
                   // self-steal xray endpoints (per-node, must resolve to node IP).
                   domain: true,
                   createdAt: true,
-                  // Slice 28 — region.code drives the "same-region bonus" in the
+                  // Slice 28: region.code drives the "same-region bonus" in the
                   // smart-selection ranker. Null when admin hasn't tagged a region;
                   // ranker still works (utilization-only score for that node).
                   region: { select: { code: true } },
                 },
               },
-              // Slice 30 — one binding fans out into N enabled hosts. Order them
+              // Slice 30: one binding fans out into N enabled hosts. Order them
               // by `priority` so subscription URL ordering is admin-controlled.
               hosts: {
                 where: { enabled: true },
@@ -266,7 +266,7 @@ export async function generateSubscription(
     bindings.push(...kept);
   }
 
-  // Slice 28 — smart node selection. When the route passed topN+cfCountry,
+  // Slice 28: smart node selection. When the route passed topN+cfCountry,
   // we rank distinct nodes by region match + utilization, take the top-N,
   // and filter bindings down to those. Falls through cleanly when topN<1
   // or cfCountry empty: ranker just orders by utilization, and the topN
@@ -310,7 +310,7 @@ export async function generateSubscription(
       config: cfgMerged,
     };
 
-    // Slice 30 — fan-out per host. Backfill migration guarantees ≥1 host
+    // Slice 30: fan-out per host. Backfill migration guarantees ≥1 host
     // per binding; ensureDefaultHost() does the same for new bindings.
     // The fallback below covers a migration-skipped binding so the
     // subscription never silently drops to zero URLs.
@@ -329,7 +329,7 @@ export async function generateSubscription(
         : b.node.name;
       const hostOverrides = hostRow ?? null;
 
-    // Slice 30 — common per-host metadata threaded onto each endpoint so
+    // Slice 30: common per-host metadata threaded onto each endpoint so
     // formatters can filter (`disableForFormats`) and richer URI builders
     // (slice 30.1) can emit alpn / allowInsecure / securityLayer without
     // re-fetching the host row.
@@ -387,7 +387,7 @@ export async function generateSubscription(
         security?: 'reality' | 'none' | 'tls';
         tlsServerName?: string;
       };
-      // Slice 30 — per-host overrides on the most-used REALITY knobs. Each
+      // Slice 30: per-host overrides on the most-used REALITY knobs. Each
       // null falls through to the profile-level config, so back-compat with
       // bindings that have only the auto-generated Default host stays exact.
       // For tls the SNI comes from the cert's serverName, not REALITY serverNames.
@@ -410,11 +410,11 @@ export async function generateSubscription(
         hostOverrides?.fingerprintOverride ?? cfg.fingerprint;
       const xrayPath = hostOverrides?.pathOverride ?? cfg.path;
       const xrayHostHeader = hostOverrides?.hostHeaderOverride ?? cfg.host;
-      // Slice 24c part 3 — branch URI scheme on subprotocol. We reuse
+      // Slice 24c part 3: branch URI scheme on subprotocol. We reuse
       // user.xrayUuid as the Trojan password (UUIDs have plenty of entropy
       // and admins are already managing them; a separate trojanPassword
       // column would be redundant credential management).
-      // Slice 30.1 — per-host overrides emitted into URI. Empty alpn array
+      // Slice 30.1: per-host overrides emitted into URI. Empty alpn array
       // falls through (URI builder skips the param), so back-compat is exact.
       const hostAlpn = hostMeta.alpn;
       const hostAllowInsecure = hostMeta.allowInsecure;
@@ -509,7 +509,7 @@ export async function generateSubscription(
       });
     } else if (ib.protocol === 'amneziawg' && user.amneziawgPrivateKey) {
       const cfg = ib.config as unknown as AmneziawgInboundConfig;
-      // Slice 27 — peer is keyed on profileId (one allocation per logical
+      // Slice 27: peer is keyed on profileId (one allocation per logical
       // AmneziaWG profile, shared across all nodes the profile is bound to).
       const peer = await allocatePeer(ib.profileId, user.id, cfg.subnet);
       endpoints.push({
@@ -541,7 +541,7 @@ export async function generateSubscription(
         uri: '',
       });
     } else if (ib.protocol === 'mtproto') {
-      // Slice 41 — Telegram MTProto via 9seconds/mtg. Architectural note:
+      // Slice 41: Telegram MTProto via 9seconds/mtg. Architectural note:
       // mtg is intentionally single-secret upstream. So every user
       // assigned to this inbound's squad receives the SAME secret + URL.
       // We derive once per inbound from (inboundId, domain). Domain
@@ -560,7 +560,7 @@ export async function generateSubscription(
         tmeUri: buildMtprotoTmeUri({ secret, host, port }),
       });
     } else if (ib.protocol === 'mieru' && user.xrayUuid) {
-      // Slice 40 — Mieru. Username = panel username for log-readability;
+      // Slice 40: Mieru. Username = panel username for log-readability;
       // password = xrayUuid (no extra credential surface).
       const cfg = ib.config as unknown as { mtu: number };
       endpoints.push({

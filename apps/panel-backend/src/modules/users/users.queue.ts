@@ -54,7 +54,7 @@ async function fetchActiveNodes(): Promise<NodeRow[]> {
 /**
  * Fan-out a single addUser/removeUser call to every active node, awaiting all
  * outcomes (allSettled) so we surface ALL failures rather than short-circuit
- * on the first. Throws if any node failed — BullMQ retries the whole job, so
+ * on the first. Throws if any node failed, BullMQ retries the whole job, so
  * `addUser`/`removeUser` MUST be idempotent on the node side (re-adding an
  * existing user is a no-op).
  */
@@ -64,7 +64,7 @@ async function fanOut<T>(
   label: string,
 ): Promise<void> {
   if (nodes.length === 0) {
-    getLogger().info(`[worker:node-users] ${label} — no active nodes, skipping`);
+    getLogger().info(`[worker:node-users] ${label} - no active nodes, skipping`);
     return;
   }
   const results = await Promise.allSettled(
@@ -106,7 +106,7 @@ async function syncAddUser(userId: string): Promise<void> {
     },
   });
   if (!user) {
-    getLogger().info(`[worker:node-users] addUser ${userId} — user not found, skipping`);
+    getLogger().info(`[worker:node-users] addUser ${userId} - user not found, skipping`);
     return;
   }
   // #4 - status-gate. A stale addUser (enqueued before a flip to
@@ -116,7 +116,7 @@ async function syncAddUser(userId: string): Promise<void> {
   // what order the add/remove jobs happen to run in.
   if (user.status !== 'active') {
     getLogger().info(
-      `[worker:node-users] addUser ${userId} — status=${user.status}, not active, skipping`,
+      `[worker:node-users] addUser ${userId} - status=${user.status}, not active, skipping`,
     );
     return;
   }
@@ -157,7 +157,7 @@ async function syncRemoveUser(userId: string): Promise<void> {
     select: { status: true, deletedAt: true },
   });
   if (user && user.deletedAt === null && user.status === 'active') {
-    getLogger().info(`[worker:node-users] removeUser ${userId} — user is active, skipping`);
+    getLogger().info(`[worker:node-users] removeUser ${userId} - user is active, skipping`);
     return;
   }
 
@@ -182,7 +182,7 @@ async function syncBackfillNode(nodeId: string): Promise<void> {
     select: { id: true, name: true, address: true },
   });
   if (!node) {
-    getLogger().info(`[worker:node-users] backfillNode ${nodeId} — node not active, skipping`);
+    getLogger().info(`[worker:node-users] backfillNode ${nodeId} - node not active, skipping`);
     return;
   }
 
@@ -271,7 +271,7 @@ async function syncBackfillNode(nodeId: string): Promise<void> {
   }
 
   if (total === 0) {
-    getLogger().info(`[worker:node-users] backfillNode ${node.name} — no active users, skipping`);
+    getLogger().info(`[worker:node-users] backfillNode ${node.name} - no active users, skipping`);
     return;
   }
 
@@ -281,7 +281,7 @@ async function syncBackfillNode(nodeId: string): Promise<void> {
       `${failures.length}/${total} users failed to backfill onto ${node.name}`,
     );
   }
-  getLogger().info(`[worker:node-users] backfillNode ${node.name} — ${total} user(s) ok`);
+  getLogger().info(`[worker:node-users] backfillNode ${node.name} - ${total} user(s) ok`);
 }
 
 // ───── Worker ─────

@@ -18,7 +18,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 // connections within an Agent's pool, so /healthz and /metrics polls hit
 // every node every 15s without paying handshake cost on each tick. Built
 // lazily on first call (CA material requires DB roundtrip via bootstrapCa)
-// and never closed — agent lifetime = process lifetime.
+// and never closed, agent lifetime = process lifetime.
 //
 // If the CA rotates we'd need to reset this; today the CA is bootstrapped
 // once at install and is treated as immutable. Slice for cert rotation later.
@@ -34,7 +34,7 @@ export interface MtlsOverride {
 }
 
 async function getSharedAgent(override?: MtlsOverride): Promise<Agent> {
-  // Test injections must always build a fresh agent — they pass
+  // Test injections must always build a fresh agent, they pass
   // synthetic CAs that mustn't leak between cases.
   if (override) {
     return new Agent({
@@ -54,7 +54,7 @@ async function getSharedAgent(override?: MtlsOverride): Promise<Agent> {
 
   sharedAgentPromise = (async () => {
     // CA cert: trust anchor for verifying node server certs.
-    // Panel-client cert: clientAuth-only leaf signed by CA. Slice S6 —
+    // Panel-client cert: clientAuth-only leaf signed by CA. Slice S6:
     // we no longer present the CA itself as our TLS leaf, which used to
     // mean any compromised node could impersonate the panel to its peers.
     const ca = await bootstrapCa();
@@ -81,7 +81,7 @@ async function getSharedAgent(override?: MtlsOverride): Promise<Agent> {
 }
 
 /**
- * Tear down the shared agent — called on graceful shutdown so node-side
+ * Tear down the shared agent, called on graceful shutdown so node-side
  * sockets get FIN'd cleanly instead of half-open.
  */
 export async function closeNodeTransport(): Promise<void> {
@@ -115,10 +115,10 @@ interface RequestOptions {
 
 /**
  * Panel→node mTLS REST client. One instance per outgoing call (no pooling
- * yet — calls are infrequent and each one rebuilds the TLS agent). The CA
+ * yet, calls are infrequent and each one rebuilds the TLS agent). The CA
  * cert (via {@link bootstrapCa}) verifies the node's server cert. The
- * panel-client leaf (via {@link getPanelClientCert}) — clientAuth-only,
- * signed by the CA — is what the panel actually presents on handshake;
+ * panel-client leaf (via {@link getPanelClientCert}), clientAuth-only,
+ * signed by the CA, is what the panel actually presents on handshake;
  * the CA private key never appears in a TLS exchange (slice S6).
  *
  * Tests can pass an `MtlsOverride` to inject a synthetic bundle without
@@ -131,7 +131,7 @@ export class NodeTransport {
   ) {}
 
   private buildUrl(path: string): string {
-    // node.address is admin-supplied — accept either `host` or `host:port`.
+    // node.address is admin-supplied, accept either `host` or `host:port`.
     // When the port is missing we default to the mTLS port the agent
     // listens on (1337 since wave-13, hard-coded in install-iceslab-node.sh;
     // was 8443 pre-2026-05-21). Without this, a fresh-out-of-the-box DNS
@@ -209,7 +209,7 @@ export class NodeTransport {
 
   async getMetrics(): Promise<HostMetricsResponse> {
     return this.request<HostMetricsResponse>('GET', '/metrics', undefined, {
-      // Metrics endpoint is local /proc reads — should be fast. Tight timeout
+      // Metrics endpoint is local /proc reads, should be fast. Tight timeout
       // keeps the per-tick poller bounded if a node hangs.
       timeoutMs: 3_000,
     });
@@ -225,7 +225,7 @@ export class NodeTransport {
   }
 
   /**
-   * Push the FULL inbound set for this node. Idempotent — node-agent diffs
+   * Push the FULL inbound set for this node. Idempotent: node-agent diffs
    * against current state and only restarts/reloads the underlying protocol
    * server if something actually changed. Empty array is valid (means "this
    * node has no inbounds yet"); the node-agent will tear down any active

@@ -22,7 +22,7 @@ import type {
  *     The client picked this format because their app speaks wg-quick; other
  *     protocols don't translate to it.
  *
- * Returns an empty string when no matching AmneziaWG endpoint is available — the
+ * Returns an empty string when no matching AmneziaWG endpoint is available, the
  * route handler turns that into a 204-style empty body, telling the client
  * "no AmneziaWG inbound configured for you".
  */

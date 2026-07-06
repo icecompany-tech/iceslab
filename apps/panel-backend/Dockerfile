@@ -15,7 +15,7 @@ ARG NODE_VERSION=22.22-alpine
 
 # ───── Build stage ─────
 FROM node:${NODE_VERSION} AS builder
-# NODE_OPTIONS caps the V8 heap during build — without it pnpm + tsc can climb
+# NODE_OPTIONS caps the V8 heap during build, without it pnpm + tsc can climb
 # past 2 GB on a fresh install and OOM-kill the container on small VPS (CX22-class).
 # 1536 MB leaves headroom for native module compilers (sharp, esbuild, prisma).
 # NPM_CONFIG_FETCH_RETRIES retries silently on flaky networks instead of hanging
@@ -66,10 +66,10 @@ RUN pnpm exec tsc
 # `src/index.ts` so dev tooling (tsx / vitest / vite) reads TS source directly.
 # Production, however, runs plain `node dist/index.js`, and since Node 22.22 a
 # .ts entry's `export * from './transport.js'` no longer falls back to
-# transport.ts (ERR_MODULE_NOT_FOUND) — node:22-alpine floated into that
+# transport.ts (ERR_MODULE_NOT_FOUND), node:22-alpine floated into that
 # behaviour and crash-looped the backend on the first rebuild. Emitting the
 # compiled .js siblings makes the source entry resolve under plain node without
-# touching package.json (so dev/test/frontend stay on TS source — they never
+# touching package.json (so dev/test/frontend stay on TS source, they never
 # see these .js, which exist only inside this image). cwd here is
 # /repo/apps/panel-backend; use absolute paths to dodge cwd ambiguity.
 RUN pnpm exec tsc -p /repo/packages/shared/tsconfig.json \
@@ -104,7 +104,7 @@ COPY --from=builder /repo /app
 
 WORKDIR /app/apps/panel-backend
 
-# I5 — run the long-lived backend as the unprivileged `node` user (uid 1000,
+# I5: run the long-lived backend as the unprivileged `node` user (uid 1000,
 # ships with the image). Safe without extra setup: the app writes nothing to
 # disk at runtime (logs to stdout, state in Postgres/Redis), reads only
 # world-readable files copied in above, and binds an unprivileged port (3000).

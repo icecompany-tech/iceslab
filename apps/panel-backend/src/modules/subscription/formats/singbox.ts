@@ -17,7 +17,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  * would require sing-box's `wireguard` outbound (which lacks the AmneziaWG
  * obfuscation params) or a `naive` outbound that doesn't exist upstream.
  *
- * Output shape — minimal valid sing-box config:
+ * Output shape - minimal valid sing-box config:
  *   - `log`: standard
  *   - `outbounds`: per-endpoint proxies + Auto selector + direct
  *   - `route.final = "Auto"`: catch-all sends every connection through the
@@ -29,7 +29,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  * avoids drift across sing-box versions.
  */
 /**
- * Slice 29 — when `bundle === 'url-test'`, the formatter wraps proxy tags in
+ * Slice 29: when `bundle === 'url-test'`, the formatter wraps proxy tags in
  * a `url-test` group named `Auto-URLTest` that probes each outbound every
  * `urltestIntervalSec` seconds and routes through the lowest-latency one.
  * Otherwise (default), we emit the legacy `selector` group that lets the
@@ -171,12 +171,12 @@ export function buildSingboxJson(
     const tag = `${e.nodeName}-${e.protocol}`;
     if (e.protocol === 'hysteria') {
       proxyTags.push(tag);
-      // sing-box requires `tls.enabled: true` for hysteria2 outbounds —
+      // sing-box requires `tls.enabled: true` for hysteria2 outbounds,
       // without it the parser fails with "TLS required" (caught in Hiddify
       // 4.1.1 on 2026-05-06). Hysteria2 always uses TLS by design, so this
       // is purely a parser-satisfaction quirk.
-      // Slice 31.5 — sing-box accepts `server_ports: ["START:END"]` (colon
-      // separator, NOT hyphen — Hiddify URI uses hyphen, sing-box JSON uses
+      // Slice 31.5: sing-box accepts `server_ports: ["START:END"]` (colon
+      // separator, NOT hyphen, Hiddify URI uses hyphen, sing-box JSON uses
       // colon). When the field is present, sing-box's hysteria2 outbound
       // picks a random port from the range for each connection and rotates
       // it. The `server_port` field is still required as a fallback / initial
@@ -194,7 +194,7 @@ export function buildSingboxJson(
         ...(portHopRange ? { server_ports: portHopRange } : {}),
         password: e.password,
         // Brutal CC bandwidth declaration. Without these the client
-        // negotiates a 0-byte send window — handshake succeeds but every
+        // negotiates a 0-byte send window, handshake succeeds but every
         // proxied request times out at tx=0. The server can override via
         // `ignoreClientBandwidth: true` (recommended default in our
         // adapter), but supplying real values here keeps Brutal CC active
@@ -207,7 +207,7 @@ export function buildSingboxJson(
         tls: {
           enabled: true,
           server_name: e.host,
-          // ALPN h3 is mandatory for some sing-box / Hiddify iOS builds —
+          // ALPN h3 is mandatory for some sing-box / Hiddify iOS builds,
           // without it the QUIC stream multiplexer never opens proxy
           // streams even though the QUIC connection itself is fine.
           alpn: ['h3'],
@@ -291,7 +291,7 @@ export function buildSingboxJson(
         ...transport,
       });
     } else if (e.protocol === 'shadowsocks') {
-      // Slice 24d — Shadowsocks 2022 (and legacy AEAD). No TLS layer; the
+      // Slice 24d: Shadowsocks 2022 (and legacy AEAD). No TLS layer; the
       // AEAD ciphertext is the disguise. method+password drives the outbound.
       proxyTags.push(tag);
       outbounds.push({
@@ -374,7 +374,7 @@ export function buildSingboxJson(
     }
   }
 
-  // Slice 29 — `url-test` group (auto-failover by latency). Default still
+  // Slice 29: `url-test` group (auto-failover by latency). Default still
   // emits the legacy `selector` so manual-pick UIs (Hiddify "Connect to:")
   // keep working; admins flip to url-test via `?bundle=url-test`.
   const bundle = opts.bundle ?? 'selector';

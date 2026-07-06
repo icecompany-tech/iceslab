@@ -100,7 +100,7 @@ function formatDelta(
   value: number,
   base: number,
 ): { text: string; positive: boolean; noData: boolean } {
-  // No traffic yet on either side — empty deltas like "0 B vs yesterday" read
+  // No traffic yet on either side, empty deltas like "0 B vs yesterday" read
   // weird and break in two lines on narrow viewports. Signal "no data" so the
   // hint can show a friendlier placeholder.
   if (value === 0 && base === 0) return { text: '', positive: true, noData: true };
@@ -717,7 +717,7 @@ function SystemHealth({ host }: { host: DashboardOverview['host'] }) {
   // Headline = load-average-derived % (1-min, smoothed), not the 200ms
   // instantaneous sample. The sample is taken while the backend builds the
   // dashboard (parallel SQL burst), so on a 1-vCPU host it measures its own
-  // work and spikes to 80%+ — misleading. loadPercent reflects sustained
+  // work and spikes to 80%+, misleading. loadPercent reflects sustained
   // busy-ness. Fall back to the sample where loadavg is unavailable (Windows
   // returns 0,0,0 → loadPercent null).
   const cpuPct = host.cpu.loadPercent ?? host.cpu.samplePercent;

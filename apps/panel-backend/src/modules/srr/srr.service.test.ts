@@ -83,7 +83,7 @@ describe('matchFormatForUserAgent', () => {
     await seed([
       { name: 'tail', uaPattern: 'TARGET$', format: 'clash', priority: 10 },
     ]);
-    // 1000 chars of padding then TARGET — beyond the 256 cap so won't match.
+    // 1000 chars of padding then TARGET, beyond the 256 cap so won't match.
     const padded = 'A'.repeat(1000) + 'TARGET';
     expect(await matchFormatForUserAgent(padded)).toBeNull();
     // But TARGET within the first 256 chars is matched.

@@ -41,7 +41,7 @@ func TestAddUserStoresPassword(t *testing.T) {
 func TestAddUserSkipsWhenNoHysteriaPassword(t *testing.T) {
 	a := newTestAdapter(t)
 
-	// User with only Xray credentials — Hysteria adapter should ignore.
+	// User with only Xray credentials, Hysteria adapter should ignore.
 	if err := a.AddUser(core.User{UserID: "u-2", XrayUUID: "uuid"}); err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPasswordChangeReplacesEntry(t *testing.T) {
 	a := newTestAdapter(t)
 
 	_ = a.AddUser(core.User{UserID: "u-5", HysteriaPassword: "old"})
-	// Re-add same user with rotated password — old entry should be cleared
+	// Re-add same user with rotated password, old entry should be cleared
 	// after RemoveUser, then new entry written.
 	_ = a.RemoveUser("u-5")
 	_ = a.AddUser(core.User{UserID: "u-5", HysteriaPassword: "new"})

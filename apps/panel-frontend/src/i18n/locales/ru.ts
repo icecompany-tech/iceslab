@@ -1103,7 +1103,7 @@ export default {
     tooltipUsers: 'Пользователей',
     tooltipProfiles: 'Профилей',
     mtprotoNoPerUserStats:
-      'MTProto (mtg) — один общий секрет на всех. Трафик per-user не считается, лимиты юзера на mtproto не действуют. Реальный объём смотри в Today на карточке ноды.',
+      'MTProto (mtg): один общий секрет на всех. Трафик per-user не считается, лимиты юзера на mtproto не действуют. Реальный объём смотри в Today на карточке ноды.',
     devicesTitle: 'HWID Устройства',
   },
 

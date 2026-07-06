@@ -2,7 +2,7 @@ import type { User, UserTraffic } from '../../generated/prisma/client.js';
 import type { ProtocolName } from '@iceslab/shared';
 
 // Re-export so existing imports keep working (slice 16 moved the
-// implementation into core-adapters/hysteria — this file now hosts only
+// implementation into core-adapters/hysteria, this file now hosts only
 // the format-level helpers that are not protocol-specific).
 export { buildHysteriaUri, type HysteriaUriOpts } from '../../core-adapters/hysteria/index.js';
 export {
@@ -46,7 +46,7 @@ export function hostFromAddress(address: string): string {
     return close === -1 ? address : address.slice(0, close + 1);
   }
   // Bare IPv6 (more than one colon, no brackets) has no unambiguous port
-  // suffix to strip — return it untouched rather than truncating at the
+  // suffix to strip, return it untouched rather than truncating at the
   // first colon.
   if (address.indexOf(':') !== address.lastIndexOf(':')) {
     return address;
@@ -61,7 +61,7 @@ export function hostFromAddress(address: string): string {
  * every mainstream client (NekoRay, Hiddify, v2rayN, ...).
  */
 export function encodePlainList(uris: string[]): string {
-  // Filter empty URIs — amneziawg endpoints don't have a URL form, so they
+  // Filter empty URIs: amneziawg endpoints don't have a URL form, so they
   // contribute nothing to the universal plain-list body. Clients that want
   // AmneziaWG fetch with `?format=wgconf`.
   const nonEmpty = uris.filter((u) => u.length > 0);
@@ -90,7 +90,7 @@ interface SubscriptionEndpointBase {
   /** Admin-facing label of the originating host. Useful for debugging
    *  why a particular URL appears in the subscription. */
   hostRemark?: string;
-  /** ALPN list — emitted by clash/singbox formatters when non-empty. */
+  /** ALPN list: emitted by clash/singbox formatters when non-empty. */
   alpn?: string[];
   /** `?allowInsecure=1` flag for self-signed CDN front. */
   allowInsecure?: boolean;
@@ -106,7 +106,7 @@ interface SubscriptionEndpointBase {
 export interface HysteriaSubscriptionEndpoint extends SubscriptionEndpointBase {
   protocol: 'hysteria';
   password: string;
-  /** Salamander obfuscation password — present only when the inbound has
+  /** Salamander obfuscation password: present only when the inbound has
    *  `obfsPassword` set. Critical on RU/IR/CN ISPs that DPI-throttle bare QUIC. */
   obfsPassword?: string;
   /** Brutal CC bandwidth declaration in Mbps. Forwarded into URI / singbox
@@ -124,7 +124,7 @@ export interface HysteriaSubscriptionEndpoint extends SubscriptionEndpointBase {
 
 export interface XraySubscriptionEndpoint extends SubscriptionEndpointBase {
   protocol: 'xray';
-  /** UUID — used both as VLESS userId and (slice 24c part 3) as Trojan password. */
+  /** UUID: used both as VLESS userId and (slice 24c part 3) as Trojan password. */
   uuid: string;
   publicKey: string;
   shortId: string;
@@ -135,7 +135,7 @@ export interface XraySubscriptionEndpoint extends SubscriptionEndpointBase {
   path?: string;
   hostHeader?: string;
   serviceName?: string;
-  /** Slice 24c part 3 — controls URI scheme (`vless://` vs `trojan://`)
+  /** Slice 24c part 3: controls URI scheme (`vless://` vs `trojan://`)
    *  and downstream singbox/clash outbound type. */
   subprotocol?: 'vless' | 'trojan' | 'vmess';
 }
@@ -148,7 +148,7 @@ export interface AmneziawgSubscriptionEndpoint extends SubscriptionEndpointBase 
   allowedIp: string;
   /** Server's WireGuard public key (the inbound's interface PublicKey). */
   serverPublicKey: string;
-  /** Junk/header obfuscation parameters — must match the server inbound. */
+  /** Junk/header obfuscation parameters: must match the server inbound. */
   jc: number;
   jmin: number;
   jmax: number;
@@ -192,10 +192,10 @@ export interface MtprotoSubscriptionEndpoint extends SubscriptionEndpointBase {
   protocol: 'mtproto';
   /** Per-user Fake-TLS secret (hex, `ee<32-bytes><domain-hex>`). */
   secret: string;
-  /** The masquerade domain — useful for non-URI formats that want it
+  /** The masquerade domain: useful for non-URI formats that want it
    *  surfaced separately from the embedded hex. */
   domain: string;
-  /** `https://t.me/proxy?...` — clickable in any browser/messenger. */
+  /** `https://t.me/proxy?...`: clickable in any browser/messenger. */
   tmeUri: string;
 }
 

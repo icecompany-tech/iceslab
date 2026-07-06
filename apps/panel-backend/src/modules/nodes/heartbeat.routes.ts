@@ -6,13 +6,13 @@ import { redis } from '../../lib/redis.js';
 import { inboundSyncQueue, inboundDirtyKey } from '../inbounds/inbounds.queue.js';
 
 /**
- * Slice 38 follow-up — detect agent restart and re-issue applyInbounds.
+ * Slice 38 follow-up: detect agent restart and re-issue applyInbounds.
  *
  * The agent emits `X-Agent-Start-Time` (a per-process unix-nano string) in
  * every heartbeat. We persist the last-seen value in Redis at
  * `node:<id>:agentStartTime`. When the incoming value differs from the
  * stored one, we enqueue an `applyNodeInbounds` job which re-pushes the
- * inbound set + all active users — closing the cycle-5 gap where iOS auth
+ * inbound set + all active users, closing the cycle-5 gap where iOS auth
  * callbacks 404'd after agent restart until an admin toggled a profile.
  *
  * First-seen (no stored value) does NOT trigger a resync: that branch fires
@@ -59,28 +59,28 @@ async function trackAgentStart(nodeId: string, startTime: string): Promise<void>
       { jobId: `apply-${nodeId}` },
     );
     console.log(
-      `[heartbeat] node=${nodeId} agent restart detected (prev=${previous} new=${startTime}) — enqueued applyInbounds`,
+      `[heartbeat] node=${nodeId} agent restart detected (prev=${previous} new=${startTime}), enqueued applyInbounds`,
     );
   }
 }
 
 /**
- * Slice 38 — heartbeat self-destruct endpoint.
+ * Slice 38: heartbeat self-destruct endpoint.
  *
- * Mounted under `/api/internal/nodes` (no admin auth — agent-only).
+ * Mounted under `/api/internal/nodes` (no admin auth, agent-only).
  * The agent presents `Authorization: Bearer <token>` from its bootstrap
  * payload. Token is HMAC over (nodeId, heartbeat_secret); the secret
  * lives in `nodes.heartbeat_secret` and never leaves the panel.
  *
  * Status mapping:
- *   200 { status: "active" }    — node is registered and not soft-deleted
- *   200 { status: "disabled" }  — admin explicitly disabled the node
+ *   200 { status: "active" }    - node is registered and not soft-deleted
+ *   200 { status: "disabled" }  - admin explicitly disabled the node
  *                                  (agent should pause activity but NOT
- *                                  self-destruct — admins toggle this)
- *   410 Gone                    — node was deleted; agent self-destructs
- *   401 Unauthorized            — token bad / nodeId unknown / HMAC fail
+ *                                  self-destruct, admins toggle this)
+ *   410 Gone                    - node was deleted; agent self-destructs
+ *   401 Unauthorized            - token bad / nodeId unknown / HMAC fail
  *
- * Network errors / 5xx on the agent side are NOT treated as "delete" —
+ * Network errors / 5xx on the agent side are NOT treated as "delete",
  * the agent only counts explicit 410s. This keeps panel-restart and
  * brief outages from spuriously destroying production nodes.
  */
@@ -122,7 +122,7 @@ export async function heartbeatRoutes(app: FastifyInstance): Promise<void> {
       select: { deletedAt: true, status: true },
     });
 
-    // findUnique by id on a UUID PK — if verifyHeartbeatToken found a
+    // findUnique by id on a UUID PK, if verifyHeartbeatToken found a
     // secret it means the row exists. The only way for it to be missing
     // here is a race with delete during this request; treat as Gone.
     if (!node) {
@@ -131,7 +131,7 @@ export async function heartbeatRoutes(app: FastifyInstance): Promise<void> {
     if (node.deletedAt) {
       return reply.code(410).send({ error: 'GONE' });
     }
-    // Slice 38 follow-up — auto-resync on agent restart. Fire-and-forget
+    // Slice 38 follow-up: auto-resync on agent restart. Fire-and-forget
     // (we don't want a Redis hiccup to fail the heartbeat itself; if the
     // restart-detect fails, the worst case is the in-memory user map stays
     // stale until the admin toggles a profile, which was the pre-slice-38

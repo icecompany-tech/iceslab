@@ -32,7 +32,7 @@ func validateInboundYAMLSafe(field, value string) error {
 }
 
 // validateMasqueradeURL enforces URL-format validation. URLs legitimately
-// contain ':' so we can't apply validateInboundYAMLSafe wholesale — instead
+// contain ':' so we can't apply validateInboundYAMLSafe wholesale, instead
 // we explicitly reject the YAML-scalar exit chars (\n \r) and then enforce
 // that what's left is actually a parsable http/https URL with a host.
 func validateMasqueradeURL(s string) error {
@@ -54,7 +54,7 @@ func validateMasqueradeURL(s string) error {
 
 // InboundConfig holds the panel-pushed runtime config that lands in
 // /etc/hysteria/config.yaml. Install-time settings (ACME domain/email,
-// auth callback URL) live on adapter.Config — those don't flow over the
+// auth callback URL) live on adapter.Config, those don't flow over the
 // wire because they're identity for the node, not per-inbound.
 //
 // Port was install-time only until 2026-05-20: admin couldn't change the
@@ -98,7 +98,7 @@ func inboundEqual(a, b InboundConfig) bool {
 }
 
 // renderConfig produces a deterministic YAML body for hysteria server. The
-// shape matches what we manually wrote during the 2026-05-07 VPS test —
+// shape matches what we manually wrote during the 2026-05-07 VPS test:
 // listen + acme + auth + (obfs?) + (masquerade?) + (bandwidth?). No keys are
 // emitted in random order, no time-stamps, so byte-identical inputs produce
 // byte-identical output (golden-test friendly).
@@ -114,11 +114,11 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 		return nil, fmt.Errorf("hysteria render: ACMEEmail is required")
 	}
 	// Port selection priority (slice 50, 2026-05-20):
-	//   1. inbound.Port — what the panel actually pushed, the source of truth
+	//   1. inbound.Port: what the panel actually pushed, the source of truth
 	//      now that admin can change ports via the UI
-	//   2. adapterCfg.ListenPort — install-time fallback (legacy, kept so a
+	//   2. adapterCfg.ListenPort: install-time fallback (legacy, kept so a
 	//      pre-slice-50 panel that doesn't include port falls through)
-	//   3. 443 — last-resort default (matches install-iceslab-node.sh)
+	//   3. 443: last-resort default (matches install-iceslab-node.sh)
 	listenPort := inbound.Port
 	if listenPort == 0 {
 		listenPort = adapterCfg.ListenPort
@@ -192,7 +192,7 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	// completes successfully but every proxied request times out at tx=0.
 	// Setting `ignoreClientBandwidth: true` forces BBR (CUBIC-class
 	// congestion control) and removes the client-bandwidth dependency
-	// entirely — at the cost of not using Brutal's aggressive scheduling.
+	// entirely, at the cost of not using Brutal's aggressive scheduling.
 	// For real-world residential broadband this is invisible; for clients
 	// that DO declare valid bandwidth values via our subscription URI
 	// (`upmbps=`/`downmbps=`) Brutal still kicks in. Net: defaults that
@@ -202,7 +202,7 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	// Cycle #6 reality-check 2026-05-12: Hysteria 2's per-user uplink/downlink
 	// counters are exposed via a separate HTTP API (`trafficStats:` block).
 	// Without this, our adapter's GetStats only returned a userId list with
-	// zero bytes — UI showed `0 B today` for every Hysteria node even with
+	// zero bytes, UI showed `0 B today` for every Hysteria node even with
 	// active traffic. The endpoint binds loopback-only; secret is shared
 	// between adapter (poller) and hysteria-server (validator) via
 	// /etc/iceslab-node/env. The block is only emitted when both fields

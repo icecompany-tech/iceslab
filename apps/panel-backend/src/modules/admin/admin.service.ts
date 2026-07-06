@@ -27,7 +27,7 @@ export class RegistrationDisabledError extends Error {
   }
 }
 
-// Postgres advisory-lock key for the bootstrap path. Arbitrary constant —
+// Postgres advisory-lock key for the bootstrap path. Arbitrary constant,
 // only matters that every bootstrap attempt picks the same value so the
 // lock actually serializes them. int4 range (signed 32-bit).
 const BOOTSTRAP_LOCK_KEY = 91_823_746;
@@ -63,7 +63,7 @@ export async function createAdmin(input: CreateAdminInput): Promise<PublicAdminD
 
 // bootstrapFirstAdmin is the only path that creates the very first admin
 // (no auth required). Two concurrent POSTs to /api/auth/register would
-// otherwise both see count===0 and both succeed — bypassing the "only one
+// otherwise both see count===0 and both succeed, bypassing the "only one
 // bootstrap" invariant. We serialize via a Postgres transaction-scoped
 // advisory lock: every concurrent attempt waits for the lock, then re-checks
 // the count under the lock. Lock is auto-released at transaction end.

@@ -16,7 +16,7 @@ const SINGLETON_ID = 1;
  * via {@link encodeNodePayload}; the node decodes it on first boot to learn
  * its identity and trust anchor.
  *
- * Slice 38 — added `panelUrl`, `nodeId`, `heartbeatToken` for the agent's
+ * Slice 38: added `panelUrl`, `nodeId`, `heartbeatToken` for the agent's
  * heartbeat self-destruct loop. They're optional in the type so existing
  * payloads that lack them (issued before the migration landed) still
  * decode; agents whose payloads are missing them simply skip heartbeats.
@@ -28,9 +28,9 @@ export interface NodePayload {
   panelUrl?: string;
   nodeId?: string;
   heartbeatToken?: string;
-  // Slice S6 — SHA-256 fingerprint (lowercase hex, no colons) of the
+  // Slice S6: SHA-256 fingerprint (lowercase hex, no colons) of the
   // panel-client cert. Agents pin this and reject any TLS leaf whose
-  // SHA-256 doesn't match — even if it's CA-signed. Closes the lateral-
+  // SHA-256 doesn't match, even if it's CA-signed. Closes the lateral-
   // movement window where a compromised node's leaf could be replayed
   // against other nodes.
   panelClientFingerprint?: string;
@@ -38,7 +38,7 @@ export interface NodePayload {
 
 /**
  * Idempotent: load the panel CA from the database, generating one on the very
- * first call. The CA never rotates automatically — operators wanting rotation
+ * first call. The CA never rotates automatically, operators wanting rotation
  * must wipe `keygen_ca` and re-issue every node cert.
  */
 export async function bootstrapCa(): Promise<CertBundle> {
@@ -67,7 +67,7 @@ export async function bootstrapCa(): Promise<CertBundle> {
     },
   });
   // CA generation only happens on first-ever panel boot OR after a manual
-  // `keygen_ca` wipe — both are events admins want to know about. (A surprise
+  // `keygen_ca` wipe, both are events admins want to know about. (A surprise
   // CA bootstrap = panel DB got wiped without anyone meaning to, every node
   // will fail mTLS until re-bootstrapped.)
   notifyTelegramAsync(
@@ -77,7 +77,7 @@ export async function bootstrapCa(): Promise<CertBundle> {
 }
 
 /**
- * Slice S6 — separate clientAuth-only leaf for panel→node mTLS handshakes.
+ * Slice S6: separate clientAuth-only leaf for panel→node mTLS handshakes.
  * The CA private key never appears in a TLS handshake.
  *
  * Lazy-backfilled: rows that pre-date S6 had NULL panel_client_*; on the
@@ -95,7 +95,7 @@ export async function getPanelClientCert(): Promise<CertBundle> {
       privateKeyPem: row.panelClientKeyPem,
     };
   }
-  // Backfill — only happens once per upgraded install.
+  // Backfill: only happens once per upgraded install.
   const panelClient = await generatePanelClientCert(ca);
   await prisma.keygenCa.update({
     where: { id: SINGLETON_ID },
@@ -110,7 +110,7 @@ export async function getPanelClientCert(): Promise<CertBundle> {
 /**
  * SHA-256 fingerprint of the panel-client cert. Each node payload bundles
  * this string; the agent pins the leaf and rejects any other cert during
- * mTLS handshakes — even valid CA-signed leaves from a compromised peer.
+ * mTLS handshakes, even valid CA-signed leaves from a compromised peer.
  */
 export async function getPanelClientFingerprint(): Promise<string> {
   const cert = await getPanelClientCert();

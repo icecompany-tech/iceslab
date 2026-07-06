@@ -1,5 +1,5 @@
 // Package naive implements CoreAdapter for NaiveProxy. Multi-user mode
-// requires Caddy compiled with the klzgrad/forwardproxy@naive fork — the
+// requires Caddy compiled with the klzgrad/forwardproxy@naive fork, the
 // upstream standalone naive binary is single-tenant only.
 //
 // Slice 20 ships the Caddyfile generator + caddy-reload pipeline. Per-user
@@ -18,19 +18,19 @@ import (
 	"strings"
 )
 
-// InboundConfig is the static part of the Caddyfile — generated once from
+// InboundConfig is the static part of the Caddyfile, generated once from
 // admin settings (slice 23 will move it into the inbounds table) and kept
 // constant across user mutations.
 type InboundConfig struct {
 	// Hostname is the public domain Caddy answers on, e.g. "n1.example.com".
-	// Required — Caddy needs it for the automatic ACME flow.
+	// Required, Caddy needs it for the automatic ACME flow.
 	Hostname string
 
 	// ListenPort is the TCP port Caddy binds to. Default 443.
 	ListenPort int
 
 	// TLSEmail is the contact address ACME uses for cert-renewal notices.
-	// Required — Let's Encrypt rejects empty contacts.
+	// Required, Let's Encrypt rejects empty contacts.
 	TLSEmail string
 
 	// MasqueradeRoot is the local directory Caddy serves to anyone hitting
@@ -78,7 +78,7 @@ func (c *InboundConfig) validate() error {
 	if strings.ContainsAny(c.TLSEmail, " {}\n\r\t") {
 		return fmt.Errorf("TLSEmail contains forbidden char: %q", c.TLSEmail)
 	}
-	// MasqueradeRoot is optional — empty value gets the safe default
+	// MasqueradeRoot is optional, empty value gets the safe default
 	// `/var/www/html` from withDefaults(). When the panel does supply a
 	// value, vet it: forbid Caddyfile-unsafe chars and pin to a whitelist
 	// of safe roots. Without the whitelist a panel can point this at
@@ -128,10 +128,10 @@ func renderCaddyfile(inbound InboundConfig, users []User) (string, error) {
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Username < sorted[j].Username })
 
 	var b strings.Builder
-	// Global options block — pin storage to /etc/caddy. Without this Caddy
+	// Global options block, pin storage to /etc/caddy. Without this Caddy
 	// tries $HOME/.local/share/caddy first, then falls back to ./caddy
 	// (relative to cwd). Our systemd unit has ProtectSystem=strict, no
-	// HOME set, and only /etc/caddy in ReadWritePaths — so the fallback
+	// HOME set, and only /etc/caddy in ReadWritePaths, so the fallback
 	// hits "mkdir caddy: read-only file system" and ACME never persists
 	// a cert. Caught live cycle #8 2026-05-13.
 	fmt.Fprintln(&b, "{")
@@ -143,7 +143,7 @@ func renderCaddyfile(inbound InboundConfig, users []User) (string, error) {
 	// forward_proxy with probe_resistance + zero basic_auth lines fails
 	// validation: "probe resistance requires authentication". Emit the
 	// block only when we have at least one user. Before any user is
-	// added the site is pure file_server masquerade — looks like a
+	// added the site is pure file_server masquerade, looks like a
 	// vanilla static-content host on probes, which is what we want.
 	if len(sorted) > 0 {
 		fmt.Fprintln(&b, "\t\tforward_proxy {")
@@ -162,7 +162,7 @@ func renderCaddyfile(inbound InboundConfig, users []User) (string, error) {
 }
 
 // writeCaddyfile atomically writes the rendered Caddyfile to disk via the
-// shared atomicfile helper (fsync(file)+fsync(dir)). Mode 0o600 — the file
+// shared atomicfile helper (fsync(file)+fsync(dir)). Mode 0o600, the file
 // contains every user's plaintext NaiveProxy password.
 func writeCaddyfile(path string, blob string) error {
 	dir := filepath.Dir(path)

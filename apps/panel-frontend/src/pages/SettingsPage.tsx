@@ -65,7 +65,7 @@ export function SettingsPage() {
         subtitle={t('settings.subtitle')}
       />
 
-      {/* Two compact cards top — Customization is one field; API tokens
+      {/* Two compact cards top, Customization is one field; API tokens
           starts empty. Side-by-side fills the 1920px viewport instead of
           stacking with empty space. Regions has a 3-column inline form so
           it gets the full row. */}

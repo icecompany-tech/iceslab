@@ -21,7 +21,7 @@ describe('escapeMarkdown', () => {
   });
 
   it('escapes brackets that could forge inline links', () => {
-    // Adversary's username = `[click here](https://evil.example)` — without
+    // Adversary's username = `[click here](https://evil.example)`, without
     // escaping this would render as a clickable link in the Telegram alert
     // and could phish whoever sees the alert. After escape it's literal.
     const adversary = '[click here](https://evil.example)';
@@ -31,7 +31,7 @@ describe('escapeMarkdown', () => {
   });
 
   it('does NOT escape backslashes (one-pass)', () => {
-    // We deliberately don't escape `\` itself — callers should never wrap
+    // We deliberately don't escape `\` itself, callers should never wrap
     // twice, but if they do, backslashes pass through unchanged so the
     // already-escaped meta chars stay escaped.
     const once = escapeMarkdown('*x*');

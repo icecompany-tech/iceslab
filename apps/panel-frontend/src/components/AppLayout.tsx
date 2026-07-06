@@ -184,14 +184,14 @@ export function AppLayout() {
 
   // Wave-14 #18: single dashQuery feeds every sidebar count. Pre-wave we
   // fired 4 separate count queries (users/profiles/squads/nodes) each
-  // pulling full row payloads only to call .length on the client — on every
+  // pulling full row payloads only to call .length on the client, on every
   // page transition for every signed-in admin. The dashboard response now
   // carries `inventory.{profileCount,squadCount}` alongside the existing
   // users.total and system.{total,online}NodeCount, all from the same
   // Redis-cached blob.
   const dashQuery = useOverview();
 
-  // ROADMAP D1 — update-available check. Cheap: the backend caches the GitHub
+  // ROADMAP D1: update-available check. Cheap: the backend caches the GitHub
   // call for 6h, so a long staleTime + a couple of refetches a day is plenty.
   const versionQuery = useQuery({
     queryKey: ['system', 'version'],
@@ -397,7 +397,7 @@ export function AppLayout() {
               </Box>
             </Box>
 
-            {/* Workspace group — core resources operators manage daily */}
+            {/* Workspace group: core resources operators manage daily */}
             <Text style={{ ...MONO_LABEL, padding: '0 28px 8px' }}>{t('sidebar.workspace')}</Text>
 
             <Stack gap={2} px={8}>
@@ -436,7 +436,7 @@ export function AppLayout() {
               />
             </Stack>
 
-            {/* Subscription group — everything that shapes the client-facing
+            {/* Subscription group: everything that shapes the client-facing
                 subscription URL: per-instance metadata + UA-routing rules. */}
             <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
               {t('sidebar.subscriptionGroup')}
@@ -454,7 +454,7 @@ export function AppLayout() {
               />
             </Stack>
 
-            {/* System group — observability + panel-wide config */}
+            {/* System group: observability + panel-wide config */}
             <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
               {t('sidebar.systemGroup')}
             </Text>

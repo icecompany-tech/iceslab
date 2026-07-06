@@ -2,7 +2,7 @@ import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
- * Clash YAML subscription formatter (targets Clash Meta / Mihomo — covers
+ * Clash YAML subscription formatter (targets Clash Meta / Mihomo, covers
  * VLESS+REALITY, Hysteria2, Trojan+REALITY, and Shadowsocks native types).
  *
  * Scope:
@@ -210,7 +210,7 @@ export function buildClashYaml(
           `    obfs-password: ${yamlString(e.obfsPassword)}`,
         );
       }
-      // Slice 31.5 — Clash Meta (mihomo) port-hopping. The `ports` key
+      // Slice 31.5: Clash Meta (mihomo) port-hopping. The `ports` key
       // accepts a `START-END` (hyphen) or comma-list form; we emit the
       // hyphen form to match the URI's `mport`. Server-side iptables
       // REDIRECT range must cover this.
@@ -297,7 +297,7 @@ export function buildClashYaml(
 
       proxies.push(block.join('\n'));
     } else if (e.protocol === 'shadowsocks') {
-      // Slice 24d — Clash Meta uses `type: ss` with a `cipher` field that
+      // Slice 24d: Clash Meta uses `type: ss` with a `cipher` field that
       // matches our `method` exactly (clash and xray share the SS2022 names).
       proxyNames.push(name);
       proxies.push(

@@ -64,7 +64,7 @@ const usersListResponseSchema = {
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route onRequest instead of plugin-level addHook so a
   // future public route added to this plugin doesn't silently inherit
-  // no-auth (Fastify v5 quirk — see feedback_fastify_auth memory). All
+  // no-auth (Fastify v5 quirk, see feedback_fastify_auth memory). All
   // current routes are still auth-gated; the change is structural.
   const auth = { onRequest: [requireAuth] };
   // POST /api/users
@@ -109,7 +109,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // GET /api/users/:id/endpoints — per-protocol URIs for this user.
+  // GET /api/users/:id/endpoints: per-protocol URIs for this user.
   // Reuses the same generateSubscription pipeline that powers /sub/<token>
   // (no duplicated URI-building logic), then strips it down to {protocol,
   // nodeName, host, port, uri} entries the admin UI can render with copy
@@ -127,7 +127,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     try {
       const result = await generateSubscription(user.subscriptionToken, {
         ip: request.ip,
-        // Admin context — no UA-driven SRR filtering, return every endpoint.
+        // Admin context, no UA-driven SRR filtering, return every endpoint.
         userAgent: '',
       });
       return reply.send({
@@ -181,7 +181,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/users/:id/revoke — kill the current subscription link (leaked or
+  // POST /api/users/:id/revoke: kill the current subscription link (leaked or
   // abusive). /sub then returns 403 REVOKED until the link is rotated.
   app.post('/api/users/:id/revoke', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
@@ -196,7 +196,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/users/:id/rotate-subscription — issue a fresh token (old link
+  // POST /api/users/:id/rotate-subscription: issue a fresh token (old link
   // dies, prior revoke cleared so the new link works immediately).
   app.post('/api/users/:id/rotate-subscription', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
@@ -211,7 +211,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  // POST /api/users/:id/reset-traffic — zero used traffic + stamp the reset;
+  // POST /api/users/:id/reset-traffic: zero used traffic + stamp the reset;
   // the user.traffic-reset cascade lifts a traffic limit and re-provisions
   // nodes. For period-billing ("bought a period -> counter reset").
   app.post('/api/users/:id/reset-traffic', auth, async (request, reply) => {

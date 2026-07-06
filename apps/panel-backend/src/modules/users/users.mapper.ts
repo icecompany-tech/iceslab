@@ -104,9 +104,9 @@ export function mapUserToPublic(
 }
 
 /**
- * Prisma `Json` field returns `unknown` — narrow to a string[] of valid
+ * Prisma `Json` field returns `unknown`, narrow to a string[] of valid
  * protocol names. Falls back to ['hysteria'] if the stored shape is
- * unexpected (defensive — should not happen with our schema validation).
+ * unexpected (defensive, should not happen with our schema validation).
  */
 export function parseEnabledProtocols(value: unknown): string[] {
   if (!Array.isArray(value)) return ['hysteria'];

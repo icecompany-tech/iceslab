@@ -87,7 +87,7 @@ describe('buildClashYaml', () => {
     expect(out).toContain('reality-opts:');
     expect(out).toContain('public-key: pubkey-base64url');
     expect(out).toContain('short-id: abc123');
-    // SNI must be quoted because of the dots — but bare alnum + dots is allowed
+    // SNI must be quoted because of the dots, but bare alnum + dots is allowed
     // by our yamlString, so no quotes needed.
     expect(out).toContain('servername: www.cloudflare.com');
   });
@@ -103,7 +103,7 @@ describe('buildClashYaml', () => {
     const out = buildClashYaml([]);
     expect(out).toContain('- MATCH,DIRECT');
     expect(out).not.toContain('- MATCH,Auto');
-    // Empty proxies/groups must be valid YAML — `[]` is the safe form.
+    // Empty proxies/groups must be valid YAML, `[]` is the safe form.
     expect(out).toMatch(/proxies:\s*\n\s+\[\]/);
     expect(out).toMatch(/proxy-groups:\s*\n\s+\[\]/);
   });
@@ -128,7 +128,7 @@ describe('buildClashYaml', () => {
     expect(buildClashYaml([hysteriaEp]).endsWith('\n')).toBe(true);
   });
 
-  // ───── Slice 24c part 3a — Trojan subprotocol ─────
+  // ───── Slice 24c part 3a: Trojan subprotocol ─────
 
   it('emits a trojan proxy entry when subprotocol=trojan', () => {
     const out = buildClashYaml([trojanEp]);
@@ -166,7 +166,7 @@ describe('buildClashYaml', () => {
     expect(out).not.toContain('reality-opts');
   });
 
-  // ───── Slice 24d — Shadowsocks ─────
+  // ───── Slice 24d: Shadowsocks ─────
 
   it('emits a shadowsocks (ss) proxy entry with cipher + password + udp', () => {
     const out = buildClashYaml([ssEp]);
@@ -189,7 +189,7 @@ describe('buildClashYaml', () => {
     expect(out).toMatch(/- eu-1-shadowsocks/);
   });
 
-  // ───── Slice 24c part 2 — transports ─────
+  // ───── Slice 24c part 2: transports ─────
 
   it('emits ws-opts with path + Host header for ws network', () => {
     const out = buildClashYaml([

@@ -18,7 +18,7 @@ type AuthRequest struct {
 }
 
 // AuthResponse is what Hysteria expects back. `id` is opaque and gets logged
-// by Hysteria for the connection — we use the panel user UUID.
+// by Hysteria for the connection, we use the panel user UUID.
 type AuthResponse struct {
 	OK bool   `json:"ok"`
 	ID string `json:"id,omitempty"`

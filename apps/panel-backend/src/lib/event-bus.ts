@@ -25,12 +25,12 @@ export interface DomainEventMap {
   // inbound.* → push the full inbound set of the affected node to its
   // node-agent over mTLS, so the protocol server (xray/hysteria/awg/naive)
   // gets the live config without admin SSH editing /etc/iceslab-node/env.
-  // Slice 24 — replaces the manual env-editing dance from VPS test 2026-05-06.
+  // Slice 24: replaces the manual env-editing dance from VPS test 2026-05-06.
   'inbound.created':      { inboundId: string; nodeId: string };
   'inbound.updated':      { inboundId: string; nodeId: string };
   'inbound.deleted':      { inboundId: string; nodeId: string };
-  // Slice 27 — Profiles + ProfileNodeBinding model. profile.* events fire
-  // on profile-template mutations (no immediate node restart — config of
+  // Slice 27: Profiles + ProfileNodeBinding model. profile.* events fire
+  // on profile-template mutations (no immediate node restart, config of
   // shared profile changed, all bound nodes need re-push). binding.* events
   // are scoped to a single node (only that node gets re-pushed).
   'profile.created':      { profileId: string };
