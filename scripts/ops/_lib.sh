@@ -168,17 +168,20 @@ require_compose_root() {
     if [[ -f "$compose" && -f "$env" ]]; then
         return 0
     fi
-    # Not in the project root. Operators tend to `cd scripts && ./deploy.sh`,
-    # so resolve to the dir above this lib (scripts/.. == project root) and
-    # re-check before erroring. Caught live 2026-06-09: deploy run from
-    # /opt/iceslab/scripts.
-    local root
-    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)" || root=""
-    if [[ -n "$root" && -f "$root/$compose" && -f "$root/$env" ]]; then
-        cd "$root"
-        log_info "switched to project root: $root"
-        return 0
-    fi
+    # Not in the project root (operators run from scripts/, scripts/ops/, or via
+    # iceslab.sh). Walk UP from this lib's own dir until the compose + env pair
+    # appears, so it works no matter how deep scripts/ is nested. Caught live
+    # 2026-06-09: deploy run from /opt/iceslab/scripts.
+    local dir
+    dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || dir=""
+    while [[ -n "$dir" && "$dir" != "/" ]]; do
+        if [[ -f "$dir/$compose" && -f "$dir/$env" ]]; then
+            cd "$dir"
+            log_info "switched to project root: $dir"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
     log_err "run from panel project root, missing $compose or $env"
     log_err "  (try: cd /opt/iceslab)"
     exit 1

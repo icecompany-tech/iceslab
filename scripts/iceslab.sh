@@ -13,8 +13,8 @@
 set -euo pipefail
 LIB_PREFIX="iceslab"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=_lib.sh
-source "$SCRIPT_DIR/_lib.sh"
+# shellcheck source=ops/_lib.sh
+source "$SCRIPT_DIR/ops/_lib.sh"
 
 # Parallel arrays; index order = menu order. KEYS also accepted as direct args.
 KEYS=(deploy deploy-backend deploy-frontend logs cleanup backup restore)
@@ -58,8 +58,8 @@ run_action() {
     local i
     for i in "${!KEYS[@]}"; do
         if [[ "${KEYS[$i]}" == "$key" ]]; then
-            log_info "running: ${RUN[$i]} $*"
-            exec "$SCRIPT_DIR/${RUN[$i]}" "$@"
+            log_info "running: ops/${RUN[$i]} $*"
+            exec "$SCRIPT_DIR/ops/${RUN[$i]}" "$@"
         fi
     done
     log_err "unknown action: ${key}"

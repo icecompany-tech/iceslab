@@ -149,6 +149,17 @@ Both installers read env overrides. The ones people reach for most:
 | `NODE_PORT` | `1337` | node-agent mTLS listen port. Change per-node to dodge port scanners. |
 | `FRONTEND_PORT` | `8080` | Panel SPA port in bare-IP mode (ignored when `PANEL_DOMAIN` is set, Caddy fronts 443). |
 
+## Operating the panel
+
+Once installed, drive the host from a single entry point on the panel box:
+
+```bash
+cd /opt/iceslab
+bash scripts/iceslab.sh
+```
+
+It opens a menu that explains each action (deploy, backend/frontend-only deploy, logs, cleanup, backup, restore) and runs the one you pick. Deploys auto-apply DB migrations. For scripting, run an action directly: `bash scripts/iceslab.sh deploy`. The individual scripts live in `scripts/ops/`; `iceslab.sh` only explains and routes to them.
+
 ## Protocols
 
 | Protocol | What runs on the node | Native or Xray |
