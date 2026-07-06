@@ -130,7 +130,7 @@ if [[ $CLEANUP_AFTER -eq 1 ]]; then
     echo
     log_info "running cleanup"
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    "$SCRIPT_DIR/cleanup.sh"
+    bash "$SCRIPT_DIR/cleanup.sh"
 fi
 
 echo
