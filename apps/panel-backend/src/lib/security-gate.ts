@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { redis } from './redis.js';
 import { notifyTelegramAsync, escapeMarkdown } from './telegram-notify.js';
 import { honeypotHits, geoBlockDenials } from './metrics.js';
+import { isPublicRoutableIp } from './ip.js';
 
 /**
  * Tier-1 security gate. Two layers, both registered as a single
@@ -142,11 +143,21 @@ export async function registerSecurityGate(app: FastifyInstance): Promise<void> 
     // Layer 2 — honeypot.
     if (isHoneypotPath(url)) {
       honeypotHits.inc();
-      const firstHit = await blacklist(ip);
-      if (firstHit) {
-        notifyTelegramAsync(
-          `🪤 *Honeypot triggered*\nip: \`${escapeMarkdown(ip)}\`\npath: \`${escapeMarkdown(url)}\`\nblacklisted for ${config.HONEYPOT_BLACKLIST_TTL_SEC}s`,
-        );
+      // Only blacklist a genuinely public, routable source. A misconfigured
+      // TRUST_PROXY_HOPS lets a client forge X-Forwarded-For with a private /
+      // loopback IP (or a victim's IP); blacklisting a non-routable one would
+      // punish whoever really sits behind that CGNAT/private range. We still
+      // serve the plausible fake 404 for EVERY hit (below) so a spoofing scanner
+      // learns nothing from the difference. Mirrors the honey-token guard in
+      // subscription.routes.ts. (A forged *public* IP still needs a correct
+      // TRUST_PROXY_HOPS to be neutralised — see config.ts.)
+      if (isPublicRoutableIp(ip)) {
+        const firstHit = await blacklist(ip);
+        if (firstHit) {
+          notifyTelegramAsync(
+            `🪤 *Honeypot triggered*\nip: \`${escapeMarkdown(ip)}\`\npath: \`${escapeMarkdown(url)}\`\nblacklisted for ${config.HONEYPOT_BLACKLIST_TTL_SEC}s`,
+          );
+        }
       }
       // Plausible-but-empty fake. Static body so scanners that fingerprint
       // by content length see a real-looking 404 rather than the 403 they'd
