@@ -60,10 +60,10 @@ step_done
 # rationale.
 if [[ $NO_CACHE -eq 1 ]]; then
     step 2 "rebuild backend (--no-cache)"
-    "${DC[@]}" build --no-cache backend
+    retry 3 "${DC[@]}" build --no-cache backend
 else
     step 2 "rebuild backend (cached)"
-    "${DC[@]}" build backend
+    retry 3 "${DC[@]}" build backend
 fi
 step_done
 
@@ -74,6 +74,13 @@ step 3 "prisma migrate deploy"
 # (podman compose backends have a known regression with `run`). Runs the image
 # built in step 2 so new migrations are present.
 "${DC[@]}" up -d postgres
+# Wait for postgres before the one-shot migrate; a cold start otherwise races
+# and migrate fails with a confusing "connection refused".
+for _i in $(seq 1 30); do
+    if "${DC[@]}" exec -T postgres pg_isready -q 2>/dev/null; then break; fi
+    if [[ $_i -eq 30 ]]; then log_warn "postgres not ready after 30s; running migrate anyway"; fi
+    sleep 1
+done
 "${DC[@]}" up --abort-on-container-exit --exit-code-from migrate migrate
 "${DC[@]}" rm -fsv migrate >/dev/null 2>&1 || true
 step_done

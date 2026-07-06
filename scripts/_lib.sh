@@ -39,6 +39,9 @@ fi
 # Subtraction gives wall-clock seconds since the library was sourced.
 _LIB_START_SECONDS=$SECONDS
 _LIB_STEP_SECONDS=$SECONDS
+# Label of the currently-running step, set by step(); on_err prints it so a
+# failure names the phase ("rebuild", "prisma migrate deploy"), not just a line.
+_LIB_CURRENT_STEP=""
 
 fmt_duration() {
     # Format seconds as "Xs" / "XmYs" / "XhYm" by scale.
@@ -80,6 +83,7 @@ step() {
     local n=$1
     shift
     _LIB_STEP_SECONDS=$SECONDS
+    _LIB_CURRENT_STEP="[${n}/${STEP_TOTAL}] $*"
     printf '\n%b[%s]%b %b[%s/%s]%b %s %b(+%s total)%b\n' \
         "$C_INFO" "$LIB_PREFIX" "$C_RST" \
         "$C_INFO" "$n" "$STEP_TOTAL" "$C_RST" \
@@ -91,6 +95,32 @@ step_done() {
     printf '%b[%s]%b   %b✓ done in %s%b\n' \
         "$C_INFO" "$LIB_PREFIX" "$C_RST" \
         "$C_OK" "$(elapsed_step)" "$C_RST"
+}
+
+# ───── Resilience ─────
+# retry <max> <cmd...>: run cmd; on failure retry up to <max> times total with a
+# linear backoff, logging each attempt. For network-flaky steps (docker / pnpm /
+# prisma image + engine pulls) where a transient ECONNRESET / ETIMEDOUT should
+# not sink the whole deploy. Returns the last exit code if every attempt fails,
+# so the caller's `set -e` + ERR trap still fire with a clear message.
+retry() {
+    local max=$1
+    shift
+    local attempt=1 rc=0
+    while (( attempt <= max )); do
+        if "$@"; then
+            return 0
+        fi
+        rc=$?
+        if (( attempt < max )); then
+            log_warn "attempt ${attempt}/${max} failed (exit ${rc}); retry in $((attempt * 5))s"
+            sleep $(( attempt * 5 ))
+        else
+            log_err "all ${max} attempts failed (exit ${rc})"
+        fi
+        attempt=$(( attempt + 1 ))
+    done
+    return "$rc"
 }
 
 # ───── Error context ─────
@@ -113,6 +143,8 @@ on_err() {
     cmd=$(sed -n "${line}p" "$src" 2>/dev/null | sed 's/^[[:space:]]*//' || echo '?')
     printf '\n%b[%s]%b %b═══ FAILED ═══%b\n' \
         "$C_INFO" "$LIB_PREFIX" "$C_RST" "$C_ERR" "$C_RST" >&2
+    printf '%b[%s]%b   step:    %s\n' \
+        "$C_INFO" "$LIB_PREFIX" "$C_RST" "${_LIB_CURRENT_STEP:-?}" >&2
     printf '%b[%s]%b   line:    %s (in %s)\n' \
         "$C_INFO" "$LIB_PREFIX" "$C_RST" "$line" "$(basename "$src")" >&2
     printf '%b[%s]%b   command: %s\n' \
@@ -121,6 +153,8 @@ on_err() {
         "$C_INFO" "$LIB_PREFIX" "$C_RST" "$exit_code" >&2
     printf '%b[%s]%b   elapsed: %s\n' \
         "$C_INFO" "$LIB_PREFIX" "$C_RST" "$(elapsed_total)" >&2
+    printf '%b[%s]%b   %bhint:%b transient network/registry pulls or DB-not-ready are safe to re-run (bash scripts/deploy.sh); a migration or config error shown above is real and needs a fix.\n' \
+        "$C_INFO" "$LIB_PREFIX" "$C_RST" "$C_DIM" "$C_RST" >&2
     exit "$exit_code"
 }
 

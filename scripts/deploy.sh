@@ -81,10 +81,13 @@ step_done
 # DB. So: build, then migrate.
 if [[ $NO_CACHE -eq 1 ]]; then
     step 2 "rebuild backend + frontend (--no-cache)"
-    "${DC[@]}" build --no-cache backend frontend
+    # retry: the build pulls base images + npm/prisma engine over the network,
+    # which flakes with transient ECONNRESET/ETIMEDOUT (caught live). 3 attempts
+    # turn a blip into a slower deploy instead of a failed one.
+    retry 3 "${DC[@]}" build --no-cache backend frontend
 else
     step 2 "rebuild backend + frontend (cached)"
-    "${DC[@]}" build backend frontend
+    retry 3 "${DC[@]}" build backend frontend
 fi
 step_done
 
@@ -96,6 +99,15 @@ step 3 "prisma migrate deploy"
 # `up --abort-on-container-exit` for the one-shot migrate sidesteps that.
 # Runs the image built in step 2, so new migrations are present.
 "${DC[@]}" up -d postgres
+# Wait for postgres to accept connections before the one-shot migrate; a cold
+# start otherwise races and migrate fails with a confusing "connection refused".
+for _i in $(seq 1 30); do
+    if "${DC[@]}" exec -T postgres pg_isready -q 2>/dev/null; then break; fi
+    if [[ $_i -eq 30 ]]; then log_warn "postgres not ready after 30s; running migrate anyway"; fi
+    sleep 1
+done
+# migrate runs ONCE (no retry): success = migrations applied; a non-zero here is
+# a real migration/SQL error (shown inline above), not a transient blip.
 "${DC[@]}" up --abort-on-container-exit --exit-code-from migrate migrate
 "${DC[@]}" rm -fsv migrate >/dev/null 2>&1 || true
 step_done

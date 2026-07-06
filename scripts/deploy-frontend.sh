@@ -59,11 +59,11 @@ step_done
 # ───── Step 2: rebuild frontend ─────
 if [[ $NO_CACHE -eq 1 ]]; then
     step 2 "rebuild frontend (--no-cache)"
-    "${DC[@]}" build --no-cache frontend
+    retry 3 "${DC[@]}" build --no-cache frontend
     "${DC[@]}" up -d frontend
 else
     step 2 "rebuild + restart frontend (cached)"
-    "${DC[@]}" up -d --build frontend
+    retry 3 "${DC[@]}" up -d --build frontend
 fi
 step_done
 
