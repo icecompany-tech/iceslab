@@ -194,12 +194,15 @@ export async function generateSubscription(
   // nested query from a squad-set-keyed in-process cache shared by every user
   // in the same squads. Membership changes need no busting, the user just
   // maps to a different key.
-  const groupIds = (
-    await prisma.groupMember.findMany({
-      where: { userId: user.id },
-      select: { groupId: true },
-    })
-  ).map((g) => g.groupId);
+  // Pull the group ids AND each group's routingPreset in one query: the id list
+  // keys the binding cache below, and the presets feed resolveSquadRouting at the
+  // end. Previously the routing preset was a SECOND `group.findMany` over the
+  // identical squad set, i.e. a redundant round-trip on every /sub poll.
+  const memberships = await prisma.groupMember.findMany({
+    where: { userId: user.id },
+    select: { groupId: true, group: { select: { routingPreset: true } } },
+  });
+  const groupIds = memberships.map((g) => g.groupId);
 
   const cachedBindings =
     groupIds.length === 0
@@ -740,12 +743,11 @@ export async function generateSubscription(
     e.nodeName = name;
   }
 
-  // R3-a - resolve the per-squad routing override across the user's squads.
-  const userGroups = await prisma.group.findMany({
-    where: { members: { some: { userId: user.id } } },
-    select: { routingPreset: true },
-  });
-  const squadRoutingPreset = resolveSquadRouting(userGroups.map((g) => g.routingPreset));
+  // R3-a - resolve the per-squad routing override across the user's squads,
+  // reusing the memberships already loaded above (no extra query).
+  const squadRoutingPreset = resolveSquadRouting(
+    memberships.map((m) => m.group.routingPreset),
+  );
 
   return {
     endpoints,
