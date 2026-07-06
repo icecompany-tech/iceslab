@@ -90,3 +90,21 @@ export function parseRecipe(raw: unknown): Recipe | null {
   if (res.data.schemaVersion !== RECIPE_SCHEMA_VERSION) return null;
   return res.data as Recipe;
 }
+
+// ───── Source management + ad-hoc import ─────
+//
+// URL length is capped here; scheme/host safety is enforced separately by
+// assertFetchableUrl (recipes.ssrf.ts) at add/update and fetch time.
+
+export const SourceInputSchema = z.object({
+  name: z.string().min(1).max(80),
+  url: z.string().min(1).max(500),
+  enabled: z.boolean().optional(),
+});
+
+export const SourceUpdateSchema = SourceInputSchema.partial();
+
+export const ImportRequestSchema = z.object({
+  url: z.string().max(500).optional(),
+  json: z.string().max(1_000_000).optional(),
+});

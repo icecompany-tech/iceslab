@@ -90,6 +90,14 @@ export interface Recipe {
    * protocol option the panel does not have yet.
    */
   minPanelVersion?: string;
+  /**
+   * Name of the source this recipe was merged from. Stamped by the backend
+   * when it aggregates the operator's enabled sources, so a card can show
+   * where a recipe came from. Absent on built-ins.
+   */
+  sourceName?: string;
+  /** Id of the source (backend-stamped) for grouping and filtering. */
+  sourceId?: string;
 }
 
 /**
@@ -109,4 +117,42 @@ export interface RecipeRegistryResponse {
    * empty). Lets the UI show a "registry offline" hint without erroring.
    */
   stale: boolean;
+}
+
+/**
+ * A configured recipe source (operator-managed, "bring your own GitHub").
+ * The panel merges recipes from every enabled source; the seeded default
+ * points at the curated icecompany-tech/iceslab-recipes registry.
+ */
+export interface RecipeSource {
+  id: string;
+  name: string;
+  /** Raw URL of a registry index.json or a recipes JSON array. */
+  url: string;
+  enabled: boolean;
+  /** True for the seeded default source. Informational, not a trust gate. */
+  trusted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload to create or update a recipe source. */
+export interface RecipeSourceInput {
+  name: string;
+  url: string;
+  enabled?: boolean;
+}
+
+/**
+ * Ad-hoc import: pull recipes from a one-off URL or validate pasted JSON
+ * without adding a permanent source. Exactly one of `url` / `json` is used.
+ */
+export interface RecipeImportRequest {
+  url?: string;
+  json?: string;
+}
+
+/** Result of an ad-hoc import: the recipes that passed validation. */
+export interface RecipeImportResponse {
+  recipes: Recipe[];
 }

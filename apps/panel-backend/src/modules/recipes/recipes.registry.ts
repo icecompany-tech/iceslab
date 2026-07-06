@@ -1,44 +1,28 @@
-import type { Recipe, RecipeRegistryResponse } from '@iceslab/shared';
+import type { Recipe, RecipeRegistryResponse, RecipeSource } from '@iceslab/shared';
 import { isNewer, readCurrentVersion } from '../system/system.service.js';
 import { parseRecipe, RegistryIndexSchema } from './recipes.schemas.js';
+import { getEnabledSources } from './recipes.sources.js';
+import { assertFetchableUrl } from './recipes.ssrf.js';
 
 /**
- * Community transport-recipe registry, fetched from a public GitHub repo.
+ * Community transport-recipe registry: recipes merged from every source the
+ * operator has enabled (their own GitHub repos plus the curated default).
  *
- * Same best-effort contract as the version check (system.service.ts): the
- * panel must never break because GitHub is unreachable. On any failure we
- * fall back to the last good cache and flag it `stale`; if there is no cache
- * we return an empty list. Built-in recipes ship in the frontend, so the
- * registry being offline only hides the community set, never the essentials.
- *
- * A recipe is data, not code: it only carries ProfileForm field values.
- * Every entry is schema-validated (recipes.schemas.ts) before it is served,
- * and the created profile is still validated server-side on save.
+ * Same best-effort contract as the version check: the panel must never break
+ * because a source is unreachable. Each source is fetched with a per-URL cache
+ * (6h) and single-flight; a failing source falls back to its last good set and
+ * flags the whole response `stale`, while the other sources still load. Recipes
+ * are data, not code, they only carry ProfileForm field values, and every entry
+ * is schema-validated before it is served.
  */
 
-// Public raw URL of the registry index. Override for forks / mirrors.
-const REGISTRY_URL =
-  process.env.RECIPES_REGISTRY_URL ??
-  'https://raw.githubusercontent.com/icecompany-tech/iceslab-recipes/main/index.json';
-// Human-readable provenance echoed in the response.
-const REGISTRY_SOURCE =
-  process.env.RECIPES_REGISTRY_SOURCE ?? 'icecompany-tech/iceslab-recipes@main';
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // re-fetch at most every 6h
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // per source, re-fetch at most every 6h
 const FETCH_TIMEOUT_MS = 4000;
-const MAX_BYTES = 1_000_000; // hard cap on the index payload we will parse
-
-interface RegistryCache {
-  recipes: Recipe[];
-  fetchedAt: number; // epoch ms of the last SUCCESSFUL fetch
-  ok: boolean; // did the most recent fetch attempt succeed
-}
-let cache: RegistryCache | null = null;
-let inflight: Promise<RegistryCache> | null = null;
+const MAX_BYTES = 1_000_000; // hard cap on a single source payload
 
 /**
  * Hide recipes the running panel is too old to honour: a recipe may set a
- * field that only exists in a newer panel, and applying it would silently
- * do nothing (or mislead). `minPanelVersion` absent means "any version".
+ * field only a newer panel has. `minPanelVersion` absent means "any version".
  */
 function versionAllows(recipe: Recipe, current: string): boolean {
   if (!recipe.minPanelVersion) return true;
@@ -52,64 +36,87 @@ function extractRawList(payload: unknown): unknown[] {
   return Array.isArray(parsed.data) ? parsed.data : parsed.data.recipes;
 }
 
-async function fetchRegistry(): Promise<RegistryCache> {
-  const prev = cache;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(REGISTRY_URL, {
-        headers: { Accept: 'application/json', 'User-Agent': 'iceslab-panel' },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!res.ok) throw new Error(`registry HTTP ${res.status}`);
-
-    const text = await res.text();
-    if (text.length > MAX_BYTES) throw new Error('registry payload too large');
-    const payload: unknown = JSON.parse(text);
-
-    const current = readCurrentVersion();
-    const recipes: Recipe[] = [];
-    const seen = new Set<string>();
-    for (const raw of extractRawList(payload)) {
-      const recipe = parseRecipe(raw);
-      if (!recipe) continue; // malformed or unknown schemaVersion
-      if (seen.has(recipe.id)) continue; // first id wins
-      if (!versionAllows(recipe, current)) continue;
-      seen.add(recipe.id);
-      recipes.push(recipe);
-    }
-    return { recipes, fetchedAt: Date.now(), ok: true };
-  } catch {
-    // Keep serving the last good set, just flagged stale. Preserve its
-    // fetchedAt so the UI can show how old the cache is.
-    return {
-      recipes: prev?.recipes ?? [],
-      fetchedAt: prev?.fetchedAt ?? 0,
-      ok: false,
-    };
+/**
+ * Validate + version-gate a parsed payload (registry index or bare array)
+ * into typed recipes, deduped by id. Pure, so it also backs the pasted-JSON
+ * import path.
+ */
+export function parseRecipes(payload: unknown): Recipe[] {
+  const current = readCurrentVersion();
+  const out: Recipe[] = [];
+  const seen = new Set<string>();
+  for (const raw of extractRawList(payload)) {
+    const recipe = parseRecipe(raw);
+    if (!recipe) continue; // malformed or unknown schemaVersion
+    if (seen.has(recipe.id)) continue; // first id wins
+    if (!versionAllows(recipe, current)) continue;
+    seen.add(recipe.id);
+    out.push(recipe);
   }
+  return out;
 }
 
-async function getRegistry(): Promise<RegistryCache> {
-  if (cache?.ok && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return cache;
-  }
-  // Single-flight: collapse concurrent refreshes into one GitHub call.
-  if (!inflight) {
-    inflight = fetchRegistry().then((r) => {
-      // Only overwrite the cache on success, so a transient GitHub blip
-      // does not evict a good set; a failed attempt just returns stale.
-      if (r.ok || !cache) cache = r;
-      inflight = null;
-      return r.ok ? r : (cache ?? r);
+/**
+ * Fetch + validate recipes from one URL. No caching, no source tagging;
+ * used by the registry (wrapped in a cache) and the ad-hoc import route.
+ * Throws on guard / network / size failure so the caller can 400 or fall back.
+ */
+export async function fetchRecipesFromUrl(url: string): Promise<Recipe[]> {
+  assertFetchableUrl(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'iceslab-panel' },
+      signal: controller.signal,
     });
+  } finally {
+    clearTimeout(timer);
   }
-  return inflight;
+  if (!res.ok) throw new Error(`source HTTP ${res.status}`);
+  const text = await res.text();
+  if (text.length > MAX_BYTES) throw new Error('source payload too large');
+  return parseRecipes(JSON.parse(text) as unknown);
+}
+
+interface SourceCache {
+  recipes: Recipe[];
+  fetchedAt: number; // epoch ms of the last SUCCESSFUL fetch
+  ok: boolean; // did the most recent attempt succeed
+}
+const cache = new Map<string, SourceCache>();
+const inflight = new Map<string, Promise<SourceCache>>();
+
+async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
+  const key = source.url;
+  const hit = cache.get(key);
+  if (hit?.ok && Date.now() - hit.fetchedAt < CACHE_TTL_MS) return hit;
+  let flight = inflight.get(key);
+  if (!flight) {
+    flight = (async () => {
+      const prev = cache.get(key);
+      try {
+        const recipes = await fetchRecipesFromUrl(source.url);
+        const entry: SourceCache = { recipes, fetchedAt: Date.now(), ok: true };
+        cache.set(key, entry);
+        return entry;
+      } catch {
+        // Keep the last good set for this URL, flagged not-ok (stale).
+        const entry: SourceCache = {
+          recipes: prev?.recipes ?? [],
+          fetchedAt: prev?.fetchedAt ?? 0,
+          ok: false,
+        };
+        if (!prev) cache.set(key, entry);
+        return entry;
+      } finally {
+        inflight.delete(key);
+      }
+    })();
+    inflight.set(key, flight);
+  }
+  return flight;
 }
 
 export interface RecipeRegistryFilters {
@@ -120,18 +127,45 @@ export interface RecipeRegistryFilters {
 export async function getRecipeRegistry(
   filters: RecipeRegistryFilters = {},
 ): Promise<RecipeRegistryResponse> {
-  const reg = await getRegistry();
-  let recipes = reg.recipes;
+  const sources = await getEnabledSources();
+  const results = await Promise.all(
+    sources.map(async (s) => ({ source: s, cache: await getSourceRecipes(s) })),
+  );
+
+  let anyFailed = false;
+  let latest = 0;
+  const merged: Recipe[] = [];
+  const seen = new Set<string>(); // dedupe across sources by sourceId:id
+  for (const { source, cache: c } of results) {
+    if (!c.ok) anyFailed = true;
+    if (c.fetchedAt > latest) latest = c.fetchedAt;
+    for (const r of c.recipes) {
+      const key = `${source.id}:${r.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Provenance + trust are the source's, not self-declared: a community
+      // source cannot mark its recipes "official".
+      merged.push({
+        ...r,
+        sourceId: source.id,
+        sourceName: source.name,
+        verified: source.trusted,
+      });
+    }
+  }
+
+  let recipes = merged;
   if (filters.protocol) {
     recipes = recipes.filter((r) => r.protocol === filters.protocol);
   }
   if (filters.region) {
     recipes = recipes.filter((r) => (r.region ?? 'GLOBAL') === filters.region);
   }
+
   return {
-    fetchedAt: reg.fetchedAt ? new Date(reg.fetchedAt).toISOString() : '',
-    source: REGISTRY_SOURCE,
+    fetchedAt: latest ? new Date(latest).toISOString() : '',
+    source: sources.map((s) => s.name).join(', ') || 'none',
     recipes,
-    stale: !reg.ok,
+    stale: anyFailed,
   };
 }
