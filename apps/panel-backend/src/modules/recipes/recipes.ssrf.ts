@@ -20,7 +20,9 @@ const BLOCKED_HOST_PATTERNS: RegExp[] = [
 ];
 
 function isBlockedHost(host: string): boolean {
-  const h = host.toLowerCase();
+  // URL.hostname keeps the [] around an IPv6 literal, so strip them and the
+  // bare-address checks below match (e.g. "[::1]" -> "::1").
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
   if (
     h === 'localhost' ||
     h.endsWith('.localhost') ||
@@ -30,9 +32,10 @@ function isBlockedHost(host: string): boolean {
   ) {
     return true;
   }
-  // IPv6 loopback + unique-local (fc00::/7) + link-local (fe80::/10). URL
-  // hostname strips the [] brackets, so compare the bare address.
-  if (h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe8')) {
+  // IPv6 literals only (they contain a colon; a domain like "fc-cdn.com"
+  // must not be blocked): loopback ::1, unique-local fc00::/7, link-local
+  // fe80::/10.
+  if (h.includes(':') && (h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h))) {
     return true;
   }
   return BLOCKED_HOST_PATTERNS.some((re) => re.test(h));
