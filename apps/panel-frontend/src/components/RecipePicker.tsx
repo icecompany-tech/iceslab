@@ -175,6 +175,7 @@ export function RecipePicker({ protocol, onPick }: Props) {
       <RecipeImportModal
         opened={importOpen}
         onClose={importCtl.close}
+        protocol={protocol}
         onPick={handlePick}
       />
     </Stack>
@@ -189,21 +190,25 @@ export function RecipePicker({ protocol, onPick }: Props) {
 function RecipeImportModal({
   opened,
   onClose,
+  protocol,
   onPick,
 }: {
   opened: boolean;
   onClose: () => void;
+  protocol: ProtocolName;
   onPick: (r: Recipe) => void;
 }) {
   const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [json, setJson] = useState('');
   const [results, setResults] = useState<Recipe[] | null>(null);
+  const [hidden, setHidden] = useState(0);
 
   const reset = () => {
     setUrl('');
     setJson('');
     setResults(null);
+    setHidden(0);
   };
   const close = () => {
     reset();
@@ -214,10 +219,21 @@ function RecipeImportModal({
     mutationFn: () =>
       importRecipes(url.trim() ? { url: url.trim() } : { json: json.trim() }),
     onSuccess: (data) => {
-      const recipes = data.recipes.map(fromWireRecipe);
-      setResults(recipes);
-      if (recipes.length === 0) {
-        notifications.show({ color: 'yellow', message: t('recipes.import.none') });
+      const all = data.recipes.map(fromWireRecipe);
+      // A profile has one fixed protocol; only recipes for the protocol being
+      // configured can apply here. Hide the rest (e.g. an xray recipe while on
+      // hysteria) so they cannot be merged into the wrong form.
+      const matched = all.filter((r) => r.protocol === protocol);
+      setResults(matched);
+      setHidden(all.length - matched.length);
+      if (matched.length === 0) {
+        notifications.show({
+          color: 'yellow',
+          message:
+            all.length > 0
+              ? t('recipes.import.wrongProtocol', { protocol })
+              : t('recipes.import.none'),
+        });
       }
     },
     onError: (err) =>
@@ -273,6 +289,11 @@ function RecipeImportModal({
             <Text size="xs" fw={600}>
               {t('recipes.import.pick')}
             </Text>
+            {hidden > 0 && (
+              <Text size="xs" c="dimmed">
+                {t('recipes.import.hidden', { count: hidden, protocol })}
+              </Text>
+            )}
             {results.map((r) => (
               <Paper
                 key={recipeKey(r)}

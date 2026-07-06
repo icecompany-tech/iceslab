@@ -284,10 +284,23 @@ export const RECIPES: Recipe[] = [
       'AmneziaWG (форк WireGuard с DPI-bypass). Дефолтный preset Jc/Jmin/Jmax + S/H обфускации скрывает WireGuard-сигнатуру. Подходит для большинства провайдеров. На особо жёстких ISP попробуй "Iran-tuned".',
     dpiResistance: 4,
     speed: 5,
-    apply: {
+    // Set the FULL TSPU field set (not just the preset label) so switching to
+    // this recipe after "Iran-tuned" resets the obfuscation numbers instead of
+    // leaving Iran values behind, the form must land in a consistent state, not
+    // a partial merge. H1-H4 re-rolled per click so the preset does not
+    // fingerprint every default deploy identically.
+    apply: () => ({
       awgPreset: 'tspu',
+      awgJc: 4,
+      awgJmin: 64,
+      awgJmax: 128,
+      awgS1: 32,
+      awgS2: 56,
+      awgS3: 0,
+      awgS4: 0,
+      ...randAwgHeaders(),
       awgSubnet: '10.66.66.0/24',
-    },
+    }),
   },
   {
     id: 'awg-iran',
@@ -414,6 +427,21 @@ function randomValueFor(kind: RecipeRandomizeKind): string | number {
       return randAwgHeader();
   }
 }
+
+/**
+ * Common profile fields a recipe must never overwrite. They live on the flat
+ * FormValues (so `k in current` would let them through) but are not protocol
+ * config: a recipe only tunes protocol-specific fields. The apply merge
+ * excludes these so an untrusted recipe cannot flip a profile's protocol /
+ * engine or silently disable / rename it. Mirrors the backend RecipeSchema.
+ */
+export const RECIPE_COMMON_FIELDS = new Set([
+  'protocol',
+  'engine',
+  'name',
+  'description',
+  'enabled',
+]);
 
 /**
  * Collapse a recipe's overrides to a single field map. Built-ins may carry a

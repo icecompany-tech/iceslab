@@ -65,18 +65,32 @@ export async function getEnabledSources(): Promise<RecipeSource[]> {
   return (await getSources()).filter((s) => s.enabled);
 }
 
-async function saveSources(sources: RecipeSource[]): Promise<void> {
-  const value = sources as unknown as Prisma.InputJsonValue;
-  await prisma.appSetting.upsert({
-    where: { key: SETTINGS_KEY },
-    create: { key: SETTINGS_KEY, value, isPublic: false },
-    update: { value },
+/**
+ * Serialize a read-modify-write of the recipeSources blob. A transaction-scoped
+ * advisory lock keyed on the settings key makes concurrent source mutations
+ * (two admin tabs, a double-submit, an API script) apply one after another
+ * instead of silently dropping each other (lost update on the shared blob).
+ */
+async function mutateSources<T>(
+  apply: (sources: RecipeSource[]) => { next: RecipeSource[]; result: T },
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${SETTINGS_KEY}))`;
+    const row = await tx.appSetting.findUnique({ where: { key: SETTINGS_KEY } });
+    const current = row ? coerceSources(row.value) : [DEFAULT_SOURCE];
+    const { next, result } = apply(current);
+    const value = next as unknown as Prisma.InputJsonValue;
+    await tx.appSetting.upsert({
+      where: { key: SETTINGS_KEY },
+      create: { key: SETTINGS_KEY, value, isPublic: false },
+      update: { value },
+    });
+    return result;
   });
 }
 
 export async function addSource(input: RecipeSourceInput): Promise<RecipeSource> {
   assertFetchableUrl(input.url); // throws -> 400 in the route
-  const sources = await getSources();
   const now = new Date().toISOString();
   const source: RecipeSource = {
     id: randomUUID(),
@@ -87,10 +101,9 @@ export async function addSource(input: RecipeSourceInput): Promise<RecipeSource>
     createdAt: now,
     updatedAt: now,
   };
-  // getSources may have returned the virtual default; persisting [...sources]
-  // pins it alongside the new one so it does not silently vanish.
-  await saveSources([...sources, source]);
-  return source;
+  // Persisting [...sources] pins the (possibly virtual) default alongside the
+  // new one so it does not silently vanish on first write.
+  return mutateSources((sources) => ({ next: [...sources, source], result: source }));
 }
 
 export async function updateSource(
@@ -98,27 +111,26 @@ export async function updateSource(
   patch: Partial<RecipeSourceInput>,
 ): Promise<RecipeSource | null> {
   if (patch.url !== undefined) assertFetchableUrl(patch.url);
-  const sources = await getSources();
-  const idx = sources.findIndex((s) => s.id === id);
-  if (idx === -1) return null;
-  const existing = sources[idx]!;
-  const updated: RecipeSource = {
-    ...existing,
-    name: patch.name?.trim() ?? existing.name,
-    url: patch.url?.trim() ?? existing.url,
-    enabled: patch.enabled ?? existing.enabled,
-    updatedAt: new Date().toISOString(),
-  };
-  const next = [...sources];
-  next[idx] = updated;
-  await saveSources(next);
-  return updated;
+  return mutateSources((sources) => {
+    const idx = sources.findIndex((s) => s.id === id);
+    if (idx === -1) return { next: sources, result: null };
+    const existing = sources[idx]!;
+    const updated: RecipeSource = {
+      ...existing,
+      name: patch.name?.trim() ?? existing.name,
+      url: patch.url?.trim() ?? existing.url,
+      enabled: patch.enabled ?? existing.enabled,
+      updatedAt: new Date().toISOString(),
+    };
+    const next = [...sources];
+    next[idx] = updated;
+    return { next, result: updated };
+  });
 }
 
 export async function deleteSource(id: string): Promise<boolean> {
-  const sources = await getSources();
-  const next = sources.filter((s) => s.id !== id);
-  if (next.length === sources.length) return false;
-  await saveSources(next);
-  return true;
+  return mutateSources((sources) => {
+    const next = sources.filter((s) => s.id !== id);
+    return { next, result: next.length !== sources.length };
+  });
 }

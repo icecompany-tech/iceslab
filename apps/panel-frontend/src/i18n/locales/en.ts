@@ -789,6 +789,8 @@ export default {
       pick: 'Pick one to apply:',
       none: 'No valid recipes found.',
       failed: 'Import failed',
+      wrongProtocol: 'Nothing in there for {{protocol}} (only that protocol applies here).',
+      hidden: '{{count}} recipe(s) for other protocols hidden.',
     },
     export: {
       button: 'Export as recipe',

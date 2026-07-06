@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
-import { getRecipeRegistry } from './recipes.registry.js';
+import { getRecipeRegistry, bustSourceCache } from './recipes.registry.js';
 import { addSource, deleteSource, getSources, updateSource } from './recipes.sources.js';
 import { importRecipes } from './recipes.import.js';
 import {
@@ -60,6 +60,7 @@ export async function recipesRoutes(app: FastifyInstance): Promise<void> {
       return badUrl(reply, err);
     }
     const created = await addSource(input);
+    bustSourceCache();
     return reply.code(201).send(created);
   });
 
@@ -75,6 +76,7 @@ export async function recipesRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = await updateSource(id, patch);
     if (!updated) return reply.code(404).send({ error: 'NOT_FOUND' });
+    bustSourceCache();
     return reply.send(updated);
   });
 
@@ -82,6 +84,7 @@ export async function recipesRoutes(app: FastifyInstance): Promise<void> {
     const { id } = IdParam.parse(req.params);
     const ok = await deleteSource(id);
     if (!ok) return reply.code(404).send({ error: 'NOT_FOUND' });
+    bustSourceCache();
     return reply.code(204).send();
   });
 

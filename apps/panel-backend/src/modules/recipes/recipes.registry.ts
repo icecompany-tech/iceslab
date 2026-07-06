@@ -17,8 +17,10 @@ import { assertFetchableUrl } from './recipes.ssrf.js';
  */
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // per source, re-fetch at most every 6h
+const NEGATIVE_TTL_MS = 5 * 60 * 1000; // don't re-hammer a dead source for 5 min
 const FETCH_TIMEOUT_MS = 4000;
 const MAX_BYTES = 1_000_000; // hard cap on a single source payload
+const MAX_REDIRECTS = 3;
 
 /**
  * Hide recipes the running panel is too old to honour: a recipe may set a
@@ -56,27 +58,80 @@ export function parseRecipes(payload: unknown): Recipe[] {
   return out;
 }
 
+// Read a response body with a hard byte cap, streamed so an oversized or
+// slow-drip body cannot buffer unbounded (the abort signal still bounds time).
+async function readBounded(res: Response, maxBytes: number): Promise<string> {
+  const len = Number(res.headers.get('content-length'));
+  if (Number.isFinite(len) && len > maxBytes) {
+    throw new Error('source payload too large');
+  }
+  if (!res.body) {
+    const t = await res.text();
+    if (t.length > maxBytes) throw new Error('source payload too large');
+    return t;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      text += decoder.decode();
+      break;
+    }
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error('source payload too large');
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text;
+}
+
+/**
+ * Fetch a URL's text with the SSRF guard re-run on EVERY hop. fetch is told
+ * `redirect: 'manual'` so undici cannot silently follow a 3xx into a private
+ * IP or metadata host; we resolve each Location ourselves and re-validate it.
+ * The abort timer stays armed across the body read so a slow stream cannot
+ * hang, and the body is size-capped while streaming.
+ */
+async function fetchGuardedText(startUrl: string): Promise<string> {
+  let url = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    assertFetchableUrl(url); // re-validate the start URL and every redirect hop
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'iceslab-panel' },
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        if (!loc) throw new Error(`redirect ${res.status} without Location`);
+        url = new URL(loc, url).toString(); // resolve relative, re-checked next hop
+        continue;
+      }
+      if (!res.ok) throw new Error(`source HTTP ${res.status}`);
+      return await readBounded(res, MAX_BYTES);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error('too many redirects');
+}
+
 /**
  * Fetch + validate recipes from one URL. No caching, no source tagging;
  * used by the registry (wrapped in a cache) and the ad-hoc import route.
- * Throws on guard / network / size failure so the caller can 400 or fall back.
+ * Throws on guard / network / size / redirect failure so the caller can 400
+ * or fall back.
  */
 export async function fetchRecipesFromUrl(url: string): Promise<Recipe[]> {
-  assertFetchableUrl(url);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'iceslab-panel' },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok) throw new Error(`source HTTP ${res.status}`);
-  const text = await res.text();
-  if (text.length > MAX_BYTES) throw new Error('source payload too large');
+  const text = await fetchGuardedText(url);
   return parseRecipes(JSON.parse(text) as unknown);
 }
 
@@ -84,14 +139,30 @@ interface SourceCache {
   recipes: Recipe[];
   fetchedAt: number; // epoch ms of the last SUCCESSFUL fetch
   ok: boolean; // did the most recent attempt succeed
+  failedAt?: number; // epoch ms of the last FAILED attempt (negative cache)
 }
 const cache = new Map<string, SourceCache>();
 const inflight = new Map<string, Promise<SourceCache>>();
+
+/**
+ * Drop all cached source fetches. Called after any source add/update/delete so
+ * a re-added or re-pointed source is re-fetched instead of serving a stale
+ * URL-keyed hit (source mutations are rare, so busting everything is fine).
+ */
+export function bustSourceCache(): void {
+  cache.clear();
+  inflight.clear();
+}
 
 async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
   const key = source.url;
   const hit = cache.get(key);
   if (hit?.ok && Date.now() - hit.fetchedAt < CACHE_TTL_MS) return hit;
+  // Negative cache: a source that just failed is not re-hammered (and does not
+  // block the merged response on its timeout) for NEGATIVE_TTL_MS.
+  if (hit && !hit.ok && hit.failedAt && Date.now() - hit.failedAt < NEGATIVE_TTL_MS) {
+    return hit;
+  }
   let flight = inflight.get(key);
   if (!flight) {
     flight = (async () => {
@@ -102,13 +173,15 @@ async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
         cache.set(key, entry);
         return entry;
       } catch {
-        // Keep the last good set for this URL, flagged not-ok (stale).
+        // Keep the last good set for this URL, flagged not-ok (stale), and
+        // stamp failedAt so the negative cache above throttles retries.
         const entry: SourceCache = {
           recipes: prev?.recipes ?? [],
           fetchedAt: prev?.fetchedAt ?? 0,
           ok: false,
+          failedAt: Date.now(),
         };
-        if (!prev) cache.set(key, entry);
+        cache.set(key, entry);
         return entry;
       } finally {
         inflight.delete(key);

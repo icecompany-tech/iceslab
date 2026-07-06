@@ -36,7 +36,7 @@ import {
 } from '../lib/api';
 import { RecipePicker } from './RecipePicker';
 import { RecipeExportModal } from './RecipeExportModal';
-import { resolveRecipeApply, validateXrayConfig } from '../lib/recipes';
+import { resolveRecipeApply, validateXrayConfig, RECIPE_COMMON_FIELDS } from '../lib/recipes';
 import { protocolLabel } from '../lib/protocols';
 
 // Xray stream transports. The whole stack already handles all six (Zod schema,
@@ -870,6 +870,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
           />
 
           <RecipePicker
+            key={form.values.protocol}
             protocol={form.values.protocol}
             onPick={async (recipe) => {
               // Resolve the recipe's field map. Built-ins may carry a thunk
@@ -882,7 +883,10 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading }
               form.setValues((current) => {
                 const safe: Record<string, string | number | boolean> = {};
                 for (const [k, v] of Object.entries(fields)) {
-                  if (k in current) safe[k] = v;
+                  // Only protocol-specific fields: never let a recipe touch a
+                  // common field (protocol/engine/name/description/enabled),
+                  // even though they exist on the flat FormValues.
+                  if (k in current && !RECIPE_COMMON_FIELDS.has(k)) safe[k] = v;
                 }
                 return { ...current, ...safe };
               });

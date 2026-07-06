@@ -52,6 +52,14 @@ describe('parseRecipe', () => {
   it('rejects a rating outside 1-5', () => {
     expect(parseRecipe({ ...valid, dpiResistance: 9 })).toBeNull();
   });
+
+  it('rejects apply that sets a common profile field', () => {
+    // A recipe must only tune protocol-specific fields, never flip protocol /
+    // engine or disable / rename the profile.
+    expect(parseRecipe({ ...valid, apply: { protocol: 'hysteria' } })).toBeNull();
+    expect(parseRecipe({ ...valid, apply: { enabled: false } })).toBeNull();
+    expect(parseRecipe({ ...valid, apply: { engine: 'singbox' } })).toBeNull();
+  });
 });
 
 describe('parseRecipes (registry payload)', () => {

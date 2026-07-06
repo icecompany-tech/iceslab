@@ -35,6 +35,12 @@ const RANDOMIZE = z.object({
 // form, only scalar field values.
 const APPLY_VALUE = z.union([z.string().max(512), z.number(), z.boolean()]);
 
+// Common profile fields a recipe must never set: a recipe only tunes
+// protocol-specific fields. Rejecting these here is defense-in-depth behind
+// the frontend allowlist, so an untrusted recipe cannot flip a profile's
+// protocol/engine or silently disable/rename it.
+const RECIPE_COMMON_KEYS = ['protocol', 'engine', 'name', 'description', 'enabled'];
+
 export const RecipeSchema = z.object({
   schemaVersion: z.number().int(),
   id: z
@@ -54,7 +60,11 @@ export const RecipeSchema = z.object({
       z.string().min(1).max(48).regex(/^[a-zA-Z][a-zA-Z0-9]*$/),
       APPLY_VALUE,
     )
-    .refine((o) => Object.keys(o).length <= 40, 'too many apply keys'),
+    .refine((o) => Object.keys(o).length <= 40, 'too many apply keys')
+    .refine(
+      (o) => !RECIPE_COMMON_KEYS.some((k) => k in o),
+      'apply may not set common profile fields (protocol/engine/name/description/enabled)',
+    ),
   randomize: z.array(RANDOMIZE).max(16).optional(),
   notes: z.array(z.string().max(400)).max(16).optional(),
   region: z.enum(['GLOBAL', 'RU', 'IR', 'CN', 'BY', 'OTHER']).optional(),
