@@ -553,7 +553,7 @@ export default {
     exit: 'exit',
     today: 'today',
     deleted: 'Cascade deleted',
-    saved: 'Cascade saved',
+    saved: 'Cascade saved — nodes are applying the config in the background (usually under a minute).',
     editTitle: 'Edit {{name}}',
     newTitle: 'New cascade',
     name: 'Name',

@@ -106,7 +106,7 @@ export function CascadesPanel() {
 
   const nodeOptions = useMemo(
     () =>
-      (nodesQuery.data?.nodes ?? []).map((n) => ({ value: n.id, label: `${n.name} (${n.protocol})` })),
+      (nodesQuery.data?.nodes ?? []).map((n) => ({ value: n.id, label: n.name })),
     [nodesQuery.data],
   );
 
@@ -129,8 +129,13 @@ export function CascadesPanel() {
   const [editing, setEditing] = useState<Cascade | 'new' | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['cascades'] });
-  const onError = (err: unknown) =>
+  const onError = (err: unknown) => {
+    // Cascade writes commit fast and provision nodes asynchronously, so a slow
+    // or timed-out response can fire onError even though the change landed.
+    // Refetch so the list reflects reality instead of a stale view.
+    invalidate();
     notifications.show({ color: 'red', title: t('common.saveError'), message: apiErrorMessage(err) });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: deleteCascade,
