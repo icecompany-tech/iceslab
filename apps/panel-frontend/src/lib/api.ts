@@ -907,6 +907,16 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   return data;
 }
 
+export interface CascadeStatus {
+  done: boolean;
+  nodes: { id: string; name: string; applied: boolean; online: boolean }[];
+}
+
+export async function getCascadeStatus(id: string): Promise<CascadeStatus> {
+  const { data } = await api.get<CascadeStatus>(`/api/cascades/${id}/status`);
+  return data;
+}
+
 export async function deleteCascade(id: string): Promise<void> {
   await api.delete(`/api/cascades/${id}`);
 }

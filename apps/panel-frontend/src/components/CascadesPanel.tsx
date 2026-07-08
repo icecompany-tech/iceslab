@@ -29,6 +29,7 @@ import {
 import {
   listCascades,
   createCascade,
+  getCascadeStatus,
   updateCascade,
   deleteCascade,
   listNodes,
@@ -374,9 +375,59 @@ function CascadeFormModal({
         ? updateCascade(cascade.id, { name, enabled, mode, hops: hopInputs })
         : createCascade({ name, enabled, mode, hops: hopInputs });
     },
-    onSuccess: () => {
-      notifications.show({ color: 'green', message: t('cascades.saved') });
+    onSuccess: (result) => {
       onSaved();
+      // Provisioning runs async (cascade.changed -> per-node inbound-sync), so poll
+      // the status endpoint and resolve a live toast into done / still-waiting
+      // instead of leaving the operator guessing after Save.
+      const cid = result?.id ?? cascade?.id;
+      if (!cid) {
+        notifications.show({ color: 'green', message: t('cascades.saved') });
+        return;
+      }
+      const nid = `casc-prov-${cid}`;
+      notifications.show({
+        id: nid,
+        loading: true,
+        autoClose: false,
+        withCloseButton: false,
+        title: t('cascades.saved'),
+        message: t('cascades.provisioning'),
+      });
+      let tries = 0;
+      const poll = async () => {
+        tries += 1;
+        try {
+          const st = await getCascadeStatus(cid);
+          if (st.done) {
+            notifications.update({
+              id: nid,
+              loading: false,
+              color: 'green',
+              autoClose: 5000,
+              title: t('cascades.saved'),
+              message: t('cascades.provisioned'),
+            });
+            return;
+          }
+          if (tries >= 12) {
+            const waiting = st.nodes.filter((n) => !n.applied).map((n) => n.name).join(', ');
+            notifications.update({
+              id: nid,
+              loading: false,
+              color: 'yellow',
+              autoClose: 8000,
+              title: t('cascades.saved'),
+              message: t('cascades.provisionWaiting', { nodes: waiting }),
+            });
+            return;
+          }
+        } catch {
+          /* transient — keep polling */
+        }
+        window.setTimeout(poll, 7500);
+      };
+      window.setTimeout(poll, 6000);
     },
     onError,
   });
