@@ -105,6 +105,41 @@ export async function getCascade(id: string): Promise<CascadeDto> {
   return mapCascade(c);
 }
 
+export interface CascadeStatusDto {
+  done: boolean;
+  nodes: { id: string; name: string; applied: boolean; online: boolean }[];
+}
+
+/**
+ * Best-effort provisioning status for a cascade. Saving a cascade pushes new
+ * inbound config to each hop node asynchronously (cascade.changed ->
+ * inbound-sync), so the UI otherwise can't tell when it landed. For each hop we
+ * report whether the node has re-reported its status since the cascade was last
+ * saved (lastStatusChange > cascade.updatedAt = the node-agent applied the push)
+ * and whether it is currently online. Lets the UI resolve a "provisioning..." ->
+ * "done / node X not responding" toast after a save.
+ */
+export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
+  const c = await prisma.cascade.findUnique({
+    where: { id },
+    include: {
+      hops: {
+        orderBy: { position: 'asc' },
+        include: { node: { select: { id: true, name: true, status: true, lastStatusChange: true } } },
+      },
+    },
+  });
+  if (!c) throw new CascadeNotFoundError(id);
+  const since = c.updatedAt;
+  const nodes = c.hops.map((h) => ({
+    id: h.node.id,
+    name: h.node.name,
+    applied: !!h.node.lastStatusChange && h.node.lastStatusChange > since,
+    online: h.node.status === 'online' || h.node.status === 'connected',
+  }));
+  return { done: nodes.length > 0 && nodes.every((n) => n.applied), nodes };
+}
+
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
   const mode = input.mode ?? 'chain';
   const isBalancer = mode === 'balancer';

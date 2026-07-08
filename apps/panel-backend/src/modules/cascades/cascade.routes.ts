@@ -41,6 +41,16 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // Provisioning status of a cascade's hop nodes (polled by the UI after a save).
+  app.get('/api/cascades/:id/status', auth, async (req, reply) => {
+    const { id } = CascadeIdParamSchema.parse(req.params);
+    try {
+      return reply.send(await svc.getCascadeStatus(id));
+    } catch (err) {
+      return handleError(err, reply);
+    }
+  });
+
   app.post('/api/cascades', auth, async (req, reply) => {
     const input = CreateCascadeSchema.parse(req.body);
     try {
