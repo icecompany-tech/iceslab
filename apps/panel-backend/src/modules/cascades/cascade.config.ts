@@ -135,6 +135,20 @@ const LINK_IN_TAG = 'cascade-link-in';
 const LINK_OUT_TAG = 'cascade-link-out';
 const DIRECT_TAG = 'direct';
 
+// Drop QUIC (HTTP/3 = UDP/443) at the cascade entry so clients fall back to
+// TCP/HTTP-2. QUIC tunneled as UDP-over-TCP through the inter-hop vless link
+// suffers head-of-line blocking under sustained video load — YouTube Shorts
+// played ~5s then froze ~1min before recovering. TCP over the same link is
+// smooth (measured ~70 Mbit/s), and browsers/apps race QUIC+TCP so a blocked
+// UDP/443 falls back instantly. `blocked` is the node-agent's base blackhole
+// outbound. Placed before the balancer/link-out catch-all so it wins for 443.
+const QUIC_BLOCK_RULE: Record<string, unknown> = {
+  type: 'field',
+  network: 'udp',
+  port: 443,
+  outboundTag: 'blocked',
+};
+
 function vlessLinkInbound(cred: VlessLinkCred): Record<string, unknown> {
   return {
     tag: LINK_IN_TAG,
@@ -212,6 +226,7 @@ export function buildCascadeConfigs(
     if (role === 'entry') {
       // User traffic -> link-out. Split-routing presets can prepend
       // direct/block rules ahead of this later (E).
+      routingRules.push(QUIC_BLOCK_RULE);
       routingRules.push({ type: 'field', network: 'tcp,udp', outboundTag: LINK_OUT_TAG });
     } else if (role === 'transit') {
       routingRules.push({ type: 'field', inboundTag: [LINK_IN_TAG], outboundTag: LINK_OUT_TAG });
@@ -288,7 +303,7 @@ export function buildBalancerCascadeConfigs(
     outbounds: entryOutbounds,
     // User traffic -> balancer (leastPing picks the lowest-RTT exit). Split-
     // routing presets can prepend direct/block rules ahead of this later.
-    routingRules: [{ type: 'field', network: 'tcp,udp', balancerTag: BALANCER_TAG }],
+    routingRules: [QUIC_BLOCK_RULE, { type: 'field', network: 'tcp,udp', balancerTag: BALANCER_TAG }],
     observatory: {
       subjectSelector: [LINK_OUT_TAG],
       // xray-core's json tag is `probeURL` (capital URL). A lowercase `probeUrl`

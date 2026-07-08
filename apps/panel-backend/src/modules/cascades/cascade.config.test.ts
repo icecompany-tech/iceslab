@@ -42,9 +42,11 @@ describe('buildBalancerCascadeConfigs (auto node)', () => {
     expect(bal.tag).toBe('auto');
     expect(bal.selector).toEqual(['cascade-link-out']);
     expect((bal.strategy as Record<string, unknown>).type).toBe('leastPing');
-    // user rule targets the balancer, not a fixed outbound
-    expect(e.routingRules[0]).toMatchObject({ balancerTag: 'auto' });
-    expect(e.routingRules[0]).not.toHaveProperty('outboundTag');
+    // QUIC (udp/443) is dropped first so clients fall back to TCP; the user
+    // rule then targets the balancer, not a fixed outbound
+    expect(e.routingRules[0]).toMatchObject({ network: 'udp', port: 443, outboundTag: 'blocked' });
+    expect(e.routingRules[1]).toMatchObject({ balancerTag: 'auto' });
+    expect(e.routingRules[1]).not.toHaveProperty('outboundTag');
   });
 
   it('each exit terminates its link and egresses via freedom, firewalled to the entry', () => {
@@ -150,7 +152,9 @@ describe('buildCascadeConfigs (vless->vless)', () => {
     expect(out.settings.vnext[0].port).toBe(24000);
     expect(out.settings.vnext[0].users[0].id).toBe('uuid-0');
     expect(cfg.outbounds.some((o) => o.protocol === 'freedom')).toBe(true);
-    expect(cfg.routingRules[0]!.outboundTag).toBe('cascade-link-out');
+    // [0] drops QUIC (udp/443), [1] sends the rest to the link-out
+    expect(cfg.routingRules[0]).toMatchObject({ network: 'udp', port: 443, outboundTag: 'blocked' });
+    expect(cfg.routingRules[1]!.outboundTag).toBe('cascade-link-out');
   });
 
   it('transit has link-in (from prev) + link-out (to next), routed through', () => {
@@ -225,8 +229,8 @@ describe('buildCascadeConfigs (shadowsocks link cell, C3b)', () => {
       network: 'tcp,udp',
     });
     expect(inb.settings.clients).toBeUndefined(); // point-to-point, no multi-user clients
-    // routing roles are protocol-agnostic
-    expect(entry!.routingRules[0]!.outboundTag).toBe('cascade-link-out');
+    // routing roles are protocol-agnostic ([0] drops QUIC, [1] link-out)
+    expect(entry!.routingRules[1]!.outboundTag).toBe('cascade-link-out');
     expect(exit!.routingRules[0]).toMatchObject({ inboundTag: ['cascade-link-in'], outboundTag: 'direct' });
   });
 
