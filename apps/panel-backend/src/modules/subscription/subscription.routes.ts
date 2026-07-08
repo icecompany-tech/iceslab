@@ -417,7 +417,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // config, just links + copy + per-format download buttons.
       if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
         const settings = await getSubscriptionSettings();
-        const subUrl = `${config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
+        const subUrl = `${config.SUBSCRIPTION_PUBLIC_URL ?? config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
         // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
         // are single-tunnel-per-key, so a user with several AWG servers gets each
