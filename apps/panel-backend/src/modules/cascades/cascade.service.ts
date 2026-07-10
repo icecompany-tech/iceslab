@@ -76,8 +76,12 @@ export async function getHiddenCascadeNodeIds(): Promise<Set<string>> {
   if (hiddenNodesCache && Date.now() < hiddenNodesCache.expiresAt) {
     return hiddenNodesCache.value;
   }
+  // Only cascades that opt INTO hiding (the default) suppress their non-entry
+  // hops. An operator who unchecks `hideHopsFromSub` keeps the exits visible as
+  // direct subscription picks (they still work standalone; the cascade just
+  // additionally offers them behind its "Auto" entry).
   const hops = await prisma.cascadeHop.findMany({
-    where: { cascade: { enabled: true } },
+    where: { cascade: { enabled: true, hideHopsFromSub: true } },
     select: { nodeId: true, position: true },
   });
   const entry = new Set<string>();
@@ -130,6 +134,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
         name: input.name,
         enabled: input.enabled,
         mode,
+        hideHopsFromSub: input.hideHopsFromSub,
         hops: {
           create: hops.map((h, idx) => ({
             // Nested create uses the checked input -> connect the relation
@@ -196,6 +201,9 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
           ...(input.mode !== undefined ? { mode: input.mode } : {}),
+          ...(input.hideHopsFromSub !== undefined
+            ? { hideHopsFromSub: input.hideHopsFromSub }
+            : {}),
         },
       });
       if (hops) {

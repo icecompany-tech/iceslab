@@ -326,6 +326,7 @@ function CascadeFormModal({
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [mode, setMode] = useState<'chain' | 'balancer'>('chain');
+  const [hideHopsFromSub, setHideHopsFromSub] = useState(true);
   const [hops, setHops] = useState<HopRow[]>([]);
   const [lastFor, setLastFor] = useState<string | null | undefined>(undefined);
 
@@ -336,6 +337,7 @@ function CascadeFormModal({
       setName(cascade.name);
       setEnabled(cascade.enabled);
       setMode(cascade.mode === 'balancer' ? 'balancer' : 'chain');
+      setHideHopsFromSub(cascade.hideHopsFromSub ?? true);
       setHops(
         cascade.hops.map((h) => ({
           nodeId: h.nodeId,
@@ -347,6 +349,7 @@ function CascadeFormModal({
       setName('');
       setEnabled(true);
       setMode('chain');
+      setHideHopsFromSub(true);
       setHops([
         { nodeId: '', entryProtocol: 'xray', linkProtocol: 'xray' },
         { nodeId: '', entryProtocol: '', linkProtocol: '' },
@@ -371,8 +374,8 @@ function CascadeFormModal({
         };
       });
       return cascade
-        ? updateCascade(cascade.id, { name, enabled, mode, hops: hopInputs })
-        : createCascade({ name, enabled, mode, hops: hopInputs });
+        ? updateCascade(cascade.id, { name, enabled, mode, hideHopsFromSub, hops: hopInputs })
+        : createCascade({ name, enabled, mode, hideHopsFromSub, hops: hopInputs });
     },
     onSuccess: () => {
       notifications.show({ color: 'green', message: t('cascades.saved') });
@@ -432,6 +435,12 @@ function CascadeFormModal({
           value={mode}
           onChange={(v) => setMode(v === 'balancer' ? 'balancer' : 'chain')}
           w={260}
+        />
+        <Switch
+          label={t('cascades.hideHopsLabel')}
+          description={t('cascades.hideHopsDesc')}
+          checked={hideHopsFromSub}
+          onChange={(e) => setHideHopsFromSub(e.currentTarget.checked)}
         />
 
         <Group justify="space-between" align="center" mt="xs">

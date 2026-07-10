@@ -866,6 +866,8 @@ export interface Cascade {
   name: string;
   enabled: boolean;
   mode: CascadeMode;
+  /** Hide the cascade's non-entry nodes from the raw subscription (default). */
+  hideHopsFromSub: boolean;
   hops: CascadeHop[];
   createdAt: string;
   updatedAt: string;
@@ -882,6 +884,7 @@ export interface CreateCascadeInput {
   name: string;
   enabled?: boolean;
   mode?: CascadeMode;
+  hideHopsFromSub?: boolean;
   hops: CascadeHopInput[];
 }
 
@@ -889,6 +892,7 @@ export interface UpdateCascadeInput {
   name?: string;
   enabled?: boolean;
   mode?: CascadeMode;
+  hideHopsFromSub?: boolean;
   hops?: CascadeHopInput[];
 }
 
