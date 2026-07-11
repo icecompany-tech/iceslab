@@ -101,6 +101,15 @@ export function registerBindingsCacheBust(): void {
   eventBus.on('profile.updated', bust);
   eventBus.on('profile.deleted', bust);
   eventBus.on('node.created', bust);
+  // review M5 — close the ≤60s staleness window on these mutation paths:
+  //   node.updated  → node disable/enable + REALITY self-steal domain edit
+  //   node.deleted  → deleted node's endpoints stop being served at once
+  //   cascade.changed → a cascade hop was removed (node delete / cascade edit)
+  //   host.changed  → per-binding public endpoint override create/edit/delete/reorder
+  eventBus.on('node.updated', bust);
+  eventBus.on('node.deleted', bust);
+  eventBus.on('cascade.changed', bust);
+  eventBus.on('host.changed', bust);
 }
 
 // ───── Test seams ─────

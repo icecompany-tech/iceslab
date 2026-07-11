@@ -385,6 +385,12 @@ export async function deleteNode(id: string): Promise<void> {
     prisma.node.update({ where: { id }, data: { deletedAt: new Date() } }),
   ]);
 
+  // Bust the subscription bindings cache immediately so this node's endpoints
+  // stop being served (otherwise they linger up to the 60s TTL). cascade.changed
+  // below only fires when the node was a cascade hop, so a plain node delete
+  // needs its own event (review M5).
+  eventBus.emit('node.deleted', { nodeId: id });
+
   // Re-render the surviving cascade members as plain nodes (drop link fragments).
   if (survivorNodeIds.length > 0) {
     eventBus.emit('cascade.changed', { nodeIds: survivorNodeIds });

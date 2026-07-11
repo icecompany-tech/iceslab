@@ -22,6 +22,15 @@ export interface DomainEventMap {
   // node config matches. Without this a Node.domain edit only self-heals on an
   // unrelated binding/profile edit or an agent restart. Caught in review 2026-06-17.
   'node.updated':         { nodeId: string; nodeName: string };
+  // node.deleted → the node (and its profile bindings) are gone. Only used to
+  // bust the subscription bindings cache so a deleted node's endpoints stop
+  // appearing immediately instead of lingering for the 60s TTL (review M5).
+  'node.deleted':         { nodeId: string };
+  // host.changed → a Host row (per-binding public endpoint override: address/
+  // port/priority/enabled/disableForFormats) was created/edited/deleted/
+  // reordered. Affects subscription OUTPUT only, not the node's pushed config,
+  // so it just busts the bindings cache (review M5). Payload is unused.
+  'host.changed':         { hostId?: string };
   // inbound.* → push the full inbound set of the affected node to its
   // node-agent over mTLS, so the protocol server (xray/hysteria/awg/naive)
   // gets the live config without admin SSH editing /etc/iceslab-node/env.
