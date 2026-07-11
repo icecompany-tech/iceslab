@@ -499,7 +499,11 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   }
   const targets: ImportTarget[] = [];
   if (showSub) targets.push({ id: 'sub', label: t.subTarget });
-  for (const n of awgNodes) targets.push({ id: `awg:${n.nodeName}`, label: n.nodeName });
+  // Chip label is the product name, not the raw node/city — a single AWG node
+  // reads "AmneziaWG", not "London". Only disambiguate by node when there's more
+  // than one AmneziaWG server.
+  for (const n of awgNodes)
+    targets.push({ id: `awg:${n.nodeName}`, label: multiAwg ? `AmneziaWG · ${n.nodeName}` : 'AmneziaWG' });
 
   const figures: string[] = [];
   if (showSub) {
