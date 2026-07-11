@@ -305,10 +305,23 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
 
   try {
     const res = await transport.applyInbounds(req);
-    getLogger().info(
-      `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied} skipped=${res.skipped}`,
-    );
-    inboundSyncJobs.inc({ result: 'ok' });
+    if (res.skipped > 0) {
+      // The node-agent returns 200 even when it silently skips an inbound whose
+      // (protocol, engine) has no registered adapter on that node — but the
+      // subscription generator still advertises that endpoint, so clients get
+      // routed to a dead server. Surface it (warn + a distinct metric label)
+      // instead of counting it as a clean success, so a heterogeneous-fleet
+      // adapter gap during a rollout is visible in monitoring rather than silent.
+      getLogger().warn(
+        `[worker:inbound-sync] applyInbounds ${node.name}: ${res.skipped} inbound(s) SKIPPED (no matching adapter on this node); subscriptions may advertise a dead endpoint until the agent gains the adapter. applied=${res.applied}`,
+      );
+      inboundSyncJobs.inc({ result: 'skipped' });
+    } else {
+      getLogger().info(
+        `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied}`,
+      );
+      inboundSyncJobs.inc({ result: 'ok' });
+    }
   } catch (err) {
     const detail =
       err instanceof NodeRequestError
