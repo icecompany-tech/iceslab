@@ -138,7 +138,7 @@ export default {
       multiplier: 'Consumption multiplier',
       multiplierDesc: '1 = норма, > 1 премиум',
       domain: 'Домен (FQDN, опционально)',
-      domainDesc: 'A-запись на IP ноды. Используется как REALITY serverName для self-steal профилей (SNI совпадает с IP, переживает РФ-DPI) и для ACME позже.',
+      domainDesc: 'Сначала заведите A-запись на IP ноды. Используется как REALITY serverName для self-steal профилей (SNI совпадает с IP, переживает РФ-DPI) и как имя ACME-сертификата hysteria — смена перевыпускает сертификат на новое имя, поэтому убедитесь, что DNS-запись уже указывает сюда, иначе нода потеряет TLS.',
       singboxEngine: 'Поставить также движок sing-box',
       singboxEngineDesc: 'Добавит --with-singbox в install-команду - тогда нода сможет обслуживать и профили vless/vmess/trojan/hy2/ss с движком sing-box.',
       hardeningSection: 'Защита (hardening)',

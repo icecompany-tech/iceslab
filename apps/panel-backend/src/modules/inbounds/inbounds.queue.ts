@@ -174,23 +174,33 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     };
   });
 
-  // B3/G - REALITY self-steal: serverNames is a per-NODE property (must resolve
-  // to THIS node's IP), not per-profile. For any xray inbound whose profile is in
-  // self-steal mode, override serverNames with the node's own domain so SNI and IP
-  // stay consistent (the node-agent serves a local TLS fallback for it; see
-  // selfsteal.go). One self-steal profile can deploy to N nodes, each using its
-  // own domain. If the node has no domain set, self-steal cannot work; surface it.
+  // The node's panel-set `domain` is a per-NODE property that drives two things,
+  // so we fetch it once and apply to both:
+  //   1. hysteria ACME cert hostname — pushing it lets an admin change a node's
+  //      domain from the panel and have the node re-issue its LE cert for the
+  //      new name (the A-record must already point here). Omitted when unset, so
+  //      the node keeps its install-time hostname.
+  //   2. REALITY self-steal serverNames — must resolve to THIS node's IP.
+  const hysteriaInbounds = inbounds.filter((i) => i.protocol === 'hysteria');
   const selfStealInbounds = inbounds.filter(
     (i) =>
       i.protocol === 'xray' &&
       (i.config as { realityMode?: string }).realityMode === 'self-steal',
   );
-  if (selfStealInbounds.length > 0) {
+  if (hysteriaInbounds.length > 0 || selfStealInbounds.length > 0) {
     const nodeRow = await prisma.node.findUnique({
       where: { id: nodeId },
       select: { domain: true },
     });
     const domain = nodeRow?.domain ?? null;
+    if (domain) {
+      for (const ib of hysteriaInbounds) {
+        ib.config = {
+          ...(ib.config as Record<string, unknown>),
+          hostname: domain,
+        } as InboundDto['config'];
+      }
+    }
     for (const ib of selfStealInbounds) {
       if (domain) {
         // Key MUST be `realityServerNames` (the wire-contract field the

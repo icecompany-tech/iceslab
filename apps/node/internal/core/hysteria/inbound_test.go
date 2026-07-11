@@ -171,3 +171,42 @@ func TestInboundCfgWireUnmarshal(t *testing.T) {
 		t.Errorf("wire roundtrip mismatch: got %+v want %+v", got, in)
 	}
 }
+
+func TestRenderConfig_PanelHostnameOverridesInstall(t *testing.T) {
+	cfg := Config{
+		Hostname:   "install.example.com",
+		ACMEEmail:  "a@b.io",
+		ListenPort: 443,
+	}
+	// The panel pushed a new domain for this node — the ACME cert must be
+	// issued for it, overriding the install-time hostname.
+	blob, err := renderConfig(cfg, InboundConfig{Hostname: "panel.example.com"})
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	got := string(blob)
+	if !strings.Contains(got, "- panel.example.com") {
+		t.Errorf("panel-pushed hostname not used in acme.domains:\n%s", got)
+	}
+	if strings.Contains(got, "install.example.com") {
+		t.Errorf("install-time hostname should be overridden by the panel hostname:\n%s", got)
+	}
+}
+
+func TestRenderConfig_FallsBackToInstallHostname(t *testing.T) {
+	cfg := Config{Hostname: "install.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
+	blob, err := renderConfig(cfg, InboundConfig{}) // no panel hostname
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	if !strings.Contains(string(blob), "- install.example.com") {
+		t.Errorf("empty panel hostname should fall back to install-time hostname:\n%s", string(blob))
+	}
+}
+
+func TestRenderConfig_RejectsInjectedHostname(t *testing.T) {
+	cfg := Config{Hostname: "hy2.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
+	if _, err := renderConfig(cfg, InboundConfig{Hostname: "evil.example.com\nlisten: :1"}); err == nil {
+		t.Fatal("expected error for a newline in the panel-pushed hostname")
+	}
+}

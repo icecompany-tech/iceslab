@@ -11,6 +11,15 @@ const PortSchema = z.number().int().min(1).max(65535);
 // ───── Per-protocol config schemas ─────
 
 export const HysteriaConfigSchema = z.object({
+  /**
+   * Public FQDN hysteria issues its ACME (Let's Encrypt) cert for. Normally
+   * omitted — the node uses its install-time hostname. The sync worker injects
+   * the node's `domain` here when set, so an admin can change a node's domain
+   * from the panel and the node re-issues the cert for the new name. The
+   * A-record for the new name must already point at the node, or the ACME
+   * challenge fails.
+   */
+  hostname: z.string().max(253).optional(),
   /** Optional Salamander obfuscation password. Leave empty for no obfs. */
   obfsPassword: z.string().max(128).optional(),
   /** Local URL Hysteria masquerades to for non-authenticated probers. */

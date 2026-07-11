@@ -62,7 +62,15 @@ func validateMasqueradeURL(s string) error {
 // renderConfig fell back to adapterCfg.ListenPort. Now Port is per-
 // inbound and the install-time ListenPort acts only as a fallback.
 type InboundConfig struct {
-	Port           int
+	Port int
+	// Hostname is the public FQDN hysteria's ACME (Let's Encrypt) issues the
+	// cert for. Install-time only until this field: the panel now pushes the
+	// node's domain per-inbound so an admin can change it from the UI (the node
+	// re-renders config.yaml and hysteria re-issues the cert for the new name).
+	// Empty falls back to the install-time adapterCfg.Hostname. NB: the DNS
+	// A-record for the new name must already point at this node before the
+	// change, or the ACME challenge fails and hysteria has no valid cert.
+	Hostname       string
 	ObfsPassword   string
 	MasqueradeURL  string
 	BrutalUpMbps   int
@@ -73,6 +81,7 @@ type InboundConfig struct {
 // apps/panel-backend/src/modules/inbounds/inbounds.schemas.ts. Field names
 // are JSON-camelCase to match what the panel emits over /applyInbounds.
 type inboundCfgWire struct {
+	Hostname       string `json:"hostname,omitempty"`
 	ObfsPassword   string `json:"obfsPassword,omitempty"`
 	MasqueradeURL  string `json:"masqueradeUrl,omitempty"`
 	BrutalUpMbps   int    `json:"brutalUpMbps,omitempty"`
@@ -82,6 +91,7 @@ type inboundCfgWire struct {
 func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 	return InboundConfig{
 		Port:           port,
+		Hostname:       w.Hostname,
 		ObfsPassword:   w.ObfsPassword,
 		MasqueradeURL:  w.MasqueradeURL,
 		BrutalUpMbps:   w.BrutalUpMbps,
@@ -91,6 +101,7 @@ func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 
 func inboundEqual(a, b InboundConfig) bool {
 	return a.Port == b.Port &&
+		a.Hostname == b.Hostname &&
 		a.ObfsPassword == b.ObfsPassword &&
 		a.MasqueradeURL == b.MasqueradeURL &&
 		a.BrutalUpMbps == b.BrutalUpMbps &&
@@ -107,8 +118,22 @@ func inboundEqual(a, b InboundConfig) bool {
 // surface is tiny and the layout is fixed; a 60-line writer is cheaper than
 // a transitive dep.
 func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
-	if adapterCfg.Hostname == "" {
+	// Hostname selection: the panel-pushed inbound.Hostname wins (admin can now
+	// change the node's domain from the UI, which re-issues the ACME cert), with
+	// the install-time adapterCfg.Hostname as the fallback for pre-this-field
+	// pushes. A newline/YAML-metachar in a panel-pushed hostname would break out
+	// of the acme.domains scalar, so validate it like the other pushed strings.
+	hostname := inbound.Hostname
+	if hostname == "" {
+		hostname = adapterCfg.Hostname
+	}
+	if hostname == "" {
 		return nil, fmt.Errorf("hysteria render: Hostname is required")
+	}
+	if inbound.Hostname != "" {
+		if err := validateInboundYAMLSafe("Hostname", inbound.Hostname); err != nil {
+			return nil, err
+		}
 	}
 	if adapterCfg.ACMEEmail == "" {
 		return nil, fmt.Errorf("hysteria render: ACMEEmail is required")
@@ -144,7 +169,7 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 	b.WriteString("\n")
 	b.WriteString("acme:\n")
 	b.WriteString("  domains:\n")
-	fmt.Fprintf(&b, "    - %s\n", adapterCfg.Hostname)
+	fmt.Fprintf(&b, "    - %s\n", hostname)
 	fmt.Fprintf(&b, "  email: %s\n", adapterCfg.ACMEEmail)
 	b.WriteString("\n")
 	b.WriteString("auth:\n")

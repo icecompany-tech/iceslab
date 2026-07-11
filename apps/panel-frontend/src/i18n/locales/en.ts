@@ -134,7 +134,7 @@ export default {
       multiplier: 'Consumption multiplier',
       multiplierDesc: '1 = normal, > 1 premium',
       domain: 'Domain (FQDN, optional)',
-      domainDesc: 'A-record this to the node IP. Used as REALITY serverName for self-steal profiles (SNI matches IP, survives RU DPI) and for ACME later.',
+      domainDesc: 'Point an A-record at the node IP FIRST. Used as the REALITY serverName for self-steal profiles (SNI matches IP, survives RU DPI) and as the hysteria ACME cert hostname — changing it re-issues the certificate for the new name, so make sure the DNS record already points here or the node loses TLS.',
       singboxEngine: 'Also install sing-box engine',
       singboxEngineDesc: 'Adds --with-singbox to the install command, so this node can also serve vless/vmess/trojan/hy2/ss profiles that use the sing-box engine.',
       hardeningSection: 'Zashchita (hardening)',
