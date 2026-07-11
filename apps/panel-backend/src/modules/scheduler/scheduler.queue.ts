@@ -160,10 +160,11 @@ export function startCronTasksWorker(): Worker {
         }
         case 'prune-history': {
           const r = await pruneHistory();
-          const total = r.subscriptionRequests + r.nodeUserUsage + r.nodeUsage + r.bootstrapTokens;
+          const total =
+            r.subscriptionRequests + r.nodeUserUsage + r.nodeUsage + r.subscriptionEvents + r.bootstrapTokens;
           if (total > 0) {
             getLogger().info(
-              `[cron] prune-history - deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.bootstrapTokens} bootstrap-token rows`,
+              `[cron] prune-history - deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.subscriptionEvents} sub-event, ${r.bootstrapTokens} bootstrap-token rows`,
             );
           }
           break;
