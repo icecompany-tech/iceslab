@@ -411,7 +411,15 @@ func (a *Adapter) Healthy() bool {
 	if a.callbackSrv == nil {
 		return false
 	}
-	if a.cfg.BinaryPath != "" {
+	// Only assert the in-process subprocess in spawn mode. When ServiceUnit is
+	// set the server is managed by systemd: Start() skips the in-process spawn
+	// and leaves a.proc nil, so this check would ALWAYS report unhealthy even
+	// though hysteria is running — every systemd-managed node then permanently
+	// shows "degraded", masking genuine degradation. In systemd mode the
+	// callback server being up is the readiness signal we own here; unit
+	// liveness can be layered on later via a cached `systemctl is-active` probe
+	// (see the AmneziaWG adapter's cached health probe for the pattern).
+	if a.cfg.BinaryPath != "" && a.cfg.ServiceUnit == "" {
 		if a.proc == nil || !a.proc.Running() {
 			return false
 		}
