@@ -72,7 +72,12 @@ export async function allocatePeer(
   const range = parseSubnet(subnet);
   const firstIp = intToIp(range.firstUsable);
   const lastIp = intToIp(range.lastUsable);
-  const maxAttempts = 5;
+  // review #6 — raised 5→12. Under a thundering herd of first-ever AWG /sub
+  // hits on the same profile, every allocator races for the lowest free IP and
+  // 5 retries could exhaust before the losers re-picked. Each retry recomputes
+  // the lowest free IP after the winners' inserts commit, so more attempts
+  // resolve realistic contention; the happy path still returns on attempt 0.
+  const maxAttempts = 12;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const rows = await prisma.$queryRaw<
