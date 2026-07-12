@@ -177,20 +177,28 @@ func validateAllowedIP(s string) error {
 	return nil
 }
 
-// validateIField enforces "looks like an AmneziaWG I-signature": a hex string
-// only (the panel validates the same shape with /^[0-9a-fA-F]*$/). Empty is
-// allowed and means "slot disabled". This is the same RCE class the WG-key and
-// AllowedIP validators guard against: I1-I5 arrive over the panel→node wire and
-// are written verbatim into the awg-quick INI's [Interface] block via
-// fmt.Fprintf. A value containing a newline (e.g. "aabb\nPostUp = curl … | sh")
-// closes the I-line and injects a PostUp directive that awg-quick evaluates as
-// a root shell command on interface bring-up. Restricting to hex kills the
-// newline and every shell metacharacter.
+// validateIField enforces "looks like an AmneziaWG I-signature": either a plain
+// hex string OR an AmneziaWG 2.0 CPS (Custom Protocol Signature) built from the
+// tags `<b 0xHEX>` (fixed bytes), `<r N>` (N random bytes) and `<t>` (timestamp)
+// — e.g. `<b 0xc00000000108><r 64><t>`, which mimics a QUIC Initial packet.
+// Empty is allowed and means "slot disabled".
+//
+// This is the same RCE class the WG-key/AllowedIP validators guard against:
+// I1-I5 arrive over the panel→node wire and are written verbatim into the
+// awg-quick INI's [Interface] block via fmt.Fprintf. A value with a newline
+// (e.g. "aabb\nPostUp = curl … | sh") would close the I-line and inject a
+// PostUp directive run as root on bring-up. We keep that shut with a strict
+// whitelist: hex digits, the `0x` prefix, spaces, the CPS delimiters `<` `>`
+// and the tag letters `r`/`t` (`b`/`c`/`d` are already hex). This set cannot
+// form a newline, `[`, `=`, or any shell metacharacter, so no INI/PostUp
+// injection is possible.
 func validateIField(name, s string) error {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return fmt.Errorf("%s must be a hex string (offending byte at index %d)", name, i)
+		ok := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ||
+			c == 'x' || c == 'X' || c == '<' || c == '>' || c == ' ' || c == 'r' || c == 't'
+		if !ok {
+			return fmt.Errorf("%s: disallowed byte at index %d (allowed: hex or a 2.0 CPS like <b 0x..><r N><t>)", name, i)
 		}
 	}
 	return nil

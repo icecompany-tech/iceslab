@@ -71,6 +71,13 @@ export interface AmneziawgClientConfigOpts {
    * matches AmneziaVPN-app default.
    */
   persistentKeepalive?: number;
+  /**
+   * Client-side MTU written into [Interface]. Default 1280 — conservative for
+   * mobile paths so a large TCP response still fits inside the AWG tunnel.
+   * Without it the client uses 1420, the handshake completes, but pages won't
+   * load on tight mobile networks (small packets/DNS work, big ones drop).
+   */
+  mtu?: number;
 }
 
 export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): string {
@@ -80,6 +87,7 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
   lines.push('[Interface]');
   lines.push(`PrivateKey = ${opts.privateKey}`);
   lines.push(`Address = ${opts.allowedIp}`);
+  lines.push(`MTU = ${opts.mtu ?? 1280}`);
   if (opts.dns?.length) {
     lines.push(`DNS = ${opts.dns.join(', ')}`);
   }
@@ -88,8 +96,11 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
   lines.push(`Jmax = ${opts.jmax}`);
   lines.push(`S1 = ${opts.s1}`);
   lines.push(`S2 = ${opts.s2}`);
-  lines.push(`S3 = ${opts.s3}`);
-  lines.push(`S4 = ${opts.s4}`);
+  // S3/S4 are AmneziaWG 2.0-only. Emit them only when non-zero — the AmneziaVPN
+  // iOS network-extension parser rejects the S3/S4 keys outright (ParseError 9)
+  // even at 0. Omitting keeps a 1.x config parseable everywhere.
+  if (opts.s3) lines.push(`S3 = ${opts.s3}`);
+  if (opts.s4) lines.push(`S4 = ${opts.s4}`);
   lines.push(`H1 = ${opts.h1}`);
   lines.push(`H2 = ${opts.h2}`);
   lines.push(`H3 = ${opts.h3}`);

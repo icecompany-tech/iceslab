@@ -184,14 +184,16 @@ const ObfuscationSchema = z.object({
   h2: z.number().int().min(5).max(4294967295).default(200),
   h3: z.number().int().min(5).max(4294967295).default(300),
   h4: z.number().int().min(5).max(4294967295).default(400),
-  // Hex-encoded mimicry packets: optional, v2.0 feature. When empty,
-  // the kernel module skips that slot. Each up to 256 hex chars
-  // (128 bytes) per upstream guidance.
-  i1: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i2: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i3: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i4: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i5: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
+  // v2.0 mimicry packets: optional. Either plain hex OR an AmneziaWG 2.0 CPS
+  // built from the tags `<b 0xHEX>` / `<r N>` / `<t>` (e.g. a QUIC-Initial
+  // signature `<b 0xc00000000108><r 64><t>`). The whitelist (hex + `xX<> rt-`)
+  // matches the node's validateIField and cannot form a newline/`[`/`=`/shell
+  // metachar, so no INI/PostUp injection is possible. Empty = slot disabled.
+  i1: z.string().regex(/^[0-9a-fA-FxX<> rt-]*$/).max(256).default(''),
+  i2: z.string().regex(/^[0-9a-fA-FxX<> rt-]*$/).max(256).default(''),
+  i3: z.string().regex(/^[0-9a-fA-FxX<> rt-]*$/).max(256).default(''),
+  i4: z.string().regex(/^[0-9a-fA-FxX<> rt-]*$/).max(256).default(''),
+  i5: z.string().regex(/^[0-9a-fA-FxX<> rt-]*$/).max(256).default(''),
 });
 
 export const AmneziawgConfigSchema = z

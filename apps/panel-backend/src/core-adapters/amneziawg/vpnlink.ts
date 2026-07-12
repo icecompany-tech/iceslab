@@ -86,13 +86,20 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     Jmax: String(opts.jmax),
     S1: String(opts.s1),
     S2: String(opts.s2),
-    S3: String(opts.s3),
-    S4: String(opts.s4),
-    H1: String(opts.h1),
-    H2: String(opts.h2),
-    H3: String(opts.h3),
-    H4: String(opts.h4),
   };
+  // S3/S4 are AmneziaWG 2.0 additions. The AmneziaVPN iOS network-extension
+  // parser (verified on 4.8.19 / iOS 26) can't parse the S3/S4 keys AT ALL —
+  // even S3=0/S4=0 → TunnelConfiguration.ParseError code 9, connection never
+  // starts. So only emit them for a real 2.0 config (non-zero); otherwise omit
+  // so the 1.x-only NE parser accepts the config. (Same reason empty I-fields
+  // are omitted below.) Confirmed live: dropping S3/S4=0 + the empty PSK made
+  // the exact config connect on iOS.
+  if (opts.s3) obf.S3 = String(opts.s3);
+  if (opts.s4) obf.S4 = String(opts.s4);
+  obf.H1 = String(opts.h1);
+  obf.H2 = String(opts.h2);
+  obf.H3 = String(opts.h3);
+  obf.H4 = String(opts.h4);
   [opts.i1, opts.i2, opts.i3, opts.i4, opts.i5].forEach((v, idx) => {
     if (v && v.length > 0) obf[`I${idx + 1}`] = v;
   });
@@ -100,7 +107,7 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // Inner client config. `config` (the .conf text) is required; an empty one is
   // the schema half of "error 900". last_config is DOUBLE-encoded (a stringified
   // JSON), per the app's AwgProtocolConfig::toJson.
-  const lastConfig = {
+  const lastConfig: Record<string, unknown> = {
     ...obf,
     allowed_ips: allowed,
     clientId: '',
@@ -113,9 +120,12 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     mtu: String(opts.mtu ?? 1280),
     persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
     port: opts.port,
-    psk_key: opts.pskKey ?? '',
     server_pub_key: opts.serverPublicKey,
   };
+  // Emit psk_key ONLY when there's a real preshared key. An empty psk_key made
+  // the app rebuild `PresharedKey = ` (empty) into the [Interface], which the
+  // iOS NE parser rejects (ParseError 9). Omit → no PresharedKey line.
+  if (opts.pskKey) lastConfig.psk_key = opts.pskKey;
 
   const awg = {
     ...obf,
