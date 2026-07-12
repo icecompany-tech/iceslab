@@ -51,8 +51,20 @@ func TestInboundDefaults(t *testing.T) {
 	if cfg.Address != "" {
 		t.Errorf("Address should remain empty, got %q", cfg.Address)
 	}
-	if !strings.Contains(cfg.PostUp, "MASQUERADE") {
+	up := strings.Join(cfg.PostUp, "\n")
+	down := strings.Join(cfg.PostDown, "\n")
+	if !strings.Contains(up, "MASQUERADE") {
 		t.Errorf("PostUp default missing MASQUERADE: %q", cfg.PostUp)
+	}
+	// FORWARD ACCEPT is required on DROP-policy hosts (Docker/ufw) or the
+	// client connects but has no internet. Inserted (not appended) so it
+	// beats ufw's reject-forward chain.
+	if !strings.Contains(up, "-I FORWARD 1 -i %i -j ACCEPT") ||
+		!strings.Contains(up, "-I FORWARD 1 -o %i -j ACCEPT") {
+		t.Errorf("PostUp default missing FORWARD ACCEPT: %q", cfg.PostUp)
+	}
+	if !strings.Contains(down, "-D FORWARD -i %i -j ACCEPT") {
+		t.Errorf("PostDown default missing FORWARD cleanup: %q", cfg.PostDown)
 	}
 }
 
