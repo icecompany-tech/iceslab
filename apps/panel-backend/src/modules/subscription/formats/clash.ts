@@ -1,5 +1,6 @@
 import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { buildRoscomVpnSections } from './clash.roscomvpn.js';
 
 /**
  * Clash YAML subscription formatter (targets Clash Meta / Mihomo, covers
@@ -220,6 +221,7 @@ export function buildClashYaml(
       : preset === 'cn-split'
         ? CN_SPLIT_RULE_LINES
         : null;
+  const useRoscomVpn = preset === 'roscomvpn';
   const proxies: string[] = [];
   const proxyNames: string[] = [];
 
@@ -415,10 +417,14 @@ export function buildClashYaml(
     }
   }
 
+  const roscomVpn =
+    useRoscomVpn && proxyNames.length > 0 ? buildRoscomVpnSections() : null;
   const lines: string[] = [];
   if (splitRuleLines) {
     lines.push(...SPLIT_GEO_LINES);
     lines.push(...splitDnsLines!);
+  } else if (roscomVpn) {
+    lines.push(...roscomVpn.headerLines);
   } else {
     lines.push(...buildProxyAllDnsLines(proxyNames.length > 0));
   }
@@ -429,6 +435,10 @@ export function buildClashYaml(
     lines.push(...proxies);
   }
   lines.push('');
+
+  if (roscomVpn) {
+    lines.push(...roscomVpn.providerLines, '');
+  }
 
   lines.push('proxy-groups:');
   if (proxyNames.length > 0) {
@@ -469,6 +479,8 @@ export function buildClashYaml(
   lines.push(...customDomainLines);
   if (splitRuleLines) {
     lines.push(...splitRuleLines);
+  } else if (roscomVpn) {
+    lines.push(...roscomVpn.ruleLines);
   }
   lines.push(proxyNames.length > 0 ? '  - MATCH,Auto' : '  - MATCH,DIRECT');
 

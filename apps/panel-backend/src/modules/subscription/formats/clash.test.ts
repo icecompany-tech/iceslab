@@ -385,6 +385,70 @@ describe('buildClashYaml', () => {
     });
   });
 
+  describe('routingPreset roscomvpn', () => {
+    function providerNames(out: string): Set<string> {
+      const section = out.slice(out.indexOf('rule-providers:'), out.indexOf('\nrules:'));
+      return new Set(
+        section
+          .split('\n')
+          .filter((line) => /^  [a-z0-9-]+:$/.test(line))
+          .map((line) => line.trim().slice(0, -1)),
+      );
+    }
+
+    function referencedProviders(out: string): Set<string> {
+      return new Set(
+        Array.from(out.matchAll(/(?:RULE-SET,|rule-set:)([a-z0-9-]+)/g)).map(
+          (match) => match[1],
+        ),
+      );
+    }
+
+    it('emits self-updating RoscomVPN providers and conservative routing rules', () => {
+      const out = buildClashYaml([xrayEp], { routingPreset: 'roscomvpn' });
+      expect(out).toContain('rule-providers:');
+      expect(out).toContain(
+        'url: https://cdn.jsdelivr.net/gh/hydraponique/roscomvpn-geosite/release/mihomo/category-ru.mrs',
+      );
+      expect(out).toContain('interval: 86400');
+      expect(out).toContain('- AND,((NETWORK,UDP),(DST-PORT,443)),REJECT');
+      expect(out).toContain('- RULE-SET,youtube,Auto');
+      expect(out).toContain('- RULE-SET,category-ru,DIRECT');
+      expect(out.trimEnd().endsWith('- MATCH,Auto')).toBe(true);
+    });
+
+    it('keeps every provider and proxy-group reference resolvable', () => {
+      const out = buildClashYaml([xrayEp], { routingPreset: 'roscomvpn' });
+      const defined = providerNames(out);
+      expect(defined.size).toBeGreaterThan(0);
+      for (const reference of referencedProviders(out)) {
+        expect(defined.has(reference), `missing provider: ${reference}`).toBe(true);
+      }
+      expect(out).toContain('proxy: Auto');
+      expect(out).toContain('- name: Auto');
+      expect(out).toContain('https://1.1.1.1/dns-query#Auto');
+    });
+
+    it('puts custom domain rules ahead of RoscomVPN rules', () => {
+      const out = buildClashYaml([xrayEp], {
+        routingPreset: 'roscomvpn',
+        customDomainLists: { block: ['blocked.example'], direct: [], proxy: [] },
+      });
+      expect(out.indexOf('DOMAIN-SUFFIX,blocked.example,REJECT')).toBeLessThan(
+        out.indexOf('RULE-SET,private-ips,DIRECT'),
+      );
+    });
+
+    it('does not emit dangling providers or Auto references without proxies', () => {
+      const out = buildClashYaml([], { routingPreset: 'roscomvpn' });
+      expect(out).not.toContain('rule-providers:');
+      expect(out).not.toContain('RULE-SET,');
+      expect(out).not.toContain('#Auto');
+      expect(out).not.toContain('proxy: Auto');
+      expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
+    });
+  });
+
   // ───── Byte-identity regression guards (H2) ─────
 
   describe('routingPreset byte-identity (H2 guard)', () => {

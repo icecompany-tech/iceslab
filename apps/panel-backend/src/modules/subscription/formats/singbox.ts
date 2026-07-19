@@ -151,8 +151,8 @@ export function buildSingboxJson(
   const outbounds: Record<string, unknown>[] = [];
   const proxyTags: string[] = [];
   // Routing preset (R1b + H2). Each split preset selects its own route rules +
-  // remote rule-sets; proxy-all leaves them null so the output stays
-  // byte-identical to pre-R1 builds.
+  // remote rule-sets. RoscomVPN is Mihomo-specific and intentionally falls
+  // back to proxy-all here instead of producing a partial routing profile.
   const preset = opts.routingPreset ?? 'proxy-all';
   const splitRules =
     preset === 'ru-split'

@@ -401,5 +401,11 @@ describe('buildSingboxJson', () => {
         buildSingboxJson([xrayEp], { routingPreset: 'cn-split' }),
       );
     });
+
+    it('roscomvpn falls back to proxy-all because it is Mihomo-only', () => {
+      expect(buildSingboxJson([xrayEp], { routingPreset: 'roscomvpn' })).toBe(
+        buildSingboxJson([xrayEp], { routingPreset: 'proxy-all' }),
+      );
+    });
   });
 });

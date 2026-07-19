@@ -533,6 +533,7 @@ export default {
       routingProxyAll: 'Весь трафик в тоннель',
       routingRuSplit: 'RU-сплит (ru-split)',
       routingCnSplit: 'CN-сплит (cn-split)',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
       devicesTitle: 'Зарегистрированные устройства ({{count}})',
       devicesEmpty: 'Юзер ещё не подключался с HWID-aware клиента, либо лимит не задан.',
       deviceDelete: 'Сбросить слот, чтобы юзер мог подключиться с другого устройства',
@@ -604,6 +605,7 @@ export default {
       routingProxyAll: 'Проксировать всё',
       routingRuSplit: 'RU split (ru-split)',
       routingCnSplit: 'CN split (cn-split)',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
       hwidLimit: 'Лимит устройств HWID (дефолт сквада)',
       hwidLimitDesc: 'Дефолтный лимит устройств для членов без своего лимита. Пусто = нет. По сквадам выигрывает самый щедрый (max).',
       hwidLimitPlaceholder: 'Нет дефолта сквада',
@@ -711,6 +713,9 @@ export default {
       routingCnSplit: 'CN split (cn-split)',
       routingCnSplitDesc:
         'Реклама и малварь в блок, китайские сайты и локальные адреса напрямую, остальное через туннель. Чистый китайский DNS.',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
+      routingRoscomVpnDesc:
+        'Ежедневно обновляемые списки RoscomVPN: российские и локальные ресурсы напрямую, заблокированные сервисы через туннель. Только для Mihomo-клиентов.',
       routingSaved: 'Пресет маршрутизации обновлён',
       fragmentTitle: 'TLS-фрагментация',
       fragmentDesc:

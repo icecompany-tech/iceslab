@@ -13,17 +13,20 @@ describe('resolveSquadRouting', () => {
     expect(resolveSquadRouting(['proxy-all'])).toBe('proxy-all');
     // H2 - cn-split resolves as a single override like any other preset.
     expect(resolveSquadRouting([null, 'cn-split'])).toBe('cn-split');
+    expect(resolveSquadRouting([null, 'roscomvpn'])).toBe('roscomvpn');
   });
 
   it('dedupes identical overrides', () => {
     expect(resolveSquadRouting(['ru-split', 'ru-split', null])).toBe('ru-split');
     expect(resolveSquadRouting(['cn-split', 'cn-split', null])).toBe('cn-split');
+    expect(resolveSquadRouting(['roscomvpn', 'roscomvpn', null])).toBe('roscomvpn');
   });
 
   it('falls back to null on conflicting overrides', () => {
     expect(resolveSquadRouting(['ru-split', 'proxy-all'])).toBe(null);
     // H2 - cn-split conflicting with ru-split -> inherit (null).
     expect(resolveSquadRouting(['cn-split', 'ru-split'])).toBe(null);
+    expect(resolveSquadRouting(['roscomvpn', 'proxy-all'])).toBe(null);
   });
 
   it('ignores invalid/garbage preset values', () => {
@@ -38,7 +41,7 @@ describe('resolveSquadRouting', () => {
 // Kept as a pure expression test so the precedence ordering is pinned even
 // though the resolution itself lives inline in the route handler.
 describe('routing-preset precedence (R1a + R3-a + R3)', () => {
-  type Preset = 'proxy-all' | 'ru-split' | 'cn-split';
+  type Preset = 'proxy-all' | 'ru-split' | 'cn-split' | 'roscomvpn';
   function resolve(
     query: Preset | undefined,
     user: Preset | null,

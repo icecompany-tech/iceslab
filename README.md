@@ -188,7 +188,7 @@ One link per user: `https://panel.example.com/sub/<token>`. The same URL serves 
 
 User-Agent auto-detection is admin-editable (Subscription Response Rules page). Useful query params: `?topN=N` caps the list to the best nodes by region + load, `?bundle=url-test|balancer` picks the auto-failover flavor, `?routing=` overrides the routing preset per request.
 
-Panel-wide routing preset (Subscription page): `proxy-all` (default, everything tunnels) or `ru-split` (ads blocked, RU domains/IPs and private ranges direct, the rest tunnels). Applies to the full-config formats: clash, singbox, xrayjson. Per-user device limits (HWID) are enforced on the same endpoint.
+Panel-wide routing presets (Subscription page): `proxy-all` (default, everything tunnels), `ru-split`, `cn-split`, and `roscomvpn`. RU/CN split applies to Clash, sing-box, and Xray JSON; `roscomvpn` uses daily-updated RoscomVPN rule providers and applies to Mihomo/Clash only. Presets can be overridden per squad, per user, or with `?routing=`. Per-user device limits (HWID) are enforced on the same endpoint.
 
 ## Stack
 

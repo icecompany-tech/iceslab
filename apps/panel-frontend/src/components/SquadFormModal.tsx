@@ -316,6 +316,7 @@ export function SquadFormModal({
               { value: 'proxy-all', label: t('squads.form.routingProxyAll') },
               { value: 'ru-split', label: t('squads.form.routingRuSplit') },
               { value: 'cn-split', label: t('squads.form.routingCnSplit') },
+              { value: 'roscomvpn', label: t('squads.form.routingRoscomVpn') },
             ]}
             allowDeselect={false}
             {...form.getInputProps('routingPreset')}

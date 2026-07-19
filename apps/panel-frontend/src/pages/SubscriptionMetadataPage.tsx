@@ -308,6 +308,12 @@ export function SubscriptionMetadataPage() {
               label={t('settings.subscription.routingCnSplit')}
               description={t('settings.subscription.routingCnSplitDesc')}
             />
+            <Radio
+              value="roscomvpn"
+              disabled={routingMutation.isPending || settingsQuery.isLoading}
+              label={t('settings.subscription.routingRoscomVpn')}
+              description={t('settings.subscription.routingRoscomVpnDesc')}
+            />
           </Stack>
         </Radio.Group>
       </Card>

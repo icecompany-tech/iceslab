@@ -528,6 +528,7 @@ export default {
       routingProxyAll: 'Proxy all',
       routingRuSplit: 'RU split (ru-split)',
       routingCnSplit: 'CN split (cn-split)',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
       devicesTitle: 'Registered devices ({{count}})',
       devicesEmpty: 'No HWID-aware client has connected yet, or no limit is set.',
       deviceDelete: 'Free this slot - user can log in from a different device',
@@ -599,6 +600,7 @@ export default {
       routingProxyAll: 'Proxy all',
       routingRuSplit: 'RU split (ru-split)',
       routingCnSplit: 'CN split (cn-split)',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
       hwidLimit: 'HWID device limit (squad default)',
       hwidLimitDesc: 'Default device cap for members without their own limit. Empty = none. Across squads the most-permissive (max) wins.',
       hwidLimitPlaceholder: 'No squad default',
@@ -706,6 +708,9 @@ export default {
       routingCnSplit: 'CN split (cn-split)',
       routingCnSplitDesc:
         'Ads and malware blocked, China sites and private ranges go direct, everything else through the tunnel. Clean China DNS.',
+      routingRoscomVpn: 'RoscomVPN (Mihomo)',
+      routingRoscomVpnDesc:
+        'Daily-updated RoscomVPN rule sets: Russian and private resources direct, blocked services through the tunnel. Mihomo clients only.',
       routingSaved: 'Routing preset updated',
       fragmentTitle: 'TLS fragment',
       fragmentDesc:
