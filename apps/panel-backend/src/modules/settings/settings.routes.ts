@@ -30,7 +30,8 @@ import { invalidateSubscriptionSettingsCache } from './settings.service.js';
  *   - `subscriptionRoutingPreset` (enum, R1a + H2) - routing rules emitted into
  *                                                   clash/singbox/xrayjson:
  *                                                   'proxy-all' (default) |
- *                                                   'ru-split' | 'cn-split'
+ *                                                   'ru-split' | 'cn-split' |
+ *                                                   'roscomvpn'
  *   - `subscriptionTlsFragment` (boolean)         - when true, the Xray JSON
  *                                                   format splits the client's
  *                                                   outgoing ClientHello via a
