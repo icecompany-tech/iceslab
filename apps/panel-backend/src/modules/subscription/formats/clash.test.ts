@@ -253,14 +253,15 @@ describe('buildClashYaml', () => {
   // ───── Routing Templates (R1c) ─────
 
   describe('routingPreset', () => {
-    it('default proxy-all output is byte-identical to pre-R1 (no geo block, no preset rules)', () => {
+    it('default proxy-all output is byte-identical to explicit proxy-all', () => {
       expect(buildClashYaml([xrayEp], { routingPreset: 'proxy-all' })).toBe(
         buildClashYaml([xrayEp]),
       );
       const out = buildClashYaml([xrayEp]);
       expect(out).not.toContain('GEOSITE');
       expect(out).not.toContain('geox-url');
-      expect(out.startsWith('proxies:')).toBe(true);
+      expect(out).toContain('dns:');
+      expect(out.indexOf('dns:')).toBeLessThan(out.indexOf('proxies:'));
     });
 
     it('ru-split emits geo block with jsdelivr mirrors and auto-update', () => {
@@ -298,9 +299,25 @@ describe('buildClashYaml', () => {
       expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
     });
 
-    it('ru-split emits split-DNS block (R2); proxy-all does not', () => {
-      expect(buildClashYaml([xrayEp])).not.toContain('dns:');
+    it('proxy-all emits DNS with proxied DoH for TUN clients', () => {
+      const out = buildClashYaml([xrayEp]);
+      expect(out).toContain('mode: rule');
+      expect(out).toContain('ipv6: false');
+      expect(out).toContain('dns:');
+      expect(out).toContain('  listen: 0.0.0.0:1053');
+      expect(out).toContain('  enhanced-mode: redir-host');
+      expect(out).toContain('    - https://1.1.1.1/dns-query#Auto');
+      expect(out).toContain('    - https://8.8.8.8/dns-query#Auto');
+    });
 
+    it('proxy-all without proxies does not leave a dangling Auto DNS reference', () => {
+      const out = buildClashYaml([]);
+      expect(out).toContain('dns:');
+      expect(out).not.toContain('#Auto');
+      expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
+    });
+
+    it('ru-split emits split-DNS block (R2)', () => {
       const out = buildClashYaml([xrayEp], { routingPreset: 'ru-split' });
       expect(out).toContain('dns:');
       expect(out).toContain('  enable: true');

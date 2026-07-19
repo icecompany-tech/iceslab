@@ -137,6 +137,35 @@ const CN_SPLIT_DNS_LINES: readonly string[] = [
   '',
 ];
 
+const PROXY_ALL_DOH_NAMESERVERS = [
+  'https://1.1.1.1/dns-query',
+  'https://8.8.8.8/dns-query',
+] as const;
+
+function buildProxyAllDnsLines(hasProxyGroup: boolean): string[] {
+  const viaProxy = (nameserver: string): string =>
+    hasProxyGroup ? `${nameserver}#Auto` : nameserver;
+
+  return [
+    'mode: rule',
+    'ipv6: false',
+    'dns:',
+    '  enable: true',
+    '  listen: 0.0.0.0:1053',
+    '  ipv6: false',
+    '  enhanced-mode: redir-host',
+    '  default-nameserver:',
+    '    - 1.1.1.1',
+    '    - 8.8.8.8',
+    '  proxy-server-nameserver:',
+    '    - 1.1.1.1',
+    '    - 8.8.8.8',
+    '  nameserver:',
+    ...PROXY_ALL_DOH_NAMESERVERS.map((nameserver) => `    - ${viaProxy(nameserver)}`),
+    '',
+  ];
+}
+
 const RU_SPLIT_RULE_LINES: readonly string[] = [
   '  - GEOSITE,category-ads-all,REJECT',
   '  - GEOSITE,category-ru,DIRECT',
@@ -390,6 +419,8 @@ export function buildClashYaml(
   if (splitRuleLines) {
     lines.push(...SPLIT_GEO_LINES);
     lines.push(...splitDnsLines!);
+  } else {
+    lines.push(...buildProxyAllDnsLines(proxyNames.length > 0));
   }
   lines.push('proxies:');
   if (proxies.length === 0) {
