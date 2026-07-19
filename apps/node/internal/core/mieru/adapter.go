@@ -27,7 +27,7 @@ type Config struct {
 	Inbound InboundConfig
 
 	// RunCmd is the injectable command runner used by AddUser/RemoveUser/
-	// ApplyInbound to invoke `mita apply config` and `mita reload`. Defaults
+	// ApplyInbound to invoke `mita apply config`, `mita reload`, and `mita start`. Defaults
 	// to os/exec; tests inject a fake.
 	RunCmd RunCmdFunc
 }
@@ -211,6 +211,7 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
+	wasStarted := a.started
 	a.mu.Unlock()
 
 	blob, err := renderConfig(inbound, users)
@@ -253,6 +254,14 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 		// config` is sufficient; warn rather than fail.
 		a.logger.Warn("mita reload returned non-zero (often safe after apply)",
 			"err", err, "out", string(out))
+	}
+	if !wasStarted {
+		// The packaged systemd unit runs mita's RPC daemon, whose proxy starts
+		// in IDLE. `start` is idempotent when a previous agent already brought
+		// it to RUNNING, so this also handles node-agent restarts safely.
+		if out, err := run(ctx, binPath, "start"); err != nil {
+			return fmt.Errorf("mita start: %w (%s)", err, string(out))
+		}
 	}
 
 	a.mu.Lock()

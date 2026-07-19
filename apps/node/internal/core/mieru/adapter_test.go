@@ -140,7 +140,7 @@ func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestStart_InvokesMitaApplyAndReload(t *testing.T) {
+func TestStart_InvokesMitaApplyReloadAndStart(t *testing.T) {
 	runner := &recordingRunner{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	dir := t.TempDir()
@@ -155,9 +155,10 @@ func TestStart_InvokesMitaApplyAndReload(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 
-	// Should have called: mita apply config <path> + mita reload
-	if len(runner.calls) < 2 {
-		t.Fatalf("expected at least 2 mita calls, got %d: %v", len(runner.calls), runner.calls)
+	// The packaged systemd unit starts only the RPC daemon. `mita start` is
+	// still required to move the proxy from IDLE to RUNNING.
+	if len(runner.calls) < 3 {
+		t.Fatalf("expected at least 3 mita calls, got %d: %v", len(runner.calls), runner.calls)
 	}
 	first := strings.Join(runner.calls[0], " ")
 	if !strings.Contains(first, "apply config") {
@@ -166,5 +167,9 @@ func TestStart_InvokesMitaApplyAndReload(t *testing.T) {
 	second := strings.Join(runner.calls[1], " ")
 	if !strings.Contains(second, "reload") {
 		t.Errorf("second call should be `reload`, got %q", second)
+	}
+	third := strings.Join(runner.calls[2], " ")
+	if !strings.Contains(third, "start") {
+		t.Errorf("third call should be `start`, got %q", third)
 	}
 }
