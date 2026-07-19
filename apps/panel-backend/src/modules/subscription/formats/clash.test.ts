@@ -42,6 +42,17 @@ const ssEp: SubscriptionEndpoint = {
   uri: 'ss://...',
 };
 
+const mieruEp: SubscriptionEndpoint = {
+  protocol: 'mieru',
+  nodeName: 'eu-1',
+  host: 'm1.example.com',
+  port: 8443,
+  username: 'alice',
+  password: 'pa:ss#word',
+  mtu: 1400,
+  uri: 'mieru://...',
+};
+
 const shadowtlsEp: SubscriptionEndpoint = {
   protocol: 'shadowtls',
   nodeName: 'eu-1',
@@ -187,6 +198,19 @@ describe('buildClashYaml', () => {
     expect(out).toMatch(/- eu-1-hysteria/);
     expect(out).toMatch(/- eu-1-xray/);
     expect(out).toMatch(/- eu-1-shadowsocks/);
+  });
+
+  it('emits a mieru proxy with separate username and password fields', () => {
+    const out = buildClashYaml([mieruEp]);
+    expect(out).toContain('- name: eu-1-mieru');
+    expect(out).toContain('type: mieru');
+    expect(out).toContain('server: m1.example.com');
+    expect(out).toContain('port: 8443');
+    expect(out).toContain('transport: TCP');
+    expect(out).toContain('udp: true');
+    expect(out).toContain('username: alice');
+    expect(out).toContain('password: "pa:ss#word"');
+    expect(out).toContain('multiplexing: MULTIPLEXING_LOW');
   });
 
   // ───── Slice 24c part 2: transports ─────

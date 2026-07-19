@@ -10,6 +10,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *   - xray (VLESS+REALITY)  → `type: vless` with `reality-opts`
  *   - xray (Trojan+REALITY) → `type: trojan` with `reality-opts` (slice 24c part 3a)
  *   - shadowsocks           → `type: ss` with cipher + password (slice 24d)
+ *   - mieru                 → `type: mieru` with username + password
  *   - amneziawg / naive are NOT emitted: classic Clash has no native support
  *     and Clash Meta's experimental wireguard/naive support diverges per
  *     fork. AmneziaWG users get the wg-quick `.conf` format; Naive users
@@ -309,6 +310,21 @@ export function buildClashYaml(
           `    cipher: ${yamlString(e.method)}`,
           `    password: ${yamlString(e.password)}`,
           `    udp: true`,
+        ].join('\n'),
+      );
+    } else if (e.protocol === 'mieru') {
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: mieru`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    transport: TCP`,
+          `    udp: true`,
+          `    username: ${yamlString(e.username)}`,
+          `    password: ${yamlString(e.password)}`,
+          `    multiplexing: MULTIPLEXING_LOW`,
         ].join('\n'),
       );
     } else if (e.protocol === 'tuic') {
