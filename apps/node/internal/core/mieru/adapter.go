@@ -23,6 +23,10 @@ type Config struct {
 	// `mita apply config <path>`.
 	ConfigPath string
 
+	// StatePath stores the panel user ID to Mieru credential mapping across
+	// node-agent restarts. The generated mita config cannot restore panel IDs.
+	StatePath string
+
 	// Inbound is the static settings (listen port, MTU, logging).
 	Inbound InboundConfig
 
@@ -45,6 +49,12 @@ type Adapter struct {
 	mu      sync.Mutex
 	users   map[string]User // userId → User
 	started bool
+	// proxyRunning tracks whether this adapter has moved mita's systemd-owned
+	// RPC daemon from IDLE to RUNNING.
+	proxyRunning bool
+	// awaitingSync protects an existing pre-state-file config during the
+	// one-time migration until the panel sends the authoritative user list.
+	awaitingSync bool
 	// N6 - sha256 of the last successfully-applied rendered config. A sync that
 	// produces an identical blob skips the two `mita apply/reload` CLI forks.
 	renderedHash [32]byte
@@ -78,24 +88,42 @@ func (a *Adapter) Engine() string { return "mieru" }
 // own systemd unit owns the lifecycle. The adapter just rewrites config
 // + tells mita to reload.
 //
-// In config-only mode (BinaryPath empty) Start writes the YAML and stops
+// In config-only mode (BinaryPath empty) Start writes the JSON and stops
 // there, useful for tests and for dev hosts without mita installed.
 func (a *Adapter) Start(ctx context.Context) error {
+	stateFound, err := a.loadState()
+	if err != nil {
+		return err
+	}
+	if !stateFound && a.cfg.StatePath != "" {
+		migrated, err := a.startExistingConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if migrated {
+			return nil
+		}
+	}
+
+	a.mu.Lock()
+	noUsers := len(a.users) == 0
+	if noUsers {
+		a.started = true
+	}
+	a.mu.Unlock()
+	if noUsers {
+		a.logger.Info("mieru waiting for the first panel user sync")
+		return nil
+	}
 	return a.regenerateAndReload(ctx)
 }
 
-func (a *Adapter) Stop(ctx context.Context) error {
+func (a *Adapter) Stop(_ context.Context) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.started = false
-	if a.cfg.BinaryPath == "" {
-		return nil
-	}
-	// Best-effort `mita stop`, if mita is run as a systemd unit, this is
-	// a no-op. If it's running standalone, mita exits.
-	if _, err := a.cfg.RunCmd(ctx, a.cfg.BinaryPath, "stop"); err != nil {
-		a.logger.Warn("mita stop returned non-zero (often safe)", "err", err)
-	}
+	// mita is owned by its systemd unit. Leaving it running keeps user traffic
+	// alive during a node-agent restart or upgrade.
 	return nil
 }
 
@@ -113,7 +141,20 @@ func (a *Adapter) AddUser(user core.User) error {
 		a.mu.Unlock()
 		return nil
 	}
+	previous, existed := a.users[user.UserID]
+	previousAwaitingSync := a.awaitingSync
 	a.users[user.UserID] = desired
+	a.awaitingSync = false
+	if err := a.persistStateLocked(); err != nil {
+		if existed {
+			a.users[user.UserID] = previous
+		} else {
+			delete(a.users, user.UserID)
+		}
+		a.awaitingSync = previousAwaitingSync
+		a.mu.Unlock()
+		return err
+	}
 	started := a.started
 	a.mu.Unlock()
 	if !started {
@@ -124,11 +165,17 @@ func (a *Adapter) AddUser(user core.User) error {
 
 func (a *Adapter) RemoveUser(userID string) error {
 	a.mu.Lock()
-	if _, ok := a.users[userID]; !ok {
+	removed, ok := a.users[userID]
+	if !ok {
 		a.mu.Unlock()
 		return nil
 	}
 	delete(a.users, userID)
+	if err := a.persistStateLocked(); err != nil {
+		a.users[userID] = removed
+		a.mu.Unlock()
+		return err
+	}
 	started := a.started
 	a.mu.Unlock()
 	if !started {
@@ -172,9 +219,14 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		a.cfg.Inbound.ListenPort = effectivePort
 	}
 	newPort := a.cfg.Inbound.ListenPort
+	awaitingSync := a.awaitingSync && len(a.users) == 0
 	a.mu.Unlock()
 	a.logger.Info("mieru ApplyInbound: config changed",
 		"mtu", wire.MTU, "port", newPort)
+	if awaitingSync {
+		a.logger.Info("mieru preserving existing config until panel user sync")
+		return nil
+	}
 	return a.regenerateAndReload(context.Background())
 }
 
@@ -211,7 +263,7 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
-	wasStarted := a.started
+	wasProxyRunning := a.proxyRunning
 	a.mu.Unlock()
 
 	blob, err := renderConfig(inbound, users)
@@ -239,7 +291,16 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 	unchanged := a.started && a.renderedHash == hash
 	a.mu.Unlock()
 	if unchanged {
-		a.logger.Debug("mieru config unchanged, skipping mita apply/reload", "users", len(users))
+		if len(users) == 0 || wasProxyRunning {
+			a.logger.Debug("mieru config unchanged, skipping mita apply/reload", "users", len(users))
+			return nil
+		}
+		if out, err := run(ctx, binPath, "start"); err != nil {
+			return fmt.Errorf("mita start: %w (%s)", err, string(out))
+		}
+		a.mu.Lock()
+		a.proxyRunning = true
+		a.mu.Unlock()
 		return nil
 	}
 
@@ -255,7 +316,7 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 		a.logger.Warn("mita reload returned non-zero (often safe after apply)",
 			"err", err, "out", string(out))
 	}
-	if !wasStarted {
+	if len(users) > 0 && !wasProxyRunning {
 		// The packaged systemd unit runs mita's RPC daemon, whose proxy starts
 		// in IDLE. `start` is idempotent when a previous agent already brought
 		// it to RUNNING, so this also handles node-agent restarts safely.
@@ -263,9 +324,15 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 			return fmt.Errorf("mita start: %w (%s)", err, string(out))
 		}
 	}
+	if len(users) == 0 && wasProxyRunning {
+		if out, err := run(ctx, binPath, "stop"); err != nil {
+			return fmt.Errorf("mita stop after last user removal: %w (%s)", err, string(out))
+		}
+	}
 
 	a.mu.Lock()
 	a.started = true
+	a.proxyRunning = len(users) > 0
 	a.renderedHash = hash
 	a.mu.Unlock()
 	a.logger.Info("mieru (mita) reloaded", "users", len(users), "mtu", inbound.MTU)
