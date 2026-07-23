@@ -18,8 +18,8 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@bull-board/api": "^7.0.0",
-    "@bull-board/fastify": "^7.0.0",
+    "@bull-board/api": "^7.2.1",
+    "@bull-board/fastify": "^7.2.1",
     "@fastify/compress": "^8.3.1",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
@@ -32,7 +32,7 @@
     "bcrypt": "^6.0.0",
     "bullmq": "^5.76.5",
     "dotenv": "^17.4.2",
-    "fastify": "^5.8.5",
+    "fastify": "^5.10.0",
     "ioredis": "^5.10.1",
     "pg": "^8.20.0",
     "prisma": "^7.8.0",
@@ -48,6 +48,6 @@
     "@types/pg": "^8.20.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.10"
   }
 }
