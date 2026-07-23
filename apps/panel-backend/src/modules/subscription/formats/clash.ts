@@ -10,6 +10,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *   - xray (VLESS+REALITY)  → `type: vless` with `reality-opts`
  *   - xray (Trojan+REALITY) → `type: trojan` with `reality-opts` (slice 24c part 3a)
  *   - shadowsocks           → `type: ss` with cipher + password (slice 24d)
+ *   - mieru                 → `type: mieru`, TCP transport
  *   - amneziawg / naive are NOT emitted: classic Clash has no native support
  *     and Clash Meta's experimental wireguard/naive support diverges per
  *     fork. AmneziaWG users get the wg-quick `.conf` format; Naive users
@@ -136,6 +137,48 @@ const CN_SPLIT_DNS_LINES: readonly string[] = [
   '',
 ];
 
+/**
+ * DNS for `proxy-all`. Until now this preset emitted no `dns:` section at all,
+ * which is fine while mihomo runs as a system proxy (the app hands it a domain
+ * and it resolves remotely) and broken the moment it runs in TUN mode: the
+ * client captures the DNS query, has no resolver configured for it, and the
+ * profile imports cleanly while nothing resolves. That failure reads as a
+ * client bug, which is the worst kind for us.
+ *
+ * Same loop-safe shape as the split presets, minus the geo policy, since
+ * proxy-all has no notion of a domain that should stay local:
+ *   - `default-nameserver` and `proxy-server-nameserver` are plain IPs. They
+ *     bootstrap the DoH hostnames below and resolve the node's own address,
+ *     neither of which can go through a tunnel that is not up yet.
+ *   - everything else is DoH, so the queries this preset does make are not
+ *     readable by the local network.
+ *   - fake-ip keeps app-side resolution instant and means real domains are
+ *     never resolved locally at all, which for proxy-all is the point.
+ *
+ * This retires the "byte-identical to pre-R1 builds" guarantee the preset used
+ * to carry. Deliberate: that guarantee was protecting an output that did not
+ * work in TUN.
+ */
+const PROXY_ALL_DNS_LINES: readonly string[] = [
+  'dns:',
+  '  enable: true',
+  '  enhanced-mode: fake-ip',
+  '  fake-ip-range: 198.18.0.1/16',
+  '  fake-ip-filter:',
+  '    - "*.lan"',
+  '    - "+.local"',
+  '  default-nameserver:',
+  '    - 1.1.1.1',
+  '    - 8.8.8.8',
+  '  proxy-server-nameserver:',
+  '    - 1.1.1.1',
+  '    - 8.8.8.8',
+  '  nameserver:',
+  '    - https://1.1.1.1/dns-query',
+  '    - https://dns.google/dns-query',
+  '',
+];
+
 const RU_SPLIT_RULE_LINES: readonly string[] = [
   '  - GEOSITE,category-ads-all,REJECT',
   '  - GEOSITE,category-ru,DIRECT',
@@ -178,12 +221,12 @@ export function buildClashYaml(
   // lines (the geo-db block is shared); proxy-all leaves them null so the
   // output stays byte-identical to pre-R1 builds.
   const preset = buildOpts.routingPreset ?? 'proxy-all';
-  const splitDnsLines =
+  const dnsLines =
     preset === 'ru-split'
       ? RU_SPLIT_DNS_LINES
       : preset === 'cn-split'
         ? CN_SPLIT_DNS_LINES
-        : null;
+        : PROXY_ALL_DNS_LINES;
   const splitRuleLines =
     preset === 'ru-split'
       ? RU_SPLIT_RULE_LINES
@@ -367,14 +410,42 @@ export function buildClashYaml(
           `    udp: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'mieru') {
+      // Mieru -> mihomo `type: mieru`. Missing until now, which meant a user
+      // whose only endpoint was Mieru imported a Clash profile with their node
+      // silently absent: the other formatters (surge/loon/quantumultx) carried
+      // it, so the gap looked like a client bug rather than ours.
+      //
+      // The node binds TCP and UDP on the same port (mieru/config.go), and we
+      // advertise TCP: it is the transport that survives the middleboxes this
+      // protocol exists to get through, and mihomo takes one, not both.
+      //
+      // Two fields are left out on purpose. `mtu` tunes the server-side tunnel
+      // and mihomo has no key for it, so sending it would be inventing config.
+      // `multiplexing` is omitted because mihomo's own default is the value we
+      // would have written anyway.
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: mieru`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    transport: TCP`,
+          `    username: ${yamlString(e.username)}`,
+          `    password: ${yamlString(e.password)}`,
+        ].join('\n'),
+      );
     }
   }
 
   const lines: string[] = [];
+  // The geo databases are only fetched by the split presets, which are the only
+  // ones with GEOSITE/GEOIP rules to resolve. DNS is emitted for every preset.
   if (splitRuleLines) {
     lines.push(...SPLIT_GEO_LINES);
-    lines.push(...splitDnsLines!);
   }
+  lines.push(...dnsLines);
   lines.push('proxies:');
   if (proxies.length === 0) {
     lines.push('  []');

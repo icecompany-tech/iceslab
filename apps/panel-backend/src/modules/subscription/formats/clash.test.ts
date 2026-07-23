@@ -54,6 +54,17 @@ const shadowtlsEp: SubscriptionEndpoint = {
   uri: '',
 };
 
+const mieruEp: SubscriptionEndpoint = {
+  protocol: 'mieru',
+  nodeName: 'eu-1',
+  host: 'n1.example.com',
+  port: 2012,
+  username: 'alice',
+  password: 'cabc78ae-94e3-4a16-936a-133d059acfac',
+  mtu: 1400,
+  uri: 'mieru://...',
+};
+
 describe('buildClashYaml', () => {
   it('emits a hysteria2 proxy entry with mandatory fields', () => {
     const out = buildClashYaml([hysteriaEp]);
@@ -189,6 +200,32 @@ describe('buildClashYaml', () => {
     expect(out).toMatch(/- eu-1-shadowsocks/);
   });
 
+  // ───── Mieru (issue #29) ─────
+
+  it('emits a mieru proxy entry with the TCP transport and user credentials', () => {
+    const out = buildClashYaml([mieruEp]);
+    expect(out).toContain('- name: eu-1-mieru');
+    expect(out).toContain('type: mieru');
+    expect(out).toContain('server: n1.example.com');
+    expect(out).toContain('port: 2012');
+    expect(out).toContain('transport: TCP');
+    expect(out).toContain('username: alice');
+    expect(out).toContain('password: cabc78ae-94e3-4a16-936a-133d059acfac');
+    // mihomo has no key for either, so emitting them would be inventing config.
+    expect(out).not.toContain('mtu');
+    expect(out).not.toContain('multiplexing');
+  });
+
+  it('puts mieru in the proxy group instead of dropping the node silently', () => {
+    // The gap this closes: a user whose only endpoint was mieru got a valid
+    // profile with no proxies at all, and a MATCH,DIRECT catch-all, so their
+    // traffic went straight out unproxied while the import looked successful.
+    const out = buildClashYaml([mieruEp]);
+    expect(out).toMatch(/proxies:\n {2}- name: eu-1-mieru/);
+    expect(out).toContain('      - eu-1-mieru');
+    expect(out.trimEnd().endsWith('- MATCH,Auto')).toBe(true);
+  });
+
   // ───── Slice 24c part 2: transports ─────
 
   it('emits ws-opts with path + Host header for ws network', () => {
@@ -229,14 +266,47 @@ describe('buildClashYaml', () => {
   // ───── Routing Templates (R1c) ─────
 
   describe('routingPreset', () => {
-    it('default proxy-all output is byte-identical to pre-R1 (no geo block, no preset rules)', () => {
+    it('proxy-all carries no routing rules and no geo databases', () => {
       expect(buildClashYaml([xrayEp], { routingPreset: 'proxy-all' })).toBe(
         buildClashYaml([xrayEp]),
       );
       const out = buildClashYaml([xrayEp]);
       expect(out).not.toContain('GEOSITE');
+      // Nothing in this preset resolves a geo category, so fetching the
+      // databases would be download for its own sake.
       expect(out).not.toContain('geox-url');
-      expect(out.startsWith('proxies:')).toBe(true);
+    });
+
+    it('proxy-all emits a loop-safe DNS block so TUN clients can resolve', () => {
+      // Without this the profile imports cleanly and then resolves nothing in
+      // TUN mode, which users report as a broken client rather than a broken
+      // config. See PROXY_ALL_DNS_LINES for why this replaced the old
+      // byte-identical-to-pre-R1 guarantee.
+      const out = buildClashYaml([xrayEp]);
+      expect(out).toContain('dns:');
+      expect(out).toContain('  enable: true');
+      expect(out).toContain('  enhanced-mode: fake-ip');
+
+      // The bootstrap resolvers must be plain IPs: they are what resolves the
+      // DoH hostnames and the node's own address, neither of which can travel
+      // through a tunnel that is not up yet.
+      const bootstrap = out.slice(
+        out.indexOf('  default-nameserver:'),
+        out.indexOf('  nameserver:'),
+      );
+      expect(bootstrap).toContain('    - 1.1.1.1');
+      expect(bootstrap).not.toContain('https://');
+      expect(out).toContain('  proxy-server-nameserver:');
+
+      // Everything else is DoH, so the queries this preset does make are not
+      // readable by the local network.
+      expect(out).toContain('    - https://1.1.1.1/dns-query');
+
+      // No geo policy here: proxy-all has no domain that should stay local.
+      expect(out).not.toContain('nameserver-policy');
+
+      // DNS precedes the proxies, as in the split presets.
+      expect(out.indexOf('dns:')).toBeLessThan(out.indexOf('proxies:'));
     });
 
     it('ru-split emits geo block with jsdelivr mirrors and auto-update', () => {
@@ -274,9 +344,7 @@ describe('buildClashYaml', () => {
       expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
     });
 
-    it('ru-split emits split-DNS block (R2); proxy-all does not', () => {
-      expect(buildClashYaml([xrayEp])).not.toContain('dns:');
-
+    it('ru-split emits split-DNS block (R2) with the RU nameserver policy', () => {
       const out = buildClashYaml([xrayEp], { routingPreset: 'ru-split' });
       expect(out).toContain('dns:');
       expect(out).toContain('  enable: true');
