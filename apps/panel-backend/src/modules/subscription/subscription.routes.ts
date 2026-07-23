@@ -32,7 +32,7 @@ const TokenParamSchema = z.object({
 });
 
 const FormatEnum = z.enum([
-  'plain', 'json', 'clash', 'singbox', 'wgconf', 'xrayjson', 'xkeen', 'outline',
+  'plain', 'json', 'clash', 'singbox', 'wgconf', 'amneziavpn', 'xrayjson', 'xkeen', 'outline',
   'surge', 'quantumultx', 'loon',
 ]);
 type Format = z.infer<typeof FormatEnum>;
@@ -525,6 +525,16 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             .type('text/plain; charset=utf-8')
             .header('Content-Disposition', `attachment; filename="${fname}"`)
             .send(buildWgQuickConf(filtered, query.node));
+        }
+        case 'amneziavpn': {
+          // AmneziaVPN-app "vpn://" connection key (base64 blob the flagship
+          // AmneziaVPN clients import directly — their QR scanner and "paste
+          // key" both accept it). Single tunnel per key, so `?node=` selects
+          // which AmneziaWG node; absent = first. Empty body = no AWG endpoint
+          // for this user (same 204-style contract as wgconf).
+          return reply
+            .type('text/plain; charset=utf-8')
+            .send(buildAwgVpnLink(filtered, query.node));
         }
         case 'xrayjson': {
           const xjBundle: 'flat' | 'balancer' | undefined =
