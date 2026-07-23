@@ -22,6 +22,24 @@ export interface DomainEventMap {
   // node config matches. Without this a Node.domain edit only self-heals on an
   // unrelated binding/profile edit or an agent restart. Caught in review 2026-06-17.
   'node.updated':         { nodeId: string; nodeName: string };
+  // node.changed → ANY node field was written. Deliberately separate from
+  // node.updated: that one re-pushes the inbound set, which restarts the
+  // protocol server and drops live connections, so it must stay reserved for
+  // edits the agent actually needs. Renaming a node is no reason to disconnect
+  // its users. This one only invalidates read caches, so it is safe to fire on
+  // every edit, including the ones that merely change what a subscription
+  // renders (address, region, name).
+  'node.changed':         { nodeId: string };
+  // node.deleted → the node and its bindings are gone; drop it from the
+  // subscription read caches at once rather than serving a dead endpoint for
+  // the rest of the cache TTL.
+  'node.deleted':         { nodeId: string };
+  // host.changed → a Host row (the per-binding public endpoint override:
+  // address, port, priority, enabled, disableForFormats) was created, edited,
+  // deleted or reordered. Affects subscription OUTPUT only, never the config
+  // pushed to a node, so read-cache invalidation is the whole job. No payload:
+  // a reorder moves many rows at once and naming one of them would mislead.
+  'host.changed':         Record<string, never>;
   // inbound.* → push the full inbound set of the affected node to its
   // node-agent over mTLS, so the protocol server (xray/hysteria/awg/naive)
   // gets the live config without admin SSH editing /etc/iceslab-node/env.

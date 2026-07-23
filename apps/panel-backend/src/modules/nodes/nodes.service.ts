@@ -349,6 +349,14 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   if (domainChanged) {
     eventBus.emit('node.updated', { nodeId: id, nodeName: updated.name });
   }
+  // Read caches hold the node row as the subscription renders it, so any edit
+  // can make them wrong, not just the domain. Moving a node to a new address
+  // and having clients dial the old one for another minute is the case that
+  // matters. Separate from node.updated on purpose: this must not re-push
+  // config and restart the protocol server (see the event's declaration).
+  if (Object.keys(data).length > 0) {
+    eventBus.emit('node.changed', { nodeId: id });
+  }
 
   return mapNodeToPublic(updated);
 }
@@ -384,6 +392,11 @@ export async function deleteNode(id: string): Promise<void> {
     prisma.profileNodeBinding.deleteMany({ where: { nodeId: id } }),
     prisma.node.update({ where: { id }, data: { deletedAt: new Date() } }),
   ]);
+
+  // Stop serving this node's endpoints now. cascade.changed below fires only
+  // when the node happened to be a hop, so an ordinary delete needs its own
+  // signal or the subscription keeps advertising a node that is gone.
+  eventBus.emit('node.deleted', { nodeId: id });
 
   // Re-render the surviving cascade members as plain nodes (drop link fragments).
   if (survivorNodeIds.length > 0) {

@@ -1,4 +1,5 @@
 import { Prisma } from '../../generated/prisma/client.js';
+import { eventBus } from '../../lib/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { mapHost, type PublicHostDto } from './hosts.mapper.js';
 import type {
@@ -74,6 +75,10 @@ export async function createHost(input: CreateHostInput): Promise<PublicHostDto>
       disableForFormats: input.disableForFormats,
     },
   });
+  // A host IS an endpoint in the subscription, so every mutation here changes
+  // what users are handed. ensureDefaultHost needs no emit: createBinding
+  // already announces itself, and that busts the same cache.
+  eventBus.emit('host.changed', {});
   return mapHost(created);
 }
 
@@ -106,6 +111,7 @@ export async function updateHost(
   }
 
   const updated = await prisma.host.update({ where: { id }, data });
+  eventBus.emit('host.changed', {});
   return mapHost(updated);
 }
 
@@ -113,6 +119,7 @@ export async function deleteHost(id: string): Promise<void> {
   const existing = await prisma.host.findUnique({ where: { id } });
   if (!existing) throw new HostNotFoundError(id);
   await prisma.host.delete({ where: { id } });
+  eventBus.emit('host.changed', {});
 }
 
 /**
@@ -142,6 +149,9 @@ export async function reorderHosts(input: ReorderHostsInput): Promise<PublicHost
     where: { id: { in: input.hostIds } },
   });
   const byId = new Map(refreshed.map((h) => [h.id, h]));
+  // Priority decides which endpoint a client tries first, so a reorder changes
+  // the subscription even though no field the user typed did.
+  eventBus.emit('host.changed', {});
   return input.hostIds.map((id) => mapHost(byId.get(id)!));
 }
 

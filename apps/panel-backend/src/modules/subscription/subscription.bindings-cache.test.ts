@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { eventBus, type DomainEventMap } from '../../lib/event-bus.js';
 import {
   bindingsCacheKey,
   getCachedBindings,
   bustBindingsCache,
+  registerBindingsCacheBust,
   _resetBindingsCacheForTest,
 } from './subscription.bindings-cache.js';
 
@@ -92,4 +94,48 @@ describe('getCachedBindings (B6)', () => {
     expect(a).toEqual(['a']);
     expect(b).toEqual(['b']);
   });
+});
+
+// The cached query spans bindings, profiles, nodes, hosts and the cascade
+// exposure set. Any of those moving while the cache serves the old answer means
+// an admin watches their edit do nothing for up to a minute, or worse, users
+// keep dialling an address that no longer works. Each event below is one such
+// mutation path, so this table is the list of edits that must take effect at
+// once, and it should grow whenever a new one appears.
+describe('registerBindingsCacheBust (M5)', () => {
+  const MUTATIONS: { [K in keyof DomainEventMap]?: DomainEventMap[K] } = {
+    'binding.created': { bindingId: 'b', profileId: 'p', nodeId: 'n' },
+    'binding.updated': { bindingId: 'b', profileId: 'p', nodeId: 'n' },
+    'binding.deleted': { bindingId: 'b', profileId: 'p', nodeId: 'n' },
+    'profile.created': { profileId: 'p' },
+    'profile.updated': { profileId: 'p' },
+    'profile.deleted': { profileId: 'p', affectedNodeIds: ['n'] },
+    'node.created': { nodeId: 'n', nodeName: 'n1' },
+    'node.changed': { nodeId: 'n' },
+    'node.deleted': { nodeId: 'n' },
+    'host.changed': {},
+    'cascade.changed': { nodeIds: ['n'] },
+  };
+
+  // Subscribed once: the bus has no unsubscribe, and re-registering per test
+  // would just stack duplicate listeners.
+  beforeAll(() => registerBindingsCacheBust());
+  beforeEach(() => _resetBindingsCacheForTest());
+
+  for (const [event, payload] of Object.entries(MUTATIONS)) {
+    it(`busts on ${event}`, async () => {
+      let calls = 0;
+      const load = (): Promise<number[]> => Promise.resolve([++calls]);
+      await getCachedBindings('k', 1000, load);
+
+      eventBus.emit(event as keyof DomainEventMap, payload as never);
+      // The bus defers handlers onto a microtask, so the bust is not visible
+      // synchronously after emit.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Same key, same instant: only an invalidation can force a reload here.
+      await getCachedBindings('k', 1000, load);
+      expect(calls).toBe(2);
+    });
+  }
 });

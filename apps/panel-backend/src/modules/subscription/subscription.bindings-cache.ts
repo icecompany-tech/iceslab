@@ -11,10 +11,12 @@ import { eventBus } from '../../lib/event-bus.js';
  * key on the next request.
  *
  * Invalidation:
- *  - A global version counter, bumped on every binding/profile/node domain
- *    event (instant for the common config edits).
- *  - A short TTL backstop for the mutation paths that don't ride the bus today
- *    (node disable, host edits), bounding staleness to TTL_MS regardless.
+ *  - A global version counter, bumped on every domain event that touches what
+ *    the query reads (bindings, profiles, nodes, hosts, cascades), so an admin
+ *    edit shows up on the next request rather than at the end of the TTL.
+ *  - The TTL then only backstops what never reaches the bus at all: a row
+ *    changed straight in the database, or an event a future mutation path
+ *    forgets to emit.
  *
  * In-process (not Redis) on purpose: the cached value is the raw Prisma result
  * with nested objects and Date fields, so keeping it in-heap avoids a
@@ -101,6 +103,17 @@ export function registerBindingsCacheBust(): void {
   eventBus.on('profile.updated', bust);
   eventBus.on('profile.deleted', bust);
   eventBus.on('node.created', bust);
+  // Everything the cached query reads must bust it, or an admin's edit sits
+  // invisible behind the TTL while they refresh the page wondering why. The
+  // query spans bindings, profiles, nodes and hosts:
+  //   node.changed    → any node edit, including the address a client dials
+  //   node.deleted    → its endpoints must stop being served immediately
+  //   host.changed    → per-binding endpoint override added/edited/reordered
+  //   cascade.changed → hops came or went, which moves what is exposed
+  eventBus.on('node.changed', bust);
+  eventBus.on('node.deleted', bust);
+  eventBus.on('host.changed', bust);
+  eventBus.on('cascade.changed', bust);
 }
 
 // ───── Test seams ─────
