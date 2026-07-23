@@ -3,6 +3,7 @@ package hysteria
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -140,19 +141,95 @@ func TestHealthyAfterCallbackStart(t *testing.T) {
 	}
 }
 
+// Under systemd, Start() skips the in-process spawn by design, so a.proc stays
+// nil forever. Healthy() used to read that nil as "hysteria is down" and every
+// systemd-managed node reported unhealthy permanently, which is precisely the
+// state in which a node going genuinely bad raises no new alarm. The unit's own
+// liveness is the answer now, so a dead unit must still read unhealthy.
+func newSystemdAdapter(t *testing.T, runner *recordingRunner) *Adapter {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a := New(Config{
+		BinaryPath:  "/usr/bin/hysteria",
+		ServiceUnit: "hysteria-server.service",
+		RunCmd:      runner.run,
+	}, logger)
+	a.callbackSrv = &http.Server{} // callback up, subprocess deliberately absent
+	return a
+}
+
+func TestHealthy_SystemdModeAsksSystemd(t *testing.T) {
+	runner := &recordingRunner{}
+	a := newSystemdAdapter(t, runner)
+
+	if !a.Healthy() {
+		t.Fatal("Healthy: systemd-managed node with an active unit must report healthy")
+	}
+	calls := runner.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one probe, got %v", calls)
+	}
+	if got, want := strings.Join(calls[0], " "),
+		"systemctl is-active --quiet hysteria-server.service"; got != want {
+		t.Errorf("probe: got %q want %q", got, want)
+	}
+}
+
+func TestHealthy_SystemdModeReportsDeadUnit(t *testing.T) {
+	runner := &recordingRunner{err: errors.New("inactive")}
+	a := newSystemdAdapter(t, runner)
+
+	if a.Healthy() {
+		t.Error("Healthy: unit is not active, node must not report healthy")
+	}
+}
+
+func TestHealthy_SystemdProbeIsCached(t *testing.T) {
+	// The panel healthchecks every node on a fan-out; forking systemctl on each
+	// call would put an external process on that path.
+	runner := &recordingRunner{}
+	a := newSystemdAdapter(t, runner)
+
+	for range 5 {
+		a.Healthy()
+	}
+	if n := len(runner.snapshot()); n != 1 {
+		t.Errorf("expected the probe to be cached after the first call, ran it %d times", n)
+	}
+}
+
+func TestHealthy_SpawnModeStillRequiresTheSubprocess(t *testing.T) {
+	// No ServiceUnit: we own the subprocess, so its absence is real evidence.
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a := New(Config{BinaryPath: "/usr/bin/hysteria"}, logger)
+	a.callbackSrv = &http.Server{}
+
+	if a.Healthy() {
+		t.Error("Healthy: spawn mode with no running subprocess must report unhealthy")
+	}
+}
+
 // ───── ApplyInbound (slice 24b2) ─────
 
-// recordingRunner captures every RunCmd invocation for assertions.
+// recordingRunner captures every RunCmd invocation for assertions. err, when
+// set, is returned from every call so tests can drive the failure path.
 type recordingRunner struct {
 	mu    sync.Mutex
 	calls [][]string
+	err   error
 }
 
 func (r *recordingRunner) run(_ context.Context, name string, args ...string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, append([]string{name}, args...))
-	return nil
+	return r.err
+}
+
+func (r *recordingRunner) snapshot() [][]string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([][]string(nil), r.calls...)
 }
 
 func newApplyInboundAdapter(t *testing.T, runner *recordingRunner) (*Adapter, string) {

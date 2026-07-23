@@ -122,6 +122,14 @@ type Adapter struct {
 
 	callbackSrv *http.Server
 	proc        *subprocess.Subprocess // hysteria subprocess; nil when BinaryPath is empty
+
+	// Cached `systemctl is-active` probe for systemd mode (guarded by mu).
+	// Healthy() serves unitHealthy and refreshes it in the background once
+	// older than unitProbeTTL, so the health path never forks systemctl inline
+	// (same shape as the AmneziaWG adapter's cached probe).
+	unitCheckedAt time.Time
+	unitHealthy   bool
+	unitProbing   bool
 }
 
 type userEntry struct {
@@ -401,22 +409,79 @@ func fetchTrafficStats(client HTTPClient, listen, secret string) (map[string]tra
 	return out, nil
 }
 
+// unitProbeTTL caps how often Healthy() shells out to `systemctl is-active`.
+const unitProbeTTL = 20 * time.Second
+
 // Healthy reports whether the adapter is ready to serve traffic.
 // In callback-only mode (no BinaryPath), only the auth-callback server
-// must be up. With BinaryPath set, the hysteria subprocess must also
-// be running.
+// must be up. With a binary configured, hysteria itself must also be up, and
+// how we establish that depends on who owns its lifecycle:
+//
+//	ServiceUnit set    → systemd owns it. Start() deliberately skips the
+//	                     in-process spawn, so a.proc is nil BY DESIGN and
+//	                     asserting it reports every systemd-managed node as
+//	                     permanently unhealthy, which is how genuine
+//	                     degradation went unnoticed in the field. Ask systemd.
+//	ServiceUnit empty  → spawn mode, we own the subprocess and can check it
+//	                     directly.
 func (a *Adapter) Healthy() bool {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.callbackSrv == nil {
+	callbackUp := a.callbackSrv != nil
+	proc := a.proc
+	a.mu.RUnlock()
+
+	if !callbackUp {
 		return false
 	}
-	if a.cfg.BinaryPath != "" {
-		if a.proc == nil || !a.proc.Running() {
-			return false
-		}
+	if a.cfg.BinaryPath == "" {
+		return true
 	}
-	return true
+	if a.cfg.ServiceUnit != "" {
+		return a.unitActive()
+	}
+	return proc != nil && proc.Running()
+}
+
+// unitActive reports the cached verdict on the systemd unit, refreshing it in
+// the background when stale. Serving a slightly old answer is the point: the
+// panel's healthcheck fan-out hits every node, and forking systemctl inline on
+// each call would put an external process on that hot path.
+func (a *Adapter) unitActive() bool {
+	a.mu.Lock()
+	if a.unitCheckedAt.IsZero() {
+		// Nothing cached yet, so probe synchronously rather than report a
+		// zero-value verdict we never actually measured.
+		a.mu.Unlock()
+		return a.probeUnit()
+	}
+	if time.Since(a.unitCheckedAt) >= unitProbeTTL && !a.unitProbing {
+		a.unitProbing = true
+		go func() {
+			a.probeUnit()
+			a.mu.Lock()
+			a.unitProbing = false
+			a.mu.Unlock()
+		}()
+	}
+	res := a.unitHealthy
+	a.mu.Unlock()
+	return res
+}
+
+// probeUnit asks systemd whether the hysteria unit is active and caches the
+// answer. `systemctl is-active` exits non-zero for every state but active, so
+// the error IS the signal. Bounded by 2s so a wedged systemctl cannot pin the
+// background refresh forever.
+func (a *Adapter) probeUnit() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := a.cfg.RunCmd(ctx, "systemctl", "is-active", "--quiet", a.cfg.ServiceUnit)
+	ok := err == nil
+	a.mu.Lock()
+	a.unitHealthy = ok
+	a.unitCheckedAt = time.Now()
+	a.mu.Unlock()
+	return ok
 }
 
 // ApplyInbound parses panel-pushed Hysteria config, diffs vs the last applied
