@@ -88,8 +88,12 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
   lines.push(`Jmax = ${opts.jmax}`);
   lines.push(`S1 = ${opts.s1}`);
   lines.push(`S2 = ${opts.s2}`);
-  lines.push(`S3 = ${opts.s3}`);
-  lines.push(`S4 = ${opts.s4}`);
+  // S3/S4 are AmneziaWG 2.0-only, emitted only when non-zero. The AmneziaVPN
+  // iOS network extension (checked on 4.8.19) cannot parse these keys at all,
+  // even at 0, and aborts with ParseError 9. Omitting them keeps a 1.x-shaped
+  // config that every client accepts, and a real 2.0 setup still gets them.
+  if (opts.s3) lines.push(`S3 = ${opts.s3}`);
+  if (opts.s4) lines.push(`S4 = ${opts.s4}`);
   lines.push(`H1 = ${opts.h1}`);
   lines.push(`H2 = ${opts.h2}`);
   lines.push(`H3 = ${opts.h3}`);

@@ -78,21 +78,26 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // "present" - so emitting I1="".."I5="" injects blank `I1 = ` lines that break
   // the AmneziaWG handshake. THIS is why the key imported but would not connect
   // while the raw .conf (which omits empty I-fields) did. Mirror buildWgQuickConf:
-  // emit I-fields ONLY when non-empty. S1-S4 stay (the working .conf carries
-  // S3/S4 even at 0).
+  // emit I-fields ONLY when non-empty, and S3/S4 only when non-zero (below).
   const obf: Record<string, string> = {
     Jc: String(opts.jc),
     Jmin: String(opts.jmin),
     Jmax: String(opts.jmax),
     S1: String(opts.s1),
     S2: String(opts.s2),
-    S3: String(opts.s3),
-    S4: String(opts.s4),
     H1: String(opts.h1),
     H2: String(opts.h2),
     H3: String(opts.h3),
     H4: String(opts.h4),
   };
+  // S3/S4 are AmneziaWG 2.0 additions, emitted ONLY when non-zero. The
+  // AmneziaVPN iOS network extension (checked on 4.8.19) cannot parse the
+  // S3/S4 keys at all, even at 0: it aborts with ParseError 9 and the tunnel
+  // never starts. Omitting them leaves a 1.x-shaped config every client
+  // accepts. This supersedes the earlier note that S3/S4 could stay at 0,
+  // which held on desktop and Android but not on iOS.
+  if (opts.s3) obf.S3 = String(opts.s3);
+  if (opts.s4) obf.S4 = String(opts.s4);
   [opts.i1, opts.i2, opts.i3, opts.i4, opts.i5].forEach((v, idx) => {
     if (v && v.length > 0) obf[`I${idx + 1}`] = v;
   });
@@ -100,7 +105,7 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // Inner client config. `config` (the .conf text) is required; an empty one is
   // the schema half of "error 900". last_config is DOUBLE-encoded (a stringified
   // JSON), per the app's AwgProtocolConfig::toJson.
-  const lastConfig = {
+  const lastConfig: Record<string, unknown> = {
     ...obf,
     allowed_ips: allowed,
     clientId: '',
@@ -113,9 +118,12 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     mtu: String(opts.mtu ?? 1280),
     persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
     port: opts.port,
-    psk_key: opts.pskKey ?? '',
     server_pub_key: opts.serverPublicKey,
   };
+  // Same rule as the empty I-fields: emit psk_key ONLY for a real preshared
+  // key. An empty one made the app rebuild a blank `PresharedKey = ` line into
+  // the [Interface], which the iOS parser rejects.
+  if (opts.pskKey) lastConfig.psk_key = opts.pskKey;
 
   const awg = {
     ...obf,

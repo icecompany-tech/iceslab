@@ -61,7 +61,10 @@ describe('buildAmneziaVpnLink', () => {
     expect(awg.transport_proto).toBe('udp');
     // obfuscation params at the awg level, as strings
     expect(awg.Jc).toBe('4');
-    expect(awg.S3).toBe('0');
+    // S3/S4 are omitted at 0. The AmneziaVPN iOS network extension cannot parse
+    // those keys at all, even when zero, and aborts with ParseError 9.
+    expect('S3' in awg).toBe(false);
+    expect('S4' in awg).toBe(false);
 
     // last_config is a STRINGIFIED inner JSON (double-encoded), not an object.
     expect(typeof awg.last_config).toBe('string');
@@ -79,7 +82,9 @@ describe('buildAmneziaVpnLink', () => {
     expect(inner.client_ip).toBe('10.66.66.2/32');
     expect(inner.port).toBe(51820); // inner port is an INT (unlike the server-level string)
     expect(inner.allowed_ips).toEqual(['0.0.0.0/0', '::/0']);
-    expect(inner.psk_key).toBe(''); // no preshared key by default
+    // psk_key is ABSENT (not '') without a preshared key: a blank one made the
+    // app rebuild an empty `PresharedKey = ` line that the iOS parser rejects.
+    expect('psk_key' in inner).toBe(false);
   });
 
   it('emits I1-I5 only when set, OMITTING empty slots (empty strings break the rebuilt [Interface])', () => {
@@ -100,5 +105,18 @@ describe('buildAmneziaVpnLink', () => {
     // the inline .conf likewise carries only the non-empty I-lines
     expect(inner.config as string).toContain('I1 = aabb');
     expect(inner.config as string).not.toContain('I2 =');
+  });
+
+  it('emits S3/S4 and psk_key when they carry a real value', () => {
+    const key = buildAmneziaVpnLink({ ...baseOpts, s3: 12, s4: 34, pskKey: 'pskBase64' });
+    const env = decodeVpnKey(key) as { containers: Array<{ awg: Record<string, unknown> }> };
+    const awg = env.containers[0]!.awg;
+    expect(awg.S3).toBe('12');
+    expect(awg.S4).toBe('34');
+    const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
+    expect(inner.psk_key).toBe('pskBase64');
+    // the inline .conf carries the same non-zero S3/S4
+    expect(inner.config as string).toContain('S3 = 12');
+    expect(inner.config as string).toContain('S4 = 34');
   });
 });
