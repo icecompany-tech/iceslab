@@ -336,17 +336,22 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   }
   if (input.singboxEngine !== undefined) data.singboxEngine = input.singboxEngine;
 
-  // A Node.domain change alters the per-node REALITY self-steal serverNames
-  // pushed to the agent (inbounds.queue) and the client SNI (subscription).
-  // Detect it before the write so we can re-push the inbound set; otherwise the
-  // live node config drifts until an unrelated binding/profile edit or agent
-  // restart fires a sync. Caught in review 2026-06-17.
+  // Two fields feed the config we push to the agent, so editing either has to
+  // re-push it. Detect them before the write, otherwise the live node config
+  // drifts until an unrelated binding/profile edit or an agent restart happens
+  // to fire a sync. Caught in review 2026-06-17.
+  //   domain  → per-node REALITY self-steal serverNames (and the client SNI)
+  //   address → the name hysteria's ACME certificate is issued for, which has
+  //             to match what clients dial; without a push the node keeps
+  //             serving a certificate for the address it no longer has
   const domainChanged =
     input.domain !== undefined && input.domain !== existing.domain;
+  const addressChanged =
+    input.address !== undefined && input.address !== existing.address;
 
   const updated = await repo.updateById(id, data);
 
-  if (domainChanged) {
+  if (domainChanged || addressChanged) {
     eventBus.emit('node.updated', { nodeId: id, nodeName: updated.name });
   }
   // Read caches hold the node row as the subscription renders it, so any edit

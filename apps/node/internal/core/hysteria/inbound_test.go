@@ -158,8 +158,9 @@ func TestInboundEqual(t *testing.T) {
 func TestInboundCfgWireUnmarshal(t *testing.T) {
 	// Verify the wire matches HysteriaConfigSchema in the panel, this is the
 	// contract surface between TS panel and Go agent.
-	in := InboundConfig{Port: 1234, ObfsPassword: "p", MasqueradeURL: "u", BrutalUpMbps: 10, BrutalDownMbps: 20}
+	in := InboundConfig{Port: 1234, Hostname: "hy2.example.com", ObfsPassword: "p", MasqueradeURL: "u", BrutalUpMbps: 10, BrutalDownMbps: 20}
 	w := inboundCfgWire{
+		Hostname:       in.Hostname,
 		ObfsPassword:   in.ObfsPassword,
 		MasqueradeURL:  in.MasqueradeURL,
 		BrutalUpMbps:   in.BrutalUpMbps,
@@ -169,5 +170,48 @@ func TestInboundCfgWireUnmarshal(t *testing.T) {
 	// wire JSON, toInboundConfig takes it as a second param.
 	if got := w.toInboundConfig(in.Port); !inboundEqual(got, in) {
 		t.Errorf("wire roundtrip mismatch: got %+v want %+v", got, in)
+	}
+}
+
+// The panel pushes the node's address so an admin can move a node to a new one
+// without re-onboarding it. That address is what clients dial and validate, so
+// the certificate has to be issued for it and not for the install-time name.
+func TestRenderConfig_PushedHostnameOverridesInstallTime(t *testing.T) {
+	cfg := Config{Hostname: "install.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
+
+	blob, err := renderConfig(cfg, InboundConfig{Hostname: "moved.example.com"})
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	got := string(blob)
+	if !strings.Contains(got, "- moved.example.com") {
+		t.Errorf("pushed hostname missing from acme.domains:\n%s", got)
+	}
+	if strings.Contains(got, "install.example.com") {
+		t.Errorf("install-time hostname should have been replaced:\n%s", got)
+	}
+}
+
+func TestRenderConfig_FallsBackToInstallTimeHostname(t *testing.T) {
+	// A panel too old to send one, or a node whose address is an IP no CA will
+	// issue for. Either way the node keeps the certificate it already has.
+	cfg := Config{Hostname: "install.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
+
+	blob, err := renderConfig(cfg, InboundConfig{})
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	if !strings.Contains(string(blob), "- install.example.com") {
+		t.Errorf("empty pushed hostname should fall back to the install-time one:\n%s", string(blob))
+	}
+}
+
+func TestRenderConfig_RejectsInjectedHostname(t *testing.T) {
+	// acme.domains is a bare YAML scalar, so a newline would let a pushed value
+	// append arbitrary top-level keys to the config.
+	cfg := Config{Hostname: "hy2.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
+
+	if _, err := renderConfig(cfg, InboundConfig{Hostname: "evil.example.com\nlisten: :1"}); err == nil {
+		t.Fatal("expected an error for a newline in the pushed hostname")
 	}
 }

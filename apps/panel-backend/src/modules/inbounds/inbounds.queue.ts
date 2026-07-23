@@ -1,5 +1,7 @@
+import { isIP } from 'node:net';
 import { Queue, Worker, type Job } from 'bullmq';
 import type { ApplyInboundsRequest, InboundDto, ProtocolName } from '@iceslab/shared';
+import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { redis } from '../../lib/redis.js';
 import { prisma } from '../../prisma.js';
 import { mtprotoSecret } from '../../core-adapters/mtproto/index.js';
@@ -9,6 +11,26 @@ import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.j
 import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/credentials.js';
 import { getLogger } from '../../lib/logger.js';
+
+/**
+ * The FQDN to publish in a node's hysteria `acme.domains`, or null to leave the
+ * node on the hostname it was installed with.
+ *
+ * Taken from the node's own address because that is both what a hysteria client
+ * dials and what it sends as its SNI, which makes it the only name whose
+ * certificate can validate. Anything a public CA cannot issue for returns null,
+ * since asking hysteria to re-issue on a doomed name would cost it the working
+ * certificate it already holds:
+ *   - an IP literal, which Let's Encrypt does not serve
+ *   - a single-label name, which cannot be publicly resolvable
+ */
+export function acmeHostnameFor(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const host = hostFromAddress(address.trim()).toLowerCase();
+  const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  if (!bare || isIP(bare) !== 0 || !bare.includes('.')) return null;
+  return bare;
+}
 
 // ───── Job data shapes ─────
 
@@ -174,6 +196,9 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     };
   });
 
+  // Two per-NODE names get injected into per-profile configs below, so both read
+  // the node row once.
+  //
   // B3/G - REALITY self-steal: serverNames is a per-NODE property (must resolve
   // to THIS node's IP), not per-profile. For any xray inbound whose profile is in
   // self-steal mode, override serverNames with the node's own domain so SNI and IP
@@ -185,11 +210,31 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
       i.protocol === 'xray' &&
       (i.config as { realityMode?: string }).realityMode === 'self-steal',
   );
-  if (selfStealInbounds.length > 0) {
+  const hysteriaInbounds = inbounds.filter((i) => i.protocol === 'hysteria');
+  if (selfStealInbounds.length > 0 || hysteriaInbounds.length > 0) {
     const nodeRow = await prisma.node.findUnique({
       where: { id: nodeId },
-      select: { domain: true },
+      select: { domain: true, address: true },
     });
+
+    // Hysteria ACME: the cert has to carry the name the CLIENT validates, and a
+    // hysteria client sends the address it dialled as its SNI (buildHysteriaUri
+    // sets sni from the host, and unlike xray it has no sniOverride path). The
+    // node's own address is therefore the only name a cert can match, and
+    // pushing it lets an admin move a node to a new domain from the panel
+    // instead of re-onboarding it. Emphatically NOT node.domain: that is the
+    // self-steal camouflage name, and issuing hysteria's cert for it would
+    // leave every client validating a name the cert no longer covers.
+    const acmeHostname = acmeHostnameFor(nodeRow?.address);
+    if (acmeHostname) {
+      for (const ib of hysteriaInbounds) {
+        ib.config = {
+          ...(ib.config as Record<string, unknown>),
+          hostname: acmeHostname,
+        } as InboundDto['config'];
+      }
+    }
+
     const domain = nodeRow?.domain ?? null;
     for (const ib of selfStealInbounds) {
       if (domain) {

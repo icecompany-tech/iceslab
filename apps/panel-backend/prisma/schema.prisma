@@ -265,8 +265,10 @@ model Node {
   // B3 / G (2026-06-14) - self-steal domain + node hardening.
   // domain: FQDN the operator A-records to THIS node's IP. Used as the REALITY
   //   serverName for self-steal profiles deployed here (SNI resolves to the node
-  //   IP, so SNI and IP stay consistent), and later for ACME on the node. NULL
-  //   means no self-steal / no ACME.
+  //   IP, so SNI and IP stay consistent). NULL means no self-steal. NOT the
+  //   hysteria ACME name, despite an earlier note here saying it would be: a
+  //   hysteria client validates the certificate against the address it dialled,
+  //   so the cert follows `address` and this camouflage name stays out of it.
   // hardening: flexible blob of probe-resistance toggles (ufwLockdown, fail2ban,
   //   realisticFallback, sshAllowlist, ...). Json so new G-toggles add without a
   //   migration; the install script + agent read only the flags they understand.
