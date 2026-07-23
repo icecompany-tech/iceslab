@@ -907,6 +907,25 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   return data;
 }
 
+export interface CascadeHopStatus {
+  nodeId: string;
+  name: string;
+  /** The node acknowledged an inbound push made after this cascade was saved. */
+  applied: boolean;
+  online: boolean;
+}
+
+export interface CascadeStatus {
+  done: boolean;
+  hops: CascadeHopStatus[];
+}
+
+/** Provisioning state of a cascade's hops, polled after a save. */
+export async function getCascadeStatus(id: string): Promise<CascadeStatus> {
+  const { data } = await api.get<CascadeStatus>(`/api/cascades/${id}/status`);
+  return data;
+}
+
 export async function deleteCascade(id: string): Promise<void> {
   await api.delete(`/api/cascades/${id}`);
 }

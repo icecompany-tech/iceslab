@@ -31,6 +31,7 @@ import {
   createCascade,
   updateCascade,
   deleteCascade,
+  getCascadeStatus,
   listNodes,
   apiErrorMessage,
   type Cascade,
@@ -39,6 +40,13 @@ import {
 } from '../lib/api';
 import { useOverview } from '../hooks/useOverview';
 import { countryFlag } from '../lib/countries';
+
+// A cascade save reaches its hop nodes asynchronously, so the save toast polls
+// the status endpoint and resolves itself. Bounded: roughly 12 polls at 7s is
+// about a minute and a half, well past a normal provisioning round, after which
+// we name whoever is still silent rather than spinning forever.
+const PROVISION_POLL_MS = 7000;
+const PROVISION_MAX_POLLS = 12;
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
@@ -379,9 +387,64 @@ function CascadeFormModal({
         ? updateCascade(cascade.id, { name, enabled, mode, hops: hopInputs })
         : createCascade({ name, enabled, mode, hops: hopInputs });
     },
-    onSuccess: () => {
-      notifications.show({ color: 'green', message: t('cascades.saved') });
+    onSuccess: (result) => {
+      const id = result?.id ?? cascade?.id;
       onSaved();
+      if (!id) {
+        notifications.show({ color: 'green', message: t('cascades.saved') });
+        return;
+      }
+      // A save reaches each hop asynchronously (cascade.changed -> inbound-sync),
+      // so resolve a live toast instead of leaving the operator guessing. The
+      // poll is deliberately detached from this modal: it closes immediately and
+      // the toast should outlive it. It is bounded, so a hop that never answers
+      // cannot poll forever.
+      const toastId = `cascade-provisioning-${id}`;
+      notifications.show({
+        id: toastId,
+        loading: true,
+        autoClose: false,
+        withCloseButton: false,
+        title: t('cascades.saved'),
+        message: t('cascades.provisioning'),
+      });
+      const settle = (color: string, message: string) =>
+        notifications.update({
+          id: toastId,
+          loading: false,
+          color,
+          autoClose: 8000,
+          title: t('cascades.saved'),
+          message,
+        });
+      let polls = 0;
+      let failures = 0;
+      const poll = async () => {
+        polls += 1;
+        try {
+          const st = await getCascadeStatus(id);
+          failures = 0;
+          if (st.done) {
+            settle('green', t('cascades.provisioned'));
+            return;
+          }
+          if (polls >= PROVISION_MAX_POLLS) {
+            const waiting = st.hops.filter((h) => !h.applied).map((h) => h.name).join(', ');
+            settle('yellow', t('cascades.provisionWaiting', { nodes: waiting }));
+            return;
+          }
+        } catch {
+          // Don't claim we're still waiting when we can't even ask. A blip or
+          // two is normal; a persistent failure gets reported as unknown.
+          failures += 1;
+          if (failures >= 3) {
+            settle('yellow', t('cascades.provisionUnknown'));
+            return;
+          }
+        }
+        window.setTimeout(poll, PROVISION_POLL_MS);
+      };
+      window.setTimeout(poll, PROVISION_POLL_MS);
     },
     onError,
   });

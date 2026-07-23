@@ -105,6 +105,59 @@ export async function getCascade(id: string): Promise<CascadeDto> {
   return mapCascade(c);
 }
 
+export interface CascadeHopStatus {
+  nodeId: string;
+  name: string;
+  /** The node acknowledged an inbound push made after this cascade was saved. */
+  applied: boolean;
+  online: boolean;
+}
+
+export interface CascadeStatusDto {
+  /** Every hop has acknowledged the push. */
+  done: boolean;
+  hops: CascadeHopStatus[];
+}
+
+/**
+ * Provisioning status of a cascade's hops. Saving a cascade pushes new inbound
+ * config to each hop asynchronously (cascade.changed -> inbound-sync), so the
+ * UI otherwise cannot tell whether the save actually landed.
+ *
+ * `applied` compares the node's `lastInboundSyncAt`, stamped only when
+ * applyInbounds returned ok, against the cascade's `updatedAt`. That is a
+ * truthful "this node took the config we sent after you saved". Note it is
+ * deliberately NOT `lastStatusChange`: that field only moves on an
+ * online/offline transition, so a node that stays healthy would never satisfy
+ * it and every successful save would look like it was still pending.
+ *
+ * A node that is offline reports applied=false and online=false, which is the
+ * honest answer: the push is queued and the cron re-pushes when it returns.
+ */
+export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
+  const c = await prisma.cascade.findUnique({
+    where: { id },
+    include: {
+      hops: {
+        orderBy: { position: 'asc' },
+        include: {
+          node: { select: { id: true, name: true, status: true, lastInboundSyncAt: true } },
+        },
+      },
+    },
+  });
+  if (!c) throw new CascadeNotFoundError(id);
+
+  const savedAt = c.updatedAt;
+  const hops = c.hops.map((h) => ({
+    nodeId: h.node.id,
+    name: h.node.name,
+    applied: !!h.node.lastInboundSyncAt && h.node.lastInboundSyncAt > savedAt,
+    online: h.node.status === 'online',
+  }));
+  return { done: hops.length > 0 && hops.every((h) => h.applied), hops };
+}
+
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
   const mode = input.mode ?? 'chain';
   const isBalancer = mode === 'balancer';
