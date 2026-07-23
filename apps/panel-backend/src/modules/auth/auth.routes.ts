@@ -8,7 +8,7 @@ import * as adminService from '../admin/admin.service.js';
 import { mapAdminToPublic } from '../admin/admin.mapper.js';
 import { notifyTelegramAsync, escapeMarkdown, redactIp, redactUsername } from '../../lib/telegram-notify.js';
 import { loginAttempts } from '../../lib/metrics.js';
-import { config } from '../../config.js';
+import { config, subscriptionOrigin } from '../../config.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/status - public discovery: tells the frontend which auth
@@ -27,7 +27,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         enabled: adminCount === 0,
       },
       panel: {
-        publicUrl: config.PUBLIC_URL.replace(/\/$/, ''),
+        // Origin the SPA prepends to a token for the copy-paste link. Client
+        // facing, so it follows a subscription-domain split rather than the
+        // panel's own address.
+        publicUrl: subscriptionOrigin(),
         // Subscription path prefix. Default `/sub`, admin can override
         // via SUBSCRIPTION_PATH_PREFIX env to mask the Iceslab
         // signature (e.g. `/v` or `/get`). Always starts with `/`.

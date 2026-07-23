@@ -246,3 +246,16 @@ function loadConfig(): Config {
 }
 
 export const config: Config = Object.freeze(loadConfig());
+
+// The origin every CLIENT subscription link is built on: SUBSCRIPTION_PUBLIC_URL
+// when the operator split /sub onto its own domain, the panel's own otherwise.
+// Both producers go through here (the install page and the copy-paste link the
+// panel shows an admin), so the two can never disagree about which domain a
+// token lives on - an admin copying the panel domain after a split would be
+// handing out the address the split existed to retire. Trailing slash is
+// stripped once, here, instead of at each concatenation site.
+export function subscriptionOrigin(
+  cfg: Pick<Config, 'PUBLIC_URL' | 'SUBSCRIPTION_PUBLIC_URL'> = config,
+): string {
+  return (cfg.SUBSCRIPTION_PUBLIC_URL ?? cfg.PUBLIC_URL).replace(/\/$/, '');
+}

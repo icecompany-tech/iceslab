@@ -21,7 +21,7 @@ import {
 } from '../settings/settings.service.js';
 import { enforceHwid, resolveSquadHwidLimit } from '../hwid/hwid.service.js';
 import { prisma } from '../../prisma.js';
-import { config } from '../../config.js';
+import { config, subscriptionOrigin } from '../../config.js';
 import { subscriptionRequests } from '../../lib/metrics.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
 import { redis } from '../../lib/redis.js';
@@ -417,7 +417,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // config, just links + copy + per-format download buttons.
       if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
         const settings = await getSubscriptionSettings();
-        const subUrl = `${config.SUBSCRIPTION_PUBLIC_URL ?? config.PUBLIC_URL}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
+        const subUrl = `${subscriptionOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
         // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
         // are single-tunnel-per-key, so a user with several AWG servers gets each
@@ -528,7 +528,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         }
         case 'amneziavpn': {
           // AmneziaVPN-app "vpn://" connection key (base64 blob the flagship
-          // AmneziaVPN clients import directly — their QR scanner and "paste
+          // AmneziaVPN clients import directly: their QR scanner and "paste
           // key" both accept it). Single tunnel per key, so `?node=` selects
           // which AmneziaWG node; absent = first. Empty body = no AWG endpoint
           // for this user (same 204-style contract as wgconf).
