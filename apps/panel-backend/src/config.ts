@@ -42,6 +42,11 @@ const ConfigSchema = z.object({
   // agents shipped with `panelUrl=undefined` and never polled, the
   // mechanism that was supposed to revoke a stolen bundle just sat dead.
   PUBLIC_URL: z.url(),
+  // Public origin for the CLIENT subscription link (install page + QR). Split
+  // from PUBLIC_URL so operators can serve /sub from a separate, CDN/block-
+  // resistant domain (e.g. a grey-cloud relay) while the panel/admin and node
+  // bootstrap stay on PUBLIC_URL. Falls back to PUBLIC_URL when unset.
+  SUBSCRIPTION_PUBLIC_URL: z.url().optional(),
 
   // Path prefix where the subscription endpoint is mounted. Default
   // `/sub` matches the historical default. Operators with concerns
