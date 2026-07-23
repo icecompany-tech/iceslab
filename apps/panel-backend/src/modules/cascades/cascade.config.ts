@@ -137,7 +137,7 @@ const DIRECT_TAG = 'direct';
 
 // Drop QUIC (HTTP/3 = UDP/443) at the cascade entry so clients fall back to
 // TCP/HTTP-2. QUIC tunneled as UDP-over-TCP through the inter-hop vless link
-// suffers head-of-line blocking under sustained video load — YouTube Shorts
+// suffers head-of-line blocking under sustained video load: YouTube Shorts
 // played ~5s then froze ~1min before recovering. TCP over the same link is
 // smooth (measured ~70 Mbit/s), and browsers/apps race QUIC+TCP so a blocked
 // UDP/443 falls back instantly. `blocked` is the node-agent's base blackhole
