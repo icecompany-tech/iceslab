@@ -100,7 +100,7 @@ type InboundConfig struct {
 
 	// Optional NAT/forwarding setup. Each element is rendered as its own
 	// `PostUp =` / `PostDown =` line (awg-quick runs them in order), and each
-	// is validated by validatePostHook — so a multi-rule setup stays within
+	// is validated by validatePostHook, so a multi-rule setup stays within
 	// the strict no-shell-metacharacter whitelist instead of being chained
 	// with `;`. If empty, defaults to FORWARD ACCEPT + MASQUERADE (see
 	// withDefaults). Operators on tightly-firewalled hosts may override.
@@ -139,14 +139,14 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 		//     ship a `FORWARD` policy of DROP (ufw's DEFAULT_FORWARD_POLICY,
 		//     Docker's own chain), so forwarded packets from a wg peer are
 		//     dropped even though the handshake (INPUT to the wg process)
-		//     succeeds — the client shows "Connected" but has no internet.
+		//     succeeds: the client shows "Connected" but has no internet.
 		//     We INSERT at the top (`-I FORWARD 1`) rather than append,
 		//     because on a ufw host `-A FORWARD` lands AFTER ufw's
 		//     reject-forward chain and never matches. Caught live 2026-07-12
 		//     on a DROP-policy node: AmneziaWG handshaked but no traffic flowed.
 		//
 		//  2. MASQUERADE on WAN egress. `! -o %i` matches packets exiting on ANY
-		//     interface OTHER than the wg interface itself — i.e. real WAN
+		//     interface OTHER than the wg interface itself, i.e. real WAN
 		//     egress. The earlier default used `-o %i` which MASQUERADE'd
 		//     traffic going TO peers and never NAT'd the actual internet-bound
 		//     traffic, so RX/TX was massively asymmetric (server forwarded
