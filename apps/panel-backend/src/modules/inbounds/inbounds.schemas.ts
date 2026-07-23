@@ -184,14 +184,19 @@ const ObfuscationSchema = z.object({
   h2: z.number().int().min(5).max(4294967295).default(200),
   h3: z.number().int().min(5).max(4294967295).default(300),
   h4: z.number().int().min(5).max(4294967295).default(400),
-  // Hex-encoded mimicry packets: optional, v2.0 feature. When empty,
-  // the kernel module skips that slot. Each up to 256 hex chars
-  // (128 bytes) per upstream guidance.
-  i1: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i2: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i3: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i4: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
-  i5: z.string().regex(/^[0-9a-fA-F]*$/).max(256).default(''),
+  // Mimicry packets: optional, v2.0 feature. When empty the kernel module skips
+  // that slot. A value is either plain hex, or a 2.0 CPS signature built from
+  // the tags `<b 0xHEX>` / `<r N>` / `<t>` (e.g. `<b 0xc00000000108><r 64><t>`,
+  // a QUIC-Initial lookalike). The character set MUST match validateIField in
+  // the node's amneziawg/config.go, otherwise a value saved here is refused on
+  // the node and the inbound silently fails to apply. The set cannot form a
+  // newline, '[', '=' or a shell metacharacter, so the INI/PostUp injection
+  // guard still holds. Up to 256 chars per upstream guidance.
+  i1: z.string().regex(/^[0-9a-fA-FxX<> rt]*$/).max(256).default(''),
+  i2: z.string().regex(/^[0-9a-fA-FxX<> rt]*$/).max(256).default(''),
+  i3: z.string().regex(/^[0-9a-fA-FxX<> rt]*$/).max(256).default(''),
+  i4: z.string().regex(/^[0-9a-fA-FxX<> rt]*$/).max(256).default(''),
+  i5: z.string().regex(/^[0-9a-fA-FxX<> rt]*$/).max(256).default(''),
 });
 
 export const AmneziawgConfigSchema = z
