@@ -305,15 +305,34 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
 
   try {
     const res = await transport.applyInbounds(req);
-    getLogger().info(
-      `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied} skipped=${res.skipped}`,
-    );
-    inboundSyncJobs.inc({ result: 'ok' });
+    if (res.skipped > 0) {
+      // The agent answers 200 even for an inbound whose (protocol, engine) pair
+      // matches no adapter it has: the config is persisted for a later restart
+      // to pick up, but nothing is listening now. Meanwhile the subscription
+      // generator keeps handing that endpoint to users, who connect to a server
+      // that will never answer. Logging it as a clean success is how an adapter
+      // gap during a staged rollout stays invisible until users complain.
+      getLogger().warn(
+        `[worker:inbound-sync] applyInbounds ${node.name}: applied=${res.applied} SKIPPED=${res.skipped} ` +
+          `(no matching adapter on this node, config persisted but not live); ` +
+          `subscriptions still advertise the skipped endpoints`,
+      );
+      inboundSyncJobs.inc({ result: 'skipped' });
+    } else {
+      getLogger().info(
+        `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied}`,
+      );
+      inboundSyncJobs.inc({ result: 'ok' });
+    }
     // Record the acknowledgement. Stamped ONLY on success, so a failed or a
     // still-queued push leaves the marker stale and a caller can tell a config
     // that landed from one that is still in flight (cascade status today, node
-    // failover later). Best-effort: this bookkeeping must never turn an
-    // otherwise successful push into a failed job.
+    // failover later). A partial push counts: the node did process this
+    // request, and the response carries aggregate counts only, so we could not
+    // attribute a skip to a particular inbound even if we wanted to. Withholding
+    // the stamp would instead wedge every reader forever on an unrelated skip.
+    // Best-effort: this bookkeeping must never turn an otherwise successful push
+    // into a failed job.
     await prisma.node
       .update({ where: { id: nodeId }, data: { lastInboundSyncAt: new Date() } })
       .catch(() => null);

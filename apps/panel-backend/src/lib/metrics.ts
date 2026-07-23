@@ -60,7 +60,7 @@ export const subscriptionRequests = new Counter({
 export const inboundSyncJobs = new Counter({
   name: 'iceslab_inbound_sync_jobs_total',
   help: 'applyInbounds fan-out outcomes',
-  labelNames: ['result'] as const, // ok | fail
+  labelNames: ['result'] as const, // ok | skipped | fail
   registers: [registry],
 });
 
