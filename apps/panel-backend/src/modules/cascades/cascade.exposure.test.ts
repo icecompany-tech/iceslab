@@ -27,9 +27,19 @@ async function node(name: string): Promise<string> {
 
 // Build a cascade straight through prisma: only nodeId + position drive
 // getHiddenCascadeNodeIds, so we skip the inter-hop link creds the service adds.
-async function cascade(name: string, enabled: boolean, nodeIds: string[]): Promise<void> {
+async function cascade(
+  name: string,
+  enabled: boolean,
+  nodeIds: string[],
+  hideHopsFromSub = true,
+): Promise<void> {
   await prisma.cascade.create({
-    data: { name, enabled, hops: { create: nodeIds.map((nodeId, i) => ({ nodeId, position: i })) } },
+    data: {
+      name,
+      enabled,
+      hideHopsFromSub,
+      hops: { create: nodeIds.map((nodeId, i) => ({ nodeId, position: i })) },
+    },
   });
   invalidateHiddenCascadeNodeCache();
 }
@@ -56,6 +66,24 @@ describe('getHiddenCascadeNodeIds (cascade subscription exposure)', () => {
     expect(hidden.has(de01)).toBe(true); // transit hidden
     expect(hidden.has(de02)).toBe(true); // exit hidden (the field leak)
     expect(hidden.size).toBe(2);
+  });
+
+  it('exposes the hops of a cascade that opted OUT of hiding, without affecting others', async () => {
+    // The leak fix stays the default, but an operator can deliberately publish a
+    // cascade's exits as direct picks too. That choice must be per cascade: one
+    // opting out cannot un-hide anybody else's exits.
+    const ruA = await node('ru-a');
+    const deA = await node('de-a');
+    await cascade('exposed', true, [ruA, deA], false);
+
+    const ruB = await node('ru-b');
+    const deB = await node('de-b');
+    await cascade('hidden', true, [ruB, deB]);
+
+    const hidden = await getHiddenCascadeNodeIds();
+    expect(hidden.has(deA)).toBe(false); // opted out: exit stays directly connectable
+    expect(hidden.has(deB)).toBe(true); // default still hides
+    expect(hidden.size).toBe(1);
   });
 
   it('hides nothing for a DISABLED cascade', async () => {

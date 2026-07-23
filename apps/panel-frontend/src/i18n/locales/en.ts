@@ -573,7 +573,7 @@ export default {
     modeBalancer: 'Balancer (auto exit)',
     hideHopsLabel: 'Hide exit nodes from subscription',
     hideHopsDesc:
-      'On (default): the cascade’s exit nodes are reachable only via its "Auto" entry. Off: they also appear as direct picks in the subscription.',
+      'On (default): the cascade\'s exit nodes are reachable only via its "Auto" entry. Off: they also appear as direct picks in the subscription.',
   },
   squads: {
     title: 'Internal squads',
