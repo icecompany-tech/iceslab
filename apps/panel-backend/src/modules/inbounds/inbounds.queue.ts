@@ -309,6 +309,14 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
       `[worker:inbound-sync] applyInbounds ${node.name} ok: applied=${res.applied} skipped=${res.skipped}`,
     );
     inboundSyncJobs.inc({ result: 'ok' });
+    // Record the acknowledgement. Stamped ONLY on success, so a failed or a
+    // still-queued push leaves the marker stale and a caller can tell a config
+    // that landed from one that is still in flight (cascade status today, node
+    // failover later). Best-effort: this bookkeeping must never turn an
+    // otherwise successful push into a failed job.
+    await prisma.node
+      .update({ where: { id: nodeId }, data: { lastInboundSyncAt: new Date() } })
+      .catch(() => null);
   } catch (err) {
     const detail =
       err instanceof NodeRequestError

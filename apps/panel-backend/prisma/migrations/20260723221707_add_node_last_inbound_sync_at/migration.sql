@@ -1,0 +1,11 @@
+-- Truthful "this node applied the config we pushed" marker. Stamped only when
+-- applyInbounds returns ok, so a failed or still-pending push leaves it stale
+-- and the UI can tell a landed save from a waiting one. `last_status_change`
+-- cannot answer that: it only moves on an online/offline transition, so a node
+-- that stays healthy never updates it.
+--
+-- Hand-written on purpose. `prisma migrate dev` wanted to bundle unrelated
+-- drift into this file: dropping and recreating six foreign keys, and dropping
+-- DEFAULTs on id / updated_at across five tables, which earlier raw migrations
+-- had set deliberately. Only the new column belongs here.
+ALTER TABLE "nodes" ADD COLUMN "last_inbound_sync_at" TIMESTAMPTZ(6);

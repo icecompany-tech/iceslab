@@ -247,6 +247,13 @@ model Node {
   status                String    @default("unknown") @db.VarChar(16)
   lastStatusChange      DateTime? @map("last_status_change") @db.Timestamptz(6)
   lastStatusMessage     String?   @map("last_status_message")
+  // Stamped when the node ACKNOWLEDGES an inbound push (applyInbounds returned
+  // ok), never on a failure and never on a plain liveness tick. That makes it a
+  // truthful "this node applied the config we sent" marker: comparing it with a
+  // cascade's or binding's updatedAt tells the UI whether a save actually
+  // landed on this hop. `lastStatusChange` cannot answer that, it only moves on
+  // an online/offline transition, so a healthy node never updates it.
+  lastInboundSyncAt     DateTime? @map("last_inbound_sync_at") @db.Timestamptz(6)
   consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
 
   // Slice 27.5: region grouping + capacity hint. Both NULL by default
