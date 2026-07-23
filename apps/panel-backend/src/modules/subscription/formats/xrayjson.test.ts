@@ -246,6 +246,12 @@ describe('buildXrayJson', () => {
         buildXrayJson([xrayEp], { routingPreset: 'cn-split' }),
       );
     });
+
+    it('roscomvpn falls back to proxy-all because it is Mihomo-only', () => {
+      expect(buildXrayJson([xrayEp], { routingPreset: 'roscomvpn' })).toBe(
+        buildXrayJson([xrayEp], { routingPreset: 'proxy-all' }),
+      );
+    });
   });
 
   // TLS-fragment.

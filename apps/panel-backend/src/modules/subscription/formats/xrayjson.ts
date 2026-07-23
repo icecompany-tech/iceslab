@@ -172,8 +172,8 @@ export function buildXrayJson(
   const proxyTags: string[] = [];
   const bundle = opts.bundle ?? 'flat';
   // Routing preset (R1a + H2). Each split preset selects its own rule array +
-  // split-DNS block; proxy-all leaves both null so the output stays
-  // byte-identical to pre-R1 builds.
+  // split-DNS block. RoscomVPN is Mihomo-specific and intentionally falls
+  // back to proxy-all here instead of producing a partial routing profile.
   const preset = opts.routingPreset ?? 'proxy-all';
   const splitRules =
     preset === 'ru-split'

@@ -1,5 +1,6 @@
 import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { buildRoscomVpnSections } from './clash.roscomvpn.js';
 
 /**
  * Clash YAML subscription formatter (targets Clash Meta / Mihomo, covers
@@ -10,6 +11,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
  *   - xray (VLESS+REALITY)  → `type: vless` with `reality-opts`
  *   - xray (Trojan+REALITY) → `type: trojan` with `reality-opts` (slice 24c part 3a)
  *   - shadowsocks           → `type: ss` with cipher + password (slice 24d)
+ *   - mieru                 → `type: mieru` with username + password
  *   - amneziawg / naive are NOT emitted: classic Clash has no native support
  *     and Clash Meta's experimental wireguard/naive support diverges per
  *     fork. AmneziaWG users get the wg-quick `.conf` format; Naive users
@@ -136,6 +138,35 @@ const CN_SPLIT_DNS_LINES: readonly string[] = [
   '',
 ];
 
+const PROXY_ALL_DOH_NAMESERVERS = [
+  'https://1.1.1.1/dns-query',
+  'https://8.8.8.8/dns-query',
+] as const;
+
+function buildProxyAllDnsLines(hasProxyGroup: boolean): string[] {
+  const viaProxy = (nameserver: string): string =>
+    hasProxyGroup ? `${nameserver}#Auto` : nameserver;
+
+  return [
+    'mode: rule',
+    'ipv6: false',
+    'dns:',
+    '  enable: true',
+    '  listen: 0.0.0.0:1053',
+    '  ipv6: false',
+    '  enhanced-mode: redir-host',
+    '  default-nameserver:',
+    '    - 1.1.1.1',
+    '    - 8.8.8.8',
+    '  proxy-server-nameserver:',
+    '    - 1.1.1.1',
+    '    - 8.8.8.8',
+    '  nameserver:',
+    ...PROXY_ALL_DOH_NAMESERVERS.map((nameserver) => `    - ${viaProxy(nameserver)}`),
+    '',
+  ];
+}
+
 const RU_SPLIT_RULE_LINES: readonly string[] = [
   '  - GEOSITE,category-ads-all,REJECT',
   '  - GEOSITE,category-ru,DIRECT',
@@ -190,6 +221,7 @@ export function buildClashYaml(
       : preset === 'cn-split'
         ? CN_SPLIT_RULE_LINES
         : null;
+  const useRoscomVpn = preset === 'roscomvpn';
   const proxies: string[] = [];
   const proxyNames: string[] = [];
 
@@ -311,6 +343,21 @@ export function buildClashYaml(
           `    udp: true`,
         ].join('\n'),
       );
+    } else if (e.protocol === 'mieru') {
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: mieru`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    transport: TCP`,
+          `    udp: true`,
+          `    username: ${yamlString(e.username)}`,
+          `    password: ${yamlString(e.password)}`,
+          `    multiplexing: MULTIPLEXING_LOW`,
+        ].join('\n'),
+      );
     } else if (e.protocol === 'tuic') {
       // TUIC v5 (sing-box engine) -> mihomo `type: tuic`. Self-signed cert in
       // the alpha so skip-cert-verify; uuid+password auth, native UDP relay.
@@ -370,10 +417,16 @@ export function buildClashYaml(
     }
   }
 
+  const roscomVpn =
+    useRoscomVpn && proxyNames.length > 0 ? buildRoscomVpnSections() : null;
   const lines: string[] = [];
   if (splitRuleLines) {
     lines.push(...SPLIT_GEO_LINES);
     lines.push(...splitDnsLines!);
+  } else if (roscomVpn) {
+    lines.push(...roscomVpn.headerLines);
+  } else {
+    lines.push(...buildProxyAllDnsLines(proxyNames.length > 0));
   }
   lines.push('proxies:');
   if (proxies.length === 0) {
@@ -382,6 +435,10 @@ export function buildClashYaml(
     lines.push(...proxies);
   }
   lines.push('');
+
+  if (roscomVpn) {
+    lines.push(...roscomVpn.providerLines, '');
+  }
 
   lines.push('proxy-groups:');
   if (proxyNames.length > 0) {
@@ -422,6 +479,8 @@ export function buildClashYaml(
   lines.push(...customDomainLines);
   if (splitRuleLines) {
     lines.push(...splitRuleLines);
+  } else if (roscomVpn) {
+    lines.push(...roscomVpn.ruleLines);
   }
   lines.push(proxyNames.length > 0 ? '  - MATCH,Auto' : '  - MATCH,DIRECT');
 

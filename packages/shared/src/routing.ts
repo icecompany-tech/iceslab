@@ -13,11 +13,18 @@
  *     direct, everything else through the tunnel. Same shape as `ru-split`;
  *     only the geo categories and the clean-DNS resolver differ (AliDNS
  *     223.5.5.5 instead of Yandex 77.88.8.8).
+ *   - `roscomvpn`: Mihomo-only client-side rule providers from RoscomVPN.
+ *     Other full-config formats intentionally fall back to `proxy-all`.
  *
  * Stored in AppSetting under `subscriptionRoutingPreset`; overridable per
  * request via `?routing=` on /sub (mirrors the `bundle` param pattern).
  */
-export const ROUTING_PRESET_IDS = ['proxy-all', 'ru-split', 'cn-split'] as const;
+export const ROUTING_PRESET_IDS = [
+  'proxy-all',
+  'ru-split',
+  'cn-split',
+  'roscomvpn',
+] as const;
 
 export type RoutingPresetId = (typeof ROUTING_PRESET_IDS)[number];
 

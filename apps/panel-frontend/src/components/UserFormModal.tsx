@@ -488,6 +488,8 @@ export function UserFormModal({ opened, onClose, user, onSubmit, loading }: Prop
                     { value: '', label: t('users.form.routingInherit') },
                     { value: 'proxy-all', label: t('users.form.routingProxyAll') },
                     { value: 'ru-split', label: t('users.form.routingRuSplit') },
+                    { value: 'cn-split', label: t('users.form.routingCnSplit') },
+                    { value: 'roscomvpn', label: t('users.form.routingRoscomVpn') },
                   ]}
                   allowDeselect={false}
                   {...form.getInputProps('routingPreset')}

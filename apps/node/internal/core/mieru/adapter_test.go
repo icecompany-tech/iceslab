@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -140,24 +142,29 @@ func TestApplyInbound_RejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestStart_InvokesMitaApplyAndReload(t *testing.T) {
+func TestStart_InvokesMitaApplyReloadAndStart(t *testing.T) {
 	runner := &recordingRunner{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	dir := t.TempDir()
 	a := New(Config{
 		BinaryPath: "/usr/local/bin/mita",
 		ConfigPath: dir + "/server.yaml",
+		StatePath:  dir + "/users.state.json",
 		Inbound:    InboundConfig{ListenPort: 2012, MTU: 1400, LoggingLevel: "INFO"},
 		RunCmd:     runner.run,
 	}, logger)
+	if err := a.AddUser(core.User{UserID: "u-1", Username: "alice", XrayUUID: "uuid-a"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
 
 	if err := a.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	// Should have called: mita apply config <path> + mita reload
-	if len(runner.calls) < 2 {
-		t.Fatalf("expected at least 2 mita calls, got %d: %v", len(runner.calls), runner.calls)
+	// The packaged systemd unit starts only the RPC daemon. `mita start` is
+	// still required to move the proxy from IDLE to RUNNING.
+	if len(runner.calls) < 3 {
+		t.Fatalf("expected at least 3 mita calls, got %d: %v", len(runner.calls), runner.calls)
 	}
 	first := strings.Join(runner.calls[0], " ")
 	if !strings.Contains(first, "apply config") {
@@ -166,5 +173,163 @@ func TestStart_InvokesMitaApplyAndReload(t *testing.T) {
 	second := strings.Join(runner.calls[1], " ")
 	if !strings.Contains(second, "reload") {
 		t.Errorf("second call should be `reload`, got %q", second)
+	}
+	third := strings.Join(runner.calls[2], " ")
+	if !strings.Contains(third, "start") {
+		t.Errorf("third call should be `start`, got %q", third)
+	}
+}
+
+func TestStartWithoutUsersWaitsForFirstUser(t *testing.T) {
+	runner := &recordingRunner{}
+	dir := t.TempDir()
+	a := New(Config{
+		BinaryPath: "/usr/local/bin/mita",
+		ConfigPath: filepath.Join(dir, "server.json"),
+		StatePath:  filepath.Join(dir, "users.state.json"),
+		Inbound:    InboundConfig{ListenPort: 2012, MTU: 1400, LoggingLevel: "INFO"},
+		RunCmd:     runner.run,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start without users: %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("empty adapter should wait for panel sync, got calls: %v", runner.calls)
+	}
+	if !a.Healthy() {
+		t.Fatal("adapter should be healthy while waiting for the first user")
+	}
+
+	if err := a.AddUser(core.User{UserID: "u-1", Username: "alice", XrayUUID: "uuid-a"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("first user should apply, reload, and start mita; got %v", runner.calls)
+	}
+}
+
+func TestUsersPersistAcrossAdapterRestart(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		ConfigPath: filepath.Join(dir, "server.json"),
+		StatePath:  filepath.Join(dir, "users.state.json"),
+		Inbound:    InboundConfig{ListenPort: 8443, MTU: 1400, LoggingLevel: "INFO"},
+	}
+	a := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := a.AddUser(core.User{UserID: "panel-id", Username: "alice", XrayUUID: "uuid-a"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	info, err := os.Stat(cfg.StatePath)
+	if err != nil {
+		t.Fatalf("stat state: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("state permissions: got %o want 600", got)
+	}
+
+	restarted := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := restarted.Start(context.Background()); err != nil {
+		t.Fatalf("Start after restart: %v", err)
+	}
+	if got := restarted.users["panel-id"]; got != (User{Name: "alice", Password: "uuid-a"}) {
+		t.Fatalf("persisted user not restored: %+v", got)
+	}
+
+	if err := restarted.RemoveUser("panel-id"); err != nil {
+		t.Fatalf("RemoveUser: %v", err)
+	}
+	again := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := again.Start(context.Background()); err != nil {
+		t.Fatalf("Start after removal: %v", err)
+	}
+	if len(again.users) != 0 {
+		t.Fatalf("removed user came back after restart: %+v", again.users)
+	}
+}
+
+func TestStartRejectsCorruptStateWithoutReplacingConfig(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "server.json")
+	statePath := filepath.Join(dir, "users.state.json")
+	existing := []byte(`{"users":[{"name":"alice","password":"uuid-a"}]}`)
+	if err := os.WriteFile(configPath, existing, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte(`{"version":1,"users":`), 0o600); err != nil {
+		t.Fatalf("write corrupt state: %v", err)
+	}
+	runner := &recordingRunner{}
+	a := New(Config{
+		BinaryPath: "/usr/local/bin/mita",
+		ConfigPath: configPath,
+		StatePath:  statePath,
+		RunCmd:     runner.run,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := a.Start(context.Background()); err == nil {
+		t.Fatal("Start should reject corrupt state")
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if string(after) != string(existing) {
+		t.Fatal("corrupt state handling replaced the live config")
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("corrupt state should not invoke mita, got %v", runner.calls)
+	}
+}
+
+func TestStartPreservesExistingConfigDuringStateMigration(t *testing.T) {
+	runner := &recordingRunner{}
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "server.json")
+	existing, err := renderConfig(
+		InboundConfig{ListenPort: 8443, MTU: 1400, LoggingLevel: "INFO"},
+		[]User{{Name: "alice", Password: "uuid-a"}},
+	)
+	if err != nil {
+		t.Fatalf("render existing config: %v", err)
+	}
+	if err := os.WriteFile(configPath, existing, 0o600); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+	a := New(Config{
+		BinaryPath: "/usr/local/bin/mita",
+		ConfigPath: configPath,
+		StatePath:  filepath.Join(dir, "missing.state.json"),
+		Inbound:    InboundConfig{ListenPort: 8443, MTU: 1400, LoggingLevel: "INFO"},
+		RunCmd:     runner.run,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start migration: %v", err)
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config after Start: %v", err)
+	}
+	if string(after) != string(existing) {
+		t.Fatal("Start replaced the existing live config before panel resync")
+	}
+	if len(runner.calls) != 1 || !strings.Contains(strings.Join(runner.calls[0], " "), "start") {
+		t.Fatalf("migration should only ensure the existing config is running, got %v", runner.calls)
+	}
+}
+
+func TestStopDoesNotStopSystemdOwnedMita(t *testing.T) {
+	runner := &recordingRunner{}
+	a := New(Config{
+		BinaryPath: "/usr/local/bin/mita",
+		RunCmd:     runner.run,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := a.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("agent shutdown must leave systemd-owned mita running, got %v", runner.calls)
 	}
 }

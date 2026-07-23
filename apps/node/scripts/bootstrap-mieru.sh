@@ -16,10 +16,13 @@ fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 INSTALL_DIR=/usr/local/bin
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/mita-path.sh
+source "$SCRIPT_DIR/lib/mita-path.sh"
 
 # ───── 1. Already installed? ─────
-if [[ -x "$INSTALL_DIR/mita" ]]; then
-  CURRENT=$("$INSTALL_DIR/mita" version 2>&1 | head -1 || echo "unknown")
+if MITA_BINARY=$(ensure_mita_compat_path "$INSTALL_DIR/mita"); then
+  CURRENT=$("$MITA_BINARY" version 2>&1 | head -1 || echo "unknown")
   log "mita already installed: $CURRENT (skipping download)"
   log "To upgrade, remove $INSTALL_DIR/mita and rerun."
   exit 0
@@ -63,7 +66,9 @@ dpkg -i "$TMPDIR/$DEB" || {
 }
 
 # ───── 6. Smoke-test ─────
-"$INSTALL_DIR/mita" version >/dev/null 2>&1 || fail "smoke test failed"
+MITA_BINARY=$(ensure_mita_compat_path "$INSTALL_DIR/mita") || \
+  fail "mita package installed, but no executable was found in PATH"
+"$MITA_BINARY" version >/dev/null 2>&1 || fail "smoke test failed"
 log "Smoke-test passed"
 
 # ───── 7. Make /etc/mita writable by node-agent ─────
@@ -74,11 +79,11 @@ log "Created /etc/mita (mode 0700; node-agent will populate server.yaml on Apply
 # ───── 8. Summary ─────
 echo
 log "mita is ready."
-echo "    Binary:  $INSTALL_DIR/mita"
+echo "    Binary:  $MITA_BINARY"
 echo "    Version: $LATEST_TAG"
 echo
 echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
-echo "    MITA_BINARY=$INSTALL_DIR/mita"
+echo "    MITA_BINARY=$MITA_BINARY"
 echo "    MITA_CONFIG=/etc/mita/server.json"
 echo "    MITA_PORT=2012"
 echo "    MITA_MTU=1400        # min 1280; drop to 1280 on PPPoE / odd VPN paths"

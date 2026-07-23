@@ -30,8 +30,8 @@ import (
 
 // User represents one mita user (name + password).
 type User struct {
-	Name     string
-	Password string
+	Name     string `json:"name"`
+	Password string `json:"password"`
 }
 
 // InboundConfig holds per-instance settings.
@@ -133,7 +133,7 @@ func renderConfig(inbound InboundConfig, users []User) ([]byte, error) {
 	return json.MarshalIndent(doc, "", "  ")
 }
 
-// writeConfig atomically writes mita's YAML via the shared atomicfile
+// writeConfig atomically writes mita's JSON via the shared atomicfile
 // helper (fsync(file) + fsync(dir)). Mode 0o600, file contains every
 // user's password.
 func writeConfig(path string, blob []byte) error {

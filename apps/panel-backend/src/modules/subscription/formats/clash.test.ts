@@ -42,6 +42,17 @@ const ssEp: SubscriptionEndpoint = {
   uri: 'ss://...',
 };
 
+const mieruEp: SubscriptionEndpoint = {
+  protocol: 'mieru',
+  nodeName: 'eu-1',
+  host: 'm1.example.com',
+  port: 8443,
+  username: 'alice',
+  password: 'pa:ss#word',
+  mtu: 1400,
+  uri: 'mieru://...',
+};
+
 const shadowtlsEp: SubscriptionEndpoint = {
   protocol: 'shadowtls',
   nodeName: 'eu-1',
@@ -189,6 +200,19 @@ describe('buildClashYaml', () => {
     expect(out).toMatch(/- eu-1-shadowsocks/);
   });
 
+  it('emits a mieru proxy with separate username and password fields', () => {
+    const out = buildClashYaml([mieruEp]);
+    expect(out).toContain('- name: eu-1-mieru');
+    expect(out).toContain('type: mieru');
+    expect(out).toContain('server: m1.example.com');
+    expect(out).toContain('port: 8443');
+    expect(out).toContain('transport: TCP');
+    expect(out).toContain('udp: true');
+    expect(out).toContain('username: alice');
+    expect(out).toContain('password: "pa:ss#word"');
+    expect(out).toContain('multiplexing: MULTIPLEXING_LOW');
+  });
+
   // ───── Slice 24c part 2: transports ─────
 
   it('emits ws-opts with path + Host header for ws network', () => {
@@ -229,14 +253,15 @@ describe('buildClashYaml', () => {
   // ───── Routing Templates (R1c) ─────
 
   describe('routingPreset', () => {
-    it('default proxy-all output is byte-identical to pre-R1 (no geo block, no preset rules)', () => {
+    it('default proxy-all output is byte-identical to explicit proxy-all', () => {
       expect(buildClashYaml([xrayEp], { routingPreset: 'proxy-all' })).toBe(
         buildClashYaml([xrayEp]),
       );
       const out = buildClashYaml([xrayEp]);
       expect(out).not.toContain('GEOSITE');
       expect(out).not.toContain('geox-url');
-      expect(out.startsWith('proxies:')).toBe(true);
+      expect(out).toContain('dns:');
+      expect(out.indexOf('dns:')).toBeLessThan(out.indexOf('proxies:'));
     });
 
     it('ru-split emits geo block with jsdelivr mirrors and auto-update', () => {
@@ -274,9 +299,25 @@ describe('buildClashYaml', () => {
       expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
     });
 
-    it('ru-split emits split-DNS block (R2); proxy-all does not', () => {
-      expect(buildClashYaml([xrayEp])).not.toContain('dns:');
+    it('proxy-all emits DNS with proxied DoH for TUN clients', () => {
+      const out = buildClashYaml([xrayEp]);
+      expect(out).toContain('mode: rule');
+      expect(out).toContain('ipv6: false');
+      expect(out).toContain('dns:');
+      expect(out).toContain('  listen: 0.0.0.0:1053');
+      expect(out).toContain('  enhanced-mode: redir-host');
+      expect(out).toContain('    - https://1.1.1.1/dns-query#Auto');
+      expect(out).toContain('    - https://8.8.8.8/dns-query#Auto');
+    });
 
+    it('proxy-all without proxies does not leave a dangling Auto DNS reference', () => {
+      const out = buildClashYaml([]);
+      expect(out).toContain('dns:');
+      expect(out).not.toContain('#Auto');
+      expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
+    });
+
+    it('ru-split emits split-DNS block (R2)', () => {
       const out = buildClashYaml([xrayEp], { routingPreset: 'ru-split' });
       expect(out).toContain('dns:');
       expect(out).toContain('  enable: true');
@@ -341,6 +382,70 @@ describe('buildClashYaml', () => {
       expect(out).toContain('    - https://1.1.1.1/dns-query');
       // No Yandex resolver.
       expect(out).not.toContain('77.88.8.8');
+    });
+  });
+
+  describe('routingPreset roscomvpn', () => {
+    function providerNames(out: string): Set<string> {
+      const section = out.slice(out.indexOf('rule-providers:'), out.indexOf('\nrules:'));
+      return new Set(
+        section
+          .split('\n')
+          .filter((line) => /^  [a-z0-9-]+:$/.test(line))
+          .map((line) => line.trim().slice(0, -1)),
+      );
+    }
+
+    function referencedProviders(out: string): Set<string> {
+      return new Set(
+        Array.from(out.matchAll(/(?:RULE-SET,|rule-set:)([a-z0-9-]+)/g)).map(
+          (match) => match[1],
+        ),
+      );
+    }
+
+    it('emits self-updating RoscomVPN providers and conservative routing rules', () => {
+      const out = buildClashYaml([xrayEp], { routingPreset: 'roscomvpn' });
+      expect(out).toContain('rule-providers:');
+      expect(out).toContain(
+        'url: https://cdn.jsdelivr.net/gh/hydraponique/roscomvpn-geosite/release/mihomo/category-ru.mrs',
+      );
+      expect(out).toContain('interval: 86400');
+      expect(out).toContain('- AND,((NETWORK,UDP),(DST-PORT,443)),REJECT');
+      expect(out).toContain('- RULE-SET,youtube,Auto');
+      expect(out).toContain('- RULE-SET,category-ru,DIRECT');
+      expect(out.trimEnd().endsWith('- MATCH,Auto')).toBe(true);
+    });
+
+    it('keeps every provider and proxy-group reference resolvable', () => {
+      const out = buildClashYaml([xrayEp], { routingPreset: 'roscomvpn' });
+      const defined = providerNames(out);
+      expect(defined.size).toBeGreaterThan(0);
+      for (const reference of referencedProviders(out)) {
+        expect(defined.has(reference), `missing provider: ${reference}`).toBe(true);
+      }
+      expect(out).toContain('proxy: Auto');
+      expect(out).toContain('- name: Auto');
+      expect(out).toContain('https://1.1.1.1/dns-query#Auto');
+    });
+
+    it('puts custom domain rules ahead of RoscomVPN rules', () => {
+      const out = buildClashYaml([xrayEp], {
+        routingPreset: 'roscomvpn',
+        customDomainLists: { block: ['blocked.example'], direct: [], proxy: [] },
+      });
+      expect(out.indexOf('DOMAIN-SUFFIX,blocked.example,REJECT')).toBeLessThan(
+        out.indexOf('RULE-SET,private-ips,DIRECT'),
+      );
+    });
+
+    it('does not emit dangling providers or Auto references without proxies', () => {
+      const out = buildClashYaml([], { routingPreset: 'roscomvpn' });
+      expect(out).not.toContain('rule-providers:');
+      expect(out).not.toContain('RULE-SET,');
+      expect(out).not.toContain('#Auto');
+      expect(out).not.toContain('proxy: Auto');
+      expect(out.trimEnd().endsWith('- MATCH,DIRECT')).toBe(true);
     });
   });
 

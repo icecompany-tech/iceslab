@@ -122,6 +122,10 @@ jobs:
         working-directory: apps/node
         run: go test ./...
 
+      - name: Test node bootstrap scripts
+        working-directory: apps/node
+        run: bash scripts/bootstrap-mieru.test.sh
+
   # Slice 36 follow-up: build + publish container images to GHCR on every
   # push to main and on every tag. Pull requests build but don't publish
   # (no creds reach forked-PR jobs). Tag naming follows GHCR convention:
