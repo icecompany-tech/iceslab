@@ -98,11 +98,14 @@ type InboundConfig struct {
 	// rendered into the awg-quick `[Interface]` block.
 	I1, I2, I3, I4, I5 string
 
-	// Optional NAT setup. If empty, defaults to the standard MASQUERADE rule
-	// over the host's primary egress interface. Operators on tightly-firewalled
-	// hosts may want to set these explicitly.
-	PostUp   string
-	PostDown string
+	// Optional NAT/forwarding setup. Each element is rendered as its own
+	// `PostUp =` / `PostDown =` line (awg-quick runs them in order), and each
+	// is validated by validatePostHook — so a multi-rule setup stays within
+	// the strict no-shell-metacharacter whitelist instead of being chained
+	// with `;`. If empty, defaults to FORWARD ACCEPT + MASQUERADE (see
+	// withDefaults). Operators on tightly-firewalled hosts may override.
+	PostUp   []string
+	PostDown []string
 }
 
 // Peer is a single [Peer] block. Generated from a panel `amneziawg_peers` row.
@@ -129,20 +132,38 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 	// zero, not "use the default". Caught live cycle #6 2026-05-12:
 	// admin set Jc=0 in UI to debug, server kept rendering Jc=4 because
 	// of these defaults, handshake silently failed.
-	if out.PostUp == "" {
-		// `! -o %i` matches packets exiting on ANY interface OTHER than the wg
-		// interface itself, i.e. real WAN egress. The earlier default used
-		// `-o %i` which MASQUERADE'd traffic going TO peers and never NAT'd
-		// the actual internet-bound traffic, so VPN clients reached "Connected"
-		// but RX/TX was massively asymmetric (server received decrypted
-		// requests, forwarded them with private src 10.x, responses never
-		// routed back). Caught live 2026-05-13 on a production node, fixed inline
-		// with `iptables -t nat -A POSTROUTING -s 10.66.66.0/24 -o net0 -j MASQUERADE`;
-		// this default uses `! -o %i` so it works regardless of WAN iface name.
-		out.PostUp = "iptables -t nat -A POSTROUTING ! -o %i -j MASQUERADE"
+	if len(out.PostUp) == 0 {
+		// Two things are needed for a client to actually reach the internet:
+		//
+		//  1. FORWARD ACCEPT for the wg interface. Hosts running Docker or ufw
+		//     ship a `FORWARD` policy of DROP (ufw's DEFAULT_FORWARD_POLICY,
+		//     Docker's own chain), so forwarded packets from a wg peer are
+		//     dropped even though the handshake (INPUT to the wg process)
+		//     succeeds — the client shows "Connected" but has no internet.
+		//     We INSERT at the top (`-I FORWARD 1`) rather than append,
+		//     because on a ufw host `-A FORWARD` lands AFTER ufw's
+		//     reject-forward chain and never matches. Caught live 2026-07-12
+		//     on a DROP-policy node: AmneziaWG handshaked but no traffic flowed.
+		//
+		//  2. MASQUERADE on WAN egress. `! -o %i` matches packets exiting on ANY
+		//     interface OTHER than the wg interface itself — i.e. real WAN
+		//     egress. The earlier default used `-o %i` which MASQUERADE'd
+		//     traffic going TO peers and never NAT'd the actual internet-bound
+		//     traffic, so RX/TX was massively asymmetric (server forwarded
+		//     decrypted requests with private src 10.x, responses never routed
+		//     back). `! -o %i` works regardless of WAN iface name.
+		out.PostUp = []string{
+			"iptables -I FORWARD 1 -i %i -j ACCEPT",
+			"iptables -I FORWARD 1 -o %i -j ACCEPT",
+			"iptables -t nat -A POSTROUTING ! -o %i -j MASQUERADE",
+		}
 	}
-	if out.PostDown == "" {
-		out.PostDown = "iptables -t nat -D POSTROUTING ! -o %i -j MASQUERADE"
+	if len(out.PostDown) == 0 {
+		out.PostDown = []string{
+			"iptables -D FORWARD -i %i -j ACCEPT",
+			"iptables -D FORWARD -o %i -j ACCEPT",
+			"iptables -t nat -D POSTROUTING ! -o %i -j MASQUERADE",
+		}
 	}
 	return out
 }
@@ -274,14 +295,21 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 	// is admin-controlled. We still hard-whitelist allowed command prefixes
 	// here as defence-in-depth so a future maintainer who plumbs them
 	// through the wire by accident can't accidentally introduce RCE.
-	if err := validatePostHook(cfg.PostUp); err != nil {
-		return "", fmt.Errorf("PostUp: %w", err)
+	// Each command is validated and emitted as its own PostUp/PostDown line;
+	// awg-quick runs them in order. This keeps every rule inside the strict
+	// single-command whitelist (validatePostHook rejects ';' and friends).
+	for _, cmd := range cfg.PostUp {
+		if err := validatePostHook(cmd); err != nil {
+			return "", fmt.Errorf("PostUp: %w", err)
+		}
+		fmt.Fprintf(&b, "PostUp = %s\n", cmd)
 	}
-	if err := validatePostHook(cfg.PostDown); err != nil {
-		return "", fmt.Errorf("PostDown: %w", err)
+	for _, cmd := range cfg.PostDown {
+		if err := validatePostHook(cmd); err != nil {
+			return "", fmt.Errorf("PostDown: %w", err)
+		}
+		fmt.Fprintf(&b, "PostDown = %s\n", cmd)
 	}
-	fmt.Fprintf(&b, "PostUp = %s\n", cfg.PostUp)
-	fmt.Fprintf(&b, "PostDown = %s\n", cfg.PostDown)
 
 	for _, p := range peers {
 		if p.PublicKey == "" || p.AllowedIP == "" {
