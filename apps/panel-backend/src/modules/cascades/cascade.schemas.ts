@@ -39,6 +39,9 @@ export const CreateCascadeSchema = z.object({
   name: z.string().min(1).max(64),
   enabled: z.boolean().default(true),
   mode: CascadeMode.default('chain'),
+  /** When true (default), hide the cascade's non-entry (exit/transit) nodes
+   *  from the raw subscription; uncheck to also expose them as direct picks. */
+  hideHopsFromSub: z.boolean().default(true),
   hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS),
 });
 
@@ -46,6 +49,7 @@ export const UpdateCascadeSchema = z.object({
   name: z.string().min(1).max(64).optional(),
   enabled: z.boolean().optional(),
   mode: CascadeMode.optional(),
+  hideHopsFromSub: z.boolean().optional(),
   hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS).optional(),
 });
 

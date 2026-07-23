@@ -728,6 +728,12 @@ model Cascade {
   // entry that latency-balances across N parallel exits, the "auto" node).
   // Stored as a free string, like the hop protocol enums.
   mode      String   @default("chain") @db.VarChar(16)
+  // When true (default/legacy), non-entry hops of this enabled cascade are
+  // hidden from the raw subscription so clients can only reach the chain via
+  // the entry (prevents the direct-to-exit leak). Uncheck in the panel to ALSO
+  // expose the cascade's exit nodes as directly-connectable endpoints — for
+  // operators who want users to pick those regions raw as well as via "Auto".
+  hideHopsFromSub Boolean @default(true) @map("hide_hops_from_sub")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
