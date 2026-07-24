@@ -13,7 +13,7 @@ Self-hosted proxy management panel that runs the real upstream binary for each p
 - 7 protocols, real binaries - no lowest-common-denominator reimplementation.
 - Push over mTLS - the panel pushes config to agents, they apply and report back. No SSH into nodes.
 - Built for hostile networks - REALITY self-steal, multi-hop cascades, DPI-aware setup recipes, routing presets.
-- One subscription URL per user - disable, throttle, or revoke without touching the protocol layer. Every client format from one link (clash, sing-box, xray-json, wireguard, base64).
+- One subscription URL per user - disable, revoke, or cap traffic without touching the protocol layer. Every client format from one link (clash, sing-box, xray-json, wireguard, base64).
 - Operator-grade - live fleet telemetry, per-user HWID limits and quotas, analytics, Telegram bot, admin 2FA.
 - Self-hosted, AGPL-3.0 - your nodes, your data. One-command install via Docker Compose.
 
@@ -29,7 +29,7 @@ Self-hosted proxy management panel that runs the real upstream binary for each p
     <td width="50%"><img src="docs/screenshots/profiles-settings.png" alt="Protocol profiles"><br><sub>Guided, DPI-aware protocol setup. Manual edits always available.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/users.png" alt="Users"><br><sub>One subscription URL per user. Disable, throttle or revoke without touching the protocol layer.</sub></td>
+    <td width="50%"><img src="docs/screenshots/users.png" alt="Users"><br><sub>One subscription URL per user. Disable, revoke or cap traffic without touching the protocol layer.</sub></td>
     <td width="50%"><img src="docs/screenshots/cascade.png" alt="Cascades"><br><sub>Multi-hop cascades: chain nodes entry to exit for layered routing.</sub></td>
   </tr>
   <tr>
