@@ -90,9 +90,12 @@ export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
 
 export const ListUsersQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  // 500 is generous; UsersPage front asks for 200 to render the table without
-  // pagination at typical commercial-scale (≤500 users). When the install
-  // grows past that, swap to server-side pagination on the page.
+  // Page SIZE cap, not a ceiling on how many users the list can reach: `page`
+  // above walks the whole table (repository turns the pair into skip/take plus
+  // a separate count for `total`), and UsersPage has driven both since Wave-14.
+  // Spelled out because the previous comment here described a pre-Wave-14 state
+  // and read as "this install tops out at 500 users", which is how a reader
+  // auditing the code reached exactly that wrong conclusion.
   limit: z.coerce.number().int().positive().max(500).default(50),
   status: UserStatus.optional(),
   search: z.string().min(1).max(64).optional(),                  // matches username/email/telegramId/tag
