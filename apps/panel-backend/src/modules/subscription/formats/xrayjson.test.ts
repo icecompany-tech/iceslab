@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildXrayJson } from './xrayjson.js';
+import { buildXrayJson, buildXrayJsonArray } from './xrayjson.js';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
 
 const xrayEp: SubscriptionEndpoint = {
@@ -14,6 +14,13 @@ const xrayEp: SubscriptionEndpoint = {
   flow: 'xtls-rprx-vision',
   fingerprint: 'chrome',
   uri: 'vless://...',
+};
+
+const xrayEp2: SubscriptionEndpoint = {
+  ...xrayEp,
+  nodeName: 'us-2',
+  host: 'n2.example.com',
+  uri: 'vless://...2',
 };
 
 const hysteriaEp: SubscriptionEndpoint = {
@@ -463,5 +470,55 @@ describe('buildXrayJson', () => {
       );
       expect(cfg.routing.domainStrategy).toBe('AsIs');
     });
+  });
+});
+
+// T1 - A1 array format. The migration blocker: Happ reads the single-config
+// buildXrayJson as ONE server; this array is N standalone configs it reads as N
+// servers. buildXrayJson must stay untouched (still needed for the balancer).
+describe('buildXrayJsonArray (T1)', () => {
+  it('produces a top-level JSON array with a trailing newline', () => {
+    const out = buildXrayJsonArray([xrayEp, xrayEp2]);
+    expect(out.endsWith('\n')).toBe(true);
+    const arr = parse(out);
+    expect(Array.isArray(arr)).toBe(true);
+  });
+
+  it('emits one standalone config per xray endpoint', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2]));
+    expect(arr).toHaveLength(2);
+    expect(arr[0].remarks).toBe('eu-1');
+    expect(arr[1].remarks).toBe('us-2');
+  });
+
+  it('each element is a full config: own socks inbound + proxy/direct/block outbounds', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp]));
+    const cfg = arr[0];
+    expect(cfg.inbounds).toHaveLength(1);
+    expect(cfg.inbounds[0].protocol).toBe('socks');
+    expect(cfg.inbounds[0].port).toBe(10808);
+    const tags = cfg.outbounds.map((o: any) => o.tag);
+    expect(tags).toEqual(['eu-1-xray', 'direct', 'block']);
+  });
+
+  it('per-config routing: bittorrent -> direct, catch-all -> that proxy', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2]));
+    // config[1] routes to ITS OWN proxy, not the first one.
+    const rules = arr[1].routing.rules;
+    expect(rules[0]).toEqual({ type: 'field', protocol: ['bittorrent'], outboundTag: 'direct' });
+    expect(rules[1]).toEqual({ type: 'field', network: 'tcp,udp', outboundTag: 'us-2-xray' });
+  });
+
+  it('reuses buildProxyOutbound: the proxy carries REALITY + the endpoint uuid', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp]));
+    const v = arr[0].outbounds.find((o: any) => o.protocol === 'vless');
+    expect(v.streamSettings.security).toBe('reality');
+    expect(v.streamSettings.realitySettings.serverName).toBe('www.cloudflare.com');
+    expect(v.settings.vnext[0].users[0].id).toBe('11111111-2222-3333-4444-555555555555');
+  });
+
+  it('ignores non-xray endpoints (xray-only format)', () => {
+    expect(parse(buildXrayJsonArray([hysteriaEp]))).toEqual([]);
+    expect(parse(buildXrayJsonArray([hysteriaEp, xrayEp]))).toHaveLength(1);
   });
 });
