@@ -164,6 +164,17 @@ const CN_SPLIT_DNS: Record<string, unknown> = {
   ],
 };
 
+// Preset selectors, shared by the single-config builder and the array (T2) so
+// both pick the same split rules / DNS from one place.
+function splitRulesFor(
+  preset: RoutingPresetId,
+): ReadonlyArray<Record<string, unknown>> | null {
+  return preset === 'ru-split' ? RU_SPLIT_RULES : preset === 'cn-split' ? CN_SPLIT_RULES : null;
+}
+function splitDnsFor(preset: RoutingPresetId): Record<string, unknown> | null {
+  return preset === 'ru-split' ? RU_SPLIT_DNS : preset === 'cn-split' ? CN_SPLIT_DNS : null;
+}
+
 /**
  * Build one xray proxy outbound from an endpoint. Extracted from buildXrayJson
  * (T1) so the single-config builder and buildXrayJsonArray emit byte-identical
@@ -275,18 +286,8 @@ export function buildXrayJson(
   // split-DNS block; proxy-all leaves both null so the output stays
   // byte-identical to pre-R1 builds.
   const preset = opts.routingPreset ?? 'proxy-all';
-  const splitRules =
-    preset === 'ru-split'
-      ? RU_SPLIT_RULES
-      : preset === 'cn-split'
-        ? CN_SPLIT_RULES
-        : null;
-  const splitDns =
-    preset === 'ru-split'
-      ? RU_SPLIT_DNS
-      : preset === 'cn-split'
-        ? CN_SPLIT_DNS
-        : null;
+  const splitRules = splitRulesFor(preset);
+  const splitDns = splitDnsFor(preset);
 
   // TLS-fragment - the fragment outbound's tag must not collide with any proxy
   // (`${nodeName}-xray`), `direct`, or `block` tag, and must exactly equal the
@@ -399,28 +400,75 @@ export function buildXrayJson(
 }
 
 /**
- * T1 - A1 array format. A top-level JSON array of standalone xray configs, one
- * per xray endpoint, each with its own `remarks` (server name), SOCKS inbound,
- * outbounds (its proxy + direct + block) and per-config routing (bittorrent ->
- * direct, everything else -> that proxy). This is what Happ / V2RayTun parse as
- * N separate servers; the single-config buildXrayJson (one config, N outbounds)
- * they read as one server, which is the migration blocker this closes.
+ * A1 array format (T1 skeleton + T2 routing). A top-level JSON array of
+ * standalone xray configs, one per xray endpoint, each with its own `remarks`
+ * (server name), SOCKS inbound, outbounds (its proxy + direct + block) and
+ * per-config routing. This is what Happ / V2RayTun parse as N separate servers;
+ * the single-config buildXrayJson (one config, N outbounds) they read as one
+ * server, which is the migration blocker this closes.
  *
- * T1 is the skeleton. Routing-preset passthrough, custom rules and TLS-fragment
- * per config land in T2 (hence `opts` is reserved but unused here).
- * buildXrayJson stays untouched, the balancer bundle still needs it.
+ * T2: each config carries the SAME routing surface the single-config builder
+ * does (custom rules, custom domain lists, split preset + split DNS, TLS-
+ * fragment), but every "proxy" target is THIS config's own proxy rather than a
+ * shared first-outbound. buildXrayJson stays untouched, the balancer bundle
+ * still needs it.
  */
 export function buildXrayJsonArray(
   endpoints: SubscriptionEndpoint[],
-  _opts: XrayJsonBuildOpts = {},
+  opts: XrayJsonBuildOpts = {},
 ): string {
   const xrayEps = endpoints.filter((e) => e.protocol === 'xray');
+  const preset = opts.routingPreset ?? 'proxy-all';
+  const splitRules = splitRulesFor(preset);
+  const splitDns = splitDnsFor(preset);
+  const tlsFragment = opts.tlsFragment === true;
+  const cdl = opts.customDomainLists;
+
   const configs = xrayEps.map((e) => {
     const tag = `${e.nodeName}-xray`;
-    const proxy = buildProxyOutbound(e, false, 'fragment');
+    // Proxy tags always end in `-xray`, so `fragment` can never collide with one
+    // here (unlike the single-config builder, which shares one namespace across
+    // N proxies and has to guard the tag).
+    const fragmentTag = 'fragment';
+    const proxy = buildProxyOutbound(e, tlsFragment, fragmentTag);
+
+    const outbounds: Record<string, unknown>[] = [
+      proxy,
+      { tag: 'direct', protocol: 'freedom' },
+      { tag: 'block', protocol: 'blackhole' },
+    ];
+    if (tlsFragment) {
+      outbounds.push({
+        tag: fragmentTag,
+        protocol: 'freedom',
+        settings: { fragment: { ...TLS_FRAGMENT_SETTINGS } },
+      });
+    }
+
+    // R3 custom domain lists, this config's proxy is the only proxy target.
+    const customDomainRules: Record<string, unknown>[] = cdl
+      ? [
+          ...(cdl.block.length ? [{ type: 'field', domain: cdl.block, outboundTag: 'block' }] : []),
+          ...(cdl.direct.length ? [{ type: 'field', domain: cdl.direct, outboundTag: 'direct' }] : []),
+          ...(cdl.proxy.length ? [{ type: 'field', domain: cdl.proxy, outboundTag: tag }] : []),
+        ]
+      : [];
+
+    const rules: Record<string, unknown>[] = [
+      // Precedence mirrors buildXrayJson: raw custom rules, then domain lists,
+      // then the split preset. Then the per-config contract (эталон Remnawave):
+      // torrent off the tunnel, everything else through this proxy.
+      ...(opts.customRules ?? []),
+      ...customDomainRules,
+      ...(splitRules ?? []),
+      { type: 'field', protocol: ['bittorrent'], outboundTag: 'direct' },
+      { type: 'field', network: 'tcp,udp', outboundTag: tag },
+    ];
+
     return {
       remarks: e.nodeName,
       log: { loglevel: 'warning' },
+      ...(splitDns ? { dns: splitDns } : {}),
       inbounds: [
         {
           tag: 'socks-in',
@@ -430,19 +478,10 @@ export function buildXrayJsonArray(
           settings: { auth: 'noauth', udp: true },
         },
       ],
-      outbounds: [
-        proxy,
-        { tag: 'direct', protocol: 'freedom' },
-        { tag: 'block', protocol: 'blackhole' },
-      ],
+      outbounds,
       routing: {
-        domainStrategy: 'AsIs',
-        // Per-config routing is part of the contract (эталон Remnawave): torrent
-        // goes direct (off the tunnel), everything else through this proxy.
-        rules: [
-          { type: 'field', protocol: ['bittorrent'], outboundTag: 'direct' },
-          { type: 'field', network: 'tcp,udp', outboundTag: tag },
-        ],
+        domainStrategy: splitRules ? 'IPIfNonMatch' : 'AsIs',
+        rules,
       },
     };
   });

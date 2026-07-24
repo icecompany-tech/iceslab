@@ -522,3 +522,78 @@ describe('buildXrayJsonArray (T1)', () => {
     expect(parse(buildXrayJsonArray([hysteriaEp, xrayEp]))).toHaveLength(1);
   });
 });
+
+// T2 - the array carries the same routing surface as the single-config builder,
+// but every proxy target is THIS config's own proxy.
+describe('buildXrayJsonArray routing (T2)', () => {
+  it('applies the ru-split preset per config: split rules, split DNS, IPIfNonMatch', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2], { routingPreset: 'ru-split' }));
+    for (const [i, cfg] of arr.entries()) {
+      const ownTag = i === 0 ? 'eu-1-xray' : 'us-2-xray';
+      expect(cfg.routing.domainStrategy).toBe('IPIfNonMatch');
+      expect(cfg.dns.servers[0].address).toBe('77.88.8.8');
+      const rules = cfg.routing.rules;
+      // block/direct split rules present, then bittorrent, then catch-all to OWN proxy.
+      expect(rules[0].domain).toEqual(['geosite:category-ads-all']);
+      expect(rules[rules.length - 1]).toEqual({
+        type: 'field',
+        network: 'tcp,udp',
+        outboundTag: ownTag,
+      });
+    }
+  });
+
+  it('proxy-all: no split DNS, AsIs, just bittorrent + catch-all', () => {
+    const cfg = parse(buildXrayJsonArray([xrayEp]))[0];
+    expect(cfg.dns).toBeUndefined();
+    expect(cfg.routing.domainStrategy).toBe('AsIs');
+    expect(cfg.routing.rules).toHaveLength(2);
+  });
+
+  it('custom domain lists target THIS config proxy, not a shared first', () => {
+    const arr = parse(
+      buildXrayJsonArray([xrayEp, xrayEp2], {
+        customDomainLists: { block: [], direct: [], proxy: ['youtube.com'] },
+      }),
+    );
+    // config[1]'s proxy rule points at us-2-xray, not eu-1-xray.
+    const proxyRule = arr[1].routing.rules.find((r: any) => r.domain?.includes('youtube.com'));
+    expect(proxyRule.outboundTag).toBe('us-2-xray');
+  });
+
+  it('prepends raw customRules ahead of everything per config', () => {
+    const custom = [{ type: 'field', domain: ['my.corp'], outboundTag: 'direct' }];
+    const cfg = parse(buildXrayJsonArray([xrayEp], { customRules: custom }))[0];
+    expect(cfg.routing.rules[0]).toEqual(custom[0]);
+  });
+
+  it('tlsFragment: each config gets its own fragment outbound + proxy dials through it', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2], { tlsFragment: true }));
+    for (const cfg of arr) {
+      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      expect(frag).toBeDefined();
+      expect(frag.settings.fragment).toEqual({
+        packets: 'tlshello',
+        length: '100-200',
+        interval: '10-20',
+      });
+      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      expect(v.streamSettings.sockopt.dialerProxy).toBe('fragment');
+    }
+  });
+
+  it('carries the endpoint transport into the array proxy (xhttp)', () => {
+    const xhttpEp: SubscriptionEndpoint = {
+      ...xrayEp,
+      network: 'xhttp',
+      path: '/dl',
+      hostHeader: 'cdn.example.com',
+    };
+    const v = parse(buildXrayJsonArray([xhttpEp]))[0].outbounds.find(
+      (o: any) => o.protocol === 'vless',
+    );
+    expect(v.streamSettings.network).toBe('xhttp');
+    expect(v.streamSettings.xhttpSettings.path).toBe('/dl');
+    expect(v.streamSettings.xhttpSettings.mode).toBe('auto');
+  });
+});
