@@ -6,7 +6,7 @@ import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
 import { buildWgQuickConf } from './formats/wgconf.js';
 import { buildAwgVpnLink } from './formats/amneziavpn.js';
-import { buildXrayJson } from './formats/xrayjson.js';
+import { buildXrayJson, buildXrayJsonArray } from './formats/xrayjson.js';
 import { buildOutlineJson } from './formats/outline.js';
 import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
@@ -32,8 +32,8 @@ const TokenParamSchema = z.object({
 });
 
 const FormatEnum = z.enum([
-  'plain', 'json', 'clash', 'singbox', 'wgconf', 'amneziavpn', 'xrayjson', 'xkeen', 'outline',
-  'surge', 'quantumultx', 'loon',
+  'plain', 'json', 'clash', 'singbox', 'wgconf', 'amneziavpn', 'xrayjson', 'xrayjson-array',
+  'xkeen', 'outline', 'surge', 'quantumultx', 'loon',
 ]);
 type Format = z.infer<typeof FormatEnum>;
 
@@ -544,6 +544,15 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           return reply
             .type('application/json')
             .send(buildXrayJson(filtered, { bundle: xjBundle, routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
+        }
+        case 'xrayjson-array': {
+          // A1: top-level JSON array of standalone xray configs (one per
+          // endpoint), the shape Happ / V2RayTun parse as N separate servers.
+          // Carries the same routing surface as single-config xrayjson, minus
+          // `bundle` (no balancer: the client picks a server, not an outbound).
+          return reply
+            .type('application/json')
+            .send(buildXrayJsonArray(filtered, { routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
         }
         case 'xkeen': {
           // XKeen (xray-core on Keenetic routers): outbounds + routing +

@@ -566,7 +566,7 @@ export async function getNodeExposure(id: string): Promise<PortExposureResult> {
 // ───── Subscription Response Rules (SRR) ─────
 
 export type SubscriptionFormat =
-  | 'plain' | 'json' | 'clash' | 'singbox' | 'wgconf' | 'xrayjson' | 'xkeen'
+  | 'plain' | 'json' | 'clash' | 'singbox' | 'wgconf' | 'xrayjson' | 'xrayjson-array' | 'xkeen'
   | 'outline' | 'surge' | 'quantumultx' | 'loon';
 
 export interface SrrRule {

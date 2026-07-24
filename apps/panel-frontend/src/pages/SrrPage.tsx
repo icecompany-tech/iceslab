@@ -40,6 +40,7 @@ const FORMAT_COLORS: Record<string, string> = {
   singbox: 'blue',
   wgconf: 'teal',
   xrayjson: 'violet',
+  'xrayjson-array': 'violet',
   xkeen: 'grape',
   outline: 'cyan',
   surge: 'orange',

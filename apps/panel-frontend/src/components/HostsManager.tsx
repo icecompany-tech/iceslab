@@ -58,6 +58,7 @@ const FORMAT_OPTIONS = [
   { value: 'clash', label: 'Clash YAML' },
   { value: 'singbox', label: 'Sing-box JSON' },
   { value: 'xrayjson', label: 'Xray JSON' },
+  { value: 'xrayjson-array', label: 'Xray JSON array' },
   { value: 'xkeen', label: 'XKeen (router)' },
   { value: 'outline', label: 'Outline (SIP008)' },
   { value: 'surge', label: 'Surge' },

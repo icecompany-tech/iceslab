@@ -450,6 +450,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     { label: 'Clash', fmt: 'clash' },
     { label: 'Sing-box', fmt: 'singbox' },
     { label: 'Xray JSON', fmt: 'xrayjson' },
+    { label: 'Xray JSON array', fmt: 'xrayjson-array' },
     { label: 'Base64', fmt: 'plain' },
   ];
 
