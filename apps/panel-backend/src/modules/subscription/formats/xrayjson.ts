@@ -275,6 +275,44 @@ function buildProxyOutbound(
   };
 }
 
+/**
+ * Build a hysteria2 outbound for the array format, in xray-core's documented
+ * client shape (protocol "hysteria", settings.version 2 + address/port,
+ * streamSettings.network "hysteria" + hysteriaSettings).
+ *
+ * FIELD-PENDING, do not treat as verified. Two open risks:
+ *   1. xray-core's hy2 outbound has NO Salamander obfs field. Our RU nodes set
+ *      obfsPassword (bare QUIC is DPI-throttled in RU), so on an obfs node this
+ *      outbound will NOT connect via xray-core. It only works on non-obfs hy2
+ *      nodes. The Remnawave эталон likely routes protocol:"hysteria" through
+ *      Happ's NATIVE hy2 core (not xray-core), which does support obfs, so the
+ *      real working shape must be confirmed against that эталон + a live hy2
+ *      node before tester sign-off.
+ *   2. xray-core has open bugs on the hy2 outbound (XTLS/Xray-core#5619).
+ * Isolated here so the exact shape is one edit once the эталон lands.
+ */
+function buildHysteriaOutbound(e: SubscriptionEndpoint, tag: string): Record<string, unknown> {
+  if (e.protocol !== 'hysteria') throw new Error('unreachable'); // narrowing
+  const hysteriaSettings: Record<string, unknown> = { version: 2, auth: e.password };
+  // Brutal CC bandwidth. Xray wants a unit-suffixed string ("100mbps").
+  if (typeof e.upMbps === 'number') hysteriaSettings.up = `${e.upMbps}mbps`;
+  if (typeof e.downMbps === 'number') hysteriaSettings.down = `${e.downMbps}mbps`;
+  // NB: obfsPassword is intentionally NOT emitted, xray-core hy2 outbound has no
+  // field for it. See the FIELD-PENDING note above: an obfs node needs Happ's
+  // native hy2 core, and the эталон is the source of truth for that shape.
+  return {
+    tag,
+    protocol: 'hysteria',
+    settings: { version: 2, address: e.host, port: e.port },
+    streamSettings: {
+      network: 'hysteria',
+      security: 'tls',
+      tlsSettings: { serverName: e.host },
+      hysteriaSettings,
+    },
+  };
+}
+
 export function buildXrayJson(
   endpoints: SubscriptionEndpoint[],
   opts: XrayJsonBuildOpts = {},
@@ -400,10 +438,11 @@ export function buildXrayJson(
 }
 
 /**
- * A1 array format (T1 skeleton + T2 routing). A top-level JSON array of
- * standalone xray configs, one per xray endpoint, each with its own `remarks`
- * (server name), SOCKS inbound, outbounds (its proxy + direct + block) and
- * per-config routing. This is what Happ / V2RayTun parse as N separate servers;
+ * A1 array format (T1 skeleton + T2 routing + hy2). A top-level JSON array of
+ * standalone configs, one per xray OR hysteria endpoint, each with its own
+ * `remarks` (server name), SOCKS inbound, outbounds (its proxy + direct + block)
+ * and per-config routing. This is what Happ / V2RayTun parse as N separate
+ * servers;
  * the single-config buildXrayJson (one config, N outbounds) they read as one
  * server, which is the migration blocker this closes.
  *
@@ -417,27 +456,36 @@ export function buildXrayJsonArray(
   endpoints: SubscriptionEndpoint[],
   opts: XrayJsonBuildOpts = {},
 ): string {
-  const xrayEps = endpoints.filter((e) => e.protocol === 'xray');
+  // xray endpoints AND hysteria endpoints, in endpoint order so the array order
+  // matches the эталон. hy2 is FIELD-PENDING (see buildHysteriaOutbound). Other
+  // protocols are skipped, this is an xray/hy2 surface.
+  const supported = endpoints.filter(
+    (e) => e.protocol === 'xray' || e.protocol === 'hysteria',
+  );
   const preset = opts.routingPreset ?? 'proxy-all';
   const splitRules = splitRulesFor(preset);
   const splitDns = splitDnsFor(preset);
   const tlsFragment = opts.tlsFragment === true;
   const cdl = opts.customDomainLists;
 
-  const configs = xrayEps.map((e) => {
-    const tag = `${e.nodeName}-xray`;
-    // Proxy tags always end in `-xray`, so `fragment` can never collide with one
-    // here (unlike the single-config builder, which shares one namespace across
-    // N proxies and has to guard the tag).
+  const configs = supported.map((e) => {
+    // Per-protocol primary outbound + tag. TLS-fragment is xray-only (it splits
+    // the TCP ClientHello; hy2 rides QUIC, nothing to fragment). Tags carry a
+    // protocol suffix so `fragment` can never collide.
+    const isXray = e.protocol === 'xray';
+    const tag = isXray ? `${e.nodeName}-xray` : `${e.nodeName}-hysteria`;
     const fragmentTag = 'fragment';
-    const proxy = buildProxyOutbound(e, tlsFragment, fragmentTag);
+    const applyFragment = tlsFragment && isXray;
+    const primary = isXray
+      ? buildProxyOutbound(e, applyFragment, fragmentTag)
+      : buildHysteriaOutbound(e, tag);
 
     const outbounds: Record<string, unknown>[] = [
-      proxy,
+      primary,
       { tag: 'direct', protocol: 'freedom' },
       { tag: 'block', protocol: 'blackhole' },
     ];
-    if (tlsFragment) {
+    if (applyFragment) {
       outbounds.push({
         tag: fragmentTag,
         protocol: 'freedom',
@@ -445,7 +493,7 @@ export function buildXrayJsonArray(
       });
     }
 
-    // R3 custom domain lists, this config's proxy is the only proxy target.
+    // R3 custom domain lists, this config's own outbound is the only proxy target.
     const customDomainRules: Record<string, unknown>[] = cdl
       ? [
           ...(cdl.block.length ? [{ type: 'field', domain: cdl.block, outboundTag: 'block' }] : []),

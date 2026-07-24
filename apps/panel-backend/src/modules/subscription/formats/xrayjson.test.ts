@@ -23,6 +23,30 @@ const xrayEp2: SubscriptionEndpoint = {
   uri: 'vless://...2',
 };
 
+const hy2Ep: SubscriptionEndpoint = {
+  protocol: 'hysteria',
+  nodeName: 'hy-de',
+  host: 'hy.example.com',
+  port: 443,
+  password: 'hy-secret',
+  obfsPassword: 'salt',
+  upMbps: 100,
+  downMbps: 300,
+  uri: 'hysteria2://...',
+};
+
+// A protocol the array does NOT emit (not xray, not hysteria), to prove the
+// filter still skips everything else.
+const naiveEp: SubscriptionEndpoint = {
+  protocol: 'naive',
+  nodeName: 'nv-1',
+  host: 'nv.example.com',
+  port: 443,
+  username: 'u',
+  password: 'p',
+  uri: 'naive+https://...',
+};
+
 const hysteriaEp: SubscriptionEndpoint = {
   protocol: 'hysteria',
   nodeName: 'eu-1',
@@ -517,9 +541,56 @@ describe('buildXrayJsonArray (T1)', () => {
     expect(v.settings.vnext[0].users[0].id).toBe('11111111-2222-3333-4444-555555555555');
   });
 
-  it('ignores non-xray endpoints (xray-only format)', () => {
-    expect(parse(buildXrayJsonArray([hysteriaEp]))).toEqual([]);
-    expect(parse(buildXrayJsonArray([hysteriaEp, xrayEp]))).toHaveLength(1);
+  it('skips protocols the array does not emit (not xray, not hysteria)', () => {
+    expect(parse(buildXrayJsonArray([naiveEp]))).toEqual([]);
+    expect(parse(buildXrayJsonArray([naiveEp, xrayEp]))).toHaveLength(1);
+  });
+});
+
+// hy2 in the array (FIELD-PENDING, see buildHysteriaOutbound). Structure is
+// tested here; the exact hysteriaSettings shape is verified against the эталон
+// and a live hy2 node before sign-off.
+describe('buildXrayJsonArray hysteria (hy2)', () => {
+  it('emits a hysteria config in xray-core outbound shape', () => {
+    const cfg = parse(buildXrayJsonArray([hy2Ep]))[0];
+    expect(cfg.remarks).toBe('hy-de');
+    const out = cfg.outbounds.find((o: any) => o.protocol === 'hysteria');
+    expect(out.tag).toBe('hy-de-hysteria');
+    expect(out.settings).toEqual({ version: 2, address: 'hy.example.com', port: 443 });
+    expect(out.streamSettings.network).toBe('hysteria');
+    expect(out.streamSettings.hysteriaSettings.version).toBe(2);
+    expect(out.streamSettings.hysteriaSettings.auth).toBe('hy-secret');
+  });
+
+  it('maps Brutal bandwidth to unit-suffixed up/down', () => {
+    const out = parse(buildXrayJsonArray([hy2Ep]))[0].outbounds.find(
+      (o: any) => o.protocol === 'hysteria',
+    );
+    expect(out.streamSettings.hysteriaSettings.up).toBe('100mbps');
+    expect(out.streamSettings.hysteriaSettings.down).toBe('300mbps');
+  });
+
+  it('does NOT emit obfs (xray-core hy2 outbound has no field for it)', () => {
+    // Documented limitation: an obfs node needs Happ native hy2 core, not this.
+    const out = JSON.stringify(buildXrayJsonArray([hy2Ep]));
+    expect(out).not.toContain('salt');
+    expect(out.toLowerCase()).not.toContain('obfs');
+  });
+
+  it('catch-all routes to the hy2 tag', () => {
+    const rules = parse(buildXrayJsonArray([hy2Ep]))[0].routing.rules;
+    expect(rules[rules.length - 1]).toEqual({
+      type: 'field',
+      network: 'tcp,udp',
+      outboundTag: 'hy-de-hysteria',
+    });
+  });
+
+  it('mixed xray + hy2 keeps endpoint order, one config each', () => {
+    const arr = parse(buildXrayJsonArray([xrayEp, hy2Ep]));
+    expect(arr.map((c: any) => c.remarks)).toEqual(['eu-1', 'hy-de']);
+    expect(arr[0].outbounds.find((o: any) => o.protocol === 'vless')).toBeDefined();
+    expect(arr[1].outbounds.find((o: any) => o.protocol === 'hysteria')).toBeDefined();
   });
 });
 
