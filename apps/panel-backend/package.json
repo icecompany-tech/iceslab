@@ -13,6 +13,8 @@
     "db:migrate": "node ./node_modules/prisma/build/index.js migrate deploy",
     "demo:metrics": "tsx --env-file=../../.env scripts/demo-metrics.ts",
     "seed:demo": "tsx --env-file=../../.env scripts/seed-demo.ts",
+    "stress:users": "tsx scripts/stress-users.ts",
+    "reset:admin": "tsx scripts/reset-admin.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests"
