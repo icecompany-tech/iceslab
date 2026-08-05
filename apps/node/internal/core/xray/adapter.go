@@ -166,7 +166,18 @@ func (a *Adapter) AddUser(user core.User) error {
 		return nil
 	}
 	a.users[user.UserID] = desired
+	// Dormant guard: with no REALITY key yet (ApplyInbound not received from the
+	// panel) a full config render fails with "RealityPrivateKey is required".
+	// The user is already cached above and will be flushed by the first
+	// regenerateAndRestart that ApplyInbound triggers once the key arrives, so
+	// defer instead of erroring. Mirrors Start(), which no-ops under the same
+	// condition. Without this, backfill retries render on every poll and spam
+	// WARN while the inbound stays unconfigured.
+	dormant := a.cfg.Inbound.RealityPrivateKey == ""
 	a.mu.Unlock()
+	if dormant {
+		return nil
+	}
 	if a.liveUpdateUser(context.Background(), liveAdd, desired) {
 		return nil
 	}
@@ -183,7 +194,14 @@ func (a *Adapter) RemoveUser(userID string) error {
 		return nil
 	}
 	delete(a.users, userID)
+	// Dormant guard: same rationale as AddUser. The cache is already updated;
+	// with no REALITY key there is no running xray to update and a render would
+	// fail, so defer to the next ApplyInbound-driven regenerateAndRestart.
+	dormant := a.cfg.Inbound.RealityPrivateKey == ""
 	a.mu.Unlock()
+	if dormant {
+		return nil
+	}
 	if a.liveUpdateUser(context.Background(), liveRemove, removed) {
 		return nil
 	}
