@@ -19,8 +19,8 @@ importers:
   apps/panel-backend:
     dependencies:
       '@bull-board/api':
-        specifier: ^7.2.1
-        version: 7.2.1(@bull-board/ui@7.2.1)
+        specifier: ^8.6.0
+        version: 8.6.0(@bull-board/ui@8.6.0(bullmq@5.76.5))(bullmq@5.76.5)
       '@bull-board/fastify':
         specifier: ^7.2.1
         version: 7.2.1
@@ -284,11 +284,26 @@ packages:
     peerDependencies:
       '@bull-board/ui': 7.2.1
 
+  '@bull-board/api@8.6.0':
+    resolution: {integrity: sha512-tJLkYszUJhvDzTexLT+6/OEUYCWrR5QBKXk+SNlNsxHw8WClSRFEirXMrKwrei3LlMVxPV5lvbBOC7LNNymibQ==}
+    peerDependencies:
+      '@bull-board/ui': 8.6.0
+      bull: ^4.16.5
+      bullmq: ^5.79.2 || ^6.0.0
+    peerDependenciesMeta:
+      bull:
+        optional: true
+      bullmq:
+        optional: true
+
   '@bull-board/fastify@7.2.1':
     resolution: {integrity: sha512-OzJRqMArt9n1SoK+bi/+uOjqYpte5VUMh9+1R0MlTG+wRm7pe/Y5mqNsl5JfGFaElPLDsxyJCLQqDH/25eRlaQ==}
 
   '@bull-board/ui@7.2.1':
     resolution: {integrity: sha512-O4ykrXrl2UJNHnhJrCvJxrw1ar+DlUBgyZUeZ8Ci+Ne5Wbq6rBv1gfpQH54/eu3IFbLso0S/kjc6WUGb2HPqZw==}
+
+  '@bull-board/ui@8.6.0':
+    resolution: {integrity: sha512-Qb/HYNU2JhRYKoyeJhXgeu1ZL4VK5RANmLC/cpzbtZPz5b9b260d0J0Af0L0zGdP6ORYg2XpPQKwrIy7n96AwQ==}
 
   '@electric-sql/pglite-socket@0.1.1':
     resolution: {integrity: sha512-p2hoXw3Z3LQHwTeikdZNsFBOvXGqKY2hk51BBw+8NKND8eoH+8LFOtW9Z8CQKmTJ2qqGYu82ipqiyFZOTTXNfw==}
@@ -1316,6 +1331,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2937,6 +2953,13 @@ snapshots:
       '@bull-board/ui': 7.2.1
       redis-info: 3.1.0
 
+  '@bull-board/api@8.6.0(@bull-board/ui@8.6.0(bullmq@5.76.5))(bullmq@5.76.5)':
+    dependencies:
+      '@bull-board/ui': 8.6.0(bullmq@5.76.5)
+      redis-info: 3.1.0
+    optionalDependencies:
+      bullmq: 5.76.5
+
   '@bull-board/fastify@7.2.1':
     dependencies:
       '@bull-board/api': 7.2.1(@bull-board/ui@7.2.1)
@@ -2948,6 +2971,13 @@ snapshots:
   '@bull-board/ui@7.2.1':
     dependencies:
       '@bull-board/api': 7.2.1(@bull-board/ui@7.2.1)
+
+  '@bull-board/ui@8.6.0(bullmq@5.76.5)':
+    dependencies:
+      '@bull-board/api': 8.6.0(@bull-board/ui@8.6.0(bullmq@5.76.5))(bullmq@5.76.5)
+    transitivePeerDependencies:
+      - bull
+      - bullmq
 
   '@electric-sql/pglite-socket@0.1.1(@electric-sql/pglite@0.4.1)':
     dependencies:
