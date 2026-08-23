@@ -526,8 +526,13 @@ func renderMultiConfig(
 	}
 
 	doc := map[string]any{
+		// "warning", not "info": at info level xray logs every connection
+		// (received request / dialing / accepted) to stdout, which journald
+		// mirrors into /var/log/syslog — on a busy cascade exit that fills the
+		// disk with GBs of per-connection noise in a couple of days (one node
+		// hit 100%). Warnings and errors still surface; the flood does not.
 		"log": map[string]any{
-			"loglevel": "info",
+			"loglevel": "warning",
 		},
 		"stats": map[string]any{},
 		"api": map[string]any{
