@@ -16,9 +16,12 @@ pnpm --filter @iceslab/panel-frontend dev    # SPA on :5173
 
 ## Branches
 
-- `main` is the trunk: what installer scripts pull and the daily working branch.
-  Tagged releases (`v0.1.0`, `v0.1.1`, ...) are cut straight from it.
-- Fork, branch off `main`, and open your PR back into `main`.
+- `main` is the release branch: what the installer scripts pull, and where the
+  tags (`v0.1.0`, `v0.1.1`, ...) are cut from. Keep it deployable.
+- `develop` is where work lands first and gets tested. It publishes rolling
+  images to GHCR under the `develop` tag, which is what test servers pull.
+- Fork, branch off `develop`, and open your PR back into `develop`. A fix for a
+  released bug can target `main` directly; say so in the PR.
 
 ## Before opening a PR
 
