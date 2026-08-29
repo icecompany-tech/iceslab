@@ -367,6 +367,16 @@ export function collapseCascadeLines(
 ): void {
   // An endpoint is identified by where it actually points: two hosts on one node
   // are two different ways in, and each is a candidate on its own.
+  //
+  // The label is part of that string, and since 2026-08-30 it is the label AFTER
+  // disambiguation (the caller runs that first, and must). For entries that used
+  // to read alike the key therefore changed, and the rendezvous order below is a
+  // function of the key, so which entry carries which line moved once for those
+  // subscribers - on a router a move drops every live connection. It happens on
+  // the first refresh after the change and not again. Keying this on the
+  // endpoint identity instead, which no rename can reach, is tracked separately
+  // (cascade-entry-key-label-af26): that reshuffles EVERYONE, so it waits for a
+  // window where a reshuffle is acceptable.
   const keyOf = (e: SubscriptionEndpoint): string =>
     `${e.nodeName}|${e.host}|${e.port}|${e.protocol === 'xray' ? (e.network ?? '') : ''}`;
 
@@ -1249,10 +1259,13 @@ export async function generateSubscription(
   // which the numbering never did.
   disambiguateEndpointLabels(endpoints);
 
-  // One line per cascade profile, dealt across the pool's entries. Runs BEFORE
-  // the labels are told apart: the duplicates this removes are exactly the rows
-  // that would otherwise be handed a transport suffix to distinguish two rows
-  // that should have been one.
+  // One line per cascade profile, dealt across the pool's entries. Runs AFTER
+  // the labels above, and has to: it identifies an entry by a string that
+  // includes the label, so two entries still reading alike would land in one
+  // slot, the deal would filter the last of them and leave the other holding
+  // every line - twice the rows, which is the thing this call exists to remove.
+  // The price of that order is cosmetic: an entry can keep a "· XHTTP" it
+  // earned against a sibling the collapse then drops.
   collapseCascadeLines(endpoints, user.id);
 
   // Same idea one level down: whatever cascade lines remain must still be
