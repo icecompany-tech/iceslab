@@ -327,7 +327,11 @@ describe('GET /sub/:token - multi-format (slice 21)', () => {
     const cfg = JSON.parse(res.body);
     expect(cfg.inbounds[0].protocol).toBe('socks');
     const v = cfg.outbounds.find((o: { protocol: string }) => o.protocol === 'vless');
-    expect(v.tag).toBe('eu-1-xray');
+    // The tag is the endpoint's identity, not its display name: it survives
+    // renaming the node, and it is what the catch-all rule points at.
+    expect(v.tag).toMatch(/^proxy-[0-9a-f]{8}$/);
+    const catchAll = cfg.routing.rules[cfg.routing.rules.length - 1];
+    expect(catchAll.outboundTag).toBe(v.tag);
     expect(v.streamSettings.network).toBe('raw');
   });
 

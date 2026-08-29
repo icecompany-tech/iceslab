@@ -47,9 +47,27 @@ describe('buildOutlineJson (SIP008)', () => {
     expect(cfg.servers).toEqual([]);
   });
 
-  it('uses hostId as the stable server id when present', () => {
-    const cfg = JSON.parse(buildOutlineJson([{ ...ssEp, hostId: 'host-123' }]));
-    expect(cfg.servers[0].id).toBe('host-123');
+  it('gives a server the same id after its node is renamed', () => {
+    // SIP008 clients match a polled server against the one they already hold by
+    // this id. Deriving it from the display name meant renaming a node dropped
+    // the old server and added a stranger.
+    const before = JSON.parse(buildOutlineJson([{ ...ssEp, hostId: 'host-123' }]));
+    const after = JSON.parse(
+      buildOutlineJson([{ ...ssEp, hostId: 'host-123', nodeName: '🇩🇪 Frankfurt' }]),
+    );
+    expect(before.servers[0].id).toBe('host-123');
+    expect(after.servers[0].id).toBe('host-123');
+  });
+
+  it('falls back to the endpoint identity, not to the name and a list index', () => {
+    const cfg = JSON.parse(
+      buildOutlineJson([
+        { ...ssEp, key: 'host-a' },
+        { ...ssEp, key: 'host-b', port: 8389 },
+      ]),
+    );
+    expect(cfg.servers[0].id).not.toBe(cfg.servers[1].id);
+    expect(cfg.servers[0].id).not.toContain('eu-1');
   });
 
   it('is valid JSON with a trailing newline', () => {

@@ -1,5 +1,6 @@
 import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { makeTagger } from '../endpoint-identity.js';
 
 /**
  * Clash YAML subscription formatter (targets Clash Meta / Mihomo, covers
@@ -236,8 +237,12 @@ export function buildClashYaml(
   const proxies: string[] = [];
   const proxyNames: string[] = [];
 
+  // A Clash proxy name is both the row a person taps and the string every
+  // proxy-group and rule points at, so it stays readable and is made unique
+  // instead of being replaced by an id. Same reasoning as the sing-box tag.
+  const nameOf = makeTagger();
   for (const e of endpoints) {
-    const name = `${e.nodeName}-${e.protocol}`;
+    const name = nameOf(e, `${e.nodeName}-${e.protocol}`);
     if (e.protocol === 'hysteria') {
       proxyNames.push(name);
       const lines = [

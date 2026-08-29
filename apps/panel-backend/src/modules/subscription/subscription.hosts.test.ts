@@ -119,6 +119,68 @@ async function serverNames(subToken: string): Promise<string[]> {
     .map((uri) => decodeURIComponent(uri.split('#')[1] ?? ''));
 }
 
+/** A second way into the SAME node: another transport, its own auto-created
+ *  "Default" host, which is the state an operator reaches by clicking Add. */
+async function addTransport(nodeId: string, name: string, network: string, port: number) {
+  const profile = JSON.parse(
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/profiles',
+        headers: auth(),
+        payload: {
+          name,
+          protocol: 'xray',
+          config: {
+            security: 'reality',
+            realityDest: 'www.microsoft.com:443',
+            realityServerNames: ['www.microsoft.com'],
+            realityPrivateKey: 'k'.repeat(43),
+            realityPublicKey: 'p'.repeat(43),
+            realityShortIds: ['0123abcd'],
+            network,
+          },
+        },
+      })
+    ).body,
+  );
+  await app.inject({
+    method: 'POST',
+    url: '/api/bindings',
+    headers: auth(),
+    payload: { profileId: profile.id, nodeId, port },
+  });
+  return profile;
+}
+
+describe('two unnamed ways into one node', () => {
+  /**
+   * The label is the host's remark or, for a host nobody named, the node's own
+   * name - so a second transport on one machine reads exactly like the first.
+   * The operator reported that on 2026-08-29, and the same string is what
+   * sing-box tags and Clash proxy names are built from, so the duplicate was
+   * also a duplicate identifier (audit A-020).
+   */
+  it('reads as two lines naming what differs, in the client and in the link', async () => {
+    const { profile, node, user, squad } = await seed();
+    const xhttp = await addTransport(node.id, 'sub-xhttp', 'xhttp', 8443);
+    const grpc = await addTransport(node.id, 'sub-grpc', 'grpc', 9443);
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/squads/${squad.id}`,
+      headers: auth(),
+      payload: { profileIds: [profile.id, xhttp.id, grpc.id] },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+
+    const names = await serverNames(user.subscriptionToken);
+    expect(names).toHaveLength(3);
+    expect(new Set(names).size).toBe(3);
+    expect(names.some((n) => n.includes('XHTTP'))).toBe(true);
+    expect(names.some((n) => n.includes('gRPC'))).toBe(true);
+  });
+});
+
 describe('subscription contents follow hosts', () => {
   it('serves the host, named after it rather than the node', async () => {
     const { user } = await seed();

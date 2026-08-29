@@ -57,6 +57,40 @@ export function hostFromAddress(address: string): string {
 }
 
 /**
+ * Put a different name on an already-built share link.
+ *
+ * The label a user reads is only final once the WHOLE list is known: two rows
+ * that read the same have to be told apart, and that cannot be decided while
+ * the first of them is being built. Every URI is built inside the per-binding
+ * loop, though, so until 2026-08-30 the plain list carried the name each row had
+ * before the list was looked at - the panel showed two distinguishable rows and
+ * the client showed two identical ones, which is precisely the shape the
+ * operator reported on 2026-08-29.
+ *
+ * Every scheme we emit carries the name in the `#fragment`, except vmess, where
+ * it is the `ps` field inside the base64 payload. Anything unparseable is
+ * returned untouched: a link with a stale name still works, a link mangled by a
+ * rewrite does not.
+ */
+export function withUriRemark(uri: string, remark: string): string {
+  if (!uri) return uri;
+  if (uri.startsWith('vmess://')) {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(uri.slice('vmess://'.length), 'base64').toString('utf-8'),
+      ) as Record<string, unknown>;
+      payload.ps = remark;
+      return `vmess://${Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64')}`;
+    } catch {
+      return uri;
+    }
+  }
+  const hash = uri.indexOf('#');
+  const base = hash === -1 ? uri : uri.slice(0, hash);
+  return `${base}#${encodeURIComponent(remark)}`;
+}
+
+/**
  * Universal subscription body: base64 of newline-separated URIs. Works with
  * every mainstream client (NekoRay, Hiddify, v2rayN, ...).
  */
@@ -83,6 +117,17 @@ interface SubscriptionEndpointBase {
    * looked like an identity was the label above, which is not one.
    */
   nodeId: string;
+  /**
+   * Stable identity of THIS endpoint, not of its node: the host row it is
+   * emitted from. Survives renaming the node, the host and the country, which
+   * the display label above does not. Formats derive their tags from it, see
+   * `endpoint-identity.ts`.
+   *
+   * Optional only so an endpoint written out by hand (a test, a preview) stays
+   * valid; `endpointKey` falls back to the tuple that identifies it in that
+   * case. The subscription service always sets it.
+   */
+  key?: string;
   /** Public host the client connects to (no port). */
   host: string;
   /** Public port the client connects to. */

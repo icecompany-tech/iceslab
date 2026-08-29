@@ -1,5 +1,6 @@
 import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { endpointTag, makeTagger } from '../endpoint-identity.js';
 
 /**
  * Xray-core client JSON subscription formatter.
@@ -185,9 +186,9 @@ function buildProxyOutbound(
   e: SubscriptionEndpoint,
   tlsFragment: boolean,
   fragmentTag: string,
+  tag: string,
 ): Record<string, unknown> {
   if (e.protocol !== 'xray') throw new Error('unreachable'); // narrowing
-  const tag = `${e.nodeName}-xray`;
   const sub = e.subprotocol ?? 'vless';
   const network = e.network ?? 'raw';
   // securityLayer: 'default' = REALITY, else 'tls' (own cert) / 'none' (plain).
@@ -327,25 +328,29 @@ export function buildXrayJson(
   const splitRules = splitRulesFor(preset);
   const splitDns = splitDnsFor(preset);
 
-  // TLS-fragment - the fragment outbound's tag must not collide with any proxy
-  // (`${nodeName}-xray`), `direct`, or `block` tag, and must exactly equal the
-  // dialerProxy value we stamp onto each proxy outbound. Prefer "fragment";
-  // fall back to "tls-fragment" if some emitted outbound already owns the
-  // "fragment" tag (defensive - keeps the guarantee even if the proxy tag
-  // scheme ever changes to not carry the `-xray` suffix).
+  // TLS-fragment - the fragment outbound's tag must not collide with any proxy,
+  // `direct`, or `block` tag, and must exactly equal the dialerProxy value we
+  // stamp onto each proxy outbound. Prefer "fragment"; fall back to
+  // "tls-fragment" if some emitted outbound already owns the "fragment" tag.
+  // Unreachable now that proxy tags are `proxy-<id>` rather than a node name an
+  // operator picks, and kept exactly for that reason: the guarantee should not
+  // rest on the current tag scheme.
   const tlsFragment = opts.tlsFragment === true && xrayEps.length > 0;
-  const reservedTags = new Set<string>(['direct', 'block']);
-  for (const e of xrayEps) {
-    if (e.protocol === 'xray') reservedTags.add(`${e.nodeName}-xray`);
-  }
+  // This is the one config where N proxies share a namespace, so it is the one
+  // place a duplicate tag can break the whole file. The tagger settles that
+  // before anything is built; identical ids mean two endpoints that are the same
+  // endpoint, which is a caller's mistake and not something to silently merge.
+  const tagOf = makeTagger();
+  const xrayTags = xrayEps.map((e) => tagOf(e, endpointTag(e)));
+  const reservedTags = new Set<string>(['direct', 'block', ...xrayTags]);
   const fragmentTag = reservedTags.has('fragment') ? 'tls-fragment' : 'fragment';
 
-  // T1: per-endpoint outbound now built by the shared buildProxyOutbound. Caller
-  // keeps the proxyTags bookkeeping (order and values unchanged, so the output
-  // stays byte-identical to the inline version).
-  const proxyOutbounds = xrayEps.map((e) => {
-    proxyTags.push(`${e.nodeName}-xray`);
-    return buildProxyOutbound(e, tlsFragment, fragmentTag);
+  // T1: per-endpoint outbound now built by the shared buildProxyOutbound. The
+  // caller owns the tag, so the rules below and the outbound they point at can
+  // only ever be given the same string.
+  const proxyOutbounds = xrayEps.map((e, i) => {
+    proxyTags.push(xrayTags[i]!);
+    return buildProxyOutbound(e, tlsFragment, fragmentTag, xrayTags[i]!);
   });
 
   // Slice 29 follow-up: when balancer is on AND we have ≥2 proxies, wrap
@@ -498,14 +503,15 @@ export function buildXrayJsonArray(
   // the node name normally, the exit name for an A4 route-profile expansion.
   const makeConfig = (e: SubscriptionEndpoint, remark: string) => {
     // Per-protocol primary outbound + tag. TLS-fragment is xray-only (it splits
-    // the TCP ClientHello; hy2 rides QUIC, nothing to fragment). Tags carry a
-    // protocol suffix so `fragment` can never collide.
+    // the TCP ClientHello; hy2 rides QUIC, nothing to fragment). The tag is the
+    // endpoint's own id, so it can collide with neither `fragment` nor a sibling
+    // config's tag.
     const isXray = e.protocol === 'xray';
-    const tag = isXray ? `${e.nodeName}-xray` : `${e.nodeName}-hysteria`;
+    const tag = endpointTag(e);
     const fragmentTag = 'fragment';
     const applyFragment = tlsFragment && isXray;
     const primary = isXray
-      ? buildProxyOutbound(e, applyFragment, fragmentTag)
+      ? buildProxyOutbound(e, applyFragment, fragmentTag, tag)
       : buildHysteriaOutbound(e, tag);
 
     const outbounds: Record<string, unknown>[] = [

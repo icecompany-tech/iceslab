@@ -1,5 +1,6 @@
 import type { RoutingPresetId } from '@iceslab/shared';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { makeTagger } from '../endpoint-identity.js';
 
 /**
  * Sing-box JSON subscription formatter (sing-box 1.10+).
@@ -167,8 +168,15 @@ export function buildSingboxJson(
         ? CN_SPLIT_RULE_SETS
         : null;
 
+  // A sing-box tag is what the selector shows and what a client remembers as
+  // "the proxy I picked", so it cannot become an opaque id the way an xray
+  // outbound tag can: it has to stay the readable name AND be unique. Labels are
+  // made unique for every format at once in disambiguateEndpointLabels; the
+  // tagger is what holds the guarantee when a formatter is called directly, with
+  // endpoints that never passed through the service.
+  const tagOf = makeTagger();
   for (const e of endpoints) {
-    const tag = `${e.nodeName}-${e.protocol}`;
+    const tag = tagOf(e, `${e.nodeName}-${e.protocol}`);
     if (e.protocol === 'hysteria') {
       proxyTags.push(tag);
       // sing-box requires `tls.enabled: true` for hysteria2 outbounds,

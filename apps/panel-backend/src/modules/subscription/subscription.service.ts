@@ -33,10 +33,12 @@ import {
   encodePlainList,
   hostFromAddress,
   mtprotoSecret,
+  withUriRemark,
   type ShadowsocksMethod,
   type SubscriptionEndpoint,
   type SubscriptionJsonResponse,
 } from './subscription.formats.js';
+import { endpointId } from './endpoint-identity.js';
 import { withVlessRouteTag } from './formats/xrayjson.js';
 
 // ───── Domain errors ─────
@@ -202,6 +204,111 @@ const TRANSPORT_LABEL: Record<string, string> = {
   httpupgrade: 'HTTPUpgrade',
   kcp: 'KCP',
 };
+
+const PROTOCOL_LABEL: Record<string, string> = {
+  hysteria: 'Hysteria2',
+  xray: 'Xray',
+  amneziawg: 'AmneziaWG',
+  naive: 'NaiveProxy',
+  shadowsocks: 'Shadowsocks',
+  mtproto: 'MTProto',
+  mieru: 'Mieru',
+  tuic: 'TUIC',
+  anytls: 'AnyTLS',
+  shadowtls: 'ShadowTLS',
+};
+
+/**
+ * What can be said about an endpoint to tell it apart from a namesake, best
+ * first. Only consulted when something actually collides, and only the entry
+ * that DOES separate the group is used: appending "· Hysteria2" to two rows that
+ * are both Hysteria2 lengthens them without telling anyone anything.
+ */
+function endpointDescriptors(e: SubscriptionEndpoint): (string | undefined)[] {
+  return [
+    e.protocol === 'xray' ? TRANSPORT_LABEL[e.network ?? 'raw'] : PROTOCOL_LABEL[e.protocol],
+    e.hostRemark && e.hostRemark !== 'Default' ? e.hostRemark : undefined,
+    String(e.port),
+  ];
+}
+const DESCRIPTOR_LEVELS = 3;
+
+function refineLabels(group: SubscriptionEndpoint[], level: number): void {
+  if (group.length < 2) return;
+  for (let l = level; l < DESCRIPTOR_LEVELS; l++) {
+    const values = group.map((e) => endpointDescriptors(e)[l]);
+    if (new Set(values).size < 2) continue;
+    group.forEach((e, i) => {
+      const v = values[i];
+      if (v) e.nodeName = `${e.nodeName} · ${v}`;
+    });
+    const byLabel = new Map<string, SubscriptionEndpoint[]>();
+    for (const e of group) {
+      const bucket = byLabel.get(e.nodeName) ?? [];
+      bucket.push(e);
+      byLabel.set(e.nodeName, bucket);
+    }
+    for (const bucket of byLabel.values()) refineLabels(bucket, l + 1);
+    return;
+  }
+  // Same node, same transport, same host, same port: nothing about the endpoint
+  // separates it from its namesake any more, so its own identity has to.
+  for (const e of group) e.nodeName = `${e.nodeName} · ${endpointId(e).slice(0, 4)}`;
+}
+
+/**
+ * Make every server line in one subscription readably different.
+ *
+ * The label comes from `subscriptionServerName`, which is the host's remark or,
+ * for a host nobody named, the node's own name. Two bindings on one node with
+ * unnamed hosts therefore read the same, and the client shows two rows a person
+ * has no way to choose between (reported by the operator 2026-08-29). It also
+ * used to matter structurally: sing-box tags and Clash proxy names are built
+ * from this string, and a duplicate there is a duplicate identifier.
+ *
+ * The predecessor of this function numbered the duplicates - "ru-01", "ru-01 2"
+ * - which is unique but says nothing, and it did so in list order, so adding a
+ * binding could move the "2" onto a different server. Here the whole colliding
+ * group is given the first fact that actually separates it, so the suffix
+ * carries meaning ("· XHTTP", "· gRPC") and depends on the endpoints rather than
+ * on their order.
+ *
+ * The link's own name is refreshed alongside the label, and this is the reason
+ * the function exists at all rather than the caller doing it inline: URIs are
+ * built one binding at a time, before there is a list to compare against.
+ */
+export function disambiguateEndpointLabels(endpoints: SubscriptionEndpoint[]): void {
+  const before = new Map<SubscriptionEndpoint, string>();
+  const groups = new Map<string, SubscriptionEndpoint[]>();
+  for (const e of endpoints) {
+    before.set(e, e.nodeName);
+    const bucket = groups.get(e.nodeName) ?? [];
+    bucket.push(e);
+    groups.set(e.nodeName, bucket);
+  }
+  for (const group of groups.values()) refineLabels(group, 0);
+
+  // A suffixed label can in principle land on a label somebody else already had
+  // ("X" + "· 443" meeting a host literally named "X · 443"). Vanishingly rare,
+  // but the uniqueness has to be a guarantee rather than a likelihood, because
+  // the formats build identifiers out of it.
+  const used = new Set<string>();
+  for (const e of endpoints) {
+    if (!used.has(e.nodeName)) {
+      used.add(e.nodeName);
+      continue;
+    }
+    const id = endpointId(e).slice(0, 4);
+    let candidate = `${e.nodeName} · ${id}`;
+    for (let n = 2; used.has(candidate); n++) candidate = `${e.nodeName} · ${id} ${n}`;
+    e.nodeName = candidate;
+    used.add(candidate);
+  }
+
+  for (const e of endpoints) {
+    if (e.nodeName !== before.get(e)) e.uri = withUriRemark(e.uri, e.nodeName);
+  }
+}
 
 /**
  * Make every cascade line in one subscription distinguishable.
@@ -733,6 +840,9 @@ export async function generateSubscription(
       // one spread cannot be forgotten in a branch the way ten copies can.
       nodeId: b.node.id,
       hostId: hostOverrides?.id,
+      // Identity, as opposed to the label above: the row this endpoint is
+      // emitted from, which no rename can move. See endpoint-identity.ts.
+      key: hostOverrides?.id ?? b.id,
       // Only carried when this binding has MORE THAN ONE host. It exists to
       // tell apart the several cascade profiles a multi-host entry produces,
       // which are otherwise identical strings. With a single host there is
@@ -1132,24 +1242,12 @@ export async function generateSubscription(
     // Audit failure must not block the subscription response.
   }
 
-  // Bug #7: all three structured formatters derive their outbound tag as
-  // `${nodeName}-${protocol}` (sing-box tag, Clash name, xray-json tag). Two
-  // hosts on the SAME binding (same node, same protocol) with empty/"Default"
-  // remark collide on that tag, and Clash/sing-box/xray reject duplicate tags
-  // -> broken client config. Disambiguate on the (nodeName, protocol) PAIR so
-  // the same node under two different protocols keeps its name (the tags
-  // already differ); only a real same-name+same-protocol collision is renamed
-  // ("X", "X 2", ...). First occurrence keeps the original name.
-  const usedTags = new Set<string>();
-  for (const e of endpoints) {
-    let name = e.nodeName;
-    let n = 2;
-    while (usedTags.has(`${name}-${e.protocol}`)) {
-      name = `${e.nodeName} ${n++}`;
-    }
-    usedTags.add(`${name}-${e.protocol}`);
-    e.nodeName = name;
-  }
+  // Two ways in that read the same are two rows a subscriber cannot choose
+  // between, and in sing-box and Clash the row's name is also the identifier the
+  // selector group points at. Bug #7 numbered such rows ("X", "X 2"); this names
+  // what differs instead, and carries the result into the link's own remark,
+  // which the numbering never did.
+  disambiguateEndpointLabels(endpoints);
 
   // One line per cascade profile, dealt across the pool's entries. Runs BEFORE
   // the labels are told apart: the duplicates this removes are exactly the rows
