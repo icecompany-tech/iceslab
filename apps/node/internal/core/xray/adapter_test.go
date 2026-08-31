@@ -594,3 +594,45 @@ func contains(haystack []byte, needle string) bool {
 
 // silence unused "json" warning if config_test.go doesn't import it elsewhere
 var _ = json.Marshal
+
+// TestAddRemoveUser_DormantDefers verifies the dormant guard: with no REALITY
+// key configured yet (ApplyInbound not received from the panel), AddUser and
+// RemoveUser update the in-memory user cache and return nil instead of
+// attempting a config render that fails with "RealityPrivateKey is required".
+// Regression for the backfill loop that spammed WARN and left a node's xray
+// permanently dormant while the panel kept pushing users to a not-yet-keyed
+// inbound.
+func TestAddRemoveUser_DormantDefers(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	inbound := validInbound()
+	inbound.RealityPrivateKey = "" // dormant: key not pushed yet
+	a := New(Config{
+		BinaryPath: "/usr/bin/xray",
+		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+		Inbound:    inbound,
+		RunCmd: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			t.Errorf("dormant adapter must not shell out to xray, got: %s %v", name, args)
+			return nil, nil
+		},
+	}, logger)
+
+	if err := a.AddUser(core.User{UserID: "u1", XrayUUID: "uuid-1"}); err != nil {
+		t.Fatalf("dormant AddUser should defer without error, got: %v", err)
+	}
+	a.mu.Lock()
+	_, cached := a.users["u1"]
+	a.mu.Unlock()
+	if !cached {
+		t.Fatal("dormant AddUser must still cache the user for later flush")
+	}
+
+	if err := a.RemoveUser("u1"); err != nil {
+		t.Fatalf("dormant RemoveUser should defer without error, got: %v", err)
+	}
+	a.mu.Lock()
+	_, stillThere := a.users["u1"]
+	a.mu.Unlock()
+	if stillThere {
+		t.Fatal("dormant RemoveUser must drop the user from cache")
+	}
+}
