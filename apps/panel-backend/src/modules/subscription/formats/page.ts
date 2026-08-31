@@ -126,7 +126,7 @@ const PLATFORM_LABEL: Record<PlatformId, string> = {
 // xray/ss subscription clients are NOT listed for amneziawg, and vice versa.
 
 type AppAction =
-  | { kind: 'deeplink'; scheme: 'hiddify' | 'streisand' | 'v2rayng' | 'clash' | 'singbox' | 'shadowrocket' }
+  | { kind: 'deeplink'; scheme: 'hiddify' | 'streisand' | 'v2rayng' | 'clash' | 'singbox' | 'shadowrocket' | 'incy' }
   | { kind: 'awg-vpn' } // scan the AmneziaVPN vpn:// QR below
   | { kind: 'awg-conf' } // scan the AmneziaWG .conf QR below
   | { kind: 'download' } // grab the per-node .conf below
@@ -141,6 +141,17 @@ interface AppDef {
 }
 
 const APPS: AppDef[] = [
+  // INCY (Xray-core) — listed first + recommended: imports this subscription on
+  // every platform via `incy://import/`, and (unlike some engines) parses XHTTP
+  // transports incl. CDN-fronted / packet-up, which matters for whitelist-bypass
+  // setups.
+  {
+    name: 'INCY',
+    platforms: ['ios', 'android', 'androidtv', 'windows', 'macos', 'linux'],
+    protocols: ['xray', 'shadowsocks', 'hysteria'],
+    action: { kind: 'deeplink', scheme: 'incy' },
+    recommended: true,
+  },
   // Universal subscription clients (xray / shadowsocks / hysteria via the link).
   {
     name: 'Hiddify',
@@ -255,6 +266,11 @@ function deeplinkHref(
 ): string {
   const enc = encodeURIComponent(subUrl);
   switch (scheme) {
+    case 'incy':
+      // INCY (Xray-core) — `incy://import/{url}` one-taps the subscription. It
+      // parses XHTTP transports (incl. CDN-fronted / packet-up) that some other
+      // clients' engines reject, which is handy for whitelist-bypass setups.
+      return `incy://import/${subUrl}`;
     case 'hiddify':
       return `hiddify://import/${subUrl}`;
     case 'streisand':
