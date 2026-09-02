@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { AppShell, Box, Center, Loader, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,17 +7,30 @@ import { useTranslation } from 'react-i18next';
 import { IconUsersGroup } from '@tabler/icons-react';
 import { DiscordIcon, GithubIcon, HeartIcon, StarIcon, TelegramIcon } from './BrandIcons';
 import {
-  NavDeliveryIcon,
+  NavBillingIcon,
+  NavBlockIcon,
+  NavCascadesIcon,
+  NavChevronIcon,
+  NavDnsIcon,
+  NavEgressIcon,
   NavHomeIcon,
   NavHostsIcon,
-  NavInsightsIcon,
+  NavHttpStatsIcon,
+  NavHwidIcon,
   NavLogoutIcon,
-  NavMetadataIcon,
   NavNodesIcon,
+  NavPoliciesIcon,
   NavProfilesIcon,
   NavQueuesIcon,
   NavRoutesIcon,
+  NavRuleSetsIcon,
+  NavSearchIcon,
+  NavSessionIcon,
   NavSettingsIcon,
+  NavShieldIcon,
+  NavSlidersIcon,
+  NavSubscribePageIcon,
+  NavTemplateIcon,
   NavUsersIcon,
 } from './NavIcons';
 import { useAuth } from '../stores/auth';
@@ -30,12 +43,21 @@ import { DISCORD_URL, GITHUB_URL, SUPPORT_URL, TELEGRAM_URL } from '../lib/commu
 const HAIRLINE = '#1C2A3D';
 const GROUND = '#08101A';
 const CARD = '#0F1A28';
+// The nav is its own panel sitting on the ground, a shade above it so the card
+// reads as a surface rather than a column ruled off by a border.
+const SIDEBAR_CARD = '#0B1622';
+const HOVER = '#0B1420';
 const SNOW = '#C8D4E3';
 const MIST = '#7A8BA3';
+// Sub-rows sit half a step under their parent: light enough to read, quiet
+// enough that the top level still leads.
+const SUBLABEL = '#8A9BB2';
+const FAINT = '#5A6B82';
 const CYAN = '#7DD3FC';
 const CYAN2 = '#67E8F9';
 const MOSS = '#A7D8B9';
 const AMBER = '#F5B14C';
+const VIOLET = '#A78BFA';
 // Warm rose, used by nothing else in the panel: the donate chip is the one
 // place we ask for something back, so it gets its own accent.
 const ROSE = '#E08AA8';
@@ -61,68 +83,109 @@ type NavItemProps = {
   icon: React.ReactNode;
   count?: NavCount;
   countDot?: boolean;
+  /**
+   * Drawn at full weight but inert: the screen behind it doesn't exist yet.
+   * Kept visible rather than hidden so the nav shows the shape we're building
+   * toward; a placeholder that navigates nowhere beats one that 404s.
+   */
+  placeholder?: boolean;
+  placeholderTitle?: string;
+  /** Extra element after the count, currently only the disclosure arrow. */
+  trailing?: React.ReactNode;
 };
 
-function NavItem({ to, href, end, label, icon, count, countDot }: NavItemProps) {
-  const renderInner = (isActive: boolean) => (
+/** Row body shared by links, the inert placeholders and the Nodes toggle. */
+function navRowStyle(isActive: boolean): React.CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '8px 12px',
+    borderRadius: 8,
+    color: isActive ? SNOW : MIST,
+    fontFamily: DISPLAY,
+    fontSize: 13,
+    fontWeight: isActive ? 500 : 400,
+    backgroundColor: isActive ? HOVER : 'transparent',
+    borderLeft: `2px solid ${isActive ? CYAN : 'transparent'}`,
+    transition: 'background-color 120ms, color 120ms',
+    position: 'relative',
+  };
+}
+
+function hoverOn(e: React.MouseEvent, isActive: boolean) {
+  if (isActive) return;
+  (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+  (e.currentTarget as HTMLElement).style.color = SNOW;
+}
+
+function hoverOff(e: React.MouseEvent, isActive: boolean) {
+  if (isActive) return;
+  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+  (e.currentTarget as HTMLElement).style.color = MIST;
+}
+
+function NavCount({ count, countDot }: { count: NavCount; countDot?: boolean }) {
+  if (count === undefined || count === null) return null;
+  return (
     <Box
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '8px 12px',
-        borderRadius: 8,
-        color: isActive ? SNOW : MIST,
-        fontFamily: DISPLAY,
-        fontSize: 13,
-        fontWeight: isActive ? 500 : 400,
-        backgroundColor: isActive ? '#0B1420' : 'transparent',
-        borderLeft: `2px solid ${isActive ? CYAN : 'transparent'}`,
-        transition: 'background-color 120ms, color 120ms',
-        position: 'relative',
+        gap: 4,
+        fontFamily: "'Geist Mono', monospace",
+        fontSize: 11,
+        color: countDot ? MOSS : MIST,
       }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.backgroundColor = '#0B1420';
-          (e.currentTarget as HTMLElement).style.color = SNOW;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-          (e.currentTarget as HTMLElement).style.color = MIST;
-        }
-      }}
+    >
+      {countDot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            backgroundColor: MOSS,
+            boxShadow: `0 0 6px ${MOSS}99`,
+          }}
+        />
+      )}
+      {count}
+    </Box>
+  );
+}
+
+function NavItem({
+  to,
+  href,
+  end,
+  label,
+  icon,
+  count,
+  countDot,
+  placeholder,
+  placeholderTitle,
+  trailing,
+}: NavItemProps) {
+  const renderInner = (isActive: boolean, interactive = true) => (
+    <Box
+      style={navRowStyle(isActive)}
+      onMouseEnter={interactive ? (e) => hoverOn(e, isActive) : undefined}
+      onMouseLeave={interactive ? (e) => hoverOff(e, isActive) : undefined}
     >
       <Box style={{ color: isActive ? CYAN : MIST, display: 'flex' }}>{icon}</Box>
       <span style={{ flex: 1 }}>{label}</span>
-      {count !== undefined && count !== null && (
-        <Box
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            fontFamily: "'Geist Mono', monospace",
-            fontSize: 11,
-            color: countDot ? MOSS : MIST,
-          }}
-        >
-          {countDot && (
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: MOSS,
-                boxShadow: `0 0 6px ${MOSS}99`,
-              }}
-            />
-          )}
-          {count}
-        </Box>
-      )}
+      <NavCount count={count} countDot={countDot} />
+      {trailing}
     </Box>
   );
+
+  if (placeholder) {
+    return (
+      <Box title={placeholderTitle} style={{ cursor: 'default' }}>
+        {renderInner(false, false)}
+      </Box>
+    );
+  }
 
   if (href) {
     return (
@@ -140,6 +203,105 @@ function NavItem({ to, href, end, label, icon, count, countDot }: NavItemProps) 
 
   return (
     <RouterNavLink to={to!} end={end} style={{ textDecoration: 'none', display: 'block' }}>
+      {({ isActive }) => renderInner(isActive)}
+    </RouterNavLink>
+  );
+}
+
+/**
+ * Group heading: a coloured tick plus the mono label. The tick is what tells
+ * the four groups apart at a glance once the nav is long enough that the
+ * labels themselves scroll past.
+ */
+function GroupHeader({ label, tick, first }: { label: string; tick: string; first?: boolean }) {
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: first ? '0 28px 8px 22px' : '16px 28px 8px 22px',
+        borderTop: first ? undefined : `1px dashed ${HAIRLINE}`,
+      }}
+    >
+      <Box
+        style={{ width: 3, height: 12, borderRadius: 2, flexShrink: 0, backgroundColor: tick }}
+      />
+      <Text style={MONO_LABEL}>{label}</Text>
+    </Box>
+  );
+}
+
+/** Row inside an open sub-list: indented past the parent's icon lane. */
+function SubNavItem({
+  to,
+  label,
+  icon,
+  count,
+  placeholder,
+  placeholderTitle,
+}: {
+  to?: string;
+  label: string;
+  icon: React.ReactNode;
+  count?: NavCount;
+  placeholder?: boolean;
+  placeholderTitle?: string;
+}) {
+  const renderInner = (isActive: boolean, interactive = true) => (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '7px 12px 7px 40px',
+        borderRadius: 8,
+        color: isActive ? SNOW : SUBLABEL,
+        fontFamily: DISPLAY,
+        fontSize: 12,
+        lineHeight: '16px',
+        backgroundColor: isActive ? HOVER : 'transparent',
+        transition: 'background-color 120ms, color 120ms',
+      }}
+      onMouseEnter={
+        interactive
+          ? (e) => {
+              if (isActive) return;
+              (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+              (e.currentTarget as HTMLElement).style.color = SNOW;
+            }
+          : undefined
+      }
+      onMouseLeave={
+        interactive
+          ? (e) => {
+              if (isActive) return;
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+              (e.currentTarget as HTMLElement).style.color = SUBLABEL;
+            }
+          : undefined
+      }
+    >
+      <Box style={{ color: isActive ? CYAN : FAINT, display: 'flex' }}>{icon}</Box>
+      <span style={{ flex: 1 }}>{label}</span>
+      {count !== undefined && count !== null && (
+        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 10, color: FAINT }}>
+          {count}
+        </span>
+      )}
+    </Box>
+  );
+
+  if (placeholder || !to) {
+    return (
+      <Box title={placeholderTitle} style={{ cursor: 'default' }}>
+        {renderInner(false, false)}
+      </Box>
+    );
+  }
+
+  return (
+    <RouterNavLink to={to} end style={{ textDecoration: 'none', display: 'block' }}>
       {({ isActive }) => renderInner(isActive)}
     </RouterNavLink>
   );
@@ -300,6 +462,12 @@ function AppLayoutInner() {
   const nodesTotal = dashQuery.data?.system.totalNodeCount;
   const nodesOnline = dashQuery.data?.system.onlineNodeCount ?? nodesTotal;
 
+  // Open by default: the sub-list is the only way to reach the node views now,
+  // so hiding it behind a click would bury three destinations.
+  const [nodesOpen, setNodesOpen] = useState(true);
+  const nodesSectionActive = pathname === '/nodes' || pathname.startsWith('/nodes/');
+  const notWired = t('sidebar.notWired');
+
   function handleLogout() {
     clearSession();
     // Drop cached queries, otherwise next admin on this browser sees the
@@ -331,7 +499,7 @@ function AppLayoutInner() {
   return (
     <AppShell
       header={{ height: 76 }}
-      navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: false } }}
+      navbar={{ width: 262, breakpoint: 'sm', collapsed: { mobile: false } }}
       padding={0}
       styles={{
         main: { backgroundColor: GROUND, minHeight: '100vh' },
@@ -339,10 +507,13 @@ function AppLayoutInner() {
           backgroundColor: GROUND,
           borderBottom: `1px solid ${HAIRLINE}`,
         },
+        // No border on the column: the nav card carries its own, and a second
+        // line down the full height would fence off the ground the card floats
+        // on.
         navbar: {
           backgroundColor: GROUND,
-          borderRight: `1px solid ${HAIRLINE}`,
-          padding: 0,
+          border: 'none',
+          padding: '14px 0 14px 14px',
         },
       }}
     >
@@ -499,7 +670,22 @@ function AppLayoutInner() {
       </AppShell.Header>
 
       <AppShell.Navbar>
-        <Stack justify="space-between" h="100%" gap={0}>
+        {/* The nav is a card that ends where its content ends, so the ground
+            below it belongs to the page rather than to an empty column. */}
+        <Box
+          style={{
+            width: 248,
+            alignSelf: 'flex-start',
+            height: 'fit-content',
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: 14,
+            overflow: 'clip',
+            paddingBottom: 8,
+            backgroundColor: SIDEBAR_CARD,
+            border: `1px solid ${HAIRLINE}`,
+          }}
+        >
           <Stack gap={0}>
             {/* Signed in as */}
             <Box style={{ padding: '20px 16px 16px' }}>
@@ -541,7 +727,7 @@ function AppLayoutInner() {
             {/* Workspace group: core resources operators manage daily. Order
                 follows the model: who gets access (users, squads) before what
                 they get (profiles) before the metal it runs on (nodes). */}
-            <Text style={{ ...MONO_LABEL, padding: '0 28px 8px' }}>{t('sidebar.workspace')}</Text>
+            <GroupHeader label={t('sidebar.workspace')} tick={CYAN} first />
 
             <Stack gap={2} px={8}>
               <NavItem to="/" end label={t('sidebar.home')} icon={<NavHomeIcon />} />
@@ -569,57 +755,184 @@ function AppLayoutInner() {
                 icon={<NavHostsIcon />}
                 count={hostCount}
               />
-              <NavItem
-                to="/nodes"
-                label={t('sidebar.nodes')}
-                icon={<NavNodesIcon />}
-                count={
-                  nodesTotal !== undefined && nodesOnline !== undefined
-                    ? `${nodesOnline}/${nodesTotal}`
-                    : nodesTotal
-                }
-                // LOW: green dot reflects ONLINE nodes, not just "nodes exist".
-                // With 0 online the dot was misleadingly green (looks healthy).
-                countDot={nodesOnline !== undefined && nodesOnline > 0}
-              />
+
+              {/* Nodes opens instead of navigating: the inventory now has three
+                  views under it, and the row that owns them shouldn't quietly
+                  be one of them. The first child is the plain node list. */}
+              <UnstyledButton
+                onClick={() => setNodesOpen((v) => !v)}
+                aria-expanded={nodesOpen}
+                style={{ display: 'block', width: '100%' }}
+              >
+                <Box
+                  style={navRowStyle(nodesSectionActive)}
+                  onMouseEnter={(e) => hoverOn(e, nodesSectionActive)}
+                  onMouseLeave={(e) => hoverOff(e, nodesSectionActive)}
+                >
+                  <Box style={{ color: nodesSectionActive ? CYAN : MIST, display: 'flex' }}>
+                    <NavNodesIcon />
+                  </Box>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{t('sidebar.nodes')}</span>
+                  <NavCount
+                    count={
+                      nodesTotal !== undefined && nodesOnline !== undefined
+                        ? `${nodesOnline}/${nodesTotal}`
+                        : nodesTotal
+                    }
+                    // LOW: green dot reflects ONLINE nodes, not just "nodes
+                    // exist". With 0 online the dot was misleadingly green.
+                    countDot={nodesOnline !== undefined && nodesOnline > 0}
+                  />
+                  <Box
+                    style={{
+                      display: 'flex',
+                      color: MIST,
+                      transform: nodesOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      transition: 'transform 140ms',
+                    }}
+                  >
+                    <NavChevronIcon />
+                  </Box>
+                </Box>
+              </UnstyledButton>
+
+              {nodesOpen && (
+                <Stack gap={1} pt={2} pb={6}>
+                  <SubNavItem
+                    to="/nodes"
+                    label={t('sidebar.nodes')}
+                    icon={<NavNodesIcon size={14} />}
+                    count={nodesTotal}
+                  />
+                  <SubNavItem
+                    to="/cascades"
+                    label={t('sidebar.cascades')}
+                    icon={<NavCascadesIcon size={14} />}
+                  />
+                  <SubNavItem
+                    label={t('sidebar.infraBilling')}
+                    icon={<NavBillingIcon size={14} />}
+                    placeholder
+                    placeholderTitle={notWired}
+                  />
+                </Stack>
+              )}
             </Stack>
 
             {/* Subscription group: everything that shapes the client-facing
-                subscription URL: per-instance metadata + the delivery rules
-                that pick a format per client. */}
-            <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
-              {t('sidebar.subscriptionGroup')}
-            </Text>
+                subscription URL. "Settings" is the umbrella that holds the
+                response headers, the per-status notes and the delivery
+                behaviour; metadata is one tab inside it, not a sibling. */}
+            <GroupHeader label={t('sidebar.subscriptionGroup')} tick={VIOLET} />
             <Stack gap={2} px={8}>
               <NavItem
                 to="/subscription/metadata"
-                label={t('sidebar.subscriptionMetadata')}
-                icon={<NavMetadataIcon />}
+                label={t('sidebar.settings')}
+                icon={<NavSlidersIcon />}
               />
               <NavItem
-                to="/subscription/routes"
+                label={t('sidebar.subscriptionTemplate')}
+                icon={<NavTemplateIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
                 label={t('sidebar.subscriptionRoutes')}
                 icon={<NavRoutesIcon />}
+                placeholder
+                placeholderTitle={notWired}
               />
               <NavItem
-                to="/subscription/delivery"
-                label={t('sidebar.subscriptionDelivery')}
-                icon={<NavDeliveryIcon />}
+                label={t('sidebar.subscribePage')}
+                icon={<NavSubscribePageIcon />}
+                placeholder
+                placeholderTitle={notWired}
               />
             </Stack>
 
-            {/* System group: observability + panel-wide config */}
-            <Text style={{ ...MONO_LABEL, padding: '20px 28px 8px' }}>
-              {t('sidebar.systemGroup')}
-            </Text>
+            {/* Traffic group: everything that answers "where does this packet
+                go", plus what we cut. Policies is the rule list itself; the
+                rest are the catalogues those rules point at. */}
+            <GroupHeader label={t('sidebar.trafficGroup')} tick={MOSS} />
             <Stack gap={2} px={8}>
-              <NavItem to="/insights" label={t('sidebar.insights')} icon={<NavInsightsIcon />} />
+              <NavItem
+                to="/subscription/routes"
+                label={t('sidebar.policies')}
+                icon={<NavPoliciesIcon />}
+              />
+              <NavItem
+                label={t('sidebar.torrentBlocker')}
+                icon={<NavBlockIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.ruleSets')}
+                icon={<NavRuleSetsIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.egress')}
+                icon={<NavEgressIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.dns')}
+                icon={<NavDnsIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+            </Stack>
+
+            {/* Tools group: read-only instruments an operator reaches for when
+                something looks wrong, not things they configure. */}
+            <GroupHeader label={t('sidebar.toolsGroup')} tick={AMBER} />
+            <Stack gap={2} px={8}>
+              <NavItem
+                label={t('sidebar.hwidInspector')}
+                icon={<NavHwidIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.srhInspector')}
+                icon={<NavSearchIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.torrentBlockerReports')}
+                icon={<NavShieldIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.sessionExplorer')}
+                icon={<NavSessionIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
+              <NavItem
+                label={t('sidebar.httpStats')}
+                icon={<NavHttpStatsIcon />}
+                placeholder
+                placeholderTitle={notWired}
+              />
               <NavItem href="/admin/queues" label={t('sidebar.queues')} icon={<NavQueuesIcon />} />
             </Stack>
           </Stack>
 
           {/* Bottom: settings + sign out */}
-          <Stack gap={2} px={8} pb={16} pt={8} style={{ borderTop: `1px solid ${HAIRLINE}` }}>
+          <Stack
+            gap={2}
+            px={8}
+            pb={4}
+            pt={12}
+            mt={8}
+            style={{ borderTop: `1px dashed ${HAIRLINE}` }}
+          >
             <NavItem to="/settings" label={t('sidebar.settings')} icon={<NavSettingsIcon />} />
             <UnstyledButton
               onClick={handleLogout}
@@ -648,7 +961,7 @@ function AppLayoutInner() {
               <span>{t('sidebar.logout')}</span>
             </UnstyledButton>
           </Stack>
-        </Stack>
+        </Box>
       </AppShell.Navbar>
 
       <AppShell.Main>
