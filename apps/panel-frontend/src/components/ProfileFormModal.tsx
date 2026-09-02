@@ -807,7 +807,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
             <IconBolt size={18} />
           </Card>
           <Stack gap={2}>
-            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+            <Text style={{ fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
               {isEdit ? profile.name : t('modal.profileNewTitle')}
             </Text>
             <Text
@@ -1259,7 +1259,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
                         <IconKey size={14} color="#7DD3FC" stroke={1.8} />
                         <Text
                           style={{
-                            fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+                            fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                             fontSize: 12,
                             fontWeight: 500,
                             lineHeight: '16px',
@@ -1326,7 +1326,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
               >
                 <Text
                   style={{
-                    fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+                    fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                     fontSize: 13,
                     lineHeight: '16px',
                     color: '#C8D4E3',
@@ -1973,7 +1973,7 @@ function EnginePicker({
             >
               <Text
                 style={{
-                  fontFamily: 'Geist Mono, monospace',
+                  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                   fontSize: 11,
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
@@ -1996,7 +1996,7 @@ function EnginePicker({
               >
                 <Text
                   style={{
-                    fontFamily: 'Geist Mono, monospace',
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                     fontSize: 10,
                     color: active ? '#7DD3FC' : '#7A8BA3',
                   }}
@@ -2036,7 +2036,7 @@ function EnginePicker({
           <Group gap={10} wrap="nowrap" style={{ flexShrink: 0 }}>
             <Text
               style={{
-                fontFamily: 'Geist Mono, monospace',
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 10,
                 fontWeight: 500,
                 letterSpacing: '0.12em',
@@ -2057,7 +2057,7 @@ function EnginePicker({
                 border: '1px solid #1C2A3D',
               }}
             >
-              <Text style={{ fontFamily: 'Geist Mono, monospace', fontSize: 12, color: '#C8D4E3' }}>
+              <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 12, color: '#C8D4E3' }}>
                 xray {newest}
               </Text>
               <Box
@@ -2072,7 +2072,7 @@ function EnginePicker({
               >
                 <Text
                   style={{
-                    fontFamily: 'Geist Mono, monospace',
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                     fontSize: 9,
                     letterSpacing: '0.08em',
                     color: '#A7D8B9',
@@ -2179,7 +2179,7 @@ function EnginePicker({
                   />
                   <Text
                     style={{
-                      fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+                      fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                       fontSize: 13,
                       fontWeight: 600,
                       lineHeight: '16px',
@@ -2210,7 +2210,7 @@ function EnginePicker({
               {activeTab !== 'xray' && (
                 <Text
                   style={{
-                    fontFamily: 'Geist Mono, monospace',
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                     fontSize: 10,
                     lineHeight: '12px',
                     color: active ? accent : '#5A6B82',
@@ -2326,7 +2326,7 @@ function SectionCard({
           {icon}
           <Text
             style={{
-              fontFamily: 'Geist Mono, monospace',
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
               fontSize: 10,
               fontWeight: 500,
               letterSpacing: '0.16em',
@@ -2413,7 +2413,7 @@ function PillChip({
     >
       <Text
         style={{
-          fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+          fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
           fontSize: 12,
           fontWeight: active ? 600 : 400,
           lineHeight: '16px',
@@ -2435,7 +2435,7 @@ function StepLabel({ children }: { children: React.ReactNode }) {
   return (
     <Text
       style={{
-        fontFamily: 'Geist Mono, monospace',
+        fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
         fontSize: 10,
         letterSpacing: '0.14em',
         textTransform: 'uppercase',

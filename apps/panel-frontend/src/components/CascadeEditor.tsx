@@ -29,7 +29,7 @@ export const AMBER = '#F5B14C';
 export const RED = '#E07A5F';
 export const VIOLET = '#A78BFA';
 
-export const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+export const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 export const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 // Mirrors the backend cap (cascade.schemas MAX_CASCADE_HOPS); keep the two in

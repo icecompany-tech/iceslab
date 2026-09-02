@@ -42,7 +42,7 @@ const AMBER = '#F5B14C';
 const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 
-const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /** Only the dropdown needs a number; the columns themselves are sized in CSS

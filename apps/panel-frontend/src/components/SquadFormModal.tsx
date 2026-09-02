@@ -256,7 +256,7 @@ export function SquadFormModal({
             <IconLink size={18} />
           </Card>
           <Stack gap={2}>
-            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+            <Text style={{ fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
               {isEdit ? squad?.name ?? t('squads.form.titleEdit') : t('modal.squadNewTitle')}
             </Text>
             <Text

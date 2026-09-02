@@ -269,7 +269,7 @@ export function ProfilesPage() {
               border: 'none',
               outline: 'none',
               color: SNOW,
-              fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+              fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               fontSize: 13,
             }}
           />
@@ -358,7 +358,7 @@ export function ProfilesPage() {
             }}
           >
             <IconPlus size={14} stroke={2.4} color={CYAN} />
-            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontSize: 13, fontWeight: 500, color: SNOW }}>
+            <Text style={{ fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fontSize: 13, fontWeight: 500, color: SNOW }}>
               {t('profiles.create')}
             </Text>
           </UnstyledButton>
@@ -710,7 +710,7 @@ function ProfileCard({
           <IconEdit size={14} stroke={1.8} color={accent} />
           <Text
             style={{
-              fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+              fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
               fontSize: 13,
               fontWeight: 500,
               color: accent,

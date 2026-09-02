@@ -446,7 +446,7 @@ export function NodeEditModal({
                   {countryFlag(node.countryCode)}
                 </Text>
               )}
-              <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+              <Text style={{ fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
                 {node.name}
               </Text>
               <Badge variant="light" color={statusColor} size="sm" tt="uppercase" style={{ letterSpacing: '0.08em', fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
@@ -890,7 +890,13 @@ export function NodeEditModal({
                                     [binding.id]: typeof v === 'number' ? v : Number(v) || binding.port,
                                   }))
                                 }
-                                styles={{ input: { fontFamily: 'monospace', textAlign: 'center' } }}
+                                styles={{
+                                  input: {
+                                    fontFamily:
+                                      "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+                                    textAlign: 'center',
+                                  },
+                                }}
                               />
                             </Tooltip>
                             {portDrafts[binding.id] !== undefined &&

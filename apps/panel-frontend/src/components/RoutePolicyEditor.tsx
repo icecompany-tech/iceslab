@@ -54,7 +54,7 @@ const SHADOW_BG = '#1A1512';
 const SHADOW_INK = '#6E6257';
 const SHADOW_NOTE = '#C08A5A';
 
-const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /** Only the dropdown needs a number; the columns themselves are sized in CSS

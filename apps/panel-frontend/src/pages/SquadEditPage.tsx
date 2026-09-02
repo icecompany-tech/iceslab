@@ -66,7 +66,7 @@ const MOSS = '#A7D8B9';
 const AMBER = '#F5B14C';
 const VIOLET = '#A78BFA';
 
-const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 const LABEL = {

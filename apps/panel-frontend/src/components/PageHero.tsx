@@ -52,7 +52,7 @@ export function PageHero({ eyebrow, title, subtitle, right }: PageHeroProps) {
         </Box>
         <Text
           style={{
-            fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+            fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
             fontSize: 64,
             fontWeight: 500,
             letterSpacing: '-0.025em',

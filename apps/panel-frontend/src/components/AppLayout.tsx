@@ -62,7 +62,7 @@ const VIOLET = '#A78BFA';
 // place we ask for something back, so it gets its own accent.
 const ROSE = '#E08AA8';
 
-const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const MONO_LABEL = {
   fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",

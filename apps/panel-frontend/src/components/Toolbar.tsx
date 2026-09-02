@@ -17,7 +17,7 @@ const SNOW = '#C8D4E3';
 const MIST = '#7A8BA3';
 const CYAN = '#7DD3FC';
 
-const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const SHELL = {
   height: 36,

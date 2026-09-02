@@ -190,7 +190,7 @@ export function RecipePicker({ protocol, onPick }: Props) {
                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                   <Text
                     style={{
-                      fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+                      fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                       fontSize: 12,
                       fontWeight: 600,
                       color: active ? '#7DD3FC' : '#C8D4E3',

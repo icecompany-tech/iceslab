@@ -85,7 +85,7 @@ const AMBER = '#F5B14C';
 const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 
-const DISPLAY = { fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif" };
+const DISPLAY = { fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" };
 const MONO = { fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" };
 const MONO_LABEL = {
   ...MONO,

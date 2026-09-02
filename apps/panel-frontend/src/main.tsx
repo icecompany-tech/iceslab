@@ -19,7 +19,6 @@ import './i18n';
 // strange thing for a privacy-infrastructure tool to do. Variable builds, so one
 // file per family covers every weight we use.
 import '@fontsource-variable/inter';
-import '@fontsource-variable/space-grotesk';
 import '@fontsource-variable/geist-mono';
 
 import '@mantine/core/styles.css';

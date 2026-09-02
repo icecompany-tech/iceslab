@@ -58,7 +58,7 @@ const MONO_LABEL = {
 };
 
 const DISPLAY = {
-  fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+  fontFamily: "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
 const cardStyle = {

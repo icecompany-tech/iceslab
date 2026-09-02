@@ -128,6 +128,11 @@ const violet: MantineColorsTuple = [
 const MONO =
   "'Geist Mono Variable', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
+// One sans for the whole interface. Headings, menu and body all run on Inter;
+// the hierarchy is carried by size, weight and colour, not by a second face.
+const SANS =
+  "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
 // Shared input label/input look, applied to TextInput/Select/NumberInput/Textarea/etc
 const inputStyles = {
   label: {
@@ -162,15 +167,12 @@ export const theme = createTheme({
   },
   white: SNOW,
   black: GROUND,
-  // Body text is Inter: it was already named as the fallback everywhere while
-  // never actually being loaded, and it is the face built for exactly this,
-  // dense UI copy at 11-13px. Space Grotesk stays on headings and labels, where
-  // its wider, squarer shapes do the distinguishing.
-  fontFamily:
-    "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  // Inter is the face built for exactly this: dense UI copy at 11-13px, with
+  // the character variants index.css switches on so l/1/I stay apart in IDs.
+  fontFamily: SANS,
   fontFamilyMonospace: MONO,
   headings: {
-    fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
+    fontFamily: SANS,
     fontWeight: '500',
     sizes: {
       h1: { fontSize: rem(32), lineHeight: '1.15' },
