@@ -509,11 +509,14 @@ function AppLayoutInner() {
         },
         // No border on the column: the nav card carries its own, and a second
         // line down the full height would fence off the ground the card floats
-        // on.
+        // on. The column scrolls because four groups plus the node sub-list
+        // run past the fold on a 1080/1200-tall screen, and the rows that fell
+        // off the bottom were sign-out and settings.
         navbar: {
           backgroundColor: GROUND,
           border: 'none',
           padding: '14px 0 14px 14px',
+          overflowY: 'auto',
         },
       }}
     >
