@@ -305,12 +305,12 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
             <IconServer2 size={18} />
           </Card>
           <Stack gap={2}>
-            <Text style={{ fontFamily: "'Space Grotesk', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
               {isEdit ? `${t('modal.nodeNewTitle')} · ${form.values.name}` : t('modal.nodeNewTitle')}
             </Text>
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 9,
                 letterSpacing: '0.16em',
                 textTransform: 'uppercase',
@@ -434,7 +434,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
             <Group justify="space-between" mt="md">
               <Text
                 style={{
-                  fontFamily: "'Geist Mono', monospace",
+                  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                   fontSize: 10,
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',
@@ -504,7 +504,7 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
             <Group justify="space-between" mt="md">
               <Text
                 style={{
-                  fontFamily: "'Geist Mono', monospace",
+                  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                   fontSize: 10,
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',

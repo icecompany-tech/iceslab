@@ -17,7 +17,7 @@ const SNOW = '#C8D4E3';
 const MIST = '#7A8BA3';
 const CYAN = '#7DD3FC';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
 
 const SHELL = {
   height: 36,
@@ -113,7 +113,7 @@ export function ToolbarButton({
             borderRadius: 999,
             backgroundColor: `${CYAN}24`,
             color: CYAN,
-            fontFamily: "'Geist Mono', monospace",
+            fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
             fontSize: 10,
             fontWeight: 600,
             lineHeight: '12px',

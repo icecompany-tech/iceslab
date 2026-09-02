@@ -171,7 +171,7 @@ export function NodeCard({
                       border: `1px solid ${CYAN}33`,
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
-                      fontFamily: "'Geist Mono', monospace",
+                      fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                       letterSpacing: '0.08em',
                     }}
                   >
@@ -183,7 +183,7 @@ export function NodeCard({
                 <Text
                   size="xs"
                   truncate
-                  style={{ color: MIST, fontFamily: "'Geist Mono', monospace" }}
+                  style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
                 >
                   {node.address}
                 </Text>
@@ -201,7 +201,7 @@ export function NodeCard({
                     color: VIOLET,
                     border: `1px solid ${VIOLET}33`,
                     textTransform: 'none',
-                    fontFamily: "'Geist Mono', monospace",
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                   }}
                 >
                   {node.cascadeLabel}
@@ -218,7 +218,7 @@ export function NodeCard({
                 color: accent,
                 border: `1px solid ${accent}33`,
                 textTransform: 'uppercase',
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 letterSpacing: '0.08em',
               }}
             >
@@ -302,7 +302,7 @@ export function NodeCard({
               </Text>
               <Text
                 size="xs"
-                style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}
+                style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
               >
                 {node.approxUsers}/{node.maxUsers}
               </Text>
@@ -331,7 +331,7 @@ export function NodeCard({
               <IconDownload size={12} style={{ color: CYAN }} />
               <Text
                 size="xs"
-                style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}
+                style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
               >
                 {formatBytes(node.todayBytes)}
               </Text>
@@ -342,7 +342,7 @@ export function NodeCard({
               <IconUpload size={12} style={{ color: VIOLET }} />
               <Text
                 size="xs"
-                style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}
+                style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
               >
                 {node.inboundCount} bindings
               </Text>
@@ -354,7 +354,7 @@ export function NodeCard({
                 <IconCpu size={12} style={{ color: MIST }} />
                 <Text
                   size="xs"
-                  style={{ color: MIST, fontFamily: "'Geist Mono', monospace" }}
+                  style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
                 >
                   xray {node.coreVersion}
                 </Text>
@@ -475,7 +475,7 @@ function CoreHealth({
               fw={500}
               style={{
                 color: MIST,
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 10,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -490,7 +490,7 @@ function CoreHealth({
                 flex: 1,
                 minWidth: 0,
                 color: FAINT,
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 10,
               }}
             >
@@ -503,7 +503,7 @@ function CoreHealth({
             <Text
               size="xs"
               fw={600}
-              style={{ color: percent === null ? FAINT : SNOW, fontFamily: "'Geist Mono', monospace" }}
+              style={{ color: percent === null ? FAINT : SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
             >
               {percent === null ? '-' : `${percent.toFixed(0)}%`}
             </Text>
@@ -529,7 +529,7 @@ function CoreHealth({
           <Text
             size="xs"
             truncate
-            style={{ color: tone, fontFamily: "'Geist Mono', monospace", fontSize: 10 }}
+            style={{ color: tone, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10 }}
           >
             {restartLine}
           </Text>
@@ -537,7 +537,7 @@ function CoreHealth({
         <Tooltip label={freshness} withArrow multiline w={280}>
           <Text
             size="xs"
-            style={{ color: FAINT, fontFamily: "'Geist Mono', monospace", fontSize: 10, flexShrink: 0 }}
+            style={{ color: FAINT, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, flexShrink: 0 }}
           >
             {relativeTime(restarts.observedAt, t).text}
           </Text>
@@ -570,7 +570,7 @@ function MetricBar({
             style={{
               flex: 1,
               color: MIST,
-              fontFamily: "'Geist Mono', monospace",
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
               fontSize: 10,
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
@@ -581,7 +581,7 @@ function MetricBar({
           <Text
             size="xs"
             fw={600}
-            style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}
+            style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
           >
             {value.toFixed(0)}%
           </Text>

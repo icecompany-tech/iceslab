@@ -42,8 +42,8 @@ const AMBER = '#F5B14C';
 const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
-const MONO = "'Geist Mono', monospace";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /** Only the dropdown needs a number; the columns themselves are sized in CSS
  *  (.routes-rule-match / .routes-rule-action) so they can shrink together. */

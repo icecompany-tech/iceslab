@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -71,9 +71,9 @@ const EDGE = '#2C3A4E';
 const FAINT = '#5A6B82';
 const DIM = '#3A4A60';
 
-const MONO_FAMILY = "'Geist Mono', monospace";
+const MONO_FAMILY = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 const MONO = { fontFamily: MONO_FAMILY };
-const DISPLAY_FAMILY = "'Space Grotesk', Inter, sans-serif";
+const DISPLAY_FAMILY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
 
 /**
  * One "12 VPS" pair in the page bar: number in snow, unit in mist. `soft` marks
@@ -728,7 +728,7 @@ export function NodesPage() {
           </Box>
           <Text
             style={{
-              fontFamily: "'Space Grotesk', Inter, sans-serif",
+              fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
               fontSize: 17,
               fontWeight: 600,
               lineHeight: '22px',
@@ -804,7 +804,7 @@ export function NodesPage() {
                   outline: 'none',
                   background: 'transparent',
                   color: SNOW,
-                  fontFamily: "'Space Grotesk', Inter, sans-serif",
+                  fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
                   fontSize: 12,
                   lineHeight: '16px',
                 }}
@@ -938,7 +938,7 @@ export function NodesPage() {
             <IconPlus size={14} stroke={2.4} color={CYAN} />
             <Text
               style={{
-                fontFamily: "'Space Grotesk', Inter, sans-serif",
+                fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
                 fontSize: 13,
                 fontWeight: 500,
                 color: SNOW,

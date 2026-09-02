@@ -446,16 +446,16 @@ export function NodeEditModal({
                   {countryFlag(node.countryCode)}
                 </Text>
               )}
-              <Text style={{ fontFamily: "'Space Grotesk', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+              <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
                 {node.name}
               </Text>
-              <Badge variant="light" color={statusColor} size="sm" tt="uppercase" style={{ letterSpacing: '0.08em', fontFamily: "'Geist Mono', monospace" }}>
+              <Badge variant="light" color={statusColor} size="sm" tt="uppercase" style={{ letterSpacing: '0.08em', fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                 {node.status}
               </Badge>
             </Group>
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 9,
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',
@@ -960,7 +960,7 @@ export function NodeEditModal({
                       <Text
                         mb={4}
                         style={{
-                          fontFamily: "'Geist Mono', monospace",
+                          fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                           fontSize: 9,
                           letterSpacing: '0.12em',
                           textTransform: 'uppercase',

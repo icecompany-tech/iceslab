@@ -69,8 +69,8 @@ const AMBER = '#F5B14C';
 const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
-const MONO = "'Geist Mono', monospace";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random'];
 const ALPNS = ['h2', 'http/1.1', 'h3'];

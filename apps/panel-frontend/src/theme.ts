@@ -122,7 +122,11 @@ const violet: MantineColorsTuple = [
   '#130E26',
 ];
 
-const MONO = "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
+// The " Variable" names are what the bundled @fontsource-variable packages
+// register; the bare names stay behind them so a build that ever drops the
+// dependency still finds a locally installed copy before falling to system.
+const MONO =
+  "'Geist Mono Variable', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 // Shared input label/input look, applied to TextInput/Select/NumberInput/Textarea/etc
 const inputStyles = {
@@ -158,11 +162,15 @@ export const theme = createTheme({
   },
   white: SNOW,
   black: GROUND,
+  // Body text is Inter: it was already named as the fallback everywhere while
+  // never actually being loaded, and it is the face built for exactly this,
+  // dense UI copy at 11-13px. Space Grotesk stays on headings and labels, where
+  // its wider, squarer shapes do the distinguishing.
   fontFamily:
-    "Geist, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   fontFamilyMonospace: MONO,
   headings: {
-    fontFamily: "'Space Grotesk', Inter, sans-serif",
+    fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
     fontWeight: '500',
     sizes: {
       h1: { fontSize: rem(32), lineHeight: '1.15' },

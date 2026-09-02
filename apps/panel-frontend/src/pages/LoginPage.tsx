@@ -24,8 +24,8 @@ const MOSS = '#A7D8B9';
 const AMBER = '#F5D585';
 const RUST = '#E89B8B';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
-const MONO = "'Geist Mono', monospace";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /** The one caption style the whole page runs on: mono, 10px, wide tracking. */
 const MONO_LABEL = {

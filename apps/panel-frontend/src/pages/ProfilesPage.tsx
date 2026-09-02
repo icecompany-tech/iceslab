@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -269,7 +269,7 @@ export function ProfilesPage() {
               border: 'none',
               outline: 'none',
               color: SNOW,
-              fontFamily: "'Space Grotesk', Inter, sans-serif",
+              fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
               fontSize: 13,
             }}
           />
@@ -316,7 +316,7 @@ export function ProfilesPage() {
                   <Text style={{ flex: 1, fontSize: 13, color: isAll ? SNOW : accent }}>
                     {option.label}
                   </Text>
-                  <Text style={{ fontFamily: "'Geist Mono', monospace", fontSize: 11, color: MIST }}>
+                  <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 11, color: MIST }}>
                     {count}
                   </Text>
                   {checked && <IconCheck size={13} stroke={2.4} color={CYAN} />}
@@ -358,7 +358,7 @@ export function ProfilesPage() {
             }}
           >
             <IconPlus size={14} stroke={2.4} color={CYAN} />
-            <Text style={{ fontFamily: "'Space Grotesk', Inter, sans-serif", fontSize: 13, fontWeight: 500, color: SNOW }}>
+            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontSize: 13, fontWeight: 500, color: SNOW }}>
               {t('profiles.create')}
             </Text>
           </UnstyledButton>
@@ -436,10 +436,10 @@ export function ProfilesPage() {
 function BarFact({ value, label, accent }: { value: number; label: string; accent?: string }) {
   return (
     <>
-      <Text style={{ fontFamily: "'Geist Mono', monospace", fontSize: 13, fontWeight: 500, color: accent ?? SNOW }}>
+      <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 13, fontWeight: 500, color: accent ?? SNOW }}>
         {value}
       </Text>
-      <Text style={{ fontFamily: "'Geist Mono', monospace", fontSize: 10, letterSpacing: '0.12em', color: MIST }}>
+      <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, letterSpacing: '0.12em', color: MIST }}>
         {label}
       </Text>
     </>
@@ -448,7 +448,7 @@ function BarFact({ value, label, accent }: { value: number; label: string; accen
 
 function BarDot() {
   return (
-    <Text style={{ fontFamily: "'Geist Mono', monospace", fontSize: 10, color: '#3A4A60' }}>
+    <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: '#3A4A60' }}>
       {'·'}
     </Text>
   );
@@ -580,7 +580,7 @@ function ProfileCard({
             color: accent,
             border: `1px solid ${accent}33`,
             textTransform: 'uppercase',
-            fontFamily: "'Geist Mono', monospace",
+            fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
             letterSpacing: '0.08em',
           }}
         >
@@ -600,7 +600,7 @@ function ProfileCard({
               backgroundColor: bindingCount === 0 ? 'transparent' : `${MOSS}1A`,
               color: bindingCount === 0 ? MIST : MOSS,
               border: `1px solid ${bindingCount === 0 ? HAIRLINE : `${MOSS}33`}`,
-              fontFamily: "'Geist Mono', monospace",
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
             }}
           >
             <IconServer2 size={11} />
@@ -622,7 +622,7 @@ function ProfileCard({
               backgroundColor: profile.userCount === 0 ? 'transparent' : `${CYAN}1A`,
               color: profile.userCount === 0 ? MIST : CYAN,
               border: `1px solid ${profile.userCount === 0 ? HAIRLINE : `${CYAN}33`}`,
-              fontFamily: "'Geist Mono', monospace",
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
             }}
           >
             <IconUsers size={11} />
@@ -664,7 +664,7 @@ function ProfileCard({
           >
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 9,
                 letterSpacing: '0.12em',
                 textTransform: 'uppercase',
@@ -675,7 +675,7 @@ function ProfileCard({
             </Text>
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 12,
                 color: SNOW,
                 overflow: 'hidden',
@@ -710,7 +710,7 @@ function ProfileCard({
           <IconEdit size={14} stroke={1.8} color={accent} />
           <Text
             style={{
-              fontFamily: "'Space Grotesk', Inter, sans-serif",
+              fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
               fontSize: 13,
               fontWeight: 500,
               color: accent,

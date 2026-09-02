@@ -63,8 +63,8 @@ const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 const VIOLET_HI = '#C0AAF6';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
-const MONO = "'Geist Mono', monospace";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
+const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 const LABEL = {
   fontFamily: MONO,

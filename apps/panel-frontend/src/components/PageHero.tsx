@@ -40,7 +40,7 @@ export function PageHero({ eyebrow, title, subtitle, right }: PageHeroProps) {
           />
           <Text
             style={{
-              fontFamily: "'Geist Mono', monospace",
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
               fontSize: 11,
               letterSpacing: '0.16em',
               textTransform: 'uppercase',
@@ -52,7 +52,7 @@ export function PageHero({ eyebrow, title, subtitle, right }: PageHeroProps) {
         </Box>
         <Text
           style={{
-            fontFamily: "'Space Grotesk', Inter, sans-serif",
+            fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
             fontSize: 64,
             fontWeight: 500,
             letterSpacing: '-0.025em',

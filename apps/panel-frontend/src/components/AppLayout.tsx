@@ -62,10 +62,10 @@ const VIOLET = '#A78BFA';
 // place we ask for something back, so it gets its own accent.
 const ROSE = '#E08AA8';
 
-const DISPLAY = "'Space Grotesk', Inter, sans-serif";
+const DISPLAY = "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif";
 
 const MONO_LABEL = {
-  fontFamily: "'Geist Mono', monospace",
+  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
   fontSize: 10,
   letterSpacing: '0.16em',
   textTransform: 'uppercase' as const,
@@ -133,7 +133,7 @@ function NavCount({ count, countDot }: { count: NavCount; countDot?: boolean }) 
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        fontFamily: "'Geist Mono', monospace",
+        fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
         fontSize: 11,
         color: countDot ? MOSS : MIST,
       }}
@@ -285,7 +285,7 @@ function SubNavItem({
       <Box style={{ color: isActive ? CYAN : FAINT, display: 'flex' }}>{icon}</Box>
       <span style={{ flex: 1 }}>{label}</span>
       {count !== undefined && count !== null && (
-        <span style={{ fontFamily: "'Geist Mono', monospace", fontSize: 10, color: FAINT }}>
+        <span style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: FAINT }}>
           {count}
         </span>
       )}
@@ -585,7 +585,7 @@ function AppLayoutInner() {
                 />
                 <Text
                   style={{
-                    fontFamily: "'Geist Mono', monospace",
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                     fontSize: 11,
                     fontWeight: 500,
                     letterSpacing: '0.04em',
@@ -599,7 +599,7 @@ function AppLayoutInner() {
               <TopChip>
                 <Text
                   style={{
-                    fontFamily: "'Geist Mono', monospace",
+                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                     fontSize: 11,
                     fontWeight: 500,
                     letterSpacing: '0.04em',
@@ -631,7 +631,7 @@ function AppLayoutInner() {
                     <StarIcon />
                     <Text
                       style={{
-                        fontFamily: "'Geist Mono', monospace",
+                        fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                         fontSize: 12,
                         fontWeight: 700,
                         letterSpacing: '0.02em',
@@ -656,7 +656,7 @@ function AppLayoutInner() {
               <HeartIcon />
               <Text
                 style={{
-                  fontFamily: "'Geist Mono', monospace",
+                  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                   fontSize: 11,
                   fontWeight: 500,
                   letterSpacing: '0.12em',

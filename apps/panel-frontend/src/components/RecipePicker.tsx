@@ -190,7 +190,7 @@ export function RecipePicker({ protocol, onPick }: Props) {
                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                   <Text
                     style={{
-                      fontFamily: "'Space Grotesk', Inter, sans-serif",
+                      fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
                       fontSize: 12,
                       fontWeight: 600,
                       color: active ? '#7DD3FC' : '#C8D4E3',
@@ -209,7 +209,7 @@ export function RecipePicker({ protocol, onPick }: Props) {
         </Stack>
       )}
 
-      <Text style={{ fontFamily: "'Geist Mono', monospace", fontSize: 10, color: '#5A6B82' }}>
+      <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: '#5A6B82' }}>
         {t('recipes.countLine', {
           shown: visibleBuiltins.length,
           total: builtins.length + registry.length,

@@ -256,12 +256,12 @@ export function SquadFormModal({
             <IconLink size={18} />
           </Card>
           <Stack gap={2}>
-            <Text style={{ fontFamily: "'Space Grotesk', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
+            <Text style={{ fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif", fontWeight: 500, fontSize: 18, color: '#C8D4E3' }}>
               {isEdit ? squad?.name ?? t('squads.form.titleEdit') : t('modal.squadNewTitle')}
             </Text>
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 9,
                 letterSpacing: '0.16em',
                 textTransform: 'uppercase',
@@ -570,7 +570,7 @@ export function SquadFormModal({
           <Group justify="space-between" gap="sm">
             <Text
               style={{
-                fontFamily: "'Geist Mono', monospace",
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
                 fontSize: 10,
                 letterSpacing: '0.14em',
                 textTransform: 'uppercase',

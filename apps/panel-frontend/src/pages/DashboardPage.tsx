@@ -50,7 +50,7 @@ const RED = '#E07A5F';
 const VIOLET = '#A78BFA';
 
 const MONO_LABEL = {
-  fontFamily: "'Geist Mono', monospace",
+  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
   fontSize: 10,
   letterSpacing: '0.12em',
   textTransform: 'uppercase' as const,
@@ -58,7 +58,7 @@ const MONO_LABEL = {
 };
 
 const DISPLAY = {
-  fontFamily: "'Space Grotesk', Inter, sans-serif",
+  fontFamily: "'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, sans-serif",
 };
 
 const cardStyle = {
@@ -87,7 +87,7 @@ function CountBadge({ children }: { children: ReactNode }) {
     <Text
       component="span"
       style={{
-        fontFamily: "'Geist Mono', monospace",
+        fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
         fontSize: 11,
         fontWeight: 500,
         color: MIST,
@@ -475,7 +475,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
                             {n.countryCode ? `${flagEmoji(n.countryCode)} ` : ''}
                             {n.name}
                           </Text>
-                          <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono', monospace" }}>
+                          <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                             {n.address}
                           </Text>
                         </Stack>
@@ -524,12 +524,12 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
                         />
                       </Table.Td>
                       <Table.Td ta="right">
-                        <Text size="sm" style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}>
+                        <Text size="sm" style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                           {n.inboundCount}
                         </Text>
                       </Table.Td>
                       <Table.Td ta="right">
-                        <Text size="sm" style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}>
+                        <Text size="sm" style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                           {formatBytes(n.todayBytes)}
                         </Text>
                       </Table.Td>
@@ -572,7 +572,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
                       </Text>
                     </Group>
                     <Group gap={4} align="baseline">
-                      <Text size="sm" fw={600} style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}>
+                      <Text size="sm" fw={600} style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                         {p.enabledUserCount}
                       </Text>
                       <Text size="xs" style={{ color: MIST }}>
@@ -618,7 +618,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
                     </ThemeIcon>
                     <Text size="sm" style={{ color: SNOW }}>{u.username}</Text>
                   </Group>
-                  <Text size="sm" fw={600} style={{ color: SNOW, fontFamily: "'Geist Mono', monospace" }}>
+                  <Text size="sm" fw={600} style={{ color: SNOW, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                     {formatBytes(u.bytes)}
                   </Text>
                 </Group>
@@ -658,7 +658,7 @@ function DashboardContent({ data }: { data: DashboardOverview }) {
                       </ThemeIcon>
                       <Stack gap={0}>
                         <Text size="sm" style={{ color: SNOW }}>{e.eventType}</Text>
-                        <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono', monospace" }}>
+                        <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
                           {e.username ?? e.userId.slice(0, 8)}
                         </Text>
                       </Stack>
@@ -847,7 +847,7 @@ function UsageBar({
         </Group>
         <Text
           style={{
-            fontFamily: "'Geist Mono', monospace",
+            fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
             fontSize: 11,
             lineHeight: '14px',
             color,
@@ -884,7 +884,7 @@ function UsageBar({
         {primary}
       </Text>
       <Text
-        style={{ color: MIST, fontFamily: "'Geist Mono', monospace", fontSize: 12, lineHeight: '16px' }}
+        style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 12, lineHeight: '16px' }}
       >
         {secondary}
       </Text>
@@ -926,7 +926,7 @@ function NodeMiniBar({
             section: { backgroundColor: color },
           }}
         />
-        <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono', monospace" }}>
+        <Text size="xs" style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}>
           {percent.toFixed(0)}%
         </Text>
       </Stack>

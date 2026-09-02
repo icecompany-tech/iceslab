@@ -65,7 +65,7 @@ export function LanguageSwitcher({ persist = false }: { persist?: boolean }) {
           </svg>
           <Text
             style={{
-              fontFamily: "'Geist Mono', monospace",
+              fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
               fontSize: 10,
               letterSpacing: '0.1em',
               lineHeight: '12px',
