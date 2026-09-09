@@ -21,7 +21,7 @@ import {
   IconSearch,
   IconShield,
 } from '@tabler/icons-react';
-import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/route-policies';
+import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/routePolicies';
 import {
   createSquad,
   listSquads,
@@ -35,7 +35,7 @@ import { listHosts } from '@/lib/domain/hosts';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
-import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 
 /**
  * Squad editor as a page, not a modal: it is the screen where an operator

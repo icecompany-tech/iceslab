@@ -15,7 +15,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RoutingPresetId } from '@iceslab/shared';
-import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getSettings, updateSettings, type AdminSettings } from '@/lib/domain/settings';
 

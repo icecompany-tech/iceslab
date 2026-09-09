@@ -5,7 +5,7 @@ import { Box, Stack, Text, Textarea, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RoutingPresetId } from '@iceslab/shared';
-import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/routingPresets';
 import {
   ROUTE_POLICY_WRITES_LIVE,
   ROUTING_PRESET_WRITES_LIVE,
@@ -15,7 +15,7 @@ import {
   type RoutePolicy,
   type RouteRule,
   type RoutingPreset,
-} from '@/lib/domain/route-policies';
+} from '@/lib/domain/routePolicies';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getSettings, updateSettings } from '@/lib/domain/settings';
 import { listSquads, type Squad } from '@/lib/domain/squads';

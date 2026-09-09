@@ -20,7 +20,7 @@ import {
   IconTrash,
   IconUsers,
 } from '@tabler/icons-react';
-import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/route-policies';
+import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/routePolicies';
 import {
   createSquad,
   deleteSquad,

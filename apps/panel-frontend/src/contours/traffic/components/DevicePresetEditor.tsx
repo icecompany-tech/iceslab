@@ -13,7 +13,7 @@ import {
   type RouteAction,
   type RouteRule,
   type RoutingPreset,
-} from '@/lib/domain/route-policies';
+} from '@/lib/domain/routePolicies';
 import { apiErrorMessage } from '@/lib/net/client';
 import { ACTION_TONE, ActionSelect } from '@/contours/traffic/components/RoutePolicyEditor';
 

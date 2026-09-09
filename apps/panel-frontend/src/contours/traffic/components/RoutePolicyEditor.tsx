@@ -15,7 +15,7 @@ import {
   type RouteAction,
   type RoutePolicy,
   type RouteRule,
-} from '@/lib/domain/route-policies';
+} from '@/lib/domain/routePolicies';
 import { apiErrorMessage } from '@/lib/net/client';
 import { type Squad } from '@/lib/domain/squads';
 

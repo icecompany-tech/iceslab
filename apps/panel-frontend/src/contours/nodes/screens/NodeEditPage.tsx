@@ -22,7 +22,7 @@ import {
 } from '@/lib/domain/nodes';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { listCascades, type Cascade } from '@/lib/domain/cascades';
-import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/route-policies';
+import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/routePolicies';
 import { listSquads } from '@/lib/domain/squads';
 import { COUNTRY_OPTIONS, countryFlag } from '@/lib/domain/countries';
 import { useOverview } from '@/lib/domain/dashboard';

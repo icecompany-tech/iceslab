@@ -32,11 +32,11 @@ import {
   IconShieldLock,
   IconUsers,
 } from '@tabler/icons-react';
-import { ALL_SQUAD_ID, type RoutePolicy } from '@/lib/domain/route-policies';
+import { ALL_SQUAD_ID, type RoutePolicy } from '@/lib/domain/routePolicies';
 import { type Cascade } from '@/lib/domain/cascades';
 import { type CreateSquadInput, type Squad, type UpdateSquadInput } from '@/lib/domain/squads';
 import { type Profile } from '@/lib/domain/profiles';
-import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
 
 const PROTOCOL_COLORS: Record<string, string> = {

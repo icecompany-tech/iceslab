@@ -21,7 +21,7 @@ import { copyToClipboard } from '@/lib/ui/clipboard';
 // 3-minute window while this list glowed for 5.
 import { isOnlineAt } from '@iceslab/shared';
 import { relativeTime, type TFn } from '@/lib/ui/relativeTime';
-import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/routingPresets';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';

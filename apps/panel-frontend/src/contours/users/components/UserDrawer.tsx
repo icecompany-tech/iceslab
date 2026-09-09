@@ -30,7 +30,7 @@ import {
   IconUser,
   IconX,
 } from '@tabler/icons-react';
-import { ALL_SQUAD_ID } from '@/lib/domain/route-policies';
+import { ALL_SQUAD_ID } from '@/lib/domain/routePolicies';
 import {
   deleteHwidDevice,
   fetchUserEndpoints,
@@ -45,7 +45,7 @@ import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { listNodes } from '@/lib/domain/nodes';
 import { listSquads } from '@/lib/domain/squads';
 import { relativeTime } from '@/lib/ui/relativeTime';
-import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';
+import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 
 /**
  * Create / edit a user. A drawer rather than a modal: this is a form you fill
