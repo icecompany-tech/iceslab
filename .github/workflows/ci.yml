@@ -17,8 +17,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  panel:
-    name: panel (backend + frontend)
+  # ───────────────────────────────────────────────────────────────────────
+  # Dependency audit. Its own job on purpose: the lockfile is one per
+  # workspace, so the audit belongs to neither app, and when it was the first
+  # step of a combined panel job a fresh advisory hid whether typecheck and
+  # tests passed at all (2026-09-09, fast-uri + mysql2). Now a red audit and a
+  # red test suite are two different lights.
+  # ───────────────────────────────────────────────────────────────────────
+  audit:
+    name: audit (deps, high+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Slice 35: npm audit gate. `--prod` ignores dev-only dependencies
+      # (vitest / @types/*) which historically carry lower-stakes
+      # transitive vulns we'd rather not gate releases on. `--audit-level
+      # high` lets known-medium issues in third-party deps pass while
+      # still failing the build on high/critical, where action is
+      # expected within hours, not weeks. Tune as the fleet matures.
+      #
+      # Advisories deliberately silenced live in `pnpm.auditConfig.ignoreGhsas`
+      # in the root package.json, and each one needs a reason recorded in the
+      # commit that added it. Today that list holds exactly one:
+      # GHSA-qwww-vcr4-c8h2 (react-router RSC-mode CSRF), whose fix only exists
+      # in react-router 8.x. The panel is a Vite SPA and does not run React
+      # Server Components at all, so the vulnerable code path is not reachable;
+      # silencing it beats forcing a major frontend upgrade for a mode we do
+      # not use. Revisit when the frontend moves to 8.x for other reasons.
+      - name: pnpm audit (high+)
+        run: pnpm audit --prod --audit-level high
+        continue-on-error: false
+
+  backend:
+    name: backend (panel)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -72,25 +116,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Slice 35: npm audit gate. `--prod` ignores dev-only dependencies
-      # (vitest / @types/*) which historically carry lower-stakes
-      # transitive vulns we'd rather not gate releases on. `--audit-level
-      # high` lets known-medium issues in third-party deps pass while
-      # still failing the build on high/critical, where action is
-      # expected within hours, not weeks. Tune as the fleet matures.
-      #
-      # Advisories deliberately silenced live in `pnpm.auditConfig.ignoreGhsas`
-      # in the root package.json, and each one needs a reason recorded in the
-      # commit that added it. Today that list holds exactly one:
-      # GHSA-qwww-vcr4-c8h2 (react-router RSC-mode CSRF), whose fix only exists
-      # in react-router 8.x. The panel is a Vite SPA and does not run React
-      # Server Components at all, so the vulnerable code path is not reachable;
-      # silencing it beats forcing a major frontend upgrade for a mode we do
-      # not use. Revisit when the frontend moves to 8.x for other reasons.
-      - name: pnpm audit (high+)
-        run: pnpm audit --prod --audit-level high
-        continue-on-error: false
-
       - name: Prisma generate + migrate
         working-directory: apps/panel-backend
         run: |
@@ -120,6 +145,32 @@ jobs:
         working-directory: apps/panel-backend
         run: pnpm exec tsc --noEmit
 
+      - name: Test backend
+        working-directory: apps/panel-backend
+        run: pnpm test
+
+  # No Postgres, no Redis, no Prisma: the SPA never touches them. Its own job
+  # so a backend test failure and a frontend type error stop sharing one red
+  # mark, and so the frontend result arrives in about a minute instead of
+  # waiting behind the backend suite.
+  frontend:
+    name: frontend (panel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       # `tsc -b`, not `tsc --noEmit`. The frontend references @iceslab/shared as
       # a composite project; --noEmit skips building referenced projects and so
       # typechecks against whatever .d.ts happens to be on disk, which in CI is
@@ -129,9 +180,11 @@ jobs:
         working-directory: apps/panel-frontend
         run: pnpm exec tsc -b
 
-      - name: Test backend
-        working-directory: apps/panel-backend
-        run: pnpm test
+      # The same build the frontend Dockerfile runs, ten seconds here instead
+      # of a failed image job after the merge.
+      - name: Build frontend
+        working-directory: apps/panel-frontend
+        run: pnpm exec vite build
 
   node-agent:
     name: node-agent (Go)
@@ -174,7 +227,8 @@ jobs:
   docker:
     name: docker (build + publish)
     runs-on: ubuntu-latest
-    needs: [panel, node-agent]
+    # audit stays in the chain: an image must not publish past a high advisory.
+    needs: [audit, backend, frontend, node-agent]
     # Runs on a pull request too, but only BUILDS there (see `push:` below).
     # A Dockerfile break used to surface after merge, when the job first ran on
     # develop - which is also the branch the operator's test server pulls from,
