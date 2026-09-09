@@ -1,0 +1,196 @@
+// ───── Section C: Cascades (multi-hop) ───────────────────────────────────────
+//
+// A cascade is an ordered chain of nodes: entry -> [transit...] -> exit. Clients
+// connect to the ENTRY node's user-facing inbound; traffic is proxy-chained
+// (terminate-at-each-hop, so the entry can split-route) hop to hop to the EXIT,
+// which egresses direct. See docs/plan/ROADMAP.md "C. Каскады" for the full design.
+//
+// C1 = this data model. Config generation (C2) and node-agent outbound-chaining
+// (C3) build on it. The protocol enums below are stored as free strings (the
+// full 7-core set); the node-agent realises them cell by cell, native first
+// (xray entry -> vless/ss2022/wg links), bridges later.
+model Cascade {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(64)
+  enabled   Boolean  @default(true)
+  // 'chain' (sequential entry->...->exit, default/legacy) or 'balancer' (one
+  // entry that latency-balances across N parallel exits, the "auto" node).
+  // Stored as a free string, like the hop protocol enums.
+  mode      String   @default("chain") @db.VarChar(16)
+  // When true (default/legacy), non-entry hops of this enabled cascade are
+  // hidden from the raw subscription so clients can only reach the chain via
+  // the entry (prevents the direct-to-exit leak). Uncheck in the panel to ALSO
+  // expose the cascade's exit nodes as directly-connectable endpoints, for
+  // operators who want users to pick those regions raw as well as via "Auto".
+  hideHopsFromSub Boolean @default(true) @map("hide_hops_from_sub")
+  // Offer an "Auto" line in the subscription: one profile that names no
+  // direction and lets the entry pick the fastest way out by measured RTT.
+  // Off by default so an existing operator's client lists do not grow a row
+  // they never asked for after an update.
+  autoProfile Boolean @default(false) @map("auto_profile")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // v4: monotonic issuer for direction tags. A tag identifies a DIRECTION and
+  // travels in the client's UUID, so it must survive the exit node changing
+  // underneath it, and a deleted direction must never hand its tag to the next
+  // one (that would silently reroute everyone holding the old link). Hence a
+  // counter rather than `max(tag) + 1`.
+  nextDirectionTag Int @default(1) @map("next_direction_tag")
+
+  // v4: `hops` and `mode` become the rollback path once positions/directions
+  // land. Nothing new should read them.
+  hops CascadeHop[]
+  positions  CascadePosition[]
+  directions CascadeDirection[]
+  links      CascadeLink[]
+  groupExits GroupCascadeExit[]
+
+  @@map("cascades")
+}
+
+// One ordered hop. position 0 = entry, highest = exit.
+//   - entryProtocol: the client-facing protocol; set ONLY on the entry hop.
+//   - linkProtocol:  the protocol to the NEXT hop; NULL on the exit hop (which
+//                    egresses direct via freedom/direct).
+//   - linkConfig:    generated inter-hop link credentials (filled by C2).
+model CascadeHop {
+  id            String   @id @default(uuid()) @db.Uuid
+  cascadeId     String   @map("cascade_id") @db.Uuid
+  nodeId        String   @map("node_id") @db.Uuid
+  position      Int
+  entryProtocol String?  @map("entry_protocol") @db.VarChar(32)
+  linkProtocol  String?  @map("link_protocol") @db.VarChar(32)
+  linkConfig    Json?    @map("link_config")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cascade Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  node    Node    @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  // One hop per position within a cascade; a node may appear in many cascades.
+  @@unique([cascadeId, position])
+  @@index([nodeId])
+  @@map("cascade_hops")
+}
+
+// ───── Cascades v4 (2026-08-07) ─────
+//
+// Two renames that are really one change: a hop became a POSITION that holds a
+// POOL of interchangeable nodes, and an exit became a DIRECTION with a stable
+// tag. They ship together because `position` used to mean two things at once
+// (for a chain the last position was the exit, for a balancer every non-zero
+// position was one), and a pool cannot be introduced under that ambiguity
+// without breaking one of the readings.
+
+// One step of the path: the entry or a transit. The EXIT is deliberately not a
+// position, it is a CascadeDirection - what a client picks is a way out, not a
+// machine, and the machine behind it must be replaceable without the client
+// noticing.
+model CascadePosition {
+  id            String   @id @default(uuid()) @db.Uuid
+  cascadeId     String   @map("cascade_id") @db.Uuid
+  // 0 = entry. Transits follow in ascending order.
+  position      Int
+  // Client-facing protocol; set ONLY on position 0.
+  entryProtocol String?  @map("entry_protocol") @db.VarChar(32)
+  // Protocol of the hop OUT of this position, towards the next position or a
+  // direction. Concrete credentials live per node pair in CascadeLink.
+  linkProtocol  String?  @map("link_protocol") @db.VarChar(32)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cascade Cascade               @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  nodes   CascadePositionNode[]
+
+  @@unique([cascadeId, position])
+  @@map("cascade_positions")
+}
+
+model CascadePositionNode {
+  positionId String @map("position_id") @db.Uuid
+  nodeId     String @map("node_id") @db.Uuid
+
+  position CascadePosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  node     Node            @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  @@id([positionId, nodeId])
+  @@index([nodeId])
+  @@map("cascade_position_nodes")
+}
+
+// A way out of the cascade. `tag` is the stable identity: it is written into the
+// client's UUID (bytes 7-8, read by xray as vlessRoute) and squad ACL cuts
+// access by it, so the panel issues it once and never reuses it. The nodes
+// behind it are a pool and may change freely.
+//
+// Before v4 the tag was the exit's ORDINAL POSITION in a sorted list, so
+// deleting one exit renumbered every exit after it and silently sent those
+// users to a different country.
+model CascadeDirection {
+  id          String   @id @default(uuid()) @db.Uuid
+  cascadeId   String   @map("cascade_id") @db.Uuid
+  // Issued from Cascade.nextDirectionTag. 1..255: routeTag() packs it into the
+  // low byte of a uint16 whose high byte is the route-policy ordinal.
+  tag         Int
+  // Shown to the client as the name of the direction. Null when the pool is
+  // empty or its nodes carry no country, which is legitimate in v4: a direction
+  // can exist with its tag frozen while it has no live node.
+  countryCode String?  @map("country_code") @db.Char(2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cascade Cascade                @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  nodes   CascadeDirectionNode[]
+
+  @@unique([cascadeId, tag])
+  @@map("cascade_directions")
+}
+
+model CascadeDirectionNode {
+  directionId String @map("direction_id") @db.Uuid
+  nodeId      String @map("node_id") @db.Uuid
+
+  direction CascadeDirection @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  node      Node             @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  @@id([directionId, nodeId])
+  @@index([nodeId])
+  @@map("cascade_direction_nodes")
+}
+
+// Credentials for one node-to-node hop inside a cascade.
+//
+// These could not stay on the hop row: with a pool of M nodes on one step and N
+// on the next there are M*N distinct secrets, and one JSON column on one row
+// cannot hold that.
+//
+// A link is identified by THREE things, not two: from, to, and the DIRECTION it
+// serves. Only the entry can read a client's chosen direction (it rides in the
+// UUID the client authenticates with); a transit downstream sees an internal
+// link, not a user. Per-direction credentials on every leg are what let a
+// transit tell them apart and fan them back out.
+//
+// The listen PORT is shared per receiving step (LINK_PORT_BASE + step): xray
+// and SS2022 both take several clients on one inbound, so N directions cost N
+// secrets but one port, and a pool does not eat ports proportionally to M*N.
+model CascadeLink {
+  id           String   @id @default(uuid()) @db.Uuid
+  cascadeId    String   @map("cascade_id") @db.Uuid
+  fromNodeId   String   @map("from_node_id") @db.Uuid
+  toNodeId     String   @map("to_node_id") @db.Uuid
+  // Tag of the direction this leg carries traffic for. Matches
+  // CascadeDirection.tag within the same cascade.
+  directionTag Int      @map("direction_tag")
+  protocol     String   @db.VarChar(32)
+  // Serialised LinkCred (see cascade.config.ts): vless uuid or shadowsocks psk
+  // plus the listen port on the receiving side.
+  config       Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cascade  Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  fromNode Node    @relation("CascadeLinkFrom", fields: [fromNodeId], references: [id], onDelete: Restrict)
+  toNode   Node    @relation("CascadeLinkTo", fields: [toNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([cascadeId, fromNodeId, toNodeId, directionTag])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("cascade_links")
+}

@@ -1,0 +1,14 @@
+/// Key-value store for panel-wide settings (brand name, logo, primary
+/// colour, ACL flags). Centralised so multiple admin browsers see the
+/// same state and unauthenticated pages (LoginPage) can read public keys.
+model AppSetting {
+  key       String   @id
+  value     Json
+  /// Read-without-auth flag. `true` = exposed via GET /api/settings/public,
+  /// safe for the login page to fetch before authenticating. `false` =
+  /// admin-only.
+  isPublic  Boolean  @default(false) @map("is_public")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_settings")
+}

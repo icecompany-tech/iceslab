@@ -1,0 +1,204 @@
+model Node {
+  // See User.sourceId. Partial unique index lives in the raw migration.
+  sourceId String? @map("source_id") @db.VarChar(128)
+  id                    String    @id @default(uuid()) @db.Uuid
+  // `name` and `address` are unique only among ACTIVE rows, see the
+  // partial unique indexes `nodes_name_active_key` / `nodes_address_active_key`
+  // applied via raw migration. Without that, soft-deleted rows would block
+  // re-using the same name/address. App-level checks in nodes.service.ts
+  // mirror the partial index semantics; createNode also catches P2002 from
+  // the DB layer as a defense-in-depth.
+  name                  String    @db.VarChar(64)
+  address               String    @db.VarChar(255)
+  protocol              String    @default("xray") @db.VarChar(32)
+  publicKey             Bytes?    @map("public_key")
+  countryCode           String?   @map("country_code") @db.Char(2)
+  status                String    @default("unknown") @db.VarChar(16)
+  lastStatusChange      DateTime? @map("last_status_change") @db.Timestamptz(6)
+  lastStatusMessage     String?   @map("last_status_message")
+  // T7: version of this node's proxy core (e.g. xray "26.3.27"), reported by
+  // the agent in /healthz and refreshed by the status poller. NULL until a
+  // versioned agent checks in. The panel gates cascade exit selection
+  // (vlessRoute) on xray >= 25.9.5 using this.
+  coreVersion           String?   @map("core_version") @db.VarChar(32)
+  // 2026-08-04: last restart tally reported by the agent's xray core, refreshed
+  // by the same status poller. Shape (see CoreRestarts in packages/shared):
+  //   { total, crash, memory, lastAt?, lastReason?, memoryLimitBytes?,
+  //     rssBytes?, observedAt }
+  // Json because this is display/diagnostic data whose shape will grow (other
+  // cores, per-core breakdown) and nothing queries inside it.
+  //
+  // Why store it at all: the agent restarts xray once its memory crosses a
+  // ceiling, BEFORE the kernel OOM-kills it. That drops live connections, so
+  // without a stored counter the panel would show a green node while users
+  // complain about drops. NULL = no reporting agent has checked in yet, which
+  // is NOT the same as "zero restarts".
+  coreRestarts          Json?     @map("core_restarts")
+  // Stamped when the node ACKNOWLEDGES an inbound push (applyInbounds returned
+  // ok), never on a failure and never on a plain liveness tick. That makes it a
+  // truthful "this node applied the config we sent" marker: comparing it with a
+  // cascade's or binding's updatedAt tells the UI whether a save actually
+  // landed on this hop. `lastStatusChange` cannot answer that, it only moves on
+  // an online/offline transition, so a healthy node never updates it.
+  lastInboundSyncAt     DateTime? @map("last_inbound_sync_at") @db.Timestamptz(6)
+  consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
+
+  // Slice 27.5: region grouping + capacity hint. Both NULL by default
+  // so existing nodes need no backfill; UI shows them under "Без региона"
+  // and skips the utilization bar.
+  regionId              String?   @map("region_id") @db.Uuid
+  maxUsers              Int?      @map("max_users")
+
+  // B3 / G (2026-06-14) - self-steal domain + node hardening.
+  // domain: FQDN the operator A-records to THIS node's IP. Used as the REALITY
+  //   serverName for self-steal profiles deployed here (SNI resolves to the node
+  //   IP, so SNI and IP stay consistent). NULL means no self-steal. NOT the
+  //   hysteria ACME name, despite an earlier note here saying it would be: a
+  //   hysteria client validates the certificate against the address it dialled,
+  //   so the cert follows `address` and this camouflage name stays out of it.
+  // hardening: flexible blob of probe-resistance toggles (ufwLockdown, fail2ban,
+  //   realisticFallback, sshAllowlist, ...). Json so new G-toggles add without a
+  //   migration; the install script + agent read only the flags they understand.
+  domain                String?   @db.VarChar(255)
+  hardening             Json?
+
+  // WARP egress (feat/warp-native). When warpEnabled, this node's xray inbound
+  // gets a wireguard outbound to Cloudflare WARP + a routing rule (per-node
+  // egress v1). warpAccount holds the registered device creds (secretKey,
+  // address, reserved, endpoint, token, license, ...) as a blob - Json so the
+  // shape can evolve without a migration. See docs/studies/STUDY-warp-native.md.
+  warpEnabled           Boolean   @default(false) @map("warp_enabled")
+  warpAccount           Json?     @map("warp_account")
+
+  // Engine-choice: opt this node into the sing-box engine alongside its native
+  // core, so vless/vmess/trojan/hy2/ss profiles with engine=singbox can run
+  // here. Surfaces as `--with-singbox` in the install command. Native protocol
+  // stays primary; tuic/anytls/shadowtls already run on sing-box (flag no-op).
+  singboxEngine         Boolean   @default(false) @map("singbox_engine")
+
+  // Slice 38: heartbeat self-destruct. Random 32-byte secret, generated
+  // at node creation. The bootstrap payload bundles a stateless HMAC token
+  // (nodeId + sig over heartbeatSecret) that the agent presents on every
+  // heartbeat poll. Server-side verification looks the secret up here and
+  // checks `deletedAt`. Backfill: existing rows get a freshly-generated
+  // secret in the migration so they keep working post-rollout.
+  heartbeatSecret       Bytes     @map("heartbeat_secret")
+
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  inbounds Inbound[]
+  profileBindings  ProfileNodeBinding[]
+  connectedUsers  UserTraffic[]
+  userUsageHistory NodeUserUsageHistory[]
+  usageHistory     NodeUsageHistory[]
+  bootstrapTokens NodeBootstrapToken[]
+  cascadeHops     CascadeHop[]
+  // Cascades v4. Deleting a node a live cascade routes through has to be a
+  // deliberate act (RESTRICT on the join rows), not something the operator
+  // learns about from a user complaint.
+  cascadePositions  CascadePositionNode[]
+  cascadeDirections CascadeDirectionNode[]
+  cascadeLinksFrom  CascadeLink[] @relation("CascadeLinkFrom")
+  cascadeLinksTo    CascadeLink[] @relation("CascadeLinkTo")
+  groupCascadeExits GroupCascadeExit[]
+  region          Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([deletedAt])
+  @@index([regionId])
+  @@map("nodes")
+}
+
+// Slice 27.5: logical grouping of nodes ("EU-West", "RU", "Asia").
+// Plain identity table; smart server-side selection (slice 28) will
+// score nodes by `region.code` against the user's GeoIP lookup.
+model Region {
+  id        String   @id @default(uuid()) @db.Uuid
+  // Free-text label shown in the admin UI ("Europe", "RU TSPU-zone").
+  name      String   @unique @db.VarChar(64)
+  // ISO 3166-2-ish short code for matching ("EU", "RU", "AS"). Free-form
+  // for now, slice 28 may tighten validation when GeoIP integration lands.
+  code      String   @unique @db.VarChar(16)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  nodes Node[]
+
+  @@map("regions")
+}
+
+// One-time bootstrap token a node-installer redeems to fetch its mTLS
+// payload over HTTP at install time. Payload (cert + key + CA) is generated
+// on-redeem via keygen, NOT stored here, the token is just a short
+// identifier the node hands back, plus expiry/single-use machinery.
+//
+// Why this exists: the raw payload is ~6-7 KB base64. Linux TTY canonical
+// mode truncates pasted strings at 4096 bytes, so admins can't reliably
+// paste the whole payload through SSH. A short token (~22 chars) sails
+// through TTY without issue, then the node-side curl fetches the full
+// payload on a clean HTTP body without any TTY in between.
+model NodeBootstrapToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  nodeId     String    @map("node_id") @db.Uuid
+  // URL-safe random, 22+ chars. Single-use; consumedAt set on redeem.
+  token      String    @unique @db.VarChar(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([expiresAt])
+  @@map("node_bootstrap_tokens")
+}
+
+model NodeUserUsageHistory {
+  nodeId   String   @map("node_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  date     DateTime @db.Date
+  bytesIn  BigInt   @default(0) @map("bytes_in")
+  bytesOut BigInt   @default(0) @map("bytes_out")
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([nodeId, date, userId])
+  @@index([userId, date(sort: Desc)])
+  @@map("node_user_usage_history")
+}
+
+model NodeUsageHistory {
+  nodeId        String   @map("node_id") @db.Uuid
+  hour          DateTime @map("hour") @db.Timestamptz(6)
+  downloadBytes BigInt   @default(0) @map("download_bytes")
+  uploadBytes   BigInt   @default(0) @map("upload_bytes")
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  @@id([nodeId, hour])
+  @@index([nodeId, hour(sort: Desc)])
+  // Dashboard aggregates by `WHERE hour >= since` without nodeId, the
+  // composite indexes above are leftmost on nodeId and useless for that.
+  @@index([hour(sort: Desc)])
+  @@map("node_usage_history")
+}
+
+/// #5 - per-(node, user) cumulative byte snapshot for non-destructive xray
+/// stats. The poller stores the last cumulative counters it saw from the agent
+/// and bills only the delta, so a lost response or a failed commit never drops
+/// bytes (the snapshot is advanced in the same transaction as the increments).
+/// No FK relations on purpose: rows for removed nodes/users are harmless and
+/// pruned separately, and it keeps the hot stats-poll write off relation joins.
+model NodeUserTrafficSnapshot {
+  nodeId    String   @map("node_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  cumIn     BigInt   @default(0) @map("cum_in")
+  cumOut    BigInt   @default(0) @map("cum_out")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([nodeId, userId])
+  @@map("node_user_traffic_snapshot")
+}

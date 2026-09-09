@@ -1,0 +1,63 @@
+model SubscriptionEvent {
+  id                 BigInt    @id @default(autoincrement())
+  userId             String    @map("user_id") @db.Uuid
+  eventType          String    @map("event_type") @db.VarChar(32)
+  performedByAdminId String?   @map("performed_by_admin_id") @db.Uuid
+
+  // State snapshot (before/after)
+  trafficLimitBefore BigInt?   @map("traffic_limit_before")
+  trafficLimitAfter  BigInt?   @map("traffic_limit_after")
+  trafficUsedBefore  BigInt?   @map("traffic_used_before")
+  trafficUsedAfter   BigInt?   @map("traffic_used_after")
+  expireAtBefore     DateTime? @map("expire_at_before") @db.Timestamptz(6)
+  expireAtAfter      DateTime? @map("expire_at_after") @db.Timestamptz(6)
+  statusBefore       String?   @map("status_before") @db.VarChar(16)
+  statusAfter        String?   @map("status_after") @db.VarChar(16)
+
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  performedByAdmin AdminUser? @relation(fields: [performedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([eventType])
+  @@map("subscription_events")
+}
+
+// Subscription Response Rules: User-Agent → format auto-selection.
+// Slice 22 ships this for /sub/:token: when the client doesn't pass
+// `?format=` we walk the rules in `priority ASC` order and serve the
+// first whose `uaPattern` regex matches `User-Agent`. Default catch-all
+// rule (highest priority value) maps unknown UAs to `plain`.
+model SubscriptionResponseRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(64)
+  // Regex applied against the full User-Agent header. Match is case-
+  // sensitive, patterns include their own (?i) when needed. Length is
+  // bounded by the route handler before regex execution to defang ReDoS.
+  uaPattern String   @map("ua_pattern")
+  // Must match the FormatEnum in subscription.routes.ts.
+  format    String   @db.VarChar(16)
+  // Lower priority = evaluated first. Drag-and-drop UI mutates this.
+  priority  Int      @default(100)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([priority])
+  @@map("subscription_response_rules")
+}
+
+model SubscriptionRequestHistory {
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id") @db.Uuid
+  requestIp   String?  @map("request_ip") @db.VarChar(45)
+  userAgent   String?  @map("user_agent")
+  requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, requestedAt(sort: Desc)])
+  @@map("subscription_request_history")
+}

@@ -1,0 +1,152 @@
+model User {
+  // Provenance of an imported row: its id in the SOURCE panel. NULL for rows
+  // created here, which is the normal case. Makes an import repeatable - a
+  // second run matches on this instead of duplicating the set or guessing by
+  // username (which the source lets people change). UNIQUE is a PARTIAL index
+  // applied in the raw migration (NULLs excluded), so Prisma must not be told
+  // to enforce it here.
+  sourceId String? @map("source_id") @db.VarChar(128)
+  id       String @id @default(uuid()) @db.Uuid
+  shortId  String @unique @map("short_id") @db.VarChar(16)
+  username String @db.VarChar(64)
+  status   String @default("active") @db.VarChar(16)
+
+  // Subscription window
+  expireAt DateTime? @map("expire_at") @db.Timestamptz(6)
+
+  // Traffic
+  trafficLimitBytes    BigInt? @map("traffic_limit_bytes")
+  trafficLimitStrategy String  @default("no_reset") @map("traffic_limit_strategy") @db.VarChar(16)
+
+  // Subscription URL
+  subscriptionToken String    @unique @map("subscription_token") @db.VarChar(64)
+  subRevokedAt      DateTime? @map("sub_revoked_at") @db.Timestamptz(6)
+
+  // Pre-generated credentials for all protocols
+  hysteriaPassword    String @map("hysteria_password") @db.VarChar(64)
+  amneziawgPrivateKey String @map("amneziawg_private_key") @db.VarChar(64)
+  amneziawgPublicKey  String @map("amneziawg_public_key") @db.VarChar(64)
+  naivePassword       String @map("naive_password") @db.VarChar(64)
+  xrayUuid            String @map("xray_uuid") @db.Uuid
+
+  // Per-user enabled protocols (subset of {hysteria, xray, amneziawg, naive}).
+  // Subscription generator filters endpoints by this; default keeps existing
+  // users on hysteria-only and admins explicitly opt in to others.
+  enabledProtocols Json @default("[\"hysteria\"]") @map("enabled_protocols")
+
+  // Limits
+  hwidDeviceLimit Int? @map("hwid_device_limit")
+
+  // R3 - optional per-user routing-preset override. Null = inherit (squad ->
+  // global -> default). Highest precedence: wins over squad and global, loses
+  // only to the per-request ?routing= query.
+  routingPreset String? @map("routing_preset") @db.VarChar(32)
+
+  // Slice 27.5: sticky-affinity hint for subscription generator.
+  // NULL = no preference (current behaviour). When set, the generator
+  // may bias the URL ordering toward this node so the client's url-test
+  // group settles on it first. Soft hint: not enforcement, the user's
+  // squad ACL still gates access to the node's profiles.
+  preferredNodeId String? @map("preferred_node_id") @db.Uuid
+
+  // Metadata (admin-facing)
+  description String?
+  tag         String? @db.VarChar(64)
+  telegramId  BigInt? @map("telegram_id")
+  email       String? @db.VarChar(255)
+
+  // Lifecycle
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  traffic      UserTraffic?
+  groupMembers GroupMember[]
+  events               SubscriptionEvent[]
+  subscriptionRequests SubscriptionRequestHistory[]
+  nodeUsageHistory     NodeUserUsageHistory[]
+  amneziawgPeers       AmneziawgPeer[]
+  hwidDevices          HwidUserDevice[]
+
+  @@index([username])
+  @@index([status])
+  @@index([expireAt])
+  @@index([deletedAt])
+  @@index([telegramId])
+  @@index([email])
+  @@map("users")
+}
+
+model UserTraffic {
+  userId               String    @id @map("user_id") @db.Uuid
+  usedTrafficBytes     BigInt    @default(0) @map("used_traffic_bytes")
+  lifetimeTrafficBytes BigInt    @default(0) @map("lifetime_traffic_bytes")
+  onlineAt             DateTime? @map("online_at") @db.Timestamptz(6)
+  firstConnectedAt     DateTime? @map("first_connected_at") @db.Timestamptz(6)
+  lastConnectedNodeId  String?   @map("last_connected_node_id") @db.Uuid
+  lastTrafficResetAt   DateTime? @map("last_traffic_reset_at") @db.Timestamptz(6)
+
+  user              User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastConnectedNode Node? @relation(fields: [lastConnectedNodeId], references: [id], onDelete: SetNull)
+
+  @@index([lastConnectedNodeId])
+  @@index([onlineAt])
+  @@map("user_traffic")
+}
+
+// Per-user IP allocation for AmneziaWG inbounds. One row per (inboundId, userId);
+// allocator picks the first free IP from the inbound's subnet (default 10.0.0.0/24).
+// Persisted so the same user keeps a stable IP across restarts and so we can detect
+// IP exhaustion before mutating the awg config.
+model AmneziawgPeer {
+  id        String   @id @default(uuid()) @db.Uuid
+  // Slice 27: was `inboundId` pointing at `inbounds`. After profiles
+  // refactor, peer allocations are scoped to the logical profile. Same user
+  // gets the same WG IP across every node a given profile is bound to
+  // (separate WG processes per node never see each other, so no collision).
+  profileId String   @map("profile_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  ip        String   @db.VarChar(45)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, ip])
+  @@unique([profileId, userId])
+  @@index([userId])
+  @@map("amneziawg_peers")
+}
+
+// ───── Slice S2: HWID enforcement ────────────────────────────────────────
+//
+// Tracks which physical client devices have fetched a user's subscription.
+// Each row is a (userId, hwid) pair, populated lazily, on /sub/:token the
+// middleware reads the `x-hwid` header (set by Hiddify/Streisand/Happ),
+// upserts this row, then counts how many devices the user has and 403s
+// if `count > user.hwidDeviceLimit`.
+//
+// Trust model: client-supplied HWID, this is a "concerned parent" gate,
+// not anti-cheat. Spoofing the header on the client trivially bypasses
+// it. Acceptable: the goal is preventing casual subscription sharing, not
+// hardening against adversarial users.
+model HwidUserDevice {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  hwid         String   @db.VarChar(255)
+  // First time we saw this device, for audit / "device added" UI later.
+  firstSeenAt  DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  // Updated on every /sub/:token hit so admins can see stale devices.
+  lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  // Optional admin label ("Phone", "Laptop"), set via API later, NULL by default.
+  label        String?  @db.VarChar(64)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Same physical device hitting the same user's subscription is one row,
+  // not a fresh insert per request.
+  @@unique([userId, hwid])
+  @@index([userId])
+  @@map("hwid_user_devices")
+}

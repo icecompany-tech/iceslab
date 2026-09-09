@@ -1,0 +1,135 @@
+model GroupProfile {
+  groupId   String   @map("group_id") @db.Uuid
+  profileId String   @map("profile_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, profileId])
+  @@index([profileId])
+  @@map("group_profiles")
+}
+
+/// Which HOSTS of a squad's profiles that squad actually hands out.
+///
+/// A squad grants PROFILES, and every host of a granted profile came with it.
+/// That made "this tier sees two countries, that one sees all" impossible to
+/// express: the only workaround was duplicating the profile, which means
+/// different REALITY keys and a second inbound on the nodes, i.e. solving an
+/// access problem by duplicating infrastructure.
+///
+/// OPT-IN RESTRICTION, deliberately the same rule the cascade exit allow-list
+/// already uses, so the panel has one access idea rather than two:
+///   - no rows for a squad  -> it hands out EVERY host of its profiles
+///     (what every existing squad does, so nothing needs migrating);
+///   - one or more rows     -> it hands out exactly those.
+///
+/// Keyed on the host, not the binding: bindings are internal plumbing an
+/// operator never sees, hosts are the lines subscribers read.
+model GroupHost {
+  groupId   String   @map("group_id") @db.Uuid
+  hostId    String   @map("host_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  host  Host  @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, hostId])
+  @@index([hostId])
+  @@map("group_hosts")
+}
+
+model Group {
+  // See User.sourceId. Partial unique index lives in the raw migration.
+  sourceId String? @map("source_id") @db.VarChar(128)
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(64)
+  description String?
+  // R3-a - optional per-squad routing-preset override (e.g. 'ru-split'). Null =
+  // inherit the panel-wide default. A user's effective preset is the single
+  // distinct non-null override across their squads (see subscription.service).
+  routingPreset String? @map("routing_preset") @db.VarChar(32)
+  // K7 - optional per-squad HWID device-limit default. Used only when the user
+  // has no explicit hwidDeviceLimit; the effective default is the MAX across
+  // the user's squads (most-permissive cohort wins). Null = no squad default.
+  hwidDeviceLimit Int? @map("hwid_device_limit")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  groupInbounds GroupInbound[]
+  groupProfiles GroupProfile[]
+  // Opt-in narrowing of which HOSTS of those profiles this squad hands out.
+  // See GroupHost.
+  groupHosts    GroupHost[]
+  members       GroupMember[]
+  // A4 increment 2: per-cascade exit allow-list. See GroupCascadeExit.
+  cascadeExits  GroupCascadeExit[]
+  // A4 ad-split: per-squad grant of extra route-policies. See GroupRoutePolicy.
+  routePolicies GroupRoutePolicy[]
+
+  @@map("groups")
+}
+
+model GroupInbound {
+  groupId   String   @map("group_id") @db.Uuid
+  inboundId String   @map("inbound_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inbound Inbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, inboundId])
+  @@index([inboundId])
+  @@map("group_inbounds")
+}
+
+model GroupMember {
+  groupId   String   @map("group_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+// A4 increment 2: per-squad cascade-exit allow-list. A row means "group X allows
+// its members to use exit node Y of balancer cascade Z". OPT-IN restriction: if a
+// user has NO allow row for a cascade across all their groups, they get ALL exits
+// (back-compat with increment 1); if they have >=1, they get the UNION of allowed
+// exits across their groups. Keyed on (cascade, exit_node) not the hop id: hops are
+// recreated on every cascade edit, node ids are stable. A stale row for a node no
+// longer in the cascade is harmless (filtered out at build time).
+model GroupCascadeExit {
+  groupId    String @map("group_id") @db.Uuid
+  cascadeId  String @map("cascade_id") @db.Uuid
+  exitNodeId String @map("exit_node_id") @db.Uuid
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  cascade Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  node    Node    @relation(fields: [exitNodeId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, cascadeId, exitNodeId])
+  @@index([cascadeId])
+  @@index([exitNodeId])
+  @@map("group_cascade_exits")
+}
+
+// A4 ad-split: per-squad GRANT of an extra route-policy (opt-in, unlike the exit
+// allow-list which is opt-in restriction). The plain policy (ordinal 0) is always
+// available; a member gets an extra policy only if one of their squads grants it.
+model GroupRoutePolicy {
+  groupId  String @map("group_id") @db.Uuid
+  policyId String @map("policy_id") @db.Uuid
+
+  group  Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  policy RoutePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, policyId])
+  @@index([policyId])
+  @@map("group_route_policies")
+}

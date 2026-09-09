@@ -1,0 +1,21 @@
+// A4 ad-split: a named route-policy = a set of direct/block domain lists layered
+// onto a chosen cascade exit at the ENTRY node. A route-profile the client sees =
+// (cascade exit) x (plain OR this policy). `ordinal` is the tag band: the vlessRoute
+// tag = ordinal*256 + exitIndex + 1. Ordinal 0 is the IMPLICIT plain profile (no
+// row, no rules) and yields the pre-ad-split exit tags (exitIndex+1) unchanged, so
+// this table holds only EXTRA policies (ordinal >= 1). directDomains/blockDomains
+// hold xray geosite/domain strings ("geosite:google", "geosite:category-ads-all").
+model RoutePolicy {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique @db.VarChar(64)
+  // Tag band (1..255). Unique so tags never collide across policies. 0 = implicit plain.
+  ordinal      Int      @unique
+  directDomains String[] @map("direct_domains")
+  blockDomains  String[] @map("block_domains")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  grants GroupRoutePolicy[]
+
+  @@map("route_policies")
+}
