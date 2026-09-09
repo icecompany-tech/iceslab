@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../../prisma.js';
 import type { CreateAdminInput } from './admin.schemas.js';
 import { mapAdminToPublic, type PublicAdminDto } from './admin.mapper.js';
-import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 
 const BCRYPT_COST = 12;
 

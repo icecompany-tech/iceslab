@@ -3,7 +3,7 @@ import { connect as tlsConnect } from 'node:tls';
 import { lookup } from 'node:dns/promises';
 import { prisma } from '../../prisma.js';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
-import { isPublicRoutableIp } from '../../lib/ip.js';
+import { isPublicRoutableIp } from '../../lib/util/ip.js';
 
 export interface ProbeResult {
   bindingId: string;

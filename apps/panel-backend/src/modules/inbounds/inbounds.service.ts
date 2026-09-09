@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { Inbound } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import {
   PROTOCOL_CONFIG_SCHEMAS,

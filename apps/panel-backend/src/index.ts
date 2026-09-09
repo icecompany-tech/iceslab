@@ -2,7 +2,7 @@ import type { Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { config } from './config.js';
 import { prisma, pingDatabase } from './prisma.js';
-import { pingRedis, closeRedis } from './lib/redis.js';
+import { pingRedis, closeRedis } from './lib/infra/redis.js';
 import { closeNodeTransport } from './modules/nodes/nodes.transport.js';
 import { registerUserEventHandlers } from './modules/users/users.events.js';
 import { registerNodeEventHandlers } from './modules/nodes/nodes.events.js';
@@ -16,9 +16,9 @@ import {
   registerCronJobs,
 } from './modules/scheduler/scheduler.queue.js';
 import { buildApp } from './app.js';
-import { setBaseLogger } from './lib/logger.js';
-import { startMetricsRefreshLoop } from './lib/metrics-refresh.js';
-import { startTelegramBot } from './lib/telegram-bot.js';
+import { setBaseLogger } from './lib/infra/logger.js';
+import { startMetricsRefreshLoop } from './lib/infra/metrics-refresh.js';
+import { startTelegramBot } from './lib/notify/telegram-bot.js';
 
 let app: FastifyInstance | null = null;
 let nodeUsersWorker: Worker | null = null;

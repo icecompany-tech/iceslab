@@ -1,6 +1,6 @@
 import { ONLINE_WINDOW_MS, type HostMetricsResponse } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import { collectSystemMetrics, type SystemMetrics } from './system-metrics.js';
 import { readCachedNodeMetrics } from '../nodes/nodes.cron.js';
 

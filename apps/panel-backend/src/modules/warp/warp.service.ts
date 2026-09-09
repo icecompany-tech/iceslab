@@ -1,4 +1,4 @@
-import { generateWireguardKeyPair } from '../../lib/credentials.js';
+import { generateWireguardKeyPair } from '../../lib/auth/credentials.js';
 
 /**
  * Cloudflare WARP device registration (panel-side), replicating `wgcf register`.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { disambiguateCascadeLabels } from './subscription.service.js';
 import type { SubscriptionEndpoint } from './subscription.formats.js';
-import { cascadeProfileLabel } from '../../lib/country-flag.js';
+import { cascadeProfileLabel } from '../../lib/util/country-flag.js';
 
 /**
  * Two lines a subscriber cannot tell apart are worse than one line fewer.

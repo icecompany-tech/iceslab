@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../../prisma.js';
-import { closeRedis } from '../../lib/redis.js';
+import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import { getProfileById, listProfiles } from './profiles.service.js';

@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma.js';
-import { eventBus } from '../../lib/event-bus.js';
-import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import { nodeUsersQueue } from './users.queue.js';
 
 type ResetStrategy = 'day' | 'week' | 'month';

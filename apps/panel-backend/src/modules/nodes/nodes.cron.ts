@@ -1,11 +1,11 @@
 import type { HostMetricsResponse } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import { NodeTransport, NodeRequestError } from './nodes.transport.js';
 import { inboundSyncQueue } from '../inbounds/inbounds.queue.js';
-import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
-import { getLogger } from '../../lib/logger.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
+import { getLogger } from '../../lib/infra/logger.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { NodeCoreRestarts } from '@iceslab/shared';
 

@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
-import { getLogger } from '../../lib/logger.js';
+import { getLogger } from '../../lib/infra/logger.js';
 import {
   computeNodeStatsWrites,
   computeUserDeltas,

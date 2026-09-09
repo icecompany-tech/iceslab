@@ -1,8 +1,8 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import ru from './locales/ru';
-import en from './locales/en';
+import ru from '@/i18n/locales/ru';
+import en from '@/i18n/locales/en';
 
 /**
  * i18next bootstrap - runs once at app startup before React mounts.

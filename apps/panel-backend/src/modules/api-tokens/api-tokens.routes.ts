@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
-import { PermissiveUuid } from '../../lib/uuid-schema.js';
+import { PermissiveUuid } from '../../lib/util/uuid-schema.js';
 import * as svc from './api-tokens.service.js';
 import { isKnownScope } from '../auth/scope.hook.js';
 

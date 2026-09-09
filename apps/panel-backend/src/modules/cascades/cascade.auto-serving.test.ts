@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../../prisma.js';
-import { closeRedis } from '../../lib/redis.js';
+import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { getRouteProfilesByEntryNode } from './cascade.service.js';
 import { autoRouteTag } from './cascade.config.js';

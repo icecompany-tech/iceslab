@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
-import { generateWireguardKeyPair, generateRealityKeyPair } from '../../lib/credentials.js';
+import { generateWireguardKeyPair, generateRealityKeyPair } from '../../lib/auth/credentials.js';
 
 const KeypairQuery = z.object({
   protocol: z.enum(['xray', 'amneziawg']).default('amneziawg'),

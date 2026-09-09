@@ -1,5 +1,5 @@
 import { prisma } from '../../prisma.js';
-import { generateSecret, totpUri, verifyTotp } from '../../lib/totp.js';
+import { generateSecret, totpUri, verifyTotp } from '../../lib/auth/totp.js';
 
 // K8 - admin 2FA (TOTP) enrollment lifecycle. setup writes a pending secret;
 // enable flips it on only after a valid code is confirmed (so a broken/

@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
 import { issueNodeCert, encodeNodePayload } from '../keygen/keygen.service.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import * as repo from './nodes.repository.js';
 import { getPanelPublicIp } from './panel-ip.js';
 import { issueBootstrapToken } from './bootstrap.service.js';
 import { registerWarpDevice } from '../warp/warp.service.js';
-import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import {
   mapNodeToPublic,
   mapNodeWithPayload,

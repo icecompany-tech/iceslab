@@ -1,9 +1,9 @@
 import type { XrayCascadeFragments } from '@iceslab/shared';
-import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/country-flag.js';
+import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
-import { eventBus } from '../../lib/event-bus.js';
-import { getLogger } from '../../lib/logger.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
+import { getLogger } from '../../lib/infra/logger.js';
 import {
   CascadeValidationError,
   foldPositionsIntoHops,

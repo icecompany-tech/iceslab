@@ -1,5 +1,5 @@
-import { eventBus, type DomainEventMap } from '../../lib/event-bus.js';
-import { emitWebhook } from '../../lib/webhook.js';
+import { eventBus, type DomainEventMap } from '../../lib/infra/event-bus.js';
+import { emitWebhook } from '../../lib/notify/webhook.js';
 
 /**
  * K2: forward externally-meaningful domain events to the webhook bus.

@@ -1,5 +1,5 @@
 import { Queue, Worker, type Job } from 'bullmq';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import {
   resetTrafficForStrategy,
   resetTrafficRolling,
@@ -11,7 +11,7 @@ import {
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
 import { pruneHistory } from '../maintenance/retention.cron.js';
-import { getLogger } from '../../lib/logger.js';
+import { getLogger } from '../../lib/infra/logger.js';
 
 // ───── Queue ─────
 

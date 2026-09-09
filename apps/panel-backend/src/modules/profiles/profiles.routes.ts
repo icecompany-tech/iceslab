@@ -4,7 +4,7 @@ import { requireAuth } from '../auth/auth.hook.js';
 import {
   generateWireguardKeyPair,
   generateRealityKeyPair,
-} from '../../lib/credentials.js';
+} from '../../lib/auth/credentials.js';
 import {
   BindingIdParamSchema,
   CreateBindingSchema,

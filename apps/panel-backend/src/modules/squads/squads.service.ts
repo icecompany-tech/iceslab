@@ -1,4 +1,4 @@
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { ALL_SQUAD_ID } from './squads.constants.js';
 import type { CreateSquadInput, UpdateSquadInput } from './squads.schemas.js';

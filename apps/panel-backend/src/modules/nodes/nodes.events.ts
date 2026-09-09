@@ -1,4 +1,4 @@
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { nodeUsersQueue } from '../users/users.queue.js';
 
 /**

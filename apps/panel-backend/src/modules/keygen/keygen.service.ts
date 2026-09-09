@@ -1,5 +1,5 @@
 import { prisma } from '../../prisma.js';
-import { notifyTelegramAsync } from '../../lib/telegram-notify.js';
+import { notifyTelegramAsync } from '../../lib/notify/telegram-notify.js';
 import {
   generateCa,
   generateNodeCert,

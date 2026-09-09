@@ -1,10 +1,10 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import type { AddUserRequest, RemoveUserRequest } from '@iceslab/shared';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import { prisma } from '../../prisma.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
-import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/credentials.js';
-import { getLogger } from '../../lib/logger.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
+import { getLogger } from '../../lib/infra/logger.js';
 
 // ───── Job data shapes ─────
 

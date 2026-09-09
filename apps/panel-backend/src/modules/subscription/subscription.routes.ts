@@ -22,10 +22,10 @@ import {
 import { enforceHwid, resolveSquadHwidLimit } from '../hwid/hwid.service.js';
 import { prisma } from '../../prisma.js';
 import { config, subscriptionOrigin } from '../../config.js';
-import { subscriptionRequests } from '../../lib/metrics.js';
-import { notifyTelegramAsync, escapeMarkdown } from '../../lib/telegram-notify.js';
-import { redis } from '../../lib/redis.js';
-import { isPublicRoutableIp } from '../../lib/ip.js';
+import { subscriptionRequests } from '../../lib/infra/metrics.js';
+import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
+import { redis } from '../../lib/infra/redis.js';
+import { isPublicRoutableIp } from '../../lib/util/ip.js';
 
 const TokenParamSchema = z.object({
   token: z.string().min(8).max(128),

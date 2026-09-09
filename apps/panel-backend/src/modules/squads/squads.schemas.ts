@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ROUTING_PRESET_IDS } from '@iceslab/shared';
-import { PermissiveUuid } from '../../lib/uuid-schema.js';
+import { PermissiveUuid } from '../../lib/util/uuid-schema.js';
 
 const NameSchema = z
   .string()

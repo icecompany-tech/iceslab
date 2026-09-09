@@ -21,7 +21,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import { prisma } from '../src/prisma.js';
-import { redis } from '../src/lib/redis.js';
+import { redis } from '../src/lib/infra/redis.js';
 import { nodeMetricsKey } from '../src/modules/nodes/nodes.cron.js';
 
 const GiB = 1024 ** 3;

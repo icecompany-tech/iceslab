@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { prisma } from '../../prisma.js';
-import { closeRedis } from '../../lib/redis.js';
+import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { fetchActiveUsers } from './inbounds.queue.js';
 import { createUser, deleteUser, updateUser } from '../users/users.service.js';

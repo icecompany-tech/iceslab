@@ -10,14 +10,14 @@ import {
 // the single source of truth for which protocols a user sees. The column is
 // kept on the User row for backwards-compat but never filters subscription
 // output.
-import { subscriptionServerName } from '../../lib/country-flag.js';
+import { subscriptionServerName } from '../../lib/util/country-flag.js';
 import { allocatePeer } from '../amneziawg/amneziawg.service.js';
 import { getHiddenCascadeNodeIds, getRouteProfilesByEntryNode } from '../cascades/cascade.service.js';
 import { isAutoRouteTag } from '../cascades/cascade.config.js';
 import { getSubscriptionSettings } from '../settings/settings.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
-import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword, deriveSsPassword } from '../../lib/credentials.js';
+import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword, deriveSsPassword } from '../../lib/auth/credentials.js';
 import {
   buildAnytlsUri,
   buildHysteriaUri,

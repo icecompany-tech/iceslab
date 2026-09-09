@@ -6,7 +6,7 @@ vi.mock('../admin/admin.service.js');
 // Slice S7 - login now touches Redis for username-lockout. Stub the
 // underlying client so unit tests don't need a live Redis. ioredis API
 // surface we hit: get / incr / expire / del / ttl.
-vi.mock('../../lib/redis.js', () => ({
+vi.mock('../../lib/infra/redis.js', () => ({
   redis: {
     get: vi.fn().mockResolvedValue(null),
     incr: vi.fn().mockResolvedValue(1),

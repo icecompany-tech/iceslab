@@ -1,6 +1,6 @@
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { nodeUsersQueue } from './users.queue.js';
-import { notifyTelegramAsync } from '../../lib/telegram-notify.js';
+import { notifyTelegramAsync } from '../../lib/notify/telegram-notify.js';
 import { prisma } from '../../prisma.js';
 
 /**

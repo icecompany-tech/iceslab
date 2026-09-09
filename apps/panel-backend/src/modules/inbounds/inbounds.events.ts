@@ -1,7 +1,7 @@
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { inboundSyncQueue, inboundDirtyKey } from './inbounds.queue.js';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 
 /**
  * Register inbound-related event handlers.

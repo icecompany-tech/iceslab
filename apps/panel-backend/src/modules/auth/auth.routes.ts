@@ -6,8 +6,8 @@ import * as authService from './auth.service.js';
 import * as twofa from './twofa.service.js';
 import * as adminService from '../admin/admin.service.js';
 import { mapAdminToPublic } from '../admin/admin.mapper.js';
-import { notifyTelegramAsync, escapeMarkdown, redactIp, redactUsername } from '../../lib/telegram-notify.js';
-import { loginAttempts } from '../../lib/metrics.js';
+import { notifyTelegramAsync, escapeMarkdown, redactIp, redactUsername } from '../../lib/notify/telegram-notify.js';
+import { loginAttempts } from '../../lib/infra/metrics.js';
 import { config, subscriptionOrigin } from '../../config.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {

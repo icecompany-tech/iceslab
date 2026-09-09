@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { generateRealityKeyPair } from '../../lib/credentials.js';
+import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
 
 /**
  * C2/C3b - cascade config generation for the native inter-hop link cells the

@@ -1,6 +1,6 @@
 import type { Prisma } from '../../generated/prisma/client.js';
-import { generateUserCredentials, generateSubscriptionToken } from '../../lib/credentials.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { generateUserCredentials, generateSubscriptionToken } from '../../lib/auth/credentials.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import * as repo from './users.repository.js';
 import type {

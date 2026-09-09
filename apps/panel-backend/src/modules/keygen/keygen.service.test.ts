@@ -7,7 +7,7 @@ import {
   type NodePayload,
 } from './keygen.service.js';
 import { prisma } from '../../prisma.js';
-import { closeRedis } from '../../lib/redis.js';
+import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 
 beforeEach(async () => {

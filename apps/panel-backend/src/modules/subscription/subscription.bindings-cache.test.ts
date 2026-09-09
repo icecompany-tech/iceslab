@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { eventBus, type DomainEventMap } from '../../lib/event-bus.js';
+import { eventBus, type DomainEventMap } from '../../lib/infra/event-bus.js';
 import {
   bindingsCacheKey,
   getCachedBindings,

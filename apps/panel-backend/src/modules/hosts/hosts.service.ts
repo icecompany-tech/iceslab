@@ -1,5 +1,5 @@
 import { Prisma } from '../../generated/prisma/client.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { checkSniConsistency } from '../profiles/host-fields.js';
 // Reused rather than redefined so the operator gets the same wording whichever

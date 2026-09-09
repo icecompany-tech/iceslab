@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { buildXrayJson, buildXrayJsonArray, withVlessRouteTag } from './xrayjson.js';
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
 // An outbound tag is the endpoint's identity, not its name, so the expected

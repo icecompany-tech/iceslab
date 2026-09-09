@@ -6,9 +6,9 @@ import {
   recordTotpStep,
 } from '../admin/admin.service.js';
 import type { LoginInput } from './auth.schemas.js';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import { config } from '../../config.js';
-import { verifyTotpStep } from '../../lib/totp.js';
+import { verifyTotpStep } from '../../lib/auth/totp.js';
 
 // Constant-work mitigation for username enumeration. When the username does
 // not exist we skip the real bcrypt.compare, so the not-found branch returns

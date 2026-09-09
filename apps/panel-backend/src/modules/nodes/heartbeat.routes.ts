@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../prisma.js';
 import { verifyHeartbeatToken } from './heartbeat-token.js';
 import { config } from '../../config.js';
-import { redis } from '../../lib/redis.js';
+import { redis } from '../../lib/infra/redis.js';
 import { inboundSyncQueue, inboundDirtyKey } from '../inbounds/inbounds.queue.js';
 
 /**

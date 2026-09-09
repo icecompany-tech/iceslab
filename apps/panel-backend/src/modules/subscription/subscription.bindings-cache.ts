@@ -1,4 +1,4 @@
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 
 /**
  * B6 - in-process cache for the heavy per-`/sub` binding query (the nested

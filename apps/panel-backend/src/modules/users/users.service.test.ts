@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as repo from './users.repository.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import {
   createUser,
   getUserById,
@@ -15,10 +15,10 @@ import {
 } from './users.service.js';
 
 vi.mock('./users.repository.js');
-vi.mock('../../lib/event-bus.js', () => ({
+vi.mock('../../lib/infra/event-bus.js', () => ({
   eventBus: { emit: vi.fn() },
 }));
-vi.mock('../../lib/credentials.js', () => ({
+vi.mock('../../lib/auth/credentials.js', () => ({
   generateUserCredentials: vi.fn(() => ({
     hysteriaPassword: 'hyst-pass',
     naivePassword: 'naive-pass',

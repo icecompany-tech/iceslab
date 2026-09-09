@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
-import { eventBus } from '../../lib/event-bus.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { MAX_DIRECTION_ORDINAL } from '../cascades/cascade.config.js';
 
 // A4 ad-split: a named route-policy (extra, ordinal >= 1) the operator can grant
