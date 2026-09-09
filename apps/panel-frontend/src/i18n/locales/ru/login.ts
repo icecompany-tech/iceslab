@@ -1,0 +1,42 @@
+export const login = {
+  login: {
+    bootstrapTitle: '{{brand}} - создать первого админа',
+    signInTitle: '{{brand}} - вход',
+    bootstrapHint:
+      'Админов ещё нет. Первая регистрация создаёт bootstrap-аккаунт.',
+    username: 'Имя пользователя',
+    password: 'Пароль',
+    submitLogin: 'Войти',
+    submitRegister: 'Создать админа',
+  },
+
+  loginPage: {
+    topbarVersion: 'v{{version}} · Operator panel · Alpha',
+    topbarStatusNormal: 'Backend доступен',
+    topbarStatusDegraded: 'Backend деградирует',
+    topbarStatusDown: 'Backend недоступен',
+    signInBadge: 'Вход',
+    heroLine1: 'Консоль',
+    heroLine2: 'оператора.',
+    heroDescription: 'Одна панель. Все протоколы. Нативные ядра. mTLS-агенты.',
+    feature1: 'Мультипротокол',
+    feature2: 'Нативные бинарники',
+    feature3: 'mTLS push',
+    footerLicense: 'AGPL-3.0',
+    footerHosting: 'Self-hosted',
+    credentialsLabel: 'Креды',
+    signInTo: 'Войти в {{brand}}',
+    bootstrapTo: 'Bootstrap {{brand}}',
+    // Стрелку рисует сама кнопка, в тексте её быть не должно.
+    continueAction: 'Продолжить',
+    createAdminAction: 'Создать админа',
+    bootstrapHint: 'У первого админа полный доступ к панели. Выбери надёжный пароль, bootstrap запускается один раз.',
+    signInFailed: 'Не удалось войти',
+    unknownError: 'Неизвестная ошибка',
+    twofaCodeLabel: 'Код двухфакторки',
+    twofaHint: 'У этого админа включена двухфакторка, код спросим после пароля.',
+    twofaVerify: 'Подтвердить',
+    twofaTitle: 'Двухфакторка',
+    twofaInvalid: 'Неверный код, попробуй ещё раз',
+  },
+} as const;
