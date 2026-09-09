@@ -42,20 +42,20 @@ model GroupHost {
 
 model Group {
   // See User.sourceId. Partial unique index lives in the raw migration.
-  sourceId String? @map("source_id") @db.VarChar(128)
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(64)
-  description String?
+  sourceId        String?  @map("source_id") @db.VarChar(128)
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @unique @db.VarChar(64)
+  description     String?
   // R3-a - optional per-squad routing-preset override (e.g. 'ru-split'). Null =
   // inherit the panel-wide default. A user's effective preset is the single
   // distinct non-null override across their squads (see subscription.service).
-  routingPreset String? @map("routing_preset") @db.VarChar(32)
+  routingPreset   String?  @map("routing_preset") @db.VarChar(32)
   // K7 - optional per-squad HWID device-limit default. Used only when the user
   // has no explicit hwidDeviceLimit; the effective default is the MAX across
   // the user's squads (most-permissive cohort wins). Null = no squad default.
-  hwidDeviceLimit Int? @map("hwid_device_limit")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  hwidDeviceLimit Int?     @map("hwid_device_limit")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   groupInbounds GroupInbound[]
   groupProfiles GroupProfile[]

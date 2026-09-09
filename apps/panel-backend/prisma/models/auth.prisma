@@ -1,20 +1,20 @@
 model AdminUser {
-  id           String    @id @default(uuid()) @db.Uuid
-  username     String    @unique @db.VarChar(64)
-  passwordHash String    @map("password_hash") @db.VarChar(128)
-  role         String    @default("admin") @db.VarChar(32)
+  id               String    @id @default(uuid()) @db.Uuid
+  username         String    @unique @db.VarChar(64)
+  passwordHash     String    @map("password_hash") @db.VarChar(128)
+  role             String    @default("admin") @db.VarChar(32)
   // K8 - 2FA TOTP. `totpSecret` is the base32 secret (set at setup, before
   // confirmation); `totpEnabled` flips true only after the admin confirms a
   // valid code, and login enforces a code only when it's true.
-  totpSecret   String?   @map("totp_secret") @db.VarChar(64)
-  totpEnabled  Boolean   @default(false) @map("totp_enabled")
+  totpSecret       String?   @map("totp_secret") @db.VarChar(64)
+  totpEnabled      Boolean   @default(false) @map("totp_enabled")
   // #14 - time-step of the last accepted TOTP code. Login rejects any code
   // whose step is <= this so a captured code can't be replayed within its
   // validity window (RFC 6238 section 5.2). Null until the first 2FA login.
-  totpLastUsedStep Int?  @map("totp_last_used_step")
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  totpLastUsedStep Int?      @map("totp_last_used_step")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   performedEvents SubscriptionEvent[]
   apiTokens       ApiToken[]
@@ -23,18 +23,18 @@ model AdminUser {
 }
 
 model ApiToken {
-  id                String    @id @default(uuid()) @db.Uuid
-  name              String    @db.VarChar(64)
-  tokenHash         String    @unique @map("token_hash") @db.VarChar(255)
-  scopes            Json      @default("[]")
-  lastUsedAt        DateTime? @map("last_used_at") @db.Timestamptz(6)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String     @db.VarChar(64)
+  tokenHash        String     @unique @map("token_hash") @db.VarChar(255)
+  scopes           Json       @default("[]")
+  lastUsedAt       DateTime?  @map("last_used_at") @db.Timestamptz(6)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   // Issuing admin, populated for tokens minted from /api/api-tokens since
   // the FK was added. Nullable so legacy rows backfill cleanly; tryApiToken
   // leaves request.admin undefined for those, which means /me 401s but the
   // token still authorises the request itself.
-  createdByAdminId  String?   @map("created_by_admin_id") @db.Uuid
-  createdByAdmin    AdminUser? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdByAdminId String?    @map("created_by_admin_id") @db.Uuid
+  createdByAdmin   AdminUser? @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
 
   @@index([createdByAdminId], map: "api_tokens_created_by_admin_id_idx")
   @@map("api_tokens")
@@ -43,18 +43,18 @@ model ApiToken {
 // Singleton holding the panel's self-signed CA used to issue per-node mTLS
 // certificates. Always exactly one row (id = 1), bootstrap on first start.
 model KeygenCa {
-  id            Int      @id @default(1)
-  certPem       String   @map("cert_pem")
-  privateKeyPem String   @map("private_key_pem")
+  id                 Int      @id @default(1)
+  certPem            String   @map("cert_pem")
+  privateKeyPem      String   @map("private_key_pem")
   // Slice S6: separate panel-client cert (clientAuth-only, signed by CA).
   // Used to be: panel presented the CA itself as its TLS leaf, which
   // collapsed any compromised node into root-equivalent on the rest of
   // the fleet. Now the CA private key never participates in a handshake.
   // Nullable for one release so existing rows backfill on first call;
   // bootstrapCa() generates them lazily.
-  panelClientCertPem    String? @map("panel_client_cert_pem")
-  panelClientKeyPem     String? @map("panel_client_key_pem")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  panelClientCertPem String?  @map("panel_client_cert_pem")
+  panelClientKeyPem  String?  @map("panel_client_key_pem")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("keygen_ca")
 }

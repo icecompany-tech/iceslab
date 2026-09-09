@@ -17,7 +17,7 @@
 
 model Profile {
   // See User.sourceId. Partial unique index lives in the raw migration.
-  sourceId String? @map("source_id") @db.VarChar(128)
+  sourceId    String?  @map("source_id") @db.VarChar(128)
   id          String   @id @default(uuid()) @db.Uuid
   // Globally unique within the panel. Becomes the user-facing label of the
   // logical inbound (replaces the per-node Inbound.name when N nodes share
@@ -97,51 +97,51 @@ model ProfileNodeBinding {
 // our URI builders / format formatters actually consume.
 model Host {
   // See User.sourceId. Partial unique index lives in the raw migration.
-  sourceId String? @map("source_id") @db.VarChar(128)
-  id                String   @id @default(uuid()) @db.Uuid
-  bindingId         String   @map("binding_id") @db.Uuid
+  sourceId  String? @map("source_id") @db.VarChar(128)
+  id        String  @id @default(uuid()) @db.Uuid
+  bindingId String  @map("binding_id") @db.Uuid
 
   // Human label shown next to the URL in the admin UI ("Direct", "EU-CDN",
   // "Mobile-tuned"). Not surfaced in the subscription, purely admin-side.
-  remark            String   @default("Default") @db.VarChar(64)
+  remark   String  @default("Default") @db.VarChar(64)
   // Subscription emission order. Lowest first. Drag-and-drop UI mutates this.
-  priority          Int      @default(0)
-  enabled           Boolean  @default(true)
+  priority Int     @default(0)
+  enabled  Boolean @default(true)
 
   // Public address the client connects to. NULL → fall back to
   // binding.publicHost → node.address. Use this when the host is fronted
   // by a CDN whose endpoint differs from the origin.
-  addressOverride   String?  @map("address_override") @db.VarChar(253)
-  portOverride      Int?     @map("port_override")
+  addressOverride String? @map("address_override") @db.VarChar(253)
+  portOverride    Int?    @map("port_override")
 
   // TLS / transport overrides. Each NULL → keep the value derived from
   // profile.config + binding.overrides. Setting one only on a host lets the
   // same inbound be reached with multiple SNI / fingerprint / path tuples.
-  sniOverride       String?  @map("sni_override") @db.VarChar(253)
-  hostHeaderOverride String? @map("host_header_override") @db.VarChar(253)
-  pathOverride      String?  @map("path_override") @db.VarChar(253)
+  sniOverride         String? @map("sni_override") @db.VarChar(253)
+  hostHeaderOverride  String? @map("host_header_override") @db.VarChar(253)
+  pathOverride        String? @map("path_override") @db.VarChar(253)
   fingerprintOverride String? @map("fingerprint_override") @db.VarChar(32)
 
   // ALPN list emitted into client URI / config. Empty = adapter default.
-  alpn              String[] @default([])
+  alpn          String[] @default([])
   // Skip cert verification on the client side (?allowInsecure=1). Useful for
   // self-signed CDN front. Default off, admin opts in per host.
-  allowInsecure     Boolean  @default(false) @map("allow_insecure")
+  allowInsecure Boolean  @default(false) @map("allow_insecure")
   // Forces client-side security layer. `default` = use protocol default
   // (REALITY for xray, TLS for naive, etc). `tls` / `none` are explicit
   // overrides, only used when fronting REALITY through a CDN that
   // terminates TLS itself.
-  securityLayer     String   @default("default") @map("security_layer") @db.VarChar(16)
+  securityLayer String   @default("default") @map("security_layer") @db.VarChar(16)
 
   // Subscription formats this host should be excluded from. e.g. some
   // CDN-fronted shapes only work in singbox, not in clash. Stored as a
   // canonical lowercase format name array: ["plain","clash","singbox","xrayjson","wgconf"].
   disableForFormats String[] @default([]) @map("disable_for_formats")
 
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  binding ProfileNodeBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+  binding    ProfileNodeBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
   // Squads that narrow their handout to this specific host. See GroupHost.
   groupHosts GroupHost[]
 
@@ -150,13 +150,13 @@ model Host {
 }
 
 model Inbound {
-  id        String   @id @default(uuid()) @db.Uuid
-  nodeId    String   @map("node_id") @db.Uuid
-  protocol  String   @db.VarChar(32)
-  name      String   @db.VarChar(64)
-  port      Int
-  config    Json
-  enabled   Boolean  @default(true)
+  id         String   @id @default(uuid()) @db.Uuid
+  nodeId     String   @map("node_id") @db.Uuid
+  protocol   String   @db.VarChar(32)
+  name       String   @db.VarChar(64)
+  port       Int
+  config     Json
+  enabled    Boolean  @default(true)
   // publicHost / publicPort: slice 25. Until now the panel emitted client
   // URIs using `hostFromAddress(node.address)` and `inbound.port` directly,
   // which forced admins to overload `node.address` (the mTLS control-plane
@@ -165,12 +165,12 @@ model Inbound {
   // dance. With these two columns the public client-URL host can diverge
   // from the control-plane endpoint. NULL → keep the historic behaviour
   // (fallback to node.address).
-  publicHost String? @map("public_host") @db.VarChar(253)
-  publicPort Int?    @map("public_port")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publicHost String?  @map("public_host") @db.VarChar(253)
+  publicPort Int?     @map("public_port")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  node Node @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  node          Node           @relation(fields: [nodeId], references: [id], onDelete: Restrict)
   groupInbounds GroupInbound[]
 
   @@unique([nodeId, port])

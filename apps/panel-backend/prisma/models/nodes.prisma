@@ -1,6 +1,6 @@
 model Node {
   // See User.sourceId. Partial unique index lives in the raw migration.
-  sourceId String? @map("source_id") @db.VarChar(128)
+  sourceId              String?   @map("source_id") @db.VarChar(128)
   id                    String    @id @default(uuid()) @db.Uuid
   // `name` and `address` are unique only among ACTIVE rows, see the
   // partial unique indexes `nodes_name_active_key` / `nodes_address_active_key`
@@ -46,8 +46,8 @@ model Node {
   // Slice 27.5: region grouping + capacity hint. Both NULL by default
   // so existing nodes need no backfill; UI shows them under "Без региона"
   // and skips the utilization bar.
-  regionId              String?   @map("region_id") @db.Uuid
-  maxUsers              Int?      @map("max_users")
+  regionId String? @map("region_id") @db.Uuid
+  maxUsers Int?    @map("max_users")
 
   // B3 / G (2026-06-14) - self-steal domain + node hardening.
   // domain: FQDN the operator A-records to THIS node's IP. Used as the REALITY
@@ -59,22 +59,22 @@ model Node {
   // hardening: flexible blob of probe-resistance toggles (ufwLockdown, fail2ban,
   //   realisticFallback, sshAllowlist, ...). Json so new G-toggles add without a
   //   migration; the install script + agent read only the flags they understand.
-  domain                String?   @db.VarChar(255)
-  hardening             Json?
+  domain    String? @db.VarChar(255)
+  hardening Json?
 
   // WARP egress (feat/warp-native). When warpEnabled, this node's xray inbound
   // gets a wireguard outbound to Cloudflare WARP + a routing rule (per-node
   // egress v1). warpAccount holds the registered device creds (secretKey,
   // address, reserved, endpoint, token, license, ...) as a blob - Json so the
   // shape can evolve without a migration. See docs/studies/STUDY-warp-native.md.
-  warpEnabled           Boolean   @default(false) @map("warp_enabled")
-  warpAccount           Json?     @map("warp_account")
+  warpEnabled Boolean @default(false) @map("warp_enabled")
+  warpAccount Json?   @map("warp_account")
 
   // Engine-choice: opt this node into the sing-box engine alongside its native
   // core, so vless/vmess/trojan/hy2/ss profiles with engine=singbox can run
   // here. Surfaces as `--with-singbox` in the install command. Native protocol
   // stays primary; tuic/anytls/shadowtls already run on sing-box (flag no-op).
-  singboxEngine         Boolean   @default(false) @map("singbox_engine")
+  singboxEngine Boolean @default(false) @map("singbox_engine")
 
   // Slice 38: heartbeat self-destruct. Random 32-byte secret, generated
   // at node creation. The bootstrap payload bundles a stateless HMAC token
@@ -82,28 +82,28 @@ model Node {
   // heartbeat poll. Server-side verification looks the secret up here and
   // checks `deletedAt`. Backfill: existing rows get a freshly-generated
   // secret in the migration so they keep working post-rollout.
-  heartbeatSecret       Bytes     @map("heartbeat_secret")
+  heartbeatSecret Bytes @map("heartbeat_secret")
 
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  inbounds Inbound[]
-  profileBindings  ProfileNodeBinding[]
-  connectedUsers  UserTraffic[]
-  userUsageHistory NodeUserUsageHistory[]
-  usageHistory     NodeUsageHistory[]
-  bootstrapTokens NodeBootstrapToken[]
-  cascadeHops     CascadeHop[]
+  inbounds          Inbound[]
+  profileBindings   ProfileNodeBinding[]
+  connectedUsers    UserTraffic[]
+  userUsageHistory  NodeUserUsageHistory[]
+  usageHistory      NodeUsageHistory[]
+  bootstrapTokens   NodeBootstrapToken[]
+  cascadeHops       CascadeHop[]
   // Cascades v4. Deleting a node a live cascade routes through has to be a
   // deliberate act (RESTRICT on the join rows), not something the operator
   // learns about from a user complaint.
   cascadePositions  CascadePositionNode[]
   cascadeDirections CascadeDirectionNode[]
-  cascadeLinksFrom  CascadeLink[] @relation("CascadeLinkFrom")
-  cascadeLinksTo    CascadeLink[] @relation("CascadeLinkTo")
+  cascadeLinksFrom  CascadeLink[]          @relation("CascadeLinkFrom")
+  cascadeLinksTo    CascadeLink[]          @relation("CascadeLinkTo")
   groupCascadeExits GroupCascadeExit[]
-  region          Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  region            Region?                @relation(fields: [regionId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([deletedAt])

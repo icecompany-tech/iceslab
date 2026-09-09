@@ -6,10 +6,10 @@ model User {
   // applied in the raw migration (NULLs excluded), so Prisma must not be told
   // to enforce it here.
   sourceId String? @map("source_id") @db.VarChar(128)
-  id       String @id @default(uuid()) @db.Uuid
-  shortId  String @unique @map("short_id") @db.VarChar(16)
-  username String @db.VarChar(64)
-  status   String @default("active") @db.VarChar(16)
+  id       String  @id @default(uuid()) @db.Uuid
+  shortId  String  @unique @map("short_id") @db.VarChar(16)
+  username String  @db.VarChar(64)
+  status   String  @default("active") @db.VarChar(16)
 
   // Subscription window
   expireAt DateTime? @map("expire_at") @db.Timestamptz(6)
@@ -61,8 +61,8 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Relations
-  traffic      UserTraffic?
-  groupMembers GroupMember[]
+  traffic              UserTraffic?
+  groupMembers         GroupMember[]
   events               SubscriptionEvent[]
   subscriptionRequests SubscriptionRequestHistory[]
   nodeUsageHistory     NodeUserUsageHistory[]
@@ -132,15 +132,15 @@ model AmneziawgPeer {
 // it. Acceptable: the goal is preventing casual subscription sharing, not
 // hardening against adversarial users.
 model HwidUserDevice {
-  id           String   @id @default(uuid()) @db.Uuid
-  userId       String   @map("user_id") @db.Uuid
-  hwid         String   @db.VarChar(255)
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  hwid        String   @db.VarChar(255)
   // First time we saw this device, for audit / "device added" UI later.
-  firstSeenAt  DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
   // Updated on every /sub/:token hit so admins can see stale devices.
-  lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
   // Optional admin label ("Phone", "Laptop"), set via API later, NULL by default.
-  label        String?  @db.VarChar(64)
+  label       String?  @db.VarChar(64)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
