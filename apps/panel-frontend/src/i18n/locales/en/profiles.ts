@@ -195,4 +195,149 @@ export const profiles = {
     portRangeEnd: 'Port range end',
     portRangeEndDesc: 'Must be > start. The node\'s iptables range must cover this.',
   },
+  recipes: {
+    searchPlaceholder: 'Search recipes…',
+    countLine: '{{shown}} of {{total}} recipes · built-in registry',
+    title: 'Quick-setup recipes',
+    subtitle: "Click and the fields below populate for the chosen scenario. Manual edits stay available.",
+    appliedBadge: 'RECIPE APPLIED',
+    appliedAlert: 'Applied: {{name}}',
+    dpiLabel: 'DPI',
+    speedLabel: 'Speed',
+    registry: {
+      title: 'Community registry',
+      loading: 'Loading community recipes...',
+      offline: 'Community registry is unreachable, built-in recipes only.',
+      staleBadge: 'cached',
+      official: 'official',
+      community: 'community',
+      byAuthor: 'by {{author}}',
+      regionAll: 'All',
+      region: {
+        GLOBAL: 'Global',
+        RU: 'RU',
+        IR: 'IR',
+        CN: 'CN',
+        BY: 'BY',
+      },
+    },
+    import: {
+      button: 'Import',
+      title: 'Import a recipe',
+      hint: 'Paste a raw URL (your gist / GitHub) or the recipe JSON. It is validated, then you pick one to apply. Nothing is saved.',
+      urlLabel: 'Recipe URL',
+      jsonLabel: 'or paste recipe JSON',
+      load: 'Load',
+      pick: 'Pick one to apply:',
+      none: 'No valid recipes found.',
+      failed: 'Import failed',
+      wrongProtocol: 'Nothing in there for {{protocol}} (only that protocol applies here).',
+      hidden: '{{count}} recipe(s) for other protocols hidden.',
+    },
+    export: {
+      button: 'Export as recipe',
+      title: 'Export as recipe',
+      hint: 'Save the current config as a recipe JSON you can commit to your own GitHub recipe source and share.',
+      nameLabel: 'Name',
+      namePlaceholder: 'My RU config',
+      descLabel: 'Description',
+      regionLabel: 'Region',
+      download: 'Download JSON',
+      filename: 'file: {{name}}.json',
+    },
+    cards: {
+      'xray-reality-vision-raw': {
+        name: 'REALITY + Vision (raw)',
+        description: 'Canonical stealth - masquerades as a real HTTPS site',
+        details:
+          'VLESS + REALITY + Vision flow over raw TCP. To DPI the traffic looks like a normal HTTPS request to a major CDN site (Cloudflare/Apple/etc). Vision flow adds zero-copy splice - the fastest path with no masking overhead. Recommended default for most situations.',
+        notes: [
+          "Vision only works with raw - don't change the transport after applying",
+        ],
+      },
+      'xray-reality-xhttp': {
+        name: 'REALITY + xhttp (HTTP/2 chunked)',
+        description: 'For aggressive DPI that cuts VLESS+raw',
+        details:
+          'VLESS + REALITY + xhttp transport. Traffic ships as HTTP/2 chunked-stream - looks like ordinary HTTP/2 to a CDN. ~10-15% slower than raw due to framing, but bypasses DPI that started cutting REALITY+raw in some ISPs. No Vision (xhttp does not support it).',
+        notes: [
+          "The path is randomised - don't share it publicly",
+          "If REALITY+raw is blocked in your network, xhttp usually still works",
+        ],
+      },
+      'xray-trojan-reality': {
+        name: 'Trojan + REALITY',
+        description: 'Password-auth instead of UUID, anti-probe defence',
+        details:
+          "Trojan via xray-core + REALITY. Users authenticate with a password (we reuse user.xrayUuid as the password). On bad auth the server returns a real HTTPS response from the decoy site - anti-probe defence. No Vision (Trojan doesn't support it). Useful for legacy clients that don't understand VLESS.",
+      },
+      'xray-reality-grpc-ru': {
+        name: 'REALITY + gRPC (RU masquerade)',
+        description: 'Decoy as a Russian CDN, for RU where cloudflare SNI is cut',
+        details:
+          'VLESS + REALITY + gRPC with serverName masqueraded as a major Russian CDN (Yandex avatars). Russian TSPU filters by SNI and targets cloudflare/foreign names, while a Russian CDN domain passes, plus a huge volume of legit traffic to hide in. Fingerprint firefox ("loyal" to TSPU JA3/JA4; chrome gets flagged). gRPC over raw: HTTP/2 framing is harder to fingerprint as a proxy. Mirrors live RU configs from 2026. NOTE: a single foreign node still dies under a whitelist shutdown; for shutdowns you need a cascade with a RU entry.',
+        notes: [
+          'serverName as a Russian CDN (avatars.mds.yandex.net); alternative ads.x5.ru. The node must reach dest:443 over TLS 1.3',
+          'fingerprint firefox: chrome is flagged as suspicious by Russian TSPU',
+          'serviceName is randomised so it does not fingerprint Iceslab',
+          'Under a whitelist shutdown a foreign node will not save you - you need a cascade with a RU entry',
+        ],
+      },
+      'hysteria-default': {
+        name: 'Hysteria 2 (clean)',
+        description: 'UDP, low latency, no obfs - for free regions',
+        details:
+          'Hysteria 2 over QUIC (UDP) without obfuscation. Lowest latency (UDP, no TCP handshake) and good throughput via Brutal CC. No obfs - DPI may flag QUIC traffic. Use in regions without active UDP-DPI.',
+      },
+      'hysteria-salamander': {
+        name: 'Hysteria 2 + Salamander (RU mobile)',
+        description: 'Obfuscation for UDP-DPI on Russian mobile carriers',
+        details:
+          'Hysteria 2 with Salamander obfuscation password. Each UDP packet is XOR-encrypted with a key derived from the password - DPI sees no QUIC signature. On Russian mobile carriers (Megafon/MTS/Beeline) clean Hysteria is often throttled to tx:0; Salamander typically passes through. Brutal CC tuned for 100 Mbps peaks.',
+        notes: [
+          "Obfs password generated randomly - don't lose it, clients need it",
+          'Brutal CC 100/100 Mbps - adjust to your node\'s real bandwidth',
+        ],
+      },
+      'awg-default': {
+        name: 'AmneziaWG (default)',
+        description: 'Default obfs parameters - works for most ISPs',
+        details:
+          'AmneziaWG (a WireGuard fork with DPI bypass). Default Jc/Jmin/Jmax + S/H obfuscation hides the WireGuard signature. Fits most providers. For aggressive ISPs try the "Iran-tuned" recipe.',
+      },
+      'awg-iran': {
+        name: 'AmneziaWG (Iran-tuned)',
+        description: 'Obfuscation tuned for Iranian DPI',
+        details:
+          "AmneziaWG with obfuscation parameters recommended by the Amnezia team for Iranian ISPs. Jc=4 (junk count), specific S1-S4 padding, H1-H4 header bytes. The default parameters fail Iranian DPI; these usually pass. Often helps on corporate firewalls too.",
+      },
+      'naive-default': {
+        name: 'NaiveProxy (Caddy)',
+        description: 'HTTP/2 proxy with Chrome fingerprint, probe-resistant',
+        details:
+          "NaiveProxy via Caddy fork. Traffic moves over HTTP/2 as a normal HTTPS request with the correct Chrome JA3 fingerprint. ACME cert from Let's Encrypt automatically. One of the stealthiest options where xray and hysteria are already banned.",
+        notes: [
+          'Fill hostname and tlsEmail manually - needs a real domain with an A-record on the node',
+        ],
+      },
+      'ss-2022-blake3': {
+        name: 'SS-2022 (blake3-aes-256)',
+        description: 'Modern Shadowsocks - XChaCha20-level security',
+        details:
+          'Shadowsocks 2022 with the 2022-blake3-aes-256-gcm cipher. Modern alternative AEAD - better performance and probe-resistance than legacy chacha20. Supported by all current SS clients (Outline, Shadowrocket, sing-box).',
+      },
+      'mtproto-default': {
+        name: 'MTProto (Telegram)',
+        description: 'Telegram-only - a separate use case',
+        details:
+          'MTProto proxy for Telegram. NOT a general-purpose VPN - Telegram traffic only. One shared secret across all users (upstream 9seconds/mtg limitation). Useful when Telegram is blocked but you want a fast pipe specifically for the messenger.',
+      },
+      'mieru-default': {
+        name: 'Mieru (Chinese GFW)',
+        description: 'Tuned against the Great Firewall - random padding',
+        details:
+          "Mieru by enfein - a modern stealth protocol with aggressive padding, designed against the Chinese GFW. Traffic looks like noise - no signatures. Supported by sing-box. Use when other protocols are cut in mainland China.",
+      },
+    },
+  },
 } as const;

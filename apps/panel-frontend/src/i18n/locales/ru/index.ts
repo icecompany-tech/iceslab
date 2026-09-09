@@ -5,7 +5,8 @@
  * etc) so we can split files later without rename. Keep keys descriptive
  * enough that a missing translation defaults to a meaningful fallback.
  *
- * Split by contour: one file per group, this index only re-assembles them.
+ * One file per contour, this index only re-assembles them. A key lives with
+ * the contour that reads it; `common` holds what several contours share.
  * Keys, strings and nesting are untouched by the split.
  */
 import { common } from './common';
@@ -18,6 +19,7 @@ import { hosts } from './hosts';
 import { profiles } from './profiles';
 import { cascades } from './cascades';
 import { squads } from './squads';
+import { traffic } from './traffic';
 import { subscription } from './subscription';
 import { settings } from './settings';
 
@@ -32,6 +34,7 @@ export default {
   ...profiles,
   ...cascades,
   ...squads,
+  ...traffic,
   ...subscription,
   ...settings,
 };

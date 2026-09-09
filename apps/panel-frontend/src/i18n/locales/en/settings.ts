@@ -96,4 +96,25 @@ export const settings = {
     savedOk: 'Saved - will refresh for all admins after reload',
     saveErrorTitle: 'Failed to save',
   },
+  regions: {
+    title: 'Regions',
+    description:
+      'Logical grouping of nodes (EU / RU / Asia / …) - used for filtering on /nodes and smart server-side selection (slice 28).',
+    empty: 'No regions yet. Create your first - e.g. "Europe" with code "EU".',
+    name: 'Name',
+    namePlaceholder: 'Europe',
+    code: 'Code',
+    codePlaceholder: 'EU',
+    nodesCount_one: '{{count}} node',
+    nodesCount_other: '{{count}} nodes',
+    add: 'Add',
+    deleteTitle: 'Delete region "{{name}}"?',
+    deleteWithNodes: '{{count}} nodes will remain but lose their region link (field cleared).',
+    deleteSafe: 'No node attached - safe to delete.',
+    notify: {
+      created: 'Region created',
+      updated: 'Region updated',
+      deleted: 'Region deleted',
+    },
+  },
 } as const;

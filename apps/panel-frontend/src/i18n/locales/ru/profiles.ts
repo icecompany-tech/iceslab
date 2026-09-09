@@ -195,4 +195,137 @@ export const profiles = {
     portRangeEnd: 'Конец диапазона портов',
     portRangeEndDesc: 'Должен быть > начала. iptables-диапазон на ноде должен покрывать этот.',
   },
+  recipes: {
+    searchPlaceholder: 'Поиск рецептов…',
+    countLine: '{{shown}} из {{total}} рецептов · встроенный реестр',
+    title: 'Рецепты быстрой настройки',
+    subtitle: 'Клик - поля ниже заполнятся под выбранный сценарий. Ручная правка остаётся доступной.',
+    appliedBadge: 'RECIPE ПРИМЕНЁН',
+    appliedAlert: 'Применён: {{name}}',
+    dpiLabel: 'DPI',
+    speedLabel: 'Speed',
+    registry: {
+      title: 'Реестр сообщества',
+      loading: 'Загрузка рецептов сообщества...',
+      offline: 'Реестр сообщества недоступен, только встроенные рецепты.',
+      staleBadge: 'кэш',
+      official: 'official',
+      community: 'community',
+      byAuthor: 'автор: {{author}}',
+      regionAll: 'Все',
+      region: {
+        GLOBAL: 'Глобал',
+        RU: 'RU',
+        IR: 'IR',
+        CN: 'CN',
+        BY: 'BY',
+      },
+    },
+    import: {
+      button: 'Импорт',
+      title: 'Импорт рецепта',
+      hint: 'Вставь raw-URL (свой gist / GitHub) или JSON рецепта. Он валидируется, потом выбираешь какой применить. Ничего не сохраняется.',
+      urlLabel: 'URL рецепта',
+      jsonLabel: 'или вставь JSON рецепта',
+      load: 'Загрузить',
+      pick: 'Выбери, что применить:',
+      none: 'Валидных рецептов не найдено.',
+      failed: 'Импорт не удался',
+      wrongProtocol: 'Для {{protocol}} там ничего нет (сюда применим только этот протокол).',
+      hidden: 'Скрыто рецептов для других протоколов: {{count}}.',
+    },
+    export: {
+      button: 'Экспорт в рецепт',
+      title: 'Экспорт в рецепт',
+      hint: 'Сохрани текущий конфиг как JSON-рецепт, положи его в свой GitHub-источник рецептов и поделись.',
+      nameLabel: 'Название',
+      namePlaceholder: 'Мой RU-конфиг',
+      descLabel: 'Описание',
+      regionLabel: 'Регион',
+      download: 'Скачать JSON',
+      filename: 'файл: {{name}}.json',
+    },
+    cards: {
+      'xray-reality-vision-raw': {
+        name: 'REALITY + Vision (raw)',
+        description: 'Канонический stealth - маскировка под HTTPS-сайт',
+        details:
+          'VLESS + REALITY + Vision flow поверх raw TCP. Трафик выглядит для DPI как обычный HTTPS-запрос на крупный CDN-сайт (Cloudflare/Apple/etc). Vision flow добавляет zero-copy splice - самый быстрый путь без потери на маскировке. Это рекомендуемый дефолт для большинства ситуаций.',
+        notes: [
+          'Vision работает только с raw - не меняй транспорт после применения recipe',
+        ],
+      },
+      'xray-reality-xhttp': {
+        name: 'REALITY + xhttp (HTTP/2 chunked)',
+        description: 'Для жёсткого DPI который режет VLESS+raw',
+        details:
+          'VLESS + REALITY + xhttp transport. Трафик уезжает в HTTP/2 chunked-stream - выглядит как обычный HTTP/2 запрос (выпадает в общую массу h2 трафика к CDN). Чуть медленнее raw (≈10-15% потери на framing), но обходит DPI который начал резать REALITY+raw в некоторых ISP. Без Vision - для xhttp Vision не работает.',
+        notes: [
+          'Path рандомизирован - не показывай его публично',
+          'Если REALITY+raw блокируется в твоей сети - xhttp обычно ещё работает',
+        ],
+      },
+      'xray-trojan-reality': {
+        name: 'Trojan + REALITY',
+        description: 'Password-auth вместо UUID, anti-probe defense',
+        details:
+          'Trojan через xray-core + REALITY. Пользователи аутентифицируются паролем (мы используем user.xrayUuid как пароль). При неверной аутентификации сервер возвращает реальный HTTPS-ответ с decoy-сайта - anti-probe защита. Без Vision (Trojan его не поддерживает). Полезно для legacy-клиентов которые не умеют VLESS.',
+      },
+      'hysteria-default': {
+        name: 'Hysteria 2 (clean)',
+        description: 'UDP, низкая latency, без obfs - для свободных регионов',
+        details:
+          'Hysteria 2 поверх QUIC (UDP) без обфускации. Самая низкая latency (UDP без TCP-handshake) и хорошая throughput через Brutal CC. Без obfs - DPI может обнаружить QUIC-трафик. Подходит для регионов без активного UDP-DPI.',
+      },
+      'hysteria-salamander': {
+        name: 'Hysteria 2 + Salamander (RU mobile)',
+        description: 'Obfuscation для обхода UDP-DPI на РФ-мобиле',
+        details:
+          'Hysteria 2 с Salamander obfuscation password. Каждый UDP-пакет XOR-шифруется производным от пароля ключом - DPI не видит QUIC-сигнатуру. На РФ мобильных (Megafon/MTS/Beeline) clean Hysteria часто throttled до tx:0; Salamander обычно проходит. Brutal CC параметры выставлены для пиков 100 Mbps.',
+        notes: [
+          'Obfs password сгенерирован случайно - не теряй его, нужен на клиентах',
+          'Brutal CC 100/100 Mbps - настрой под реальную пропускную способность ноды',
+        ],
+      },
+      'awg-default': {
+        name: 'AmneziaWG (default)',
+        description: 'Дефолтные obfs параметры - для большинства ISP',
+        details:
+          'AmneziaWG (форк WireGuard с DPI-bypass). Дефолтный preset Jc/Jmin/Jmax + S/H обфускации скрывает WireGuard-сигнатуру. Подходит для большинства провайдеров. На особо жёстких ISP попробуй «Iran-tuned».',
+      },
+      'awg-iran': {
+        name: 'AmneziaWG (Iran-tuned)',
+        description: 'Обфускация под иранский DPI',
+        details:
+          'AmneziaWG с параметрами обфускации, рекомендованными командой Amnezia для иранских ISP. Jc=4 (junk count), специфические S1-S4 паддинги, H1-H4 хедер-байты. На иранском DPI default-параметры не проходят, эти - да. Также часто помогают на корпоративных firewall.',
+      },
+      'naive-default': {
+        name: 'NaiveProxy (Caddy)',
+        description: 'HTTP/2 proxy с Chrome-fingerprint, защищён от probe',
+        details:
+          'NaiveProxy через Caddy fork. Трафик идёт в HTTP/2 как обычный HTTPS-запрос с правильным Chrome JA3 fingerprint. ACME cert от Let\'s Encrypt автоматически. Один из самых stealth-вариантов для регионов где xray и hysteria уже забанены.',
+        notes: [
+          'Hostname и tlsEmail заполни вручную - нужен реальный домен с A-записью на ноду',
+        ],
+      },
+      'ss-2022-blake3': {
+        name: 'SS-2022 (blake3-aes-256)',
+        description: 'Современный Shadowsocks - XChaCha20 уровень security',
+        details:
+          'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm. Современная alternative AEAD - лучше по производительности и резистентности к probe-attacks чем legacy chacha20. Поддерживается всеми актуальными SS-клиентами (Outline, Shadowrocket, sing-box).',
+      },
+      'mtproto-default': {
+        name: 'MTProto (Telegram)',
+        description: 'Только для Telegram-клиента - отдельный use case',
+        details:
+          'MTProto-прокси для Telegram. Это НЕ general-purpose VPN - только Telegram-трафик. Один shared secret на все юзеры (upstream 9seconds/mtg ограничение). Полезно когда Telegram забанен но хочется быстрого канала именно для месседжера.',
+      },
+      'mieru-default': {
+        name: 'Mieru (Chinese GFW)',
+        description: 'Специально под Great Firewall - random padding',
+        details:
+          'Mieru от enfein - современный stealth-протокол с агрессивным паддингом, разработан против Chinese GFW. Трафик выглядит как noise - нет сигнатур. Поддерживается sing-box. Используй когда другие протоколы режутся в CN-mainland.',
+      },
+    },
+  },
 } as const;

@@ -98,4 +98,26 @@ export const settings = {
     savedOk: 'Сохранено - обновится у всех админов после refresh',
     saveErrorTitle: 'Не получилось сохранить',
   },
+  regions: {
+    title: 'Регионы',
+    description:
+      'Логическая группировка нод (EU / RU / Asia / …) - используется для фильтрации в /nodes и для smart server-side selection (slice 28).',
+    empty: 'Регионов нет. Создай первый - например, «Europe» с кодом «EU».',
+    name: 'Имя',
+    namePlaceholder: 'Europe',
+    code: 'Код',
+    codePlaceholder: 'EU',
+    nodesCount_one: '{{count}} нода',
+    nodesCount_few: '{{count}} ноды',
+    nodesCount_many: '{{count}} нод',
+    add: 'Добавить',
+    deleteTitle: 'Удалить регион «{{name}}»?',
+    deleteWithNodes: '{{count}} нод останутся, но потеряют привязку к региону (поле обнулится).',
+    deleteSafe: 'Ни одна нода не привязана - действие безопасное.',
+    notify: {
+      created: 'Регион создан',
+      updated: 'Регион обновлён',
+      deleted: 'Регион удалён',
+    },
+  },
 } as const;
