@@ -29,17 +29,19 @@ import {
 } from '@tabler/icons-react';
 import {
   createHost,
-  getProfileHostFields,
   goneWhileEditing,
-  listBindings,
   listHosts,
-  listNodes,
-  listProfiles,
   portConflict,
-  sniMismatch,
   updateHost,
-  type Fingerprint,
-} from '@/lib/net/api';
+} from '@/lib/domain/hosts';
+import {
+  getProfileHostFields,
+  listBindings,
+  listProfiles,
+  sniMismatch,
+} from '@/lib/domain/profiles';
+import { listNodes } from '@/lib/domain/nodes';
+import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
 

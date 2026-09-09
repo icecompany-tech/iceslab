@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Drawer, NumberInput, Select, Stack, Text, TextInput, Textarea, UnstyledButton } from '@mantine/core';
+import {
+  Box,
+  Drawer,
+  NumberInput,
+  Select,
+  Stack,
+  Text,
+  TextInput,
+  Textarea,
+  UnstyledButton,
+} from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,21 +30,20 @@ import {
   IconUser,
   IconX,
 } from '@tabler/icons-react';
+import { ALL_SQUAD_ID } from '@/lib/domain/route-policies';
 import {
-  ALL_SQUAD_ID,
   deleteHwidDevice,
   fetchUserEndpoints,
-  listBindings,
-  listNodes,
-  listProfiles,
-  listSquads,
   listUserDevices,
   listUsers,
   type CreateUserInput,
   type TrafficLimitStrategy,
   type UpdateUserInput,
   type User,
-} from '@/lib/net/api';
+} from '@/lib/domain/users';
+import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { listNodes } from '@/lib/domain/nodes';
+import { listSquads } from '@/lib/domain/squads';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';
 

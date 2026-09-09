@@ -2,15 +2,11 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import {
-  getCascadeStatus,
-  listBindings,
-  listRoutePolicies,
-  listSquads,
-  type Cascade,
-  type CascadeHop,
-  type Node,
-} from '@/lib/net/api';
+import { getCascadeStatus, type Cascade, type CascadeHop } from '@/lib/domain/cascades';
+import { listBindings } from '@/lib/domain/profiles';
+import { listRoutePolicies } from '@/lib/domain/route-policies';
+import { listSquads } from '@/lib/domain/squads';
+import { type Node } from '@/lib/domain/nodes';
 import { countryFlag } from '@/lib/domain/countries';
 import { useOverview } from '@/lib/domain/dashboard';
 

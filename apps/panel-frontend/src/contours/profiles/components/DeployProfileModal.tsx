@@ -17,17 +17,16 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconRocket, IconServer2 } from '@tabler/icons-react';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  apiErrorMessage,
   createBinding,
   deleteBinding,
   getNextFreePort,
   listBindings,
-  listNodes,
   type Binding,
-  type Node as PanelNode,
   type Profile,
-} from '@/lib/net/api';
+} from '@/lib/domain/profiles';
+import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
 
 interface Props {
   profile: Profile | null;

@@ -12,7 +12,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
-import type { ProtocolName } from '@/lib/net/api';
+import type { ProtocolName } from '@/lib/domain/protocols';
 import { buildExportRecipe, downloadRecipeJson } from '@/contours/profiles/lib/recipes';
 
 /**

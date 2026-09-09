@@ -10,7 +10,7 @@ import {
   updateProfile,
   type CreateProfileInput,
   type UpdateProfileInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/profiles';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 

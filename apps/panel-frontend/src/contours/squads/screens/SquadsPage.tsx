@@ -20,21 +20,19 @@ import {
   IconTrash,
   IconUsers,
 } from '@tabler/icons-react';
+import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/route-policies';
 import {
-  ALL_SQUAD_ID,
   createSquad,
   deleteSquad,
-  listBindings,
-  listCascades,
-  listNodes,
-  listProfiles,
-  listRoutePolicies,
   listSquads,
   updateSquad,
   type CreateSquadInput,
   type Squad,
   type UpdateSquadInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/squads';
+import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { listCascades } from '@/lib/domain/cascades';
+import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { SquadFormModal } from '@/contours/squads/components/SquadFormModal';
 

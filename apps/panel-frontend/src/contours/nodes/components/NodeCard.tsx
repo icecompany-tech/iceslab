@@ -25,7 +25,8 @@ import {
   IconUpload,
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
-import type { CoreRestarts, DashboardOverview } from '@/lib/net/api';
+import type { CoreRestarts } from '@/lib/domain/nodes';
+import type { DashboardOverview } from '@/lib/domain/dashboard';
 import { countryFlag } from '@/lib/domain/countries';
 import { relativeTime } from '@/lib/ui/relativeTime';
 

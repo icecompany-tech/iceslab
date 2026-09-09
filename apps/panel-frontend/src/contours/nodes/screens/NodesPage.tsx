@@ -32,11 +32,10 @@ import {
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { createBinding } from '@/lib/domain/profiles';
 import {
-  createBinding,
   createNode,
   deleteNode,
-  listCascades,
   listNodes,
   listRegions,
   refreshNodeBootstrap,
@@ -44,7 +43,8 @@ import {
   type CreateNodeInput,
   type Node,
   type UpdateNodeInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/nodes';
+import { listCascades } from '@/lib/domain/cascades';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { NodeFormModal } from '@/contours/nodes/components/NodeFormModal';

@@ -20,7 +20,7 @@ import {
   IconClock,
   IconShieldLock,
 } from '@tabler/icons-react';
-import { testConnectProfile, type TestConnectResult, type Profile } from '@/lib/net/api';
+import { testConnectProfile, type TestConnectResult, type Profile } from '@/lib/domain/profiles';
 
 interface Props {
   profile: Profile | null;

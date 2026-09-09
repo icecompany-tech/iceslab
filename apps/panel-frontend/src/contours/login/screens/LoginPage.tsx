@@ -1,12 +1,22 @@
 import { useState } from 'react';
-import { Box, PasswordInput, Stack, TextInput, Text, Loader, Center, UnstyledButton } from '@mantine/core';
+import {
+  Box,
+  PasswordInput,
+  Stack,
+  TextInput,
+  Text,
+  Loader,
+  Center,
+  UnstyledButton,
+} from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { fetchAuthStatus, login, register, type LoginResponse, api } from '@/lib/net/api';
+import { fetchAuthStatus, login, register, type LoginResponse } from '@/lib/auth/api';
+import { api } from '@/lib/net/client';
 import { useAuth } from '@/lib/auth/session';
 import { useBrandName } from '@/lib/ui/useBrandName';
 import { LanguageSwitcher } from '@/ui/LanguageSwitcher';

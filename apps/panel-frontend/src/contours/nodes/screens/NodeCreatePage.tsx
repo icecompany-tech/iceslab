@@ -16,16 +16,14 @@ import {
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createBinding, listProfiles, type Profile } from '@/lib/domain/profiles';
 import {
-  createBinding,
   createNode,
   findNode,
-  listProfiles,
   type NodeHardening,
   type NodeProtocol,
   type NodeWithPayload,
-  type Profile,
-} from '@/lib/net/api';
+} from '@/lib/domain/nodes';
 import { COUNTRY_OPTIONS } from '@/lib/domain/countries';
 import { protocolLabel } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';

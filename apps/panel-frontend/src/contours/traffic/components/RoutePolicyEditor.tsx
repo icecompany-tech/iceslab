@@ -7,7 +7,6 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ROUTE_POLICY_WRITES_LIVE,
-  apiErrorMessage,
   createRoutePolicy,
   deleteRoutePolicy,
   policyConflict,
@@ -16,8 +15,9 @@ import {
   type RouteAction,
   type RoutePolicy,
   type RouteRule,
-  type Squad,
-} from '@/lib/net/api';
+} from '@/lib/domain/route-policies';
+import { apiErrorMessage } from '@/lib/net/client';
+import { type Squad } from '@/lib/domain/squads';
 
 /**
  * The "on the node" editor: a policy's rules in the order they are evaluated.

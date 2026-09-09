@@ -53,8 +53,6 @@ import {
 import {
   createUser,
   deleteUser,
-  fetchAuthStatus,
-  listSquads,
   listUserTags,
   listUsers,
   subscriptionUrl,
@@ -66,7 +64,9 @@ import {
   type UpdateUserInput,
   type User,
   type UserSort,
-} from '@/lib/net/api';
+} from '@/lib/domain/users';
+import { fetchAuthStatus } from '@/lib/auth/api';
+import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { UserDrawer } from '@/contours/users/components/UserDrawer';

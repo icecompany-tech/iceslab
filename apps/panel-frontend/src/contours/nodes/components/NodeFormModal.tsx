@@ -24,15 +24,14 @@ import {
 import { useForm, type UseFormReturnType } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
 import { IconBolt, IconRocket, IconServer2, IconShieldLock } from '@tabler/icons-react';
+import { listProfiles, type Profile } from '@/lib/domain/profiles';
 import {
-  listProfiles,
   type CreateNodeInput,
   type Node,
   type NodeHardening,
   type NodeProtocol,
-  type Profile,
   type UpdateNodeInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/nodes';
 import { COUNTRY_OPTIONS } from '@/lib/domain/countries';
 
 const PROTOCOL_OPTIONS: { value: NodeProtocol; label: string }[] = [

@@ -12,7 +12,13 @@ import {
   Stack,
   Text,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCheck, IconChevronDown, IconCopy, IconDownload } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconChevronDown,
+  IconCopy,
+  IconDownload,
+} from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { copyToClipboard } from '@/lib/ui/clipboard';
 

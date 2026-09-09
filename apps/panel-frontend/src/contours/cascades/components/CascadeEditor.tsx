@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
-import type { CascadeMode, CascadeProtocol, Node } from '@/lib/net/api';
+import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
+import type { Node } from '@/lib/domain/nodes';
 import { COUNTRIES, countryFlag } from '@/lib/domain/countries';
 
 /**

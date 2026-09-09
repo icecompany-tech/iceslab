@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getPublicSettings } from '@/lib/net/api';
+import { getPublicSettings } from '@/lib/domain/settings';
 
 export function useBrandName(): string {
   const { data } = useQuery({

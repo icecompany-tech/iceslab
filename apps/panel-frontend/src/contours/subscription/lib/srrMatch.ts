@@ -1,4 +1,4 @@
-import type { SrrRule, SubscriptionFormat } from '@/lib/net/api';
+import type { SrrRule, SubscriptionFormat } from '@/lib/domain/srr';
 
 /**
  * The delivery matcher, run in the browser.

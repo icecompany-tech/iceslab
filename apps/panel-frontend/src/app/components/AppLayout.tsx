@@ -35,7 +35,7 @@ import {
 } from '@/ui/NavIcons';
 import { useAuth } from '@/lib/auth/session';
 import { useBrandName } from '@/lib/ui/useBrandName';
-import { getSystemVersion } from '@/lib/net/api';
+import { getSystemVersion } from '@/lib/domain/settings';
 import { useOverview } from '@/lib/domain/dashboard';
 import { PageMetaProvider, usePageMetaFacts } from '@/lib/ui/usePageMeta';
 import { DISCORD_URL, GITHUB_URL, SUPPORT_URL, TELEGRAM_URL } from '@/lib/domain/community';

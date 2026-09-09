@@ -5,14 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  apiErrorMessage,
   cascadeShapeError,
   createCascadeV4,
   listCascades,
-  listNodes,
   type CascadeProtocol,
-} from '@/lib/net/api';
+} from '@/lib/domain/cascades';
+import { listNodes } from '@/lib/domain/nodes';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';

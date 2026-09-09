@@ -1,4 +1,4 @@
-import type { SubscriptionFormat } from '@/lib/net/api';
+import type { SubscriptionFormat } from '@/lib/domain/srr';
 
 /**
  * The formats a delivery rule may select, in the order the picker lists them.

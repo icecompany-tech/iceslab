@@ -6,28 +6,24 @@ import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { deleteHost, listHosts } from '@/lib/domain/hosts';
 import {
-  deleteHost,
   deleteNode,
   disableNodeWarp,
   findNode,
   getNodeExposure,
-  listBindings,
-  listCascades,
-  listHosts,
   listNodes,
-  listProfiles,
   listRegions,
-  listRoutePolicies,
-  listSquads,
   refreshNodeBootstrap,
   registerNodeWarp,
   updateNode,
-  type Cascade,
   type Node,
   type NodeProtocol,
-  type RoutePolicy,
-} from '@/lib/net/api';
+} from '@/lib/domain/nodes';
+import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { listCascades, type Cascade } from '@/lib/domain/cascades';
+import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/route-policies';
+import { listSquads } from '@/lib/domain/squads';
 import { COUNTRY_OPTIONS, countryFlag } from '@/lib/domain/countries';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';

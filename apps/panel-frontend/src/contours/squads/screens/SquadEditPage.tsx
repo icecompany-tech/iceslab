@@ -21,20 +21,18 @@ import {
   IconSearch,
   IconShield,
 } from '@tabler/icons-react';
+import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/route-policies';
 import {
-  ALL_SQUAD_ID,
   createSquad,
-  listBindings,
-  listCascades,
-  listHosts,
-  listNodes,
-  listProfiles,
-  listRoutePolicies,
   listSquads,
   updateSquad,
   type SquadExitAclEntry,
   type UpdateSquadInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/squads';
+import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { listCascades } from '@/lib/domain/cascades';
+import { listHosts } from '@/lib/domain/hosts';
+import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routing-presets';

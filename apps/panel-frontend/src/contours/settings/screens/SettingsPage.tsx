@@ -20,29 +20,29 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { copyToClipboard } from '@/lib/ui/clipboard';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  apiErrorMessage,
   createApiToken,
-  createRegion,
   deleteApiToken,
-  deleteRegion,
-  disable2fa,
-  enable2fa,
-  get2faStatus,
   listApiTokens,
-  listRegions,
   getSettings,
-  setup2fa,
-  updateRegion,
   updateSettings,
+  type ApiToken,
+} from '@/lib/domain/settings';
+import {
+  createRegion,
+  deleteRegion,
+  listRegions,
+  updateRegion,
+  type Region,
+} from '@/lib/domain/nodes';
+import { disable2fa, enable2fa, get2faStatus, setup2fa, type TotpSetup } from '@/lib/auth/api';
+import {
   getRecipeSources,
   addRecipeSource,
   updateRecipeSource,
   deleteRecipeSource,
-  type ApiToken,
-  type Region,
-  type TotpSetup,
-} from '@/lib/net/api';
+} from '@/lib/domain/recipes';
 import type { RecipeSource } from '@iceslab/shared';
 
 /**

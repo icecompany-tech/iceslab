@@ -41,9 +41,9 @@ import {
   updateProfile,
   type CreateProfileInput,
   type Profile,
-  type ProtocolName,
   type UpdateProfileInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/profiles';
+import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';

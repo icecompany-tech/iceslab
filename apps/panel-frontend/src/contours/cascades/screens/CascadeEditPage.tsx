@@ -5,18 +5,17 @@ import { Box, Stack, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  apiErrorMessage,
   deleteCascade,
   cascadeShapeError,
   getCascadeStatus,
   listCascades,
-  listNodes,
   updateCascadeV4,
   type Cascade,
   type CascadeProtocol,
-  type Node,
-} from '@/lib/net/api';
+} from '@/lib/domain/cascades';
+import { listNodes, type Node } from '@/lib/domain/nodes';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { useOverview } from '@/lib/domain/dashboard';

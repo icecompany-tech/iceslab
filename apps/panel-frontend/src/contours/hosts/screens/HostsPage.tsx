@@ -2,7 +2,16 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { Box, Menu, Select, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
+import {
+  Box,
+  Menu,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  ThemeIcon,
+  UnstyledButton,
+} from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import {
   IconAlertTriangle,
@@ -21,13 +30,9 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import {
-  deleteHost,
-  listBindings,
-  listHosts,
-  listNodes,
-  listProfiles,
-} from '@/lib/net/api';
+import { deleteHost, listHosts } from '@/lib/domain/hosts';
+import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
 

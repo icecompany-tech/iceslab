@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Box, Loader, Stack, Text, UnstyledButton } from '@mantine/core';
-import { getInsights, type Insights } from '@/lib/net/api';
+import { getInsights, type Insights } from '@/lib/domain/dashboard';
 
 /**
  * Two questions the panel can answer from data it already stores: who is

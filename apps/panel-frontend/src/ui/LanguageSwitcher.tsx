@@ -1,6 +1,6 @@
 import { Menu, UnstyledButton, Text } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
-import { updateSettings } from '@/lib/net/api';
+import { updateSettings } from '@/lib/domain/settings';
 
 const LANGS = [
   { code: 'ru', label: 'Русский', flag: '🇷🇺' },

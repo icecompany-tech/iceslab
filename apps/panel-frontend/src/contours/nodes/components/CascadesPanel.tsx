@@ -3,15 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Stack } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listCascades, updateCascade, deleteCascade, type Cascade } from '@/lib/domain/cascades';
+import { listNodes } from '@/lib/domain/nodes';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  listCascades,
-  updateCascade,
-  deleteCascade,
-  listNodes,
-  apiErrorMessage,
-  type Cascade,
-} from '@/lib/net/api';
-import { CascadesView, useCascadeRows, type CascadeLayout } from '@/contours/nodes/components/CascadesView';
+  CascadesView,
+  useCascadeRows,
+  type CascadeLayout,
+} from '@/contours/nodes/components/CascadesView';
 
 /**
  * The "Cascades" sub-view of the Nodes page. A cascade is a chain of nodes, so

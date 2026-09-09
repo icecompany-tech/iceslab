@@ -36,7 +36,7 @@ import {
   IconUsers,
   IconWifi,
 } from '@tabler/icons-react';
-import { type DashboardOverview } from '@/lib/net/api';
+import { type DashboardOverview } from '@/lib/domain/dashboard';
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';

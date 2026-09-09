@@ -33,11 +33,10 @@ import {
   reorderHosts,
   updateHost,
   type CreateHostInput,
-  type Fingerprint,
   type Host,
-  type ProtocolName,
   type UpdateHostInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/hosts';
+import { type Fingerprint, type ProtocolName } from '@/lib/domain/protocols';
 
 // AmneziaWG can't multi-host meaningfully - pubkey-pinned UDP single endpoint.
 // Hide the manager entirely for that protocol.

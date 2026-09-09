@@ -9,18 +9,16 @@ import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/r
 import {
   ROUTE_POLICY_WRITES_LIVE,
   ROUTING_PRESET_WRITES_LIVE,
-  apiErrorMessage,
-  getSettings,
   listRoutePolicies,
   listRoutingPresets,
-  listSquads,
-  updateSettings,
   type RouteAction,
   type RoutePolicy,
   type RouteRule,
   type RoutingPreset,
-  type Squad,
-} from '@/lib/net/api';
+} from '@/lib/domain/route-policies';
+import { apiErrorMessage } from '@/lib/net/client';
+import { getSettings, updateSettings } from '@/lib/domain/settings';
+import { listSquads, type Squad } from '@/lib/domain/squads';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { RoutePolicyEditor, blankPolicy } from '@/contours/traffic/components/RoutePolicyEditor';
 import { DevicePresetEditor, blankPreset } from '@/contours/traffic/components/DevicePresetEditor';

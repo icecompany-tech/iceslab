@@ -6,7 +6,8 @@ import { Box, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/co
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiErrorMessage, deleteSrrRule, listSrrRules, updateSrrRule, type SrrRule } from '@/lib/net/api';
+import { apiErrorMessage } from '@/lib/net/client';
+import { deleteSrrRule, listSrrRules, updateSrrRule, type SrrRule } from '@/lib/domain/srr';
 import { SRR_FORMATS, formatTone } from '@/contours/subscription/lib/srrFormats';
 import { compilePattern, matchingRules } from '@/contours/subscription/lib/srrMatch';
 import { usePageMeta } from '@/lib/ui/usePageMeta';

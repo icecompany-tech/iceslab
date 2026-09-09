@@ -47,22 +47,23 @@ import {
   createBinding,
   deleteBinding,
   listBindings,
-  listHosts,
   listProfiles,
-  listRegions,
-  listSquads,
   updateBinding,
+} from '@/lib/domain/profiles';
+import { listHosts, type Host } from '@/lib/domain/hosts';
+import {
+  listRegions,
   getNodeExposure,
   registerNodeWarp,
   disableNodeWarp,
-  apiErrorMessage,
-  type Host,
   type Node as PanelNode,
   type NodeHardening,
   type NodeProtocol,
   type PortExposureResult,
   type UpdateNodeInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/nodes';
+import { listSquads } from '@/lib/domain/squads';
+import { apiErrorMessage } from '@/lib/net/client';
 import { useOverview } from '@/lib/domain/dashboard';
 import { COUNTRY_OPTIONS, countryFlag } from '@/lib/domain/countries';
 import { parseNodeAgentPort, pickFreeQuickDeployPort } from '@/lib/domain/ports';

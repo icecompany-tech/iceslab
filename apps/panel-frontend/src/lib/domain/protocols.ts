@@ -76,3 +76,24 @@ export function isOlderThan(version: string | null | undefined, min: string): bo
   }
   return false;
 }
+
+export type ProtocolName =
+  | 'hysteria'
+  | 'xray'
+  | 'amneziawg'
+  | 'naive'
+  | 'shadowsocks'
+  | 'mtproto'
+  | 'mieru'
+  | 'tuic'
+  | 'anytls'
+  | 'shadowtls';
+
+export type Fingerprint =
+  | 'chrome'
+  | 'firefox'
+  | 'safari'
+  | 'ios'
+  | 'android'
+  | 'edge'
+  | 'random';

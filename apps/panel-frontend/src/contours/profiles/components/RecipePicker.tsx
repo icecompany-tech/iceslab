@@ -29,8 +29,9 @@ import {
   IconStarFilled,
   IconWorld,
 } from '@tabler/icons-react';
-import type { ProtocolName } from '@/lib/net/api';
-import { apiErrorMessage, getRecipeRegistry, importRecipes } from '@/lib/net/api';
+import type { ProtocolName } from '@/lib/domain/protocols';
+import { apiErrorMessage } from '@/lib/net/client';
+import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
 import { fromWireRecipe, recipesForProtocol, type Recipe } from '@/contours/profiles/lib/recipes';
 
 interface Props {

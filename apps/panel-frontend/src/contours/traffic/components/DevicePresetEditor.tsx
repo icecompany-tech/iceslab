@@ -7,14 +7,14 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ROUTING_PRESET_WRITES_LIVE,
-  apiErrorMessage,
   createRoutingPreset,
   deleteRoutingPreset,
   updateRoutingPreset,
   type RouteAction,
   type RouteRule,
   type RoutingPreset,
-} from '@/lib/net/api';
+} from '@/lib/domain/route-policies';
+import { apiErrorMessage } from '@/lib/net/client';
 import { ACTION_TONE, ActionSelect } from '@/contours/traffic/components/RoutePolicyEditor';
 
 /**

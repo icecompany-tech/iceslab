@@ -15,7 +15,7 @@
  * description, enabled) are left to the user.
  */
 
-import type { ProtocolName } from '@/lib/net/api';
+import type { ProtocolName } from '@/lib/domain/protocols';
 import { RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
 import type {
   Recipe as WireRecipe,

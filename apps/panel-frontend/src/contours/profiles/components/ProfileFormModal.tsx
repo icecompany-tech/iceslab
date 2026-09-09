@@ -37,17 +37,21 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
+import { generateInboundKeypair } from '@/lib/domain/inbounds';
+import { listNodes } from '@/lib/domain/nodes';
 import {
-  generateInboundKeypair,
-  listNodes,
   type CreateProfileInput,
   type Profile,
-  type ProtocolName,
   type UpdateProfileInput,
-} from '@/lib/net/api';
+} from '@/lib/domain/profiles';
+import { type ProtocolName } from '@/lib/domain/protocols';
 import { RecipePicker } from '@/contours/profiles/components/RecipePicker';
 import { RecipeExportModal } from '@/contours/profiles/components/RecipeExportModal';
-import { resolveRecipeApply, validateXrayConfig, RECIPE_COMMON_FIELDS } from '@/contours/profiles/lib/recipes';
+import {
+  resolveRecipeApply,
+  validateXrayConfig,
+  RECIPE_COMMON_FIELDS,
+} from '@/contours/profiles/lib/recipes';
 import { protocolLabel } from '@/lib/domain/protocols';
 
 // Xray stream transports. The whole stack already handles all six (Zod schema,

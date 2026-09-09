@@ -5,17 +5,29 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Box, NumberInput, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiErrorMessage } from '@/lib/net/client';
 import {
-  apiErrorMessage,
   createSrrRule,
   listSrrRules,
   updateSrrRule,
   type SubscriptionFormat,
-} from '@/lib/net/api';
-import { CASCADE_AWARE_FORMATS, SRR_FORMATS, formatTone } from '@/contours/subscription/lib/srrFormats';
+} from '@/lib/domain/srr';
+import {
+  CASCADE_AWARE_FORMATS,
+  SRR_FORMATS,
+  formatTone,
+} from '@/contours/subscription/lib/srrFormats';
 import { compilePattern, patternCompiles, shadowedBy } from '@/contours/subscription/lib/srrMatch';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { BarButton, BoltIcon, FormatChip, InfoIcon, TickIcon, WarnIcon, isCatchAll } from '@/contours/subscription/screens/SrrPage';
+import {
+  BarButton,
+  BoltIcon,
+  FormatChip,
+  InfoIcon,
+  TickIcon,
+  WarnIcon,
+  isCatchAll,
+} from '@/contours/subscription/screens/SrrPage';
 
 /**
  * One delivery rule: a regex over the User-Agent, a priority, and the format it

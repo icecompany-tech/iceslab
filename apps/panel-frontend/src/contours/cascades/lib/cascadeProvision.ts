@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications';
-import { getCascadeStatus } from '@/lib/net/api';
+import { getCascadeStatus } from '@/lib/domain/cascades';
 
 /**
  * A cascade save commits fast and reaches its hop nodes afterwards
