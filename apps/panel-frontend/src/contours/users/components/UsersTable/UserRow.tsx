@@ -57,8 +57,15 @@ export function UserRow({
   const subUrl = subscriptionUrl(u.subscriptionToken, authStatusQuery.data?.panel);
   const otherSquads = u.groupIds.filter((id) => id !== '00000000-0000-0000-0000-000000000001');
 
-  const cells: Record<UserColumnId, ReactNode> = {
-    username: (
+  /**
+   * One thunk per column, so a row builds only the cells it draws.
+   *
+   * This was an object of ready elements, which meant every row assembled all
+   * twenty-three and threw fifteen away: on a hundred-row page that is two
+   * thousand React elements built for nothing on each render.
+   */
+  const cells: Record<UserColumnId, () => ReactNode> = {
+    username: () => (
       <>
         <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Box
@@ -109,7 +116,7 @@ export function UserRow({
     ),
     // One line, always: the short id is 12 characters of base62 and wrapping it
     // made every second row taller than its neighbours.
-    shortId: (
+    shortId: () => (
       <Text
         title={u.shortId}
         style={{
@@ -125,11 +132,11 @@ export function UserRow({
         {u.shortId}
       </Text>
     ),
-    status: <Pill accent={statusAccent}>{t(`userStatus.${compStatus}`)}</Pill>,
+    status: () => <Pill accent={statusAccent}>{t(`userStatus.${compStatus}`)}</Pill>,
     // The node this user last connected through. The panel stores it
     // (UserTraffic.lastConnectedNodeId) but the list endpoint does not return
     // it, so the column stands empty rather than guessing.
-    lastNode: (
+    lastNode: () => (
       <Text
         title={t('usersTable.lastNodePending')}
         style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: MIST }}
@@ -137,7 +144,7 @@ export function UserRow({
         -
       </Text>
     ),
-    expires: (
+    expires: () => (
       <Tooltip label={u.expireAt ? new Date(u.expireAt).toLocaleString() : '-'}>
         <Text
           style={{
@@ -152,7 +159,7 @@ export function UserRow({
         </Text>
       </Tooltip>
     ),
-    used: (
+    used: () => (
       <>
         <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {isPaused ? (
@@ -192,7 +199,7 @@ export function UserRow({
         />
       </>
     ),
-    usedPct: (
+    usedPct: () => (
       <Text
         style={{
           ...MONO,
@@ -205,12 +212,12 @@ export function UserRow({
         {trafficPct === null ? '-' : `${trafficPct.toFixed(1)}%`}
       </Text>
     ),
-    limit: (
+    limit: () => (
       <Text style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: MIST }}>
         {u.trafficLimitBytes === null ? '∞' : formatBytes(u.trafficLimitBytes)}
       </Text>
     ),
-    squads: (
+    squads: () => (
       <Box style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         {otherSquads.length === 0 ? (
           <SquadPill muted>All</SquadPill>
@@ -224,12 +231,12 @@ export function UserRow({
         )}
       </Box>
     ),
-    tag: <Plain>{u.tag ?? '-'}</Plain>,
-    description: <Plain title={u.description ?? undefined}>{u.description ?? '-'}</Plain>,
-    telegramId: <Plain>{u.telegramId ?? '-'}</Plain>,
-    email: <Plain title={u.email ?? undefined}>{u.email ?? '-'}</Plain>,
-    subLink: <Plain title={subUrl}>{subUrl}</Plain>,
-    routing: (
+    tag: () => <Plain>{u.tag ?? '-'}</Plain>,
+    description: () => <Plain title={u.description ?? undefined}>{u.description ?? '-'}</Plain>,
+    telegramId: () => <Plain>{u.telegramId ?? '-'}</Plain>,
+    email: () => <Plain title={u.email ?? undefined}>{u.email ?? '-'}</Plain>,
+    subLink: () => <Plain title={subUrl}>{subUrl}</Plain>,
+    routing: () => (
       <Plain>
         {u.routingPreset
           ? isRoutingPresetId(u.routingPreset)
@@ -238,20 +245,20 @@ export function UserRow({
           : t('userDrawer.inheritsSquad')}
       </Plain>
     ),
-    deviceLimit: <Plain>{u.hwidDeviceLimit ?? '∞'}</Plain>,
+    deviceLimit: () => <Plain>{u.hwidDeviceLimit ?? '∞'}</Plain>,
     // The panel stores when this user first connected (UserTraffic
     // .firstConnectedAt) but the list endpoint does not return it.
-    firstConnected: <Plain title={t('usersTable.firstConnectedPending')}>-</Plain>,
-    lastOnline: <Plain>{relativeTime(u.lastOnlineAt, t).text}</Plain>,
-    trafficReset: <Plain>{u.lastTrafficResetAt ? shortDate(u.lastTrafficResetAt) : '-'}</Plain>,
-    lifetimeUsed: <Plain>{formatBytes(u.lifetimeTrafficBytes)}</Plain>,
-    linkRevoked: (
+    firstConnected: () => <Plain title={t('usersTable.firstConnectedPending')}>-</Plain>,
+    lastOnline: () => <Plain>{relativeTime(u.lastOnlineAt, t).text}</Plain>,
+    trafficReset: () => <Plain>{u.lastTrafficResetAt ? shortDate(u.lastTrafficResetAt) : '-'}</Plain>,
+    lifetimeUsed: () => <Plain>{formatBytes(u.lifetimeTrafficBytes)}</Plain>,
+    linkRevoked: () => (
       <Plain color={u.subRevokedAt ? RED : undefined}>
         {u.subRevokedAt ? shortDate(u.subRevokedAt) : '-'}
       </Plain>
     ),
-    created: <Plain>{shortDate(u.createdAt)}</Plain>,
-    uuid: <Plain title={u.id}>{u.id}</Plain>,
+    created: () => <Plain>{shortDate(u.createdAt)}</Plain>,
+    uuid: () => <Plain title={u.id}>{u.id}</Plain>,
   };
 
   return (
@@ -291,7 +298,7 @@ export function UserRow({
             paddingInline: 10,
           }}
         >
-          {cells[column.id]}
+          {cells[column.id]()}
         </Box>
       ))}
 

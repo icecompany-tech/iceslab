@@ -6,6 +6,7 @@ import { ActionIcon, ThemeIcon } from '@mantine/core';
 import { CARD, CYAN, GROUND, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
 import { UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MONO } from '@/contours/users/lib/textStyles';
 import { Box, Group, Select, Stack, Text } from '@mantine/core';
 import { HeadCell } from '@/contours/users/components/UsersTable/HeadCell';
@@ -42,12 +43,61 @@ export function UsersTable(props: Pick<UsersPageState,
   const pad = DENSITY_PADDING[density];
 
   const allOnPage = pagedUsers.length > 0 && pagedUsers.every((u) => selected.has(u.id));
-  const headStyles = columnStyles(visibleColumns, columnView.pins, WELL);
-  const rowStyles = columnStyles(visibleColumns, columnView.pins, CARD);
-  // Enough room for every column at its own width, so nothing squeezes when
-  // the operator turns more of them on.
+  // Recomputed only when the columns or their pins change, not on every row
+  // render: the same two arrays are handed to every row on the page.
+  const headStyles = useMemo(
+    () => columnStyles(visibleColumns, columnView.pins, WELL),
+    [visibleColumns, columnView.pins],
+  );
+  const rowStyles = useMemo(
+    () => columnStyles(visibleColumns, columnView.pins, CARD),
+    [visibleColumns, columnView.pins],
+  );
+  /**
+   * Enough room for every fixed column at its own width, so nothing squeezes
+   * when the operator turns more of them on.
+   *
+   * The username column is the elastic one and is counted at the least it may
+   * shrink to, not at the width it usually takes: counting its nominal 384
+   * made the default eight columns overflow the card by twelve pixels and
+   * raised a scroll rail over a table that fits.
+   */
   const minWidth =
-    SELECT_COL + ACTIONS_COL + visibleColumns.reduce((sum, c) => sum + (c.width ?? 384), 0);
+    SELECT_COL + ACTIONS_COL + visibleColumns.reduce((sum, c) => sum + (c.width ?? 240), 0);
+
+  /**
+   * A second horizontal rail above the heading, tied to the one under the
+   * table.
+   *
+   * With a hundred rows on the page the only rail was at the far bottom, so
+   * moving sideways meant scrolling down, dragging, and scrolling back. The
+   * top one carries no content of its own: it is an empty strip as wide as the
+   * table, and the two scroll positions are kept in step.
+   */
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const check = () => setOverflows(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [minWidth]);
+
+  /** Guarded, or each nudge would bounce back off the other rail forever. */
+  function mirror(from: HTMLDivElement | null, to: HTMLDivElement | null) {
+    if (!from || !to || syncing.current) return;
+    syncing.current = true;
+    to.scrollLeft = from.scrollLeft;
+    requestAnimationFrame(() => {
+      syncing.current = false;
+    });
+  }
 
   return (
     <Box
@@ -128,8 +178,21 @@ export function UsersTable(props: Pick<UsersPageState,
           thousand pixels of table to the right of the fold. In full screen it
           takes the vertical axis too, so the heading can stay put above the
           rows instead of scrolling away with the page. */}
+      {overflows && (
+        <Box
+          ref={railRef}
+          className="table-scroll table-rail"
+          onScroll={() => mirror(railRef.current, scrollerRef.current)}
+          style={{ overflowX: 'auto', overflowY: 'hidden' }}
+        >
+          <Box style={{ width: minWidth, height: 1 }} />
+        </Box>
+      )}
+
       <Box
+        ref={scrollerRef}
         className="table-scroll"
+        onScroll={() => mirror(scrollerRef.current, railRef.current)}
         style={{
           overflowX: 'auto',
           ...(fullscreen ? { overflowY: 'auto', maxHeight: 'calc(100vh - 148px)' } : {}),

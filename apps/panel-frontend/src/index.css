@@ -492,6 +492,17 @@ html:root {
 .table-scroll {
   scrollbar-width: thin;
   scrollbar-color: #2C3A4E transparent;
+  /* Applies to jumps the code makes (a rail click, a keyboard page): the
+     wheel and a thumb drag are never animated by this, so the two rails stay
+     in step instead of chasing each other. */
+  scroll-behavior: smooth;
+  /* The sideways position is its own axis of state, so it is worth keeping
+     when the list refetches under it. */
+  overscroll-behavior-x: contain;
+}
+/* The twin rail above the heading: it exists to be dragged, nothing more. */
+.table-rail {
+  scroll-behavior: auto;
 }
 .table-scroll::-webkit-scrollbar {
   display: block;
