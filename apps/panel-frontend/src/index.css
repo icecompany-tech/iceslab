@@ -456,18 +456,29 @@ html:root {
   min-width: 200px;
 }
 
-/* Hairline scrollbar */
+/* ───── Scrollbars ──────────────────────────────────────────────────────
+   No rail anywhere. The 10px one that used to live here was drawn on top of
+   the content it scrolled: over the node table on Главная it covered the
+   "today" column, down the sidebar it ran a bright line beside the counters,
+   and at the right edge of the page it split the layout off from the window.
+   Scrolling itself is untouched, wheel, trackpad, keys and drag all still
+   work; only the painted rail is gone.
+
+   `scrollbar-width` does not inherit, so it has to be set on every element
+   rather than once on the root. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  display: none;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #1C2A3D;
-  border-radius: 6px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #2C3A4E;
+
+/* Mantine's ScrollArea paints its own rail inside the component, out of reach
+   of the rules above. Both places it appears (the node list on Главная, the
+   long pickers in the node and squad modals) already sit in a box whose edge
+   says where the content ends. */
+.mantine-ScrollArea-scrollbar,
+.mantine-ScrollArea-corner {
+  display: none !important;
 }
