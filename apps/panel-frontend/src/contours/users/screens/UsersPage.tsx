@@ -53,6 +53,11 @@ export function UsersPage() {
     createOpen,
     openCreate,
     closeCreate,
+    colFilters,
+    setColFilter,
+    selected,
+    setSelected,
+    toggleSelected,
   } = useUsersPage();
 
   return (
@@ -61,7 +66,7 @@ export function UsersPage() {
 
       <UsersToolbar qc={qc} activeFilters={activeFilters} usersQuery={usersQuery} squadsQuery={squadsQuery} knownTags={knownTags} search={search} setSearch={setSearch} squadFilter={squadFilter} setSquadFilter={setSquadFilter} tagFilter={tagFilter} setTagFilter={setTagFilter} routingFilter={routingFilter} setRoutingFilter={setRoutingFilter} openCreate={openCreate} />
 
-      <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} />
+      <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} statusFilter={statusFilter} setStatusFilter={setStatusFilter} colFilters={colFilters} setColFilter={setColFilter} selected={selected} setSelected={setSelected} toggleSelected={toggleSelected} activeFilters={activeFilters} />
 
       <UserDrawer
         opened={createOpen}

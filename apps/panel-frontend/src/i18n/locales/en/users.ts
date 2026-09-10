@@ -19,9 +19,14 @@ export const users = {
     },
     table: {
       username: 'Username',
+      shortId: 'ID',
       status: 'Status',
+      lastNode: 'Last node',
       traffic: 'Traffic',
       expires: 'Expires',
+      used: 'Used',
+      usedPct: 'Used %',
+      limit: 'Limit',
       squads: 'Squads',
       // The column holds lastOnlineAt, so it is headed by what it holds. Under
       // "Subscription" a value like "23s ago" claimed a fetch the panel does
@@ -212,6 +217,20 @@ export const users = {
     revokedBadge: 'Revoked',
     rowsPerPage: 'Rows per page',
     of: 'of',
+    viewColumns: '{{shown}} of {{total}} columns',
+    viewNoFilters: 'no filters',
+    viewFilters_one: '{{count}} filter',
+    viewFilters_other: '{{count}} filters',
+    viewSortedBy: 'sorted by {{column}}',
+    selectedCount_one: '{{count}} selected',
+    selectedCount_other: '{{count}} selected',
+    filterBy: 'Filter by...',
+    filterUnavailable: 'The list endpoint cannot narrow by this column yet.',
+    lastNodePending: 'The panel records the last node but does not return it in the list yet.',
+    sortBy: 'Sort by this column',
+    sortAsc: 'Sort ascending',
+    sortDesc: 'Sort descending',
+    sortUnavailable: 'Not sortable',
   },
 
   userTime: {

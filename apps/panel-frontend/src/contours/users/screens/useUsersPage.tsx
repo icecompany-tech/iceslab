@@ -2,6 +2,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { Text } from '@mantine/core';
 import type { StatusFilter } from '@/contours/users/lib/userStatus';
 import type { UpdateUserInput, User, UserSort } from '@/lib/domain/users';
+import type { UserColumnId } from '@/contours/users/lib/usersTable';
 import { createUser, deleteUser, listUserTags, listUsers, resetUserTraffic, revokeUserSubscription, rotateUserSubscription, updateUser } from '@/lib/domain/users';
 import { fetchAuthStatus } from '@/lib/auth/api';
 import { listSquads } from '@/lib/domain/squads';
@@ -43,6 +44,33 @@ export function useUsersPage() {
   // gets without changing anything the table already shows.
   const [routingFilter, setRoutingFilter] = useState<string | null>(null);
   const activeFilters = (squadFilter ? 1 : 0) + (tagFilter ? 1 : 0) + (routingFilter ? 1 : 0);
+
+  /**
+   * The boxes under the column headings. Only the columns the list endpoint
+   * can narrow by are wired: the username box feeds the same `search` the
+   * toolbar uses, so typing in either place asks the server one question
+   * rather than two that disagree.
+   */
+  const [colFilters, setColFilters] = useState<Partial<Record<UserColumnId, string>>>({});
+  function setColFilter(id: UserColumnId, value: string) {
+    setColFilters((f) => ({ ...f, [id]: value }));
+    if (id === 'username') setSearch(value);
+    setPage(1);
+  }
+
+  /**
+   * Rows ticked in the gutter. Kept as ids rather than users so a refetch
+   * cannot resurrect a stale copy of a row that has since changed.
+   */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  function toggleSelected(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleSort(next: UserSort) {
     if (next === sort) {
@@ -287,6 +315,11 @@ export function useUsersPage() {
   return {
     qc,
     activeFilters,
+    colFilters,
+    setColFilter,
+    selected,
+    setSelected,
+    toggleSelected,
     toggleSort,
     serverStatus,
     serverSearch,
