@@ -114,9 +114,14 @@ function ColumnMenu({
 }
 
 /**
- * The filter under a heading. Live only where the list endpoint can narrow by
- * that field: the rest are drawn but disabled, and say why on hover, rather
- * than filtering the twenty-five rows that happen to be on screen.
+ * The filter under a heading, drawn only where the list endpoint can actually
+ * narrow by that field.
+ *
+ * The first cut drew a greyed-out box under every column and explained itself
+ * on hover. That was the wrong call: a box shaped like an input that refuses
+ * text reads as broken, and nobody hovers a control they think is dead. A
+ * column that cannot be filtered now shows nothing at all, and the slot is
+ * held open so the headings above stay on one lane.
  */
 function FilterBox({
   column,
@@ -186,9 +191,5 @@ function FilterBox({
     );
   }
 
-  return (
-    <Box style={{ ...shell, opacity: 0.45 }} title={t('usersTable.filterUnavailable')}>
-      <Text style={{ ...MONO_LABEL }}>{t('usersTable.filterBy')}</Text>
-    </Box>
-  );
+  return <Box style={{ height: 28, flexShrink: 0 }} />;
 }

@@ -253,7 +253,6 @@ export const users = {
     selectedCount_many: 'выбрано {{count}}',
     selectedCount_other: 'выбрано {{count}}',
     filterBy: 'Фильтр...',
-    filterUnavailable: 'Список пока не умеет сужать выборку по этой колонке.',
     lastNodePending: 'Панель хранит последнюю ноду, но в списке её пока не отдаёт.',
     sortBy: 'Сортировать по этой колонке',
     sortAsc: 'По возрастанию',

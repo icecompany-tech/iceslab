@@ -241,7 +241,6 @@ export const users = {
     selectedCount_one: '{{count}} selected',
     selectedCount_other: '{{count}} selected',
     filterBy: 'Filter by...',
-    filterUnavailable: 'The list endpoint cannot narrow by this column yet.',
     lastNodePending: 'The panel records the last node but does not return it in the list yet.',
     sortBy: 'Sort by this column',
     sortAsc: 'Sort ascending',
