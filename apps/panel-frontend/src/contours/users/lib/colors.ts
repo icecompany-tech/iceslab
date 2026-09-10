@@ -15,6 +15,17 @@ export const VIOLET_HI = '#C0AAF6';
 export const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 export const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
+/**
+ * Three tones the artboard uses that the palette above did not carry.
+ *
+ * They are not decoration: the plan controls are deliberately quieter than the
+ * username field above them (WELL on FIELD_EDGE against SUNK on BORDER_INPUT),
+ * and reusing the louder pair made the two rows compete.
+ */
+export const FIELD_EDGE = '#16243F';
+export const BADGE = '#152233';
+export const DIM_TEXT = '#5A6B82';
+
 export const AMBER = '#F5B14C';
 /** Same ink as SUNK above, under the name the users table uses. */
 export const GROUND = '#08101A';

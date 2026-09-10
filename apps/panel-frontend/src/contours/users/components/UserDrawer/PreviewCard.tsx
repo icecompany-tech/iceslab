@@ -40,6 +40,8 @@ export function PreviewCard({
   expireDays,
   routingPreset,
   routingClash,
+  routingSource,
+  isEdit,
   onEditTraffic,
 }: {
   preview: PreviewData;
@@ -52,6 +54,10 @@ export function PreviewCard({
    *  member squads agree. Read from the squads themselves, not from the
    *  subscription: what the panel hands out instead is not exposed here. */
   routingClash: string | null;
+  /** Which squad decides the routing, when exactly one does. */
+  routingSource: { preset: string; squad: string } | null;
+  /** Only an existing account has fields worth jumping back to. */
+  isEdit: boolean;
   onEditTraffic: () => void;
 }) {
   const { t } = useTranslation();
@@ -166,11 +172,13 @@ export function PreviewCard({
       <Box style={{ height: 1, backgroundColor: HAIRLINE, margin: '14px 0 12px' }} />
 
       <Stack gap={8}>
+        {/* The pencils are an edit affordance: while creating, the fields they
+            point at are two rows away and already open. */}
         <PreviewRow
           label={t('userDrawer.traffic')}
           value={trafficGb === '' ? '∞' : `${trafficGb} GiB`}
-          note={t(`users.strategy.${strategy}`)}
-          onEdit={onEditTraffic}
+          note={t(`userDrawer.resets.${strategy}`)}
+          onEdit={isEdit ? onEditTraffic : undefined}
         />
         <PreviewRow
           label={t('userDrawer.expires')}
@@ -184,7 +192,7 @@ export function PreviewCard({
               : '∞'
           }
           note={expireDays === '' ? undefined : t('userDrawer.inDays', { count: Number(expireDays) })}
-          onEdit={onEditTraffic}
+          onEdit={isEdit ? onEditTraffic : undefined}
         />
         {/* The format is decided per client by the delivery rules, so the panel
             cannot name one here from the account alone. Drawn as a row with no
@@ -195,10 +203,17 @@ export function PreviewCard({
           value="-"
           note={t('userDrawer.formatFromRules')}
         />
+        {/* Naming the squad turns "inherits" from a shrug into an address. */}
         <PreviewRow
           label={t('userDrawer.routing')}
-          value={routingPreset || t('userDrawer.inheritsSquad')}
-          note={routingClash ? t('userDrawer.routingClashChip') : undefined}
+          value={routingPreset || routingSource?.preset || t('userDrawer.inheritsSquad')}
+          note={
+            routingClash
+              ? t('userDrawer.routingClashChip')
+              : routingSource
+                ? t('userDrawer.routingFromSquad', { squad: routingSource.squad })
+                : undefined
+          }
         />
       </Stack>
 

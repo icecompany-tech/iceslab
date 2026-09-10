@@ -1,7 +1,7 @@
 import { ROUTING_PRESET_IDS } from '@/lib/domain/routingPresets';
-import { IconChevronDown, IconChevronUp, IconDeviceDesktop, IconMail, IconNote, IconRoute, IconTag } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconDeviceDesktop, IconMail, IconNote, IconRoute, IconTag } from '@tabler/icons-react';
 import { AdvancedGroup } from '@/contours/users/components/UserDrawer/AdvancedGroup';
-import { CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW, WELL } from '@/contours/users/lib/colors';
+import { BADGE, CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW } from '@/contours/users/lib/colors';
 import { Box, NumberInput, Select, Stack, Text, TextInput, Textarea, UnstyledButton } from '@mantine/core';
 import { DeviceList } from '@/contours/users/components/UserDrawer/DeviceList';
 import { Hint } from '@/contours/users/components/UserDrawer/Hint';
@@ -46,12 +46,14 @@ export function AdvancedPanel({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '14px 16px',
+          padding: '13px 16px',
         }}
       >
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 8, color: MIST, minWidth: 0 }}>
-          {advancedOpen ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
-          <Text style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 500, color: SNOW }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: 10, color: MIST, minWidth: 0 }}>
+          {/* Closed it points at what it will open, not down at the row it is
+              already on: the artboard uses the same arrow the sidebar does. */}
+          {advancedOpen ? <IconChevronDown size={14} stroke={2} /> : <IconChevronRight size={14} stroke={2} />}
+          <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '16px', color: SNOW }}>
             {t('userDrawer.advanced')}
           </Text>
           {/* Closed, the row names what is behind it and counts the fields, so
@@ -61,7 +63,8 @@ export function AdvancedPanel({
             <Text
               style={{
                 fontFamily: DISPLAY,
-                fontSize: 12,
+                fontSize: 11,
+                lineHeight: '14px',
                 color: MIST,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -76,21 +79,23 @@ export function AdvancedPanel({
         {advancedOpen ? (
           <Text style={{ ...LABEL }}>{t('userDrawer.hide')}</Text>
         ) : (
-          <Text
+          <Box
             style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              lineHeight: '14px',
-              color: MIST,
-              backgroundColor: WELL,
-              border: `1px solid ${HAIRLINE}`,
-              borderRadius: 5,
-              padding: '1px 7px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 20,
+              height: 20,
+              paddingInline: 6,
+              borderRadius: 999,
+              backgroundColor: BADGE,
               flexShrink: 0,
             }}
           >
-            {isEdit ? 6 : 7}
-          </Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: MIST }}>
+              {isEdit ? 6 : 7}
+            </Text>
+          </Box>
         )}
       </UnstyledButton>
 

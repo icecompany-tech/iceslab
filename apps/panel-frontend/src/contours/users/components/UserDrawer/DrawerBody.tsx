@@ -60,6 +60,8 @@ export function DrawerBody({ user, ...ui }: UserForm & { user: Props['user'] }) 
             expireDays={ui.form.values.expireDays}
             routingPreset={ui.form.values.routingPreset}
             routingClash={routingClash}
+            routingSource={ui.squadRoutingSource}
+            isEdit={ui.isEdit}
             onEditTraffic={() => trafficRef.current?.focus()}
           />
         </Box>

@@ -224,6 +224,27 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     return distinct.size > 1 ? named.map((s) => ({ name: s.name, preset: s.routingPreset! })) : null;
   }, [squads, form.values.groupIds]);
 
+  /**
+   * Where the routing this person gets comes from, when it comes from a squad.
+   *
+   * The preview used to print "inherits squad" and stop there, which is true
+   * and useless: the operator still has to open every squad to find out which
+   * one decides it. Named only when exactly one squad speaks, because that is
+   * the one case where the answer is certain.
+   */
+  const squadRoutingSource = useMemo(() => {
+    if (form.values.routingPreset) return null;
+    const named = squads.filter(
+      (s) =>
+        s.routingPreset !== null &&
+        (s.id === ALL_SQUAD_ID || form.values.groupIds.includes(s.id)),
+    );
+    const distinct = new Set(named.map((s) => s.routingPreset));
+    return distinct.size === 1 && named[0]
+      ? { preset: named[0].routingPreset!, squad: named[0].name }
+      : null;
+  }, [squads, form.values.groupIds, form.values.routingPreset]);
+
   function applyPreset(p: Preset) {
     setPresetId(p.id);
     form.setFieldValue('trafficLimitGb', p.trafficGb ?? '');
@@ -341,6 +362,7 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     estimate,
     preview,
     squadRoutingClash,
+    squadRoutingSource,
     setCreateNext,
     applyPreset,
     setExpiry,

@@ -146,6 +146,16 @@ export const users = {
     format: 'Format',
     formatFromRules: 'set by the delivery rules',
     routing: 'Routing',
+    routingFromSquad: 'from squad {{squad}}',
+    // How the preview says a reset period, where the sentence is "50 GiB,
+    // resets monthly" rather than a setting called "Every month".
+    resets: {
+      no_reset: 'never resets',
+      day: 'resets daily',
+      week: 'resets weekly',
+      month: 'resets monthly',
+      rolling: 'rolling 30 days',
+    },
     routingClashChip: 'SQUADS DISAGREE',
     routingClashPair: '{{squad}} asks for {{preset}}',
     routingClashTitle: 'Squads disagree, so neither wins',

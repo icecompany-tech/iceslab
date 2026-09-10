@@ -1,15 +1,21 @@
 import { EXPIRY_SPANS, expiryDate, formatExpiryDate, spanOfDays } from '@/contours/users/lib/userExpiry';
 import { IconChevronDown } from '@tabler/icons-react';
 import { Box, Menu, Text, UnstyledButton } from '@mantine/core';
-import { BORDER_INPUT, CARD, CYAN, DISPLAY, HAIRLINE, MIST, MONO, SNOW, SUNK } from '@/contours/users/lib/colors';
+import { CARD, CYAN, DIM_TEXT, DISPLAY, FIELD_EDGE, HAIRLINE, MIST, MONO, SNOW, WELL } from '@/contours/users/lib/colors';
 import { STRATEGY_VALUES } from '@/contours/users/lib/userForm';
-import { Section } from '@/contours/users/components/UserDrawer/Section';
 import { expireRelative } from '@/contours/users/lib/userFormat';
 import { useTranslation } from 'react-i18next';
 import type { RefObject } from 'react';
 import type { UserForm } from '@/contours/users/components/UserDrawer/useUserForm';
 
-/** The one control shape both halves of the row wear. */
+/**
+ * The one control shape both halves of the row wear.
+ *
+ * Quieter than the username field above it: that one is SUNK inside
+ * BORDER_INPUT, this one a shade lighter inside a much darker edge. Reusing
+ * the louder pair here, which is what the first cut did, made the plan row
+ * compete with the one field that is actually required.
+ */
 const CONTROL = {
   display: 'flex',
   alignItems: 'center',
@@ -17,8 +23,18 @@ const CONTROL = {
   height: 38,
   padding: '0 12px',
   borderRadius: 8,
-  backgroundColor: SUNK,
-  border: `1px solid ${BORDER_INPUT}`,
+  backgroundColor: WELL,
+  border: `1px solid ${FIELD_EDGE}`,
+};
+
+/** Dimmer and wider-tracked than a section label elsewhere in the form. */
+const PLAN_LABEL = {
+  fontFamily: MONO,
+  fontSize: 10,
+  lineHeight: '12px',
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase' as const,
+  color: DIM_TEXT,
 };
 
 const DROPDOWN = {
@@ -77,7 +93,8 @@ export function PlanRow({
   return (
     <Box style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
       <Box style={{ flex: 1, minWidth: 0 }}>
-        <Section label={t('userDrawer.traffic')}>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Text style={PLAN_LABEL}>{t('userDrawer.traffic')}</Text>
           <Box style={CONTROL}>
             <input
               ref={trafficRef}
@@ -112,7 +129,7 @@ export function PlanRow({
                   <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '14px', color: MIST }}>
                     {t(`users.strategyShort.${form.values.trafficLimitStrategy}`)}
                   </Text>
-                  <IconChevronDown size={12} stroke={2} color={MIST} />
+                  <IconChevronDown size={12} stroke={2} color={DIM_TEXT} />
                 </UnstyledButton>
               </Menu.Target>
               <Menu.Dropdown>
@@ -127,11 +144,12 @@ export function PlanRow({
               </Menu.Dropdown>
             </Menu>
           </Box>
-        </Section>
+        </Box>
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>
-        <Section label={t('userDrawer.expires')}>
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <Text style={PLAN_LABEL}>{t('userDrawer.expires')}</Text>
           <Menu position="bottom-start" width="target" styles={{ dropdown: DROPDOWN }}>
             <Menu.Target>
               <UnstyledButton style={{ ...CONTROL, width: '100%' }}>
@@ -156,7 +174,7 @@ export function PlanRow({
                       fontFamily: DISPLAY,
                       fontSize: 11,
                       lineHeight: '14px',
-                      color: MIST,
+                      color: DIM_TEXT,
                       flexShrink: 0,
                     }}
                   >
@@ -181,7 +199,7 @@ export function PlanRow({
               })}
             </Menu.Dropdown>
           </Menu>
-        </Section>
+        </Box>
       </Box>
     </Box>
   );
