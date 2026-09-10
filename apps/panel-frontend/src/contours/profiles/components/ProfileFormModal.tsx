@@ -78,6 +78,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
   } = useProfileForm({ profile, opened, mode, onSubmit, onClose });
   return (
     <FormShell
+      inline={inline}
       opened={opened}
       onClose={() => {
         form.reset();

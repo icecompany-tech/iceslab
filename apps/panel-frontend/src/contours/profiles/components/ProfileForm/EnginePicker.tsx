@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Box, Group, Text, UnstyledButton } from '@mantine/core';
+import { Box, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconBolt,
@@ -148,10 +148,8 @@ export function EnginePicker({
           quiet rather than showing a number that belongs to a different
           binary. */}
       {activeTab === 'xray' && newest && (
-        <Group
-          gap={14}
-          wrap="nowrap"
-          align="center"
+        <Stack
+          gap={8}
           style={{
             padding: '10px 14px',
             borderRadius: 8,
@@ -159,105 +157,112 @@ export function EnginePicker({
             border: '1px solid #1C2A3D',
           }}
         >
-          <Group gap={10} wrap="nowrap" style={{ flexShrink: 0 }}>
-            <Text
-              style={{
-                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
-                fontSize: 10,
-                fontWeight: 500,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: '#7A8BA3',
-              }}
-            >
-              {t('profiles.engine.coreVersion')}
-            </Text>
-            <Group
-              gap={10}
-              wrap="nowrap"
-              style={{
-                height: 32,
-                padding: '0 12px',
-                borderRadius: 8,
-                backgroundColor: '#08101A',
-                border: '1px solid #1C2A3D',
-              }}
-            >
-              <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 12, color: '#C8D4E3' }}>
-                xray {newest}
-              </Text>
-              <Box
+          {/* Version on the left, fleet verdict on the right, explanation on
+              its own line under both. It used to be one nowrap row, and the
+              explanation was the only elastic part of it: on the profile page
+              the recipe rail takes 380px from 1400px up, which leaves the row
+              barely 560px and the sentence about a hundred. Wrapping is
+              cheaper than a media query and holds at every width. */}
+          <Group gap={14} wrap="nowrap" align="center" justify="space-between">
+            <Group gap={10} wrap="nowrap" style={{ flexShrink: 0 }}>
+              <Text
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  height: 18,
-                  padding: '0 7px',
-                  borderRadius: 6,
-                  backgroundColor: '#A7D8B91F',
+                  fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+                  fontSize: 10,
+                  fontWeight: 500,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: '#7A8BA3',
                 }}
               >
-                <Text
+                {t('profiles.engine.coreVersion')}
+              </Text>
+              <Group
+                gap={10}
+                wrap="nowrap"
+                style={{
+                  height: 32,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  backgroundColor: '#08101A',
+                  border: '1px solid #1C2A3D',
+                }}
+              >
+                <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 12, color: '#C8D4E3' }}>
+                  xray {newest}
+                </Text>
+                <Box
                   style={{
-                    fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
-                    fontSize: 9,
-                    letterSpacing: '0.08em',
-                    color: '#A7D8B9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: 18,
+                    padding: '0 7px',
+                    borderRadius: 6,
+                    backgroundColor: '#A7D8B91F',
                   }}
                 >
-                  {t('profiles.engine.latest')}
-                </Text>
-              </Box>
+                  <Text
+                    style={{
+                      fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+                      fontSize: 9,
+                      letterSpacing: '0.08em',
+                      color: '#A7D8B9',
+                    }}
+                  >
+                    {t('profiles.engine.latest')}
+                  </Text>
+                </Box>
+              </Group>
             </Group>
+            {behind.length > 0 ? (
+              <Group
+                gap={8}
+                wrap="nowrap"
+                style={{
+                  height: 28,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  backgroundColor: '#F5B14C1A',
+                  border: '1px solid #F5B14C40',
+                  flexShrink: 0,
+                }}
+              >
+                <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} />
+                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C' }}>
+                  {t('profiles.engine.behind', {
+                    count: behind.length,
+                    total: coreVersions.length,
+                    version: behind[0],
+                  })}
+                </Text>
+              </Group>
+            ) : (
+              <Group
+                gap={8}
+                wrap="nowrap"
+                style={{
+                  height: 28,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  backgroundColor: '#A7D8B91A',
+                  border: '1px solid #A7D8B940',
+                  flexShrink: 0,
+                }}
+              >
+                <IconCheck size={13} color="#A7D8B9" stroke={2.2} />
+                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#A7D8B9' }}>
+                  {t('profiles.engine.allCurrent', {
+                    count: coreVersions.length,
+                    version: newest,
+                  })}
+                </Text>
+              </Group>
+            )}
           </Group>
-          <Box style={{ width: 1, height: 22, backgroundColor: '#1C2A3D', flexShrink: 0 }} />
-          <Text style={{ fontSize: 11, lineHeight: '16px', color: '#7A8BA3', flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 11, lineHeight: '16px', color: '#7A8BA3' }}>
             {t('profiles.engine.coreVersionHint')}
           </Text>
-          {behind.length > 0 ? (
-            <Group
-              gap={8}
-              wrap="nowrap"
-              style={{
-                height: 28,
-                padding: '0 12px',
-                borderRadius: 8,
-                backgroundColor: '#F5B14C1A',
-                border: '1px solid #F5B14C40',
-                flexShrink: 0,
-              }}
-            >
-              <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} />
-              <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C' }}>
-                {t('profiles.engine.behind', {
-                  count: behind.length,
-                  total: coreVersions.length,
-                  version: behind[0],
-                })}
-              </Text>
-            </Group>
-          ) : (
-            <Group
-              gap={8}
-              wrap="nowrap"
-              style={{
-                height: 28,
-                padding: '0 12px',
-                borderRadius: 8,
-                backgroundColor: '#A7D8B91A',
-                border: '1px solid #A7D8B940',
-                flexShrink: 0,
-              }}
-            >
-              <IconCheck size={13} color="#A7D8B9" stroke={2.2} />
-              <Text style={{ fontSize: 11, lineHeight: '14px', color: '#A7D8B9' }}>
-                {t('profiles.engine.allCurrent', {
-                  count: coreVersions.length,
-                  version: newest,
-                })}
-              </Text>
-            </Group>
-          )}
-        </Group>
+        </Stack>
       )}
 
       {/* Tiles, not a list: each one says what the protocol actually speaks,
