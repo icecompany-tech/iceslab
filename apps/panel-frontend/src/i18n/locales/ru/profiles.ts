@@ -94,6 +94,13 @@ export const profiles = {
       coreVersion: 'Версия ядра',
       daemonVersion: 'Версия демона',
       latest: 'СВЕЖАЯ',
+      older: 'СТАРАЯ',
+      versionMenuTitle: 'Версии на нодах',
+      nodesWith_one: '{{count}} нода',
+      nodesWith_few: '{{count}} ноды',
+      nodesWith_many: '{{count}} нод',
+      runsOn: 'стоит на: {{names}}',
+      andMore: 'и ещё {{count}}',
       coreVersionHint:
         'Один процесс обслуживает все xray-профили на ноде, поэтому версия относится к ноде, а не к профилю. Shadowsocks 2022 едет на том же бинаре.',
       behind: 'на {{count}} из {{total}} нод стоит {{version}}, обновятся, когда на них ляжет хост',

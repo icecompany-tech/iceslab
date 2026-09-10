@@ -89,6 +89,12 @@ export const profiles = {
       coreVersion: 'Core version',
       daemonVersion: 'Daemon version',
       latest: 'LATEST',
+      older: 'OLDER',
+      versionMenuTitle: 'Versions in the fleet',
+      nodesWith_one: '{{count}} node',
+      nodesWith_other: '{{count}} nodes',
+      runsOn: 'runs on: {{names}}',
+      andMore: 'and {{count}} more',
       coreVersionHint:
         'One process serves every xray-core profile on a node, so the version is per node, not per profile. Shadowsocks 2022 rides the same binary.',
       behind: '{{count}} of {{total}} nodes run {{version}}, they upgrade when a host lands on them',
