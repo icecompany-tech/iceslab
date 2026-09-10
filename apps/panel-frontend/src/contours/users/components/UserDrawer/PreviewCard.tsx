@@ -1,7 +1,7 @@
-import { IconEye } from '@tabler/icons-react';
+import { IconAlertTriangle, IconEye } from '@tabler/icons-react';
 import type { TrafficLimitStrategy } from '@/lib/domain/users';
 import { Box, Stack, Text } from '@mantine/core';
-import { CARD, CYAN, DIM, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
+import { AMBER, CARD, CYAN, DIM, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
 import { Count, PreviewRow } from '@/contours/users/components/UserDrawer/PreviewRow';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { ProtocolChip } from '@/contours/users/components/UserDrawer/ProtocolChip';
@@ -39,6 +39,7 @@ export function PreviewCard({
   expiresAt,
   expireDays,
   routingPreset,
+  routingClash,
   onEditTraffic,
 }: {
   preview: PreviewData;
@@ -47,6 +48,10 @@ export function PreviewCard({
   expiresAt: Date | null;
   expireDays: number | '';
   routingPreset: string;
+  /** "basic asks for ru-split, premium asks for proxy-all", or null when the
+   *  member squads agree. Read from the squads themselves, not from the
+   *  subscription: what the panel hands out instead is not exposed here. */
+  routingClash: string | null;
   onEditTraffic: () => void;
 }) {
   const { t } = useTranslation();
@@ -181,11 +186,46 @@ export function PreviewCard({
           note={expireDays === '' ? undefined : t('userDrawer.inDays', { count: Number(expireDays) })}
           onEdit={onEditTraffic}
         />
+        {/* The format is decided per client by the delivery rules, so the panel
+            cannot name one here from the account alone. Drawn as a row with no
+            value rather than guessed: the effective format is a backend field
+            that does not exist yet. */}
+        <PreviewRow
+          label={t('userDrawer.format')}
+          value="-"
+          note={t('userDrawer.formatFromRules')}
+        />
         <PreviewRow
           label={t('userDrawer.routing')}
           value={routingPreset || t('userDrawer.inheritsSquad')}
+          note={routingClash ? t('userDrawer.routingClashChip') : undefined}
         />
       </Stack>
+
+      {routingClash && (
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            marginTop: 12,
+            padding: '12px 14px',
+            borderRadius: 8,
+            backgroundColor: `${AMBER}12`,
+            border: `1px solid ${AMBER}33`,
+          }}
+        >
+          <IconAlertTriangle size={14} stroke={2} color={AMBER} style={{ flexShrink: 0, marginTop: 1 }} />
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 600, lineHeight: '16px', color: AMBER }}>
+              {t('userDrawer.routingClashTitle')}
+            </Text>
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: MIST }}>
+              {t('userDrawer.routingClashBody', { pairs: routingClash })}
+            </Text>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

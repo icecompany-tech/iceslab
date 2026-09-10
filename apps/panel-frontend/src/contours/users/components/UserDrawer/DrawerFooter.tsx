@@ -23,7 +23,7 @@ export function DrawerFooter({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '16px 24px 20px',
+            padding: '12px 18px 14px',
             backgroundColor: WELL,
             borderTop: `1px solid ${HAIRLINE}`,
             flexShrink: 0,

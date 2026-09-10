@@ -25,7 +25,7 @@ export function DrawerHeader({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
-            padding: '22px 24px 18px',
+            padding: '14px 18px 12px',
             borderBottom: `1px solid ${HAIRLINE}`,
             flexShrink: 0,
           }}

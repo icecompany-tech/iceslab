@@ -2,8 +2,10 @@ import type { CreateUserInput, UpdateUserInput } from '@/lib/domain/users';
 import type { FormValues } from '@/contours/users/lib/userForm';
 import type { Preset } from '@/contours/users/lib/userPresets';
 import type { PreviewData, PreviewRowData } from '@/contours/users/components/UserDrawer/PreviewCard';
+import type { ExpirySpan } from '@/contours/users/lib/userExpiry';
 import { ALL_SQUAD_ID } from '@/lib/domain/routePolicies';
 import { defaultValues } from '@/contours/users/lib/userForm';
+import { expiryDays } from '@/contours/users/lib/userExpiry';
 import { fetchUserEndpoints, listUsers } from '@/lib/domain/users';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { listNodes } from '@/lib/domain/nodes';
@@ -18,12 +20,20 @@ import type { Props } from '@/contours/users/components/UserDrawer';
 /**
  * The draft a user is edited as: the form, the lists it picks from (squads,
  * profiles, nodes), the name check, the traffic estimate and the preview of
- * what the subscription will hand out. The drawer keeps layout only.
+ * what the subscription will hand out. The modal keeps layout only.
  */
 export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
   const { t } = useTranslation();
 
   const isEdit = user !== null;
+  /**
+   * One clock for the whole session of the form, stamped when it opens. Every
+   * expiry date, and the lookup that turns a stored day count back into "30
+   * days", is measured from it: a clock read per render would let the label and
+   * the date beside it disagree across midnight.
+   */
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
+  const now = useMemo(() => new Date(openedAt), [openedAt]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetId, setPresetId] = useState<string | null>(null);
   const presets = useMemo(() => loadPresets(), [opened]);
@@ -47,6 +57,7 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
       form.setValues(defaultValues(user));
       setAdvancedOpen(false);
       setPresetId(null);
+      setOpenedAt(Date.now());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, user?.id, user?.updatedAt]);
@@ -64,7 +75,9 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
   });
   const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes(), enabled: opened });
 
-  const squads = squadsQuery.data?.squads ?? [];
+  // Memoised because two derived blocks below key off it: a fresh [] per render
+  // would recompute the estimate and the routing check on every keystroke.
+  const squads = useMemo(() => squadsQuery.data?.squads ?? [], [squadsQuery.data]);
 
   // Username availability. There is no dedicated endpoint, so this reuses the
   // list search and compares exactly: a substring hit on another user must not
@@ -170,11 +183,41 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     };
   }, [isEdit, estimate, endpointsQuery.data, nodesQuery.data]);
 
+  /**
+   * Which squads name a routing preset, when they name more than one.
+   *
+   * Mirrors `resolveSquadRouting` (panel-backend
+   * `subscription.service.ts:119`): one distinct preset across the member
+   * squads wins, two or more cancel out and the person drops to the panel
+   * default. Only the disagreement is drawn from this. What the panel hands
+   * out instead is the backend's answer and is not exposed to this screen, so
+   * the effective value in the preview still reads "inherits squad".
+   *
+   * Every user is in All whether or not the form lists it, so All's own preset
+   * counts here exactly as the backend counts it.
+   */
+  const squadRoutingClash = useMemo(() => {
+    const named = squads.filter(
+      (s) =>
+        s.routingPreset !== null &&
+        (s.id === ALL_SQUAD_ID || form.values.groupIds.includes(s.id)),
+    );
+    const distinct = new Set(named.map((s) => s.routingPreset));
+    return distinct.size > 1 ? named.map((s) => ({ name: s.name, preset: s.routingPreset! })) : null;
+  }, [squads, form.values.groupIds]);
+
   function applyPreset(p: Preset) {
     setPresetId(p.id);
     form.setFieldValue('trafficLimitGb', p.trafficGb ?? '');
     form.setFieldValue('expireDays', p.expireDays ?? '');
+    form.setFieldValue('expirySet', true);
     form.setFieldValue('trafficLimitStrategy', p.strategy);
+  }
+
+  /** The expiry picker writes a day count, the same unit a preset carries. */
+  function setExpiry(span: ExpirySpan) {
+    form.setFieldValue('expireDays', expiryDays(span, now));
+    form.setFieldValue('expirySet', true);
   }
 
   function toggleSquad(id: string) {
@@ -186,8 +229,16 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
   }
 
   async function handleSubmit(values: FormValues) {
+    const chosenExpiry =
+      values.expireDays === ''
+        ? null
+        : new Date(now.getTime() + Number(values.expireDays) * 86_400_000);
+
     if (isEdit) {
       const input: UpdateUserInput = {
+        // Sent only when this session picked a span. An untouched edit leaves
+        // the field out entirely rather than restating the stored date.
+        ...(values.expirySet ? { expireAt: chosenExpiry?.toISOString() ?? null } : {}),
         status: values.status,
         trafficLimitGb: values.trafficLimitGb === '' ? null : Number(values.trafficLimitGb) || null,
         trafficLimitStrategy: values.trafficLimitStrategy,
@@ -220,12 +271,22 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     onClose();
   }
 
-  const expiresAt =
-    form.values.expireDays === ''
+  /**
+   * The day the subscription runs out, as the form currently stands. Until a
+   * span is picked, an existing user keeps the date they already carry: the
+   * preview used to read "no expiry" for everyone on edit, because the picker
+   * starts empty and the stored date was never consulted.
+   */
+  const expiresAt = form.values.expirySet
+    ? form.values.expireDays === ''
       ? null
-      : new Date(Date.now() + Number(form.values.expireDays) * 86_400_000);
+      : new Date(now.getTime() + Number(form.values.expireDays) * 86_400_000)
+    : user?.expireAt
+      ? new Date(user.expireAt)
+      : null;
 
   return {
+    now,
     isEdit,
     presets,
     form,
@@ -241,7 +302,9 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     endpointsQuery,
     estimate,
     preview,
+    squadRoutingClash,
     applyPreset,
+    setExpiry,
     toggleSquad,
     handleSubmit,
     expiresAt,
@@ -252,5 +315,5 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
   };
 }
 
-/** Everything the drawer hands to its sections. */
+/** Everything the modal hands to its sections. */
 export type UserForm = ReturnType<typeof useUserForm>;

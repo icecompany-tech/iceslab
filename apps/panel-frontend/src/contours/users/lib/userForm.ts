@@ -27,6 +27,12 @@ export interface FormValues {
   trafficLimitGb: number | '';
   trafficLimitStrategy: TrafficLimitStrategy;
   expireDays: number | '';
+  /**
+   * Whether this session actually chose an expiry. An edit that never touched
+   * the field must send no date at all: restating one would recompute "now +
+   * 30 days" on every save and walk the expiry forward a month at a time.
+   */
+  expirySet: boolean;
   status: 'active' | 'disabled';
   description: string;
   tag: string;
@@ -44,6 +50,7 @@ export function defaultValues(user: User | null): FormValues {
     trafficLimitGb: user?.trafficLimitBytes != null ? Math.round(user.trafficLimitBytes / GiB) : '',
     trafficLimitStrategy: user?.trafficLimitStrategy ?? 'no_reset',
     expireDays: '',
+    expirySet: false,
     // limited/expired are cron-managed and rejected by UpdateUserSchema, so an
     // edit can only set active or disabled. Saving a limited user reactivates
     // them; the review cron re-limits if they are still over quota.
