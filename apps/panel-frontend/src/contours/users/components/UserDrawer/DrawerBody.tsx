@@ -125,7 +125,7 @@ export function DrawerBody({
           {/* What the preview counts, listed one line at a time so a support
               call can be answered with a single URI instead of the whole
               subscription. */}
-          {ui.isEdit && <DialCard endpoints={ui.endpointsQuery.data?.endpoints ?? []} />}
+          {ui.isEdit && <DialCard query={ui.endpointsQuery} />}
         </Box>
       </Box>
 

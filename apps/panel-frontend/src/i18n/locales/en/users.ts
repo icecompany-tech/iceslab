@@ -200,6 +200,11 @@ export const users = {
     revokeHint:
       'Revoking answers 403 on the current link. The client stops updating until the new link reaches them.',
     dialTitle: 'What this user can dial',
+    dialEmpty:
+      'Nothing to hand out. Either the picked squads have no deployed profiles, or none of the nodes behind them is answering right now.',
+    dialRefused:
+      'The subscription is not being served: the account has expired, run out of traffic, is switched off, or its link was revoked.',
+    dialError: 'Could not read the endpoints for this account.',
     dialHint:
       '{{configs}} configs across {{nodes}} nodes. Pick a protocol to copy that one line; the subscription hands out all of them at once.',
     dangerTitle: 'Things that reach the client',

@@ -6,7 +6,9 @@ import { copyToClipboard } from '@/lib/ui/clipboard';
 import { protocolLabel } from '@/lib/domain/protocols';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { UserEndpoint } from '@/lib/domain/users';
+import type { UserForm } from '@/contours/users/components/UserDrawer/useUserForm';
+
+type EndpointsQuery = UserForm['endpointsQuery'];
 
 /**
  * The lines this person can actually dial, one protocol at a time.
@@ -16,9 +18,10 @@ import type { UserEndpoint } from '@/lib/domain/users';
  * different questions, which is why the subscription link and a single URI
  * both have a place here.
  */
-export function DialCard({ endpoints }: { endpoints: UserEndpoint[] }) {
+export function DialCard({ query }: { query: EndpointsQuery }) {
   const { t } = useTranslation();
 
+  const endpoints = useMemo(() => query.data?.endpoints ?? [], [query.data]);
   const protocols = useMemo(
     () => [...new Set(endpoints.map((e) => e.protocol))],
     [endpoints],
@@ -27,7 +30,23 @@ export function DialCard({ endpoints }: { endpoints: UserEndpoint[] }) {
   const current = active && protocols.includes(active) ? active : (protocols[0] ?? null);
   const shown = endpoints.filter((e) => e.protocol === current);
 
-  if (endpoints.length === 0) return null;
+  /**
+   * Why there is nothing to dial, when there is nothing.
+   *
+   * The card used to vanish on an empty list, which left an operator unable to
+   * tell "this account is served nothing" from "the panel forgot to draw the
+   * block". A 403 is its own answer: the subscription endpoint refuses an
+   * account that has expired, run out or had its link revoked.
+   */
+  const empty = query.isLoading
+    ? t('common.loading')
+    : isForbidden(query.error)
+      ? t('userDrawer.dialRefused')
+      : query.isError
+        ? t('userDrawer.dialError')
+        : endpoints.length === 0
+          ? t('userDrawer.dialEmpty')
+          : null;
 
   return (
     <Box
@@ -46,9 +65,15 @@ export function DialCard({ endpoints }: { endpoints: UserEndpoint[] }) {
         <Text style={{ ...LABEL, letterSpacing: '0.14em' }}>{t('userDrawer.dialTitle')}</Text>
         <Box style={{ flex: 1 }} />
         <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: DIM_TEXT }}>
-          {t('userDrawer.configs', { count: endpoints.length })}
+          {endpoints.length} {t('userDrawer.configs', { count: endpoints.length })}
         </Text>
       </Box>
+
+      {empty && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+          {empty}
+        </Text>
+      )}
 
       <Box style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {protocols.map((p) => {
@@ -137,9 +162,23 @@ export function DialCard({ endpoints }: { endpoints: UserEndpoint[] }) {
         </Box>
       ))}
 
-      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
-        {t('userDrawer.dialHint', { configs: endpoints.length, nodes: new Set(endpoints.map((e) => e.nodeId)).size })}
-      </Text>
+      {endpoints.length > 0 && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+          {t('userDrawer.dialHint', {
+            configs: endpoints.length,
+            nodes: new Set(endpoints.map((e) => e.nodeId)).size,
+          })}
+        </Text>
+      )}
     </Box>
+  );
+}
+
+/** The subscription endpoint answers 403 for an account it will not serve. */
+function isForbidden(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { response?: { status?: number } }).response?.status === 403
   );
 }
