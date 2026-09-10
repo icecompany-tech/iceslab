@@ -1,7 +1,7 @@
 import { ROUTING_PRESET_IDS } from '@/lib/domain/routingPresets';
-import { IconChevronDown, IconChevronUp, IconDeviceDesktop, IconMail, IconRoute, IconTag } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronUp, IconDeviceDesktop, IconMail, IconNote, IconRoute, IconTag } from '@tabler/icons-react';
 import { AdvancedGroup } from '@/contours/users/components/UserDrawer/AdvancedGroup';
-import { CARD, DISPLAY, HAIRLINE, MIST, SNOW } from '@/contours/users/lib/colors';
+import { CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW, WELL } from '@/contours/users/lib/colors';
 import { Box, NumberInput, Select, Stack, Text, TextInput, Textarea, UnstyledButton } from '@mantine/core';
 import { DeviceList } from '@/contours/users/components/UserDrawer/DeviceList';
 import { Hint } from '@/contours/users/components/UserDrawer/Hint';
@@ -49,22 +49,65 @@ export function AdvancedPanel({
           padding: '14px 16px',
         }}
       >
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 8, color: MIST }}>
+        <Box style={{ display: 'flex', alignItems: 'center', gap: 8, color: MIST, minWidth: 0 }}>
           {advancedOpen ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
           <Text style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 500, color: SNOW }}>
             {t('userDrawer.advanced')}
           </Text>
-          <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: MIST }}>
-            {t('userDrawer.advancedContents')}
-          </Text>
+          {/* Closed, the row names what is behind it and counts the fields, so
+              the disclosure is not a blind door. Open, the fields say it
+              themselves and the caption would just repeat them. */}
+          {!advancedOpen && (
+            <Text
+              style={{
+                fontFamily: DISPLAY,
+                fontSize: 12,
+                color: MIST,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+              }}
+            >
+              {isEdit ? t('userDrawer.advancedContentsEdit') : t('userDrawer.advancedContents')}
+            </Text>
+          )}
         </Box>
-        <Text style={{ ...LABEL }}>
-          {advancedOpen ? t('userDrawer.hide') : t('userDrawer.show')}
-        </Text>
+        {advancedOpen ? (
+          <Text style={{ ...LABEL }}>{t('userDrawer.hide')}</Text>
+        ) : (
+          <Text
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              lineHeight: '14px',
+              color: MIST,
+              backgroundColor: WELL,
+              border: `1px solid ${HAIRLINE}`,
+              borderRadius: 5,
+              padding: '1px 7px',
+              flexShrink: 0,
+            }}
+          >
+            {isEdit ? 6 : 7}
+          </Text>
+        )}
       </UnstyledButton>
 
       {advancedOpen && (
-        <Stack gap={20} style={{ padding: '4px 16px 18px' }}>
+        // Two columns, as drawn: who the person is on the left, what the panel
+        // keeps about them on the right. One column made the panel twice as
+        // tall as the form above it and pushed the save bar off a short screen.
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 24,
+            flexWrap: 'wrap',
+            padding: '4px 16px 18px',
+          }}
+        >
+        <Stack gap={20} style={{ flex: 1, minWidth: 280 }}>
           <AdvancedGroup icon={<IconMail size={13} />} title={t('userDrawer.contact')}>
             <Box style={{ display: 'flex', gap: 12 }}>
               <TextInput
@@ -105,11 +148,30 @@ export function AdvancedPanel({
             {isEdit && user && (
               <DeviceList userId={user.id} limit={form.values.hwidDeviceLimit} />
             )}
+          </AdvancedGroup>
+        </Stack>
+
+        <Stack gap={20} style={{ flex: 1, minWidth: 280 }}>
+          {!isEdit && (
+            <AdvancedGroup
+              icon={<IconDeviceDesktop size={13} />}
+              title={t('userDrawer.migration')}
+              badge={t('userDrawer.rare')}
+            >
+              <TextInput
+                label={t('userDrawer.importToken')}
+                placeholder={`(${t('userDrawer.optional')})`}
+                {...form.getInputProps('subscriptionToken')}
+              />
+              <Hint>{t('userDrawer.importTokenHint')}</Hint>
+            </AdvancedGroup>
+          )}
+
+          <AdvancedGroup icon={<IconNote size={13} />} title={t('userDrawer.note')}>
             <Textarea
-              label={t('userDrawer.note')}
               placeholder={t('userDrawer.notePlaceholder')}
               autosize
-              minRows={2}
+              minRows={3}
               {...form.getInputProps('description')}
             />
           </AdvancedGroup>
@@ -130,22 +192,8 @@ export function AdvancedPanel({
             />
             <Hint>{t('userDrawer.routingHint')}</Hint>
           </AdvancedGroup>
-
-          {!isEdit && (
-            <AdvancedGroup
-              icon={<IconDeviceDesktop size={13} />}
-              title={t('userDrawer.migration')}
-              badge={t('userDrawer.rare')}
-            >
-              <TextInput
-                label={t('userDrawer.importToken')}
-                placeholder={`(${t('userDrawer.optional')})`}
-                {...form.getInputProps('subscriptionToken')}
-              />
-              <Hint>{t('userDrawer.importTokenHint')}</Hint>
-            </AdvancedGroup>
-          )}
         </Stack>
+        </Box>
       )}
     </Box>
   );

@@ -110,7 +110,7 @@ export function PlanRow({
                   style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
                 >
                   <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '14px', color: MIST }}>
-                    {t(`users.strategy.${form.values.trafficLimitStrategy}`)}
+                    {t(`users.strategyShort.${form.values.trafficLimitStrategy}`)}
                   </Text>
                   <IconChevronDown size={12} stroke={2} color={MIST} />
                 </UnstyledButton>
@@ -119,7 +119,7 @@ export function PlanRow({
                 {STRATEGY_VALUES.map((v) => (
                   <MenuRow
                     key={v}
-                    label={t(`users.strategy.${v}`)}
+                    label={t(`users.strategyShort.${v}`)}
                     active={form.values.trafficLimitStrategy === v}
                     onClick={() => form.setFieldValue('trafficLimitStrategy', v)}
                   />

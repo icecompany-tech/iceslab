@@ -36,6 +36,8 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
   const now = useMemo(() => new Date(openedAt), [openedAt]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetId, setPresetId] = useState<string | null>(null);
+  /** Set by "create and next": save, then stay open on a blank draft. */
+  const [createNext, setCreateNext] = useState(false);
   const presets = useMemo(() => loadPresets(), [opened]);
 
   const form = useForm<FormValues>({
@@ -54,9 +56,25 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
 
   useEffect(() => {
     if (opened) {
-      form.setValues(defaultValues(user));
+      // A new account starts on the first preset rather than on nothing: an
+      // empty form offers unlimited traffic and no expiry, which is the one
+      // combination an operator almost never means.
+      const seed = defaultValues(user);
+      const first = user === null ? presets[0] : undefined;
+      form.setValues(
+        first
+          ? {
+              ...seed,
+              trafficLimitGb: first.trafficGb ?? '',
+              expireDays: first.expireDays ?? '',
+              expirySet: true,
+              trafficLimitStrategy: first.strategy,
+            }
+          : seed,
+      );
       setAdvancedOpen(false);
-      setPresetId(null);
+      setPresetId(first?.id ?? null);
+      setCreateNext(false);
       setOpenedAt(Date.now());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,6 +286,26 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
       };
       await onSubmit(input);
     }
+
+    // "Create and next" keeps the modal up and hands back a blank draft on the
+    // same preset, so a batch of accounts is one visit instead of ten.
+    if (createNext && !isEdit) {
+      const first = presets[0];
+      form.setValues({
+        ...defaultValues(null),
+        ...(first
+          ? {
+              trafficLimitGb: first.trafficGb ?? '',
+              expireDays: first.expireDays ?? '',
+              expirySet: true,
+              trafficLimitStrategy: first.strategy,
+            }
+          : {}),
+      });
+      setPresetId(first?.id ?? null);
+      setCreateNext(false);
+      return;
+    }
     onClose();
   }
 
@@ -303,6 +341,7 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     estimate,
     preview,
     squadRoutingClash,
+    setCreateNext,
     applyPreset,
     setExpiry,
     toggleSquad,

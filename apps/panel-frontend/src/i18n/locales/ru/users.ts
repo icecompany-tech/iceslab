@@ -53,6 +53,15 @@ export const users = {
       rotated: 'Подписка перевыпущена',
       trafficReset: 'Трафик сброшен',
     },
+    // Тот же выбор внутри контрола трафика, где он делит полосу в 200px с
+    // числом и должен читаться одним коротким словом.
+    strategyShort: {
+      no_reset: 'без сброса',
+      day: 'ежедневно',
+      week: 'еженедельно',
+      month: 'ежемесячно',
+      rolling: 'скользящие 30д',
+    },
     strategy: {
       no_reset: 'Никогда не сбрасывать',
       day: 'Каждый день',
@@ -133,6 +142,8 @@ export const users = {
     inDays: 'через {{count}} дн.',
     advanced: 'Дополнительно',
     advancedContents: 'email, telegram, HWID, тег, заметка, маршруты, импорт токена',
+    advancedContentsEdit: 'email, telegram, HWID, тег, заметка, маршруты',
+    createAndNext: 'Создать и дальше',
     show: 'Показать',
     hide: 'Скрыть',
     contact: 'Контакты',

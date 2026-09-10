@@ -62,7 +62,12 @@ export function UserDrawer({ opened, onClose, user, onSubmit, loading }: Props) 
       >
         <DrawerHeader isEdit={ui.isEdit} onClose={onClose} user={user} />
         <DrawerBody {...ui} user={user} />
-        <DrawerFooter isEdit={ui.isEdit} onClose={onClose} loading={loading} />
+        <DrawerFooter
+          isEdit={ui.isEdit}
+          onClose={onClose}
+          loading={loading}
+          setCreateNext={ui.setCreateNext}
+        />
       </form>
     </Modal>
   );

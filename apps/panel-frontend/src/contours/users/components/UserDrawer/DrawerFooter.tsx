@@ -12,7 +12,11 @@ export function DrawerFooter({
   isEdit,
   onClose,
   loading,
-}: Pick<UserForm, 'isEdit'> & { onClose: Props['onClose']; loading: Props['loading'] }) {
+  setCreateNext,
+}: Pick<UserForm, 'isEdit' | 'setCreateNext'> & {
+  onClose: Props['onClose'];
+  loading: Props['loading'];
+}) {
   const { t } = useTranslation();
 
   return (
@@ -33,7 +37,20 @@ export function DrawerFooter({
             ⏎ {isEdit ? t('userDrawer.saveShort') : t('userDrawer.createShort')}
           </Text>
           <Box style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <FooterButton onClick={onClose}>{t('common.cancel')}</FooterButton>
+            {/* Making accounts is done in runs, so the second button saves this
+                one and leaves the form open on a blank draft. An edit is a
+                single visit and gets the way out instead. */}
+            {isEdit ? (
+              <FooterButton onClick={onClose}>{t('common.cancel')}</FooterButton>
+            ) : (
+              <FooterButton
+                type="submit"
+                disabled={loading}
+                onClick={() => setCreateNext(true)}
+              >
+                {t('userDrawer.createAndNext')}
+              </FooterButton>
+            )}
             <FooterButton type="submit" primary disabled={loading}>
               {isEdit ? t('common.save') : t('userDrawer.create')}
             </FooterButton>

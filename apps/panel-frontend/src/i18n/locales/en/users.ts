@@ -60,6 +60,15 @@ export const users = {
       month: 'Every month',
       rolling: 'Rolling 30 days',
     },
+    // The same choice inside the traffic control, where it shares a 200px lane
+    // with the number and has to read as one short word.
+    strategyShort: {
+      no_reset: 'never',
+      day: 'daily',
+      week: 'weekly',
+      month: 'monthly',
+      rolling: 'rolling 30d',
+    },
   },
 
   userDrawer: {
@@ -125,6 +134,8 @@ export const users = {
     inDays: 'in {{count}} days',
     advanced: 'Advanced',
     advancedContents: 'email, telegram, HWID, tag, note, routing, import token',
+    advancedContentsEdit: 'email, telegram, HWID, tag, note, routing',
+    createAndNext: 'Create and next',
     show: 'Show',
     hide: 'Hide',
     contact: 'Contact',
