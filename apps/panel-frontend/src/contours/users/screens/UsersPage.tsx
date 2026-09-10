@@ -2,7 +2,8 @@ import { StatsRow } from '@/contours/users/components/UsersTable/StatsRow';
 import { UsersTable } from '@/contours/users/components/UsersTable/UsersTable';
 import { UsersToolbar } from '@/contours/users/components/UsersTable/UsersToolbar';
 import { useUsersPage } from '@/contours/users/screens/useUsersPage';
-import { Stack } from '@mantine/core';
+import { Box, Stack } from '@mantine/core';
+import { GROUND } from '@/contours/users/lib/colors';
 // One definition of "online" for the whole panel: the dashboard used to count a
 // 3-minute window while this list glowed for 5.
 import { type CreateUserInput, type UpdateUserInput } from '@/lib/domain/users';
@@ -58,7 +59,41 @@ export function UsersPage() {
     selected,
     setSelected,
     toggleSelected,
+    columnView,
+    setColumnView,
+    visibleColumns,
+    toggleColumn,
+    pinColumn,
+    moveColumn,
+    density,
+    cycleDensity,
+    fullscreen,
+    setFullscreen,
   } = useUsersPage();
+
+  const table = (
+    <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} statusFilter={statusFilter} setStatusFilter={setStatusFilter} colFilters={colFilters} setColFilter={setColFilter} selected={selected} setSelected={setSelected} toggleSelected={toggleSelected} activeFilters={activeFilters} columnView={columnView} setColumnView={setColumnView} visibleColumns={visibleColumns} toggleColumn={toggleColumn} pinColumn={pinColumn} moveColumn={moveColumn} density={density} cycleDensity={cycleDensity} fullscreen={fullscreen} setFullscreen={setFullscreen} openCreate={openCreate} />
+  );
+
+  // Full screen is the same table with the room the rest of the page was
+  // taking: the KPI chips and the search bar are a way in, and once you are
+  // reading twenty-three columns they are in the way.
+  if (fullscreen) {
+    return (
+      <Box
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 200,
+          backgroundColor: GROUND,
+          padding: 16,
+          overflowY: 'auto',
+        }}
+      >
+        {table}
+      </Box>
+    );
+  }
 
   return (
     <Stack gap="lg">
@@ -66,7 +101,7 @@ export function UsersPage() {
 
       <UsersToolbar qc={qc} activeFilters={activeFilters} usersQuery={usersQuery} squadsQuery={squadsQuery} knownTags={knownTags} search={search} setSearch={setSearch} squadFilter={squadFilter} setSquadFilter={setSquadFilter} tagFilter={tagFilter} setTagFilter={setTagFilter} routingFilter={routingFilter} setRoutingFilter={setRoutingFilter} openCreate={openCreate} />
 
-      <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} statusFilter={statusFilter} setStatusFilter={setStatusFilter} colFilters={colFilters} setColFilter={setColFilter} selected={selected} setSelected={setSelected} toggleSelected={toggleSelected} activeFilters={activeFilters} />
+      {table}
 
       <UserDrawer
         opened={createOpen}

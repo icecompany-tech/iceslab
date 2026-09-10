@@ -1,13 +1,20 @@
-import { ACTIONS_COL, SELECT_COL, USER_COLUMNS, USER_COLUMNS_TOTAL } from '@/contours/users/lib/usersTable';
+import { ACTIONS_COL, SELECT_COL, USER_COLUMNS } from '@/contours/users/lib/usersTable';
+import { ColumnsPanel } from '@/contours/users/components/UsersTable/ColumnsPanel';
+import { columnStyles } from '@/contours/users/lib/columnLayout';
 import { UserRow } from '@/contours/users/components/UsersTable/UserRow';
 import { ActionIcon, ThemeIcon } from '@mantine/core';
-import { CARD, GROUND, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
+import { CARD, CYAN, GROUND, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
+import { UnstyledButton } from '@mantine/core';
+import type { ReactNode } from 'react';
 import { MONO } from '@/contours/users/lib/textStyles';
 import { Box, Group, Select, Stack, Text } from '@mantine/core';
 import { HeadCell } from '@/contours/users/components/UsersTable/HeadCell';
 import { IconChevronLeft, IconChevronRight, IconUserOff } from '@tabler/icons-react';
 import { MONO_LABEL } from '@/contours/users/lib/textStyles';
 import { SelectBox } from '@/contours/users/components/UsersTable/SelectBox';
+import { UsersEmpty } from '@/contours/users/components/UsersTable/UsersEmpty';
+import { IconArrowsMaximize, IconArrowsMinimize, IconBaselineDensityLarge, IconBaselineDensityMedium, IconBaselineDensitySmall } from '@tabler/icons-react';
+import { DENSITY_PADDING } from '@/contours/users/lib/usersTable';
 import { useTranslation } from 'react-i18next';
 import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
 
@@ -23,14 +30,24 @@ export function UsersTable(props: Pick<UsersPageState,
   | 'totalPages' | 'safePage' | 'rangeStart' | 'rangeEnd' | 'handleRevoke' | 'handleRotate'
   | 'handleResetTraffic' | 'handleDelete' | 'setEditing' | 'setPage' | 'rowsPerPage'
   | 'setRowsPerPage' | 'sort' | 'order' | 'colFilters' | 'setColFilter' | 'statusFilter'
-  | 'setStatusFilter' | 'selected' | 'setSelected' | 'toggleSelected' | 'activeFilters'>) {
+  | 'setStatusFilter' | 'selected' | 'setSelected' | 'toggleSelected' | 'activeFilters'
+  | 'columnView' | 'setColumnView' | 'visibleColumns' | 'toggleColumn' | 'pinColumn'
+  | 'moveColumn' | 'density' | 'cycleDensity' | 'fullscreen' | 'setFullscreen' | 'openCreate'>) {
   const { t } = useTranslation();
   const {
     pagedUsers, totalUsers, stats, totalPages, safePage, rangeStart, rangeEnd,
     setPage, rowsPerPage, setRowsPerPage, sort, activeFilters, selected, setSelected,
+    columnView, visibleColumns, density, cycleDensity, fullscreen, setFullscreen,
   } = props;
+  const pad = DENSITY_PADDING[density];
 
   const allOnPage = pagedUsers.length > 0 && pagedUsers.every((u) => selected.has(u.id));
+  const headStyles = columnStyles(visibleColumns, columnView.pins, WELL);
+  const rowStyles = columnStyles(visibleColumns, columnView.pins, CARD);
+  // Enough room for every column at its own width, so nothing squeezes when
+  // the operator turns more of them on.
+  const minWidth =
+    SELECT_COL + ACTIONS_COL + visibleColumns.reduce((sum, c) => sum + (c.width ?? 384), 0);
 
   return (
     <Box
@@ -55,7 +72,10 @@ export function UsersTable(props: Pick<UsersPageState,
         }}
       >
         <Text style={{ ...MONO_LABEL, color: SNOW }}>
-          {t('usersTable.viewColumns', { shown: USER_COLUMNS.length, total: USER_COLUMNS_TOTAL })}
+          {t('usersTable.viewColumns', {
+            shown: visibleColumns.length,
+            total: USER_COLUMNS.length,
+          })}
         </Text>
         <Text style={{ ...MONO_LABEL }}>·</Text>
         <Text style={{ ...MONO_LABEL }}>
@@ -73,10 +93,38 @@ export function UsersTable(props: Pick<UsersPageState,
             {t('usersTable.selectedCount', { count: selected.size })}
           </Text>
         )}
+        {/* One button, three stages: it carries its own state in its icon so
+            the row height is adjusted by looking rather than by remembering. */}
+        <ToolButton
+          title={t(`usersTable.density.${density}`)}
+          onClick={cycleDensity}
+          icon={
+            density === 'compact' ? (
+              <IconBaselineDensitySmall size={14} stroke={1.8} />
+            ) : density === 'normal' ? (
+              <IconBaselineDensityMedium size={14} stroke={1.8} />
+            ) : (
+              <IconBaselineDensityLarge size={14} stroke={1.8} />
+            )
+          }
+        />
+        <ToolButton
+          title={t(fullscreen ? 'usersTable.exitFullscreen' : 'usersTable.fullscreen')}
+          active={fullscreen}
+          onClick={() => setFullscreen(!fullscreen)}
+          icon={
+            fullscreen ? (
+              <IconArrowsMinimize size={14} stroke={1.8} />
+            ) : (
+              <IconArrowsMaximize size={14} stroke={1.8} />
+            )
+          }
+        />
+        <ColumnsPanel {...props} />
       </Box>
 
       <Box style={{ overflowX: 'auto' }}>
-        <Box style={{ minWidth: 1300 }}>
+        <Box style={{ minWidth }}>
           <Box
             style={{
               display: 'flex',
@@ -86,7 +134,18 @@ export function UsersTable(props: Pick<UsersPageState,
               borderBottom: `1px solid ${HAIRLINE}`,
             }}
           >
-            <Box style={{ width: SELECT_COL, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <Box
+              style={{
+                width: SELECT_COL,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                position: 'sticky',
+                left: 0,
+                zIndex: 3,
+                backgroundColor: WELL,
+              }}
+            >
               <SelectBox
                 checked={allOnPage}
                 onChange={() =>
@@ -101,29 +160,45 @@ export function UsersTable(props: Pick<UsersPageState,
                 }
               />
             </Box>
-            {USER_COLUMNS.map((column) => (
-              <HeadCell key={column.id} column={column} {...props} />
+            {visibleColumns.map((column, i) => (
+              <HeadCell key={column.id} column={column} cellStyle={headStyles[i]!} {...props} />
             ))}
             {/* Three dots, not the word "actions": the heading of a column of
                 icon buttons should not shout louder than the buttons. */}
-            <Box style={{ width: ACTIONS_COL, flexShrink: 0, textAlign: 'right' }}>
+            <Box
+              style={{
+                width: ACTIONS_COL,
+                flexShrink: 0,
+                textAlign: 'right',
+                position: 'sticky',
+                right: 0,
+                zIndex: 3,
+                backgroundColor: WELL,
+              }}
+            >
               <Text style={{ ...MONO_LABEL }}>···</Text>
             </Box>
           </Box>
 
-          {pagedUsers.length === 0 && (
-            <Stack align="center" py={48} gap="xs">
-              <ThemeIcon size={40} radius="md" variant="light" color="gray">
-                <IconUserOff size={22} />
-              </ThemeIcon>
-              <Text c="dimmed" size="sm">
-                {stats.total === 0 ? t('users.empty') : t('common.nothingFound')}
-              </Text>
-            </Stack>
-          )}
+          {/* Nothing at all and nothing that matched are different answers, so
+              they get different screens: the first explains the list, the
+              second only says the filter is too narrow. */}
+          {pagedUsers.length === 0 &&
+            (stats.total === 0 ? (
+              <UsersEmpty openCreate={props.openCreate} />
+            ) : (
+              <Stack align="center" py={48} gap="xs">
+                <ThemeIcon size={40} radius="md" variant="light" color="gray">
+                  <IconUserOff size={22} />
+                </ThemeIcon>
+                <Text c="dimmed" size="sm">
+                  {t('common.nothingFound')}
+                </Text>
+              </Stack>
+            ))}
 
           {pagedUsers.map((u) => (
-            <UserRow key={u.id} u={u} {...props} />
+            <UserRow key={u.id} u={u} cellStyles={rowStyles} pad={pad} {...props} />
           ))}
         </Box>
       </Box>
@@ -185,5 +260,38 @@ export function UsersTable(props: Pick<UsersPageState,
         </Box>
       )}
     </Box>
+  );
+}
+
+function ToolButton({
+  title,
+  icon,
+  onClick,
+  active,
+}: {
+  title: string;
+  icon: ReactNode;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <UnstyledButton
+      title={title}
+      onClick={onClick}
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        color: active ? CYAN : MIST,
+        backgroundColor: WELL,
+        border: `1px solid ${active ? `${CYAN}55` : HAIRLINE}`,
+      }}
+    >
+      {icon}
+    </UnstyledButton>
   );
 }

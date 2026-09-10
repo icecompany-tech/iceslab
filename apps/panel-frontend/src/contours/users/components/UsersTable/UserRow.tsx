@@ -1,5 +1,5 @@
 import { isRoutingPresetId } from '@/lib/domain/routingPresets';
-import { ACTIONS_COL, SELECT_COL, USER_COLUMNS } from '@/contours/users/lib/usersTable';
+import { ACTIONS_COL, SELECT_COL } from '@/contours/users/lib/usersTable';
 import { AMBER, CARD, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/users/lib/colors';
 import { DISPLAY, MONO } from '@/contours/users/lib/textStyles';
 import { ActionIcon, Box, Menu, Text, Tooltip } from '@mantine/core';
@@ -13,7 +13,9 @@ import { expireRelative, formatBytes, trafficPercent } from '@/contours/users/li
 import { presetKey } from '@/lib/domain/routingPresets';
 import { subscriptionUrl } from '@/lib/domain/users';
 import { useTranslation } from 'react-i18next';
-import type { ReactNode } from 'react';
+import { SquadPill } from '@/contours/users/components/UsersTable/SquadPill';
+import { relativeTime } from '@/lib/ui/relativeTime';
+import type { CSSProperties, ReactNode } from 'react';
 import type { User } from '@/lib/domain/users';
 import type { UserColumnId } from '@/contours/users/lib/usersTable';
 import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
@@ -26,7 +28,11 @@ import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
  */
 export function UserRow({
   u,
+  cellStyles,
+  pad,
   authStatusQuery,
+  squadNameById,
+  visibleColumns,
   handleRevoke,
   handleRotate,
   handleResetTraffic,
@@ -34,7 +40,7 @@ export function UserRow({
   setEditing,
   selected,
   toggleSelected,
-}: { u: User } & Pick<UsersPageState, 'authStatusQuery' | 'handleRevoke' | 'handleRotate' | 'handleResetTraffic' | 'handleDelete' | 'setEditing' | 'selected' | 'toggleSelected'>) {
+}: { u: User; cellStyles: CSSProperties[]; pad: number } & Pick<UsersPageState, 'authStatusQuery' | 'squadNameById' | 'visibleColumns' | 'handleRevoke' | 'handleRotate' | 'handleResetTraffic' | 'handleDelete' | 'setEditing' | 'selected' | 'toggleSelected'>) {
   const { t } = useTranslation();
 
   const exp = expireRelative(u.expireAt, t);
@@ -49,6 +55,7 @@ export function UserRow({
     compStatus === 'expired' ? `${RED}0A` : compStatus === 'limited' ? `${AMBER}0A` : undefined;
   const isPaused = compStatus === 'limited' || compStatus === 'expired';
   const subUrl = subscriptionUrl(u.subscriptionToken, authStatusQuery.data?.panel);
+  const otherSquads = u.groupIds.filter((id) => id !== '00000000-0000-0000-0000-000000000001');
 
   const cells: Record<UserColumnId, ReactNode> = {
     username: (
@@ -203,6 +210,48 @@ export function UserRow({
         {u.trafficLimitBytes === null ? '∞' : formatBytes(u.trafficLimitBytes)}
       </Text>
     ),
+    squads: (
+      <Box style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {otherSquads.length === 0 ? (
+          <SquadPill muted>All</SquadPill>
+        ) : (
+          <>
+            {otherSquads.slice(0, 2).map((id) => (
+              <SquadPill key={id}>{squadNameById.get(id) ?? id.slice(0, 6)}</SquadPill>
+            ))}
+            {otherSquads.length > 2 && <SquadPill muted>+{otherSquads.length - 2}</SquadPill>}
+          </>
+        )}
+      </Box>
+    ),
+    tag: <Plain>{u.tag ?? '-'}</Plain>,
+    description: <Plain title={u.description ?? undefined}>{u.description ?? '-'}</Plain>,
+    telegramId: <Plain>{u.telegramId ?? '-'}</Plain>,
+    email: <Plain title={u.email ?? undefined}>{u.email ?? '-'}</Plain>,
+    subLink: <Plain title={subUrl}>{subUrl}</Plain>,
+    routing: (
+      <Plain>
+        {u.routingPreset
+          ? isRoutingPresetId(u.routingPreset)
+            ? t(`metadata.preset${presetKey(u.routingPreset)}`)
+            : u.routingPreset
+          : t('userDrawer.inheritsSquad')}
+      </Plain>
+    ),
+    deviceLimit: <Plain>{u.hwidDeviceLimit ?? '∞'}</Plain>,
+    // The panel stores when this user first connected (UserTraffic
+    // .firstConnectedAt) but the list endpoint does not return it.
+    firstConnected: <Plain title={t('usersTable.firstConnectedPending')}>-</Plain>,
+    lastOnline: <Plain>{relativeTime(u.lastOnlineAt, t).text}</Plain>,
+    trafficReset: <Plain>{u.lastTrafficResetAt ? shortDate(u.lastTrafficResetAt) : '-'}</Plain>,
+    lifetimeUsed: <Plain>{formatBytes(u.lifetimeTrafficBytes)}</Plain>,
+    linkRevoked: (
+      <Plain color={u.subRevokedAt ? RED : undefined}>
+        {u.subRevokedAt ? shortDate(u.subRevokedAt) : '-'}
+      </Plain>
+    ),
+    created: <Plain>{shortDate(u.createdAt)}</Plain>,
+    uuid: <Plain title={u.id}>{u.id}</Plain>,
   };
 
   return (
@@ -211,22 +260,31 @@ export function UserRow({
         display: 'flex',
         alignItems: 'center',
         width: '100%',
-        padding: '11px 16px',
+        padding: `${pad}px 16px`,
         backgroundColor: rowTint,
         borderBottom: `1px solid ${HAIRLINE}`,
       }}
     >
-      <Box style={{ width: SELECT_COL, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+      <Box
+        style={{
+          width: SELECT_COL,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          position: 'sticky',
+          left: 0,
+          zIndex: 3,
+          backgroundColor: rowTint ?? CARD,
+        }}
+      >
         <SelectBox checked={selected.has(u.id)} onChange={() => toggleSelected(u.id)} />
       </Box>
 
-      {USER_COLUMNS.map((column) => (
+      {visibleColumns.map((column, i) => (
         <Box
           key={column.id}
           style={{
-            ...(column.width === null
-              ? { flex: 1, minWidth: 0 }
-              : { width: column.width, flexShrink: 0 }),
+            ...cellStyles[i],
             display: 'flex',
             flexDirection: 'column',
             gap: 5,
@@ -243,6 +301,10 @@ export function UserRow({
           flexShrink: 0,
           display: 'flex',
           justifyContent: 'flex-end',
+          position: 'sticky',
+          right: 0,
+          zIndex: 3,
+          backgroundColor: rowTint ?? CARD,
         }}
       >
         <Menu shadow="md" position="bottom-end" withinPortal>
@@ -285,4 +347,41 @@ export function UserRow({
       </Box>
     </Box>
   );
+}
+
+/** The default shape of a cell: one muted mono line that never wraps. */
+function Plain({
+  children,
+  title,
+  color,
+}: {
+  children: ReactNode;
+  title?: string;
+  color?: string;
+}) {
+  return (
+    <Text
+      title={title}
+      style={{
+        ...MONO,
+        fontSize: 12,
+        lineHeight: '16px',
+        color: color ?? MIST,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/** "10 Sept 2026", the same shape the expiry picker prints. */
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }

@@ -3,6 +3,7 @@ import { Box, Menu, Text, UnstyledButton } from '@mantine/core';
 import { CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
 import { MONO_LABEL } from '@/contours/users/lib/textStyles';
 import { useTranslation } from 'react-i18next';
+import type { CSSProperties } from 'react';
 import type { UserColumn } from '@/contours/users/lib/usersTable';
 import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
 
@@ -13,6 +14,7 @@ import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
  */
 export function HeadCell({
   column,
+  cellStyle,
   sort,
   order,
   toggleSort,
@@ -20,7 +22,7 @@ export function HeadCell({
   setColFilter,
   statusFilter,
   setStatusFilter,
-}: { column: UserColumn } & Pick<
+}: { column: UserColumn; cellStyle: CSSProperties } & Pick<
   UsersPageState,
   'sort' | 'order' | 'toggleSort' | 'colFilters' | 'setColFilter' | 'statusFilter' | 'setStatusFilter'
 >) {
@@ -30,9 +32,7 @@ export function HeadCell({
   return (
     <Box
       style={{
-        ...(column.width === null
-          ? { flex: 1, minWidth: 0 }
-          : { width: column.width, flexShrink: 0 }),
+        ...cellStyle,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,

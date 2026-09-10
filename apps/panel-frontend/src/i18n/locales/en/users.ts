@@ -4,6 +4,10 @@ export const users = {
     create: 'Create user',
     searchPlaceholder: 'Search by username, email, telegram or tag…',
     empty: 'No users.',
+    emptyTitle: 'No accounts yet',
+    emptyBody:
+      'Every subscriber lives here. Create the first one and its subscription link is minted on save.',
+    emptyImport: 'OR IMPORT AN EXISTING PANEL · ICESLAB-MIGRATE',
     routingOverrideHint: 'This user overrides the routing preset their squad would give them.',
     filters: {
       button: 'Filters',
@@ -28,6 +32,18 @@ export const users = {
       usedPct: 'Used %',
       limit: 'Limit',
       squads: 'Squads',
+      description: 'Description',
+      telegramId: 'Telegram ID',
+      email: 'Email',
+      subLink: 'Subscription link',
+      routing: 'Routing',
+      deviceLimit: 'Device limit',
+      firstConnected: 'First connected',
+      trafficReset: 'Traffic reset',
+      lifetimeUsed: 'Lifetime used',
+      linkRevoked: 'Link revoked',
+      created: 'Created',
+      uuid: 'UUID',
       // The column holds lastOnlineAt, so it is headed by what it holds. Under
       // "Subscription" a value like "23s ago" claimed a fetch the panel does
       // not record.
@@ -231,6 +247,23 @@ export const users = {
     sortAsc: 'Sort ascending',
     sortDesc: 'Sort descending',
     sortUnavailable: 'Not sortable',
+    columnsPanel: 'Columns',
+    fullscreen: 'Full screen',
+    exitFullscreen: 'Leave full screen',
+    density: {
+      compact: 'Compact rows',
+      normal: 'Normal rows',
+      relaxed: 'Relaxed rows',
+    },
+    hideAll: 'Hide all',
+    resetOrder: 'Reset order',
+    unpinAll: 'Unpin all',
+    showAll: 'Show all',
+    pinLeft: 'Pin to the left',
+    pinRight: 'Pin to the right',
+    unpin: 'Unpin',
+    firstConnectedPending:
+      'The panel records the first connection but does not return it in the list yet.',
   },
 
   userTime: {

@@ -2,7 +2,9 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { Text } from '@mantine/core';
 import type { StatusFilter } from '@/contours/users/lib/userStatus';
 import type { UpdateUserInput, User, UserSort } from '@/lib/domain/users';
-import type { UserColumnId } from '@/contours/users/lib/usersTable';
+import type { ColumnPin, ColumnView, UserColumnId } from '@/contours/users/lib/usersTable';
+import type { RowDensity } from '@/contours/users/lib/usersTable';
+import { DENSITY_ORDER, DENSITY_STORAGE_KEY, USER_COLUMN_BY_ID, loadColumnView, loadDensity, saveColumnView } from '@/contours/users/lib/usersTable';
 import { createUser, deleteUser, listUserTags, listUsers, resetUserTraffic, revokeUserSubscription, rotateUserSubscription, updateUser } from '@/lib/domain/users';
 import { fetchAuthStatus } from '@/lib/auth/api';
 import { listSquads } from '@/lib/domain/squads';
@@ -57,6 +59,60 @@ export function useUsersPage() {
     if (id === 'username') setSearch(value);
     setPage(1);
   }
+
+  /**
+   * Which columns are on, in which order, and which are nailed to an edge.
+   * Loaded once from this browser and written back on every change, so the
+   * view an operator built survives a reload.
+   */
+  const [columnView, setColumnViewState] = useState<ColumnView>(() => loadColumnView());
+  function setColumnView(next: ColumnView) {
+    setColumnViewState(next);
+    saveColumnView(next);
+  }
+  function toggleColumn(id: UserColumnId) {
+    const hidden = columnView.hidden.includes(id)
+      ? columnView.hidden.filter((c) => c !== id)
+      : [...columnView.hidden, id];
+    setColumnView({ ...columnView, hidden });
+  }
+  function pinColumn(id: UserColumnId, pin: ColumnPin) {
+    const current = columnView.pins[id] ?? null;
+    setColumnView({ ...columnView, pins: { ...columnView.pins, [id]: current === pin ? null : pin } });
+  }
+  function moveColumn(from: number, to: number) {
+    const order = [...columnView.order];
+    const [moved] = order.splice(from, 1);
+    if (moved === undefined) return;
+    order.splice(to, 0, moved);
+    setColumnView({ ...columnView, order });
+  }
+
+  /**
+   * The columns actually drawn: pinned left first, then the free ones in the
+   * operator's order, then pinned right. Hidden ones drop out entirely rather
+   * than rendering at zero width, which would still cost a border.
+   */
+  const visibleColumns = useMemo(() => {
+    const shown = columnView.order
+      .map((id) => USER_COLUMN_BY_ID.get(id))
+      .filter((c): c is NonNullable<typeof c> => c !== undefined && !columnView.hidden.includes(c.id));
+    const at = (p: ColumnPin) => shown.filter((c) => (columnView.pins[c.id] ?? null) === p);
+    return [...at('left'), ...at(null), ...at('right')];
+  }, [columnView]);
+
+  /** Row height, cycled by one button; and the table alone on the screen. */
+  const [density, setDensityState] = useState<RowDensity>(() => loadDensity());
+  function cycleDensity() {
+    const next = DENSITY_ORDER[(DENSITY_ORDER.indexOf(density) + 1) % DENSITY_ORDER.length]!;
+    setDensityState(next);
+    try {
+      localStorage.setItem(DENSITY_STORAGE_KEY, next);
+    } catch {
+      // A browser with storage off still gets the change for this session.
+    }
+  }
+  const [fullscreen, setFullscreen] = useState(false);
 
   /**
    * Rows ticked in the gutter. Kept as ids rather than users so a refetch
@@ -317,6 +373,16 @@ export function useUsersPage() {
     activeFilters,
     colFilters,
     setColFilter,
+    columnView,
+    setColumnView,
+    visibleColumns,
+    toggleColumn,
+    pinColumn,
+    moveColumn,
+    density,
+    cycleDensity,
+    fullscreen,
+    setFullscreen,
     selected,
     setSelected,
     toggleSelected,

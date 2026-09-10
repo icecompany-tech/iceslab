@@ -5,6 +5,10 @@ export const users = {
     searchPlaceholder: 'Поиск по имени, email, телеграму или тегу…',
     routingOverrideHint: 'У этого юзера свой пресет маршрутов, он перебивает то, что даёт сквад.',
     empty: 'Пользователей нет.',
+    emptyTitle: 'Аккаунтов пока нет',
+    emptyBody:
+      'Здесь живёт каждый подписчик. Заведите первого, и ссылка подписки выпустится при сохранении.',
+    emptyImport: 'ИЛИ ПЕРЕНЕСИТЕ ЧУЖУЮ ПАНЕЛЬ · ICESLAB-MIGRATE',
     filters: {
       button: 'Фильтры',
       squad: 'Сквад',
@@ -28,6 +32,18 @@ export const users = {
       usedPct: 'Потрачено %',
       limit: 'Лимит',
       squads: 'Сквады',
+      description: 'Заметка',
+      telegramId: 'Telegram ID',
+      email: 'Email',
+      subLink: 'Ссылка подписки',
+      routing: 'Маршрутизация',
+      deviceLimit: 'Лимит устройств',
+      firstConnected: 'Первое подключение',
+      trafficReset: 'Сброс трафика',
+      lifetimeUsed: 'Потрачено за всё время',
+      linkRevoked: 'Ссылка отозвана',
+      created: 'Создан',
+      uuid: 'UUID',
       // В колонке лежит lastOnlineAt, поэтому она названа тем, что показывает.
       // Под заголовком «Подписка» значение вида «23 с назад» утверждало факт,
       // которого панель нигде не хранит.
@@ -243,6 +259,23 @@ export const users = {
     sortAsc: 'По возрастанию',
     sortDesc: 'По убыванию',
     sortUnavailable: 'Сортировка недоступна',
+    columnsPanel: 'Колонки',
+    fullscreen: 'Во весь экран',
+    exitFullscreen: 'Выйти из полного экрана',
+    density: {
+      compact: 'Плотные строки',
+      normal: 'Обычные строки',
+      relaxed: 'Свободные строки',
+    },
+    hideAll: 'Скрыть все',
+    resetOrder: 'Сбросить порядок',
+    unpinAll: 'Открепить все',
+    showAll: 'Показать все',
+    pinLeft: 'Закрепить слева',
+    pinRight: 'Закрепить справа',
+    unpin: 'Открепить',
+    firstConnectedPending:
+      'Панель хранит первое подключение, но в списке его пока не отдаёт.',
   },
 
   userTime: {
