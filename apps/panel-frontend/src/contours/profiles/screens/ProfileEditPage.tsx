@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -38,6 +39,22 @@ const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 export function ProfileEditPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const [search] = useSearchParams();
+
+  /**
+   * Arriving from "start from a recipe" on the empty library: put the rail in
+   * front of the operator instead of leaving them to find it beside a form
+   * they have never seen.
+   */
+  useEffect(() => {
+    if (search.get('from') !== 'recipe') return;
+    const timer = setTimeout(() => {
+      const rail = document.querySelector('.recipes-slot');
+      rail?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      rail?.querySelector('input')?.focus();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const isNew = id === 'new';

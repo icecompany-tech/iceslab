@@ -1,6 +1,11 @@
 export const profiles = {
 
   profiles: {
+    emptyTitle: 'Профилей пока нет',
+    emptyBody: 'Профиль это один протокол со своими настройками: чем нода слушает и что набирает клиент. Начните с рецепта, он заполнит поля, в которых легко ошибиться.',
+    emptyFromRecipe: 'Начать с рецепта',
+    emptyBlank: 'Чистый профиль',
+
     generate: {
       hosts_one: 'хост',
       hosts_few: 'хоста',
@@ -46,7 +51,6 @@ export const profiles = {
     create: 'Создать',
     refresh: 'Обновить',
     searchPlaceholder: 'Поиск по имени или описанию…',
-    emptyAll: 'Профилей нет - нажми «Создать».',
     emptyFiltered: 'Ничего не найдено по фильтру.',
     deployToNodes: 'Развернуть на нодах',
     bindingsTooltipNone: 'Не развёрнут - клик чтобы задеплоить',

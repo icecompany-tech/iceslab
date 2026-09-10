@@ -46,6 +46,7 @@ import {
 import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
+import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
 
@@ -365,7 +366,15 @@ export function ProfilesPage() {
         </Box>
       </Box>
 
-      {filtered.length === 0 ? (
+      {/* An empty library and a filter that matched nothing are different
+          answers: the first explains what a profile is and offers both ways in,
+          the second only says the filter is too narrow. */}
+      {filtered.length === 0 && profiles.length === 0 ? (
+        <ProfilesEmpty
+          onRecipe={() => navigate('/profiles/new?from=recipe')}
+          onBlank={() => navigate('/profiles/new')}
+        />
+      ) : filtered.length === 0 ? (
         <Card withBorder padding="xl" radius="md" style={{ backgroundColor: CARD, borderColor: HAIRLINE }}>
           <Stack align="center" gap="sm">
             <ThemeIcon
@@ -377,9 +386,7 @@ export function ProfilesPage() {
               <IconBolt size={24} />
             </ThemeIcon>
             <Text size="sm" style={{ color: MIST }}>
-              {profiles.length === 0
-                ? t('profiles.emptyAll')
-                : t('profiles.emptyFiltered')}
+              {t('profiles.emptyFiltered')}
             </Text>
           </Stack>
         </Card>

@@ -1,6 +1,11 @@
 export const profiles = {
 
   profiles: {
+    emptyTitle: 'No profiles yet',
+    emptyBody: 'A profile is one protocol with its settings: what a node listens with and what the client dials. Start from a recipe, it fills the risky fields for you.',
+    emptyFromRecipe: 'Start from a recipe',
+    emptyBlank: 'Blank profile',
+
     generate: {
       hosts_one: 'host',
       hosts_other: 'hosts',
@@ -42,7 +47,6 @@ export const profiles = {
     create: 'Create',
     refresh: 'Refresh',
     searchPlaceholder: 'Search by name or description…',
-    emptyAll: 'No profiles yet - click "Create".',
     emptyFiltered: 'Nothing matches the filter.',
     deployToNodes: 'Deploy to nodes',
     bindingsTooltipNone: 'Not deployed - click to deploy',
