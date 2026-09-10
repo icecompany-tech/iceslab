@@ -9,8 +9,10 @@ export const MIST = '#7A8BA3';
 export const FAINT = '#5A6B82';
 export const DIM = '#3A4A60';
 export const CYAN = '#7DD3FC';
+export const CYAN2 = '#67E8F9';
 export const MOSS = '#A7D8B9';
 export const AMBER = '#F5B14C';
+export const RED = '#E07A5F';
 export const VIOLET = '#A78BFA';
 
 export const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";

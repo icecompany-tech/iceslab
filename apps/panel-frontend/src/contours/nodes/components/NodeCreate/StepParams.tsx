@@ -1,7 +1,7 @@
 import { AMBER, CARD, CYAN, DISPLAY, FAINT, HAIRLINE, MOSS, SNOW } from '@/contours/nodes/lib/colors';
 import { Box, NumberInput, Select, Stack, TagsInput, Text, TextInput } from '@mantine/core';
 import { COUNTRY_OPTIONS } from '@/lib/domain/countries';
-import { FIELD } from '@/contours/nodes/lib/nodeCreateForm';
+import { FIELD } from '@/contours/nodes/lib/fieldStyles';
 import { FieldLabel } from '@/contours/nodes/components/NodeCreate/FieldLabel';
 import { NODE_PROTOCOL_GROUPED, SINGBOX_ENGINE_CAPABLE } from '@/contours/nodes/lib/nodeProtocols';
 import { SectionCard } from '@/contours/nodes/components/NodeCreate/SectionCard';
