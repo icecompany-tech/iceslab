@@ -163,7 +163,7 @@ export function EnginePicker({
               the recipe rail takes 380px from 1400px up, which leaves the row
               barely 560px and the sentence about a hundred. Wrapping is
               cheaper than a media query and holds at every width. */}
-          <Group gap={14} wrap="nowrap" align="center" justify="space-between">
+          <Group gap={10} align="center" justify="space-between">
             <Group gap={10} wrap="nowrap" style={{ flexShrink: 0 }}>
               <Text
                 style={{
@@ -218,17 +218,20 @@ export function EnginePicker({
               <Group
                 gap={8}
                 wrap="nowrap"
+                align="flex-start"
                 style={{
-                  height: 28,
-                  padding: '0 12px',
+                  padding: '6px 12px',
                   borderRadius: 8,
                   backgroundColor: '#F5B14C1A',
                   border: '1px solid #F5B14C40',
-                  flexShrink: 0,
+                  // The sentence inside is a full clause and runs long in
+                  // Russian. It wraps rather than being clipped, and the whole
+                  // chip drops to its own line when even that does not fit.
+                  minWidth: 0,
                 }}
               >
-                <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C' }}>
+                <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} style={{ flexShrink: 0, marginTop: 1 }} />
+                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C', minWidth: 0 }}>
                   {t('profiles.engine.behind', {
                     count: behind.length,
                     total: coreVersions.length,
@@ -240,17 +243,17 @@ export function EnginePicker({
               <Group
                 gap={8}
                 wrap="nowrap"
+                align="flex-start"
                 style={{
-                  height: 28,
-                  padding: '0 12px',
+                  padding: '6px 12px',
                   borderRadius: 8,
                   backgroundColor: '#A7D8B91A',
                   border: '1px solid #A7D8B940',
-                  flexShrink: 0,
+                  minWidth: 0,
                 }}
               >
-                <IconCheck size={13} color="#A7D8B9" stroke={2.2} />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#A7D8B9' }}>
+                <IconCheck size={13} color="#A7D8B9" stroke={2.2} style={{ flexShrink: 0, marginTop: 1 }} />
+                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#A7D8B9', minWidth: 0 }}>
                   {t('profiles.engine.allCurrent', {
                     count: coreVersions.length,
                     version: newest,
