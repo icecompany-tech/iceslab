@@ -1,22 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { AMBER, CARD, CYAN, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/traffic/lib/colors';
+import { Action } from '@/contours/traffic/components/RoutePolicy/Action';
+import { Chip } from '@/contours/traffic/components/RoutePolicy/Chip';
+import { ColHead } from '@/contours/traffic/components/RoutePolicy/ColHead';
+import { IconAction } from '@/contours/traffic/components/RoutePolicy/IconAction';
+import { LockIcon, NoEntryIcon, TrashIcon, WarnIcon } from '@/contours/traffic/components/RoutePolicy/icons';
+import { NEW_POLICY_ID } from '@/contours/traffic/lib/routeRules';
+import { RulesList } from '@/contours/traffic/components/RoutePolicy/RulesList';
+import { useRoutePolicyForm } from '@/contours/traffic/components/RoutePolicy/useRoutePolicyForm';
 import { useTranslation } from 'react-i18next';
-import { Box, Menu, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
-import { modals } from '@mantine/modals';
-import { notifications } from '@mantine/notifications';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ROUTE_POLICY_WRITES_LIVE,
-  createRoutePolicy,
-  deleteRoutePolicy,
-  policyConflict,
-  toPolicyInput,
-  updateRoutePolicy,
-  type RouteAction,
-  type RoutePolicy,
-  type RouteRule,
-} from '@/lib/domain/routePolicies';
-import { apiErrorMessage } from '@/lib/net/client';
+import { Box, Stack, Text, TextInput } from '@mantine/core';
+import { ROUTE_POLICY_WRITES_LIVE, type RoutePolicy } from '@/lib/domain/routePolicies';
 import { type Squad } from '@/lib/domain/squads';
 
 /**
@@ -45,14 +38,9 @@ export function RoutePolicyEditor({
 }) {
   const { t } = useTranslation();
   const {
-    qc,
-    nextKey,
-    initial,
     dirty,
     shadows,
-    granted,
     saveMutation,
-    deleteMutation,
     setRule,
     addRule,
     removeRule,
@@ -61,9 +49,6 @@ export function RoutePolicyEditor({
     name,
     setName,
     rules,
-    setRules,
-    loadedFor,
-    setLoadedFor,
     dragging,
     setDragging,
   } = useRoutePolicyForm(policy, squads, onCreated);

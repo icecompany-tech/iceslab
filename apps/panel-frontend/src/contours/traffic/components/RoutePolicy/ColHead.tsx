@@ -1,3 +1,6 @@
+import { Text } from '@mantine/core';
+import type { ReactNode } from 'react';
+import { MIST, MONO } from '@/contours/traffic/lib/colors';
 export function ColHead({
   children,
   className,

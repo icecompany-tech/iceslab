@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react';
+import { Box, Text } from '@mantine/core';
+import { MONO } from '@/contours/traffic/lib/colors';
 export function Chip({ tone, children }: { tone: string; children: ReactNode }) {
   return (
     <Box

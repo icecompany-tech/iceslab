@@ -1,3 +1,4 @@
+import type { RoutingPreset } from '@/lib/domain/routePolicies';
 import type { RoutingPresetId } from '@iceslab/shared';
 /* ───── Preset contents ─────────────────────────────────────────────────── */
 
@@ -55,3 +56,9 @@ export const PRESET_DNS: Partial<Record<RoutingPresetId, string>> = {
 // the Users filter needs the same list and the same labels.
 
 /* ───── Page ────────────────────────────────────────────────────────────── */
+
+export const NEW_PRESET_ID = '__new__';
+
+export function blankPreset(): RoutingPreset {
+  return { id: NEW_PRESET_ID, name: '', builtIn: false, rules: [] };
+}

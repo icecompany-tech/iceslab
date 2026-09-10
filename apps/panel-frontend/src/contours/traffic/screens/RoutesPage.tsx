@@ -16,8 +16,8 @@ import { ROUTE_POLICY_WRITES_LIVE, ROUTING_PRESET_WRITES_LIVE, listRoutePolicies
 import { getSettings } from '@/lib/domain/settings';
 import { listSquads } from '@/lib/domain/squads';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { blankPolicy } from '@/contours/traffic/components/RoutePolicyEditor';
-import { blankPreset } from '@/contours/traffic/components/DevicePresetEditor';
+import { blankPolicy } from '@/contours/traffic/lib/routeRules';
+import { blankPreset } from '@/contours/traffic/lib/devicePresets';
 
 /**
  * Routes: what happens to traffic, in the two places it can be decided.

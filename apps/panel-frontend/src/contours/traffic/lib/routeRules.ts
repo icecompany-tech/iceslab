@@ -1,3 +1,4 @@
+import type { RoutePolicy, RouteRule } from '@/lib/domain/routePolicies';
 export interface DraftRule extends RouteRule {}
 
 export const NEW_POLICY_ID = '__new__';
