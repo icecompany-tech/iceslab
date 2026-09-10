@@ -120,8 +120,9 @@ func newTestAdapter(t *testing.T) (*Adapter, string) {
 // restart, so this is the high-value guard for N1.
 func TestN1_BuildAduInbound_VLESS(t *testing.T) {
 	data, err := buildAduPayload(
-		[]InboundConfig{{Subprotocol: "vless"}},
-		xrayClient{ID: "uuid-a", Email: "alice", Flow: "xtls-rprx-vision"},
+		// Vision is named on the INBOUND, which is where xray reads it from.
+		[]InboundConfig{{Subprotocol: "vless", Flow: "xtls-rprx-vision"}},
+		xrayClient{ID: "uuid-a", Email: "alice"},
 	)
 	if err != nil {
 		t.Fatalf("buildAduPayload: %v", err)

@@ -265,11 +265,21 @@ func validateRealityDest(dest string) error {
 	return nil
 }
 
-// xrayClient mirrors Xray's client-config object.
+// xrayClient is WHO a user is, and nothing about how they are served.
+//
+// It used to carry Flow as well, filled once at AddUser time from the inbound
+// the agent had booted with. Two things were wrong with that. The boot inbound
+// is not the applied one (ApplyInbound stores an identified inbound in the map
+// and leaves cfg.Inbound alone), so on a normal install the field was the empty
+// string and Vision never reached anybody. And a user is added to EVERY inbound
+// this node serves, while Vision is only legal on raw - so one value per user
+// cannot be right when a node carries raw and xhttp side by side.
+//
+// Flow is a property of the inbound, so it is now read from the inbound at
+// render time; see buildUserInboundSettings.
 type xrayClient struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
-	Flow  string `json:"flow,omitempty"`
 }
 
 // CascadeFragments are the extra xray config pieces a cascade hop contributes,
@@ -609,9 +619,23 @@ func buildUserInboundSettings(cfg InboundConfig, users []xrayClient) map[string]
 			"clients": clients,
 		}
 	}
-	// VLESS: default
+	// VLESS: default. `flow` comes from THIS inbound, so the same user is served
+	// with Vision where the transport allows it (raw) and without it where xray
+	// would reject the mismatch (xhttp/ws/grpc/kcp/httpupgrade). Empty stays
+	// omitted, which is the canonical "no Vision" shape.
+	clients := make([]map[string]any, 0, len(users))
+	for _, u := range users {
+		c := map[string]any{
+			"id":    u.ID,
+			"email": u.Email,
+		}
+		if cfg.Flow != "" {
+			c["flow"] = cfg.Flow
+		}
+		clients = append(clients, c)
+	}
 	return map[string]any{
-		"clients":    users,
+		"clients":    clients,
 		"decryption": "none",
 	}
 }

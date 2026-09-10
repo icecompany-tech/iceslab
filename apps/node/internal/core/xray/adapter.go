@@ -349,15 +349,16 @@ func (a *Adapter) AddUser(user core.User) error {
 	}
 	a.mu.Lock()
 	existing, exists := a.users[user.UserID]
-	// Empty flow is intentional for xhttp/ws/grpc/kcp/httpupgrade, Vision
-	// only works with raw (TCP). Earlier versions silently coerced empty to
-	// "xtls-rprx-vision" as a defensive default; that breaks non-raw
-	// transports because xray rejects clients with mismatched flow vs the
-	// inbound's transport. Trust the panel-side flow value as-is.
+	// Identity only. `flow` used to be stamped here from a.cfg.Inbound, the
+	// inbound this agent BOOTED with, which on a panel-provisioned node is
+	// empty - so an operator could turn Vision on, watch the inbound apply, and
+	// still serve every user without it, with no error anywhere. It also cannot
+	// be one value per user: the same user is added to every inbound the node
+	// serves, and Vision is only legal on raw. The inbound owns it now, see
+	// buildUserInboundSettings.
 	desired := xrayClient{
 		ID:    user.XrayUUID,
 		Email: user.UserID,
-		Flow:  a.cfg.Inbound.Flow,
 	}
 	if exists && existing == desired {
 		a.mu.Unlock()

@@ -65,8 +65,8 @@ func TestInboundDefaults(t *testing.T) {
 
 func TestRenderConfigShape(t *testing.T) {
 	users := []xrayClient{
-		{ID: "uuid-1", Email: "user-a", Flow: "xtls-rprx-vision"},
-		{ID: "uuid-2", Email: "user-b", Flow: "xtls-rprx-vision"},
+		{ID: "uuid-1", Email: "user-a"},
+		{ID: "uuid-2", Email: "user-b"},
 	}
 	blob, err := renderConfig(validInbound(), users)
 	if err != nil {
@@ -309,7 +309,7 @@ func TestStealOthers_StillRejectsLoopbackDest(t *testing.T) {
 // nodes: passing a nil *CascadeFragments must produce exactly the same bytes as
 // the plain renderConfig path, so every existing node is unaffected.
 func TestRender_CascadeNil_ByteIdenticalToBase(t *testing.T) {
-	users := []xrayClient{{ID: "u1", Email: "u1", Flow: "xtls-rprx-vision"}}
+	users := []xrayClient{{ID: "u1", Email: "u1"}}
 	base, err := renderConfig(validInbound(), users)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
