@@ -73,8 +73,12 @@ html:root {
 @media (min-width: 1400px) {
   .profile-form-inline > form > .mantine-Stack-root {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
-    column-gap: 20px;
+    /* The artboard draws the rail at 420 on a 1920 page. Fixing it there would
+       leave 574px for the form at 1400, where the media query turns the grid
+       on, so it grows with the window instead and only reaches 420 on a wide
+       screen. */
+    grid-template-columns: minmax(0, 1fr) clamp(360px, 26vw, 420px);
+    column-gap: 24px;
     /* The rail spans far more rows than the form has, so the gap has to be
        carried by the children: a row-gap here would be charged for every
        empty row of that span and stretch the page by thousands of pixels. */

@@ -20,6 +20,9 @@ import { StepLabel } from '@/contours/profiles/components/ProfileForm/StepLabel'
 import type { UseFormReturnType } from '@mantine/form';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { XrayAdvanced } from '@/contours/profiles/components/ProfileForm/XrayAdvanced';
+import { GenerateWarning } from '@/contours/profiles/components/ProfileForm/GenerateWarning';
+import { confirmGenerate } from '@/contours/profiles/lib/confirmGenerate';
+import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
 
 export function XraySection({
   generateXrayKeys,
@@ -27,14 +30,17 @@ export function XraySection({
   form,
   advOpen,
   advCtl,
+  profileId,
 }: {
   generateXrayKeys: () => Promise<void>;
   keypairPending: boolean;
   form: UseFormReturnType<FormValues>;
   advOpen: boolean;
   advCtl: { toggle: () => void; open: () => void; close: () => void };
+  profileId: string | null;
 }) {
   const { t } = useTranslation();
+  const impact = useGenerateImpact(profileId);
   return (
             <Stack>
               {/* The three decisions in one row, the way the artboard frames
@@ -181,7 +187,7 @@ export function XraySection({
                       />
                       <UnstyledButton
                         type="button"
-                        onClick={generateXrayKeys}
+                        onClick={() => confirmGenerate(impact, t, () => void generateXrayKeys())}
                         disabled={keypairPending}
                         style={{
                           display: 'flex',
@@ -211,6 +217,11 @@ export function XraySection({
                     </Group>
                   </Stack>
                 </Group>
+              )}
+              {/* A profile nobody has deployed yet cannot break anything, so
+                  the warning appears only once there is a fleet behind it. */}
+              {form.values.xraySecurity === 'reality' && (impact.hosts > 0 || impact.nodes > 0) && (
+                <GenerateWarning impact={impact} />
               )}
               {form.values.xraySecurity === 'tls' && (
                 <>

@@ -268,6 +268,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
               advCtl={advCtl}
               generateXrayKeys={generateXrayKeys}
               keypairPending={keypairPending}
+              profileId={profile?.id ?? null}
             />
           )}
 
@@ -278,6 +279,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
               generateAwgKeys={generateAwgKeys}
               applyAwgPreset={applyAwgPreset}
               keypairPending={keypairPending}
+              profileId={profile?.id ?? null}
             />
           )}
 

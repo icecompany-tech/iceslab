@@ -1,7 +1,18 @@
 export const profiles = {
 
   profiles: {
-    bar: {
+    generate: {
+      hosts_one: 'host',
+      hosts_other: 'hosts',
+      nodes_one: 'node rebuilds',
+      nodes_other: 'nodes rebuild',
+      configs: 'configs go stale',
+      configsPending: 'The panel cannot count these yet: it would have to run the subscription pipeline for every member of every squad that reaches this profile.',
+      body: 'The key belongs to the profile, so every node of every host on it serves the same one. Replacing it takes effect everywhere at once and the old key is gone.',
+      confirmTitle: 'Replace the key pair?',
+      confirmBody: 'This profile is served by {{hosts}} hosts on {{nodes}} nodes. All of them get the new key and every config already handed out stops working.',
+      confirmAction: 'Replace',
+    },    bar: {
       profiles: 'PROFILES',
       inUse: 'IN USE',
       unused: 'UNUSED',

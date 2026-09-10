@@ -12,7 +12,10 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconKey } from '@tabler/icons-react';
+import { GenerateWarning } from '@/contours/profiles/components/ProfileForm/GenerateWarning';
+import { confirmGenerate } from '@/contours/profiles/lib/confirmGenerate';
 import { randomAwgHeaders } from '@/contours/profiles/lib/awgPresets';
+import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
 import type { UseFormReturnType } from '@mantine/form';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 
@@ -22,14 +25,17 @@ export function AmneziawgSection({
   keypairPending,
   form,
   isEdit,
+  profileId,
 }: {
   generateAwgKeys: () => Promise<void>;
   applyAwgPreset: (preset: 'tspu' | 'mobile' | 'custom') => void;
   keypairPending: boolean;
   form: UseFormReturnType<FormValues>;
   isEdit: boolean;
+  profileId: string | null;
 }) {
   const { t } = useTranslation();
+  const impact = useGenerateImpact(profileId);
   return (
             <Stack>
               {/* AmneziaWG-specific gotchas in one place. Per upstream
@@ -82,7 +88,7 @@ export function AmneziawgSection({
                     leftSection={<IconKey size={14} />}
                     variant="light"
                     loading={keypairPending}
-                    onClick={generateAwgKeys}
+                    onClick={() => confirmGenerate(impact, t, () => void generateAwgKeys())}
                     type="button"
                   >
                     {t('profiles.form.cfg.generate')}
@@ -96,6 +102,11 @@ export function AmneziawgSection({
                   {...form.getInputProps('awgServerPub')}
                 />
               </Group>
+              {/* A profile nobody has deployed yet cannot break anything, so
+                  the warning appears only once there is a fleet behind it. */}
+              {isEdit && (impact.hosts > 0 || impact.nodes > 0) && (
+                <GenerateWarning impact={impact} />
+              )}
               <Group justify="space-between" align="center" wrap="nowrap" gap="md">
                 <Text size="sm" fw={500}>
                   {t('profiles.form.cfg.awgPresetLabel')}
