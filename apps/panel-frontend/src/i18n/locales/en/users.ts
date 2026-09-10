@@ -187,6 +187,7 @@ export const users = {
     routingHint: 'Applies to full-config formats only. Wins over the squad setting.',
     migration: 'Migration',
     rare: 'RARE',
+    supportTool: 'SUPPORT TOOL',
     importToken: 'Import subscription token',
     importTokenHint:
       'Reuse an existing link so the client keeps the same subscription URL after moving from another panel.',

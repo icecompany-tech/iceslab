@@ -1,5 +1,5 @@
 import { Box, Text } from '@mantine/core';
-import { AMBER, DIM_TEXT, DISPLAY, MONO, SNOW } from '@/contours/users/lib/colors';
+import { AMBER, DIM_TEXT, DISPLAY, HAIRLINE, MONO, SNOW } from '@/contours/users/lib/colors';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -27,68 +27,64 @@ export function RoutingPrecedence({
 }) {
   const { t } = useTranslation();
 
-  const rows: { n: number; tier: string; value: string; hot?: boolean }[] = [
+  // Whichever tier speaks first wins. Marking it is the whole point: the
+  // operator wants the line that decided the outcome, not the list.
+  const winner = userPreset ? 2 : squads && !clash ? 3 : 4;
+
+  const rows = [
     { n: 1, tier: t('userDrawer.tierQuery'), value: t('userDrawer.tierQueryHint') },
-    {
-      n: 2,
-      tier: t('userDrawer.tierUser'),
-      value: userPreset || t('userDrawer.tierNotSet'),
-      hot: Boolean(userPreset),
-    },
-    {
-      n: 3,
-      tier: t('userDrawer.tierSquads'),
-      value: squads ?? t('userDrawer.tierNotSet'),
-      hot: clash,
-    },
-    // What the panel falls back to is a setting this screen cannot read; the
-    // list endpoint does not carry it, so the tier is named without a value.
+    { n: 2, tier: t('userDrawer.tierUser'), value: userPreset || t('userDrawer.tierNotSet') },
+    { n: 3, tier: t('userDrawer.tierSquads'), value: squads ?? t('userDrawer.tierNotSet') },
+    // What the panel falls back to is a setting this screen cannot read: the
+    // user response does not carry it, so the tier is named without a value.
     { n: 4, tier: t('userDrawer.tierPanel'), value: t('userDrawer.tierPanelUnknown') },
   ];
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column' }}>
-      {rows.map((r) => (
-        <Box
-          key={r.n}
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            padding: '7px 10px',
-            borderRadius: 6,
-            backgroundColor: r.hot ? `${AMBER}12` : undefined,
-          }}
-        >
-          <Text style={{ fontFamily: MONO, fontSize: 10, color: DIM_TEXT, flexShrink: 0, width: 12 }}>
-            {r.n}
-          </Text>
-          <Text
+    <Box style={{ borderRadius: 8, border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>
+      {rows.map((r, i) => {
+        const hot = clash && r.n === 3;
+        const won = !hot && r.n === winner;
+        return (
+          <Box
+            key={r.n}
             style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              lineHeight: '15px',
-              color: r.hot ? AMBER : DIM_TEXT,
-              width: 86,
-              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              padding: '9px 12px',
+              borderTop: i === 0 ? undefined : `1px solid ${HAIRLINE}`,
+              backgroundColor: hot ? `${AMBER}12` : undefined,
+              boxShadow: hot ? `inset 2px 0 0 ${AMBER}` : undefined,
             }}
           >
-            {r.tier}
-          </Text>
-          <Text
-            style={{
-              flex: 1,
-              minWidth: 0,
-              fontFamily: DISPLAY,
-              fontSize: 11,
-              lineHeight: '15px',
-              color: r.hot ? SNOW : DIM_TEXT,
-            }}
-          >
-            {r.value}
-          </Text>
-        </Box>
-      ))}
+            <Text
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                lineHeight: '15px',
+                color: hot ? AMBER : DIM_TEXT,
+                width: 96,
+                flexShrink: 0,
+              }}
+            >
+              {r.n} · {r.tier}
+            </Text>
+            <Text
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontFamily: DISPLAY,
+                fontSize: 11,
+                lineHeight: '15px',
+                color: hot ? AMBER : won ? SNOW : DIM_TEXT,
+              }}
+            >
+              {r.value}
+            </Text>
+          </Box>
+        );
+      })}
     </Box>
   );
 }

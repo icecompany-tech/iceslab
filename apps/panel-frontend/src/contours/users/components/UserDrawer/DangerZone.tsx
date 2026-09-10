@@ -37,6 +37,7 @@ export function DangerZone({
         borderRadius: 10,
         backgroundColor: CARD,
         border: `1px solid ${HAIRLINE}`,
+        flexShrink: 0,
       }}
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

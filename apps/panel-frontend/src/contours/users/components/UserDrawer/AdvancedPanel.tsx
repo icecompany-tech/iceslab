@@ -39,6 +39,8 @@ export function AdvancedPanel({
         backgroundColor: CARD,
         border: `1px solid ${HAIRLINE}`,
         overflow: 'hidden',
+        // The body scrolls; this card must not be squeezed to make room in it.
+        flexShrink: 0,
       }}
     >
       <UnstyledButton
@@ -151,24 +153,10 @@ export function AdvancedPanel({
             </Box>
             <Hint>{t('userDrawer.hwidHint')}</Hint>
           </AdvancedGroup>
-        </Stack>
 
-        <Stack gap={20} style={{ flex: 1, minWidth: 280 }}>
-          {!isEdit && (
-            <AdvancedGroup
-              icon={<IconDeviceDesktop size={13} />}
-              title={t('userDrawer.migration')}
-              badge={t('userDrawer.rare')}
-            >
-              <TextInput
-                label={t('userDrawer.importToken')}
-                placeholder={`(${t('userDrawer.optional')})`}
-                {...form.getInputProps('subscriptionToken')}
-              />
-              <Hint>{t('userDrawer.importTokenHint')}</Hint>
-            </AdvancedGroup>
-          )}
-
+          {/* The note sits with the fields about the person, not with the two
+              tools beside it: it is something an operator writes, not something
+              they configure. */}
           <AdvancedGroup icon={<IconNote size={13} />} title={t('userDrawer.note')}>
             <Textarea
               placeholder={t('userDrawer.notePlaceholder')}
@@ -177,8 +165,14 @@ export function AdvancedPanel({
               {...form.getInputProps('description')}
             />
           </AdvancedGroup>
+        </Stack>
 
-          <AdvancedGroup icon={<IconRoute size={13} />} title={t('userDrawer.routingOverride')}>
+        <Stack gap={20} style={{ flex: 1, minWidth: 280 }}>
+          <AdvancedGroup
+            icon={<IconRoute size={13} />}
+            title={t('userDrawer.routingOverride')}
+            badge={t('userDrawer.supportTool')}
+          >
             <Select
               // Built from the shared list the backend validates against, not
               // from a copy of it.
@@ -199,6 +193,21 @@ export function AdvancedPanel({
             />
             <Hint>{t('userDrawer.routingHint')}</Hint>
           </AdvancedGroup>
+
+          {!isEdit && (
+            <AdvancedGroup
+              icon={<IconDeviceDesktop size={13} />}
+              title={t('userDrawer.migration')}
+              badge={t('userDrawer.rare')}
+            >
+              <TextInput
+                label={t('userDrawer.importToken')}
+                placeholder={`(${t('userDrawer.optional')})`}
+                {...form.getInputProps('subscriptionToken')}
+              />
+              <Hint>{t('userDrawer.importTokenHint')}</Hint>
+            </AdvancedGroup>
+          )}
         </Stack>
         </Box>
       )}

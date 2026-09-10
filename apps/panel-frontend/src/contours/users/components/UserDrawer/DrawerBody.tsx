@@ -85,7 +85,19 @@ export function DrawerBody({
         padding: '16px 18px 18px',
       }}
     >
-      <Box style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
+      {/* Every block below keeps its own height. The body is a flex column, and
+          a flex child shrinks before it overflows: with Advanced open the card
+          was squeezed from 393px to 122 and its second half simply vanished,
+          which read as a form that would not open. */}
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 18,
+          flexWrap: 'wrap',
+          flexShrink: 0,
+        }}
+      >
         <Box style={{ flex: 1, minWidth: 320, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <FormColumn {...ui} trafficRef={trafficRef} />
           {/* Only an account that exists has devices bound to it and a link
