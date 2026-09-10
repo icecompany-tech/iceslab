@@ -169,13 +169,25 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
   );
 
-  app.get('/health', async () => {
+  // The status has to be in the CODE, not only in the body. Everything that
+  // watches this endpoint reads the code and nothing else: the compose
+  // healthcheck calls it and branches on `r.ok`, the frontend waits on
+  // `service_healthy` before it starts, CI polls it with `curl -fsS`. Until
+  // 2026-09-10 the handler computed 'degraded' and still answered 200, so a
+  // panel with a dead Postgres was reported healthy to every one of them.
+  //
+  // 503 is the honest code for "the process is up and cannot serve". It does
+  // NOT put the container in a restart loop: compose restarts on process exit,
+  // not on a failing healthcheck (that is a Swarm behaviour), so an unhealthy
+  // backend stays up and keeps answering with the reason.
+  app.get('/health', async (_request, reply) => {
     const [dbOk, redisOk] = await Promise.all([pingDatabase(), pingRedis()]);
-    return {
-      status: dbOk && redisOk ? 'ok' : 'degraded',
+    const healthy = dbOk && redisOk;
+    return reply.code(healthy ? 200 : 503).send({
+      status: healthy ? 'ok' : 'degraded',
       db: dbOk ? 'ok' : 'down',
       redis: redisOk ? 'ok' : 'down',
-    };
+    });
   });
 
   // Compress JSON responses ≥1 KB. Dashboard overview is the obvious target,
