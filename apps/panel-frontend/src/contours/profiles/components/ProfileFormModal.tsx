@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -28,7 +29,9 @@ import { protocolLabel } from '@/lib/domain/protocols';
 import { useProfileForm } from '@/contours/profiles/components/ProfileForm/useProfileForm';
 import type { FormValues, Mode } from '@/contours/profiles/lib/profileFormValues';
 import { PROTOCOL_ACCENT } from '@/contours/profiles/lib/protocolTiles';
+import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
+import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
 import { FormShell } from '@/contours/profiles/components/ProfileForm/FormShell';
 import { SectionCard } from '@/contours/profiles/components/ProfileForm/SectionCard';
 import { IdentitySection } from '@/contours/profiles/components/ProfileForm/IdentitySection';
@@ -58,14 +61,37 @@ interface Props {
    * use this; the modal path stays for the places not migrated yet.
    */
   inline?: boolean;
+  /**
+   * Raised while the operator is looking at a Telegram view the panel can draw
+   * but not create yet. The page owns the primary action, so it has to hear
+   * about it: a Create button that looks alive and then fails is worse than a
+   * button that says plainly it cannot.
+   */
+  onPreviewChange?: (previewing: boolean) => void;
 }
 
-export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, inline }: Props) {
+export function ProfileFormModal({
+  opened,
+  onClose,
+  profile,
+  onSubmit,
+  loading,
+  inline,
+  onPreviewChange,
+}: Props) {
   const { t } = useTranslation();
   const isEdit = profile !== null;
   const mode: Mode = isEdit ? 'edit' : 'create';
   const [exportOpen, exportCtl] = useDisclosure(false);
   const [advOpen, advCtl] = useDisclosure(false);
+  // Kept beside the form, never inside it: a preview view has no name the API
+  // would accept, so it must not be able to reach FormValues and from there a
+  // request body.
+  const [preview, setPreview] = useState<PreviewKindKey | null>(null);
+
+  useEffect(() => {
+    onPreviewChange?.(preview !== null);
+  }, [preview, onPreviewChange]);
 
   const {
     form,
@@ -120,7 +146,17 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
       }
       size="lg"
     >
-      <form id="profile-form" onSubmit={form.onSubmit(handleSubmit)}>
+      <form
+        id="profile-form"
+        onSubmit={form.onSubmit((values) => {
+          // Enter inside a text field submits the form too, so the preview
+          // guard lives here and not only on the page's disabled button.
+          // Without it the save would go through with whatever protocol was
+          // selected before the operator opened the preview.
+          if (preview) return undefined;
+          return handleSubmit(values);
+        })}
+      >
         <Stack>
           {/* Which binary runs this profile, then which protocol that binary
               speaks. Two questions in the order they are actually answered,
@@ -129,10 +165,13 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
             <EnginePicker
               engine={form.values.engine}
               protocol={form.values.protocol}
+              preview={preview}
               onPick={(kind) => {
+                setPreview(null);
                 form.setFieldValue('engine', kind.engine);
                 form.setFieldValue('protocol', kind.protocol);
               }}
+              onPickPreview={setPreview}
             />
           )}
 
@@ -147,7 +186,12 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
 
           {/* Recipes ride the right rail on the page (see index.css): they are
               a shortcut into the fields, not a step before them, so they sit
-              alongside the form instead of pushing it down. */}
+              alongside the form instead of pushing it down.
+
+              A preview view has no recipes and no protocol the registry would
+              answer for, so the rail steps aside rather than showing the ones
+              belonging to whatever was selected before. */}
+          {!preview && (
           <Box className="recipes-slot">
           <RecipePicker
             key={form.values.protocol}
@@ -222,7 +266,11 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
             }}
           />
           </Box>
+          )}
 
+          {preview ? (
+            <TelegramPreviewCard kind={preview} />
+          ) : (
           <SectionCard
             title={t('profiles.form.cfg.configTitle', {
               protocol: protocolLabel(form.values.protocol),
@@ -297,6 +345,7 @@ export function ProfileFormModal({ opened, onClose, profile, onSubmit, loading, 
 
           {form.values.protocol === 'shadowtls' && <ShadowtlsSection form={form} />}
           </SectionCard>
+          )}
 
           {/* Inline mode has Cancel and Save in the page bar already; a second
               pair at the end of a long form is just noise. */}

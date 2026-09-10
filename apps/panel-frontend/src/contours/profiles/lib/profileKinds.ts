@@ -38,6 +38,35 @@ export const PROFILE_KINDS: ProfileKind[] = [
 
 export const PROFILE_KIND_BY_KEY = new Map(PROFILE_KINDS.map((k) => [k.key, k] as const));
 
+/**
+ * The Telegram client offers four ways in, and the panel speaks one of them.
+ * The other three are drawn here because the operator needs to see the whole
+ * shelf to know what is on it, but they are deliberately NOT ProfileKinds:
+ * their names are not in the protocol enum, so nothing can post them and get a
+ * 400 back. When the backend learns them, an entry moves from this list into
+ * PROFILE_KINDS and the preview card is deleted.
+ *
+ * SOCKS5 and HTTP are plain xray inbounds, so they cost a profile kind and no
+ * new binary on the node. WEB is a three-layer stack (Caddy on 443, the relay,
+ * MTProxy) and upstream still calls it a proof-of-concept.
+ */
+export type PreviewKindKey = 'socks5' | 'http' | 'telegramweb';
+
+export interface PreviewKind {
+  key: PreviewKindKey;
+  label: string;
+}
+
+export const PREVIEW_KINDS: PreviewKind[] = [
+  { key: 'socks5', label: 'SOCKS5' },
+  { key: 'http', label: 'HTTP' },
+  { key: 'telegramweb', label: 'WEB' },
+];
+
+/** These two would ride the xray process already on the node, so the fleet's
+ *  core version is a real fact about them, not a guess. */
+export const PREVIEW_ON_XRAY = new Set<PreviewKindKey>(['socks5', 'http']);
+
 // The Select key for a (protocol, engine) pair. Only a shared protocol on
 // sing-box gets the suffix; sing-box-only protocols key by their own name.
 export function profileKindKey(protocol: string, engine: 'native' | 'singbox'): string {

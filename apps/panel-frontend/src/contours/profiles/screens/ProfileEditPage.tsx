@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -58,6 +58,12 @@ export function ProfileEditPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const isNew = id === 'new';
+
+  // The editor tells the bar when the operator is looking at a Telegram view
+  // the panel cannot create yet. Memoised because the form raises it from an
+  // effect, and a fresh function every render would loop.
+  const [previewing, setPreviewing] = useState(false);
+  const handlePreviewChange = useCallback((v: boolean) => setPreviewing(v), []);
 
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const profile = isNew ? null : (profilesQuery.data?.profiles.find((p) => p.id === id) ?? null);
@@ -163,7 +169,8 @@ export function ProfileEditPage() {
           component="button"
           type="submit"
           form="profile-form"
-          disabled={createMutation.isPending || updateMutation.isPending}
+          disabled={previewing || createMutation.isPending || updateMutation.isPending}
+          title={previewing ? t('profiles.telegramPreview.saveBlocked') : undefined}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -174,10 +181,19 @@ export function ProfileEditPage() {
             backgroundColor: WELL,
             border: `1px solid ${HAIRLINE}`,
             flexShrink: 0,
+            opacity: previewing ? 0.45 : 1,
+            cursor: previewing ? 'not-allowed' : 'pointer',
           }}
         >
-          <IconCheck size={14} stroke={2.4} color={CYAN} />
-          <Text style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, color: SNOW }}>
+          <IconCheck size={14} stroke={2.4} color={previewing ? MIST : CYAN} />
+          <Text
+            style={{
+              fontFamily: DISPLAY,
+              fontSize: 13,
+              fontWeight: 500,
+              color: previewing ? MIST : SNOW,
+            }}
+          >
             {isNew ? t('profileEdit.create') : t('common.save')}
           </Text>
         </UnstyledButton>
@@ -189,6 +205,7 @@ export function ProfileEditPage() {
         inline
         opened
         onClose={() => navigate('/profiles')}
+        onPreviewChange={handlePreviewChange}
         profile={profile}
         loading={createMutation.isPending || updateMutation.isPending}
         onSubmit={async (input, mode) => {

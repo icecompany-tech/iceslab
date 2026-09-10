@@ -6,6 +6,56 @@ export const profiles = {
     emptyFromRecipe: 'Start from a recipe',
     emptyBlank: 'Blank profile',
 
+    telegramPreview: {
+      banner: 'Drawn, but the panel does not create it yet',
+      bannerHint:
+        'The fields below match the artboard and go nowhere: the backend does not accept this protocol yet. Pick MTProto to create a Telegram profile right now.',
+      saveBlocked: 'This view cannot be saved yet, pick MTProto',
+      socks5: {
+        title: 'SOCKS5 CONFIG',
+        authLabel: 'Auth method',
+        authPassword: 'Username and password',
+        authNone: 'No password',
+        authNote:
+          'RFC 1929. The pair comes from the user, like the Shadowsocks password: nothing to fill in here.',
+        udpLabel: 'UDP associate',
+        udpOn: 'Enabled',
+        udpNote: 'Without it calls, DNS and games break: they all travel over UDP.',
+        warn: 'SOCKS5 encrypts nothing by itself. It works as an entrance to a tunnel on your own machine or a trusted network, but open to the internet without a password it becomes a shared proxy for anyone who knows the address.',
+      },
+      http: {
+        title: 'HTTP CONFIG',
+        authLabel: 'Auth method',
+        authBasic: 'Basic',
+        authNone: 'No password',
+        authNote:
+          'The pair comes from the user. Digest is supported neither by the core nor by the Telegram client.',
+        tunnelLabel: 'Tunnel',
+        tunnelValue: 'CONNECT',
+        tunnelNote: 'TCP only. UDP does not travel over an HTTP proxy at all, calls will not work.',
+        warn: 'Basic is a username and password in base64, not encryption. Without TLS on top anyone on the path reads them. Such a profile must not face the internet bare: either a trusted network, or a host with TLS.',
+      },
+      web: {
+        title: 'TELEGRAM WEB CONFIG',
+        hostLabel: 'Web proxy host *',
+        hostPlaceholder: 'proxy.example.com',
+        hostNote: 'A base path is allowed. Port and HTTPS are baked into the view: always 443.',
+        keyLabel: 'Key *',
+        keyPlaceholder: '32 hex characters',
+        keyHint: '32 HEX',
+        keyNote:
+          'This is the ordinary MTProxy client secret. All a person enters on their side is the host and this.',
+        warn: 'The client warns the user: the provider of such a proxy runs a web page in the background and may show a sponsored channel. Traffic stays private, but trust is required.',
+        stackTitle: 'What the panel would run on the node',
+        stackHint: 'Three layers instead of one daemon. This is not a protocol, it is a stack.',
+        caddyPort: '443, public',
+        relayPort: '8080 and 8081, local',
+        mtproxyPort: '2398, local',
+        portWarn:
+          'Port 443 must be free on that node. Ours is usually taken by REALITY or hysteria.',
+      },
+    },
+
     generate: {
       hosts_one: 'host',
       hosts_other: 'hosts',
@@ -28,11 +78,13 @@ export const profiles = {
       native: 'Native daemon',
       xray: 'Xray core',
       singbox: 'Sing-box',
+      telegram: 'Telegram',
       hint: 'The tab decides which binary runs on the node',
       tabHint: {
         native: 'Each protocol here runs its own process',
         xray: 'The tab decides which binary runs on the node',
         singbox: 'One binary covers all six protocols',
+        telegram: 'Exactly the four the Telegram client itself offers',
       },
       coreVersion: 'Core version',
       daemonVersion: 'Daemon version',
