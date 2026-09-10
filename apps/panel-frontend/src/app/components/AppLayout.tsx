@@ -11,18 +11,19 @@ import {
   NavBlockIcon,
   NavCascadesIcon,
   NavChevronIcon,
+  NavDeliveryIcon,
   NavDnsIcon,
   NavEgressIcon,
   NavHomeIcon,
   NavHostsIcon,
   NavHttpStatsIcon,
   NavHwidIcon,
+  NavInsightsIcon,
   NavLogoutIcon,
   NavNodesIcon,
   NavPoliciesIcon,
   NavProfilesIcon,
   NavQueuesIcon,
-  NavRoutesIcon,
   NavRuleSetsIcon,
   NavSearchIcon,
   NavSessionIcon,
@@ -834,14 +835,13 @@ function AppLayoutInner() {
                 icon={<NavSlidersIcon />}
               />
               <NavItem
-                label={t('sidebar.subscriptionTemplate')}
-                icon={<NavTemplateIcon />}
-                placeholder
-                placeholderTitle={notWired}
+                to="/subscription/delivery"
+                label={t('sidebar.subscriptionDelivery')}
+                icon={<NavDeliveryIcon />}
               />
               <NavItem
-                label={t('sidebar.subscriptionRoutes')}
-                icon={<NavRoutesIcon />}
+                label={t('sidebar.subscriptionTemplate')}
+                icon={<NavTemplateIcon />}
                 placeholder
                 placeholderTitle={notWired}
               />
@@ -893,6 +893,7 @@ function AppLayoutInner() {
                 something looks wrong, not things they configure. */}
             <GroupHeader label={t('sidebar.toolsGroup')} tick={AMBER} />
             <Stack gap={2} px={8}>
+              <NavItem to="/insights" label={t('sidebar.insights')} icon={<NavInsightsIcon />} />
               <NavItem
                 label={t('sidebar.hwidInspector')}
                 icon={<NavHwidIcon />}
