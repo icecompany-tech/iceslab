@@ -123,7 +123,18 @@ export function UsersTable(props: Pick<UsersPageState,
         <ColumnsPanel {...props} />
       </Box>
 
-      <Box style={{ overflowX: 'auto' }}>
+      {/* The only scroller in the panel that keeps a visible rail: sideways
+          movement has no wheel axis, and with every column on there are three
+          thousand pixels of table to the right of the fold. In full screen it
+          takes the vertical axis too, so the heading can stay put above the
+          rows instead of scrolling away with the page. */}
+      <Box
+        className="table-scroll"
+        style={{
+          overflowX: 'auto',
+          ...(fullscreen ? { overflowY: 'auto', maxHeight: 'calc(100vh - 148px)' } : {}),
+        }}
+      >
         <Box style={{ minWidth }}>
           <Box
             style={{
@@ -132,6 +143,7 @@ export function UsersTable(props: Pick<UsersPageState,
               padding: '10px 16px',
               backgroundColor: WELL,
               borderBottom: `1px solid ${HAIRLINE}`,
+              ...(fullscreen ? { position: 'sticky', top: 0, zIndex: 4 } : {}),
             }}
           >
             <Box

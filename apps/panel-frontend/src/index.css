@@ -482,3 +482,31 @@ html:root {
 .mantine-ScrollArea-corner {
   display: none !important;
 }
+
+/* One exception, and it is earned: a table that scrolls sideways.
+   Everything else scrolls vertically, where the wheel already does the job.
+   Sideways it does not: with every column turned on the user list is over
+   four thousand pixels wide, and with no rail and no wheel axis the columns
+   on the right were unreachable with a mouse. This one keeps a thin rail,
+   inset from the edge so it lies under the table rather than over it. */
+.table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2C3A4E transparent;
+}
+.table-scroll::-webkit-scrollbar {
+  display: block;
+  height: 10px;
+}
+.table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #2C3A4E;
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #3E4F66;
+  background-clip: content-box;
+}
