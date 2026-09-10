@@ -25,9 +25,26 @@ export interface Props {
   user: User | null;
   onSubmit: (input: CreateUserInput | UpdateUserInput) => Promise<void>;
   loading?: boolean;
+  /**
+   * The three things that reach the client. They already exist on the roster
+   * row; the form needs them because an operator who opened an account to look
+   * at it should not have to close it again to act on what they found.
+   */
+  onResetTraffic?: (user: User) => void;
+  onRevoke?: (user: User) => void;
+  onDelete?: (user: User) => void;
 }
 
-export function UserDrawer({ opened, onClose, user, onSubmit, loading }: Props) {
+export function UserDrawer({
+  opened,
+  onClose,
+  user,
+  onSubmit,
+  loading,
+  onResetTraffic,
+  onRevoke,
+  onDelete,
+}: Props) {
   const ui = useUserForm({ opened, user, onSubmit, onClose });
 
   return (
@@ -61,7 +78,13 @@ export function UserDrawer({ opened, onClose, user, onSubmit, loading }: Props) 
         style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
       >
         <DrawerHeader isEdit={ui.isEdit} onClose={onClose} user={user} />
-        <DrawerBody {...ui} user={user} />
+        <DrawerBody
+          {...ui}
+          user={user}
+          onResetTraffic={onResetTraffic}
+          onRevoke={onRevoke}
+          onDelete={onDelete}
+        />
         <DrawerFooter
           isEdit={ui.isEdit}
           onClose={onClose}

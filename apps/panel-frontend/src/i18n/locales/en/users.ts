@@ -190,6 +190,35 @@ export const users = {
     importToken: 'Import subscription token',
     importTokenHint:
       'Reuse an existing link so the client keeps the same subscription URL after moving from another panel.',
+    subscription: 'Subscription',
+    subUpdated: 'updated {{when}}',
+    copy: 'Copy',
+    copyUri: 'Copy this line',
+    openAsClient: 'Open as client',
+    revoke: 'Revoke',
+    revokeHint:
+      'Revoking answers 403 on the current link. The client stops updating until the new link reaches them.',
+    dialTitle: 'What this user can dial',
+    dialHint:
+      '{{configs}} configs across {{nodes}} nodes. Pick a protocol to copy that one line; the subscription hands out all of them at once.',
+    dangerTitle: 'Things that reach the client',
+    resetTrafficTitle: 'Reset traffic',
+    resetTrafficBody:
+      'Counter back to zero and the limit lifted, so a capped account works again right away.',
+    resetTrafficAction: 'Reset',
+    revokeTitle: 'Revoke subscription',
+    revokeBody:
+      'The current link starts answering 403. Configs already imported keep working until the client refreshes.',
+    deleteTitle: 'Delete user',
+    deleteBody:
+      'Irreversible. Credentials are pulled from every node, the link dies, devices and traffic history go with it.',
+    tierQuery: 'link query',
+    tierQueryHint: '?routing= in the subscription URL wins over everything, including this field',
+    tierUser: 'this user',
+    tierSquads: 'squads',
+    tierPanel: 'panel',
+    tierNotSet: 'not set',
+    tierPanelUnknown: 'the panel default, which this screen cannot read yet',
     create: 'Create',
     createShort: 'CREATE',
     saveShort: 'SAVE',

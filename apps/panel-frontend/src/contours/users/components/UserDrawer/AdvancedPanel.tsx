@@ -3,8 +3,8 @@ import { IconChevronDown, IconChevronRight, IconDeviceDesktop, IconMail, IconNot
 import { AdvancedGroup } from '@/contours/users/components/UserDrawer/AdvancedGroup';
 import { BADGE, CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW } from '@/contours/users/lib/colors';
 import { Box, NumberInput, Select, Stack, Text, TextInput, Textarea, UnstyledButton } from '@mantine/core';
-import { DeviceList } from '@/contours/users/components/UserDrawer/DeviceList';
 import { Hint } from '@/contours/users/components/UserDrawer/Hint';
+import { RoutingPrecedence } from '@/contours/users/components/UserDrawer/RoutingPrecedence';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { presetKey } from '@/lib/domain/routingPresets';
 import { useTranslation } from 'react-i18next';
@@ -24,10 +24,12 @@ export function AdvancedPanel({
   form,
   advancedOpen,
   setAdvancedOpen,
-  user,
-}: Pick<UserForm, 'isEdit' | 'form' | 'advancedOpen' | 'setAdvancedOpen'> & {
-  user: Props['user'];
-}) {
+  squadRoutingClash,
+  squadRoutingSource,
+}: Pick<
+  UserForm,
+  'isEdit' | 'form' | 'advancedOpen' | 'setAdvancedOpen' | 'squadRoutingClash' | 'squadRoutingSource'
+> & { user: Props['user'] }) {
   const { t } = useTranslation();
 
   return (
@@ -148,11 +150,6 @@ export function AdvancedPanel({
               />
             </Box>
             <Hint>{t('userDrawer.hwidHint')}</Hint>
-            {/* Only for a user who exists: devices are registered by a client
-                that has already connected. */}
-            {isEdit && user && (
-              <DeviceList userId={user.id} limit={form.values.hwidDeviceLimit} />
-            )}
           </AdvancedGroup>
         </Stack>
 
@@ -194,6 +191,11 @@ export function AdvancedPanel({
               ]}
               allowDeselect={false}
               {...form.getInputProps('routingPreset')}
+            />
+            <RoutingPrecedence
+              userPreset={form.values.routingPreset || null}
+              squads={squadRoutingClash ? squadRoutingClash.map((s) => `${s.name}: ${s.preset}`).join(', ') : (squadRoutingSource ? `${squadRoutingSource.squad}: ${squadRoutingSource.preset}` : null)}
+              clash={squadRoutingClash !== null}
             />
             <Hint>{t('userDrawer.routingHint')}</Hint>
           </AdvancedGroup>

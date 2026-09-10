@@ -118,6 +118,9 @@ export function UsersPage() {
         onClose={() => setEditing(null)}
         user={editing}
         loading={updateMutation.isPending}
+        onResetTraffic={handleResetTraffic}
+        onRevoke={handleRevoke}
+        onDelete={handleDelete}
         onSubmit={async (input) => {
           if (!editing) return;
           await updateMutation.mutateAsync({ id: editing.id, input: input as UpdateUserInput });
