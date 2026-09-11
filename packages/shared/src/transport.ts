@@ -9,17 +9,30 @@
  * may eventually need string encoding; revisit when quotas exceed ~8 PB.
  */
 
-export type ProtocolName =
-  | 'hysteria'
-  | 'xray'
-  | 'amneziawg'
-  | 'naive'
-  | 'shadowsocks'
-  | 'mtproto'
-  | 'mieru'
-  | 'tuic'
-  | 'anytls'
-  | 'shadowtls';
+/**
+ * Every protocol name that can appear on the wire.
+ *
+ * Declared as an array and the type derived from it, rather than as a union of
+ * literals, so the COMPOSITION can be checked at runtime. A hand-written union
+ * of literals is invisible to anything but the compiler, and the compiler is
+ * blind here by construction: JSON arrives parsed as whatever it was declared
+ * to be, so a name the agent sends and this list omits is simply mistyped and
+ * nobody notices. See contract-mirror.test.ts.
+ */
+export const PROTOCOL_NAMES = [
+  'hysteria',
+  'xray',
+  'amneziawg',
+  'naive',
+  'shadowsocks',
+  'mtproto',
+  'mieru',
+  'tuic',
+  'anytls',
+  'shadowtls',
+] as const;
+
+export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
 
 /**
  * Which proxy core renders something: the name an agent's adapter answers with.
@@ -39,14 +52,17 @@ export type ProtocolName =
  * node started reporting engines (2026-09-11); a node running AmneziaWG reports
  * "amneziawg", and nothing in TypeScript would have noticed.
  */
-export type EngineName =
-  | 'xray'
-  | 'hysteria'
-  | 'singbox'
-  | 'amneziawg'
-  | 'naive'
-  | 'mieru'
-  | 'mtproto';
+export const ENGINE_NAMES = [
+  'xray',
+  'hysteria',
+  'singbox',
+  'amneziawg',
+  'naive',
+  'mieru',
+  'mtproto',
+] as const;
+
+export type EngineName = (typeof ENGINE_NAMES)[number];
 
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
