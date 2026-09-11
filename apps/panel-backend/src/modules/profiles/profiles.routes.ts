@@ -109,6 +109,14 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileNameTakenError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      // Switching the engine would leave this profile deployed on a node whose
+      // cores cannot serve it. Named separately from CONFLICT so the screen can
+      // point at the node instead of at the field.
+      if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
+        return reply
+          .code(409)
+          .send({ error: 'PROFILE_DOES_NOT_RUN_ON_NODE', message: err.message });
+      }
       throw err;
     }
   });
@@ -142,6 +150,14 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
         err instanceof svc.NodeAlreadyBoundError
       ) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      }
+      // No core on this node renders this profile, so the inbound would never
+      // come up: the agent answers such a push 200 with `skipped`, and the
+      // subscription would keep handing out an endpoint nobody listens on.
+      if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
+        return reply
+          .code(409)
+          .send({ error: 'PROFILE_DOES_NOT_RUN_ON_NODE', message: err.message });
       }
       throw err;
     }

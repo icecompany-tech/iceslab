@@ -1,5 +1,6 @@
 import type { Node } from '../../generated/prisma/client.js';
-import type { DnsCfg, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
+import type { DnsCfg, EngineName, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
+import { reportedEngines } from './node-engines.js';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -78,6 +79,17 @@ export interface PublicNodeDto {
    * `rendersPolicy` absent is an agent older than the field: unknown, not false.
    */
   cores: NodeCores | null;
+  /**
+   * The distinct engines those cores run, which is the question almost every
+   * caller actually has ("can this node render that profile").
+   *
+   * ⚠ ABSENT means the node has never reported. An EMPTY array means it did
+   * report and runs nothing. The absence is the signal, deliberately without a
+   * boolean beside it: a flag saying "this is fact" could contradict the list,
+   * and it adds no fourth state. Same idiom as `cores: null` and an absent
+   * `rendersPolicy`.
+   */
+  engines?: EngineName[];
   createdAt: string;
   updatedAt: string;
 }
@@ -87,6 +99,7 @@ export interface PublicNodeDto {
  * fields (deletedAt, publicKey blob).
  */
 export function mapNodeToPublic(node: Node): PublicNodeDto {
+  const engines = reportedEngines(node);
   return {
     id: node.id,
     name: node.name,
@@ -109,6 +122,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     policyId: node.policyId,
     dns: (node.dns as DnsCfg | null) ?? null,
     cores: (node.cores as NodeCores | null) ?? null,
+    ...(engines !== undefined ? { engines } : {}),
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

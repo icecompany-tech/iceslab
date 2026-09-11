@@ -10,6 +10,11 @@ import {
   generateSsServerPsk,
 } from './ss-helpers.js';
 import { engineValidForProtocol } from './profiles.schemas.js';
+import {
+  effectiveEngineOf,
+  nodeRendersProfile,
+  renderableAtSave,
+} from '../nodes/node-engines.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import type {
   CreateBindingInput,
@@ -238,6 +243,20 @@ export async function updateProfile(
       );
     }
     data.engine = input.engine;
+    // Changing the engine changes the pair on EVERY node this profile is
+    // deployed to, so it is the same save-time question as creating a binding,
+    // asked once per node. Editing an inbound out from under its own nodes is
+    // how a profile ends up deployed where nothing serves it.
+    if (effectiveEngineOf({ protocol: existing.protocol, engine: input.engine ?? null }) !==
+        effectiveEngineOf(existing)) {
+      const deployed = await prisma.profileNodeBinding.findMany({
+        where: { profileId: id, node: { deletedAt: null } },
+        select: { node: { select: { name: true, cores: true } } },
+      });
+      for (const b of deployed) {
+        assertNodeRendersProfile(b.node, { protocol: existing.protocol, engine: input.engine ?? null });
+      }
+    }
   }
 
   if (input.config !== undefined) {
@@ -296,6 +315,54 @@ export async function deleteProfile(id: string): Promise<void> {
 
 // ───── Bindings CRUD ─────
 
+/**
+ * No core on this node renders this profile, so the inbound would never come up.
+ *
+ * Refused at the save, where the operator is looking. The node answers such a
+ * push with a shrug: applyInbounds finds no adapter for the (protocol, engine)
+ * pair, logs a line and returns 200 with `skipped`, so the panel shows a
+ * deployed profile and the subscription keeps handing out an endpoint nobody
+ * is listening on.
+ */
+export class ProfileDoesNotRunOnNodeError extends Error {
+  constructor(
+    public nodeName: string,
+    public detail: string,
+  ) {
+    super(`Node "${nodeName}" cannot serve this profile: ${detail}`);
+    this.name = 'ProfileDoesNotRunOnNodeError';
+  }
+}
+
+/**
+ * The gate, on what the node REPORTED and nothing else.
+ *
+ * A node that has never checked in is allowed through. The only other thing to
+ * judge by is `Node.protocol`, and that is a label for which adapter is primary,
+ * not a list of what the node can serve: multi-protocol nodes are normal here
+ * and the schema says so. A first version of this gate fell back to it and
+ * refused 23 pairs the suite builds on purpose.
+ *
+ * So this is quiet on today's fleet and becomes real when the agents are
+ * updated, which is the only order in which it can be right.
+ *
+ * ⚠ Save path ONLY. Never call this from a push, a rebuild or an upgrade: see
+ * the comment on PublicBindingDto.rendersProfile.
+ */
+function assertNodeRendersProfile(
+  node: { name: string; cores: unknown },
+  profile: { protocol: string; engine: string | null },
+): void {
+  const { ok, engines, wanted } = renderableAtSave(node, profile);
+  if (ok) return;
+  throw new ProfileDoesNotRunOnNodeError(
+    node.name,
+    `it needs the ${wanted} core and this node reports ${
+      engines.length ? engines.join(', ') : 'no core at all'
+    }`,
+  );
+}
+
 export async function createBinding(input: CreateBindingInput): Promise<PublicBindingDto> {
   const profile = await prisma.profile.findUnique({ where: { id: input.profileId } });
   if (!profile) throw new ProfileNotFoundError(input.profileId);
@@ -316,6 +383,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
     },
   });
   if (dupBinding) throw new NodeAlreadyBoundError(input.profileId, input.nodeId);
+  assertNodeRendersProfile(node, profile);
 
   const created = await prisma.profileNodeBinding.create({
     data: {
@@ -349,14 +417,26 @@ export async function listBindings(q: ListBindingsQuery): Promise<PublicBindingD
   const rows = await prisma.profileNodeBinding.findMany({
     where,
     orderBy: [{ nodeId: 'asc' }, { port: 'asc' }],
+    // For rendersProfile. Two columns each, not the whole rows: this list is
+    // read on every profile card.
+    include: {
+      node: { select: { cores: true } },
+      profile: { select: { protocol: true, engine: true } },
+    },
   });
-  return rows.map(mapBinding);
+  return rows.map((b) => mapBinding(b, nodeRendersProfile(b.node, b.profile)));
 }
 
 export async function getBindingById(id: string): Promise<PublicBindingDto> {
-  const b = await prisma.profileNodeBinding.findUnique({ where: { id } });
+  const b = await prisma.profileNodeBinding.findUnique({
+    where: { id },
+    include: {
+      node: { select: { cores: true } },
+      profile: { select: { protocol: true, engine: true } },
+    },
+  });
   if (!b) throw new BindingNotFoundError(id);
-  return mapBinding(b);
+  return mapBinding(b, nodeRendersProfile(b.node, b.profile));
 }
 
 export async function updateBinding(
