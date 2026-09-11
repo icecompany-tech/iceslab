@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   foldPositionsIntoHops,
   validateCascadeHops,
+  validateCascadeTopology,
   CascadeValidationError,
 } from './cascade.validation.js';
 import type { CascadeHopInput } from './cascade.schemas.js';
@@ -212,5 +213,46 @@ describe('validateCascadeHops (balancer mode)', () => {
     const hops = balancer(2);
     hops[2]!.entryProtocol = 'xray';
     expect(() => validateCascadeHops(hops, 'balancer')).toThrow(/only valid on the entry hop/);
+  });
+});
+
+
+// Шаг 0: the link-protocol dictionary. The column holds an ENGINE name out of
+// the seven-core enum, and only two inter-hop CELLS exist. Everything else used
+// to be accepted and silently built as vless: the operator picked hysteria, the
+// node built vless, and the cascade worked, which is what kept it invisible.
+describe('which inter-hop link protocols are carried', () => {
+  const position = (linkProtocol: string) => ({
+    nodeIds: [N1],
+    position: 0,
+    entryProtocol: 'xray' as const,
+    linkProtocol,
+  });
+  const directions = [{ nodeIds: [N2] }];
+
+  it('accepts what the field actually stores', () => {
+    // The stand's `ru` cascade carries linkProtocol "xray". Refusing it would
+    // have made an existing, working cascade impossible to save again.
+    expect(() => validateCascadeTopology([position('xray')], directions)).not.toThrow();
+    expect(() => validateCascadeTopology([position('vless')], directions)).not.toThrow();
+    expect(() => validateCascadeTopology([position('shadowsocks')], directions)).not.toThrow();
+  });
+
+  it('refuses one nothing carries, and says which', () => {
+    // The operator has to read their own choice back, not a rule number.
+    expect(() => validateCascadeTopology([position('hysteria')], directions)).toThrow(
+      CascadeValidationError,
+    );
+    expect(() => validateCascadeTopology([position('hysteria')], directions)).toThrow(/hysteria/);
+    expect(() => validateCascadeTopology([position('amneziawg')], directions)).toThrow(/amneziawg/);
+  });
+
+  it('holds on the hop shape too, which is the path a fold takes', () => {
+    const hops: CascadeHopInput[] = [
+      { nodeId: N1, position: 0, entryProtocol: 'xray', linkProtocol: 'naive' },
+      { nodeId: N2, position: 1 },
+    ];
+    expect(() => validateCascadeHops(hops)).toThrow(/naive/);
+    expect(() => validateCascadeHops(valid2())).not.toThrow();
   });
 });

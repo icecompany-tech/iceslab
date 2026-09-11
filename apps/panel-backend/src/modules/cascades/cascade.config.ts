@@ -80,11 +80,56 @@ interface Ss2022LinkCred {
 
 export type LinkCred = VlessLinkCred | Ss2022LinkCred;
 
-/** Map a hop's stored linkProtocol (free string, full 7-core enum) to a
- *  realised native cell. Only 'shadowsocks' has a dedicated cell beyond vless;
- *  everything else rides the proven vless link (unchanged from C3). */
+/**
+ * What a stored `linkProtocol` means as a LINK CELL.
+ *
+ * Two dictionaries meet in this one column and they are not the same one. The
+ * column holds an ENGINE name out of the full seven-core enum (the field's `ru`
+ * cascade stores "xray"), while LinkProtocol above names the CELL that carries
+ * one hop to the next. So "xray" and "vless" are two spellings that arrive here
+ * and mean the same cell, and the same name can mean different things depending
+ * on which dictionary the writer had in mind. The trap from CLAUDE.local.md,
+ * one name and two forms of value, except in the data rather than in a module.
+ *
+ * An explicit list, not "anything that is not shadowsocks is vless". The old
+ * shim turned `hysteria` into a vless link without a word: the operator chose
+ * one thing and the node got another. Anything not listed here is refused at
+ * SAVE (see the validators), which is the only honest answer while the cell
+ * does not exist.
+ *
+ * Splitting this dictionary from the engine enum is a migration, and it is
+ * deliberately not this change.
+ */
+const LINK_CELLS: Record<string, LinkProtocol> = {
+  // What the field actually stores today. The engine name, meaning the vless
+  // cell, which is exactly what the code has always built for it.
+  xray: 'vless',
+  // The cell named directly.
+  vless: 'vless',
+  // The only other realised cell.
+  shadowsocks: 'shadowsocks',
+};
+
+/** The cell this stored value names, or null when nothing realises it. Nothing
+ *  named is NOT a wrong name: a balancer exit carries no link protocol, and
+ *  vless is the cell every cascade has used by default since C3. */
+export function linkCellFor(p: string | null | undefined): LinkProtocol | null {
+  if (p === null || p === undefined || p === '') return 'vless';
+  return LINK_CELLS[p] ?? null;
+}
+
+/** The cell for a value the validators have already accepted. Throwing here is
+ *  a guard, not the user-facing refusal: reaching it means a save path skipped
+ *  its validation, and building a link cell the operator did not ask for is
+ *  worse than failing. */
 export function normalizeLinkProtocol(p: string | null | undefined): LinkProtocol {
-  return p === 'shadowsocks' ? 'shadowsocks' : 'vless';
+  const cell = linkCellFor(p);
+  if (!cell) {
+    throw new Error(
+      `link protocol ${JSON.stringify(p)} has no link cell; this should have been refused at save`,
+    );
+  }
+  return cell;
 }
 
 /** Pre-generate link creds for the N-1 inter-hop links of an N-hop cascade,

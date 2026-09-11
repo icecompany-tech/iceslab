@@ -9,6 +9,25 @@ import type {
   CascadeHopInput,
   CascadePositionInput,
 } from './cascade.schemas.js';
+import { linkCellFor } from './cascade.config.js';
+
+/**
+ * A link protocol nothing can carry is refused here, at the save.
+ *
+ * It used to be accepted and quietly turned into a vless link: the operator
+ * chose hysteria, the node built vless, the panel showed hysteria, and the
+ * cascade worked, which is what made it invisible. The list of what IS carried
+ * lives in cascade.config.ts; the message names the value so the operator reads
+ * their own choice back rather than a rule number.
+ */
+function assertLinkCellExists(protocol: string | null | undefined, where: string): void {
+  if (linkCellFor(protocol)) return;
+  throw new CascadeValidationError(
+    `${where}: ${JSON.stringify(protocol)} is not an inter-hop link protocol this build can ` +
+      `carry. Available: vless (also stored as "xray") and shadowsocks. A hop link is not the ` +
+      `same thing as the protocol the entry serves users with.`,
+  );
+}
 
 export class CascadeValidationError extends Error {
   constructor(message: string) {
@@ -97,6 +116,7 @@ export function validateCascadeTopology(
         })`,
       );
     }
+    assertLinkCellExists(p.linkProtocol, `position ${p.position}`);
     if (p.nodeIds.length === 0) {
       throw new CascadeValidationError(`position ${p.position} needs at least one node`);
     }
@@ -294,6 +314,9 @@ export function validateCascadeHops(
           ? 'the entry hop needs a linkProtocol (the uniform protocol for every exit link)'
           : `hop at position ${h.position} needs a linkProtocol (only the exit hop omits it)`,
       );
+    }
+    if (carriesLink) {
+      assertLinkCellExists(h.linkProtocol, `hop at position ${h.position}`);
     }
     if (!carriesLink && h.linkProtocol) {
       throw new CascadeValidationError(

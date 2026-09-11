@@ -3,6 +3,7 @@ import {
   generateLinkCreds,
   buildCascadeConfigs,
   buildBalancerCascadeConfigs,
+  linkCellFor,
   normalizeLinkProtocol,
   serializeLinkCred,
   parseLinkCred,
@@ -251,13 +252,39 @@ describe('generateLinkCreds', () => {
   });
 });
 
-describe('normalizeLinkProtocol', () => {
-  it('maps shadowsocks to itself, everything else to the vless fallback', () => {
-    expect(normalizeLinkProtocol('shadowsocks')).toBe('shadowsocks');
-    expect(normalizeLinkProtocol('vless')).toBe('vless');
-    expect(normalizeLinkProtocol('amneziawg')).toBe('vless'); // deferred cell -> vless
-    expect(normalizeLinkProtocol(null)).toBe('vless');
-    expect(normalizeLinkProtocol(undefined)).toBe('vless');
+describe('linkCellFor', () => {
+  // The column holds an ENGINE name out of the seven-core enum; LinkProtocol
+  // names the CELL that carries one hop to the next. The field's `ru` cascade
+  // stores "xray" and has always been built as a vless link, so the mapping is
+  // written down rather than left to "everything that is not shadowsocks".
+  it('reads the engine name the field actually stores', () => {
+    expect(linkCellFor('xray')).toBe('vless');
+  });
+
+  it('reads the cell named directly', () => {
+    expect(linkCellFor('vless')).toBe('vless');
+    expect(linkCellFor('shadowsocks')).toBe('shadowsocks');
+  });
+
+  it('treats nothing named as the default cell, not as a wrong name', () => {
+    // A balancer exit carries no link protocol at all.
+    expect(linkCellFor(null)).toBe('vless');
+    expect(linkCellFor(undefined)).toBe('vless');
+    expect(linkCellFor('')).toBe('vless');
+  });
+
+  it('answers null for a protocol no cell carries', () => {
+    // It used to answer 'vless' here. The operator chose hysteria, the node
+    // built a vless link, the panel kept showing hysteria, and the cascade
+    // worked, which is exactly why nobody noticed.
+    expect(linkCellFor('hysteria')).toBeNull();
+    expect(linkCellFor('amneziawg')).toBeNull();
+    expect(linkCellFor('naive')).toBeNull();
+  });
+
+  it('normalizeLinkProtocol refuses rather than substituting', () => {
+    expect(normalizeLinkProtocol('xray')).toBe('vless');
+    expect(() => normalizeLinkProtocol('hysteria')).toThrow(/hysteria/);
   });
 });
 
