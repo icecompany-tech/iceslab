@@ -32,7 +32,16 @@ export default defineConfig({
     fileParallelism: false,
     // First beforeEach in each file pays the buildApp() cold-start (~5-12s on
     // WSL: dotenv + Prisma client warmup + Fastify plugins). 30s gives slack.
-    // Per-test timeout stays at the default 5s.
     hookTimeout: 30_000,
+    // Vitest defaults to 5s per test, which is a sane number for unit tests
+    // that touch nothing. These are not those: a file here talks to a real
+    // Postgres and runs 18-40 seconds, and under a full serial run a single
+    // case crossing five seconds is load, not a defect. Four separate full runs
+    // on 2026-09-11 and 2026-09-12 lost one or two cases each to exactly this,
+    // in four DIFFERENT files, every one of them passing on its own.
+    //
+    // ⚠ A flake that survives TWENTY seconds is a bug, not load. Do not raise
+    // this again to make something go green; find out what is waiting.
+    testTimeout: 20_000,
   },
 });
