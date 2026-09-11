@@ -90,6 +90,9 @@ export const common = {
 
   // Facts a page appends to the topbar breadcrumb: "/ USERS · 36 ACCOUNTS · 21 ACTIVE".
   pageMeta: {
+    /** The breadcrumb when the page's own list failed to load: a count would
+     *  read as a real number and outlive the error card below it. */
+    noData: 'no data',
     users_one: '{{count}} account',
     users_other: '{{count}} accounts',
     usersActive: '{{count}} valid',

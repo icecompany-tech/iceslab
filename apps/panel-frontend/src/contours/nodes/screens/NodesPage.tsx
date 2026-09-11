@@ -32,7 +32,9 @@ import {
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { apiErrorMessage } from '@/lib/net/client';
 import { createBinding } from '@/lib/domain/profiles';
+import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import {
   createNode,
   deleteNode,
@@ -557,6 +559,11 @@ export function NodesPage() {
     );
   }, [enrichedNodes, membership, nodeCascadeMap, search]);
 
+  // A count the panel could not read is not zero. Both bars go to a dash while
+  // their own request is failing, so the numbers never outlive the data.
+  const fact = (v: number | string) => (nodesQuery.isError ? '-' : v);
+  const cascadeFact = (v: number | string) => (cascadesQuery.isError ? '-' : v);
+
   // Bar facts come off the whole fleet, not the filtered slice: they say what
   // the operator owns, and a search should not make nodes appear to vanish.
   const fleetFacts = useMemo(() => {
@@ -573,16 +580,23 @@ export function NodesPage() {
 
   // The crumb carries the fleet in two numbers. It follows the sub-view: the
   // cascades side counts cascades, not boxes.
+  // The breadcrumb counts the same things as the bar, so it falls silent on the
+  // same failure: "0 VPS" up there would survive the card below saying the list
+  // never arrived.
   usePageMeta(
     view === 'cascades'
-      ? [
-          t('pageMeta.cascades', { count: allCascades.length }),
-          t('pageMeta.cascadesEnabled', { count: allCascades.filter((c) => c.enabled).length }),
-        ]
-      : [
-          t('pageMeta.vps', { count: fleetFacts.vps }),
-          t('pageMeta.nodeCountries', { count: fleetFacts.countries }),
-        ],
+      ? cascadesQuery.isError
+        ? [t('pageMeta.noData')]
+        : [
+            t('pageMeta.cascades', { count: allCascades.length }),
+            t('pageMeta.cascadesEnabled', { count: allCascades.filter((c) => c.enabled).length }),
+          ]
+      : nodesQuery.isError
+        ? [t('pageMeta.noData')]
+        : [
+            t('pageMeta.vps', { count: fleetFacts.vps }),
+            t('pageMeta.nodeCountries', { count: fleetFacts.countries }),
+          ],
   );
 
   const createMutation = useMutation({
@@ -744,24 +758,31 @@ export function NodesPage() {
         {/* The facts follow the view: a fleet is counted in boxes, a set of
             cascades in chains and hops. */}
         <Box className="page-bar-facts">
+          {/* A dash, not a zero, when the list did not arrive. Zero is a count,
+              and "0 VPS" over a failed request is the panel asserting an empty
+              fleet it never saw. */}
           {view === 'nodes' ? (
             <>
-              <BarFact value={fleetFacts.vps} label={t('nodes.bar.vps')} />
+              <BarFact value={fact(fleetFacts.vps)} label={t('nodes.bar.vps')} />
               <BarDot />
-              <BarFact value={fleetFacts.online} label={t('nodes.bar.online')} accent={MOSS} />
+              <BarFact value={fact(fleetFacts.online)} label={t('nodes.bar.online')} accent={MOSS} />
               <BarDot soft="mid" />
-              <BarFact value={fleetFacts.countries} label={t('nodes.bar.countries')} soft="mid" />
+              <BarFact value={fact(fleetFacts.countries)} label={t('nodes.bar.countries')} soft="mid" />
               <BarDot soft="soft" />
-              <BarFact value={fleetFacts.hosts} label={t('nodes.bar.hosts')} soft="soft" />
+              <BarFact value={fact(fleetFacts.hosts)} label={t('nodes.bar.hosts')} soft="soft" />
               <BarDot soft="soft" />
-              <BarFact value={formatBytes(fleetFacts.today)} label={t('nodes.bar.today')} soft="soft" />
+              <BarFact
+                value={fact(formatBytes(fleetFacts.today))}
+                label={t('nodes.bar.today')}
+                soft="soft"
+              />
             </>
           ) : (
             <>
-              <BarFact value={allCascades.length} label={t('cascades.bar.chains')} />
+              <BarFact value={cascadeFact(allCascades.length)} label={t('cascades.bar.chains')} />
               <BarDot />
               <BarFact
-                value={allCascades.filter((c) => c.enabled).length}
+                value={cascadeFact(allCascades.filter((c) => c.enabled).length)}
                 label={t('cascades.bar.enabled')}
                 accent={MOSS}
               />
@@ -769,7 +790,11 @@ export function NodesPage() {
               {/* Traffic that entered the cascades today. Counting positions
                   instead would report the shape of the config, which the cards
                   below already draw. */}
-              <BarFact value={formatBytes(cascadeToday)} label={t('nodes.bar.today')} soft="mid" />
+              <BarFact
+                value={cascadeFact(formatBytes(cascadeToday))}
+                label={t('nodes.bar.today')}
+                soft="mid"
+              />
             </>
           )}
 
@@ -956,9 +981,34 @@ export function NodesPage() {
         <>
 
       {visibleNodes.length === 0 ? (
-        <Text ta="center" py="xl" style={{ color: MIST }}>
-          {t('nodes.empty')}
-        </Text>
+        /* Four different nothings, told apart before anything is offered. The
+           500 the stand served on 11.09 emptied this list exactly the way a
+           fresh install does, and the one line that used to stand here said
+           "no nodes" to both. */
+        <FleetEmpty
+          what="nodes"
+          state={
+            nodesQuery.isError
+              ? {
+                  kind: 'failed',
+                  message: apiErrorMessage(nodesQuery.error),
+                  onRetry: () => void nodesQuery.refetch(),
+                }
+              : nodesQuery.isLoading
+                ? { kind: 'loading' }
+                : enrichedNodes.length > 0
+                  ? {
+                      kind: 'narrowed',
+                      hidden: enrichedNodes.length,
+                      onClear: () => {
+                        setSearch('');
+                        setMembership('all');
+                        setRegionFilter('all');
+                      },
+                    }
+                  : { kind: 'blank', onCreate: () => navigate('/nodes/new') }
+          }
+        />
       ) : layout === 'cards' ? (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
           {visibleNodes.map((n) => {

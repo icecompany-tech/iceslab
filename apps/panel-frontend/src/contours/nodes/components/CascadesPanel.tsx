@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCascades, updateCascade, deleteCascade, type Cascade } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
 import { apiErrorMessage } from '@/lib/net/client';
+import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import {
   CascadesView,
   useCascadeRows,
@@ -55,6 +56,31 @@ export function CascadesPanel({ layout = 'cards' }: { layout?: CascadeLayout }) 
   });
 
   const rows = useCascadeRows(cascadesQuery.data?.cascades ?? [], nodesQuery.data?.nodes ?? []);
+
+  // Nothing to draw has three causes here and they are not interchangeable:
+  // the request failed, the request has not answered yet, or there really are
+  // no cascades. The panel says which, because on the first of the three the
+  // chains are still carrying traffic.
+  if (rows.length === 0) {
+    return (
+      <Stack gap="md">
+        <FleetEmpty
+          what="cascades"
+          state={
+            cascadesQuery.isError
+              ? {
+                  kind: 'failed',
+                  message: apiErrorMessage(cascadesQuery.error),
+                  onRetry: () => void cascadesQuery.refetch(),
+                }
+              : cascadesQuery.isLoading
+                ? { kind: 'loading' }
+                : { kind: 'blank', onCreate: () => navigate('/nodes/cascades/new') }
+          }
+        />
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap="md">

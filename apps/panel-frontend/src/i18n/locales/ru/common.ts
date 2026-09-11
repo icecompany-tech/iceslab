@@ -93,6 +93,9 @@ export const common = {
   // Факты, которые страница дописывает к строке в топбаре:
   // «/ ПОЛЬЗОВАТЕЛИ · 36 АККАУНТОВ · 21 АКТИВНЫХ».
   pageMeta: {
+    /** The breadcrumb when the page's own list failed to load: a count would
+     *  read as a real number and outlive the error card below it. */
+    noData: 'данных нет',
     users_one: '{{count}} аккаунт',
     users_few: '{{count}} аккаунта',
     users_many: '{{count}} аккаунтов',
