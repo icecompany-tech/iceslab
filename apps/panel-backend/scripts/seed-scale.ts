@@ -185,6 +185,42 @@ async function growNodes(): Promise<string[]> {
   const profiles = await prisma.profile.findMany({ select: { id: true, name: true } });
   const profileByName = new Map(profiles.map((p) => [p.name, p.id] as const));
 
+  /**
+   * Stop here rather than build a fleet with nothing deployed on it.
+   *
+   * This script was written to run ON TOP of seed-demo, looking its profiles up
+   * by name. seed-demo was removed on 2026-09-12 (commit 3b810dc, "drop the
+   * demo build and its seeded fleet"), so those names now resolve to nothing and
+   * the binding block below is skipped silently: hundreds of nodes appear, every
+   * profile and host page reports zero reach, and the only clue is that the
+   * numbers are wrong.
+   *
+   * That matters most exactly when it costs most. The migration rehearsal for an
+   * operator with ~30k users is the reason to run this at all, and somebody
+   * would spend a day on the panel before realising they were looking at
+   * emptiness rather than at a bug in the panel.
+   *
+   * Loud, and it names what to do: creating the profiles is a decision (which
+   * transports, which keys), not something a scale seeder should invent.
+   */
+  const wanted = [...new Set(Object.values(PROFILE_FOR_PROTO).map((p) => p.key))];
+  const found = wanted.filter((k) => profileByName.has(k));
+  if (found.length === 0) {
+    throw new Error(
+      `[nodes] none of the profiles this script binds exist: ${wanted.join(', ')}.\n` +
+        `They came from seed-demo, which was removed in 3b810dc. Without them every node ` +
+        `added here would be deployed to nothing, and the panel would look empty rather ` +
+        `than broken.\nCreate profiles with those names first (any config), or edit ` +
+        `PROFILE_FOR_PROTO to the names you do have.`,
+    );
+  }
+  if (found.length < wanted.length) {
+    console.warn(
+      `[nodes] ⚠ only ${found.length} of ${wanted.length} profiles found (${found.join(', ')}). ` +
+        `Nodes of the other protocols will be created with nothing deployed on them.`,
+    );
+  }
+
   const added: string[] = [];
   for (let i = 0; i < missing; i++) {
     const slot = FLEET[i % FLEET.length]!;
