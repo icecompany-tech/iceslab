@@ -1,5 +1,6 @@
 import { prisma } from '../../src/prisma.js';
 import { _resetBindingsCacheForTest } from '../../src/modules/subscription/subscription.bindings-cache.js';
+import { invalidateSubscriptionSettingsCache } from '../../src/modules/settings/settings.service.js';
 
 // Listed in the order they need truncating. CASCADE handles FKs but explicit
 // listing is documentation. Anything that references another table comes first.
@@ -31,6 +32,15 @@ const TABLES = [
   'api_tokens',
   'keygen_ca',
   'admin_users',
+  // Missing here until 2026-09-11, and it leaked ACROSS FILES rather than
+  // within one: files run serially in one process, so a settings row written by
+  // an earlier file was still there for every later one. The entry-pool file
+  // sets subscriptionEntryPoolSize, and the next file's subscription therefore
+  // capped its endpoints and handed back fewer lines than the test created
+  // nodes. It looked like a flake because it depends on file ORDER, so it
+  // appeared when files were added and disappeared when the failing test was
+  // run on its own.
+  'app_settings',
 ];
 
 export async function cleanDatabase(): Promise<void> {
@@ -44,6 +54,10 @@ export async function cleanDatabase(): Promise<void> {
   // prior test's cached binding-set under the same key. Treat truncation as the
   // ultimate out-of-band change and clear the cache here, per test.
   _resetBindingsCacheForTest();
+  // Same reasoning one table over: the settings DTO is cached in-process for a
+  // minute, so truncating app_settings above would otherwise leave the previous
+  // file's values being served from memory for the rest of the run.
+  invalidateSubscriptionSettingsCache();
   // Re-seed the "All" squad, slice 26 wired user-create to default to it,
   // so an empty groups table makes every user-create fail with FK violation.
   // The seed migration installs this row in production; tests truncate it
