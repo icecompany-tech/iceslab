@@ -104,6 +104,7 @@ export const common = {
     own: 'свой демон',
     pair: '{{protocol}} · {{engine}}',
     coresUnknown: 'ядра не сообщены',
+    plusSingbox: '{{pair}} + движок sing-box',
     coresNone: 'ни одного ядра',
     legNo: 'ногой каскада быть не может',
     legWhy:

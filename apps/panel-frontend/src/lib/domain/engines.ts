@@ -89,6 +89,60 @@ export function pairCaveats(pair: EnginePair): string[] {
 }
 
 /**
+ * The pair a PROFILE is: its protocol and the core that will render it.
+ *
+ * Always answerable, unlike the same question about a node: `effectiveEngine`
+ * is resolved on the server and is never null, so a profile row can name both
+ * halves today. This is the whole difference between the two sides of the
+ * screen, and the reason half the read-only places could be changed in one
+ * pass while the other half had to learn to stay quiet.
+ */
+export function profilePair(profile: {
+  protocol: string;
+  effectiveEngine: EngineName;
+}): EnginePair {
+  return { protocol: profile.protocol, engine: profile.effectiveEngine };
+}
+
+/** «VLESS · ядро xray» for a profile row. */
+export function profilePairLabel(
+  profile: { protocol: string; effectiveEngine: EngineName },
+  t: T,
+): string {
+  return pairLabel(profilePair(profile), t);
+}
+
+/**
+ * What the install command is about to put on a machine, said as a pair.
+ *
+ * The one place a node's engine is honestly knowable without a report: on the
+ * CREATE form the operator has just chosen it, so this describes an intent
+ * rather than a fact, and it is read seconds before the machine exists. Never
+ * use it about a node that already runs: by then the only truthful source is
+ * what the node reported.
+ */
+export function installIntentLabel(
+  values: { protocol: string; singboxEngine: boolean },
+  t: T,
+): string {
+  const own = pairLabel(
+    { protocol: values.protocol, engine: nativeEngineOfIntent(values.protocol) },
+    t,
+  );
+  return values.singboxEngine ? t('engine.plusSingbox', { pair: own }) : own;
+}
+
+/** Only for the create form above: which core the installer puts down for this
+ *  protocol. The same table exists once in the panel and once in the agent, and
+ *  this copy is deliberately confined to a form about a machine that does not
+ *  exist yet, where there is nothing to ask. */
+function nativeEngineOfIntent(protocol: string): EngineName {
+  if (protocol === 'shadowsocks') return 'xray';
+  if (protocol === 'tuic' || protocol === 'anytls' || protocol === 'shadowtls') return 'singbox';
+  return protocol as EngineName;
+}
+
+/**
  * The engines a node REPORTED, or undefined when it never has.
  *
  * ⚠ Nothing here is derived from `node.protocol`. That field is a LABEL saying

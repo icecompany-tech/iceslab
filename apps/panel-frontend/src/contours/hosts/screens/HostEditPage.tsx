@@ -42,6 +42,7 @@ import {
   listProfiles,
   sniMismatch,
 } from '@/lib/domain/profiles';
+import { profilePairLabel } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -638,7 +639,13 @@ export function HostEditPage() {
               // the list below re-checks itself on every switch.
               disabled={!isNew}
               placeholder={t('hostEdit.pickProfile')}
-              data={profiles.map((p) => ({ value: p.id, label: `${p.name} · ${p.protocol}` }))}
+              // The pair, not the protocol: this select decides which core will
+              // serve the host, and two profiles of one protocol can differ by
+              // exactly that.
+              data={profiles.map((p) => ({
+                value: p.id,
+                label: `${p.name} · ${profilePairLabel(p, t)}`,
+              }))}
             />
             <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <IconInfoCircle size={13} stroke={2} color={DIM} />
@@ -1065,7 +1072,7 @@ export function HostEditPage() {
             <Hint>{isNew ? t('hostEdit.previewHintNew') : t('hostEdit.previewHint')}</Hint>
             {selectedProfile && (
               <Text style={{ fontFamily: MONO, fontSize: 11, color: MIST }}>
-                {selectedProfile.protocol.toUpperCase()}
+                {profilePairLabel(selectedProfile, t)}
               </Text>
             )}
           </Card>

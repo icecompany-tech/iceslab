@@ -7,6 +7,7 @@ import { HostGroup, HostRow } from '@/contours/nodes/components/NodeCreate/HostG
 import { SummaryRow } from '@/contours/nodes/components/NodeCreate/SummaryRow';
 import { hardeningSummary, profileMeta } from '@/contours/nodes/lib/nodeInstall';
 import { protocolLabel } from '@/lib/domain/protocols';
+import { installIntentLabel } from '@/lib/domain/engines';
 import { useTranslation } from 'react-i18next';
 import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 
@@ -150,7 +151,10 @@ export function StepHosts({
               >
                 <SummaryRow
                   label={t('nodeCreate.sumNode')}
-                  value={`${form.values.name.trim() || '-'} · ${form.values.protocol}`}
+                  // The pair the installer is about to put down, including the
+                  // sing-box switch two steps back: the summary is the last
+                  // place to notice it was left off.
+                  value={`${form.values.name.trim() || '-'} · ${installIntentLabel(form.values, t)}`}
                 />
                 <SummaryRow
                   label={t('nodeCreate.sumEndpoint')}

@@ -3,6 +3,7 @@ import { countryFlag } from '@/lib/domain/countries';
 import { deleteHost } from '@/lib/domain/hosts';
 import { GlobeIcon, LinkIcon, TrashIcon } from '@/contours/nodes/components/NodeEdit/icons';
 import { PROTOCOL_DOT, shapeOf } from '@/contours/nodes/lib/nodeFormat';
+import { engineWord, profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN2, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/nodes/lib/colors';
@@ -173,7 +174,7 @@ export function HostsPanel({
                             color: MIST,
                           }}
                         >
-                          {shapeOf(profile.protocol, profile.config as Record<string, unknown>)}
+                          {wireLabel(profile, t)}
                         </Text>
                       </Box>
                     )}
@@ -226,4 +227,24 @@ export function HostsPanel({
           </Box>
     </>
   );
+}
+
+/**
+ * What the row says about the profile behind a port.
+ *
+ * For an xray profile the wire shape («vless tcp reality») is the interesting
+ * half and the engine is implied, so the engine is named only when it is the
+ * one thing the shape cannot show: a profile pinned onto sing-box. For every
+ * other protocol the pair is the answer, and it is not decoration: the native
+ * core of shadowsocks is xray, which nothing in the word «shadowsocks» says.
+ */
+function wireLabel(
+  profile: { protocol: string; effectiveEngine: EngineName; config: unknown },
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  if (profile.protocol !== 'xray') return profilePairLabel(profile, t);
+  const shape = shapeOf(profile.protocol, profile.config as Record<string, unknown>);
+  return profile.effectiveEngine === 'singbox'
+    ? `${shape} · ${engineWord('singbox', t)}`
+    : shape;
 }

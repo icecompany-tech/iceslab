@@ -4,6 +4,7 @@ import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { getCascadeStatus, type Cascade, type CascadeHop } from '@/lib/domain/cascades';
 import { listBindings } from '@/lib/domain/profiles';
+import { engineListWords } from '@/lib/domain/engines';
 import { listRoutePolicies } from '@/lib/domain/routePolicies';
 import { listSquads } from '@/lib/domain/squads';
 import { type Node } from '@/lib/domain/nodes';
@@ -539,9 +540,15 @@ function HopTile({ hop, role }: { hop: HopView; role: 'entry' | 'transit' | 'exi
         <Chip tone={roleTone} small>
           {t(`cascades.role.${role}`)}
         </Chip>
+        {/* The entry's core version, and the cores it reported when it has.
+            Never `protocol`: that is the label of the primary adapter, and
+            printing it next to a version reads as «this is the core running
+            here», which the panel does not know until the node says so. */}
         {role === 'entry' && hop.node?.coreVersion && (
           <Chip tone={VIOLET} small>
-            {hop.node.protocol} {hop.node.coreVersion}
+            {hop.node.engines
+              ? `${engineListWords(hop.node, t)} ${hop.node.coreVersion}`
+              : hop.node.coreVersion}
           </Chip>
         )}
         <Box style={{ flex: 1 }} />

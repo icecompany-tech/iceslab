@@ -30,6 +30,7 @@ import {
   type UpdateSquadInput,
 } from '@/lib/domain/squads';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { profilePairLabel } from '@/lib/domain/engines';
 import { listCascades } from '@/lib/domain/cascades';
 import { listHosts } from '@/lib/domain/hosts';
 import { listNodes } from '@/lib/domain/nodes';
@@ -856,7 +857,7 @@ export function SquadEditPage() {
                         {p.name}
                       </Text>
                       <Text style={{ fontFamily: MONO, fontSize: 10, color: FAINT }}>
-                        {p.protocol}
+                        {profilePairLabel(p, t)}
                       </Text>
                     </Box>
                     <Chip accent={p.bindingCount > 0 ? FAINT : AMBER}>

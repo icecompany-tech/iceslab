@@ -38,6 +38,7 @@ import { type CreateSquadInput, type Squad, type UpdateSquadInput } from '@/lib/
 import { type Profile } from '@/lib/domain/profiles';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
+import { engineWord } from '@/lib/domain/engines';
 
 const PROTOCOL_COLORS: Record<string, string> = {
   hysteria: 'blue',
@@ -721,6 +722,12 @@ function ProfileRow({
           <Group gap={6} wrap="nowrap">
             <Text size="sm" fw={500} truncate>
               {profile.name}
+            </Text>
+            {/* The heading above groups by PROTOCOL, so two profiles served by
+                different cores sit under one word. The engine belongs on the
+                row, which is the only place they differ. */}
+            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+              {engineWord(profile.effectiveEngine, t)}
             </Text>
             {!profile.enabled && (
               <Badge variant="default" color="gray" size="xs">

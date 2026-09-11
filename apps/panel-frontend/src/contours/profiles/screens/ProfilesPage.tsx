@@ -48,6 +48,7 @@ import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
+import { profilePairLabel } from '@/lib/domain/engines';
 import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
 
 const HAIRLINE = '#1C2A3D';
@@ -591,7 +592,9 @@ function ProfileCard({
             letterSpacing: '0.08em',
           }}
         >
-          {profile.protocol}
+          {/* The pair: two profiles of one protocol can be served by different
+              cores, and on this card the protocol alone made them twins. */}
+          {profilePairLabel(profile, t)}
         </Badge>
         <Tooltip label={bindingCount === 0 ? t('profiles.bindingsTooltipNone') : t('profiles.bindingsTooltipDeployed')}>
           <Box

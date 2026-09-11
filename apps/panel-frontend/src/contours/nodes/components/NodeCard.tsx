@@ -357,7 +357,13 @@ export function NodeCard({
                   size="xs"
                   style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
                 >
-                  xray {node.coreVersion}
+                  {/* The version alone. It used to be printed as «xray N» on
+                      every card, which names a core this machine may not be
+                      running: the protocol beside it is a label for the primary
+                      adapter, not a list of what is installed. Which cores
+                      there are belongs to what the node reported, and that is
+                      not on this card. */}
+                  {node.coreVersion}
                 </Text>
               </Group>
             </Tooltip>

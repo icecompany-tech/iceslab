@@ -8,6 +8,7 @@ import { StepInstall } from '@/contours/nodes/components/NodeCreate/StepInstall'
 import { StepParams } from '@/contours/nodes/components/NodeCreate/StepParams';
 import { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 import { useTranslation } from 'react-i18next';
+import { installIntentLabel } from '@/lib/domain/engines';
 import {
   Box,
   Stack,
@@ -177,7 +178,8 @@ export function NodeCreatePage() {
                     color: VIOLET,
                   }}
                 >
-                  {form.values.protocol}
+                  {/* The pair being installed, not the protocol alone. */}
+                  {installIntentLabel(form.values, t)}
                 </Text>
               </Box>
             </>

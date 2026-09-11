@@ -32,6 +32,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { deleteHost, listHosts } from '@/lib/domain/hosts';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
@@ -323,7 +324,9 @@ export function HostsPage() {
 
 type Row = {
   host: { id: string; remark: string; enabled: boolean; priority: number };
-  profile?: { name: string; protocol: string };
+  // `effectiveEngine` rides along: a profile row names the pair, and the engine
+  // half is not derivable here on purpose.
+  profile?: { name: string; protocol: string; effectiveEngine: EngineName };
   nodes: { id: string; name: string; status: string }[];
   lastOfBinding: boolean;
   nodeName: string | null;
@@ -451,7 +454,9 @@ function HostCard({
                 color: MIST,
               }}
             >
-              {row.profile.protocol}
+              {/* The pair, because a profile always knows its own: the server
+                  resolves `effectiveEngine` and never leaves it null. */}
+              {profilePairLabel(row.profile, t)}
             </Text>
           </Box>
         ) : (

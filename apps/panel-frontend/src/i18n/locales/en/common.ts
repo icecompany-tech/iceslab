@@ -101,6 +101,7 @@ export const common = {
     own: 'its own daemon',
     pair: '{{protocol}} · {{engine}}',
     coresUnknown: 'cores not reported',
+    plusSingbox: '{{pair}} + sing-box engine',
     coresNone: 'no cores at all',
     legNo: 'cannot be a cascade leg',
     legWhy:
