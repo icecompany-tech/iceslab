@@ -628,6 +628,31 @@ export interface NodeCoreRestarts extends CoreRestarts {
 export interface CoreStatus {
   name: ProtocolName;
   running: boolean;
+  /** Which proxy core renders this protocol on this node ("xray", "singbox",
+   *  "hysteria"). `name` is the PROTOCOL and the two are different questions:
+   *  tuic and vless can both be sing-box on one node. Absent on an agent older
+   *  than the field. */
+  engine?: EngineName;
+  /**
+   * Whether THIS core carries out the node-level policy / the node-level
+   * resolver (ApplyInboundsRequest.policy and .dns).
+   *
+   * Both are optional adapter interfaces and today exactly ONE core implements
+   * them, so on a node running AmneziaWG, sing-box, native hysteria, naive,
+   * mieru or mtproto the operator's policy does nothing whatsoever. The panel
+   * used to show the policy attached to such a node with no hint of that.
+   *
+   * Per core, not per node: a node running xray alongside tuic on sing-box
+   * applies the policy to its xray users and not to the others, so "this node
+   * applies the policy" cannot be said truthfully.
+   *
+   * ⚠ Absent means the agent predates the field, which is NOT the same as
+   * false. Show it as unknown, never as "does not render it". Reported by the
+   * node rather than decided from a table here, which would drift from the
+   * agent the day another adapter learns to render one, and drift silently.
+   */
+  rendersPolicy?: boolean;
+  rendersDns?: boolean;
   /** See CoreRestarts. Absent = this core/agent doesn't report it. */
   restarts?: CoreRestarts;
   /** T7: underlying core binary version (e.g. "26.3.27" from `xray version`),
@@ -650,6 +675,43 @@ export interface CoreStatus {
 export interface HealthcheckResponse {
   status: 'ok' | 'degraded';
   cores: CoreStatus[];
+}
+
+/**
+ * What the PANEL stores per node from the healthcheck above: the cores the
+ * agent reported, plus the panel's own freshness stamp.
+ *
+ * Kept because the per-core answer to "does this core render the policy" cannot
+ * be derived in the panel without keeping a copy of the agent's adapter list,
+ * and a copy drifts silently. The node is the only honest source.
+ *
+ * ⚠ `observedAt` follows the same rule as NodeCoreRestarts.observedAt: the row
+ * is written when something moved (or on a periodic heartbeat), so read it as
+ * "no older than this, give or take the heartbeat". A stamp far past that means
+ * the node stopped being polled, not that it is quiet and fine. `null` on the
+ * node DTO means no reporting agent has checked in yet, which is NOT the same
+ * as a node with no cores.
+ */
+export interface NodeCores {
+  observedAt: string;
+  cores: NodeCoreInfo[];
+}
+
+/**
+ * One core as the panel keeps it: an INVENTORY entry, not a liveness feed.
+ *
+ * `running` and `restarts` from CoreStatus are deliberately not stored. Liveness
+ * already lives in the node's `status` and the tally in `coreRestarts`, and a
+ * copy here would be written only when something else changed, leaving a stale
+ * "running: true" next to a node the panel knows is down.
+ */
+export interface NodeCoreInfo {
+  name: ProtocolName;
+  engine?: EngineName;
+  version?: string;
+  provisioned?: boolean;
+  rendersPolicy?: boolean;
+  rendersDns?: boolean;
 }
 
 // ───── GET /metrics ─────

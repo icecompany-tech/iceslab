@@ -235,7 +235,22 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			cs := dto.CoreStatus{
 				Name:    dto.ProtocolName(adapter.Name()),
 				Running: adapter.Healthy(),
+				Engine:  adapter.Engine(),
 			}
+			// Which node-level settings this core actually carries out. Both are
+			// optional interfaces, and today only one adapter implements either,
+			// so on a node whose cores do not the operator's policy and resolver
+			// are saved in the panel and applied nowhere. The panel cannot work
+			// this out on its own without keeping a copy of this list, which
+			// would go stale the first time an adapter learns to render one.
+			//
+			// Per CORE and not per node on purpose: a node running xray and
+			// sing-box applies the policy to its xray users and not to the
+			// others, so "this node applies the policy" is already a lie.
+			_, rendersPolicy := adapter.(core.PolicyReceiver)
+			_, rendersDns := adapter.(core.DnsReceiver)
+			cs.RendersPolicy = &rendersPolicy
+			cs.RendersDns = &rendersDns
 			// T7: surface the core version when the adapter can report it, so
 			// the panel can gate min-version features (xray >= 25.9.5 for
 			// cascade exit selection). Cached adapter-side, cheap to call.

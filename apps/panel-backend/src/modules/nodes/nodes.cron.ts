@@ -7,7 +7,7 @@ import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-n
 import { getLogger } from '../../lib/infra/logger.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import type { NodeCoreRestarts } from '@iceslab/shared';
+import type { CoreStatus, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
 
 const METRICS_KEY_PREFIX = 'node:metrics:';
 const METRICS_TTL_SECONDS = 60;
@@ -54,6 +54,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       lastStatusMessage: true,
       coreVersion: true,
       coreRestarts: true,
+      cores: true,
     },
   });
 
@@ -88,7 +89,14 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       const restartsChanged =
         result.coreRestarts !== undefined &&
         restartsWorthWriting(storedRestarts, result.coreRestarts, Date.now());
-      if (statusChanged || messageChanged || versionChanged || restartsChanged) {
+      // The core inventory, same rule again: undefined = unreachable node, keep
+      // what is stored. This is where the panel learns which cores render the
+      // operator's policy at all, so a node that never answers must not read as
+      // "no cores", which would be indistinguishable from "renders nothing".
+      const storedCores = (node.cores as NodeCores | null) ?? null;
+      const coresChanged =
+        result.cores !== undefined && coresWorthWriting(storedCores, result.cores, Date.now());
+      if (statusChanged || messageChanged || versionChanged || restartsChanged || coresChanged) {
         await prisma.node.update({
           where: { id: node.id },
           data: {
@@ -102,6 +110,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
             ...(restartsChanged
               ? { coreRestarts: result.coreRestarts as unknown as Prisma.InputJsonValue }
               : {}),
+            ...(coresChanged ? { cores: result.cores as unknown as Prisma.InputJsonValue } : {}),
           },
         });
       }
@@ -188,6 +197,10 @@ interface PollResult {
   // 2026-08-04: restart tally from the same /healthz. Undefined follows the
   // same rule as coreVersion - unreachable node or pre-2026-08 agent.
   coreRestarts?: NodeCoreRestarts;
+  // The core inventory from the same /healthz, including which cores render the
+  // node-level policy and resolver. Undefined = the node was unreachable, keep
+  // what is stored.
+  cores?: NodeCores;
 }
 
 /**
@@ -241,6 +254,51 @@ function restartsWorthWriting(
   const nextRss = fresh.rssBytes ?? 0;
   if (prevRss === 0) return nextRss !== 0;
   return Math.abs(nextRss - prevRss) / prevRss > 0.1;
+}
+
+/**
+ * The core inventory as the panel keeps it: what the agent listed, minus the
+ * parts that belong to liveness (`running`, `restarts`). See NodeCoreInfo.
+ *
+ * The flags are passed through exactly as reported, INCLUDING their absence: an
+ * agent older than the field says nothing about rendersPolicy, and that has to
+ * stay "unknown" rather than turn into false somewhere in here. A false would
+ * tell the operator their policy is ignored on a core that may well apply it.
+ */
+export function observedCores(cores: CoreStatus[], observedAt: string): NodeCores {
+  return {
+    observedAt,
+    cores: cores.map((c) => ({
+      name: c.name,
+      ...(c.engine !== undefined ? { engine: c.engine } : {}),
+      ...(c.version ? { version: c.version } : {}),
+      ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
+      ...(c.rendersPolicy !== undefined ? { rendersPolicy: c.rendersPolicy } : {}),
+      ...(c.rendersDns !== undefined ? { rendersDns: c.rendersDns } : {}),
+    })),
+  };
+}
+
+/**
+ * Should this inventory replace the stored one?
+ *
+ * Same shape of question as restartsWorthWriting, and for the same reason: the
+ * poll runs every 30 seconds per node and the inventory changes about never, so
+ * writing a row per tick would be WAL churn for a value that did not move.
+ * Compared by content, refreshed on the heartbeat so `observedAt` keeps meaning
+ * something.
+ */
+export function coresWorthWriting(
+  stored: NodeCores | null,
+  fresh: NodeCores,
+  nowMs: number,
+): boolean {
+  if (!stored) return true;
+  if (JSON.stringify(stored.cores) !== JSON.stringify(fresh.cores)) return true;
+  const storedAt = Date.parse(stored.observedAt);
+  // NaN (missing or garbled stamp from an older build) counts as stale, so the
+  // next poll repairs it instead of freezing forever.
+  return !Number.isFinite(storedAt) || nowMs - storedAt >= RESTARTS_HEARTBEAT_MS;
 }
 
 /**
@@ -328,7 +386,12 @@ async function checkOne(node: {
         }
       : undefined;
     const verdict = statusFromHealth(res);
-    return { ...verdict, coreVersion, coreRestarts };
+    return {
+      ...verdict,
+      coreVersion,
+      coreRestarts,
+      cores: observedCores(res.cores, new Date().toISOString()),
+    };
   } catch (err) {
     if (err instanceof NodeRequestError) {
       return { status: 'unreachable', message: `${err.status} ${err.message}`.slice(0, 200) };

@@ -34,6 +34,19 @@ model Node {
   // complain about drops. NULL = no reporting agent has checked in yet, which
   // is NOT the same as "zero restarts".
   coreRestarts          Json?     @map("core_restarts")
+  // The cores this node reported in /healthz, refreshed by the status poller.
+  // Shape (NodeCores in packages/shared): { observedAt, cores: CoreStatus[] }.
+  //
+  // Why a list and not the one `coreVersion` above: the node-level policy and
+  // the node-level resolver are carried out by a CORE, and today exactly one
+  // core implements either. On a node whose cores do not, the operator's policy
+  // is saved here and applied nowhere, and the panel had no way to say so. The
+  // flag comes from the agent (`rendersPolicy` per core) rather than from a
+  // table here, which would drift from the agent silently.
+  //
+  // NULL = no reporting agent has checked in yet, which is NOT "this node has
+  // no cores".
+  cores                 Json?
   // Stamped when the node ACKNOWLEDGES an inbound push (applyInbounds returned
   // ok), never on a failure and never on a plain liveness tick. That makes it a
   // truthful "this node applied the config we sent" marker: comparing it with a

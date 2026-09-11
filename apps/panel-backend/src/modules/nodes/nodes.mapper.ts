@@ -1,5 +1,5 @@
 import type { Node } from '../../generated/prisma/client.js';
-import type { DnsCfg, NodeCoreRestarts } from '@iceslab/shared';
+import type { DnsCfg, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -65,6 +65,19 @@ export interface PublicNodeDto {
   /** Э3 F: the resolver this node's users get, null = the host's own. Shape is
    *  DnsCfg in packages/shared. */
   dns: DnsCfg | null;
+  /**
+   * The cores this node reported, and for each one whether it carries out the
+   * node-level policy and resolver.
+   *
+   * Read it before telling an operator what a node does with traffic: today one
+   * core of nine renders the policy, so on a node whose cores do not, an
+   * attached policy does nothing. Per core, because a node serving xray
+   * alongside tuic on sing-box applies it to the first and not to the second.
+   *
+   * ⚠ null = no reporting agent has checked in, NOT "no cores". A core with
+   * `rendersPolicy` absent is an agent older than the field: unknown, not false.
+   */
+  cores: NodeCores | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +108,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     singboxEngine: node.singboxEngine,
     policyId: node.policyId,
     dns: (node.dns as DnsCfg | null) ?? null,
+    cores: (node.cores as NodeCores | null) ?? null,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

@@ -296,6 +296,26 @@ type CoreRestartsDto struct {
 type CoreStatus struct {
 	Name    ProtocolName `json:"name"`
 	Running bool         `json:"running"`
+	// Engine is the proxy core that renders this protocol here ("xray",
+	// "singbox", "hysteria"). Name is the PROTOCOL, and the two are not the
+	// same question: tuic and vless can both be sing-box on one node. Empty
+	// from an agent older than the field.
+	Engine string `json:"engine,omitempty"`
+	// RendersPolicy / RendersDns: whether THIS core carries out the node-level
+	// policy and the node-level resolver. Both are optional adapter interfaces
+	// (core.PolicyReceiver, core.DnsReceiver) and today exactly one core
+	// implements them, so on a node running anything else the operator's policy
+	// does nothing at all.
+	//
+	// Reported by the node rather than decided from a table in the panel, which
+	// would drift from the agent the day a second adapter learns to render one,
+	// and drift silently.
+	//
+	// Pointer + omitempty, same rule as Provisioned: absent means the agent
+	// predates the field, which is NOT the same as false. A panel reading absent
+	// must say "unknown", never "does not render it".
+	RendersPolicy *bool `json:"rendersPolicy,omitempty"`
+	RendersDns    *bool `json:"rendersDns,omitempty"`
 	// Restarts is present only for cores that supervise a real process. See
 	// CoreRestartsDto: absent means "this agent/core doesn't report", which is
 	// NOT the same as zero.
