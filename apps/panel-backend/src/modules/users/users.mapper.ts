@@ -1,6 +1,18 @@
 import type { GroupMember, User, UserTraffic } from '../../generated/prisma/client.js';
 
 /**
+ * A traffic row, optionally with the node it points at already loaded.
+ *
+ * Optional rather than required so a caller that has no use for the name (an
+ * update returning one user, say) is not forced to join. When it is absent the
+ * DTO says null, which is the same thing the column says for a user who has
+ * never connected, and the id next to it tells the two apart.
+ */
+export type TrafficWithNode = UserTraffic & {
+  lastConnectedNode?: { id: string; name: string } | null;
+};
+
+/**
  * Public DTO returned to admins via REST API.
  * Strips all protocol credentials and internal lifecycle fields.
  */
@@ -21,6 +33,19 @@ export interface PublicUserDto {
   lastTrafficResetAt: string | null;
   /** When the user last connected (touched any node). null = never online. */
   lastOnlineAt: string | null;
+  /** First time this user was ever seen on any node. null = never connected.
+   *  Written once, on the insert of their traffic row (stats.cron), so it
+   *  survives every later tick and answers "since when are they a subscriber"
+   *  independently of createdAt, which only says when the row was made. */
+  firstConnectedAt: string | null;
+  /** Node the user was last seen on. null = never connected, or the node was
+   *  deleted (the FK is SetNull). */
+  lastConnectedNodeId: string | null;
+  /** Name of that node, carried alongside the id so a roster of 500 rows does
+   *  not become 500 lookups: the id alone is unreadable in a table cell, and
+   *  resolving it client-side would mean a second request per page. Null
+   *  whenever the id is, and also when the caller did not ask for the relation. */
+  lastConnectedNodeName: string | null;
 
   // Subscription URL
   subscriptionToken: string;
@@ -61,7 +86,7 @@ export interface PublicUserDto {
  */
 export function mapUserToPublic(
   user: User & { groupMembers?: Pick<GroupMember, 'groupId'>[] },
-  traffic: UserTraffic | null,
+  traffic: TrafficWithNode | null,
 ): PublicUserDto {
   return {
     id: user.id,
@@ -81,6 +106,11 @@ export function mapUserToPublic(
       ? traffic.lastTrafficResetAt.toISOString()
       : null,
     lastOnlineAt: traffic?.onlineAt ? traffic.onlineAt.toISOString() : null,
+    firstConnectedAt: traffic?.firstConnectedAt
+      ? traffic.firstConnectedAt.toISOString()
+      : null,
+    lastConnectedNodeId: traffic?.lastConnectedNodeId ?? null,
+    lastConnectedNodeName: traffic?.lastConnectedNode?.name ?? null,
 
     subscriptionToken: user.subscriptionToken,
     subRevokedAt: user.subRevokedAt ? user.subRevokedAt.toISOString() : null,

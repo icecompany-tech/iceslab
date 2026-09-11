@@ -126,7 +126,18 @@ const PLATFORM_LABEL: Record<PlatformId, string> = {
 // xray/ss subscription clients are NOT listed for amneziawg, and vice versa.
 
 type AppAction =
-  | { kind: 'deeplink'; scheme: 'hiddify' | 'streisand' | 'v2rayng' | 'clash' | 'singbox' | 'shadowrocket' }
+  | {
+      kind: 'deeplink';
+      scheme:
+        | 'hiddify'
+        | 'streisand'
+        | 'v2rayng'
+        | 'clash'
+        | 'singbox'
+        | 'shadowrocket'
+        | 'happ'
+        | 'v2raytun';
+    }
   | { kind: 'awg-vpn' } // scan the AmneziaVPN vpn:// QR below
   | { kind: 'awg-conf' } // scan the AmneziaWG .conf QR below
   | { kind: 'download' } // grab the per-node .conf below
@@ -141,6 +152,24 @@ interface AppDef {
 }
 
 const APPS: AppDef[] = [
+  // Happ and v2RayTun first: these are the clients the operator's own
+  // subscribers are already on, and until now the page offered neither, so the
+  // most common reader of this page was told to copy a link by hand while
+  // every other app got a button.
+  {
+    name: 'Happ',
+    platforms: ['ios', 'macos', 'windows', 'android', 'androidtv', 'appletv'],
+    protocols: ['xray', 'shadowsocks', 'hysteria'],
+    action: { kind: 'deeplink', scheme: 'happ' },
+    recommended: true,
+  },
+  {
+    name: 'v2RayTun',
+    platforms: ['ios', 'macos', 'windows', 'android', 'androidtv', 'appletv'],
+    protocols: ['xray', 'shadowsocks', 'hysteria'],
+    action: { kind: 'deeplink', scheme: 'v2raytun' },
+    recommended: true,
+  },
   // Universal subscription clients (xray / shadowsocks / hysteria via the link).
   {
     name: 'Hiddify',
@@ -267,6 +296,17 @@ function deeplinkHref(
       return `sing-box://import-remote-profile?url=${enc}`;
     case 'shadowrocket':
       return `sub://${Buffer.from(subUrl, 'utf8').toString('base64')}`;
+    // The wrapper form both apps document: the subscription URL is appended
+    // whole, the way hiddify:// and streisand:// take it, not as a query
+    // parameter. Verified 2026-09-11 against docs.v2raytun.com/deep-link for
+    // v2raytun://import/ and against the Happ-family INCY deep-link docs plus a
+    // third-party resolver that handles happ://add/ for the other. Both apps
+    // also have an encrypted variant (happ://crypt*, v2raytun://crypt) which
+    // needs their key material, so the plain wrapper is what we emit.
+    case 'happ':
+      return `happ://add/${subUrl}`;
+    case 'v2raytun':
+      return `v2raytun://import/${subUrl}`;
   }
 }
 

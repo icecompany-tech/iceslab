@@ -35,6 +35,7 @@ import type {
   UpdateCascadeInput,
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
+import { isConfigApplied } from '../nodes/nodes.sync-status.js';
 
 export class CascadeNotFoundError extends Error {
   constructor(id: string) {
@@ -605,7 +606,9 @@ export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
   const hops = c.hops.map((h) => ({
     nodeId: h.node.id,
     name: h.node.name,
-    applied: !!h.node.lastInboundSyncAt && h.node.lastInboundSyncAt > savedAt,
+    // Same predicate the node card uses, from one place: two readings of
+    // "applied" that could disagree is exactly the confusion this answers.
+    applied: isConfigApplied(h.node.lastInboundSyncAt, savedAt),
     online: h.node.status === 'online',
   }));
   return { done: hops.length > 0 && hops.every((h) => h.applied), hops };

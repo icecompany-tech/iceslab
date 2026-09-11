@@ -12,6 +12,7 @@ import {
 import * as nodesService from './nodes.service.js';
 import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
+import { getNodeSyncStatus } from './nodes.sync-status.js';
 import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
 
@@ -204,6 +205,16 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // Did the last save reach this machine? The node card draws "saved, not
+  // applied yet" from this; see nodes.sync-status for why the answer needs the
+  // bindings, profiles, hosts and cascades behind the node and not just its row.
+  app.get('/api/nodes/:id/sync-status', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    const status = await getNodeSyncStatus(params.id);
+    if (!status) return reply.code(404).send({ error: 'NOT_FOUND' });
+    return reply.send(status);
   });
 
   // G4 probe-exposure: compare the node's open ufw ports to the expected set.

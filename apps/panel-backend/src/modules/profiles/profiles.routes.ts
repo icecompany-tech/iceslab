@@ -16,6 +16,7 @@ import {
   UpdateProfileSchema,
 } from './profiles.schemas.js';
 import { resolveHostFields } from './host-fields.js';
+import { getProfileKeyImpact } from './profiles.key-impact.js';
 import * as svc from './profiles.service.js';
 
 const KeypairQuery = z.object({
@@ -65,6 +66,17 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // What regenerating this profile's key would cost. The confirm dialog had
+  // honest counts for hosts and nodes and an empty slot for the one number that
+  // matters, how many client configs stop working: that is a question about
+  // squad ACL, which only the panel can answer.
+  app.get('/api/profiles/:id/key-impact', auth, async (req, reply) => {
+    const { id } = ProfileIdParamSchema.parse(req.params);
+    const impact = await getProfileKeyImpact(id);
+    if (!impact) return reply.code(404).send({ error: 'NOT_FOUND' });
+    return reply.send(impact);
   });
 
   // Which Host fields mean anything for this profile, plus what each one

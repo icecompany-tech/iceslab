@@ -35,6 +35,18 @@ export interface PublicNodeDto {
   // until a versioned agent checks in. Shown on the node card; the cascade form
   // uses it to warn before selecting an old node as a balancer entry.
   coreVersion: string | null;
+  /** When this node last ACKNOWLEDGED an inbound push (applyInbounds returned
+   *  ok). Never stamped on a failure and never on a plain liveness tick, so it
+   *  is the one field that answers "did the save land here". Deliberately not
+   *  `lastStatusChange`, which only moves on an online/offline transition and
+   *  therefore never moves on a healthy node.
+   *
+   *  The raw stamp, not a boolean: "applied" is only meaningful against the
+   *  moment the config last CHANGED, and for a node that moment is spread
+   *  across its bindings, profiles, hosts and cascades. Computing it per row
+   *  would put five aggregates behind every list page, so the comparison lives
+   *  in GET /api/nodes/:id/sync-status instead. */
+  lastInboundSyncAt: string | null;
   consumptionMultiplier: string;
   // Slice 27.5: region grouping + capacity hint.
   regionId: string | null;
@@ -67,6 +79,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     lastStatusMessage: node.lastStatusMessage,
     coreRestarts: (node.coreRestarts as NodeCoreRestarts | null) ?? null,
     coreVersion: node.coreVersion,
+    lastInboundSyncAt: node.lastInboundSyncAt?.toISOString() ?? null,
     consumptionMultiplier: node.consumptionMultiplier.toString(),
     regionId: node.regionId,
     maxUsers: node.maxUsers,

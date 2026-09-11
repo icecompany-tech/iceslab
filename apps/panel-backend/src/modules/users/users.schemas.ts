@@ -169,10 +169,65 @@ export const ListUsersQuerySchema = z.object({
   // block on a single user's page), which is how a one-off fix from months ago
   // turns into an unexplained support ticket.
   routingPreset: z.union([z.enum(ROUTING_PRESET_IDS), z.literal('any'), z.literal('none')]).optional(),
+
+  // ───── Per-column filters ─────────────────────────────────────────────
+  //
+  // The table shows 23 columns and the header offers a filter only where the
+  // endpoint can actually narrow: a control that filters the current page
+  // answers a different question than the one being asked (25 rows out of ten
+  // thousand), and a disabled control reads as breakage. So each entry below is
+  // a column that became filterable, and the frontend turns on exactly these.
+  //
+  // Shape convention, so a reader can predict a parameter instead of looking it
+  // up: a two-state column is `<name>=yes|no`, a three-state one spells its
+  // states out, a range is `<name>Before`/`<name>After` or `<name>Over`/
+  // `<name>Under`, and an id filter takes `none` for "column is empty".
+
+  /** Last node the user was seen on. `none` = never connected, or their node
+   *  was deleted (the FK nulls out). */
+  nodeId: z.union([PermissiveUuid, z.literal('none')]).optional(),
+  /** Presence, resolved against the same window the dashboard and the roster
+   *  dot use (ONLINE_WINDOW_MS), so one user cannot be online in the filter and
+   *  offline in their own row. `never` is not `offline`: never-connected is the
+   *  interesting cohort (a sold subscription nobody installed). */
+  online: z.enum(['online', 'offline', 'never']).optional(),
+  /** Expiry window. Both bounds are inclusive and independent, so "expires this
+   *  week" is one request. Users with no expiry match neither, see hasExpiry. */
+  expiresBefore: z.coerce.date().optional(),
+  expiresAfter: z.coerce.date().optional(),
+  hasExpiry: z.enum(['yes', 'no']).optional(),
+  /** Quota set vs unlimited. Not the same question as "how much is left". */
+  trafficLimit: z.enum(['limited', 'unlimited']).optional(),
+  /** Consumed bytes, absolute. Percentage-of-limit is deliberately absent: it
+   *  compares two columns of the same row, which the query builder cannot
+   *  express, and doing it in raw SQL would fork the one place that decides
+   *  who is visible. */
+  usedOver: z.coerce.number().int().nonnegative().optional(),
+  usedUnder: z.coerce.number().int().nonnegative().optional(),
+  /** Per-user device cap, set or inherited. */
+  deviceLimit: z.enum(['set', 'unset']).optional(),
+  /** Telegram account linked to the user. */
+  telegram: z.enum(['linked', 'none']).optional(),
+  /** Email filled in. */
+  email: z.enum(['set', 'none']).optional(),
+  /** Subscription link revoked. */
+  revoked: z.enum(['yes', 'no']).optional(),
+  /** Whether the user carries any tag at all. A specific tag is `tag` above;
+   *  this is the "untagged" cohort, which no exact match can express. */
+  hasTag: z.enum(['yes', 'no']).optional(),
+  createdBefore: z.coerce.date().optional(),
+  createdAfter: z.coerce.date().optional(),
+  /** First time ever seen, for "who joined this month". Independent of
+   *  createdAt: a user created in January who first connected in March. */
+  firstConnectedBefore: z.coerce.date().optional(),
+  firstConnectedAfter: z.coerce.date().optional(),
+
   // The list is paged server-side, so sorting has to be too: sorting the
   // current page only would reorder 25 rows out of N and read as a bug.
   // Default is username asc, the order an operator scans a roster in.
-  sort: z.enum(['username', 'createdAt', 'expireAt', 'traffic']).default('username'),
+  sort: z
+    .enum(['username', 'createdAt', 'expireAt', 'traffic', 'lastOnline', 'firstConnected', 'lifetimeTraffic'])
+    .default('username'),
   order: z.enum(['asc', 'desc']).default('asc'),
 });
 export type ListUsersQuery = z.infer<typeof ListUsersQuerySchema>;

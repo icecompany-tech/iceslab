@@ -27,6 +27,26 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('alice');
   });
 
+  it('offers Happ and v2RayTun with a working one-tap import', () => {
+    // These two are what the operator's own subscribers run, and the page
+    // listed neither: the most common reader was told to copy a link by hand
+    // while every other client got a button. Schemes verified 2026-09-11
+    // against docs.v2raytun.com/deep-link and the Happ-family deep-link docs.
+    const html = buildSubscriptionPage(base({ protocols: ['xray'] }));
+    expect(html).toContain('Happ');
+    expect(html).toContain('happ://add/https://panel.example.com/sub/abc123');
+    expect(html).toContain('v2RayTun');
+    expect(html).toContain('v2raytun://import/https://panel.example.com/sub/abc123');
+  });
+
+  it('does not offer them to an AmneziaWG-only subscription', () => {
+    // Neither speaks AWG obfuscation, so a button there would open an app that
+    // cannot use the config, which is worse than no button.
+    const html = buildSubscriptionPage(base({ protocols: ['amneziawg'] }));
+    expect(html).not.toContain('happ://add/');
+    expect(html).not.toContain('v2raytun://import/');
+  });
+
   it('shows a per-node AmneziaWG .conf download only when an awg node exists', () => {
     const without = buildSubscriptionPage(base({ protocols: ['hysteria'] }));
     expect(without).not.toContain('format=wgconf');

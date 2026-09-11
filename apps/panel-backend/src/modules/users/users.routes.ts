@@ -11,6 +11,7 @@ import {
 } from './users.schemas.js';
 import * as usersService from './users.service.js';
 import { mapUserToPublic } from './users.mapper.js';
+import { getUserDelivery } from './users.delivery.js';
 import { prisma } from '../../prisma.js';
 import {
   generateSubscription,
@@ -45,6 +46,9 @@ const usersListResponseSchema = {
           trafficLimitStrategy: { type: 'string' },
           lastTrafficResetAt: nstr,
           lastOnlineAt: nstr,
+          firstConnectedAt: nstr,
+          lastConnectedNodeId: nstr,
+          lastConnectedNodeName: nstr,
           subscriptionToken: { type: 'string' },
           subRevokedAt: nstr,
           hwidDeviceLimit: nnum,
@@ -113,6 +117,18 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ tags: rows.map((r) => r.tag).filter((t): t is string => t !== null) });
   });
 
+  // What this user actually gets served, as opposed to what is on their row:
+  // the routing preset after the user -> squad -> panel fall-through, and the
+  // format their client's User-Agent resolves to. Both are decided at serve
+  // time out of several places, so neither is visible on the user itself.
+  // Declared before /api/users/:id so "delivery" is not read as an id.
+  app.get('/api/users/:id/delivery', auth, async (request, reply) => {
+    const params = UserIdParamSchema.parse(request.params);
+    const delivery = await getUserDelivery(params.id);
+    if (!delivery) return reply.code(404).send({ error: 'USER_NOT_FOUND' });
+    return reply.send(delivery);
+  });
+
   // POST /api/users/bulk - one action, many users. Declared before
   // /api/users/:id so "bulk" is not read as an id.
   //
@@ -171,7 +187,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   ): Promise<unknown> => {
     const users = await prisma.user.findMany({
       where: { ...where, deletedAt: null },
-      include: { traffic: true },
+      include: { traffic: { include: { lastConnectedNode: { select: { id: true, name: true } } } } },
       // Stable order, oldest first: without it the same request can come back
       // in a different order and a caller that takes "the first one" behaves
       // differently on identical data.
@@ -189,7 +205,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   ): Promise<unknown> => {
     const user = await prisma.user.findFirst({
       where: { ...where, deletedAt: null },
-      include: { traffic: true },
+      include: { traffic: { include: { lastConnectedNode: { select: { id: true, name: true } } } } },
     });
     if (!user) return reply.code(404).send({ error: 'USER_NOT_FOUND' });
     return reply.send(mapUserToPublic(user, user.traffic));
