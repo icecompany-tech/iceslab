@@ -17,6 +17,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 //   that's cheap to retain.
 const RETENTION_DAYS = {
   subscriptionRequests: 90,
+  // Exported below: the host-freshness screen reads "this subscriber has not
+  // polled since the change" out of the same table, so it has to be able to say
+  // how far back that evidence goes. Two copies of the number would drift, and
+  // the screen would quietly start claiming more than the data supports.
   nodeUserUsage: 180,
   nodeUsage: 800,
   // subscription_events is append-only (one row per admin action / status flip).
@@ -24,6 +28,9 @@ const RETENTION_DAYS = {
   // headroom while keeping the table from filling a 2 GB VPS disk over years.
   subscriptionEvents: 180,
 } as const;
+
+/** How long a `/sub` poll stays on record. See the note above. */
+export const SUBSCRIPTION_REQUEST_RETENTION_DAYS = RETENTION_DAYS.subscriptionRequests;
 
 export interface PruneResult {
   subscriptionRequests: number;

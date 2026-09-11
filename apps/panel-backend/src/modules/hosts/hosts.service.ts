@@ -10,6 +10,7 @@ import {
   ProfileNotFoundError,
 } from '../profiles/profiles.service.js';
 import { mapHost, type HostReach, type PublicHostDto } from './hosts.mapper.js';
+import { hostConfigChangedAt } from './hosts.freshness.js';
 import type {
   CreateHostInput,
   ListHostsQuery,
@@ -111,10 +112,23 @@ export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
   }
   const rows = await prisma.host.findMany({
     where,
+    // The two rows under the host are part of its config: an operator who moved
+    // the port edited the BINDING, and every client's link changed with it.
+    include: { binding: { select: { updatedAt: true, profile: { select: { updatedAt: true } } } } },
     orderBy: [{ bindingId: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
   });
   const reach = await reachByHost(rows.map((r) => r.id));
-  return rows.map((r) => mapHost(r, reach.get(r.id) ?? { squads: 0, users: 0 }));
+  return rows.map((r) =>
+    mapHost(
+      r,
+      reach.get(r.id) ?? { squads: 0, users: 0 },
+      hostConfigChangedAt({
+        host: r.updatedAt,
+        binding: r.binding.updatedAt,
+        profile: r.binding.profile.updatedAt,
+      }).toISOString(),
+    ),
+  );
 }
 
 /**
@@ -157,9 +171,20 @@ async function reachByHost(hostIds: string[]): Promise<Map<string, HostReach>> {
 }
 
 export async function getHostById(id: string): Promise<PublicHostDto> {
-  const h = await prisma.host.findUnique({ where: { id } });
+  const h = await prisma.host.findUnique({
+    where: { id },
+    include: { binding: { select: { updatedAt: true, profile: { select: { updatedAt: true } } } } },
+  });
   if (!h) throw new HostNotFoundError(id);
-  return mapHost(h);
+  return mapHost(
+    h,
+    undefined,
+    hostConfigChangedAt({
+      host: h.updatedAt,
+      binding: h.binding.updatedAt,
+      profile: h.binding.profile.updatedAt,
+    }).toISOString(),
+  );
 }
 
 export async function createHost(input: CreateHostInput): Promise<PublicHostDto> {

@@ -8,6 +8,7 @@ import {
   UpdateHostSchema,
 } from './hosts.schemas.js';
 import * as svc from './hosts.service.js';
+import { getHostFreshness } from './hosts.freshness.js';
 
 export async function hostsRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth (see users.routes.ts header comment).
@@ -28,6 +29,17 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  // How many subscribers are still on the old link. Counts PEOPLE, not configs:
+  // the question the screen asks is who cannot connect, and one person in two
+  // squads is one person. Declared before the generic :id routes below purely
+  // for readability, Fastify matches the static segment either way.
+  app.get('/api/hosts/:id/freshness', auth, async (req, reply) => {
+    const { id } = HostIdParamSchema.parse(req.params);
+    const freshness = await getHostFreshness(id);
+    if (!freshness) return reply.code(404).send({ error: 'NOT_FOUND' });
+    return reply.send(freshness);
   });
 
   app.post('/api/hosts', auth, async (req, reply) => {

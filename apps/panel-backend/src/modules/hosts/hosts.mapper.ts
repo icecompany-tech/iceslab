@@ -40,11 +40,26 @@ export interface PublicHostDto {
   updatedAt: string;
   /** Only the list endpoint computes this; absent elsewhere. See HostReach. */
   reach?: HostReach;
+  /**
+   * When the config behind this host last changed: the newest of the host, its
+   * binding and its profile.
+   *
+   * Not `updatedAt`. Moving the port is an edit to the BINDING and it rewrites
+   * the link every subscriber holds, while the host row sits untouched, so the
+   * host's own stamp would tell an operator the line is current when it is not.
+   * Only the endpoints that load the relations carry it.
+   */
+  configChangedAt?: string;
 }
 
-export function mapHost(h: Host, reach?: HostReach): PublicHostDto {
+export function mapHost(
+  h: Host,
+  reach?: HostReach,
+  configChangedAt?: string,
+): PublicHostDto {
   return {
     ...(reach ? { reach } : {}),
+    ...(configChangedAt ? { configChangedAt } : {}),
     id: h.id,
     bindingId: h.bindingId,
     remark: h.remark,
