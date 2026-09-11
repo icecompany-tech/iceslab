@@ -3,6 +3,7 @@ import { Box, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core'
 import { CARD, CYAN, HAIRLINE } from '@/contours/nodes/lib/colors';
 import { COUNTRY_OPTIONS } from '@/lib/domain/countries';
 import { FIELD } from '@/contours/nodes/lib/fieldStyles';
+import { PolicyReach } from '@/contours/nodes/components/NodeEdit/PolicyReach';
 import { PROTOCOL_OPTIONS } from '@/contours/nodes/lib/nodeProtocols';
 import { ServerIcon } from '@/contours/nodes/components/NodeEdit/icons';
 import { useTranslation } from 'react-i18next';
@@ -14,9 +15,10 @@ import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEdi
 export function NodeParamsForm({
   regionsQuery,
   form,
+  node,
   nodePoliciesQuery,
   policyRefusal,
-}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'nodePoliciesQuery' | 'policyRefusal'>) {
+}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'node' | 'nodePoliciesQuery' | 'policyRefusal'>) {
   const { t } = useTranslation();
 
   return (
@@ -145,6 +147,10 @@ export function NodeParamsForm({
                   value={form.values.policyId || null}
                   onChange={(v) => form.setFieldValue('policyId', v ?? '')}
                 />
+                {/* Which of this machine's cores the chosen policy actually
+                    reaches. Silent until the API carries the cores, so today
+                    the card looks exactly as it did. */}
+                <PolicyReach cores={node?.cores} hasPolicy={Boolean(form.values.policyId)} />
                 {policyRefusal && (
                   <Box
                     style={{

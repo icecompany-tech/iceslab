@@ -266,6 +266,17 @@ export const nodes = {
     policyDesc:
       'The ordered rules this node uses to decide which door traffic leaves by. One policy can sit on several nodes.',
     policyNone: 'No policy',
+    policyReachAll: 'Every core on this node applies the policy: {{cores}}.',
+    policyReachSomeTag: 'THE POLICY MISSES SOME USERS',
+    policyReachSome:
+      'Only {{applied}} applies the policy. Users connected through {{missing}} go around it: their traffic leaves as if no policy were set.',
+    policyReachNoneTag: 'THE POLICY DOES NOTHING HERE',
+    policyReachNone:
+      'No core on this node applies the policy: {{cores}}. You can still pick one and it will be saved, but it will not touch traffic on this node.',
+    policyReachHint:
+      'A core applies the policy, not a node. On a node running several cores the rule holds for exactly those users whose client is connected through a core that implements it.',
+    policyReachHintSet:
+      'A policy is chosen and saved, which is what the picker above says. But a "block" rule here does not block for everyone: for the cores named above, treat this node as having no policy.',
     syncPendingTag: 'SAVED, NOT APPLIED',
     syncPendingBody:
       'The panel wrote it down, the node has not taken it. The push goes on its own, but it should have landed by now: worth a look at the node log.',
@@ -473,5 +484,32 @@ export const nodes = {
       updated: 'Host updated',
       deleted: 'Host deleted',
     },
+  },
+  fleetEmpty: {
+    retry: 'Ask again',
+    clear: 'Clear the filters',
+    narrowedTitle: 'Nothing matches the filter',
+
+    nodesLoading: 'Asking for the node list…',
+    nodesFailedTitle: 'The node list did not arrive',
+    nodesFailedBody:
+      'This is not "no nodes": the panel could not read them. The nodes keep running and carrying traffic while this page is empty. Do not create or delete anything until the list is back.',
+    nodesNarrowedBody_one: 'The filter and the search hide {{count}} node. It has not gone anywhere.',
+    nodesNarrowedBody_other: 'The filter and the search hide {{count}} nodes. They have not gone anywhere.',
+    nodesBlankTitle: 'No nodes yet',
+    nodesBlankBody:
+      'A node is a server running the panel agent and a proxy core. Until there is one, users have nowhere to connect: a subscription will be issued and will carry no address at all. Registration takes three steps, and the bootstrap token is handed out at the end.',
+    nodesBlankAction: 'Add the first node',
+
+    cascadesLoading: 'Asking for the cascades…',
+    cascadesFailedTitle: 'The cascade list did not arrive',
+    cascadesFailedBody:
+      'This is not "no cascades": the panel could not read them. The chains already built keep carrying traffic while this page is empty.',
+    cascadesNarrowedBody_one: 'The filter hides {{count}} cascade.',
+    cascadesNarrowedBody_other: 'The filter hides {{count}} cascades.',
+    cascadesBlankTitle: 'No cascades yet',
+    cascadesBlankBody:
+      'A cascade is a path through several nodes: the client dials the entry, and the traffic leaves wherever the chain ends. It needs at least two nodes, an entry and an exit, and the entry must run a core no older than 25.9.5.',
+    cascadesBlankAction: 'Build a cascade',
   },
 } as const;

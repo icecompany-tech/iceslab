@@ -91,8 +91,27 @@ export interface Node {
    * node never carries a copy of them.
    */
   policyId: string | null;
+  /**
+   * Which cores this machine actually runs, and whether each one carries the
+   * operator policy into its own config.
+   *
+   * ⚠ Absent today: the field is waiting on the backend. It cannot be derived
+   * from `protocol` or `singboxEngine`, because applying a policy is a property
+   * of the ADAPTER, and which adapters a node registers is decided in the
+   * agent's own main.go. A guess here would drift silently the day a core is
+   * added. So everything that reads this renders nothing while it is
+   * undefined, rather than claiming coverage either way.
+   */
+  cores?: NodeCore[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** One core on a node. `appliesPolicy` is the answer to the only question the
+ *  card asks: do the operator's rules reach the users on this core. */
+export interface NodeCore {
+  core: string;
+  appliesPolicy: boolean;
 }
 
 export interface Region {

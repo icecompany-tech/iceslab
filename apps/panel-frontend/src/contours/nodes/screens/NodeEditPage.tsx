@@ -227,6 +227,7 @@ export function NodeEditPage() {
                 regionsQuery={regionsQuery}
                 form={form}
                 id={id}
+                node={node}
                 nodePoliciesQuery={nodePoliciesQuery}
                 policyRefusal={policyRefusal}
               />
