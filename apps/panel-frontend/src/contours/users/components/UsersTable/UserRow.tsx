@@ -136,14 +136,36 @@ export function UserRow({
     // The node this user last connected through. The panel stores it
     // (UserTraffic.lastConnectedNodeId) but the list endpoint does not return
     // it, so the column stands empty rather than guessing.
-    lastNode: () => (
-      <Text
-        title={t('usersTable.lastNodePending')}
-        style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: MIST }}
-      >
-        -
-      </Text>
-    ),
+    /**
+     * Three answers, not two. The name arrives beside the id so five hundred
+     * rows do not need a second request to resolve it, and a null name means
+     * one of two different things: this user has never connected anywhere, or
+     * the node they last used has since been deleted. The id decides which,
+     * and the column says so instead of printing the same dash for both.
+     */
+    lastNode: () =>
+      u.lastConnectedNodeName ? (
+        <Text
+          title={u.lastConnectedNodeName}
+          style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: SNOW }}
+        >
+          {u.lastConnectedNodeName}
+        </Text>
+      ) : u.lastConnectedNodeId ? (
+        <Text
+          title={t('usersTable.lastNodeGone', { id: u.lastConnectedNodeId })}
+          style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: AMBER }}
+        >
+          {t('usersTable.lastNodeGoneShort')}
+        </Text>
+      ) : (
+        <Text
+          title={t('usersTable.lastNodeNever')}
+          style={{ ...MONO, fontSize: 12, lineHeight: '16px', color: MIST }}
+        >
+          -
+        </Text>
+      ),
     expires: () => (
       <Tooltip label={u.expireAt ? new Date(u.expireAt).toLocaleString() : '-'}>
         <Text
@@ -246,9 +268,9 @@ export function UserRow({
       </Plain>
     ),
     deviceLimit: () => <Plain>{u.hwidDeviceLimit ?? '∞'}</Plain>,
-    // The panel stores when this user first connected (UserTraffic
-    // .firstConnectedAt) but the list endpoint does not return it.
-    firstConnected: () => <Plain title={t('usersTable.firstConnectedPending')}>-</Plain>,
+    firstConnected: () => (
+      <Plain>{u.firstConnectedAt ? shortDate(u.firstConnectedAt) : '-'}</Plain>
+    ),
     lastOnline: () => <Plain>{relativeTime(u.lastOnlineAt, t).text}</Plain>,
     trafficReset: () => <Plain>{u.lastTrafficResetAt ? shortDate(u.lastTrafficResetAt) : '-'}</Plain>,
     lifetimeUsed: () => <Plain>{formatBytes(u.lifetimeTrafficBytes)}</Plain>,

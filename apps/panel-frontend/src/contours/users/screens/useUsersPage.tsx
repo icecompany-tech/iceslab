@@ -1,7 +1,7 @@
 import { useDebouncedValue } from '@mantine/hooks';
 import { Text } from '@mantine/core';
 import type { StatusFilter } from '@/contours/users/lib/userStatus';
-import type { UpdateUserInput, User, UserSort } from '@/lib/domain/users';
+import type { UpdateUserInput, User, UserFilters, UserSort } from '@/lib/domain/users';
 import type { ColumnPin, ColumnView, UserColumnId } from '@/contours/users/lib/usersTable';
 import type { RowDensity } from '@/contours/users/lib/usersTable';
 import { DENSITY_ORDER, DENSITY_STORAGE_KEY, USER_COLUMN_BY_ID, loadColumnView, loadDensity, saveColumnView } from '@/contours/users/lib/usersTable';
@@ -57,6 +57,34 @@ export function useUsersPage() {
   function setColFilter(id: UserColumnId, value: string) {
     setColFilters((f) => ({ ...f, [id]: value }));
     if (id === 'username') setSearch(value);
+    setPage(1);
+  }
+
+  /**
+   * The per-column filters the list endpoint answers to, as one object.
+   *
+   * Held flat rather than per column because that is the shape the request
+   * takes, and because two columns can feed the same question: the node
+   * column sends both `nodeId` and `online`. Clearing a key removes it
+   * entirely; sending an empty string would be a filter for the empty string.
+   */
+  const [colParams, setColParams] = useState<UserFilters>({});
+  function setFilterParam(patch: UserFilters) {
+    setColParams((cur) => {
+      const next: Record<string, unknown> = { ...cur, ...patch };
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined || v === '' || v === null) delete next[k];
+      }
+      return next as UserFilters;
+    });
+    setPage(1);
+  }
+  function clearFilterParams(keys: (keyof UserFilters)[]) {
+    setColParams((cur) => {
+      const next = { ...cur };
+      for (const k of keys) delete next[k];
+      return next;
+    });
     setPage(1);
   }
 
@@ -159,6 +187,9 @@ export function useUsersPage() {
         routingPreset: routingFilter,
         sort,
         order,
+        // Part of the cache address, not just of the request: two different
+        // filter sets are two different lists and must not share a page.
+        ...colParams,
       },
     ],
     queryFn: () =>
@@ -172,6 +203,7 @@ export function useUsersPage() {
         routingPreset: (routingFilter as 'any' | 'none' | undefined) ?? undefined,
         sort,
         order,
+        ...colParams,
       }),
     placeholderData: (prev) => prev,
   });
@@ -373,6 +405,9 @@ export function useUsersPage() {
     activeFilters,
     colFilters,
     setColFilter,
+    colParams,
+    setFilterParam,
+    clearFilterParams,
     columnView,
     setColumnView,
     visibleColumns,

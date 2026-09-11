@@ -85,6 +85,12 @@ export interface Node {
   warpEnabled: boolean;
   // Engine-choice: sing-box engine installed alongside the native core.
   singboxEngine: boolean;
+  /**
+   * Э3 layer B: the node-level routing policy this node runs, null = none.
+   * Only the id: the rules live behind /api/node-policies and are shared, so a
+   * node never carries a copy of them.
+   */
+  policyId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -165,6 +171,44 @@ export interface UpdateNodeInput {
   domain?: string | null;
   hardening?: NodeHardening | null;
   singboxEngine?: boolean;
+  /**
+   * Which node policy this node runs. `null` detaches it, which rewrites the
+   * node's config WITHOUT the rules rather than leaving the last policy
+   * running, so sending null is a real action and not a no-op.
+   *
+   * A save the node cannot carry out comes back 409 POLICY_DOES_NOT_FIT_NODE
+   * naming the node and the reason (a WARP rule with no WARP here, a cascade
+   * direction this node does not dial). The screen shows that sentence.
+   */
+  policyId?: string | null;
+}
+
+/**
+ * Did the last save actually reach this machine?
+ *
+ * A node's config is assembled from the bindings, profiles, hosts and cascades
+ * behind it, so "saved" and "running" are two different moments and the gap
+ * between them is an async push. Four aggregates per node, which is why the
+ * answer is per-node and deliberately NOT on the list DTO.
+ */
+export interface NodeSyncStatus {
+  /** Last acknowledged push, ISO. null = this node has never taken a config. */
+  lastInboundSyncAt: string | null;
+  /** When the config this node should be running was last edited, ISO. */
+  configChangedAt: string;
+  applied: boolean;
+  /**
+   * Travels with `applied` on purpose. An unapplied config on an OFFLINE node
+   * is waiting, not stuck: the cron re-pushes when it comes back. The two
+   * deserve different words, and without this flag the card cannot tell them
+   * apart.
+   */
+  online: boolean;
+}
+
+export async function getNodeSyncStatus(id: string): Promise<NodeSyncStatus> {
+  const { data } = await api.get<NodeSyncStatus>(`/api/nodes/${id}/sync-status`);
+  return data;
 }
 
 export async function listNodes(params?: {

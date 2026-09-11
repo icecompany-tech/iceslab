@@ -33,7 +33,8 @@ export function UsersTable(props: Pick<UsersPageState,
   | 'setRowsPerPage' | 'sort' | 'order' | 'colFilters' | 'setColFilter' | 'statusFilter'
   | 'setStatusFilter' | 'selected' | 'setSelected' | 'toggleSelected' | 'activeFilters'
   | 'columnView' | 'setColumnView' | 'visibleColumns' | 'toggleColumn' | 'pinColumn'
-  | 'moveColumn' | 'density' | 'cycleDensity' | 'fullscreen' | 'setFullscreen' | 'openCreate'>) {
+  | 'moveColumn' | 'density' | 'cycleDensity' | 'fullscreen' | 'setFullscreen' | 'openCreate'
+  | 'colParams' | 'setFilterParam' | 'clearFilterParams'>) {
   const { t } = useTranslation();
   const {
     pagedUsers, totalUsers, stats, totalPages, safePage, rangeStart, rangeEnd,

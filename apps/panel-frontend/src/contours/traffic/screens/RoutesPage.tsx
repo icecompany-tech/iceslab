@@ -1,5 +1,7 @@
 import { CYAN, DISPLAY, FAINT, HAIRLINE, MIST, SNOW, WELL } from '@/contours/traffic/lib/colors';
 import { DevicePane } from '@/contours/traffic/components/Routes/DevicePane';
+import { PolicyPane } from '@/contours/traffic/components/Routes/PolicyPane';
+import { blankNodePolicy, listNodePolicies, type NodePolicy } from '@/lib/domain/nodePolicies';
 import { ExportIcon, ImportIcon, PhoneIcon, PlusIcon, ServerIcon } from '@/contours/traffic/components/Routes/icons';
 import { FileLink } from '@/contours/traffic/components/Routes/FileLink';
 import { NodePane } from '@/contours/traffic/components/Routes/NodePane';
@@ -36,11 +38,22 @@ import { blankPreset } from '@/contours/traffic/lib/devicePresets';
  * operator's own lists and raw rules are stored as data and editable below.
  */
 
-type Pane = 'node' | 'device';
+/**
+ * Three panes, not two.
+ *
+ * `policy` is Э3 layer B: the ordered rule list a NODE runs, stored behind
+ * /api/node-policies and attached to machines by id. `node` is the older
+ * squad-granted pair of domain lists behind /api/route-policies, which squads
+ * still hand out and which this pane is still the only editor for. They are
+ * different resources and both are live, so both keep a home here rather than
+ * one quietly losing its editor.
+ */
+type Pane = 'policy' | 'node' | 'device';
 
 export function RoutesPage() {
   const { t } = useTranslation();
-  const [pane, setPane] = useState<Pane>('node');
+  const [pane, setPane] = useState<Pane>('policy');
+  const [policyDraft, setPolicyDraft] = useState<NodePolicy | null>(null);
   // A draft is a policy or preset that exists only here: written by New, or
   // read out of an imported file. Neither can be saved until the API grows the
   // write endpoints, so the pane shows it as an unsaved row and says so.
@@ -50,6 +63,7 @@ export function RoutesPage() {
   // next. This counter keys it, and a new draft remounts it with fresh fields.
   const [draftSeq, setDraftSeq] = useState(0);
 
+  const nodePoliciesQuery = useQuery({ queryKey: ['node-policies'], queryFn: listNodePolicies });
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
   const settingsQuery = useQuery({ queryKey: ['settings', 'all'], queryFn: getSettings });
@@ -89,15 +103,24 @@ export function RoutesPage() {
     }));
   }, [presetsQuery.data, t]);
 
+  const nodePolicies = nodePoliciesQuery.data?.policies ?? [];
+
   usePageMeta([
+    t('routes.factNodePolicies', { count: nodePolicies.length }),
     t('routes.factPolicies', { count: policies.length }),
     t('routes.factPresets', { count: presets.length }),
   ]);
 
+  const onPolicy = pane === 'policy';
   const onNode = pane === 'node';
-  const canCreate = onNode ? ROUTE_POLICY_WRITES_LIVE : ROUTING_PRESET_WRITES_LIVE;
+  const canCreate = onPolicy ? true : onNode ? ROUTE_POLICY_WRITES_LIVE : ROUTING_PRESET_WRITES_LIVE;
 
-  function stage(policy: RoutePolicy | null, preset: RoutingPreset | null) {
+  function stage(
+    nodePolicy: NodePolicy | null,
+    policy: RoutePolicy | null,
+    preset: RoutingPreset | null,
+  ) {
+    setPolicyDraft(nodePolicy);
     setNodeDraft(policy);
     setDeviceDraft(preset);
     setDraftSeq((s) => s + 1);
@@ -131,9 +154,9 @@ export function RoutesPage() {
     }
     const first = parsed[0]!;
     if (onNode) {
-      stage({ ...blankPolicy(), name: first.name, rules: first.rules }, null);
+      stage(null, { ...blankPolicy(), name: first.name, rules: first.rules }, null);
     } else {
-      stage(null, { ...blankPreset(), name: first.name, rules: first.rules });
+      stage(null, null, { ...blankPreset(), name: first.name, rules: first.rules });
     }
     notifications.show({
       color: parsed.length > 1 ? 'yellow' : 'green',
@@ -161,6 +184,13 @@ export function RoutesPage() {
           }}
         >
           <PaneTab
+            active={onPolicy}
+            icon={<ServerIcon size={13} color={onPolicy ? CYAN : MIST} />}
+            label={t('routes.panePolicy')}
+            count={nodePolicies.length}
+            onClick={() => setPane('policy')}
+          />
+          <PaneTab
             active={onNode}
             icon={<ServerIcon size={13} color={onNode ? CYAN : MIST} />}
             label={t('routes.paneNode')}
@@ -168,8 +198,8 @@ export function RoutesPage() {
             onClick={() => setPane('node')}
           />
           <PaneTab
-            active={!onNode}
-            icon={<PhoneIcon size={13} color={!onNode ? CYAN : MIST} />}
+            active={pane === 'device'}
+            icon={<PhoneIcon size={13} color={pane === 'device' ? CYAN : MIST} />}
             label={t('routes.paneDevice')}
             count={presets.length}
             onClick={() => setPane('device')}
@@ -181,12 +211,21 @@ export function RoutesPage() {
             className="page-bar-fact-soft"
             style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '16px', color: MIST }}
           >
-            {onNode ? t('routes.paneNodeHint') : t('routes.paneDeviceHint')}
+            {onPolicy
+              ? t('routes.panePolicyHint')
+              : onNode
+                ? t('routes.paneNodeHint')
+                : t('routes.paneDeviceHint')}
           </Text>
           <Box style={{ flex: 1, minWidth: 0 }} />
         </Box>
 
         <Box style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          {/* The file format these two speak describes the older policies and
+              the presets. A node policy has rules this shape cannot carry
+              (WARP, a cascade direction by id), so the pair steps aside here
+              rather than exporting something that would not import back. */}
+          {!onPolicy && (
           <FileLink
             label={t('routes.import')}
             title={t('routes.importHint')}
@@ -194,6 +233,8 @@ export function RoutesPage() {
             icon={<ImportIcon size={13} color={CYAN} />}
             onFile={importPane}
           />
+          )}
+          {!onPolicy && (
           <UnstyledButton
             type="button"
             title={t('routes.exportHint')}
@@ -205,6 +246,7 @@ export function RoutesPage() {
               {t('routes.export')}
             </Text>
           </UnstyledButton>
+          )}
           {/* Creating is the one thing this button does, and there is nothing
               to create into yet, so it stays visible but off with a reason. */}
           <UnstyledButton
@@ -217,7 +259,13 @@ export function RoutesPage() {
                   ? t('routes.writesDisabledPolicies')
                   : t('routes.writesDisabledPresets')
             }
-            onClick={() => (onNode ? stage(blankPolicy(), null) : stage(null, blankPreset()))}
+            onClick={() =>
+              onPolicy
+                ? stage(blankNodePolicy(), null, null)
+                : onNode
+                  ? stage(null, blankPolicy(), null)
+                  : stage(null, null, blankPreset())
+            }
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -242,13 +290,19 @@ export function RoutesPage() {
                 color: canCreate ? SNOW : MIST,
               }}
             >
-              {onNode ? t('routes.newPolicy') : t('routes.newPreset')}
+              {onPolicy || onNode ? t('routes.newPolicy') : t('routes.newPreset')}
             </Text>
           </UnstyledButton>
         </Box>
       </Box>
 
-      {onNode ? (
+      {onPolicy ? (
+        <PolicyPane
+          draft={policyDraft}
+          draftKey={draftSeq}
+          onDraftDone={() => setPolicyDraft(null)}
+        />
+      ) : onNode ? (
         <NodePane
           policies={policies}
           squads={squads}

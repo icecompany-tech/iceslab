@@ -37,6 +37,18 @@ export const hosts = {
   },
 
   hostEdit: {
+    freshTitle: 'Subscription version',
+    freshLead: 'Editing a host breaks clients that have not refetched the subscription yet',
+    freshCurrentLabel: 'Took the new link',
+    freshOfTotal: 'of {{total}} · {{pct}}%',
+    freshStale_one: '{{count}} person still on the old one',
+    freshStale_other: '{{count}} people still on the old one',
+    freshChanged:
+      'The link changed {{at}}. These people can no longer connect and will find out on their own.',
+    freshNever_one: '{{count}} of them never took the link at all',
+    freshNever_other: '{{count}} of them never took the link at all',
+    freshRetention:
+      'Request history is kept for {{days}} days. Anyone quieter than that is indistinguishable from someone who never came.',
     newTitle: 'New host',
     newCrumb: 'NEW',
     newSubtitle: 'NAME IT, PICK A PROFILE, ATTACH NODES',

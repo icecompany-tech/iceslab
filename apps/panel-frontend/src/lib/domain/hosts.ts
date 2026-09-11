@@ -32,6 +32,13 @@ export interface Host {
   allowInsecure: boolean;
   securityLayer: 'default' | 'tls' | 'none';
   disableForFormats: string[];
+  /**
+   * When the link this host hands out last changed shape: address, port, SNI,
+   * path, the profile behind it. NOT `updatedAt`, which also moves for edits
+   * that leave the link identical (a remark, the priority), and a client
+   * holding an unchanged link is not stale.
+   */
+  configChangedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +91,42 @@ export function portConflict(err: unknown): string | null {
 /** The profile or the node disappeared while the form was open. */
 export function goneWhileEditing(err: unknown): boolean {
   return (err as { response?: { status?: number } }).response?.status === 404;
+}
+
+/**
+ * Who is still holding the previous version of this host's link.
+ *
+ * Counts PEOPLE, not configs: one person with four devices is one row here,
+ * because the question the screen asks is how many humans are about to find
+ * out the hard way.
+ */
+export interface HostFreshness {
+  /** When the link last changed shape, ISO. */
+  configChangedAt: string;
+  /** Subscribers who have fetched since that change. */
+  current: number;
+  /** Everyone else. Includes `neverFetched`. */
+  stale: number;
+  total: number;
+  /**
+   * The subset of `stale` with no fetch on record at all: either they never
+   * took the link, or their last fetch has aged out of the window below.
+   * Split out because "never installed it" and "has not opened it in three
+   * months" read differently, even though the fix for both is the same.
+   */
+  neverFetched: number;
+  /**
+   * How far back the request history reaches. Beyond it the panel genuinely
+   * cannot tell a quiet subscriber from an absent one, so the screen says the
+   * number rather than pretending the answer is absolute. Never hardcode it:
+   * it is a server setting and it moves.
+   */
+  retentionDays: number;
+}
+
+export async function getHostFreshness(id: string): Promise<HostFreshness> {
+  const { data } = await api.get<HostFreshness>(`/api/hosts/${id}/freshness`);
+  return data;
 }
 
 export async function listHosts(params?: {

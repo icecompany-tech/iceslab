@@ -1,5 +1,5 @@
 import { Caption } from '@/contours/nodes/components/NodeEdit/Caption';
-import { Box, NumberInput, Select, Stack, TextInput } from '@mantine/core';
+import { Box, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
 import { CARD, CYAN, HAIRLINE } from '@/contours/nodes/lib/colors';
 import { COUNTRY_OPTIONS } from '@/lib/domain/countries';
 import { FIELD } from '@/contours/nodes/lib/fieldStyles';
@@ -14,7 +14,9 @@ import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEdi
 export function NodeParamsForm({
   regionsQuery,
   form,
-}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id'>) {
+  nodePoliciesQuery,
+  policyRefusal,
+}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'nodePoliciesQuery' | 'policyRefusal'>) {
   const { t } = useTranslation();
 
   return (
@@ -120,6 +122,43 @@ export function NodeParamsForm({
                     {...form.getInputProps('maxUsers')}
                   />
                 </Box>
+
+                {/* Э3 layer B. One policy can sit on many nodes, so the picker
+                    names the policy and how many machines already carry it,
+                    and choosing "none" is a real detach: the node's config is
+                    rewritten without the rules rather than keeping the last
+                    ones. A policy this machine cannot run is refused on save
+                    with a sentence naming the node and the reason, shown
+                    underneath rather than as a toast that scrolls away. */}
+                <Select
+                  {...FIELD}
+                  label={t('nodeEdit.policy')}
+                  description={t('nodeEdit.policyDesc')}
+                  placeholder={t('nodeEdit.policyNone')}
+                  clearable
+                  data={(nodePoliciesQuery.data?.policies ?? []).map((p) => ({
+                    value: p.id,
+                    label: p.nodeCount
+                      ? `${p.name} · ${t('routes.nodeOnNodes', { count: p.nodeCount })}`
+                      : p.name,
+                  }))}
+                  value={form.values.policyId || null}
+                  onChange={(v) => form.setFieldValue('policyId', v ?? '')}
+                />
+                {policyRefusal && (
+                  <Box
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      backgroundColor: '#E07A5F14',
+                      border: '1px solid #E07A5F40',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, lineHeight: '17px', color: '#E07A5F' }}>
+                      {policyRefusal}
+                    </Text>
+                  </Box>
+                )}
               </Stack>
   );
 }

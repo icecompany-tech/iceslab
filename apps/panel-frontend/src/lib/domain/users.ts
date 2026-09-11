@@ -16,6 +16,19 @@ export interface User {
   trafficLimitStrategy: TrafficLimitStrategy;
   lastTrafficResetAt: string | null;
   lastOnlineAt: string | null;
+  /** First time this user was ever seen connected. null = never has been. */
+  firstConnectedAt: string | null;
+  /** The node behind the last connection. */
+  lastConnectedNodeId: string | null;
+  /**
+   * The node's name, sent alongside the id on purpose: resolving five hundred
+   * rows against a second request is the thing this field exists to avoid.
+   *
+   * null in TWO cases and they are not the same: the user has never connected,
+   * or the node they last used has since been deleted. The id next door tells
+   * them apart, so the column reads it before deciding what to print.
+   */
+  lastConnectedNodeName: string | null;
   subscriptionToken: string;
   subRevokedAt: string | null;
   hwidDeviceLimit: number | null;
@@ -76,7 +89,53 @@ export interface UpdateUserInput {
   groupIds?: string[];
 }
 
-export type UserSort = 'username' | 'createdAt' | 'expireAt' | 'traffic';
+export type UserSort =
+  | 'username'
+  | 'createdAt'
+  | 'expireAt'
+  | 'traffic'
+  | 'lastOnline'
+  | 'firstConnected'
+  | 'lifetimeTraffic';
+
+/**
+ * Everything GET /api/users can actually narrow by.
+ *
+ * Exactly the list the API answers to and nothing beyond it: a header filter
+ * with no server behind it looks interactive, returns the whole list, and
+ * teaches the operator to distrust the ones that do work. `usedPct` is the
+ * notable absence, and it stays absent rather than being faked client-side on
+ * one page of a paged list.
+ */
+export interface UserFilters {
+  /** A node id, or `none` for "has never connected anywhere". */
+  nodeId?: string | 'none';
+  online?: 'online' | 'offline' | 'never';
+  expiresBefore?: string;
+  expiresAfter?: string;
+  /**
+   * Seven of these read like yes/no questions and NONE of them take a boolean.
+   * Each carries its own pair of words, and the pairs differ: `set` means "has
+   * a device limit" under deviceLimit and "has an email" under email, while
+   * the opposite of it is `unset` in one and `none` in the other. Mirrored
+   * from users.schemas.ts literally rather than normalised into booleans here,
+   * because a value this side invented comes back 400 and the screen would
+   * have no way to know which of the seven it got wrong.
+   */
+  hasExpiry?: 'yes' | 'no';
+  trafficLimit?: 'limited' | 'unlimited';
+  usedOver?: number;
+  usedUnder?: number;
+  deviceLimit?: 'set' | 'unset';
+  telegram?: 'linked' | 'none';
+  email?: 'set' | 'none';
+  revoked?: 'yes' | 'no';
+  hasTag?: 'yes' | 'no';
+  createdBefore?: string;
+  createdAfter?: string;
+  firstConnectedBefore?: string;
+  firstConnectedAfter?: string;
+}
 
 export async function listUsers(params?: {
   page?: number;
@@ -96,7 +155,7 @@ export async function listUsers(params?: {
   /** Server-side, because the list is paged: sorting one page would lie. */
   sort?: UserSort;
   order?: 'asc' | 'desc';
-}): Promise<UsersListResponse> {
+} & UserFilters): Promise<UsersListResponse> {
   const { data } = await api.get<UsersListResponse>('/api/users', { params });
   return data;
 }

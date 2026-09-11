@@ -8,6 +8,7 @@ import {
   disableNodeWarp,
   findNode,
   getNodeExposure,
+  getNodeSyncStatus,
   listNodes,
   listRegions,
   refreshNodeBootstrap,
@@ -18,6 +19,10 @@ import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { listCascades } from '@/lib/domain/cascades';
 import { listHosts } from '@/lib/domain/hosts';
 import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/routePolicies';
+// Aliased: the state below holds the refusal and wants the plain name. An
+// import and a local under one name resolve to the local and fail far from
+// here, which is the same trap a shadowed `Text` or `Node` sets.
+import { listNodePolicies, policyRefusal as readPolicyRefusal } from '@/lib/domain/nodePolicies';
 import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -57,6 +62,18 @@ export function useNodeEditForm() {
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
+  // Э3 layer B: the policies this node could be given, and whether the config
+  // it should be running has actually landed on the machine.
+  const nodePoliciesQuery = useQuery({ queryKey: ['node-policies'], queryFn: listNodePolicies });
+  const syncQuery = useQuery({
+    queryKey: ['node-sync', id],
+    queryFn: () => getNodeSyncStatus(id!),
+    enabled: !!id,
+    // A push is asynchronous and lands seconds later; without this the card
+    // says "not applied yet" until the operator reloads the page themselves.
+    refetchInterval: 15_000,
+  });
+  const [policyRefusal, setPolicyRefusal] = useState<string | null>(null);
   const overviewQuery = useOverview();
 
   const form = useForm<FormValues>({
@@ -162,20 +179,35 @@ export function useNodeEditForm() {
         consumptionMultiplier:
           form.values.consumptionMultiplier === '' ? 1 : Number(form.values.consumptionMultiplier),
         maxUsers: form.values.maxUsers === '' ? null : Number(form.values.maxUsers),
+        policyId: form.values.policyId || null,
       });
     },
     onSuccess: () => {
+      setPolicyRefusal(null);
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['node', id] });
+      qc.invalidateQueries({ queryKey: ['node-policies'] });
+      qc.invalidateQueries({ queryKey: ['node-sync', id] });
       form.resetDirty(form.values);
       notifications.show({ color: 'green', message: t('nodes.notify.updated') });
     },
-    onError: (err) =>
+    onError: (err) => {
+      // A policy this machine cannot carry out comes back naming the node and
+      // the reason. That sentence is the answer; a toast saying "save failed"
+      // would throw away the only part that tells the operator what to fix, so
+      // it stays on the screen next to the picker that caused it.
+      const refusal = readPolicyRefusal(err);
+      if (refusal) {
+        setPolicyRefusal(refusal.message);
+        return;
+      }
+      setPolicyRefusal(null);
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
         message: err instanceof Error ? err.message : String(err),
-      }),
+      });
+    },
   });
 
   const warpMutation = useMutation({
@@ -231,6 +263,9 @@ export function useNodeEditForm() {
     profilesQuery,
     squadsQuery,
     policiesQuery,
+    nodePoliciesQuery,
+    syncQuery,
+    policyRefusal,
     overviewQuery,
     form,
     dashNode,

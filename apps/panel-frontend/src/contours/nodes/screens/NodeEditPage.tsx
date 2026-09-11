@@ -9,6 +9,7 @@ import { NodeParamsForm } from '@/contours/nodes/components/NodeEdit/NodeParamsF
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { ResolvedRoutes } from '@/contours/nodes/components/NodeEdit/ResolvedRoutes';
 import { Sep } from '@/contours/nodes/components/NodeEdit/Separators';
+import { SyncStatusStrip } from '@/contours/nodes/components/NodeEdit/SyncStatusStrip';
 import { SystemPanel } from '@/contours/nodes/components/NodeEdit/SystemPanel';
 import { TabButton } from '@/contours/nodes/components/NodeEdit/TabButton';
 import { useNodeEditForm } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
@@ -52,6 +53,9 @@ export function NodeEditPage() {
     bootstrapMutation,
     statusTone,
     egress,
+    nodePoliciesQuery,
+    syncQuery,
+    policyRefusal,
   } = useNodeEditForm();
 
   // The id in the URL may match nothing: show the fallback rather than an
@@ -210,11 +214,22 @@ export function NodeEditPage() {
         </TabButton>
       </Box>
 
+      {/* Above the tabs' content, not inside one of them: an unapplied config
+          is true of the node, not of the sheet the operator happens to have
+          open, and it is the first thing worth knowing on this page. */}
+      <SyncStatusStrip status={syncQuery.data} />
+
       {tab === 'params' && (
         <>
           <Box style={{ display: 'flex', alignItems: 'flex-start', gap: 20, width: '100%' }}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, minWidth: 0 }}>
-              <NodeParamsForm regionsQuery={regionsQuery} form={form} id={id} />
+              <NodeParamsForm
+                regionsQuery={regionsQuery}
+                form={form}
+                id={id}
+                nodePoliciesQuery={nodePoliciesQuery}
+                policyRefusal={policyRefusal}
+              />
 
               <EgressCard navigate={navigate} cascade={cascade} warpMutation={warpMutation} egress={egress} />
             </Box>

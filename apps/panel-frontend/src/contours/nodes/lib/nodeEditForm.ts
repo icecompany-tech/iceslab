@@ -9,6 +9,9 @@ export interface FormValues {
   regionId: string;
   consumptionMultiplier: number | '';
   maxUsers: number | '';
+  /** Э3 layer B: which node policy runs here. '' means none, and saving '' is
+   *  a real detach, not a no-op: the config is rewritten without the rules. */
+  policyId: string;
 }
 
 export function splitAddress(address: string): { host: string; port: number } {
@@ -32,5 +35,6 @@ export function defaults(node: Node | null): FormValues {
     regionId: node?.regionId ?? '',
     consumptionMultiplier: node ? Number(node.consumptionMultiplier) : 1,
     maxUsers: node?.maxUsers ?? '',
+    policyId: node?.policyId ?? '',
   };
 }

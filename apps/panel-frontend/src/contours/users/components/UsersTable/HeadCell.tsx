@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
 import type { UserColumn } from '@/contours/users/lib/usersTable';
 import type { UsersPageState } from '@/contours/users/screens/useUsersPage';
+import { ColumnFilterButton } from '@/contours/users/components/UsersTable/ColumnFilter';
 
 /**
  * One column heading: what it holds, how it is sorted, and the box that
@@ -22,9 +23,21 @@ export function HeadCell({
   setColFilter,
   statusFilter,
   setStatusFilter,
+  colParams,
+  setFilterParam,
+  clearFilterParams,
 }: { column: UserColumn; cellStyle: CSSProperties } & Pick<
   UsersPageState,
-  'sort' | 'order' | 'toggleSort' | 'colFilters' | 'setColFilter' | 'statusFilter' | 'setStatusFilter'
+  | 'sort'
+  | 'order'
+  | 'toggleSort'
+  | 'colFilters'
+  | 'setColFilter'
+  | 'statusFilter'
+  | 'setStatusFilter'
+  | 'colParams'
+  | 'setFilterParam'
+  | 'clearFilterParams'
 >) {
   const { t } = useTranslation();
   const active = column.sort !== undefined && sort === column.sort;
@@ -80,6 +93,9 @@ export function HeadCell({
         setColFilter={setColFilter}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        colParams={colParams}
+        setFilterParam={setFilterParam}
+        clearFilterParams={clearFilterParams}
       />
     </Box>
   );
@@ -129,9 +145,18 @@ function FilterBox({
   setColFilter,
   statusFilter,
   setStatusFilter,
+  colParams,
+  setFilterParam,
+  clearFilterParams,
 }: { column: UserColumn } & Pick<
   UsersPageState,
-  'colFilters' | 'setColFilter' | 'statusFilter' | 'setStatusFilter'
+  | 'colFilters'
+  | 'setColFilter'
+  | 'statusFilter'
+  | 'setStatusFilter'
+  | 'colParams'
+  | 'setFilterParam'
+  | 'clearFilterParams'
 >) {
   const { t } = useTranslation();
 
@@ -145,7 +170,11 @@ function FilterBox({
     border: `1px solid ${HAIRLINE}`,
   };
 
-  if (column.filter === 'status') {
+  if (column.filter === undefined) {
+    return <Box style={{ height: 28, flexShrink: 0 }} />;
+  }
+
+  if (column.filter.kind === 'status') {
     return (
       <Box
         component="select"
@@ -171,13 +200,14 @@ function FilterBox({
     );
   }
 
-  if (column.filter === 'search') {
+  if (column.filter.kind === 'search') {
     return (
       <Box style={shell}>
         <input
           value={colFilters[column.id] ?? ''}
           onChange={(e) => setColFilter(column.id, e.currentTarget.value)}
-          placeholder={t('usersTable.filterBy')}
+          placeholder={t('usersTable.searchPlaceholder')}
+          title={t('usersTable.searchHint')}
           style={{
             ...MONO_LABEL,
             width: '100%',
@@ -191,5 +221,13 @@ function FilterBox({
     );
   }
 
-  return <Box style={{ height: 28, flexShrink: 0 }} />;
+  // Everything the server can narrow by that does not fit a 28px lane.
+  return (
+    <ColumnFilterButton
+      filter={column.filter}
+      params={colParams}
+      setParam={setFilterParam}
+      clearParams={clearFilterParams}
+    />
+  );
 }

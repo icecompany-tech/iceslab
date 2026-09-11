@@ -43,6 +43,21 @@ export const hosts = {
   },
 
   hostEdit: {
+    freshTitle: 'Версия подписки',
+    freshLead: 'Правка хоста ломает клиентов, которые ещё не перечитали подписку',
+    freshCurrentLabel: 'Забрали новую ссылку',
+    freshOfTotal: 'из {{total}} · {{pct}}%',
+    freshStale_one: '{{count}} человек ещё на старой',
+    freshStale_few: '{{count}} человека ещё на старой',
+    freshStale_many: '{{count}} человек ещё на старой',
+    freshStale_other: '{{count}} человек ещё на старой',
+    freshChanged: 'Ссылка изменилась {{at}}. Эти люди подключиться уже не могут и узнают об этом сами.',
+    freshNever_one: 'из них {{count}} не забирал ссылку ни разу',
+    freshNever_few: 'из них {{count}} не забирали ссылку ни разу',
+    freshNever_many: 'из них {{count}} не забирали ссылку ни разу',
+    freshNever_other: 'из них {{count}} не забирали ссылку ни разу',
+    freshRetention:
+      'История запросов хранится {{days}} дней. Кто не заходил дольше, неотличим от того, кто не заходил вовсе.',
     newTitle: 'Новый хост',
     newCrumb: 'НОВЫЙ',
     newSubtitle: 'НАЗОВИТЕ, ВЫБЕРИТЕ ПРОФИЛЬ, ПРИВЯЖИТЕ НОДЫ',

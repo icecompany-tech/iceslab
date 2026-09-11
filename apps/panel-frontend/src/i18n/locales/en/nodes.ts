@@ -262,6 +262,19 @@ export const nodes = {
     multiplierDesc: '1 = standard, above 1 = premium.',
     maxUsers: 'Max users',
     maxUsersDesc: 'Feeds the capacity bar on the card.',
+    policy: 'Node policy',
+    policyDesc:
+      'The ordered rules this node uses to decide which door traffic leaves by. One policy can sit on several nodes.',
+    policyNone: 'No policy',
+    syncPendingTag: 'SAVED, NOT APPLIED',
+    syncPendingBody:
+      'The panel wrote it down, the node has not taken it. The push goes on its own, but it should have landed by now: worth a look at the node log.',
+    syncWaitingTag: 'NODE NOT ANSWERING',
+    syncWaitingBody:
+      'The config is written and waiting. Not stuck: the cron pushes it again once the node is back.',
+    syncChangedAt: 'changed {{at}}',
+    syncLastApplied: 'last applied {{at}}',
+    syncNever: 'this node has never taken a config',
     egressTitle: 'Egress · the door out',
     egressHint: 'One node, one door. Pick one.',
     egressDirect: 'Direct',

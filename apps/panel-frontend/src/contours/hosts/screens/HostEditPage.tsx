@@ -29,11 +29,13 @@ import {
 } from '@tabler/icons-react';
 import {
   createHost,
+  getHostFreshness,
   goneWhileEditing,
   listHosts,
   portConflict,
   updateHost,
 } from '@/lib/domain/hosts';
+import { HostFreshnessCard } from '@/contours/hosts/components/HostFreshnessCard';
 import {
   getProfileHostFields,
   listBindings,
@@ -99,6 +101,13 @@ export function HostEditPage() {
   const hostsQuery = useQuery({ queryKey: ['hosts'], queryFn: () => listHosts() });
   const bindingsQuery = useQuery({ queryKey: ['bindings'], queryFn: () => listBindings() });
   const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
+  // Four aggregates over the request history, so it is asked once per host and
+  // never for a host that does not exist yet.
+  const freshnessQuery = useQuery({
+    queryKey: ['host-freshness', id],
+    queryFn: () => getHostFreshness(id!),
+    enabled: !!id && id !== 'new',
+  });
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
 
   const host = isNew ? null : (hostsQuery.data?.hosts.find((h) => h.id === id) ?? null);
@@ -462,6 +471,10 @@ export function HostEditPage() {
         </Box>
       </Box>
 
+      {/* Who is still holding the previous link. Above the form, because the
+          fields below are what will make that number grow. */}
+      {!isNew && <HostFreshnessCard data={freshnessQuery.data} />}
+
       <Box style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
         <Stack gap={16} style={{ flex: 2, minWidth: 0 }}>
           {/* Basics */}
@@ -586,7 +599,7 @@ export function HostEditPage() {
                         {t('hostEdit.aRecordTitle')}
                       </Text>
                       <Text style={{ fontFamily: MONO, fontSize: 12, color: SNOW }}>
-                        {address.trim()} → {currentNode?.address.split(':')[0] ?? '—'}
+                        {address.trim()} → {currentNode?.address.split(':')[0] ?? '-'}
                       </Text>
                     </>
                   ) : (
