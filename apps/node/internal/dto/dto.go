@@ -168,8 +168,8 @@ type NodePolicyAction struct {
 	Exit string `json:"exit,omitempty"`
 }
 
-// DnsCfg mirrors DnsCfg in shared/transport.ts: who answers this profile's name
-// lookups (Э3 piece F).
+// DnsCfg mirrors DnsCfg in shared/transport.ts: who answers the name lookups of
+// this NODE's users (Э3 piece F).
 //
 // The node renders no `dns` section today, so the DNS-hijack rule hands client
 // queries to dns-out and they fall through to the NODE's system resolver. On a
@@ -177,6 +177,10 @@ type NodePolicyAction struct {
 // the connection leaves from the exit (E13). Naming a resolver fixes it without
 // touching the routing stages, because the built-in DNS dials its servers as
 // ordinary connections and those take the same road as the traffic.
+//
+// On the node rather than on a profile: the core keeps ONE dns section per
+// process and the process is one per node, so a per-profile setting meant two
+// profiles on one node could disagree about a value only one of them could get.
 //
 // Nil renders exactly as before, which is the property the first commit is
 // verified against.
@@ -209,6 +213,9 @@ type ApplyInboundsRequest struct {
 	// a policy without interpreting it, exactly as it does with InboundDto.
 	// Config. Absent field = nil = render as before.
 	Policy json.RawMessage `json:"policy,omitempty"`
+	// The node's resolver (DnsCfg), raw for the same reason as Policy. Absent
+	// field = nil = no `dns` section, the host's own resolver answers.
+	Dns json.RawMessage `json:"dns,omitempty"`
 }
 
 type ApplyInboundsResponse struct {

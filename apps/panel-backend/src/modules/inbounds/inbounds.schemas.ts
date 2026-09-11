@@ -157,46 +157,11 @@ export const XrayConfigSchema = z.object({
    *  several gRPC streams per connection for better throughput. */
   grpcMultiMode: z.boolean().default(false),
 
-  /**
-   * Э3 piece F: who answers this profile's name lookups.
-   *
-   * Absent (the default, and every profile today) means the node renders no
-   * `dns` section and the host's own resolver answers. On a cascade that is the
-   * wrong machine: the name is resolved by the ENTRY while the connection
-   * leaves from the exit (field observation E13), so what is DNS-poisoned in
-   * the entry's country stays poisoned, a geo-pinned CDN answers for the wrong
-   * country, and the entry's resolver sees every name the user visits.
-   *
-   * Naming a resolver moves nothing in the routing stages: xray's built-in DNS
-   * dials its servers as ordinary connections, so on a cascade entry the query
-   * takes the same road as the traffic and is answered from the exit.
-   *
-   * ⚠ The core has ONE resolver per process while this sits on a PROFILE. Two
-   * profiles on one node asking for different resolvers is refused by the node
-   * rather than silently resolved in favour of one of them.
-   */
-  dns: z
-    .object({
-      servers: z
-        .array(
-          z.object({
-            /** Plain IP or a DoH URL. A plain IP dodges the bootstrap problem
-             *  of having to resolve the resolver's own hostname. */
-            address: z.string().min(1).max(253),
-            /** Names this server is authoritative for; empty = all of them. */
-            domains: z.array(z.string().min(1).max(253)).max(64).default([]),
-            /** Only accept answers inside these ranges, e.g. ["geoip:ru"]. */
-            expectIps: z.array(z.string().min(1).max(64)).max(32).default([]),
-            /** Keep names this server declined off the general resolver. */
-            skipFallback: z.boolean().default(false),
-          }),
-        )
-        .min(1)
-        .max(16),
-      queryStrategy: z.enum(['UseIP', 'UseIPv4', 'UseIPv6']).optional(),
-      disableCache: z.boolean().optional(),
-    })
-    .optional(),
+  // Э3 F note: the resolver used to live here. It is a NODE setting now
+  // (nodes.dns, DnsSchema in nodes.schemas.ts): the core keeps one dns section
+  // per process and the process is one per node, so a per-profile switch over a
+  // process-wide value let two profiles on one node disagree about it. Nothing
+  // reads a `dns` key inside a profile config any more, and Zod strips it here.
 
   /**
    * Subprotocol carried over the same Xray binary + REALITY stack. Slice

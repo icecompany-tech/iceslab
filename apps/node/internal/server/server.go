@@ -448,6 +448,21 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The resolver, same timing and the same reasoning as the policy above: a
+	// node-level setting that the inbound renders have to already carry, and a
+	// failure that must not take the node dark. Sent separately from the policy
+	// so a policy this core cannot render does not also cost the operator the
+	// resolver they changed in the same save.
+	for _, adapter := range s.cfg.Adapters {
+		dr, ok := adapter.(core.DnsReceiver)
+		if !ok {
+			continue
+		}
+		if err := dr.ApplyDns(req.Dns); err != nil {
+			s.logger.Error("adapter ApplyDns failed", "core", adapter.Name(), "err", err)
+		}
+	}
+
 	// Dispatch each inbound to the matching adapter by protocol name. Adapters
 	// that don't recognise the protocol return nil (defensive no-op contract).
 	// Slice 24b: Xray has a real reconfig impl; the others are stubs that

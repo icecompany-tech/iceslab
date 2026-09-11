@@ -49,6 +49,49 @@ export const HardeningSchema = z
   .nullish();
 export type HardeningInput = z.infer<typeof HardeningSchema>;
 
+/**
+ * Э3 F: who answers the name lookups of this node's users.
+ *
+ * Absent or null (the default, and every node today) means the node renders no
+ * `dns` section and the host's own resolver answers. On a cascade that is the
+ * wrong machine: the name is resolved by the ENTRY while the connection leaves
+ * from the exit (field observation E13), so what is DNS-poisoned in the entry's
+ * country stays poisoned, a geo-pinned CDN answers for the wrong country, and
+ * the entry's resolver sees every name the user visits.
+ *
+ * Naming a resolver moves nothing in the routing stages: xray's built-in DNS
+ * dials its servers as ordinary connections, so on a cascade entry the query
+ * takes the same road as the traffic and is answered from the exit.
+ *
+ * It lives on the NODE because the core keeps one resolver per PROCESS and the
+ * process is one per node. It shipped on the profile first, which put a
+ * process-wide value behind a per-profile switch and needed a conflict check at
+ * every save; the setting moved instead of the check growing.
+ */
+export const DnsSchema = z
+  .object({
+    servers: z
+      .array(
+        z.object({
+          /** Plain IP or a DoH URL. A plain IP dodges the bootstrap problem
+           *  of having to resolve the resolver's own hostname. */
+          address: z.string().min(1).max(253),
+          /** Names this server is authoritative for; empty = all of them. */
+          domains: z.array(z.string().min(1).max(253)).max(64).default([]),
+          /** Only accept answers inside these ranges, e.g. ["geoip:ru"]. */
+          expectIps: z.array(z.string().min(1).max(64)).max(32).default([]),
+          /** Keep names this server declined off the general resolver. */
+          skipFallback: z.boolean().default(false),
+        }),
+      )
+      .min(1)
+      .max(16),
+    queryStrategy: z.enum(['UseIP', 'UseIPv4', 'UseIPv6']).optional(),
+    disableCache: z.boolean().optional(),
+  })
+  .nullish();
+export type DnsInput = z.infer<typeof DnsSchema>;
+
 // Slice 27: keep parity with the inbound/profile protocol enum in
 // inbounds.schemas.ts. Node.protocol is a label for "which adapter is the
 // primary / installed on this VPS"; the actual deployment is per-binding.
@@ -79,6 +122,8 @@ export const CreateNodeSchema = z.object({
   hardening: HardeningSchema,
   // Engine-choice: also install the sing-box engine (--with-singbox).
   singboxEngine: z.boolean().default(false),
+  // Э3 F: the resolver this node's users get. Absent = the host's own.
+  dns: DnsSchema,
 });
 export type CreateNodeInput = z.infer<typeof CreateNodeSchema>;
 
@@ -97,6 +142,10 @@ export const UpdateNodeSchema = z.object({
   // rewrites the node's config without the rules rather than leaving the last
   // policy running.
   policyId: z.uuid().nullable().optional(),
+  // Э3 F: the resolver this node's users get. null clears it, which rewrites
+  // the config WITHOUT a dns section rather than leaving the last resolver
+  // answering on a node the panel shows as having none.
+  dns: DnsSchema,
 });
 export type UpdateNodeInput = z.infer<typeof UpdateNodeSchema>;
 

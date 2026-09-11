@@ -10,13 +10,6 @@ import {
   generateSsServerPsk,
 } from './ss-helpers.js';
 import { engineValidForProtocol } from './profiles.schemas.js';
-import {
-  assertDnsAgreesOnNode,
-  DnsResolverConflictError,
-  nodeIdsForProfile,
-} from './profiles.dns-agreement.js';
-
-export { DnsResolverConflictError };
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import type {
   CreateBindingInput,
@@ -279,15 +272,6 @@ export async function updateProfile(
     ) as never;
   }
 
-  // Э3 piece F: a node has ONE resolver for all of its profiles. Checked before
-  // the write and on every node this profile is deployed to, so changing the
-  // resolver here cannot quietly put a node into a state its core will refuse.
-  if (data.config !== undefined && existing.protocol === 'xray') {
-    for (const nodeId of await nodeIdsForProfile(id)) {
-      await assertDnsAgreesOnNode({ nodeId, profileId: id, config: data.config });
-    }
-  }
-
   const updated = await prisma.profile.update({
     where: { id },
     data,
@@ -332,14 +316,6 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
     },
   });
   if (dupBinding) throw new NodeAlreadyBoundError(input.profileId, input.nodeId);
-  // Э3 piece F: putting this profile here must not give the node two different
-  // resolvers. The core would refuse the config, but as a failed push minutes
-  // later rather than as an answer to the click that caused it.
-  await assertDnsAgreesOnNode({
-    nodeId: input.nodeId,
-    profileId: input.profileId,
-    config: profile.config,
-  });
 
   const created = await prisma.profileNodeBinding.create({
     data: {

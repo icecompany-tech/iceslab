@@ -187,9 +187,6 @@ export interface XrayInboundCfg {
    *  it. Registered + provisioned panel-side. Absent = direct egress (default).
    *  See docs/studies/STUDY-warp-native.md. */
   warp?: WarpCfg;
-  /** Who answers this profile's name lookups. Absent = the node's own system
-   *  resolver, which is what every node does today. See DnsCfg. */
-  dns?: DnsCfg;
 }
 
 /**
@@ -208,6 +205,15 @@ export interface XrayInboundCfg {
  * those queries take the same road as the traffic and are answered from the
  * exit's vantage point. The Policy stage is not involved and its order does not
  * move.
+ *
+ * It belongs to the NODE (ApplyInboundsRequest.dns), not to a profile. Every
+ * core we render to keeps one resolver per PROCESS and the process is one per
+ * node, so a setting on the profile put a process-wide value behind a
+ * per-profile switch: two profiles on one node could ask for different
+ * resolvers, and the node had to refuse the config while the panel had to guard
+ * the save that would create it. The same reasoning already puts the core
+ * VERSION on the node. When multi-core lands this becomes one per core on the
+ * node (sing-box has a dns block of its own); the shape below carries over.
  *
  * A MODEL, not raw xray JSON, for the same reasons as NodePolicy: a non-xray
  * core has to render the same intent its own way, and the panel has to be able
@@ -496,6 +502,10 @@ export interface ApplyInboundsRequest {
   /** Node-level routing policy. Absent or `{ rules: [] }` renders exactly as
    *  before, which is what makes it safe to ship ahead of the panel side. */
   policy?: NodePolicy;
+  /** Who answers the name lookups of this node's users. Absent = the node's own
+   *  system resolver, which is what every node does today. See DnsCfg for why
+   *  this sits on the node and not on a profile. */
+  dns?: DnsCfg;
 }
 
 export interface ApplyInboundsResponse {

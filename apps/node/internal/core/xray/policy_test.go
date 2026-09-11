@@ -65,12 +65,12 @@ func TestRenderWithoutPolicyMatchesGolden(t *testing.T) {
 // the panel may send either, and a node that restarted its core over the
 // difference would drop every live connection for nothing.
 func TestNilAndEmptyPolicyRenderTheSame(t *testing.T) {
-	withNil, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), nil, 8080, nil)
+	withNil, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), nil, 8080, nil, nil)
 	if err != nil {
 		t.Fatalf("render(nil): %v", err)
 	}
 	withEmpty, err := renderMultiConfig(
-		[]InboundConfig{validInbound()}, policyUsers(), nil, 8080, []dto.NodePolicyRule{},
+		[]InboundConfig{validInbound()}, policyUsers(), nil, 8080, []dto.NodePolicyRule{}, nil,
 	)
 	if err != nil {
 		t.Fatalf("render(empty): %v", err)
@@ -82,7 +82,7 @@ func TestNilAndEmptyPolicyRenderTheSame(t *testing.T) {
 
 func renderedRules(t *testing.T, policy []dto.NodePolicyRule, cascade *CascadeFragments) []map[string]any {
 	t.Helper()
-	blob, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), cascade, 8080, policy)
+	blob, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), cascade, 8080, policy, nil)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

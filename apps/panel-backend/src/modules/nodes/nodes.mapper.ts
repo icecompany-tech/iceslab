@@ -1,5 +1,5 @@
 import type { Node } from '../../generated/prisma/client.js';
-import type { NodeCoreRestarts } from '@iceslab/shared';
+import type { DnsCfg, NodeCoreRestarts } from '@iceslab/shared';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -62,6 +62,9 @@ export interface PublicNodeDto {
   /** Э3: node-level routing policy this node runs, null = none. The rules
    *  themselves come from /api/node-policies; the node carries only which one. */
   policyId: string | null;
+  /** Э3 F: the resolver this node's users get, null = the host's own. Shape is
+   *  DnsCfg in packages/shared. */
+  dns: DnsCfg | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +94,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     warpEnabled: node.warpEnabled,
     singboxEngine: node.singboxEngine,
     policyId: node.policyId,
+    dns: (node.dns as DnsCfg | null) ?? null,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

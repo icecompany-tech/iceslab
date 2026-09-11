@@ -55,6 +55,18 @@ model Node {
   // put the order between them back in the hands of whatever merged them.
   policyId String? @map("policy_id") @db.Uuid
 
+  // Э3 F: who answers the name lookups of this node's users. NULL = none, which
+  // is every node today and means the host's own resolver answers (the wrong
+  // machine on a cascade, see E13).
+  //
+  // On the NODE and not on a profile: the core keeps ONE dns section per
+  // process and the process is one per node, so a per-profile setting let two
+  // profiles on one node ask for a value only one of them could get. Shape (see
+  // DnsCfg in packages/shared): { servers: [{ address, domains?, expectIps?,
+  // skipFallback? }], queryStrategy?, disableCache? }. Json because nothing
+  // queries inside it and the shape grows with the cores we render to.
+  dns Json?
+
   // B3 / G (2026-06-14) - self-steal domain + node hardening.
   // domain: FQDN the operator A-records to THIS node's IP. Used as the REALITY
   //   serverName for self-steal profiles deployed here (SNI resolves to the node

@@ -1,0 +1,23 @@
+-- Э3 F: the resolver a node's users get. NULL = none, which is every node
+-- today and means the host's own resolver answers. Shape is DnsCfg in
+-- packages/shared; nothing queries inside it, so jsonb.
+--
+-- ⚠ HAND-TRIMMED, see CLAUDE.local.md. `prisma migrate dev --create-only`
+-- generated this change PLUS the standing drift between the migration history
+-- and the schema, none of which belongs to it and one part of which is actively
+-- harmful. Thrown out:
+--   - DROP DEFAULT on `id` of hosts / hwid_user_devices / profile_node_bindings
+--     / profiles / regions, and on `updated_at` of profile_node_bindings /
+--     profiles. The uuid default is what makes a raw INSERT work; dropping it
+--     breaks one silently, months from now.
+--   - DROP DEFAULT on route_policies.direct_domains / block_domains.
+--   - drop + recreate of six foreign keys (api_tokens, profile_node_bindings x2,
+--     group_profiles x2, amneziawg_peers), identical on both sides.
+--   - rename of cascade_links_cascade_id_from_to_direction_key.
+-- The drift is real and reconciling it is its own piece of work with its own
+-- rollback. It is not this change.
+--
+-- Rollback: ALTER TABLE "nodes" DROP COLUMN "dns";
+
+-- AlterTable
+ALTER TABLE "nodes" ADD COLUMN     "dns" JSONB;

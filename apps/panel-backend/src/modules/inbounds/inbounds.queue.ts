@@ -1,6 +1,6 @@
 import { isIP } from 'node:net';
 import { Queue, Worker, type Job } from 'bullmq';
-import type { ApplyInboundsRequest, InboundDto, ProtocolName } from '@iceslab/shared';
+import type { ApplyInboundsRequest, DnsCfg, InboundDto, ProtocolName } from '@iceslab/shared';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { redis } from '../../lib/infra/redis.js';
 import { prisma } from '../../prisma.js';
@@ -95,12 +95,14 @@ interface NodeRow {
   id: string;
   name: string;
   address: string;
+  /** Э3 F: the resolver this node's users get; null = the host's own. */
+  dns: unknown;
 }
 
 async function fetchNode(nodeId: string): Promise<NodeRow | null> {
   return prisma.node.findFirst({
     where: { id: nodeId, deletedAt: null, status: { not: 'disabled' } },
-    select: { id: true, name: true, address: true },
+    select: { id: true, name: true, address: true, dns: true },
   });
 }
 
@@ -356,6 +358,40 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
 }
 
 /**
+ * Everything one push carries: the inbounds, plus the two settings that belong
+ * to the NODE rather than to any one of them.
+ *
+ * Э3: the policy rides in the SAME request as the inbounds, not in one of its
+ * own. Two sources of config would mean two acknowledgements, and "saved but not
+ * applied" would have to be worked out from two stamps instead of the one
+ * lastInboundSyncAt everything already reads. Direction ids become outbound
+ * names inside this call, in the same pass that prints the cascade fragments
+ * those outbounds come from: within one push the two cannot disagree.
+ *
+ * Э3 F: so does the resolver, for that reason and one more. Every core we render
+ * to keeps ONE dns section per process and the process is one per node, so the
+ * setting arrives once per node. It started out on the inbound, where two
+ * profiles on one node could ask for different resolvers.
+ */
+async function buildApplyInboundsRequest(node: NodeRow): Promise<ApplyInboundsRequest> {
+  const inbounds = await fetchEnabledInbounds(node.id);
+  const policy = await resolvePolicyForNode(node.id);
+  const dns = (node.dns as DnsCfg | null) ?? undefined;
+  return { inbounds, ...(policy ? { policy } : {}), ...(dns ? { dns } : {}) };
+}
+
+/** The request the worker WOULD send for this node, without sending it. Exists
+ *  for tests: the push itself needs a live agent behind mTLS, so without this
+ *  the only way to check what a node is told is to stand one up. Null when the
+ *  node is gone or disabled, which is when nothing is pushed at all. */
+export async function applyInboundsRequestForNode(
+  nodeId: string,
+): Promise<ApplyInboundsRequest | null> {
+  const node = await fetchNode(nodeId);
+  return node ? buildApplyInboundsRequest(node) : null;
+}
+
+/**
  * Compute the current set of enabled inbounds for `nodeId` and push it to
  * that node-agent over mTLS. Idempotent (the node-side endpoint diffs).
  *
@@ -374,17 +410,8 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
     return;
   }
 
-  const inbounds = await fetchEnabledInbounds(nodeId);
-  // Э3: the node-level policy rides in the SAME request as the inbounds, not in
-  // one of its own. Two sources of config would mean two acknowledgements, and
-  // "saved but not applied" would have to be worked out from two stamps instead
-  // of the one lastInboundSyncAt everything already reads.
-  //
-  // Direction ids become outbound names inside this call, in the same pass that
-  // prints the cascade fragments those outbounds come from: within one push the
-  // two cannot disagree.
-  const policy = await resolvePolicyForNode(nodeId);
-  const req: ApplyInboundsRequest = { inbounds, ...(policy ? { policy } : {}) };
+  const req = await buildApplyInboundsRequest(node);
+  const inbounds = req.inbounds;
 
   getLogger().info(
     `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,

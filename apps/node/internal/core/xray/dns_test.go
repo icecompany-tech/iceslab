@@ -2,6 +2,9 @@ package xray
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
+	"path/filepath"
 	"testing"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
@@ -16,18 +19,17 @@ import (
 // with the policy, is that naming nothing changes nothing: the golden in
 // policy_test.go was captured before either field existed and still has to
 // match, which is why there is no second golden here.
+//
+// The setting is the NODE's. It shipped on the inbound first, and this file
+// used to hold two tests about what happens when two profiles on one node
+// disagree about it. There is nothing left to disagree: one node, one resolver,
+// one place to put it.
 
-func dnsInbound(cfg *dto.DnsCfg) InboundConfig {
-	in := validInbound()
-	in.Dns = cfg
-	return in
-}
-
-func renderedDns(t *testing.T, inbounds []InboundConfig) (map[string]any, error) {
+func renderedDns(t *testing.T, dns *dto.DnsCfg) map[string]any {
 	t.Helper()
-	blob, err := renderMultiConfig(inbounds, policyUsers(), nil, 8080, nil)
+	blob, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), nil, 8080, nil, dns)
 	if err != nil {
-		return nil, err
+		t.Fatalf("render: %v", err)
 	}
 	var cfg struct {
 		Dns map[string]any `json:"dns"`
@@ -35,7 +37,16 @@ func renderedDns(t *testing.T, inbounds []InboundConfig) (map[string]any, error)
 	if err := json.Unmarshal(blob, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	return cfg.Dns, nil
+	return cfg.Dns
+}
+
+func dnsAdapter(t *testing.T) *Adapter {
+	t.Helper()
+	dir := t.TempDir()
+	return New(Config{
+		ConfigPath: filepath.Join(dir, "config.json"), // config-only mode: no binary
+		Inbound:    validInbound(),
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestNoResolverRendersNoDnsSection(t *testing.T) {
@@ -57,12 +68,7 @@ func TestNoResolverRendersNoDnsSection(t *testing.T) {
 func TestAResolverWithNoScopeRendersAsABareString(t *testing.T) {
 	// The shape xray's own documentation uses for a plain fallback. The object
 	// form works too, but a config an operator opens should look familiar.
-	dns, err := renderedDns(t, []InboundConfig{
-		dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}}),
-	})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
+	dns := renderedDns(t, &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
 	servers, ok := dns["servers"].([]any)
 	if !ok || len(servers) != 1 {
 		t.Fatalf("servers: %v", dns["servers"])
@@ -73,23 +79,18 @@ func TestAResolverWithNoScopeRendersAsABareString(t *testing.T) {
 }
 
 func TestAScopedResolverKeepsItsScope(t *testing.T) {
-	dns, err := renderedDns(t, []InboundConfig{
-		dnsInbound(&dto.DnsCfg{
-			Servers: []dto.DnsServer{
-				{
-					Address:      "77.88.8.8",
-					Domains:      []string{"geosite:category-ru"},
-					ExpectIPs:    []string{"geoip:ru"},
-					SkipFallback: true,
-				},
-				{Address: "8.8.8.8"},
+	dns := renderedDns(t, &dto.DnsCfg{
+		Servers: []dto.DnsServer{
+			{
+				Address:      "77.88.8.8",
+				Domains:      []string{"geosite:category-ru"},
+				ExpectIPs:    []string{"geoip:ru"},
+				SkipFallback: true,
 			},
-			QueryStrategy: "UseIPv4",
-		}),
+			{Address: "8.8.8.8"},
+		},
+		QueryStrategy: "UseIPv4",
 	})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
 	servers := dns["servers"].([]any)
 	if len(servers) != 2 {
 		t.Fatalf("servers: %v", servers)
@@ -114,68 +115,83 @@ func TestAScopedResolverKeepsItsScope(t *testing.T) {
 	}
 }
 
-// The section is process-wide while the setting is per profile. Two profiles
-// asking for different resolvers has no correct answer here, and picking one
-// would leave the operator reading "resolver X" on a profile whose users are
-// answered by Y.
-func TestTwoProfilesDisagreeingAboutTheResolverIsRefused(t *testing.T) {
-	a := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
-	a.Tag = "in-a"
-	b := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "1.1.1.1"}}})
-	b.Tag = "in-b"
-	b.ListenPort = 8443
+// The push carries the resolver next to the policy, and the adapter has to take
+// it from there. On the inbound it would be ignored now, which is the point of
+// the move: one process, one section, one place it can come from.
+func TestTheNodeTakesItsResolverFromThePushAndNotFromAnInbound(t *testing.T) {
+	a := dnsAdapter(t)
+	if err := a.ApplyDns(json.RawMessage(`{"servers":[{"address":"77.88.8.8"}]}`)); err != nil {
+		t.Fatalf("ApplyDns: %v", err)
+	}
+	if a.dns == nil || len(a.dns.Servers) != 1 || a.dns.Servers[0].Address != "77.88.8.8" {
+		t.Fatalf("the node did not keep the resolver it was pushed: %#v", a.dns)
+	}
 
-	if _, err := renderedDns(t, []InboundConfig{a, b}); err == nil {
-		t.Errorf("two different resolvers on one node were accepted")
+	// The same value inside an inbound config reaches nothing: the field is off
+	// the inbound wire shape, so an older panel that still sends it there is
+	// ignored rather than half-obeyed.
+	if err := a.ApplyInbound(443, []byte(`{
+		"inboundId": "ib-1",
+		"realityDest": "www.cloudflare.com:443",
+		"realityServerNames": ["www.cloudflare.com"],
+		"realityPrivateKey": "aGVsbG8td29ybGQtdGhpcy1pcy1hLWZha2Uta2V5MDA",
+		"realityShortIds": ["0123456789abcdef"],
+		"dns": {"servers":[{"address":"1.1.1.1"}]}
+	}`)); err != nil {
+		t.Fatalf("ApplyInbound: %v", err)
+	}
+	if a.dns.Servers[0].Address != "77.88.8.8" {
+		t.Errorf("an inbound overwrote the node's resolver: %#v", a.dns)
 	}
 }
 
-func TestTwoProfilesAgreeingIsFine(t *testing.T) {
-	a := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
-	a.Tag = "in-a"
-	b := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
-	b.Tag = "in-b"
-	b.ListenPort = 8443
+// A repeated push must be a no-op. Without this every applyInbounds would look
+// like a change and restart the core, dropping every live connection on the
+// node for nothing.
+func TestRepeatingTheSameResolverIsNotAChange(t *testing.T) {
+	same := &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}}
+	other := &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "1.1.1.1"}}}
 
-	dns, err := renderedDns(t, []InboundConfig{a, b})
-	if err != nil {
-		t.Fatalf("render: %v", err)
+	if !dnsEqual(same, &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}}) {
+		t.Errorf("the same resolver read as a change")
 	}
-	if len(dns["servers"].([]any)) != 1 {
-		t.Errorf("servers: %v", dns["servers"])
+	if dnsEqual(same, other) {
+		t.Errorf("a different resolver read as no change")
 	}
-}
-
-func TestOneProfileNamingAResolverIsEnoughForTheNode(t *testing.T) {
-	// The other inbound simply has no opinion; that is not a disagreement.
-	a := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
-	a.Tag = "in-a"
-	b := validInbound()
-	b.Tag = "in-b"
-	b.ListenPort = 8443
-
-	dns, err := renderedDns(t, []InboundConfig{a, b})
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	if dns == nil {
-		t.Errorf("the resolver one profile asked for was dropped")
-	}
-}
-
-// Changing only the resolver still has to reach the node: without this the
-// switch saves in the panel and the core keeps the old section forever.
-func TestChangingOnlyTheResolverCountsAsAChange(t *testing.T) {
-	a := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})
-	b := dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "1.1.1.1"}}})
-	if inboundEqual(a, b) {
-		t.Errorf("a new resolver read as no change")
-	}
-	if !inboundEqual(a, dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})) {
-		t.Errorf("the same resolver read as a change, which would restart the core on every push")
-	}
-	if !inboundEqual(validInbound(), validInbound()) {
+	if !dnsEqual(nil, nil) {
 		t.Errorf("no resolver on either side read as a change")
+	}
+	if dnsEqual(nil, same) || dnsEqual(same, nil) {
+		t.Errorf("naming and un-naming a resolver read as no change")
+	}
+}
+
+// Removing it is a state, not "no news". Reading an absent resolver as "keep
+// what you had" would leave the node answering through one the operator has
+// just taken off it, with the panel showing none.
+func TestAnAbsentResolverRemovesTheSection(t *testing.T) {
+	a := dnsAdapter(t)
+	if err := a.ApplyDns(json.RawMessage(`{"servers":[{"address":"8.8.8.8"}]}`)); err != nil {
+		t.Fatalf("ApplyDns: %v", err)
+	}
+	if err := a.ApplyDns(nil); err != nil {
+		t.Fatalf("ApplyDns(nil): %v", err)
+	}
+	if a.dns != nil {
+		t.Errorf("the resolver survived being removed: %#v", a.dns)
+	}
+}
+
+// An empty `servers` array is a config xray refuses, and it refuses configs
+// WHOLE: accepting this would take the node's inbounds down with it. Refused
+// where the reason can still be read.
+func TestAResolverWithNoServersIsRefused(t *testing.T) {
+	a := dnsAdapter(t)
+	if err := a.ApplyDns(json.RawMessage(`{"servers":[]}`)); err == nil {
+		t.Errorf("a dns section with no servers was accepted")
+	}
+	if a.dns != nil {
+		t.Errorf("a refused resolver was stored anyway: %#v", a.dns)
 	}
 }
 
@@ -187,8 +203,8 @@ func TestTheResolverDoesNotMoveTheRoutingStages(t *testing.T) {
 	before := len(rules)
 
 	withDns, err := renderMultiConfig(
-		[]InboundConfig{dnsInbound(&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}})},
-		policyUsers(), nil, 8080, nil,
+		[]InboundConfig{validInbound()}, policyUsers(), nil, 8080, nil,
+		&dto.DnsCfg{Servers: []dto.DnsServer{{Address: "8.8.8.8"}}},
 	)
 	if err != nil {
 		t.Fatalf("render: %v", err)

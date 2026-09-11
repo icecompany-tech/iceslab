@@ -35,7 +35,7 @@ func inboundWire(t *testing.T, id string, port int) []byte {
 
 func renderedInbounds(t *testing.T, a *Adapter) []map[string]any {
 	t.Helper()
-	blob, err := renderMultiConfig(currentInbounds(a), sortedClients(a.users), a.cascade, 8080, a.policy)
+	blob, err := renderMultiConfig(currentInbounds(a), sortedClients(a.users), a.cascade, 8080, a.policy, a.dns)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestPortClashIsRefusedByName(t *testing.T) {
 	_ = a.ApplyInbound(443, inboundWire(t, "aaaaaaaa-1111-4000-8000-000000000001", 443))
 	_ = a.ApplyInbound(443, inboundWire(t, "bbbbbbbb-2222-4000-8000-000000000002", 443))
 
-	_, err := renderMultiConfig(currentInbounds(a), nil, nil, 8080, nil)
+	_, err := renderMultiConfig(currentInbounds(a), nil, nil, 8080, nil, nil)
 	if err == nil {
 		t.Fatal("expected a port clash to be refused")
 	}

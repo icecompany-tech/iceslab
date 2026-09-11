@@ -83,6 +83,8 @@ export async function createNode(
       // create but JsonNull keeps "no hardening" explicit. Cast mirrors the
       // jsonb-write pattern in profiles.service.ts (typed object -> InputJsonValue).
       hardening: (input.hardening as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+      // Э3 F: the resolver this node's users get. Same jsonb-write pattern.
+      dns: (input.dns as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
       // Engine-choice: install sing-box alongside the native core when opted in.
       singboxEngine: input.singboxEngine,
       // Slice 38: heartbeat-self-destruct secret. 32 bytes of entropy is
@@ -336,6 +338,11 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
       (input.hardening as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
   }
   if (input.singboxEngine !== undefined) data.singboxEngine = input.singboxEngine;
+  // Э3 F: the node's resolver. Prisma.JsonNull for the same reason as hardening
+  // above: clearing a jsonb column needs JsonNull, not raw null.
+  if (input.dns !== undefined) {
+    data.dns = (input.dns as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
+  }
   // Э3: attaching or detaching the node-level policy. Checked BEFORE the write,
   // so a policy this node cannot carry out (a WARP rule with no WARP here, a
   // cascade direction this node does not dial) is refused on the screen where
@@ -345,8 +352,8 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
     data.policyId = input.policyId;
   }
 
-  // Two fields feed the config we push to the agent, so editing either has to
-  // re-push it. Detect them before the write, otherwise the live node config
+  // Three fields feed the config we push to the agent, so editing any of them
+  // has to re-push it. Detect them before the write, otherwise the live config
   // drifts until an unrelated binding/profile edit or an agent restart happens
   // to fire a sync. Caught in review 2026-06-17.
   //   domain  → per-node REALITY self-steal serverNames (and the client SNI)
@@ -357,6 +364,13 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
     input.domain !== undefined && input.domain !== existing.domain;
   const addressChanged =
     input.address !== undefined && input.address !== existing.address;
+  //   dns     → the `dns` section of the node's core config. Clearing it counts:
+  //             the config has to be rewritten WITHOUT the section, or the node
+  //             keeps answering through a resolver the panel no longer shows.
+  //             Compared by rendered form, the value carries arrays.
+  const dnsChanged =
+    input.dns !== undefined &&
+    JSON.stringify(input.dns ?? null) !== JSON.stringify(existing.dns ?? null);
 
   // Attaching, swapping or detaching a policy changes what this node does with
   // traffic, so it has to reach the node. Detaching counts: the config must be
@@ -367,7 +381,7 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
 
   const updated = await repo.updateById(id, data);
 
-  if (domainChanged || addressChanged) {
+  if (domainChanged || addressChanged || dnsChanged) {
     eventBus.emit('node.updated', { nodeId: id, nodeName: updated.name });
   }
   if (policyChanged) {

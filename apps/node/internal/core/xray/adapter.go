@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -122,6 +123,12 @@ type Adapter struct {
 	// shares. nil = no policy, which renders exactly as before it existed.
 	policy []dto.NodePolicyRule
 
+	// dns is the resolver the node's users get (dto.DnsCfg), pushed once per
+	// applyInbounds alongside the policy. It belongs to the NODE for a hard
+	// reason: the core keeps ONE dns section per process, and this process is
+	// the node's. nil = no section at all, the state every node is in today.
+	dns *dto.DnsCfg
+
 	// restartMu serializes regenerateAndRestart so concurrent config changes
 	// can't race the subprocess swap. Never held together with mu across IO.
 	restartMu sync.Mutex
@@ -163,6 +170,50 @@ func (a *Adapter) ApplyPolicy(raw json.RawMessage) error {
 	a.mu.Unlock()
 
 	a.logger.Info("xray ApplyPolicy: policy changed, regenerating", "rules", count)
+	return a.regenerateAndRestart(context.Background())
+}
+
+// ApplyDns implements core.DnsReceiver: store the node's resolver and re-render
+// if it actually changed.
+//
+// Separate from ApplyPolicy rather than bundled with it, although both arrive in
+// the same request: they are independent settings, and a policy this core cannot
+// render must not also cost the operator the resolver change they made in the
+// same save. The price is that changing BOTH in one push restarts the core
+// twice, which is the shape applyInbounds already has for policy and inbounds.
+//
+// Compared by its rendered form, like the policy: the struct carries slices, and
+// a push repeating the same resolver has to be a no-op or every applyInbounds
+// would restart the core and drop every live connection on the node.
+//
+// An absent resolver is a legitimate state and not "leave what you had": it is
+// how one gets REMOVED, and reading it as no news would leave the node
+// answering through a resolver the operator has taken off it.
+func (a *Adapter) ApplyDns(raw json.RawMessage) error {
+	var parsed *dto.DnsCfg
+	if len(raw) > 0 && string(raw) != "null" {
+		var decoded dto.DnsCfg
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return fmt.Errorf("xray ApplyDns: %w", err)
+		}
+		// A section with no servers is not a resolver, and rendering it would
+		// hand xray an empty `servers` array, which it refuses - taking the
+		// node's inbounds down with it.
+		if len(decoded.Servers) == 0 {
+			return errors.New("xray ApplyDns: a dns section with no servers")
+		}
+		parsed = &decoded
+	}
+
+	a.mu.Lock()
+	if dnsEqual(a.dns, parsed) {
+		a.mu.Unlock()
+		return nil
+	}
+	a.dns = parsed
+	a.mu.Unlock()
+
+	a.logger.Info("xray ApplyDns: resolver changed, regenerating", "named", parsed != nil)
 	return a.regenerateAndRestart(context.Background())
 }
 
@@ -548,6 +599,7 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	inbounds := a.servedInboundsLocked()
 	cascade := a.cascade
 	policy := a.policy
+	dns := a.dns
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -566,7 +618,7 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	// same way regenerateAndRestart does it: rendering the single install-time
 	// inbound here would overwrite a multi-inbound config on disk with one that
 	// serves a fraction of it.
-	blob, err := renderMultiConfig(inbounds, clients, cascade, inbounds[0].withDefaults().ApiPort, policy)
+	blob, err := renderMultiConfig(inbounds, clients, cascade, inbounds[0].withDefaults().ApiPort, policy, dns)
 	if err != nil {
 		return false
 	}
@@ -873,10 +925,6 @@ type xrayInboundCfgWire struct {
 	// Warp is the optional Cloudflare WARP egress (per-node v1). nil/absent =
 	// direct egress. Reuses the config.go WarpConfig type (json-tagged).
 	Warp *WarpConfig `json:"warp,omitempty"`
-
-	// Dns names the resolver this profile's users get (Э3 piece F). nil/absent
-	// = the node's own system resolver, which is what every node does today.
-	Dns *dto.DnsCfg `json:"dns,omitempty"`
 }
 
 // ApplyInbound parses the panel-pushed Xray config, swaps it into the live
@@ -938,7 +986,6 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		XhttpPaddingBytes:                       wire.XhttpPaddingBytes,
 		GrpcMultiMode:                           wire.GrpcMultiMode,
 		Warp:                                    wire.Warp,
-		Dns:                                     wire.Dns,
 	}
 
 	// Multi-inbound: an identified inbound lives in the map under its own id, so
@@ -1014,12 +1061,6 @@ func inboundEqual(a, b InboundConfig) bool {
 		return false
 	}
 	if !warpEqual(a.Warp, b.Warp) {
-		return false
-	}
-	// Changing only the resolver is still a change: it rewrites the `dns`
-	// section and the core has to be handed the new one. Leaving it out here
-	// would make the switch save in the panel and never reach the node.
-	if !dnsEqual(a.Dns, b.Dns) {
 		return false
 	}
 	return true
@@ -1116,6 +1157,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	inbound := a.cfg.Inbound
 	cascade := a.cascade
 	policy := a.policy
+	dns := a.dns
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -1147,7 +1189,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	if len(pushed) == 0 && inbound.RealityPrivateKey != "" {
 		pushed = []InboundConfig{inbound}
 	}
-	blob, err := renderMultiConfig(pushed, clients, cascade, inbound.withDefaults().ApiPort, policy)
+	blob, err := renderMultiConfig(pushed, clients, cascade, inbound.withDefaults().ApiPort, policy, dns)
 	if err != nil {
 		return fmt.Errorf("render xray config: %w", err)
 	}

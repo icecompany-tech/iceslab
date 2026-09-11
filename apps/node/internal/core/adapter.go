@@ -152,6 +152,26 @@ type PolicyReceiver interface {
 	ApplyPolicy(policy json.RawMessage) error
 }
 
+// DnsReceiver is an OPTIONAL interface for adapters that can be told which
+// resolver answers their users' name lookups (see dto.DnsCfg).
+//
+// A node-level setting, next to the policy and for a harder reason than
+// symmetry: every core we render to keeps ONE resolver per process, and the
+// process is one per node. It first rode on the inbound, where a process-wide
+// setting sat behind a per-profile switch and two profiles on one node could
+// disagree about it.
+//
+// Optional for the same reason as PolicyReceiver: a core that cannot express it
+// should not pretend to, and the raw bytes pass through undecoded so this
+// package stays free of the wire shape.
+//
+// Absent (nil / empty) MUST render exactly as before, which is the state every
+// node is in today: no `dns` section at all, and the host's own resolver
+// answers.
+type DnsReceiver interface {
+	ApplyDns(dns json.RawMessage) error
+}
+
 // Provisionable is an OPTIONAL interface for adapters that can be REGISTERED
 // without being CONFIGURED. The installer registers an adapter for every
 // protocol the operator might switch on later, and such an adapter sits idle

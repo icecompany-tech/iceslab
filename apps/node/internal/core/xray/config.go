@@ -60,44 +60,21 @@ func buildPolicyRules(rules []dto.NodePolicyRule) ([]any, error) {
 	return out, nil
 }
 
-// resolveDns picks the one `dns` section this process will run.
+// renderDnsSection turns the node's resolver setting into xray's top-level
+// `dns` block.
 //
-// The section is process-wide while the setting is per PROFILE, and a node
-// serves several profiles. Two profiles asking for different resolvers is a
-// question with no correct answer here, so it is not answered: rendering one of
-// them would mean the operator reads "resolver X" on a profile whose users are
-// being answered by Y, and nothing anywhere would say so. Refusing keeps the
-// running config and hands the reason back to the panel, which is where the two
-// profiles can be looked at side by side.
+// The setting belongs to the NODE, and the reason is right here: the section is
+// one per PROCESS, and this process is one per node. It first shipped on the
+// inbound, which put a process-wide resolver behind a per-profile switch, so two
+// profiles on one node could ask for different resolvers. The node then had to
+// refuse such a config and the panel had to guard the save that would create it;
+// moving the setting up one level deletes the question instead of answering it.
 //
 // Nil when nobody asked, which is every node today and renders with no `dns`
 // key at all.
-func resolveDns(inbounds []InboundConfig) (map[string]any, error) {
-	var chosen *dto.DnsCfg
-	var chosenTag string
-	for _, ib := range inbounds {
-		if ib.Dns == nil {
-			continue
-		}
-		if chosen == nil {
-			chosen = ib.Dns
-			chosenTag = ib.withDefaults().Tag
-			continue
-		}
-		same, err := sameDns(chosen, ib.Dns)
-		if err != nil {
-			return nil, err
-		}
-		if !same {
-			return nil, fmt.Errorf(
-				"render xray config: inbounds %q and %q ask for different DNS resolvers, "+
-					"and the core has one resolver for the whole process",
-				chosenTag, ib.withDefaults().Tag,
-			)
-		}
-	}
+func renderDnsSection(chosen *dto.DnsCfg) map[string]any {
 	if chosen == nil {
-		return nil, nil
+		return nil
 	}
 
 	servers := make([]any, 0, len(chosen.Servers))
@@ -130,7 +107,7 @@ func resolveDns(inbounds []InboundConfig) (map[string]any, error) {
 	if chosen.DisableCache {
 		out["disableCache"] = true
 	}
-	return out, nil
+	return out
 }
 
 // sameDns compares two resolver settings by their rendered form: the structs
@@ -292,12 +269,6 @@ type InboundConfig struct {
 	// inbound's user traffic through it instead of `direct`. nil = direct egress
 	// (default). See docs/studies/STUDY-warp-native.md.
 	Warp *WarpConfig
-
-	// Dns names the resolver this profile's users get (Э3 piece F). nil = no
-	// `dns` section at all, which is what every node renders today and means
-	// the node's own system resolver answers. See dto.DnsCfg for why that is
-	// the wrong machine on a cascade.
-	Dns *dto.DnsCfg
 }
 
 // WarpConfig holds Cloudflare WARP egress credentials from a wgcf-style device
@@ -449,7 +420,8 @@ type xrayClient struct {
 //   - Outbounds:    the link-OUT outbound (entry/transit nodes dial the next hop)
 //   - RoutingRules: per-role rules (entry: user->link-out; transit: link-in->
 //     link-out; exit: link-in->direct). Appended AFTER the base rules so the
-//     DNS-hijack and BitTorrent/SMTP block rules still take precedence.
+//     DNS-hijack and BitTorrent/SMTP block rules still take precedence, and cut
+//     in two around the node policy (cutCascadeRulesAtTheFirstDoor).
 //
 // Each element is a raw JSON object so the panel owns the exact xray shape and
 // the node-agent stays protocol-agnostic. Nil/empty = a non-cascade node, in
@@ -474,6 +446,67 @@ type CascadeFragments struct {
 	// exposes; its user routing rule targets one via `balancerTag` (instead of a
 	// fixed `outboundTag`), so xray picks the lowest-ping exit per connection.
 	Balancers []json.RawMessage `json:"balancers,omitempty"`
+}
+
+// cutCascadeRulesAtTheFirstDoor splits the panel's cascade fragments where the
+// operator's policy has to go.
+//
+// A cascade entry ships two widths of rule in one list. Some name a
+// DESTINATION and are as narrow as routing gets here: the A4 grants, which read
+// "this user, these domains, out this way", and the QUIC block. The rest name
+// only a way out, "everything else goes into the link", and the last of them is
+// a catch-all.
+//
+// The policy belongs between the two. Above the doors, or the entry's catch-all
+// matches first and the policy never fires, which is the WARP bug all over
+// again. Below the narrow ones, or a policy rule gated on nobody shadows a rule
+// gated on one subscriber: that grant is something the operator SOLD, and it
+// would die without a word, on a node that reports success and keeps passing
+// traffic through the other door.
+//
+// The cut is a PREFIX, not a filter. Everything up to the first door stays
+// above it and everything from the first door on stays below, so the fragments
+// keep the exact order the panel printed them in and the concatenation is the
+// original list. A narrow rule sitting after a door is already dead (the door
+// matched first), so leaving it below costs nothing and buys the property that
+// this function can never reorder anything.
+func cutCascadeRulesAtTheFirstDoor(rules []json.RawMessage) (aboveThePolicy, doors []json.RawMessage) {
+	for i, raw := range rules {
+		if isDoorRule(raw) {
+			return rules[:i], rules[i:]
+		}
+	}
+	return rules, nil
+}
+
+// isDoorRule reports whether a routing rule says nothing about WHERE the traffic
+// is headed and only names the way out.
+//
+// The destination matchers are what make a rule narrow: domain, ip, port,
+// protocol. A rule carrying one of them is about some part of the internet. A
+// rule carrying none is about everything, and among the cascade fragments that
+// is always a door: user traffic into the link, the per-direction selector, the
+// balancer, link-in straight out at a direction's node.
+//
+// `network` and the gates on WHO (vlessRoute, user, inboundTag) deliberately do
+// not count. The entry's catch-all carries `network: "tcp,udp"` and the
+// direction rules carry a vlessRoute, and both of those are doors.
+//
+// A fragment this cannot read is treated as a door, which is exactly where
+// every fragment went before this existed. The node keeps these opaque on
+// purpose, and the core's own `-test` has the last word on a shape we cannot
+// parse.
+func isDoorRule(raw json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return true
+	}
+	for _, matcher := range []string{"domain", "ip", "port", "protocol"} {
+		if _, named := fields[matcher]; named {
+			return false
+		}
+	}
+	return true
 }
 
 // renderConfig produces a complete Xray config.json blob for the given users.
@@ -503,7 +536,7 @@ func renderConfig(inbound InboundConfig, users []xrayClient) ([]byte, error) {
 // several. Kept as a thin wrapper so the many existing call sites and tests
 // that deal with a single inbound stay unchanged.
 func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade *CascadeFragments) ([]byte, error) {
-	return renderMultiConfig([]InboundConfig{inbound}, users, cascade, inbound.withDefaults().ApiPort, nil)
+	return renderMultiConfig([]InboundConfig{inbound}, users, cascade, inbound.withDefaults().ApiPort, nil, nil)
 }
 
 // renderConfigWithCascade is renderConfig plus optional cascade fragments (C3).
@@ -534,6 +567,7 @@ func renderMultiConfig(
 	cascade *CascadeFragments,
 	apiPort int,
 	policy []dto.NodePolicyRule,
+	dns *dto.DnsCfg,
 ) ([]byte, error) {
 	inbounds := make([]any, 0, len(inboundCfgs)+1)
 	seenTags := make(map[string]struct{}, len(inboundCfgs))
@@ -651,13 +685,25 @@ func renderMultiConfig(
 		},
 	}
 
-	// The operator's policy sits between the two things it must not disturb:
-	// after Protection above (DNS hijack, BitTorrent, SMTP - ours, and a policy
-	// rule must not be able to unblock what we block), and before the doors out
-	// below, so "RU direct, the rest through the tunnel" actually beats a
-	// cascade entry's catch-all. Put after the cascade instead and the catch-all
-	// matches first and the policy never fires, which is the exact shape of the
-	// WARP bug noted below.
+	// The cascade fragments are two widths of rule in one list, and the policy
+	// goes between them. See cutCascadeRulesAtTheFirstDoor: the narrow ones (the
+	// A4 grants, the QUIC block) stay above, the doors below.
+	var narrowCascadeRules, cascadeDoors []json.RawMessage
+	if cascade != nil {
+		narrowCascadeRules, cascadeDoors = cutCascadeRulesAtTheFirstDoor(cascade.RoutingRules)
+	}
+	for _, r := range narrowCascadeRules {
+		rules = append(rules, r)
+	}
+
+	// The operator's policy sits between the things it must not disturb: after
+	// Protection above (DNS hijack, BitTorrent, SMTP - ours, and a policy rule
+	// must not be able to unblock what we block) and after any narrow cascade
+	// rule (a grant sold to one subscriber outranks a preference set for
+	// everybody), and before the doors out below, so "RU direct, the rest
+	// through the tunnel" actually beats a cascade entry's catch-all. Put after
+	// the doors instead and the catch-all matches first and the policy never
+	// fires, which is the exact shape of the WARP bug noted below.
 	//
 	// Nil or empty appends nothing, so a node without a policy renders
 	// byte-identically to before this existed.
@@ -677,7 +723,7 @@ func renderMultiConfig(
 		for _, ob := range cascade.Outbounds {
 			outbounds = append(outbounds, ob)
 		}
-		for _, r := range cascade.RoutingRules {
+		for _, r := range cascadeDoors {
 			rules = append(rules, r)
 		}
 	}
@@ -713,12 +759,8 @@ func renderMultiConfig(
 	}
 
 	// Э3 piece F: who answers the users' name lookups. One section for the whole
-	// process, so the inbounds have to agree on it; resolveDns says what happens
-	// when they do not.
-	dnsSection, err := resolveDns(inboundCfgs)
-	if err != nil {
-		return nil, err
-	}
+	// process, and one setting for the whole node to match.
+	dnsSection := renderDnsSection(dns)
 
 	doc := map[string]any{
 		"log": map[string]any{
