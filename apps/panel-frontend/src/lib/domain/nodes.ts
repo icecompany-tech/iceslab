@@ -1,4 +1,4 @@
-import type { EngineName } from '@iceslab/shared';
+import type { EngineName, NodeCoreInfo, NodeCores } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 export type NodeProtocol =
@@ -93,17 +93,14 @@ export interface Node {
    */
   policyId: string | null;
   /**
-   * Which cores this machine actually runs, and whether each one carries the
-   * operator policy into its own config.
+   * The cores this machine reported, with the panel's freshness stamp.
    *
-   * ⚠ Absent today: the field is waiting on the backend. It cannot be derived
-   * from `protocol` or `singboxEngine`, because applying a policy is a property
-   * of the ADAPTER, and which adapters a node registers is decided in the
-   * agent's own main.go. A guess here would drift silently the day a core is
-   * added. So everything that reads this renders nothing while it is
-   * undefined, rather than claiming coverage either way.
+   * ⚠ `null` means no reporting agent has ever checked in, which is NOT a node
+   * with no cores. Nothing here may be derived from `protocol` or
+   * `singboxEngine`: rendering a policy is a property of the ADAPTER, and which
+   * adapters a node registers is decided in the agent's own main.go.
    */
-  cores?: NodeCore[];
+  cores?: NodeCores | null;
   /**
    * The distinct engines those cores run: the answer to «can this node render
    * that profile», already deduped by the server.
@@ -119,12 +116,16 @@ export interface Node {
   updatedAt: string;
 }
 
-/** One core on a node. `appliesPolicy` is the answer to the only question the
- *  card asks: do the operator's rules reach the users on this core. */
-export interface NodeCore {
-  core: string;
-  appliesPolicy: boolean;
-}
+/**
+ * One core as the panel keeps it, re-exported so screens do not each reach into
+ * the transport package for it.
+ *
+ * ⚠ `rendersPolicy` and `rendersDns` are OPTIONAL, and the absence is a third
+ * answer: an agent older than the field reports neither, and that is unknown,
+ * not false. Saying «the policy is ignored here» about a core that applies it
+ * is worse than silence.
+ */
+export type NodeCore = NodeCoreInfo;
 
 export interface Region {
   id: string;

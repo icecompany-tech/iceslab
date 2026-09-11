@@ -150,7 +150,10 @@ export function NodeParamsForm({
                 {/* Which of this machine's cores the chosen policy actually
                     reaches. Silent until the API carries the cores, so today
                     the card looks exactly as it did. */}
-                <PolicyReach cores={node?.cores} hasPolicy={Boolean(form.values.policyId)} />
+                <PolicyReach
+                  cores={node?.cores?.cores}
+                  hasPolicy={Boolean(form.values.policyId)}
+                />
                 {policyRefusal && (
                   <Box
                     style={{

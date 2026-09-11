@@ -267,6 +267,10 @@ export const nodes = {
       'The ordered rules this node uses to decide which door traffic leaves by. One policy can sit on several nodes.',
     policyNone: 'No policy',
     policyReachAll: 'Every core on this node applies the policy: {{cores}}.',
+    policyReachUnknown:
+      'Whether this node applies the policy is not known: its agent predates the field and reports nothing about it for {{cores}}. This is not "does not apply": update the agent to get an answer.',
+    policyReachSomeUnknown:
+      'No answer about {{cores}}: that core is served by an agent older than the field. It can be counted neither as applying the policy nor as ignoring it.',
     policyReachSomeTag: 'THE POLICY MISSES SOME USERS',
     policyReachSome:
       'Only {{applied}} applies the policy. Users connected through {{missing}} go around it: their traffic leaves as if no policy were set.',
