@@ -359,6 +359,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       return reply.send({
         endpoints: result.endpoints.map((e) => ({
           protocol: e.protocol,
+          /**
+           * The core serving it. A protocol name alone does not say what the
+           * client is talking to: hysteria2 served by its own daemon and by
+           * xray are the same protocol and different dialects, and the link
+           * above already differs between them. A card that prints the protocol
+           * without the engine prints half the answer.
+           */
+          engine: e.engine,
           // `label` is the string the client shows. It was called `nodeName`
           // until 2026-07-31 while never holding a node name: one node emits
           // several of these (a cascade entry produces one per direction and

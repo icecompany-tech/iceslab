@@ -1,5 +1,5 @@
 import type { User, UserTraffic } from '../../generated/prisma/client.js';
-import type { ProtocolName } from '@iceslab/shared';
+import type { EngineName, ProtocolName } from '@iceslab/shared';
 
 // Re-export so existing imports keep working (slice 16 moved the
 // implementation into core-adapters/hysteria, this file now hosts only
@@ -104,6 +104,21 @@ export function encodePlainList(uris: string[]): string {
 
 interface SubscriptionEndpointBase {
   protocol: ProtocolName;
+  /**
+   * The CORE that serves this endpoint: the profile's pinned engine, or the
+   * protocol's native one. Never a null to resolve downstream.
+   *
+   * A protocol name alone does not determine the link. Two cores speaking one
+   * protocol do not speak the same dialect of it: xray's hysteria2 has no
+   * Salamander obfuscation at all, so a link built for the native daemon and
+   * handed to a client of an xray-served inbound makes that client obfuscate
+   * into a server that does not deobfuscate, and the connection simply never
+   * comes up. On the screen that reads as "the node is down".
+   *
+   * Optional only so an endpoint written by hand in a test stays valid; the
+   * subscription service always sets it.
+   */
+  engine?: EngineName;
   /**
    * DISPLAY LABEL, not the node's name, whatever the field is called: it is
    * built by `subscriptionServerName` out of the flag, the host remark and the

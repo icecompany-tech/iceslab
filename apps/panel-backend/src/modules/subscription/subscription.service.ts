@@ -38,6 +38,8 @@ import {
   type SubscriptionEndpoint,
   type SubscriptionJsonResponse,
 } from './subscription.formats.js';
+import { engineSpeaksHysteriaObfs } from '../../core-adapters/hysteria/index.js';
+import { effectiveEngineOf } from '../nodes/node-engines.js';
 import { endpointId } from './endpoint-identity.js';
 import { withVlessRouteTag } from './formats/xrayjson.js';
 
@@ -582,7 +584,11 @@ export async function generateSubscription(
               },
             },
             include: {
-              profile: { select: { id: true, protocol: true, config: true } },
+              // `engine` is not decoration here: it decides what the link may
+              // say. Two cores speaking one protocol do not speak the same
+              // dialect of it, and a link built for the wrong one does not fail
+              // loudly, it just never connects.
+              profile: { select: { id: true, protocol: true, engine: true, config: true } },
               node: {
                 select: {
                   id: true,
@@ -795,6 +801,10 @@ export async function generateSubscription(
     const ib = {
       id: b.id,
       protocol: b.profile.protocol,
+      // The core that actually serves this, never a null to resolve later. The
+      // protocol alone does not determine the link; see the `engine` field on
+      // SubscriptionEndpointBase.
+      engine: effectiveEngineOf(b.profile),
       profileId: b.profile.id,
       config: cfgMerged,
     };
@@ -863,6 +873,10 @@ export async function generateSubscription(
       allowInsecure: hostOverrides?.allowInsecure ?? false,
       securityLayer,
       disableForFormats: hostOverrides?.disableForFormats ?? [],
+      // Carried on every endpoint, not just the ones that read it today: the
+      // question "which core serves this" is asked by the link builder, by the
+      // admin endpoints view and, before long, by anything drawing a pair.
+      engine: ib.engine,
     };
 
     if (ib.protocol === 'hysteria') {
@@ -875,6 +889,14 @@ export async function generateSubscription(
             portHoppingEnd?: number;
           }
         | null;
+      // Salamander is a property of the CORE, not of the profile. The setting
+      // is stored either way; whether it reaches the client depends on which
+      // core serves the inbound, because xray's hysteria2 has none and a client
+      // obfuscating into it simply never connects. See
+      // engineSpeaksHysteriaObfs.
+      const obfsPassword = engineSpeaksHysteriaObfs(ib.engine)
+        ? hyCfg?.obfsPassword
+        : undefined;
       endpoints.push({
         protocol: 'hysteria',
         nodeName,
@@ -882,7 +904,7 @@ export async function generateSubscription(
         port,
         ...hostMeta,
         password: user.hysteriaPassword,
-        obfsPassword: hyCfg?.obfsPassword,
+        obfsPassword,
         upMbps: hyCfg?.brutalUpMbps,
         downMbps: hyCfg?.brutalDownMbps,
         portHoppingStart: hyCfg?.portHoppingStart,
@@ -892,7 +914,7 @@ export async function generateSubscription(
           host,
           port,
           name: nodeName,
-          obfsPassword: hyCfg?.obfsPassword,
+          obfsPassword,
           upMbps: hyCfg?.brutalUpMbps,
           downMbps: hyCfg?.brutalDownMbps,
           portHoppingStart: hyCfg?.portHoppingStart,

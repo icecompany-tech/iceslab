@@ -37,6 +37,27 @@ export interface HysteriaUriOpts {
   portHoppingEnd?: number;
 }
 
+/**
+ * Does the core serving this inbound speak Salamander obfuscation?
+ *
+ * The native hysteria2 daemon does, and so does sing-box. Xray's hysteria2 does
+ * NOT: its transport carries auth, udpIdleTimeout and masquerade, and nothing
+ * else (checked against Xray-core v26.3.27, transport/internet/hysteria/
+ * config.proto, 2026-09-12).
+ *
+ * This is why a share link cannot be built from the protocol name alone. Hand a
+ * client an `obfs=salamander` link for an xray-served inbound and it obfuscates
+ * into a server that does not deobfuscate: no error, no handshake, nothing to
+ * see. On the operator's screen that reads as "the node is down", and under
+ * RU DPI it also loses the one property hysteria2 is kept for.
+ */
+export function engineSpeaksHysteriaObfs(engine: string | undefined): boolean {
+  // Unknown engine means an endpoint built by hand (a test, a preview). The
+  // pre-engine behaviour is to emit obfs, and the only core that must not is
+  // xray, so name that one rather than guessing about the rest.
+  return engine !== 'xray';
+}
+
 export function buildHysteriaUri(opts: HysteriaUriOpts): string {
   // Hiddify's outbound parser was failing on bare `hysteria2://...:443/#name`
   // ("Unknown parse outbound") on 2026-05-06. Adding an explicit `sni` query
