@@ -168,6 +168,41 @@ type NodePolicyAction struct {
 	Exit string `json:"exit,omitempty"`
 }
 
+// DnsCfg mirrors DnsCfg in shared/transport.ts: who answers this profile's name
+// lookups (Э3 piece F).
+//
+// The node renders no `dns` section today, so the DNS-hijack rule hands client
+// queries to dns-out and they fall through to the NODE's system resolver. On a
+// cascade that is the wrong machine: the name is resolved by the entry while
+// the connection leaves from the exit (E13). Naming a resolver fixes it without
+// touching the routing stages, because the built-in DNS dials its servers as
+// ordinary connections and those take the same road as the traffic.
+//
+// Nil renders exactly as before, which is the property the first commit is
+// verified against.
+type DnsCfg struct {
+	// Servers in order; the first whose Domains match answers. A bare address
+	// with no Domains is the general resolver.
+	Servers []DnsServer `json:"servers"`
+	// UseIP | UseIPv4 | UseIPv6. Empty = the core's default.
+	QueryStrategy string `json:"queryStrategy,omitempty"`
+	DisableCache  bool   `json:"disableCache,omitempty"`
+}
+
+type DnsServer struct {
+	// Plain IP or a DoH endpoint. A plain IP dodges the bootstrap problem of
+	// resolving the resolver's own hostname.
+	Address string `json:"address"`
+	// Names this server is authoritative for. Empty = it answers everything,
+	// and it renders as a bare string rather than an object, which is the shape
+	// xray uses for a plain fallback resolver.
+	Domains []string `json:"domains,omitempty"`
+	// Only accept answers inside these ranges, e.g. ["geoip:ru"].
+	ExpectIPs []string `json:"expectIps,omitempty"`
+	// Keep queries this server declined off the general resolver.
+	SkipFallback bool `json:"skipFallback,omitempty"`
+}
+
 type ApplyInboundsRequest struct {
 	Inbounds []InboundDto `json:"inbounds"`
 	// Raw rather than decoded: the server hands it to whichever adapters accept

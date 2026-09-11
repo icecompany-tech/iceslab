@@ -873,6 +873,10 @@ type xrayInboundCfgWire struct {
 	// Warp is the optional Cloudflare WARP egress (per-node v1). nil/absent =
 	// direct egress. Reuses the config.go WarpConfig type (json-tagged).
 	Warp *WarpConfig `json:"warp,omitempty"`
+
+	// Dns names the resolver this profile's users get (Э3 piece F). nil/absent
+	// = the node's own system resolver, which is what every node does today.
+	Dns *dto.DnsCfg `json:"dns,omitempty"`
 }
 
 // ApplyInbound parses the panel-pushed Xray config, swaps it into the live
@@ -934,6 +938,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		XhttpPaddingBytes:                       wire.XhttpPaddingBytes,
 		GrpcMultiMode:                           wire.GrpcMultiMode,
 		Warp:                                    wire.Warp,
+		Dns:                                     wire.Dns,
 	}
 
 	// Multi-inbound: an identified inbound lives in the map under its own id, so
@@ -1011,7 +1016,27 @@ func inboundEqual(a, b InboundConfig) bool {
 	if !warpEqual(a.Warp, b.Warp) {
 		return false
 	}
+	// Changing only the resolver is still a change: it rewrites the `dns`
+	// section and the core has to be handed the new one. Leaving it out here
+	// would make the switch save in the panel and never reach the node.
+	if !dnsEqual(a.Dns, b.Dns) {
+		return false
+	}
 	return true
+}
+
+// dnsEqual reports whether two resolver settings are the same, so a push that
+// repeats one skips the restart. nil == nil, and comparison is on the rendered
+// form because the structs carry slices.
+func dnsEqual(a, b *dto.DnsCfg) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	same, err := sameDns(a, b)
+	if err != nil {
+		return false
+	}
+	return same
 }
 
 // warpEqual reports whether two WARP egress configs are equivalent, so

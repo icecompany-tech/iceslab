@@ -187,6 +187,61 @@ export interface XrayInboundCfg {
    *  it. Registered + provisioned panel-side. Absent = direct egress (default).
    *  See docs/studies/STUDY-warp-native.md. */
   warp?: WarpCfg;
+  /** Who answers this profile's name lookups. Absent = the node's own system
+   *  resolver, which is what every node does today. See DnsCfg. */
+  dns?: DnsCfg;
+}
+
+/**
+ * The resolver a node uses for the names its users ask for (Э3 piece F).
+ *
+ * We render no `dns` section at all today, so xray's DNS-hijack rule hands the
+ * client's queries to `dns-out`, which falls through to the NODE's system
+ * resolver. On a cascade that is the wrong machine: the name is resolved by the
+ * entry while the connection leaves from the exit (field observation E13). What
+ * is DNS-poisoned in the entry's country stays poisoned though the subscriber
+ * is paying to leave it, a geo-pinned CDN answers for the wrong country, and
+ * the entry's resolver sees every name the user visits.
+ *
+ * Naming a resolver here fixes that WITHOUT touching the routing stages: xray's
+ * built-in DNS dials its servers as ordinary connections, so on a cascade entry
+ * those queries take the same road as the traffic and are answered from the
+ * exit's vantage point. The Policy stage is not involved and its order does not
+ * move.
+ *
+ * A MODEL, not raw xray JSON, for the same reasons as NodePolicy: a non-xray
+ * core has to render the same intent its own way, and the panel has to be able
+ * to show what a node is set to rather than a blob.
+ *
+ * The shape deliberately mirrors the split-DNS block the panel already emits
+ * into CLIENT configs (RU_SPLIT_DNS in xrayjson.ts): same three ideas, an
+ * address, the domains it is authoritative for, and whether other queries may
+ * fall back to it. Mirrored rather than shared, because those constants live in
+ * layer A (what the client does) and this is layer B (what the node does), and
+ * the two must be able to diverge without dragging each other.
+ */
+export interface DnsCfg {
+  /** Resolvers in order; the first one whose `domains` match answers. A bare
+   *  address with no `domains` is the general resolver. */
+  servers: DnsServer[];
+  /** What the resolver is allowed to return. Omit for the core's default. */
+  queryStrategy?: 'UseIP' | 'UseIPv4' | 'UseIPv6';
+  /** Turn off the resolver's answer cache. Off is the sane default; this is
+   *  here for the operator debugging a stale answer, not for everyday use. */
+  disableCache?: boolean;
+}
+
+export interface DnsServer {
+  /** Plain IP ("77.88.8.8"), or a DoH endpoint ("https://dns.google/dns-query").
+   *  A plain IP dodges the bootstrap problem of resolving the resolver. */
+  address: string;
+  /** Names this server is authoritative for. Empty = it answers everything. */
+  domains?: string[];
+  /** Only accept answers inside these ranges, e.g. ["geoip:ru"]. */
+  expectIps?: string[];
+  /** Keep queries this server declined off the general resolver, so a name
+   *  scoped here cannot quietly be answered by the fallback instead. */
+  skipFallback?: boolean;
 }
 
 /**

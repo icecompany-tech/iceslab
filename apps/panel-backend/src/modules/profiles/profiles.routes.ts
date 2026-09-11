@@ -109,6 +109,13 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileNameTakenError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      // Changing this profile's resolver would leave a node it is deployed to
+      // with two different ones, which its core refuses whole.
+      if (err instanceof svc.DnsResolverConflictError) {
+        return reply
+          .code(409)
+          .send({ error: 'DNS_RESOLVER_CONFLICT', message: err.message });
+      }
       throw err;
     }
   });
@@ -142,6 +149,14 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
         err instanceof svc.NodeAlreadyBoundError
       ) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      }
+      // Э3 piece F: a node has one resolver for all its profiles, and this
+      // deployment would give it two. Named separately from CONFLICT so the
+      // panel can point at the profile already there.
+      if (err instanceof svc.DnsResolverConflictError) {
+        return reply
+          .code(409)
+          .send({ error: 'DNS_RESOLVER_CONFLICT', message: err.message });
       }
       throw err;
     }

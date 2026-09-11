@@ -60,6 +60,94 @@ func buildPolicyRules(rules []dto.NodePolicyRule) ([]any, error) {
 	return out, nil
 }
 
+// resolveDns picks the one `dns` section this process will run.
+//
+// The section is process-wide while the setting is per PROFILE, and a node
+// serves several profiles. Two profiles asking for different resolvers is a
+// question with no correct answer here, so it is not answered: rendering one of
+// them would mean the operator reads "resolver X" on a profile whose users are
+// being answered by Y, and nothing anywhere would say so. Refusing keeps the
+// running config and hands the reason back to the panel, which is where the two
+// profiles can be looked at side by side.
+//
+// Nil when nobody asked, which is every node today and renders with no `dns`
+// key at all.
+func resolveDns(inbounds []InboundConfig) (map[string]any, error) {
+	var chosen *dto.DnsCfg
+	var chosenTag string
+	for _, ib := range inbounds {
+		if ib.Dns == nil {
+			continue
+		}
+		if chosen == nil {
+			chosen = ib.Dns
+			chosenTag = ib.withDefaults().Tag
+			continue
+		}
+		same, err := sameDns(chosen, ib.Dns)
+		if err != nil {
+			return nil, err
+		}
+		if !same {
+			return nil, fmt.Errorf(
+				"render xray config: inbounds %q and %q ask for different DNS resolvers, "+
+					"and the core has one resolver for the whole process",
+				chosenTag, ib.withDefaults().Tag,
+			)
+		}
+	}
+	if chosen == nil {
+		return nil, nil
+	}
+
+	servers := make([]any, 0, len(chosen.Servers))
+	for _, s := range chosen.Servers {
+		// A resolver with no scoping renders as a bare string, which is the
+		// shape xray uses for a plain fallback. Emitting the object form with
+		// empty fields also works, but the config an operator opens should look
+		// like the ones in the documentation.
+		if len(s.Domains) == 0 && len(s.ExpectIPs) == 0 && !s.SkipFallback {
+			servers = append(servers, s.Address)
+			continue
+		}
+		entry := map[string]any{"address": s.Address}
+		if len(s.Domains) > 0 {
+			entry["domains"] = s.Domains
+		}
+		if len(s.ExpectIPs) > 0 {
+			entry["expectIPs"] = s.ExpectIPs
+		}
+		if s.SkipFallback {
+			entry["skipFallback"] = true
+		}
+		servers = append(servers, entry)
+	}
+
+	out := map[string]any{"servers": servers}
+	if chosen.QueryStrategy != "" {
+		out["queryStrategy"] = chosen.QueryStrategy
+	}
+	if chosen.DisableCache {
+		out["disableCache"] = true
+	}
+	return out, nil
+}
+
+// sameDns compares two resolver settings by their rendered form: the structs
+// carry slices, so == will not do, and a push that repeats the same setting has
+// to be a no-op rather than a restart.
+func sameDns(a, b *dto.DnsCfg) (bool, error) {
+	ja, err := json.Marshal(a)
+	if err != nil {
+		return false, err
+	}
+	jb, err := json.Marshal(b)
+	if err != nil {
+		return false, err
+	}
+	return string(ja) == string(jb), nil
+}
+
 // policyOutboundTag maps a destination to the outbound that reaches it here.
 // The tags are the ones this file emits: "direct" (freedom), "blocked"
 // (blackhole), "warp" (the wireguard outbound, present only when the node has
@@ -204,6 +292,12 @@ type InboundConfig struct {
 	// inbound's user traffic through it instead of `direct`. nil = direct egress
 	// (default). See docs/studies/STUDY-warp-native.md.
 	Warp *WarpConfig
+
+	// Dns names the resolver this profile's users get (Э3 piece F). nil = no
+	// `dns` section at all, which is what every node renders today and means
+	// the node's own system resolver answers. See dto.DnsCfg for why that is
+	// the wrong machine on a cascade.
+	Dns *dto.DnsCfg
 }
 
 // WarpConfig holds Cloudflare WARP egress credentials from a wgcf-style device
@@ -618,6 +712,14 @@ func renderMultiConfig(
 		routing["balancers"] = bals
 	}
 
+	// Э3 piece F: who answers the users' name lookups. One section for the whole
+	// process, so the inbounds have to agree on it; resolveDns says what happens
+	// when they do not.
+	dnsSection, err := resolveDns(inboundCfgs)
+	if err != nil {
+		return nil, err
+	}
+
 	doc := map[string]any{
 		"log": map[string]any{
 			"loglevel": "info",
@@ -642,6 +744,12 @@ func renderMultiConfig(
 		"inbounds":  inbounds,
 		"outbounds": outbounds,
 		"routing":   routing,
+	}
+	// The resolver, when the panel named one. Absent otherwise, which is the
+	// state every node is in today: no `dns` key, DNS falls through to the
+	// host's own resolver.
+	if dnsSection != nil {
+		doc["dns"] = dnsSection
 	}
 	// A balanced entry also carries the top-level `observatory` (nil on every
 	// other node, so the key is simply absent there).
