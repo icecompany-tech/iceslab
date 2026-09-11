@@ -140,7 +140,31 @@ export const XrayConfigSchema = z.object({
    * `kcp` collides with Hysteria on the same UDP port, admin must avoid
    * port overlap manually (the panel doesn't cross-validate today).
    */
-  network: z.enum(['raw', 'xhttp', 'ws', 'grpc', 'httpupgrade', 'kcp']).default('raw'),
+  /**
+   * `tcp` is accepted and NORMALISED to `raw` on write.
+   *
+   * xray renamed the transport in v24.9.30, and rows written before that still
+   * carry the old word. Saved config is jsonb, so nothing rewrote them: a
+   * profile created back then loads fine and cannot be saved again, which is the
+   * worst shape a validation error takes, because the operator did not type the
+   * value they are being refused for.
+   *
+   * An alias rather than a data migration, and rather than leaving it: the alias
+   * cleans itself. Every re-save rewrites one row, including in databases we
+   * will never see, which a migration cannot reach. Same form as the cascade
+   * link-protocol dictionary: the old spelling stays legal, and only what
+   * nothing implements is refused.
+   *
+   * ⚠ `network: "tcp,udp"` in a ROUTING RULE is a different dictionary entirely:
+   * there it names the rule's transport protocol, not an xray stream transport,
+   * and `tcp` is the correct value. Do not normalise that one. The Clash and
+   * sing-box builders also translate `raw` back to `tcp`, because those formats
+   * call it that, so the two spellings coexist on purpose.
+   */
+  network: z.preprocess(
+    (v) => (v === 'tcp' ? 'raw' : v),
+    z.enum(['raw', 'xhttp', 'ws', 'grpc', 'httpupgrade', 'kcp']).default('raw'),
+  ),
   /** Path for `ws`, `xhttp`, `httpupgrade`. Default `/`. Ignored for `raw`/`grpc`/`kcp`. */
   path: z.string().max(255).optional(),
   /** Host header override for `ws`/`xhttp`/`httpupgrade`. Empty → use connect host. */
