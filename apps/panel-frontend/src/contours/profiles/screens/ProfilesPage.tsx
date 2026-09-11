@@ -400,6 +400,7 @@ export function ProfilesPage() {
               bindingCount={bindingsByProfile.get(p.id) ?? p.bindingCount}
               onEdit={() => navigate(`/profiles/${p.id}`)}
               onDelete={() => handleDelete(p)}
+              onDeploy={() => navigate(`/hosts/new?profileId=${p.id}`)}
             />
           ))}
         </SimpleGrid>
@@ -512,11 +513,14 @@ function ProfileCard({
   bindingCount,
   onEdit,
   onDelete,
+  onDeploy,
 }: {
   profile: Profile;
   bindingCount: number;
   onEdit: () => void;
   onDelete: () => void;
+  /** To the host screen, with this profile already chosen. */
+  onDeploy: () => void;
 }) {
   const { t } = useTranslation();
   const accent = PROTOCOL_ACCENT[profile.protocol] ?? MIST;
@@ -565,10 +569,16 @@ function ProfileCard({
               <IconDotsVertical size={14} />
             </ActionIcon>
           </Menu.Target>
-          {/* Deploying and test-connect left the profile card: a profile is a
-              template, and where it runs is decided on the host, which is the
-              thing that actually carries a node and a port. */}
+          {/* Deploying happens on the host screen: a profile is a template, and
+              where it runs is decided by the thing that carries a node and a
+              port. What went wrong was the DOOR, not the move: the only way in
+              was a hint shown once after creating a profile, so closing it lost
+              the action for good. This item is the second way to the same
+              screen, standing where the operator is when they decide it. */}
           <Menu.Dropdown style={{ backgroundColor: CARD, borderColor: HAIRLINE }}>
+            <Menu.Item leftSection={<IconServer2 size={14} />} onClick={onDeploy}>
+              {t('profiles.deployHere')}
+            </Menu.Item>
             <Menu.Item leftSection={<IconEdit size={14} />} onClick={onEdit}>
               {t('common.edit')}
             </Menu.Item>
@@ -596,8 +606,14 @@ function ProfileCard({
               cores, and on this card the protocol alone made them twins. */}
           {profilePairLabel(profile, t)}
         </Badge>
+        {/* The count of nodes serving this profile, and the second door.
+            «0» here is the sentence an operator reads at the exact moment they
+            realise the profile runs nowhere, so the number itself takes them to
+            the screen that fixes it rather than leaving them to find it. */}
         <Tooltip label={bindingCount === 0 ? t('profiles.bindingsTooltipNone') : t('profiles.bindingsTooltipDeployed')}>
-          <Box
+          <UnstyledButton
+            type="button"
+            onClick={onDeploy}
             aria-label={bindingCount === 0 ? t('profiles.bindingsTooltipNone') : t('profiles.bindingsTooltipDeployed')}
             style={{
               display: 'inline-flex',
@@ -615,7 +631,7 @@ function ProfileCard({
           >
             <IconServer2 size={11} />
             {bindingCount}
-          </Box>
+          </UnstyledButton>
         </Tooltip>
         <Tooltip label={t('profiles.usersTooltip', { count: profile.userCount })}>
           <Text

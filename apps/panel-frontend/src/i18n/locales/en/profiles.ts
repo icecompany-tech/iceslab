@@ -107,8 +107,13 @@ export const profiles = {
     searchPlaceholder: 'Search by name or description…',
     emptyFiltered: 'Nothing matches the filter.',
     deployToNodes: 'Deploy to nodes',
-    bindingsTooltipNone: 'Not deployed - click to deploy',
-    bindingsTooltipDeployed: 'Deployed on nodes - click to manage',
+    // Both tooltips promised a click while the chip was not clickable: a dead
+    // promise, left over from when deploying lived only in the hint shown after
+    // creating a profile. Both now open the host screen with this profile
+    // already chosen.
+    bindingsTooltipNone: 'Running nowhere. Open a host and pick a node.',
+    bindingsTooltipDeployed: 'How many nodes serve it. Open a host and add another.',
+    deployHere: 'Deploy on a node',
     usersTooltip: 'Users with access via squads: {{count}}',
     deleteTitle: 'Delete profile "{{name}}"?',
     deleteWithBindings: 'Profile is deployed to {{count}} nodes. Deleting will remove it from all nodes (cascade) and invalidate this protocol\'s subscriptions for affected users.',

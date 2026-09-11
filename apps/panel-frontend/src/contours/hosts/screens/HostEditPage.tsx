@@ -120,7 +120,21 @@ export function HostEditPage() {
   const [country, setCountry] = useState<string | null>(null);
   const [port, setPort] = useState<number | ''>('');
   const [enabled, setEnabled] = useState(true);
-  const [profileId, setProfileId] = useState<string | null>(null);
+  /**
+   * Arriving from a profile: /hosts/new?profileId=... starts with it chosen.
+   *
+   * The profile card is where an operator stands when they decide a profile
+   * should run somewhere, and this screen is where that happens, so the
+   * parameter carries the decision across instead of making them find the same
+   * profile again in a list of all of them.
+   *
+   * Read once, at mount, rather than in an effect: an effect would fight the
+   * operator the moment they change the field, and would cost a setState in a
+   * render cycle for a value that is known before the first one.
+   */
+  const [profileId, setProfileId] = useState<string | null>(() =>
+    id === 'new' ? new URLSearchParams(window.location.search).get('profileId') : null,
+  );
   const [bindingId, setBindingId] = useState<string | null>(null);
   // The node the operator picked. On create this is what gets sent; the binding
   // is the API's business, not the form's.
@@ -300,7 +314,11 @@ export function HostEditPage() {
       if (isNew) {
         // Say what the operator means: serve this profile from this node on this
         // port. The binding is created server-side in the same transaction.
-        if (!profileId || !nodeId || port === '') throw new Error(t('hostEdit.pickNodeFirst'));
+        // The profile must be one that exists: the id can also arrive in the
+        // URL, and a stale link would otherwise post a profile nobody has.
+        if (!profileId || !profiles.some((p) => p.id === profileId) || !nodeId || port === '') {
+          throw new Error(t('hostEdit.pickNodeFirst'));
+        }
         return createHost({ profileId, nodeId, port: Number(port), ...payload });
       }
       return updateHost(host!.id, payload);
