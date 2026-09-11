@@ -22,31 +22,28 @@ import { blankPolicy } from '@/contours/traffic/lib/routeRules';
 import { blankPreset } from '@/contours/traffic/lib/devicePresets';
 
 /**
- * Routes: what happens to traffic, in the two places it can be decided.
+ * Routes: what happens to traffic, sorted by WHOM a rule reaches.
  *
- *   On the node   - route policies. Traffic has already reached us; the policy
- *                   says which door it leaves by. Granted per squad.
- *   On the device - the routing preset baked into the client's own config, plus
- *                   the operator's own domain lists and raw rules. Decides what
- *                   never enters the tunnel at all.
+ *   Node rules    - the ordered list a node runs, behind /api/node-policies.
+ *                   Chosen by the operator on the node, and it reaches every
+ *                   person whose traffic passes through that machine.
+ *   User rules    - the named pair of domain lists behind /api/route-policies.
+ *                   Applied at the entry node too, but granted per squad and
+ *                   picked by the tag in the client's own UUID, so it reaches
+ *                   one person.
+ *   Device rules  - the routing preset baked into the client's config, plus the
+ *                   operator's own lists and raw rules. Runs before the tunnel
+ *                   and decides what never enters it.
  *
- * Both panes are editors, but only one of them writes for real. Route policies
- * are stored data with a full CRUD behind them, and saving one re-pushes every
+ * The first two sit on the same machine, so naming them by place made them read
+ * as one thing. They are told apart by reach, and the tabs say so.
+ *
+ * Only two of the three write for real. Both policy kinds are stored data with
+ * a full CRUD behind them, and saving the squad-granted kind re-pushes every
  * cascade entry, so the change reaches the fleet. Presets are still three fixed
  * ids compiled into the subscription builders: their pane reads real data and
  * reports what saving hits, until GET /api/routing-presets exists. The
  * operator's own lists and raw rules are stored as data and editable below.
- */
-
-/**
- * Three panes, not two.
- *
- * `policy` is Э3 layer B: the ordered rule list a NODE runs, stored behind
- * /api/node-policies and attached to machines by id. `node` is the older
- * squad-granted pair of domain lists behind /api/route-policies, which squads
- * still hand out and which this pane is still the only editor for. They are
- * different resources and both are live, so both keep a home here rather than
- * one quietly losing its editor.
  */
 type Pane = 'policy' | 'node' | 'device';
 
@@ -169,7 +166,7 @@ export function RoutesPage() {
 
   return (
     <Stack gap={20}>
-      {/* Page bar: the two layers are the page, so they are the bar. */}
+      {/* Page bar: the three reaches are the page, so they are the bar. */}
       <Box className="page-bar">
         <Box
           style={{
@@ -324,5 +321,3 @@ export function RoutesPage() {
     </Stack>
   );
 }
-
-/* ───── On the node ─────────────────────────────────────────────────────── */

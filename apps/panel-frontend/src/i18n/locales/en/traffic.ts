@@ -1,8 +1,8 @@
 export const traffic = {
 
   routes: {
-    panePolicy: 'Node policy',
-    panePolicyHint: 'Traffic has reached the node. This decides which door it leaves by.',
+    panePolicy: 'Node rules',
+    panePolicyHint: 'They hold for everyone going through the node: which door traffic leaves by.',
     factNodePolicies_one: '{{count}} node policy',
     factNodePolicies_other: '{{count}} node policies',
     nodePoliciesTitle: 'Node policies',
@@ -37,10 +37,10 @@ export const traffic = {
       fromOurIp: 'From our IP',
       viaDirection: 'By a cascade exit',
     },
-    paneNode: 'Squad rules',
-    paneNodeHint: 'Domain lists a squad hands the client along with the subscription.',
-    paneDevice: 'On the device',
-    paneDeviceHint: 'Traffic is still on the phone. This decides what never enters the tunnel.',
+    paneNode: 'User rules',
+    paneNodeHint: 'They hold for one user: domain lists a squad hands out with the subscription.',
+    paneDevice: 'Device rules',
+    paneDeviceHint: "They hold on the user's device, before the tunnel: what never enters it.",
     factPolicies_one: '{{count}} policy',
     factPolicies_other: '{{count}} policies',
     factPresets: '{{count}} presets',

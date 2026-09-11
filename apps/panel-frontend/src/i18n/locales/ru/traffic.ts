@@ -1,8 +1,8 @@
 export const traffic = {
 
   routes: {
-    panePolicy: 'Политика ноды',
-    panePolicyHint: 'Трафик дошёл до ноды. Решаем, какой дверью он выйдет.',
+    panePolicy: 'Правила ноды',
+    panePolicyHint: 'Действуют на всех, кто идёт через ноду: какой дверью трафик выйдет.',
     factNodePolicies_one: 'политика ноды: {{count}}',
     factNodePolicies_few: 'политики ноды: {{count}}',
     factNodePolicies_many: 'политик ноды: {{count}}',
@@ -41,10 +41,10 @@ export const traffic = {
       fromOurIp: 'С нашего IP',
       viaDirection: 'Выходом каскада',
     },
-    paneNode: 'Правила сквадов',
-    paneNodeHint: 'Списки доменов, которые сквад выдаёт клиенту вместе с подпиской.',
-    paneDevice: 'На устройстве',
-    paneDeviceHint: 'Трафик ещё на устройстве. Решаем, что вообще не пойдёт в туннель.',
+    paneNode: 'Правила юзера',
+    paneNodeHint: 'Действуют на одного юзера: списки доменов, которые сквад выдаёт вместе с подпиской.',
+    paneDevice: 'Правила устройства',
+    paneDeviceHint: 'Действуют на устройстве юзера, до туннеля: что в туннель вообще не пойдёт.',
     factPolicies_one: 'политика: {{count}}',
     factPolicies_few: 'политики: {{count}}',
     factPolicies_many: 'политик: {{count}}',
