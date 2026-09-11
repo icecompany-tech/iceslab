@@ -203,19 +203,7 @@ export function RoutesPage() {
           />
         </Box>
 
-        <Box className="page-bar-facts" style={{ paddingLeft: 14 }}>
-          <Text
-            className="page-bar-fact-soft"
-            style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '16px', color: MIST }}
-          >
-            {onPolicy
-              ? t('routes.panePolicyHint')
-              : onNode
-                ? t('routes.paneNodeHint')
-                : t('routes.paneDeviceHint')}
-          </Text>
-          <Box style={{ flex: 1, minWidth: 0 }} />
-        </Box>
+        <Box className="page-bar-facts" style={{ paddingLeft: 14 }} />
 
         <Box style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
           {/* The file format these two speak describes the older policies and
@@ -292,6 +280,34 @@ export function RoutesPage() {
           </UnstyledButton>
         </Box>
       </Box>
+
+      {/*
+        The sentence that says whom the open pane reaches, in the page rather
+        than in the bar.
+
+        It used to ride in the bar as a `page-bar-fact-soft`, and that class is
+        hidden below 1700px for all nine pages that use it at once. Exempting
+        this one would not have worked anyway: on the policy pane at 1280 the
+        row has 226px of free width and the sentence needs 457 on one line, so
+        no media query can fit it there. Here it has the whole width at any
+        size, which is the point, since these three tabs are told apart by this
+        sentence and by nothing else on the screen.
+      */}
+      <Text
+        style={{
+          fontFamily: DISPLAY,
+          fontSize: 13,
+          lineHeight: '18px',
+          color: MIST,
+          marginTop: -8,
+        }}
+      >
+        {onPolicy
+          ? t('routes.panePolicyHint')
+          : onNode
+            ? t('routes.paneNodeHint')
+            : t('routes.paneDeviceHint')}
+      </Text>
 
       {onPolicy ? (
         <PolicyPane
