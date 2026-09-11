@@ -43,6 +43,24 @@ export class CascadeNotFoundError extends Error {
     this.name = 'CascadeNotFoundError';
   }
 }
+
+/**
+ * A way out cannot be removed while a node policy still routes through it.
+ *
+ * Refused at the save, where the operator is looking at the cascade, rather
+ * than silently dropping the rule: a rule vanishing as a side effect of editing
+ * something else changes what a node does with traffic, and nothing would say
+ * so. Names the policies so the next step is obvious.
+ */
+export class DirectionInUseByPolicyError extends Error {
+  constructor(public policyNames: string[]) {
+    super(
+      `This way out is used by a node policy (${policyNames.join(', ')}). ` +
+        `Remove the rule there first, or the nodes running it would lose the route.`,
+    );
+    this.name = 'DirectionInUseByPolicyError';
+  }
+}
 export class CascadeNameTakenError extends Error {
   constructor(name: string) {
     super(`Cascade name "${name}" is already in use`);
@@ -686,14 +704,38 @@ async function writeTopologyV4(
     }
     if (match && unclaimed.has(match.id)) {
       unclaimed.delete(match.id);
-      return { ...d, tag: match.tag };
+      return { ...d, tag: match.tag, keepId: match.id };
     }
-    return { ...d, tag: nextTag++ };
+    return { ...d, tag: nextTag++, keepId: undefined as string | undefined };
   });
 
   await tx.cascadeLink.deleteMany({ where: { cascadeId } });
   await tx.cascadePosition.deleteMany({ where: { cascadeId } });
-  await tx.cascadeDirection.deleteMany({ where: { cascadeId } });
+  // Only the directions that actually WENT AWAY. This used to drop every row
+  // and recreate all of them, which was invisible while nothing referenced a
+  // direction: the tag survived, and the tag was the identity everything used.
+  //
+  // Э3 made the row id an identity too (a node-policy rule routes out through
+  // a direction and stores its id), and delete-all would have broken that twice
+  // over: every cascade edit would orphan every rule pointing at it, and the
+  // RESTRICT that exists to protect those rules would refuse the edit outright.
+  // A direction that survives an edit now survives as the same row.
+  if (unclaimed.size > 0) {
+    // Refused HERE, naming the policy, rather than left to the foreign key.
+    // RESTRICT would also stop it, but with a message about a constraint on a
+    // table the operator has never heard of, in the middle of saving a cascade.
+    const blocking = await tx.nodePolicyRule.findMany({
+      where: { actionDirectionId: { in: [...unclaimed] } },
+      select: { policy: { select: { name: true } } },
+    });
+    if (blocking.length > 0) {
+      const names = [...new Set(blocking.map((r) => r.policy.name))];
+      throw new DirectionInUseByPolicyError(names);
+    }
+    await tx.cascadeDirection.deleteMany({
+      where: { cascadeId, id: { in: [...unclaimed] } },
+    });
+  }
 
   for (const p of positions) {
     await tx.cascadePosition.create({
@@ -707,6 +749,18 @@ async function writeTopologyV4(
     });
   }
   for (const d of resolved) {
+    if (d.keepId) {
+      // The pool is rewritten, the row is not: its id is what policy rules hold.
+      await tx.cascadeDirectionNode.deleteMany({ where: { directionId: d.keepId } });
+      await tx.cascadeDirection.update({
+        where: { id: d.keepId },
+        data: {
+          countryCode: d.countryCode ?? null,
+          nodes: { create: d.nodeIds.map((nodeId) => ({ nodeId })) },
+        },
+      });
+      continue;
+    }
     await tx.cascadeDirection.create({
       data: {
         cascadeId,

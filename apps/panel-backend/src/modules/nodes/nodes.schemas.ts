@@ -93,6 +93,10 @@ export const UpdateNodeSchema = z.object({
   domain: DomainSchema,
   hardening: HardeningSchema,
   singboxEngine: z.boolean().optional(),
+  // Э3: the node-level routing policy this node runs. null detaches it, which
+  // rewrites the node's config without the rules rather than leaving the last
+  // policy running.
+  policyId: z.uuid().nullable().optional(),
 });
 export type UpdateNodeInput = z.infer<typeof UpdateNodeSchema>;
 

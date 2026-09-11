@@ -60,6 +60,15 @@ export function registerInboundEventHandlers(): void {
     enqueue(nodeId, `node.updated ${nodeName}`);
   });
 
+  // Э3: the node-level policy is rendered into the node's config, so an edited
+  // rule does nothing until the node takes it. Every node running the policy
+  // needs the push, including the ones that just LOST it (delete or detach):
+  // their config has to be rewritten without the rules, or the node keeps
+  // routing by a policy the operator has removed.
+  eventBus.on('policy.changed', ({ policyId, nodeIds }) => {
+    for (const nodeId of nodeIds) enqueue(nodeId, `policy.changed ${policyId}`);
+  });
+
   // ───── Slice 27: Profile + Binding events ─────
   //
   // binding.* is per-(profile, node), only that node needs re-push.

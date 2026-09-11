@@ -139,6 +139,10 @@ model CascadeDirection {
 
   cascade Cascade                @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
   nodes   CascadeDirectionNode[]
+  // Э3: node-policy rules that send traffic out through this direction. The FK
+  // is RESTRICT on their side, so a direction cannot be deleted while a policy
+  // still points at it.
+  policyRules NodePolicyRule[]
 
   @@unique([cascadeId, tag])
   @@map("cascade_directions")

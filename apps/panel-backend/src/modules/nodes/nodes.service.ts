@@ -7,6 +7,7 @@ import * as repo from './nodes.repository.js';
 import { getPanelPublicIp } from './panel-ip.js';
 import { issueBootstrapToken } from './bootstrap.service.js';
 import { registerWarpDevice } from '../warp/warp.service.js';
+import { assertPolicyFitsNode } from '../node-policies/node-policies.service.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import {
   mapNodeToPublic,
@@ -335,6 +336,14 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
       (input.hardening as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
   }
   if (input.singboxEngine !== undefined) data.singboxEngine = input.singboxEngine;
+  // Э3: attaching or detaching the node-level policy. Checked BEFORE the write,
+  // so a policy this node cannot carry out (a WARP rule with no WARP here, a
+  // cascade direction this node does not dial) is refused on the screen where
+  // the operator chose it, rather than by the core minutes later in a worker log.
+  if (input.policyId !== undefined) {
+    if (input.policyId) await assertPolicyFitsNode(input.policyId, id);
+    data.policyId = input.policyId;
+  }
 
   // Two fields feed the config we push to the agent, so editing either has to
   // re-push it. Detect them before the write, otherwise the live node config
@@ -349,10 +358,23 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   const addressChanged =
     input.address !== undefined && input.address !== existing.address;
 
+  // Attaching, swapping or detaching a policy changes what this node does with
+  // traffic, so it has to reach the node. Detaching counts: the config must be
+  // rewritten WITHOUT the rules, or the node keeps routing by a policy the
+  // operator has just taken off it.
+  const policyChanged =
+    input.policyId !== undefined && input.policyId !== existing.policyId;
+
   const updated = await repo.updateById(id, data);
 
   if (domainChanged || addressChanged) {
     eventBus.emit('node.updated', { nodeId: id, nodeName: updated.name });
+  }
+  if (policyChanged) {
+    eventBus.emit('policy.changed', {
+      policyId: input.policyId ?? existing.policyId ?? '',
+      nodeIds: [id],
+    });
   }
   // Read caches hold the node row as the subscription renders it, so any edit
   // can make them wrong, not just the domain. Moving a node to a new address

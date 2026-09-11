@@ -9,6 +9,7 @@ import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/infra/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
 import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
+import { resolvePolicyForNode } from '../node-policies/node-policies.service.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
 import { getLogger } from '../../lib/infra/logger.js';
 
@@ -374,7 +375,16 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   }
 
   const inbounds = await fetchEnabledInbounds(nodeId);
-  const req: ApplyInboundsRequest = { inbounds };
+  // Э3: the node-level policy rides in the SAME request as the inbounds, not in
+  // one of its own. Two sources of config would mean two acknowledgements, and
+  // "saved but not applied" would have to be worked out from two stamps instead
+  // of the one lastInboundSyncAt everything already reads.
+  //
+  // Direction ids become outbound names inside this call, in the same pass that
+  // prints the cascade fragments those outbounds come from: within one push the
+  // two cannot disagree.
+  const policy = await resolvePolicyForNode(nodeId);
+  const req: ApplyInboundsRequest = { inbounds, ...(policy ? { policy } : {}) };
 
   getLogger().info(
     `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,

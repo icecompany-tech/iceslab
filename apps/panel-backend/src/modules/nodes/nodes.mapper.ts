@@ -59,6 +59,9 @@ export interface PublicNodeDto {
   warpEnabled: boolean;
   // Engine-choice: sing-box engine installed alongside the native core.
   singboxEngine: boolean;
+  /** Э3: node-level routing policy this node runs, null = none. The rules
+   *  themselves come from /api/node-policies; the node carries only which one. */
+  policyId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,6 +90,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     hardening: (node.hardening as HardeningDto | null) ?? null,
     warpEnabled: node.warpEnabled,
     singboxEngine: node.singboxEngine,
+    policyId: node.policyId,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

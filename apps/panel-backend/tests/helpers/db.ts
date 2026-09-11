@@ -10,6 +10,12 @@ const TABLES = [
   // first test that CREATED one poisoned every later case in the same run.
   'group_route_policies',
   'route_policies',
+  // Э3 layer B. Rules before policies: the FK cascades either way, but the
+  // order here is documentation. Both listed the day the tables landed, because
+  // the last two omissions from this list (route_policies, app_settings) each
+  // cost a debugging session where one test decided another's outcome.
+  'node_policy_rules',
+  'node_policies',
   'group_cascade_exits',
   'cascade_hops',
   'cascades',

@@ -47,6 +47,13 @@ export interface DomainEventMap {
   // pushed to a node, so read-cache invalidation is the whole job. No payload:
   // a reorder moves many rows at once and naming one of them would mislead.
   'host.changed':         Record<string, never>;
+  // policy.changed → a node-level routing policy (Э3 layer B) was edited,
+  // deleted, or attached to / detached from a node. Unlike host.changed this
+  // DOES re-push: the policy is rendered into the node's config, so a rule the
+  // operator just wrote does nothing until the node takes it. Carries the
+  // policy so the listener can find the nodes running it; a deleted policy
+  // sends its former nodes, since they need the config rewritten without it.
+  'policy.changed':       { policyId: string; nodeIds: string[] };
   // squad.changed → a squad's ACL moved: which profiles it grants, which of
   // their hosts it hands out, which policies it grants. Subscription OUTPUT
   // only, never a node config, so like host.changed this exists purely to bust

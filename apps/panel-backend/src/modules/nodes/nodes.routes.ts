@@ -13,6 +13,7 @@ import * as nodesService from './nodes.service.js';
 import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import { getNodeSyncStatus } from './nodes.sync-status.js';
+import { PolicyDoesNotFitNodeError } from '../node-policies/node-policies.service.js';
 import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
 
@@ -236,6 +237,15 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       }
       if (err instanceof nodesService.NodeAlreadyExistsError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      }
+      // Э3: the policy the operator just chose cannot be carried out here (a
+      // WARP rule with no WARP on this node, a cascade direction it does not
+      // dial). 409, and the message names the node and the reason: the core
+      // would refuse it too, but minutes later and in a worker log.
+      if (err instanceof PolicyDoesNotFitNodeError) {
+        return reply
+          .code(409)
+          .send({ error: 'POLICY_DOES_NOT_FIT_NODE', message: err.message });
       }
       throw err;
     }

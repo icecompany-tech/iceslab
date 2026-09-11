@@ -22,6 +22,7 @@ import { squadsRoutes } from './modules/squads/squads.routes.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
 import { profilesRoutes } from './modules/profiles/profiles.routes.js';
 import { hostsRoutes } from './modules/hosts/hosts.routes.js';
+import { nodePoliciesRoutes } from './modules/node-policies/node-policies.routes.js';
 import { cascadeRoutes } from './modules/cascades/cascade.routes.js';
 import { routePolicyRoutes } from './modules/route-policies/route-policies.routes.js';
 import { hwidRoutes } from './modules/hwid/hwid.routes.js';
@@ -270,6 +271,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(dashboardRoutes);
   await app.register(profilesRoutes);
   await app.register(hostsRoutes);
+  await app.register(nodePoliciesRoutes);
   await app.register(cascadeRoutes);
   await app.register(routePolicyRoutes);
   await app.register(hwidRoutes);

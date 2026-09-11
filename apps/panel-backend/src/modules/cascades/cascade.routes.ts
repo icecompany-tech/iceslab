@@ -21,6 +21,16 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
   if (err instanceof svc.CascadeNameTakenError) {
     return reply.code(409).send({ error: 'CONFLICT', message: err.message });
   }
+  if (err instanceof svc.DirectionInUseByPolicyError) {
+    // 409: the save is well-formed, it conflicts with what a node policy is
+    // currently routing through. The policy names travel with it so the panel
+    // can link straight to them instead of saying "something uses this".
+    return reply.code(409).send({
+      error: 'DIRECTION_IN_USE_BY_POLICY',
+      message: err.message,
+      policies: err.policyNames,
+    });
+  }
   if (err instanceof svc.CascadeEntryCoreTooOldError) {
     // T7: entry node's xray is too old for exit selection. 409: the request is
     // well-formed but conflicts with the node's current core version.

@@ -49,6 +49,12 @@ model Node {
   regionId String? @map("region_id") @db.Uuid
   maxUsers Int?    @map("max_users")
 
+  // Э3: the node-level routing policy this node runs. NULL = none, which is
+  // every node until an operator attaches one, and renders exactly as before.
+  // At most one, because the stage IS a single ordered list: two policies would
+  // put the order between them back in the hands of whatever merged them.
+  policyId String? @map("policy_id") @db.Uuid
+
   // B3 / G (2026-06-14) - self-steal domain + node hardening.
   // domain: FQDN the operator A-records to THIS node's IP. Used as the REALITY
   //   serverName for self-steal profiles deployed here (SNI resolves to the node
@@ -104,10 +110,15 @@ model Node {
   cascadeLinksTo    CascadeLink[]          @relation("CascadeLinkTo")
   groupCascadeExits GroupCascadeExit[]
   region            Region?                @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  // SetNull, not Restrict: deleting a policy is an explicit act on a screen
+  // that lists which nodes run it, and the honest result is those nodes going
+  // back to no policy rather than the delete being refused.
+  policy            NodePolicy?            @relation(fields: [policyId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([deletedAt])
   @@index([regionId])
+  @@index([policyId])
   @@map("nodes")
 }
 

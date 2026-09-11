@@ -1,0 +1,79 @@
+/// Э3: what a NODE does with traffic, decided on the node rather than by the
+/// client. "RU direct, the rest through the tunnel, Google subnets into WARP."
+///
+/// Deliberately NOT the existing RoutePolicy next door, despite the name. That
+/// one is a CLIENT-side thing: a set of domain lists layered onto a cascade exit
+/// and handed to the subscriber as an extra route-profile they can pick. This is
+/// the other layer: the node applies it to everything arriving, and no client
+/// can see or refuse it. Two layers, two tables, and the panel is required never
+/// to call them by the same word on screen.
+///
+/// A named policy rather than rules hanging off a node: an operator runs one
+/// answer across a fleet, and the same set has to be attachable to twelve nodes
+/// without being retyped twelve times.
+model NodePolicy {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(64)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rules NodePolicyRule[]
+  /// Nodes running this policy. A node has at most one: the whole point of the
+  /// stage is a single ordered list, and two policies on one node would put the
+  /// order between them back in the hands of whatever loop merged them.
+  nodes Node[]
+
+  @@map("node_policies")
+}
+
+/// One line of a policy: what it fires on, and where that traffic goes.
+///
+/// `position` orders them; first match wins, the way every engine we render to
+/// works. No unique constraint on (policy, position) on purpose: reordering
+/// rewrites the whole list in one transaction, and a unique index would make
+/// that need throwaway intermediate values.
+model NodePolicyRule {
+  id       String  @id @default(uuid()) @db.Uuid
+  policyId String  @map("policy_id") @db.Uuid
+  position Int
+  enabled  Boolean @default(true)
+
+  /// Match, engine-neutral. Domains and IPs carry the spelling the panel already
+  /// uses elsewhere ("geosite:category-ru", "geoip:ru", "domain:example.com",
+  /// plain hosts, CIDRs); the node translates for the core it runs. Empty on
+  /// every field = catch-all, legitimate as the last rule and a mistake above.
+  matchDomain   String[] @map("match_domain")
+  matchIp       String[] @map("match_ip")
+  matchPort     String?  @map("match_port") @db.VarChar(64)
+  matchProtocol String[] @map("match_protocol")
+  matchNetwork  String?  @map("match_network") @db.VarChar(8)
+
+  /// direct | block | warp | cascade. A destination, not a direction.
+  actionKind String @map("action_kind") @db.VarChar(16)
+
+  /// Cascade action only: WHICH way out. Stored as the direction's id, never as
+  /// the outbound tag the node will see.
+  ///
+  /// The tag is derived at render time by the same pass that prints the cascade
+  /// fragments, so inside one push the two cannot disagree. A tag stored here
+  /// instead would be orphaned the moment a cascade is rebuilt, and the node
+  /// would then refuse a config over a rule nobody touched: a loud failure in
+  /// the wrong place, which is worse than a quiet one in the right place.
+  ///
+  /// RESTRICT, not cascade-delete: deleting a direction a policy still points at
+  /// has to be refused at the save, where the operator can see what they are
+  /// about to break. Silently dropping the rule would change what the node does
+  /// with traffic as a side effect of editing something else.
+  actionDirectionId String? @map("action_direction_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  policy    NodePolicy        @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  direction CascadeDirection? @relation(fields: [actionDirectionId], references: [id], onDelete: Restrict)
+
+  @@index([policyId, position])
+  @@index([actionDirectionId])
+  @@map("node_policy_rules")
+}
