@@ -314,6 +314,13 @@ export const users = {
     },
     searchHint: 'Matches username, description, email, tag, short id and an exact telegram id.',
     lastNodeNever: 'Has never connected.',
+    searchPlaceholder: 'Name, email, tag, id…',
+    firstConnectedUnknown: 'no data',
+    firstConnectedUnknownHint:
+      'This user has connected, but the panel has no date for the first time: it started recording one later. This is not "never": the empty date says we do not know, not that the person never came. The filter and the sort on this column do not see this row.',
+    firstConnectedNever: 'Has never connected: no date because there was no connection.',
+    filterFirstConnectedNote:
+      'Rows without a date are not returned. Users who were connecting before the panel began recording this date have none forever, and they drop out of the answer silently.',
     lastNodeGone: 'That node is gone, only the id {{id}} is left.',
     lastNodeGoneShort: 'node deleted',
     lastNodePending: 'The panel records the last node but does not return it in the list yet.',

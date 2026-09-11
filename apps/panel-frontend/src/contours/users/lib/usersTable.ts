@@ -60,12 +60,17 @@ export type ColumnFilter =
    */
   | { kind: 'choice'; param: keyof UserFilters; values: string[] }
   /** Two dates, either of which may be left empty. `presence` adds the
-   *  has-it-at-all question above them, where the field is nullable. */
+   *  has-it-at-all question above them, where the field is nullable.
+   *  `note` is an i18n key printed under the pair: a date filter silently drops
+   *  every row whose value is null, and where that is a large share of the
+   *  list the operator has to be told, or a filter that answered a narrower
+   *  question than the one asked looks like a complete answer. */
   | {
       kind: 'dates';
       after: keyof UserFilters;
       before: keyof UserFilters;
       presence?: keyof UserFilters;
+      note?: string;
     }
   /** Two sizes in GB, converted to bytes on the way out. */
   | { kind: 'bytes'; over: keyof UserFilters; under: keyof UserFilters };
@@ -136,7 +141,12 @@ export const USER_COLUMNS: UserColumn[] = [
     label: 'firstConnected',
     width: 160,
     sort: 'firstConnected',
-    filter: { kind: 'dates', after: 'firstConnectedAfter', before: 'firstConnectedBefore' },
+    filter: {
+      kind: 'dates',
+      after: 'firstConnectedAfter',
+      before: 'firstConnectedBefore',
+      note: 'usersTable.filterFirstConnectedNote',
+    },
   },
   { id: 'lastOnline', label: 'lastOnline', width: 150, sort: 'lastOnline' },
   { id: 'trafficReset', label: 'trafficReset', width: 160 },

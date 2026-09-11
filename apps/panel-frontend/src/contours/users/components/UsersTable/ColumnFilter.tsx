@@ -5,8 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { listNodes } from '@/lib/domain/nodes';
 import type { UserFilters } from '@/lib/domain/users';
 import { filterKeys, type ColumnFilter as Descriptor } from '@/contours/users/lib/usersTable';
-import { CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
-import { MONO_LABEL } from '@/contours/users/lib/textStyles';
+import { AMBER, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
+import { MONO, MONO_LABEL } from '@/contours/users/lib/textStyles';
 
 /**
  * The filters that do not fit a 28px lane, behind the lane.
@@ -142,6 +142,16 @@ function Body({
             onChange={(v) => setParam({ [filter.before]: v || undefined })}
           />
         </Field>
+        {/* A date comparison never matches NULL, so rows without the date fall
+            out of the answer without a word. Where that is common the column
+            says so here, next to the control that does it. */}
+        {filter.note && (
+          // A sentence, so not MONO_LABEL: that style is uppercase with wide
+          // tracking, which turns six lines of prose into a wall.
+          <Text style={{ ...MONO, fontSize: 11, lineHeight: '16px', color: AMBER }}>
+            {t(filter.note)}
+          </Text>
+        )}
       </Stack>
     );
   }

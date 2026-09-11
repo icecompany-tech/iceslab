@@ -268,9 +268,26 @@ export function UserRow({
       </Plain>
     ),
     deviceLimit: () => <Plain>{u.hwidDeviceLimit ?? '∞'}</Plain>,
-    firstConnected: () => (
-      <Plain>{u.firstConnectedAt ? shortDate(u.firstConnectedAt) : '-'}</Plain>
-    ),
+    /**
+     * Three answers again, and the middle one is the whole point.
+     *
+     * The panel only writes this date when it first creates the traffic row, so
+     * everyone who was already connecting before the column existed keeps a
+     * null forever. An empty cell would read as "never connected" while the
+     * cell next to it names the node this person last came through, and the row
+     * would contradict itself. "Never" is a fact about the user; "no data" is a
+     * fact about us, and they are not interchangeable.
+     */
+    firstConnected: () =>
+      u.firstConnectedAt ? (
+        <Plain>{shortDate(u.firstConnectedAt)}</Plain>
+      ) : u.lastOnlineAt || u.lastConnectedNodeId ? (
+        <Plain color={AMBER} title={t('usersTable.firstConnectedUnknownHint')}>
+          {t('usersTable.firstConnectedUnknown')}
+        </Plain>
+      ) : (
+        <Plain title={t('usersTable.firstConnectedNever')}>-</Plain>
+      ),
     lastOnline: () => <Plain>{relativeTime(u.lastOnlineAt, t).text}</Plain>,
     trafficReset: () => <Plain>{u.lastTrafficResetAt ? shortDate(u.lastTrafficResetAt) : '-'}</Plain>,
     lifetimeUsed: () => <Plain>{formatBytes(u.lifetimeTrafficBytes)}</Plain>,
