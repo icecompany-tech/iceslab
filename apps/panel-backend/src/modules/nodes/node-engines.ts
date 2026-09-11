@@ -122,13 +122,20 @@ export function nodeRendersProfile(
  * Returns the engines it judged against, so the caller can name them.
  */
 export function renderableAtSave(
-  node: { cores: unknown },
+  node: { cores: unknown; protocol: string; singboxEngine: boolean },
   profile: { protocol: string; engine: string | null },
-): { ok: boolean; engines: EngineName[]; wanted: EngineName } {
+): { ok: boolean; engines: EngineName[]; wanted: EngineName; justEnabled: boolean } {
   const engines = reportedEngines(node);
   const wanted = effectiveEngineOf(profile);
-  if (!engines) return { ok: true, engines: [], wanted };
-  return { ok: engines.includes(wanted), engines, wanted };
+  if (!engines) return { ok: true, engines: [], wanted, justEnabled: false };
+  // The narrow edge: the operator switches sing-box on for a node that has
+  // already reported, and between that click and the next poll the report still
+  // says what it said before. The pair is legitimate and the refusal is only
+  // "not yet". Falling back to intent to avoid it is what we just measured as
+  // wrong, so the difference is carried in the MESSAGE instead: this is the one
+  // job intendedEngines still has.
+  const justEnabled = !engines.includes(wanted) && intendedEngines(node).includes(wanted);
+  return { ok: engines.includes(wanted), engines, wanted, justEnabled };
 }
 
 /** Narrow helper so callers do not have to know the ProtocolName union. */

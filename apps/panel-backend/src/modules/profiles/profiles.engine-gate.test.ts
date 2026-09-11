@@ -180,6 +180,32 @@ describe('the gate on deploying a profile', () => {
     expect(refused.error).toBe('PROFILE_DOES_NOT_RUN_ON_NODE');
   });
 
+  it('says "not yet" rather than "no" when the core was only just switched on', async () => {
+    // The narrow edge: sing-box is enabled on a node that has already reported,
+    // and between that click and the next poll the report still says what it
+    // said before. The pair is legitimate and the refusal is only early.
+    // Falling back to intent to avoid refusing is what was measured as wrong,
+    // so the difference lives in the message.
+    const node = await makeNode({ protocol: 'xray', singboxEngine: true });
+    await reportCores(node.id, [{ name: 'xray', engine: 'xray' }]);
+    const tuic = await makeProfile('tuic', {});
+
+    const body = await bind(tuic.id, node.id, 443, 409);
+    expect(body.message).toContain('has not reported it yet');
+    expect(body.message).toContain('wait for the next status poll');
+  });
+
+  it('does not say "not yet" when the node is not set up for that core at all', async () => {
+    // The other half: here it really is "no", and offering to wait would send
+    // the operator to stare at a poll that is never going to change anything.
+    const node = await makeNode({ protocol: 'xray' });
+    await reportCores(node.id, [{ name: 'xray', engine: 'xray' }]);
+    const tuic = await makeProfile('tuic', {});
+
+    const body = await bind(tuic.id, node.id, 443, 409);
+    expect(body.message).not.toContain('wait for the next status poll');
+  });
+
   it('refuses an engine switch that would strand the profile on its nodes', async () => {
     // The pair changes on every node at once, so the same question is asked per
     // node. Editing an inbound out from under its own deployment is how a

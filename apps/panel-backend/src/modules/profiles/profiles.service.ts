@@ -251,7 +251,9 @@ export async function updateProfile(
         effectiveEngineOf(existing)) {
       const deployed = await prisma.profileNodeBinding.findMany({
         where: { profileId: id, node: { deletedAt: null } },
-        select: { node: { select: { name: true, cores: true } } },
+        select: {
+          node: { select: { name: true, cores: true, protocol: true, singboxEngine: true } },
+        },
       });
       for (const b of deployed) {
         assertNodeRendersProfile(b.node, { protocol: existing.protocol, engine: input.engine ?? null });
@@ -350,16 +352,23 @@ export class ProfileDoesNotRunOnNodeError extends Error {
  * the comment on PublicBindingDto.rendersProfile.
  */
 function assertNodeRendersProfile(
-  node: { name: string; cores: unknown },
+  node: { name: string; cores: unknown; protocol: string; singboxEngine: boolean },
   profile: { protocol: string; engine: string | null },
 ): void {
-  const { ok, engines, wanted } = renderableAtSave(node, profile);
+  const { ok, engines, wanted, justEnabled } = renderableAtSave(node, profile);
   if (ok) return;
   throw new ProfileDoesNotRunOnNodeError(
     node.name,
     `it needs the ${wanted} core and this node reports ${
       engines.length ? engines.join(', ') : 'no core at all'
-    }`,
+    }.` +
+      // "Not yet" and "no" read the same to an operator unless we say which one
+      // this is. Without this sentence somebody who has just switched sing-box
+      // on goes looking for a bug in a message that is merely early.
+      (justEnabled
+        ? ` The node is set up to run ${wanted} but has not reported it yet. If you have just` +
+          ` enabled it, wait for the next status poll and try again.`
+        : ''),
   );
 }
 
