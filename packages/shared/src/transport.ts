@@ -21,11 +21,32 @@ export type ProtocolName =
   | 'anytls'
   | 'shadowtls';
 
-/** Which proxy core renders an inbound. Most protocols have a single native
- *  core; the shared protocols (vless/vmess/trojan + ss on xray-core, hy2 on
- *  hysteria) can alternatively be served by the sing-box engine. tuic/anytls
- *  are singbox-only. Omit `engine` on an inbound to use the native core. */
-export type EngineName = 'xray' | 'hysteria' | 'singbox';
+/**
+ * Which proxy core renders something: the name an agent's adapter answers with.
+ *
+ * Two different questions live here and they have different answers.
+ *
+ * PINNABLE. On an inbound, only the cores that serve several protocols are
+ * worth naming: the shared protocols (vless/vmess/trojan + ss on xray-core, hy2
+ * on hysteria) can be moved to sing-box, and tuic/anytls/shadowtls are
+ * sing-box only. Which pairs an operator may actually choose is enforced by
+ * ENGINE_OPTIONS in the panel, not by this type.
+ *
+ * REPORTABLE. On a core the node lists in /healthz, the name is whatever that
+ * adapter returns, and four of them are single-protocol cores with no engine
+ * to choose: amneziawg, naive, mieru and mtproto. The union first carried only
+ * the three pinnable names, which made the type lie about the wire the day the
+ * node started reporting engines (2026-09-11); a node running AmneziaWG reports
+ * "amneziawg", and nothing in TypeScript would have noticed.
+ */
+export type EngineName =
+  | 'xray'
+  | 'hysteria'
+  | 'singbox'
+  | 'amneziawg'
+  | 'naive'
+  | 'mieru'
+  | 'mtproto';
 
 export interface ProtocolCredentials {
   hysteriaPassword?: string;
