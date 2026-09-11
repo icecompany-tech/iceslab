@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  autoRouteTag,
   buildTopologyFragmentsForNode,
   routeTag,
   type TopologyLinkRow,
@@ -164,6 +165,53 @@ describe('A4 ad-split reaches a v4 entry', () => {
     expect(door, 'no rule choosing the direction for this policy').toBeGreaterThanOrEqual(0);
     expect(block).toBeLessThan(door);
     expect(direct).toBeLessThan(door);
+  });
+
+  it('catches the Auto line of the same policy, and only it', () => {
+    // The other half of the subscribers. A squad buys the ad-split and gets one
+    // line per direction PLUS an Auto line; the Auto line carries a tag of its
+    // own (0xffff - ordinal), which is not in the per-direction series. A grant
+    // built only from the direction list would miss it, and the same tariff
+    // would work for a user pinned to a country and silently not work for a
+    // user on Auto. The legacy balancer builder already warns about exactly
+    // this case in a comment; v4 has to hold the same line.
+    const hop = buildTopologyFragmentsForNode(ENTRY, {
+      positions: [{ position: 0, nodeIds: [ENTRY] }],
+      directions: [
+        { tag: 1, nodeIds: [NL] },
+        { tag: 2, nodeIds: [DE] },
+      ],
+      links: links(),
+      hosts: new Map([
+        [ENTRY, 'entry.example.com'],
+        [NL, 'nl.example.com'],
+        [DE, 'de.example.com'],
+      ]),
+      policies: [NO_ADS],
+      auto: true,
+    });
+    const rules = hop!.routingRules;
+
+    for (const domain of ['geosite:category-ads-all', 'geosite:google']) {
+      const i = indexOfDomainRule(rules, domain);
+      expect(i, `missing rule for ${domain}`).toBeGreaterThanOrEqual(0);
+      const tags = gatedOn(rules[i]!);
+      expect(
+        tags.has(String(autoRouteTag(NO_ADS.ordinal))),
+        `the rule for ${domain} misses the policy's Auto tag, so a subscriber on ` +
+          `the Auto line does not get the tariff they bought`,
+      ).toBe(true);
+      expect(
+        tags.has(String(autoRouteTag(0))),
+        `the rule for ${domain} catches the PLAIN Auto line, which was not sold it`,
+      ).toBe(false);
+    }
+
+    // And it still sits above the Auto door, which is as wide as doors get.
+    const autoDoor = rules.findIndex((r) => r['balancerTag'] === 'bal-auto');
+    expect(autoDoor, 'no Auto rule at all').toBeGreaterThanOrEqual(0);
+    expect(indexOfDomainRule(rules, 'geosite:category-ads-all')).toBeLessThan(autoDoor);
+    expect(indexOfDomainRule(rules, 'geosite:google')).toBeLessThan(autoDoor);
   });
 
   it('still renders nothing extra when no policy is defined', () => {
