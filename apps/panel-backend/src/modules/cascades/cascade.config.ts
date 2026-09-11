@@ -525,6 +525,42 @@ export interface TopologyInput {
   auto?: boolean;
 }
 
+/**
+ * A cascade that points at a node we can no longer reach for its address.
+ *
+ * Refusing the whole render, not skipping the leg. Measured on 2026-09-11, the
+ * skip has three outcomes and all three are quiet:
+ *
+ *   - a pool of two loses one member, and the rule flips from `balancerTag` to
+ *     a fixed `outboundTag`. The pool stops being a pool and the config says
+ *     nothing about it;
+ *   - a direction loses its only node, and then it gets NO routing rule at all.
+ *     A v4 entry has no catch-all, so a client whose UUID carries that
+ *     direction falls through to `freedom` and egresses from the ENTRY country
+ *     while their client shows the exit. That is the one outcome worth any
+ *     amount of loudness to prevent;
+ *   - the firewall allow-list for the link port loses an entry, and an empty
+ *     allow-list means the agent opens the port to anyone.
+ *
+ * The cost of refusing is that pushes to this node fail until an operator fixes
+ * the topology, including pushes that have nothing to do with the cascade. That
+ * is the intended trade: the node keeps the config it is already running, and
+ * somebody has to look.
+ */
+export class CascadeTopologyBrokenError extends Error {
+  constructor(
+    public nodeId: string,
+    public detail: string,
+  ) {
+    super(
+      `Cascade topology is broken around node ${nodeId}: ${detail}. Nothing is pushed to this ` +
+        `node until the cascade is fixed, because a half-rendered chain sends users out of the ` +
+        `wrong country without saying so.`,
+    );
+    this.name = 'CascadeTopologyBrokenError';
+  }
+}
+
 /** Per-direction outbound tag. Unlike the old index-based `-0/-1` suffix this
  *  is stable: it names the DIRECTION, which no longer moves when a neighbour
  *  is deleted. */
@@ -574,7 +610,16 @@ export function buildTopologyFragmentsForNode(
     linkIngressPort = incoming[0]!.cred.port;
     for (const l of incoming) {
       const host = input.hosts.get(l.fromNodeId);
-      if (host) allowFrom.push(host);
+      // An empty allow-list makes the agent open the link port to ANYONE, so a
+      // peer we cannot name is not something to shrug at.
+      if (!host) {
+        throw new CascadeTopologyBrokenError(
+          nodeId,
+          `a link arrives from node ${l.fromNodeId}, which has no address (deleted?), so the ` +
+            `firewall cannot be told who may dial the link port`,
+        );
+      }
+      allowFrom.push(host);
     }
     inbounds.push(multiClientLinkInbound(incoming));
   }
@@ -585,7 +630,13 @@ export function buildTopologyFragmentsForNode(
   const perDirCounter = new Map<number, number>();
   for (const l of outgoing) {
     const host = input.hosts.get(l.toNodeId);
-    if (!host) continue;
+    if (!host) {
+      throw new CascadeTopologyBrokenError(
+        nodeId,
+        `direction ${l.directionTag} goes through node ${l.toNodeId}, which has no address ` +
+          `(deleted?)`,
+      );
+    }
     const idx = perDirCounter.get(l.directionTag) ?? 0;
     perDirCounter.set(l.directionTag, idx + 1);
     const tag = dirOutTag(l.directionTag, idx);

@@ -1261,8 +1261,15 @@ async function getTopologyFragmentsForNode(
     nodeIds.add(l.fromNodeId);
     nodeIds.add(l.toNodeId);
   }
+  // `deletedAt: null` is load-bearing, not tidiness. A node is deleted SOFTLY,
+  // and the v4 join rows survive it (they are RESTRICT, which a soft delete
+  // never touches). Without the filter the row is still here, its address is
+  // still known, and the render happily builds an outbound dialling a machine we
+  // released. That is worse than losing the leg: the traffic goes to whoever
+  // holds that address now. With the filter it becomes a missing host, and
+  // buildTopologyFragmentsForNode refuses out loud.
   const nodeRows = await prisma.node.findMany({
-    where: { id: { in: [...nodeIds] } },
+    where: { id: { in: [...nodeIds] }, deletedAt: null },
     select: { id: true, address: true },
   });
   const hosts = new Map(nodeRows.map((n) => [n.id, n.address.split(':')[0]!]));
