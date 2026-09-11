@@ -4,7 +4,7 @@ import { invalidateSubscriptionSettingsCache } from '../../src/modules/settings/
 
 // Listed in the order they need truncating. CASCADE handles FKs but explicit
 // listing is documentation. Anything that references another table comes first.
-const TABLES = [
+export const TABLES = [
   // A4 ad-split. Missing here until 2026-07-30, which nothing noticed while the
   // module was read-only: policies are unique on both name and ordinal, so the
   // first test that CREATED one poisoned every later case in the same run.
@@ -18,6 +18,14 @@ const TABLES = [
   'node_policies',
   'group_cascade_exits',
   'cascade_hops',
+  // v4 topology. These hang off `cascades` and were being cleared implicitly by
+  // the CASCADE on the truncate; listed now because "implicitly handled" is
+  // invisible, and the day one of them loses its FK nothing would say so.
+  'cascade_links',
+  'cascade_direction_nodes',
+  'cascade_directions',
+  'cascade_position_nodes',
+  'cascade_positions',
   'cascades',
   'amneziawg_peers',
   'subscription_events',
@@ -27,14 +35,27 @@ const TABLES = [
   'node_usage_history',
   'group_members',
   'group_profiles',
+  'group_hosts',
   'group_inbounds',
   'groups',
+  'hwid_user_devices',
   'user_traffic',
   'users',
+  'hosts',
   'profile_node_bindings',
   'profiles',
   'inbounds',
+  'node_bootstrap_tokens',
+  // Two of the additions here were REAL leaks, not bookkeeping. Nothing
+  // cascades into either, so rows survived every truncate:
+  //   - node_user_traffic_snapshot has no FK at all, on purpose (the hot stats
+  //     path must not join), so a snapshot written by one test was still there
+  //     to be billed against in the next;
+  //   - regions is referenced by nodes with SET NULL, so truncating nodes left
+  //     the regions behind, and `name` and `code` are both unique.
+  'node_user_traffic_snapshot',
   'nodes',
+  'regions',
   'api_tokens',
   'keygen_ca',
   'admin_users',
