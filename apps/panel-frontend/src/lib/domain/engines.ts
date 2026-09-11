@@ -1,3 +1,4 @@
+import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
 
@@ -6,15 +7,17 @@ import { protocolLabelCompact } from '@/lib/domain/protocols';
  * matches and what the panel used to show half of.
  *
  * «hy2» in a list is not an answer: Hysteria 2 is served by its own daemon, by
- * sing-box, and (from xray v26.3.27) by xray. They have different configs,
- * different statistics, and different ability to carry a cascade leg. An
- * operator who picks the word without the engine does not know which of the
- * three they will get, and finds out in the field.
+ * sing-box, and (from xray v26.3.27) by xray. Different config, different
+ * statistics, different ability to carry a cascade leg.
  *
- * The engine names here are the panel's, not a wire format: `native` means the
- * protocol's own daemon.
+ * ⚠ `EngineName` comes from the shared contract, NOT from a spelling of our
+ * own. Four of the seven engines are single-protocol cores whose engine name
+ * equals the protocol, and the browser inventing a `native` alias beside them
+ * would be a third vocabulary meeting the other two. That is exactly the trap
+ * in CLAUDE.local.md: one name, two forms of value. «Свой демон» below is a
+ * WORD for those engines, not a value.
  */
-export type EngineName = 'xray' | 'singbox' | 'native';
+export type { EngineName };
 
 export interface EnginePair {
   /** Protocol enum value, or a link-cell name where the pair describes a link. */
@@ -24,8 +27,31 @@ export interface EnginePair {
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
 
+/** Engines that are one protocol's own core: their name says nothing an
+ *  operator does not already read in the protocol, so they get one word. */
+const OWN_DAEMON = new Set<EngineName>(['hysteria', 'amneziawg', 'naive', 'mieru', 'mtproto']);
+
+/**
+ * The engine inside a PAIR, where the protocol stands right next to it:
+ * «Hysteria 2 · свой демон». Naming the daemon again there would repeat the
+ * word the operator has already read.
+ */
 export function engineWord(engine: EngineName, t: T): string {
-  return t(`engine.${engine}`);
+  if (engine === 'xray') return t('engine.xray');
+  if (engine === 'singbox') return t('engine.singbox');
+  return OWN_DAEMON.has(engine) ? t('engine.own') : engine;
+}
+
+/**
+ * The engine ON ITS OWN, in a list of what a machine runs. Here the name is the
+ * whole content: «свой демон» in a list of cores would say which kind of core
+ * it is and not which one, so a node running AmneziaWG and one running mieru
+ * would read identically.
+ */
+export function engineCoreWord(engine: EngineName, t: T): string {
+  if (engine === 'xray') return t('engine.xray');
+  if (engine === 'singbox') return t('engine.singbox');
+  return engine;
 }
 
 /** «Hysteria 2 · свой демон». One place, so the two halves never drift apart
@@ -35,25 +61,6 @@ export function pairLabel(pair: EnginePair, t: T): string {
     protocol: protocolLabelCompact(pair.protocol),
     engine: engineWord(pair.engine, t),
   });
-}
-
-/**
- * The engine that serves a node's own protocol.
- *
- * `singboxEngine` is NOT this answer: it says sing-box is installed ALONGSIDE
- * the native core, so it widens what the node can serve without changing what
- * its own protocol runs on. The three sing-box-only protocols have no native
- * daemon, so for them the engine is sing-box by definition.
- *
- * Replaced by `node.cores[]` once the agent reports it: this function reads the
- * install-time intent, the inventory will read the machine.
- */
-const SINGBOX_ONLY = new Set(['tuic', 'anytls', 'shadowtls']);
-
-export function nodePair(node: Pick<Node, 'protocol'>): EnginePair {
-  if (node.protocol === 'xray') return { protocol: 'xray', engine: 'xray' };
-  if (SINGBOX_ONLY.has(node.protocol)) return { protocol: node.protocol, engine: 'singbox' };
-  return { protocol: node.protocol, engine: 'native' };
 }
 
 /**
@@ -82,20 +89,65 @@ export function pairCaveats(pair: EnginePair): string[] {
 }
 
 /**
- * Can a node with this protocol carry a leg of a cascade.
+ * The engines a node REPORTED, or undefined when it never has.
  *
- * Not a guess: both realised link cells (vless and shadowsocks-2022) are built
- * into the xray config of the node, see
- * apps/panel-backend/src/modules/cascades/cascade.config.ts:16-18. A machine
- * whose core is its own daemon has no xray to put the link into, so it can be a
- * way out but never a hop in the middle.
+ * ⚠ Nothing here is derived from `node.protocol`. That field is a LABEL saying
+ * which adapter was installed as primary, not a list of what the machine can
+ * run: a node labelled `tuic` routinely serves an xray profile beside it. The
+ * backend measured the cost of reading it as a capability on 2026-09-11, and it
+ * refused 23 legitimate pairs. So the three states are the report itself:
  *
- * Reads the protocol rather than `cores[]` because that field is not in the API
- * yet. When it lands this becomes «is there an xray among the cores», which is
- * the same question asked of the machine instead of of the intent.
+ *   undefined   no agent has reported cores yet. Unknown, and the panel says
+ *               nothing at all rather than guessing in either direction.
+ *   []          it reported and runs nothing.
+ *   non-empty   the fact.
  */
-export function carriesCascadeLink(protocol: string): boolean {
-  return protocol === 'xray';
+export function nodeEngines(node: Pick<Node, 'engines'>): EngineName[] | undefined {
+  return node.engines;
+}
+
+/**
+ * The node's cores in words: «ядро xray, движок sing-box».
+ *
+ * The two edge answers are words as well, never a blank: an empty string in a
+ * sentence about what a machine runs reads as a rendering bug, and «не
+ * сообщила» and «ни одного» are different facts.
+ */
+export function engineListWords(node: Pick<Node, 'engines'>, t: T): string {
+  const engines = node.engines;
+  if (!engines) return t('engine.coresUnknown');
+  if (engines.length === 0) return t('engine.coresNone');
+  return engines.map((e) => engineCoreWord(e, t)).join(', ');
+}
+
+/**
+ * Does a core on this node render a profile whose effective engine is this?
+ *
+ * Membership in a reported set, which is the whole check: `effectiveEngine`
+ * arrives on the profile already resolved, so the protocol-to-native-core table
+ * stays on the server where it has one copy. Undefined means the node has never
+ * reported, and that is NOT false.
+ */
+export function nodeRunsEngine(
+  node: Pick<Node, 'engines'>,
+  engine: EngineName,
+): boolean | undefined {
+  const engines = node.engines;
+  if (!engines) return undefined;
+  return engines.includes(engine);
+}
+
+/**
+ * Can this node carry a leg of a cascade.
+ *
+ * Both realised link cells (vless and shadowsocks-2022) are built into the xray
+ * config of the node, see cascade.config.ts:16-18 in the backend, so the
+ * question is whether xray is among the cores it reported. Undefined while it
+ * has reported nothing: a node may well be running xray under a label that says
+ * something else.
+ */
+export function nodeCarriesCascadeLink(node: Pick<Node, 'engines'>): boolean | undefined {
+  return nodeRunsEngine(node, 'xray');
 }
 
 /**

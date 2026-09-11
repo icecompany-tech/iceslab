@@ -98,11 +98,13 @@ export const common = {
   engine: {
     xray: 'xray core',
     singbox: 'sing-box engine',
-    native: 'its own daemon',
+    own: 'its own daemon',
     pair: '{{protocol}} · {{engine}}',
+    coresUnknown: 'cores not reported',
+    coresNone: 'no cores at all',
     legNo: 'cannot be a cascade leg',
     legWhy:
-      'The leg of a chain is built by xray, and a node running its own daemon has none. Such a node can be a way out, never a hop in the middle.',
+      'The leg of a chain is built by xray, and xray is not among the cores this node reported. Such a node can be a way out, never a hop in the middle.',
     cellUnrealised: '{{name}} · no such leg exists, saving will refuse it',
     caveat: {
       noSalamander: 'no obfuscation',

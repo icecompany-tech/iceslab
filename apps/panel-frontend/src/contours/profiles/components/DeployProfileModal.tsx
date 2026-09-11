@@ -27,6 +27,12 @@ import {
   type Profile,
 } from '@/lib/domain/profiles';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
+import {
+  engineCoreWord,
+  engineListWords,
+  nodeRunsEngine,
+  type EngineName,
+} from '@/lib/domain/engines';
 
 interface Props {
   profile: Profile | null;
@@ -236,7 +242,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
               <NodeRow
                 key={node.id}
                 node={node}
-                profileProtocol={profile?.protocol ?? null}
+                wanted={profile?.effectiveEngine ?? null}
                 checked={selected.has(node.id)}
                 onToggle={() => toggle(node.id)}
               />
@@ -264,25 +270,36 @@ export function DeployProfileModal({ profile, onClose }: Props) {
 
 function NodeRow({
   node,
-  profileProtocol,
+  wanted,
   checked,
   onToggle,
 }: {
   node: PanelNode;
-  profileProtocol: string | null;
+  /** The engine that will actually render this profile, resolved by the server.
+   *  Null only while the profile itself has not loaded. */
+  wanted: EngineName | null;
   checked: boolean;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const statusColor =
     node.status === 'online' ? 'teal' : node.status === 'disabled' ? 'gray' : 'red';
-  // Compatibility hint: install-iceslab-node.sh installs binaries for ONE protocol
-  // (chosen at provisioning time). Cross-protocol binding works at the
-  // panel/agent level but the agent will fall back to "callback-only mode"
-  // because the protocol-server binary isn't on disk → subscription URL
-  // points at a non-listening port.
-  const protocolMismatch =
-    profileProtocol !== null && node.protocol !== profileProtocol;
+  /**
+   * Will a core on this node render this profile: membership of the profile's
+   * effective engine in the engines the node REPORTED.
+   *
+   * Three answers, and the third is the one this row used to get wrong. It
+   * compared `node.protocol` with the profile's protocol, which reads a LABEL
+   * as a restriction: `protocol` says which adapter was installed as primary,
+   * and a node labelled `tuic` serves an xray profile beside it every day. The
+   * backend measured that same reading as a gate on 2026-09-11 and it refused
+   * 23 legitimate pairs.
+   *
+   * undefined = the node has never reported its cores, so nothing is claimed:
+   * no warning, no reassurance, no colour. Today that is the whole fleet.
+   */
+  const runs = wanted ? nodeRunsEngine(node, wanted) : undefined;
+  const willNotRun = runs === false;
   return (
     <Paper
       withBorder
@@ -290,9 +307,7 @@ function NodeRow({
       radius="sm"
       style={{
         cursor: 'pointer',
-        borderColor: protocolMismatch
-          ? 'var(--mantine-color-yellow-6)'
-          : undefined,
+        borderColor: willNotRun ? 'var(--mantine-color-yellow-6)' : undefined,
       }}
       onClick={onToggle}
     >
@@ -315,25 +330,33 @@ function NodeRow({
               {node.countryCode}
             </Badge>
           )}
+          {/* The badge answers one question: will this node run this profile.
+              While the node has never reported its cores there is no answer, so
+              the row shows the label it does have, greyed, and says in the
+              tooltip that this is a label rather than a capability. */}
           <Tooltip
             label={
-              protocolMismatch
-                ? t('profileForm.nodeMismatchTooltip', {
-                    nodeProtocol: node.protocol,
-                    profileProtocol,
-                  })
-                : t('profileForm.nodeSupportsTooltip', { protocol: node.protocol })
+              runs === undefined
+                ? t('profileForm.nodeEnginesUnknown', { protocol: node.protocol })
+                : willNotRun
+                  ? t('profileForm.nodeWillNotRun', {
+                      wanted: wanted ? engineCoreWord(wanted, t) : '',
+                      engines: engineListWords(node, t),
+                    })
+                  : t('profileForm.nodeWillRun', {
+                      wanted: wanted ? engineCoreWord(wanted, t) : '',
+                    })
             }
             multiline
-            w={280}
+            w={300}
           >
             <Badge
-              variant={protocolMismatch ? 'filled' : 'light'}
-              color={protocolMismatch ? 'yellow' : 'cyan'}
+              variant={willNotRun ? 'filled' : 'light'}
+              color={willNotRun ? 'yellow' : runs === true ? 'cyan' : 'gray'}
               size="sm"
               tt="uppercase"
             >
-              {protocolMismatch ? `⚠ ${node.protocol}` : node.protocol}
+              {willNotRun ? `⚠ ${engineListWords(node, t)}` : runs === true ? engineListWords(node, t) : node.protocol}
             </Badge>
           </Tooltip>
           <Tooltip label={node.lastStatusMessage ?? node.status}>

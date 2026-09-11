@@ -1,3 +1,4 @@
+import type { EngineName } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 import type { ProtocolName } from '@/lib/domain/protocols';
 import type { InboundConfig } from '@/lib/domain/inbounds';
@@ -6,15 +7,34 @@ import type { InboundConfig } from '@/lib/domain/inbounds';
 // template (shared across nodes), a Binding deploys it to a specific node
 // with optional per-node overrides.
 
-export type EngineName = 'xray' | 'hysteria' | 'singbox';
+/**
+ * The three engines a profile may PIN, which is a narrower thing than the
+ * engines a node can run: the other four cores serve exactly one protocol, so
+ * pinning them would say nothing the protocol has not already said.
+ *
+ * Named apart from the contract's `EngineName` on purpose. A shorter union
+ * under the same name in a second file is the trap from CLAUDE.local.md, one
+ * name and two forms of value, and `effectiveEngine` below is the full one.
+ */
+export type PinnableEngine = 'xray' | 'hysteria' | 'singbox';
 
 export interface Profile {
   id: string;
   name: string;
   protocol: ProtocolName;
   /** Proxy core that serves this profile. null = native core; 'singbox' = the
-   *  sing-box engine (engine-choice). */
+   *  sing-box engine (engine-choice). This is the STORED value, the one the
+   *  form edits. */
   engine: string | null;
+  /**
+   * The core that will actually render it: the pinned one, or the protocol's
+   * native core. Never null.
+   *
+   * Resolved on the server on purpose. The protocol-to-native-core table lives
+   * in the agent and once in the panel; a third copy in the browser would drift
+   * from both without a sound, so nothing here re-derives it.
+   */
+  effectiveEngine: EngineName;
   description: string | null;
   config: InboundConfig;
   enabled: boolean;
@@ -43,7 +63,7 @@ export interface CreateProfileInput {
   protocol: ProtocolName;
   description?: string | null;
   /** Engine-choice: null/omitted = native core, 'singbox' = sing-box. */
-  engine?: EngineName | null;
+  engine?: PinnableEngine | null;
   config: InboundConfig;
   enabled?: boolean;
 }
@@ -52,7 +72,7 @@ export interface UpdateProfileInput {
   name?: string;
   description?: string | null;
   enabled?: boolean;
-  engine?: EngineName | null;
+  engine?: PinnableEngine | null;
   config?: InboundConfig;
 }
 

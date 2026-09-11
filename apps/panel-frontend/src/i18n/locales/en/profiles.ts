@@ -260,9 +260,16 @@ export const profiles = {
     awgImportant3:
       'Migrating from AmneziaWG 1.0 - you need to regenerate all peer keys; old keys won\'t work.',
     deployHintAwgPort: 'For AmneziaWG: ≤ 9999, e.g. 443 or 1234. Don\'t use 51820.',
-    nodeMismatchTooltip:
-      'Node provisioned for "{{nodeProtocol}}" - binary "{{profileProtocol}}" is not installed. Binding will be created, but clients won\'t connect until you re-run install-node with --protocol {{profileProtocol}}.',
-    nodeSupportsTooltip: 'Node supports "{{protocol}}"',
+    // The old pair of texts read node.protocol as a restriction. It is a label
+    // for the primary adapter, not a list of what the node can run: a node
+    // labelled tuic serves an xray profile beside it every day. The question is
+    // now whether the core this profile needs is among the ones the node
+    // REPORTED about itself.
+    nodeWillRun: 'This node reported that it runs {{wanted}}. The profile will be served.',
+    nodeWillNotRun:
+      'The profile needs {{wanted}}, and this node reported only: {{engines}}. The binding would be created with nothing to serve it: the subscription link would point at a port nobody listens on.',
+    nodeEnginesUnknown:
+      'This node has not reported which cores it runs, so there is nothing to say about compatibility. "{{protocol}}" is the label of the adapter installed as primary, not a capability list: a node with one label routinely serves profiles of other protocols beside it.',
     portRangeStart: 'Port range start',
     portRangeStartDesc: 'UDP port-hopping to evade RU TSPU. Empty = single port.',
     portRangeEnd: 'Port range end',

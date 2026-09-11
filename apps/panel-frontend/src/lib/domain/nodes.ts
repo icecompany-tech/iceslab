@@ -1,3 +1,4 @@
+import type { EngineName } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 export type NodeProtocol =
@@ -103,6 +104,17 @@ export interface Node {
    * undefined, rather than claiming coverage either way.
    */
   cores?: NodeCore[];
+  /**
+   * The distinct engines those cores run: the answer to «can this node render
+   * that profile», already deduped by the server.
+   *
+   * ⚠ ABSENT means the node has never reported, EMPTY means it reported and
+   * runs nothing. The absence is the signal, with no boolean beside it that
+   * could contradict the list. Never substitute `protocol` here: that field is
+   * a label for which adapter is primary, and reading it as a capability list
+   * refused 23 legitimate pairs when the backend tried it on 2026-09-11.
+   */
+  engines?: EngineName[];
   createdAt: string;
   updatedAt: string;
 }

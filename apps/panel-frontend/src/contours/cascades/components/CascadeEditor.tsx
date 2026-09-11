@@ -30,12 +30,11 @@ import {
   type HopRole,
 } from '@/contours/cascades/lib/cascadeForm';
 import {
-  carriesCascadeLink,
+  engineListWords,
   isRealisedLinkCell,
   linkCellOptions,
-  nodePair,
+  nodeCarriesCascadeLink,
   pairCaveats,
-  pairLabel,
 } from '@/lib/domain/engines';
 
 /**
@@ -235,10 +234,6 @@ export function NodeSelect({
   // A node already used by another hop of THIS cascade is disabled: the backend
   // rejects the save outright (no loops), so offering it would only produce a
   // 400. A node owned by ANOTHER cascade stays pickable and is labelled instead.
-  //
-  // The label carries the PAIR, not the protocol: «hy2» alone does not say
-  // whether this machine can be a hop in the middle, and that is the whole
-  // question being answered while picking it.
   const data = useMemo(
     () => nodes.map((n) => ({ value: n.id, label: n.name, disabled: taken.has(n.id) })),
     [nodes, taken],
@@ -248,7 +243,16 @@ export function NodeSelect({
   // rather than leaving the slot blank on the one hop where the version matters.
   const trailing =
     selected && meta === 'core' && selected.coreVersion
-      ? { text: `${pairLabel(nodePair(selected), t)} · ${selected.coreVersion}`, tone: FAINT }
+      ? {
+          // The core version only, and the cores beside it once the node has
+          // reported them. Never the protocol label: naming an engine this
+          // machine may not be running is the mistake this row just stopped
+          // making.
+          text: selected.engines
+            ? `${engineListWords(selected, t)} · ${selected.coreVersion}`
+            : selected.coreVersion,
+          tone: FAINT,
+        }
       : selected
         ? { text: selected.status, tone: statusTone(selected.status) }
         : null;
@@ -314,23 +318,25 @@ export function NodeSelect({
             >
               {node?.address}
             </Text>
-            {/* The pair, and the one consequence of it that decides this pick.
-                A node whose core is its own daemon has no xray to put the leg
-                into, so in a middle slot it is a dead end the operator would
-                otherwise discover in the field. */}
-            {node && (
+            {/* The cores this machine REPORTED, and the one consequence that
+                decides this pick. Nothing is derived from `node.protocol`: that
+                is a label for the adapter installed as primary, and a node
+                labelled `tuic` carries an xray profile beside it, so reading it
+                as a capability would put a false warning on half the fleet.
+                While a node has reported nothing, this row says nothing. */}
+            {node?.engines && (
               <Text
                 style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT, flexShrink: 0 }}
               >
-                {pairLabel(nodePair(node), t)}
+                {engineListWords(node, t)}
               </Text>
             )}
-            {/* What the pairing COSTS, which the two names cannot say. Silent
-                for every pair the panel can show today: the first one with a
-                caveat is Hysteria 2 on xray, and the backend does not offer it
-                yet. The slot stands so it does not have to be bolted on later. */}
-            {node &&
-              pairCaveats(nodePair(node)).map((key) => (
+            {/* What a pairing COSTS, which the two names cannot say. Silent for
+                every pair the panel can show today: the first one with a caveat
+                is Hysteria 2 on xray, and the backend does not offer it yet.
+                The slot stands so it does not have to be bolted on later. */}
+            {node?.engines?.flatMap((engine) =>
+              pairCaveats({ protocol: node.protocol, engine }).map((key) => (
                 <Text
                   key={key}
                   title={t(`${key}Why`)}
@@ -338,8 +344,9 @@ export function NodeSelect({
                 >
                   {t(key)}
                 </Text>
-              ))}
-            {node && needsLink && !carriesCascadeLink(node.protocol) && (
+              )),
+            )}
+            {node && needsLink && nodeCarriesCascadeLink(node) === false && (
               <Text
                 title={t('engine.legWhy')}
                 style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: AMBER, flexShrink: 0 }}
