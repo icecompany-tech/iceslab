@@ -1,6 +1,12 @@
 import { isIP } from 'node:net';
 import { Queue, Worker, type Job } from 'bullmq';
-import type { ApplyInboundsRequest, DnsCfg, InboundDto, ProtocolName } from '@iceslab/shared';
+import type {
+  ApplyInboundsRequest,
+  DnsCfg,
+  InboundDto,
+  ProtocolName,
+  XrayCascadeFragments,
+} from '@iceslab/shared';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { redis } from '../../lib/infra/redis.js';
 import { prisma } from '../../prisma.js';
@@ -377,7 +383,32 @@ async function buildApplyInboundsRequest(node: NodeRow): Promise<ApplyInboundsRe
   const inbounds = await fetchEnabledInbounds(node.id);
   const policy = await resolvePolicyForNode(node.id);
   const dns = (node.dns as DnsCfg | null) ?? undefined;
-  return { inbounds, ...(policy ? { policy } : {}), ...(dns ? { dns } : {}) };
+  // Э3 шаг 1: the cascade is a node-level block now, next to the policy and the
+  // resolver. Read back off the xray inbound rather than fetched a second time,
+  // so the node-level block and the transitional copy are literally the same
+  // object and cannot disagree on the wire.
+  //
+  // ⚠ Both are sent for one release. A Go decoder ignores fields it does not
+  // know, so an agent that has not been updated would see no cascade at all if
+  // we stopped sending the old one, and would sit without a chain silently.
+  const fragments = (
+    inbounds.find((i) => i.protocol === 'xray')?.config as
+      | { cascade?: XrayCascadeFragments }
+      | undefined
+  )?.cascade;
+  // `engine` names the node's ROUTER. One core draws the chain, and today that
+  // is xray on every node: the shape that would have to look it up (a second
+  // router) does not exist yet, and guessing from the reported cores could name
+  // a core that draws nothing, which loses the cascade instead of keeping the
+  // behaviour it has. When a second router arrives this becomes a lookup over
+  // node.cores (the core reporting rendersPolicy is the router).
+  const cascade = fragments ? { engine: 'xray' as const, fragments } : undefined;
+  return {
+    inbounds,
+    ...(policy ? { policy } : {}),
+    ...(dns ? { dns } : {}),
+    ...(cascade ? { cascade } : {}),
+  };
 }
 
 /** The request the worker WOULD send for this node, without sending it. Exists

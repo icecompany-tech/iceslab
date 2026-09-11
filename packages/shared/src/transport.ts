@@ -176,11 +176,17 @@ export interface XrayInboundCfg {
    *  user.xrayUuid); `vmess` → per-user UUID, AEAD (no flow). VMess pairs with
    *  security 'none'/'tls' only (its share link cannot carry REALITY). */
   subprotocol?: 'vless' | 'trojan' | 'vmess';
-  /** C3 cascade chaining fragments for THIS node's hop. Generated panel-side
-   *  by buildCascadeConfigs and merged into the node's xray config:
-   *  link-in inbound (transit/exit nodes), link-out outbound (entry/transit
-   *  nodes), and the per-role routing rules. Absent for plain (non-cascade)
-   *  nodes, in which case the node renders exactly as before. */
+  /**
+   * C3 cascade chaining fragments for THIS node's hop.
+   *
+   * ⚠ TRANSITIONAL. The cascade belongs to the NODE, not to an inbound, and now
+   * travels as ApplyInboundsRequest.cascade. This copy stays for one release
+   * because a Go decoder ignores fields it does not know: an agent that has not
+   * been updated would see no cascade at all if the panel stopped sending it
+   * here, and would sit without one silently. The panel sends BOTH, from the
+   * same object so the two cannot disagree, and a node that understands the
+   * node-level block ignores this one. Remove it when the fleet is updated.
+   */
   cascade?: XrayCascadeFragments;
   /** Cloudflare WARP egress (per-node v1). When present, the node renders a
    *  wireguard outbound to WARP and routes this inbound's user traffic through
@@ -506,6 +512,32 @@ export interface ApplyInboundsRequest {
    *  system resolver, which is what every node does today. See DnsCfg for why
    *  this sits on the node and not on a profile. */
   dns?: DnsCfg;
+  /** This node's hop in a cascade. Absent = not part of one, which renders
+   *  exactly as before. See NodeCascade. */
+  cascade?: NodeCascade;
+}
+
+/**
+ * A node's hop in a cascade, as a NODE-level block.
+ *
+ * It used to ride on the xray inbound (XrayInboundCfg.cascade), which put a
+ * node-level thing behind a per-inbound switch, the same mistake the resolver
+ * made. A node has one chain, not one per door.
+ *
+ * `engine` names the node's ROUTER: the one core that draws the three stages and
+ * knows every way out, while the other cores hand it their traffic. It is not
+ * decoration and the block is NOT broadcast the way the policy is: xray and
+ * sing-box both rendering this would fight over the link port.
+ *
+ * It is also the discriminant. Today one router exists and `fragments` is always
+ * xray-shaped; when a second one arrives, `fragments` becomes a union selected
+ * by `engine`, which is an additive change rather than a breaking one. That is
+ * the whole reason for the wrapper: flat, the state "fragments present, engine
+ * unsaid" would be expressible, and one day it would arrive.
+ */
+export interface NodeCascade {
+  engine: EngineName;
+  fragments: XrayCascadeFragments;
 }
 
 export interface ApplyInboundsResponse {

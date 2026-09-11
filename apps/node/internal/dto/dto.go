@@ -216,6 +216,24 @@ type ApplyInboundsRequest struct {
 	// The node's resolver (DnsCfg), raw for the same reason as Policy. Absent
 	// field = nil = no `dns` section, the host's own resolver answers.
 	Dns json.RawMessage `json:"dns,omitempty"`
+	// This node's hop in a cascade. Absent = not part of one.
+	Cascade *NodeCascade `json:"cascade,omitempty"`
+}
+
+// NodeCascade mirrors NodeCascade in shared/transport.ts: this node's hop in a
+// cascade, as a node-level block.
+//
+// It used to ride on the xray inbound, which put a node-level thing behind a
+// per-inbound switch. A node has one chain, not one per door.
+//
+// Engine names the node's ROUTER, the one core that draws the stages and knows
+// every way out. It decides WHICH adapter is handed the block: unlike the
+// policy, this one is not broadcast, because two cores rendering it would fight
+// over the link port. It is also the discriminant that will select the shape of
+// Fragments once a second router exists, which is why Fragments stays raw here.
+type NodeCascade struct {
+	Engine    EngineName      `json:"engine"`
+	Fragments json.RawMessage `json:"fragments"`
 }
 
 type ApplyInboundsResponse struct {

@@ -172,6 +172,25 @@ type DnsReceiver interface {
 	ApplyDns(dns json.RawMessage) error
 }
 
+// CascadeReceiver is an OPTIONAL interface for adapters that can draw this
+// node's hop in a cascade (see dto.NodeCascade).
+//
+// Unlike PolicyReceiver and DnsReceiver, the block is NOT broadcast to every
+// adapter: the request names the node's router in `engine`, and only the adapter
+// whose Engine() matches is told. Two cores drawing the same chain would fight
+// over the link port.
+//
+// The other side of that: an adapter that implements this is called on EVERY
+// applyInbounds, with nil when the push carried nothing for it. That call is not
+// noise, it is what tells the adapter this push had no node-level cascade, so
+// the transitional copy still riding on the inbound is the one to read.
+//
+// Nil MUST leave the config exactly as the inbound-level copy would have, which
+// is what makes it safe to ship before the panel sends the block.
+type CascadeReceiver interface {
+	ApplyCascade(fragments json.RawMessage) error
+}
+
 // Provisionable is an OPTIONAL interface for adapters that can be REGISTERED
 // without being CONFIGURED. The installer registers an adapter for every
 // protocol the operator might switch on later, and such an adapter sits idle

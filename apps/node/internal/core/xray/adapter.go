@@ -87,6 +87,18 @@ type Adapter struct {
 	// case rendering is byte-identical to a plain node.
 	cascade *CascadeFragments
 
+	// cascadeFromNode says the cascade in THIS push came from the node-level
+	// block, so the transitional copy still riding on the inbound is not ours to
+	// read (see ApplyCascade).
+	//
+	// Per push, not latched once and for all. An agent that outlives a rollback
+	// of the panel to a version that only sends the inbound copy would otherwise
+	// go on ignoring it and sit without a cascade, silently and for good. It is
+	// therefore written on EVERY ApplyCascade, including the one that carries
+	// nothing, which is why the server calls it even when there is nothing to
+	// deliver.
+	cascadeFromNode bool
+
 	// selfSteal is the K9-B local TLS fallback, running only while the inbound
 	// is REALITY self-steal mode. nil otherwise. Lifecycle is managed in
 	// regenerateAndRestart under restartMu; the field is read under a.mu.
@@ -214,6 +226,42 @@ func (a *Adapter) ApplyDns(raw json.RawMessage) error {
 	a.mu.Unlock()
 
 	a.logger.Info("xray ApplyDns: resolver changed, regenerating", "named", parsed != nil)
+	return a.regenerateAndRestart(context.Background())
+}
+
+// ApplyCascade implements core.CascadeReceiver: take this node's hop in a
+// cascade from the node-level block and re-render if it changed.
+//
+// nil means the push carried no node-level cascade. That is a legitimate and,
+// for one release, the NORMAL state: the panel sends the block and the old
+// inbound copy from the same object, and an agent that understands both prefers
+// the block. So nil here does not clear anything, it hands the decision back to
+// ApplyInbound, which is where the transitional copy is read.
+//
+// Compared by its rendered form, like the policy and the resolver: a push that
+// repeats the same chain has to be a no-op, or every applyInbounds would restart
+// the core and drop every live connection on the node.
+func (a *Adapter) ApplyCascade(fragments json.RawMessage) error {
+	var parsed *CascadeFragments
+	if len(fragments) > 0 && string(fragments) != "null" {
+		var decoded CascadeFragments
+		if err := json.Unmarshal(fragments, &decoded); err != nil {
+			return fmt.Errorf("xray ApplyCascade: %w", err)
+		}
+		parsed = &decoded
+	}
+
+	a.mu.Lock()
+	// Written on every call: the flag means "in this push", see its declaration.
+	a.cascadeFromNode = parsed != nil
+	if parsed == nil || cascadeEqual(a.cascade, parsed) {
+		a.mu.Unlock()
+		return nil
+	}
+	a.cascade = parsed
+	a.mu.Unlock()
+
+	a.logger.Info("xray ApplyCascade: cascade changed, regenerating")
 	return a.regenerateAndRestart(context.Background())
 }
 
@@ -1004,7 +1052,12 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	// instead of byte-marshalling for speed; slice equality via reflect.
 	// C3: a cascade change alone (same inbound) must still trigger a restart,
 	// so factor the cascade fragments into the gate.
-	unchanged := cascadeEqual(a.cascade, wire.Cascade)
+	//
+	// Unless this push brought the cascade at the NODE level: then the copy on
+	// the inbound is not ours to read, and comparing against it would make every
+	// push look like a change and restart the core for nothing.
+	fromNode := a.cascadeFromNode
+	unchanged := fromNode || cascadeEqual(a.cascade, wire.Cascade)
 	if key == "" {
 		unchanged = unchanged && inboundEqual(a.cfg.Inbound, newInbound)
 	} else {
@@ -1021,7 +1074,12 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	} else {
 		a.inbounds[key] = newInbound
 	}
-	a.cascade = wire.Cascade
+	// The transitional copy, read only when the node level said nothing. This is
+	// also how a cascade gets REMOVED in both worlds: the panel that dropped it
+	// sends neither, so the assignment below clears it.
+	if !fromNode {
+		a.cascade = wire.Cascade
+	}
 	count := len(a.inbounds)
 	a.mu.Unlock()
 	a.logger.Info("xray ApplyInbound: config changed, regenerating and restarting",

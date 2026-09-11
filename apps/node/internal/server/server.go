@@ -478,6 +478,44 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The cascade, before the inbounds for the same reason as the two above, and
+	// unlike them NOT broadcast: the request names the node's router in `engine`
+	// and only that adapter is told. Two cores drawing the same chain would
+	// fight over the link port.
+	//
+	// Every other CascadeReceiver is called with nil. That is not a wasted call:
+	// it is what says "this push carried no node-level cascade", which is how an
+	// adapter knows to keep reading the transitional copy on the inbound, and
+	// how it stops ignoring that copy after the panel is rolled back.
+	var cascadeFragments json.RawMessage
+	router := ""
+	if req.Cascade != nil {
+		cascadeFragments = req.Cascade.Fragments
+		router = string(req.Cascade.Engine)
+	}
+	deliveredCascade := false
+	for _, adapter := range s.cfg.Adapters {
+		cr, ok := adapter.(core.CascadeReceiver)
+		if !ok {
+			continue
+		}
+		var mine json.RawMessage
+		if router != "" && adapter.Engine() == router {
+			mine = cascadeFragments
+			deliveredCascade = true
+		}
+		if err := cr.ApplyCascade(mine); err != nil {
+			s.logger.Error("adapter ApplyCascade failed", "core", adapter.Name(), "err", err)
+		}
+	}
+	// Loud, because the quiet version of this is the worst outcome the cascade
+	// has: a chain nobody drew is a user egressing from the ENTRY country while
+	// their client shows the exit. Same fail-closed rule as a router that dies.
+	if req.Cascade != nil && !deliveredCascade {
+		s.logger.Error("applyInbounds: no core on this node draws the cascade, the chain is NOT applied",
+			"engine", router)
+	}
+
 	// Dispatch each inbound to the matching adapter by protocol name. Adapters
 	// that don't recognise the protocol return nil (defensive no-op contract).
 	// Slice 24b: Xray has a real reconfig impl; the others are stubs that
