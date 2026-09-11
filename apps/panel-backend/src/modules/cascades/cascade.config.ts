@@ -671,6 +671,62 @@ export function buildTopologyFragmentsForNode(
   // read the direction FROM.
   if (isEntry) routingRules.push(QUIC_BLOCK_RULE);
 
+  /**
+   * A4 ad-split, at the entry.
+   *
+   * These were missing on the v4 path entirely until 2026-09-11: a policy only
+   * widened the `vlessRoute` lists of the direction rules below, and its domains
+   * were never rendered. So an operator could define an ad-split, grant it to a
+   * squad, watch the panel report success and get nothing on the node. The same
+   * defect as 2026-07-30 on chains, reintroduced by the v4 rewrite and invisible
+   * because the squad holding it had no members yet.
+   *
+   * ABOVE the direction rules on purpose. A grant names a user AND a set of
+   * domains; a direction rule names only a way out, so it is a door, and a door
+   * placed first matches everything behind it. The same narrow-above-wide rule
+   * the node applies between its own stages.
+   *
+   * Block before direct, as the chain builder does: what is blocked is blocked
+   * for everyone holding this profile, including inside a domain set that is
+   * otherwise sent direct.
+   *
+   * Gated on the tags of THIS policy across every direction (plus Auto when the
+   * entry offers it), never on the plain profile's tag: the grant belongs to the
+   * squad it was sold to.
+   */
+  if (isEntry) {
+    for (const p of input.policies ?? []) {
+      const tags = input.directions.map((d) => routeTag(p.ordinal, d.tag - 1));
+      // Mirrors the condition the Auto rule below is emitted under: a tag with
+      // no rule of its own must not be caught here either.
+      if (input.auto && byDirection.size > 1) tags.push(autoRouteTag(p.ordinal));
+      // ⚠ STRING, comma-separated, never an array: xray parses `vlessRoute`
+      // with its port-list parser, and an array fails the WHOLE config so the
+      // core refuses to start. Caught in the field 2026-08-08.
+      const vlessRoute = tags.join(',');
+      if (p.blockDomains.length) {
+        routingRules.push({
+          type: 'field',
+          vlessRoute,
+          domain: p.blockDomains,
+          outboundTag: 'blocked',
+        });
+      }
+      if (p.directDomains.length) {
+        // DIRECT_TAG, not a link-out. The whole point of directDomains at an
+        // entry is to leave from here instead of entering the chain; pointing
+        // this at a link would mean the operator sold "these go direct" while
+        // they travel through every hop.
+        routingRules.push({
+          type: 'field',
+          vlessRoute,
+          domain: p.directDomains,
+          outboundTag: DIRECT_TAG,
+        });
+      }
+    }
+  }
+
   for (const [directionTag, tags] of [...byDirection.entries()].sort((a, b) => a[0] - b[0])) {
     // A pool on the next step means several outbounds serve one direction. Let
     // xray pick by latency rather than pinning the first, which is the whole

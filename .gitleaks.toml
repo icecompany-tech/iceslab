@@ -8,6 +8,11 @@
 # whole directories will also ignore the real key someone pastes into one of
 # them. Every entry below names WHAT is being allowed and WHY, so an addition is
 # a decision rather than a side effect.
+#
+# A fixture lives NEXT TO its test. To the author that is one thing; to the
+# scanner it is two, because an allowlist by path covers the test and not its
+# data. That is the third time this has cost a red run: when a fixture trips the
+# scanner, allow the VALUE, not the directory it happens to sit in.
 
 [extend]
 useDefault = true
@@ -43,4 +48,16 @@ regexes = [
   # while a genuine key added to the same file is still caught. It also sits in
   # git history, where a fix cannot remove it.
   '''test_secret_at_least_32_characters_long_for_zod_validation''',
+  # The fake REALITY key the cascade golden fixtures carry. Base64 of the
+  # literal "hello-world-this-is-a-fake-key00", 43 characters: a real x25519 key
+  # is exactly that long, and the fixture has to be key-shaped or it does not
+  # exercise the code path it exists for.
+  #
+  # It ALREADY passes inside cascade_golden_test.go, which `paths` covers, and
+  # fails one directory away in testdata/. Allowed by VALUE rather than by
+  # adding testdata/ to `paths`: a cascade golden is precisely where somebody
+  # will one day paste a real key, because the easiest way to capture a
+  # reference config is to copy a live one, and an allowed directory would
+  # swallow that without a word.
+  '''aGVsbG8td29ybGQtdGhpcy1pcy1hLWZha2Uta2V5MDA''',
 ]

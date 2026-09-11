@@ -97,7 +97,12 @@ describe('A4 ad-split reaches a v4 entry', () => {
       `no rule carries the policy's blockDomains. The entry printed:\n` +
         JSON.stringify(rules, null, 2),
     ).toBeGreaterThanOrEqual(0);
-    expect(rules[i]!['outboundTag']).toBe('blocked');
+    // WHERE it leads, not only that it exists. A rule with the right domains
+    // pointing at the link would pass an existence check and block nothing.
+    expect(
+      rules[i]!['outboundTag'],
+      'blockDomains must end in the blackhole, not travel anywhere',
+    ).toBe('blocked');
   });
 
   it('renders the DIRECT list as a rule of its own', () => {
@@ -112,7 +117,15 @@ describe('A4 ad-split reaches a v4 entry', () => {
       `no rule carries the policy's directDomains. The entry printed:\n` +
         JSON.stringify(rules, null, 2),
     ).toBeGreaterThanOrEqual(0);
-    expect(rules[i]!['outboundTag']).toBe('direct');
+    // And this is the one that matters most. The whole point of directDomains
+    // at a cascade entry is to NOT enter the chain. A rule that exists, carries
+    // the right domains and leads to a link-out means the operator sold "google
+    // direct" and google goes through three countries: the rule looks right,
+    // the screen is green, and the behaviour is the opposite of what was sold.
+    expect(
+      rules[i]!['outboundTag'],
+      'directDomains must leave from HERE, not through a link-out',
+    ).toBe('direct');
   });
 
   it('gates both on the POLICY, not on everybody', () => {

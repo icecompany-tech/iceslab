@@ -17,12 +17,23 @@ import (
 // the policy and the resolver existed, which is exactly what makes it worth
 // something. It says nothing about a cascade: it was taken without one.
 //
-// This golden is captured now, from the code as it stands, with the cascade
-// still riding inside the inbound (`XrayInboundCfg.cascade`). It is the "before"
-// picture for moving the block to the node level. Taken FIRST and on purpose:
-// a golden captured after the move would only prove the move agrees with
-// itself, which is the same trap the field checklist warns about when it says
-// to record the original state before updating the agent.
+// This golden was captured from the code as it stood BEFORE c1f5cb3, the commit
+// that moved the block to the node level, with the cascade still riding inside
+// the inbound (`XrayInboundCfg.cascade`). It is the "before" picture. Taken
+// first and on purpose: a golden captured after the move would only prove the
+// move agrees with itself, which is the same trap the field checklist warns
+// about when it says to record the original state before updating the agent.
+//
+// The commit ORDER does not show that, because this file landed after the move
+// (38da707 after c1f5cb3), so here is how to check the claim rather than take
+// it. Verified this way on 2026-09-11, byte for byte:
+//
+//	git worktree add /tmp/check c1f5cb3~1
+//	cd /tmp/check
+//	git checkout 38da707 -- apps/node/internal/core/xray/cascade_golden_test.go \
+//	                        apps/node/internal/core/xray/testdata/
+//	cd apps/node && UPDATE_GOLDEN=1 go test -run TestCascadeEntryRenderMatchesGolden ./internal/core/xray/
+//	git diff --stat -- apps/node/internal/core/xray/testdata/render-cascade-entry.json   # empty
 //
 // The fragments in testdata are not invented. They are what
 // buildTopologyFragmentsForNode prints for an entry with two directions, a pool
