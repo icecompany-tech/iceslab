@@ -1,0 +1,91 @@
+{
+  "inbounds": [],
+  "outbounds": [
+    {
+      "tag": "cascade-link-out-d1-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "nl-a.example.com",
+            "port": 24000,
+            "users": [
+              { "id": "aaaaaaaa-0000-0000-0000-00000000000a", "encryption": "none", "flow": "xtls-rprx-vision" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": { "serverName": "www.microsoft.com", "fingerprint": "firefox" },
+        "sockopt": { "tcpCongestion": "bbr", "tcpFastOpen": true }
+      }
+    },
+    {
+      "tag": "cascade-link-out-d1-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "nl-b.example.com",
+            "port": 24000,
+            "users": [
+              { "id": "bbbbbbbb-0000-0000-0000-00000000000b", "encryption": "none", "flow": "xtls-rprx-vision" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": { "serverName": "www.microsoft.com", "fingerprint": "firefox" },
+        "sockopt": { "tcpCongestion": "bbr", "tcpFastOpen": true }
+      }
+    },
+    {
+      "tag": "cascade-link-out-d2-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "de.example.com",
+            "port": 24000,
+            "users": [
+              { "id": "cccccccc-0000-0000-0000-00000000000c", "encryption": "none", "flow": "xtls-rprx-vision" }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": { "serverName": "www.microsoft.com", "fingerprint": "firefox" },
+        "sockopt": { "tcpCongestion": "bbr", "tcpFastOpen": true }
+      }
+    }
+  ],
+  "routingRules": [
+    { "type": "field", "network": "udp", "port": 443, "outboundTag": "blocked" },
+    { "type": "field", "vlessRoute": "1,257", "balancerTag": "bal-d1" },
+    { "type": "field", "vlessRoute": "2,258", "outboundTag": "cascade-link-out-d2-0" },
+    { "type": "field", "vlessRoute": "65535,65534", "network": "tcp,udp", "balancerTag": "bal-auto" }
+  ],
+  "balancers": [
+    {
+      "tag": "bal-d1",
+      "selector": ["cascade-link-out-d1-0", "cascade-link-out-d1-1"],
+      "strategy": { "type": "leastPing" }
+    },
+    {
+      "tag": "bal-auto",
+      "selector": ["cascade-link-out"],
+      "strategy": { "type": "leastPing" }
+    }
+  ],
+  "observatory": {
+    "subjectSelector": ["cascade-link-out"],
+    "probeURL": "https://www.gstatic.com/generate_204",
+    "probeInterval": "1m"
+  }
+}

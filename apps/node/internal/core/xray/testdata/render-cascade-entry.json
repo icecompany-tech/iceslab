@@ -1,0 +1,270 @@
+{
+  "api": {
+    "services": [
+      "StatsService",
+      "HandlerService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "alice",
+            "flow": "xtls-rprx-vision",
+            "id": "11111111-2222-3333-4444-555555555555"
+          }
+        ],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "raw",
+        "realitySettings": {
+          "dest": "www.microsoft.com:443",
+          "privateKey": "aGVsbG8td29ybGQtdGhpcy1pcy1hLWZha2Uta2V5MDA",
+          "serverNames": [
+            "www.microsoft.com"
+          ],
+          "shortIds": [
+            "0123456789abcdef"
+          ],
+          "show": false,
+          "xver": 0
+        },
+        "security": "reality"
+      },
+      "tag": "vless-in-cascade-"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 8080,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api-in"
+    }
+  ],
+  "log": {
+    "loglevel": "info"
+  },
+  "observatory": {
+    "subjectSelector": [
+      "cascade-link-out"
+    ],
+    "probeURL": "https://www.gstatic.com/generate_204",
+    "probeInterval": "1m"
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "streamSettings": {
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      },
+      "tag": "direct"
+    },
+    {
+      "protocol": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    },
+    {
+      "tag": "cascade-link-out-d1-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "nl-a.example.com",
+            "port": 24000,
+            "users": [
+              {
+                "id": "aaaaaaaa-0000-0000-0000-00000000000a",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.microsoft.com",
+          "fingerprint": "firefox"
+        },
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      }
+    },
+    {
+      "tag": "cascade-link-out-d1-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "nl-b.example.com",
+            "port": 24000,
+            "users": [
+              {
+                "id": "bbbbbbbb-0000-0000-0000-00000000000b",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.microsoft.com",
+          "fingerprint": "firefox"
+        },
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      }
+    },
+    {
+      "tag": "cascade-link-out-d2-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "de.example.com",
+            "port": 24000,
+            "users": [
+              {
+                "id": "cccccccc-0000-0000-0000-00000000000c",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.microsoft.com",
+          "fingerprint": "firefox"
+        },
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      }
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true
+    }
+  },
+  "routing": {
+    "balancers": [
+      {
+        "tag": "bal-d1",
+        "selector": [
+          "cascade-link-out-d1-0",
+          "cascade-link-out-d1-1"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        }
+      },
+      {
+        "tag": "bal-auto",
+        "selector": [
+          "cascade-link-out"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        }
+      }
+    ],
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "inboundTag": [
+          "api-in"
+        ],
+        "outboundTag": "api",
+        "type": "field"
+      },
+      {
+        "outboundTag": "dns-out",
+        "protocol": [
+          "dns"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "protocol": [
+          "bittorrent"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "port": "25",
+        "type": "field"
+      },
+      {
+        "type": "field",
+        "network": "udp",
+        "port": 443,
+        "outboundTag": "blocked"
+      },
+      {
+        "type": "field",
+        "vlessRoute": "1,257",
+        "balancerTag": "bal-d1"
+      },
+      {
+        "type": "field",
+        "vlessRoute": "2,258",
+        "outboundTag": "cascade-link-out-d2-0"
+      },
+      {
+        "type": "field",
+        "vlessRoute": "65535,65534",
+        "network": "tcp,udp",
+        "balancerTag": "bal-auto"
+      }
+    ]
+  },
+  "stats": {}
+}
