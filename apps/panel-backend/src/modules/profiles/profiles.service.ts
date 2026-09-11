@@ -1,3 +1,4 @@
+import type { EngineName } from '@iceslab/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
@@ -327,11 +328,41 @@ export async function deleteProfile(id: string): Promise<void> {
  * is listening on.
  */
 export class ProfileDoesNotRunOnNodeError extends Error {
+  /**
+   * The prose is BUILT FROM the fields, not written beside them, so the two
+   * cannot drift apart.
+   *
+   * The fields are there because the panel is bilingual and this sentence is
+   * English. Two 409s already answer a Russian interface in English prose; this
+   * is the third, and the price of that habit grows. Nothing reads them yet:
+   * when error localisation happens, the sentence can be rebuilt in the
+   * operator's language without touching the contract.
+   *
+   * `reportedEngines` is always an array and never absent, because this refusal
+   * is only reachable AFTER a node has reported: one that never checked in is
+   * let through. An empty array therefore means "reported, and runs nothing",
+   * not "we do not know".
+   */
   constructor(
     public nodeName: string,
-    public detail: string,
+    public neededEngine: EngineName,
+    public reportedEngines: EngineName[],
+    /** Whether waiting will change the answer: the node is set up for this core
+     *  and has simply not reported it yet. False means waiting is pointless,
+     *  and saying otherwise would send the operator to watch a poll that will
+     *  never help. */
+    public canWait: boolean,
   ) {
-    super(`Node "${nodeName}" cannot serve this profile: ${detail}`);
+    super(
+      `Node "${nodeName}" cannot serve this profile: it needs the ${neededEngine} core and ` +
+        `this node reports ${
+          reportedEngines.length ? reportedEngines.join(', ') : 'no core at all'
+        }.` +
+        (canWait
+          ? ` The node is set up to run ${neededEngine} but has not reported it yet. If you have` +
+            ` just enabled it, wait for the next status poll and try again.`
+          : ''),
+    );
     this.name = 'ProfileDoesNotRunOnNodeError';
   }
 }
@@ -357,19 +388,10 @@ function assertNodeRendersProfile(
 ): void {
   const { ok, engines, wanted, justEnabled } = renderableAtSave(node, profile);
   if (ok) return;
-  throw new ProfileDoesNotRunOnNodeError(
-    node.name,
-    `it needs the ${wanted} core and this node reports ${
-      engines.length ? engines.join(', ') : 'no core at all'
-    }.` +
-      // "Not yet" and "no" read the same to an operator unless we say which one
-      // this is. Without this sentence somebody who has just switched sing-box
-      // on goes looking for a bug in a message that is merely early.
-      (justEnabled
-        ? ` The node is set up to run ${wanted} but has not reported it yet. If you have just` +
-          ` enabled it, wait for the next status poll and try again.`
-        : ''),
-  );
+  // "Not yet" and "no" read the same to an operator unless we say which one
+  // this is, so `canWait` carries the difference into both the prose and the
+  // fields.
+  throw new ProfileDoesNotRunOnNodeError(node.name, wanted, engines, justEnabled);
 }
 
 export async function createBinding(input: CreateBindingInput): Promise<PublicBindingDto> {

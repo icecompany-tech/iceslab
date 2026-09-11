@@ -113,9 +113,17 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       // cores cannot serve it. Named separately from CONFLICT so the screen can
       // point at the node instead of at the field.
       if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
-        return reply
-          .code(409)
-          .send({ error: 'PROFILE_DOES_NOT_RUN_ON_NODE', message: err.message });
+        return reply.code(409).send({
+          error: 'PROFILE_DOES_NOT_RUN_ON_NODE',
+          message: err.message,
+          // The same answer in machine form, so the sentence can one day be
+          // rebuilt in the operator's language without changing this contract.
+          // See ProfileDoesNotRunOnNodeError for what each one means.
+          nodeName: err.nodeName,
+          neededEngine: err.neededEngine,
+          reportedEngines: err.reportedEngines,
+          canWait: err.canWait,
+        });
       }
       throw err;
     }
@@ -155,9 +163,17 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       // come up: the agent answers such a push 200 with `skipped`, and the
       // subscription would keep handing out an endpoint nobody listens on.
       if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
-        return reply
-          .code(409)
-          .send({ error: 'PROFILE_DOES_NOT_RUN_ON_NODE', message: err.message });
+        return reply.code(409).send({
+          error: 'PROFILE_DOES_NOT_RUN_ON_NODE',
+          message: err.message,
+          // The same answer in machine form, so the sentence can one day be
+          // rebuilt in the operator's language without changing this contract.
+          // See ProfileDoesNotRunOnNodeError for what each one means.
+          nodeName: err.nodeName,
+          neededEngine: err.neededEngine,
+          reportedEngines: err.reportedEngines,
+          canWait: err.canWait,
+        });
       }
       throw err;
     }

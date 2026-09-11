@@ -180,6 +180,37 @@ describe('the gate on deploying a profile', () => {
     expect(refused.error).toBe('PROFILE_DOES_NOT_RUN_ON_NODE');
   });
 
+  it('answers in machine form beside the prose', async () => {
+    // The panel is bilingual and this sentence is English. Nothing reads these
+    // yet; they are here so the sentence can be rebuilt in the operator's
+    // language later without changing the contract.
+    const node = await makeNode({ protocol: 'hysteria' });
+    await reportCores(node.id, [{ name: 'hysteria', engine: 'hysteria' }]);
+    const profile = await makeProfile('xray', XRAY_CONFIG);
+    const body = await bind(profile.id, node.id, 443, 409);
+
+    expect(body.nodeName).toBe(node.name);
+    expect(body.neededEngine).toBe('xray');
+    expect(body.reportedEngines).toEqual(['hysteria']);
+    expect(body.canWait).toBe(false);
+    // The prose is built FROM these, so it cannot say something else.
+    expect(body.message).toContain(node.name);
+    expect(body.message).toContain('xray');
+  });
+
+  it('reports an empty list when the node runs nothing, never a missing field', async () => {
+    // `reportedEngines` is always an array: this refusal is only reachable
+    // after a node has reported, because one that never checked in is let
+    // through. So [] means "reported, runs nothing", not "unknown".
+    const node = await makeNode({ protocol: 'xray' });
+    await reportCores(node.id, []);
+    const profile = await makeProfile('xray', XRAY_CONFIG);
+    const body = await bind(profile.id, node.id, 443, 409);
+
+    expect(body.reportedEngines).toEqual([]);
+    expect(body.message).toContain('no core at all');
+  });
+
   it('says "not yet" rather than "no" when the core was only just switched on', async () => {
     // The narrow edge: sing-box is enabled on a node that has already reported,
     // and between that click and the next poll the report still says what it
