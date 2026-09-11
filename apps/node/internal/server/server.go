@@ -431,6 +431,23 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The node-level policy goes out BEFORE the inbounds, so the render that
+	// each inbound triggers already carries it. The other order would restart
+	// the core twice for one push: once without the policy, once with it.
+	//
+	// A failure here is not fatal to the request. The inbounds below are what
+	// keeps users connected; refusing the whole push over a policy the operator
+	// can fix in the panel would take the node dark for a routing preference.
+	for _, adapter := range s.cfg.Adapters {
+		pr, ok := adapter.(core.PolicyReceiver)
+		if !ok {
+			continue
+		}
+		if err := pr.ApplyPolicy(req.Policy); err != nil {
+			s.logger.Error("adapter ApplyPolicy failed", "core", adapter.Name(), "err", err)
+		}
+	}
+
 	// Dispatch each inbound to the matching adapter by protocol name. Adapters
 	// that don't recognise the protocol return nil (defensive no-op contract).
 	// Slice 24b: Xray has a real reconfig impl; the others are stubs that

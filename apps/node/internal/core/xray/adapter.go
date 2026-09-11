@@ -15,6 +15,7 @@ import (
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/subprocess"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 )
 
 const Name = "xray"
@@ -115,9 +116,69 @@ type Adapter struct {
 	// restart the core for nothing.
 	inbounds map[string]InboundConfig
 
+	// policy is the node-level routing policy (dto.NodePolicy.Rules), which
+	// belongs to the NODE and not to any one inbound: it is pushed once per
+	// applyInbounds and rendered into the single routing block every inbound
+	// shares. nil = no policy, which renders exactly as before it existed.
+	policy []dto.NodePolicyRule
+
 	// restartMu serializes regenerateAndRestart so concurrent config changes
 	// can't race the subprocess swap. Never held together with mu across IO.
 	restartMu sync.Mutex
+}
+
+// ApplyPolicy implements core.PolicyReceiver: store the node-level policy and
+// re-render if it actually changed.
+//
+// Compared by its rendered form rather than by struct equality: the rules carry
+// slices, and a push that repeats the same policy has to be a no-op. Without
+// that, every applyInbounds would look like a change and restart the core,
+// dropping every live connection on the node for nothing.
+//
+// An empty or absent policy is a legitimate state and not "leave what you had":
+// it is how a policy gets REMOVED, and treating it as no news would leave the
+// last one running forever.
+func (a *Adapter) ApplyPolicy(raw json.RawMessage) error {
+	var parsed dto.NodePolicy
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return fmt.Errorf("xray ApplyPolicy: %w", err)
+		}
+	}
+
+	// Reject an action this core cannot render BEFORE storing it, so a bad
+	// policy cannot wedge every later render.
+	if _, err := buildPolicyRules(parsed.Rules); err != nil {
+		return fmt.Errorf("xray ApplyPolicy: %w", err)
+	}
+
+	a.mu.Lock()
+	unchanged := policyEqual(a.policy, parsed.Rules)
+	if unchanged {
+		a.mu.Unlock()
+		return nil
+	}
+	a.policy = parsed.Rules
+	count := len(parsed.Rules)
+	a.mu.Unlock()
+
+	a.logger.Info("xray ApplyPolicy: policy changed, regenerating", "rules", count)
+	return a.regenerateAndRestart(context.Background())
+}
+
+func policyEqual(a, b []dto.NodePolicyRule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return string(ja) == string(jb)
 }
 
 // RetainInbounds implements core.InboundReconciler: forget every inbound the
@@ -486,6 +547,7 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	// a tag that is not there, adds nobody, and sends the caller into a restart.
 	inbounds := a.servedInboundsLocked()
 	cascade := a.cascade
+	policy := a.policy
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -504,7 +566,7 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	// same way regenerateAndRestart does it: rendering the single install-time
 	// inbound here would overwrite a multi-inbound config on disk with one that
 	// serves a fraction of it.
-	blob, err := renderMultiConfig(inbounds, clients, cascade, inbounds[0].withDefaults().ApiPort)
+	blob, err := renderMultiConfig(inbounds, clients, cascade, inbounds[0].withDefaults().ApiPort, policy)
 	if err != nil {
 		return false
 	}
@@ -1028,6 +1090,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	clients := sortedClients(a.users)
 	inbound := a.cfg.Inbound
 	cascade := a.cascade
+	policy := a.policy
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -1059,7 +1122,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	if len(pushed) == 0 && inbound.RealityPrivateKey != "" {
 		pushed = []InboundConfig{inbound}
 	}
-	blob, err := renderMultiConfig(pushed, clients, cascade, inbound.withDefaults().ApiPort)
+	blob, err := renderMultiConfig(pushed, clients, cascade, inbound.withDefaults().ApiPort, policy)
 	if err != nil {
 		return fmt.Errorf("render xray config: %w", err)
 	}

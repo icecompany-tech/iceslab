@@ -110,8 +110,70 @@ func (i InboundDto) ResolvedEngine() EngineName {
 	return NativeEngine(i.Protocol)
 }
 
+// NodePolicy mirrors NodePolicy in shared/transport.ts: what this node does
+// with traffic, decided by the node rather than by the client.
+//
+// A stage of its own, alongside the inbounds rather than inside one. The
+// cascade fragments it resembles hang off an InboundDto and are absent on a
+// plain node, they are several lists merged in a loop with nobody owning the
+// order between them (the WARP rule in xray/config.go already loses that race),
+// and being raw xray objects they cannot be named, which a non-xray core needs:
+// on AmneziaWG the same policy is iptables in PostUp.
+//
+// Nil or an empty rule list must render exactly as before. That is the property
+// the first commit is verified against.
+type NodePolicy struct {
+	// Evaluated top to bottom, first match wins.
+	Rules []NodePolicyRule `json:"rules"`
+}
+
+type NodePolicyRule struct {
+	Match  NodePolicyMatch  `json:"match"`
+	Action NodePolicyAction `json:"action"`
+}
+
+// NodePolicyMatch: every field optional, they AND together. Empty = catch-all,
+// which is legitimate as the last rule and a mistake anywhere else.
+//
+// Domain and IP carry the engine-neutral spelling the panel uses elsewhere
+// ("geosite:category-ru", "geoip:ru", "domain:example.com", plain hosts, CIDRs);
+// the node translates for whatever core it runs.
+type NodePolicyMatch struct {
+	Domain   []string `json:"domain,omitempty"`
+	IP       []string `json:"ip,omitempty"`
+	Port     string   `json:"port,omitempty"`
+	Protocol []string `json:"protocol,omitempty"`
+	Network  string   `json:"network,omitempty"`
+}
+
+// Action kinds. A destination, not a direction.
+const (
+	PolicyActionDirect  = "direct"
+	PolicyActionBlock   = "block"
+	PolicyActionWarp    = "warp"
+	PolicyActionCascade = "cascade"
+)
+
+// NodePolicyAction is the TypeScript discriminated union flattened: `kind`
+// selects, and `exit` belongs to the cascade kind alone. Go has no union type,
+// so an unknown kind has to be rejected explicitly by the renderer rather than
+// falling through to a default - a policy rule that quietly does something else
+// is worse than one that refuses to apply.
+type NodePolicyAction struct {
+	Kind string `json:"kind"`
+	// Cascade only: the outbound name the PANEL generated in this node's
+	// cascade fragments. Opaque here; a name that is not in the rendered config
+	// fails the core's own validation, which is louder than a rule that never
+	// fires.
+	Exit string `json:"exit,omitempty"`
+}
+
 type ApplyInboundsRequest struct {
 	Inbounds []InboundDto `json:"inbounds"`
+	// Raw rather than decoded: the server hands it to whichever adapters accept
+	// a policy without interpreting it, exactly as it does with InboundDto.
+	// Config. Absent field = nil = render as before.
+	Policy json.RawMessage `json:"policy,omitempty"`
 }
 
 type ApplyInboundsResponse struct {

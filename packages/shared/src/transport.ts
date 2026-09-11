@@ -357,8 +357,90 @@ export interface ShadowtlsInboundCfg {
   ssPassword?: string;
 }
 
+/**
+ * What a node does with traffic, decided by the node rather than by the client.
+ *
+ * A stage of its own, next to the inbounds and not inside them. Three reasons it
+ * cannot be folded into the cascade fragments it superficially resembles:
+ *
+ *   - those hang off an INBOUND (`InboundDto.cascade`) and are absent on a plain
+ *     node, while a policy is wanted on every node, most of all the plain ones;
+ *   - they are N lists merged in a loop, and nobody owns the order between them.
+ *     That is not a hypothetical: the per-inbound WARP rule below already never
+ *     fires on a cascade node because the cascade rules matched first (see
+ *     config.go). A second unordered list would buy a second such bug;
+ *   - a rule has to be NAMEABLE. "Protection" is ours and immovable, "Policy" is
+ *     the operator's, "the door out" is always last. Raw xray objects in one
+ *     array cannot be told apart, so the panel could not say which stage a node
+ *     has applied, and a non-xray core could not render them at all: on
+ *     AmneziaWG the same policy is iptables in PostUp.
+ *
+ * Hence a model, not xray JSON: `{ match, action }`, where the action names a
+ * destination the node resolves with whatever engine it runs.
+ */
+export interface NodePolicy {
+  /** Evaluated top to bottom, first match wins, the way every routing engine
+   *  we render to works. An empty list is the normal state of a node with no
+   *  policy and must render exactly as if the field were absent. */
+  rules: NodePolicyRule[];
+}
+
+export interface NodePolicyRule {
+  match: NodePolicyMatch;
+  action: NodePolicyAction;
+}
+
+/**
+ * What a rule fires on. Every field is optional and they AND together; a match
+ * with no fields at all is a catch-all, which is legitimate as the last rule and
+ * a mistake anywhere else.
+ *
+ * Domain and IP entries carry the engine-neutral spelling the panel already uses
+ * elsewhere (`geosite:category-ru`, `geoip:ru`, `domain:example.com`, plain
+ * hostnames and CIDRs). The node translates; on a core that cannot match domains
+ * at all, a domain-only rule is a rule that cannot be honoured, and the node
+ * says so rather than dropping it quietly.
+ */
+export interface NodePolicyMatch {
+  domain?: string[];
+  ip?: string[];
+  /** Single port or range, "443" / "1000-2000" / "80,443". */
+  port?: string;
+  /** Sniffed application protocol, e.g. ["bittorrent"]. */
+  protocol?: string[];
+  network?: 'tcp' | 'udp' | 'tcp,udp';
+}
+
+/**
+ * Where matching traffic goes. A destination, not a direction: the node knows
+ * how to reach each of these, and the panel does not have to know how the node
+ * spells it.
+ */
+export type NodePolicyAction =
+  /** Out of this node's own address. */
+  | { kind: 'direct' }
+  /** Dropped. */
+  | { kind: 'block' }
+  /** Through this node's Cloudflare WARP egress. The node must already have
+   *  WARP provisioned; a rule naming it on a node without it is refused by the
+   *  core's own config validation rather than silently skipped. */
+  | { kind: 'warp' }
+  /**
+   * Out through a cascade exit this node dials.
+   *
+   * `exit` is the outbound name the panel itself generated in the cascade
+   * fragments for this node, and the node treats it as opaque: it is the panel
+   * that owns cascade naming (the fragments are already panel-authored), and a
+   * name that is not there fails config validation loudly instead of producing
+   * a rule that quietly never fires.
+   */
+  | { kind: 'cascade'; exit: string };
+
 export interface ApplyInboundsRequest {
   inbounds: InboundDto[];
+  /** Node-level routing policy. Absent or `{ rules: [] }` renders exactly as
+   *  before, which is what makes it safe to ship ahead of the panel side. */
+  policy?: NodePolicy;
 }
 
 export interface ApplyInboundsResponse {

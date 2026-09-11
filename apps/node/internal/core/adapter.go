@@ -136,6 +136,22 @@ type InboundReconciler interface {
 	RetainInbounds(keep []string) error
 }
 
+// PolicyReceiver is an OPTIONAL interface for adapters that can render the
+// node-level routing policy (see dto.NodePolicy).
+//
+// Optional because the policy is one thing rendered by different engines: xray
+// turns it into routing rules, AmneziaWG would turn it into iptables in PostUp,
+// and an adapter that cannot express it at all should not pretend to. The raw
+// bytes are passed through undecoded, the same way ApplyInbound takes the
+// inbound config, so this package stays free of the wire shape.
+//
+// A nil or empty policy MUST render exactly as before. The panel ships the
+// field ahead of generating any rules, and the first thing that proves the
+// plumbing is a byte-identical config on the node.
+type PolicyReceiver interface {
+	ApplyPolicy(policy json.RawMessage) error
+}
+
 // Provisionable is an OPTIONAL interface for adapters that can be REGISTERED
 // without being CONFIGURED. The installer registers an adapter for every
 // protocol the operator might switch on later, and such an adapter sits idle

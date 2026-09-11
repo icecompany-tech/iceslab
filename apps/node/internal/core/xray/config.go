@@ -18,7 +18,73 @@ import (
 	"strings"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 )
+
+// buildPolicyRules turns the node-level policy into xray routing rules.
+//
+// The translation is the whole reason the policy travels as a model instead of
+// as xray JSON: the same `{match, action}` has to come out as routing rules
+// here and as iptables on an AmneziaWG node, and only the engine knows how.
+//
+// An action this core cannot name is an ERROR, not a skipped rule. A policy
+// that silently loses one line is the worst outcome available: the operator
+// sees the rule in the panel, the node reports success, and traffic goes
+// somewhere else. Refusing keeps the running config and hands the reason back
+// to the panel, which is the only place anyone will read it.
+func buildPolicyRules(rules []dto.NodePolicyRule) ([]any, error) {
+	out := make([]any, 0, len(rules))
+	for i, r := range rules {
+		tag, err := policyOutboundTag(r.Action)
+		if err != nil {
+			return nil, fmt.Errorf("policy rule %d: %w", i, err)
+		}
+		rule := map[string]any{"type": "field", "outboundTag": tag}
+		if len(r.Match.Domain) > 0 {
+			rule["domain"] = r.Match.Domain
+		}
+		if len(r.Match.IP) > 0 {
+			rule["ip"] = r.Match.IP
+		}
+		if r.Match.Port != "" {
+			rule["port"] = r.Match.Port
+		}
+		if len(r.Match.Protocol) > 0 {
+			rule["protocol"] = r.Match.Protocol
+		}
+		if r.Match.Network != "" {
+			rule["network"] = r.Match.Network
+		}
+		out = append(out, rule)
+	}
+	return out, nil
+}
+
+// policyOutboundTag maps a destination to the outbound that reaches it here.
+// The tags are the ones this file emits: "direct" (freedom), "blocked"
+// (blackhole), "warp" (the wireguard outbound, present only when the node has
+// WARP provisioned). A cascade exit is named by the PANEL, which authored the
+// fragments those outbounds come from, so it passes through untouched and an
+// exit that is not in the config fails `xray -test` before anything is swapped.
+func policyOutboundTag(a dto.NodePolicyAction) (string, error) {
+	switch a.Kind {
+	case dto.PolicyActionDirect:
+		return "direct", nil
+	case dto.PolicyActionBlock:
+		return "blocked", nil
+	case dto.PolicyActionWarp:
+		return "warp", nil
+	case dto.PolicyActionCascade:
+		if a.Exit == "" {
+			return "", errors.New("cascade action carries no exit name")
+		}
+		return a.Exit, nil
+	case "":
+		return "", errors.New("action has no kind")
+	default:
+		return "", fmt.Errorf("unknown action kind %q", a.Kind)
+	}
+}
 
 // InboundConfig is the static part of the Xray config, generated once from
 // admin settings (slice 23 will move these into the inbounds table) and kept
@@ -343,7 +409,7 @@ func renderConfig(inbound InboundConfig, users []xrayClient) ([]byte, error) {
 // several. Kept as a thin wrapper so the many existing call sites and tests
 // that deal with a single inbound stay unchanged.
 func renderConfigWithCascade(inbound InboundConfig, users []xrayClient, cascade *CascadeFragments) ([]byte, error) {
-	return renderMultiConfig([]InboundConfig{inbound}, users, cascade, inbound.withDefaults().ApiPort)
+	return renderMultiConfig([]InboundConfig{inbound}, users, cascade, inbound.withDefaults().ApiPort, nil)
 }
 
 // renderConfigWithCascade is renderConfig plus optional cascade fragments (C3).
@@ -373,6 +439,7 @@ func renderMultiConfig(
 	users []xrayClient,
 	cascade *CascadeFragments,
 	apiPort int,
+	policy []dto.NodePolicyRule,
 ) ([]byte, error) {
 	inbounds := make([]any, 0, len(inboundCfgs)+1)
 	seenTags := make(map[string]struct{}, len(inboundCfgs))
@@ -489,6 +556,22 @@ func renderMultiConfig(
 			"outboundTag": "blocked",
 		},
 	}
+
+	// The operator's policy sits between the two things it must not disturb:
+	// after Protection above (DNS hijack, BitTorrent, SMTP - ours, and a policy
+	// rule must not be able to unblock what we block), and before the doors out
+	// below, so "RU direct, the rest through the tunnel" actually beats a
+	// cascade entry's catch-all. Put after the cascade instead and the catch-all
+	// matches first and the policy never fires, which is the exact shape of the
+	// WARP bug noted below.
+	//
+	// Nil or empty appends nothing, so a node without a policy renders
+	// byte-identically to before this existed.
+	policyRules, err := buildPolicyRules(policy)
+	if err != nil {
+		return nil, err
+	}
+	rules = append(rules, policyRules...)
 
 	// C3: append cascade fragments. Order matters: cascade rules come AFTER the
 	// base block/dns rules so a cascade entry's catch-all (user traffic ->
