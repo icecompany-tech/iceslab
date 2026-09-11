@@ -89,6 +89,27 @@ export const common = {
   },
 
   // Facts a page appends to the topbar breadcrumb: "/ USERS · 36 ACCOUNTS · 21 ACTIVE".
+  /**
+   * The pair (protocol, engine). The dispatcher on a node matches the pair, so
+   * "hy2" in a list is half an answer: Hysteria 2 is served by three different
+   * things, with different configs, different statistics and a different
+   * ability to carry a cascade leg.
+   */
+  engine: {
+    xray: 'xray core',
+    singbox: 'sing-box engine',
+    native: 'its own daemon',
+    pair: '{{protocol}} · {{engine}}',
+    legNo: 'cannot be a cascade leg',
+    legWhy:
+      'The leg of a chain is built by xray, and a node running its own daemon has none. Such a node can be a way out, never a hop in the middle.',
+    cellUnrealised: '{{name}} · no such leg exists, saving will refuse it',
+    caveat: {
+      noSalamander: 'no obfuscation',
+      noSalamanderWhy:
+        'Salamander obfuscation belongs to the Hysteria 2 daemon; the xray core has none at all. In Russia that is the part that gets through the DPI, so this pair is not a swap, it is a different product.',
+    },
+  },
   pageMeta: {
     /** The breadcrumb when the page's own list failed to load: a count would
      *  read as a real number and outlive the error card below it. */

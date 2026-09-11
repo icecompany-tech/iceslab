@@ -29,6 +29,14 @@ import {
   statusTone,
   type HopRole,
 } from '@/contours/cascades/lib/cascadeForm';
+import {
+  carriesCascadeLink,
+  isRealisedLinkCell,
+  linkCellOptions,
+  nodePair,
+  pairCaveats,
+  pairLabel,
+} from '@/lib/domain/engines';
 
 /**
  * The pieces both cascade pages are built from. Creating and editing a cascade
@@ -136,6 +144,8 @@ export function HopRow({
           // The entry is the hop whose core version decides whether per-exit
           // auth works at all, so that is what its field reports.
           meta={role === 'entry' ? 'core' : 'status'}
+          // A hop with a link protocol is a hop that has to build one.
+          needsLink={linkProtocol !== null}
           onChange={onPickNode}
         />
       </Stack>
@@ -160,11 +170,15 @@ export function HopRow({
           {linkProtocol === null && subscriptionLabel ? t('cascadeEdit.subLabel') : linkLabel}
         </FieldLabel>
         {linkProtocol !== null ? (
+          /* The LINK is a different dictionary from the protocol next to it:
+             only two cells are realised and both are built by xray, so the row
+             names the pair. Everything the list used to offer is refused at
+             save since the backend stopped substituting vless silently. */
           <Select
-            data={protocolOptions(linkProtocol)}
+            data={linkCellOptions(linkProtocol, t)}
             value={linkProtocol}
             allowDeselect={false}
-            error={!isKnownProtocol(linkProtocol)}
+            error={!isRealisedLinkCell(linkProtocol)}
             onChange={(v) => v && onLinkProtocol(v as CascadeProtocol)}
           />
         ) : subscriptionLabel ? (
@@ -200,6 +214,7 @@ export function NodeSelect({
   claimedBy,
   usedElsewhere,
   meta = 'status',
+  needsLink = false,
   onChange,
 }: {
   value: string | null;
@@ -207,6 +222,9 @@ export function NodeSelect({
   claimedBy: Map<string, string>;
   usedElsewhere: string[];
   meta?: 'status' | 'core';
+  /** This slot carries a leg to the next hop, so a machine that cannot build
+   *  one is a trap here. Off for the ways out: an exit needs no leg. */
+  needsLink?: boolean;
   onChange: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -217,6 +235,10 @@ export function NodeSelect({
   // A node already used by another hop of THIS cascade is disabled: the backend
   // rejects the save outright (no loops), so offering it would only produce a
   // 400. A node owned by ANOTHER cascade stays pickable and is labelled instead.
+  //
+  // The label carries the PAIR, not the protocol: «hy2» alone does not say
+  // whether this machine can be a hop in the middle, and that is the whole
+  // question being answered while picking it.
   const data = useMemo(
     () => nodes.map((n) => ({ value: n.id, label: n.name, disabled: taken.has(n.id) })),
     [nodes, taken],
@@ -226,7 +248,7 @@ export function NodeSelect({
   // rather than leaving the slot blank on the one hop where the version matters.
   const trailing =
     selected && meta === 'core' && selected.coreVersion
-      ? { text: `${selected.protocol} ${selected.coreVersion}`, tone: FAINT }
+      ? { text: `${pairLabel(nodePair(selected), t)} · ${selected.coreVersion}`, tone: FAINT }
       : selected
         ? { text: selected.status, tone: statusTone(selected.status) }
         : null;
@@ -292,6 +314,39 @@ export function NodeSelect({
             >
               {node?.address}
             </Text>
+            {/* The pair, and the one consequence of it that decides this pick.
+                A node whose core is its own daemon has no xray to put the leg
+                into, so in a middle slot it is a dead end the operator would
+                otherwise discover in the field. */}
+            {node && (
+              <Text
+                style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT, flexShrink: 0 }}
+              >
+                {pairLabel(nodePair(node), t)}
+              </Text>
+            )}
+            {/* What the pairing COSTS, which the two names cannot say. Silent
+                for every pair the panel can show today: the first one with a
+                caveat is Hysteria 2 on xray, and the backend does not offer it
+                yet. The slot stands so it does not have to be bolted on later. */}
+            {node &&
+              pairCaveats(nodePair(node)).map((key) => (
+                <Text
+                  key={key}
+                  title={t(`${key}Why`)}
+                  style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: AMBER, flexShrink: 0 }}
+                >
+                  {t(key)}
+                </Text>
+              ))}
+            {node && needsLink && !carriesCascadeLink(node.protocol) && (
+              <Text
+                title={t('engine.legWhy')}
+                style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: AMBER, flexShrink: 0 }}
+              >
+                {t('engine.legNo')}
+              </Text>
+            )}
             {option.disabled ? (
               <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
                 {t('cascadeCreate.alreadyInThis')}
@@ -332,6 +387,7 @@ export function PoolField({
   claimedBy,
   usedElsewhere,
   meta = 'status',
+  needsLink = false,
   addLabel,
   onChange,
 }: {
@@ -340,6 +396,7 @@ export function PoolField({
   claimedBy: Map<string, string>;
   usedElsewhere: string[];
   meta?: 'status' | 'core';
+  needsLink?: boolean;
   addLabel: string;
   onChange: (ids: string[]) => void;
 }) {
@@ -356,6 +413,7 @@ export function PoolField({
               // Every other slot of this cascade, plus the pool's own other rows.
               usedElsewhere={[...usedElsewhere, ...rows.filter((_, j) => j !== i)]}
               meta={meta}
+              needsLink={needsLink}
               onChange={(v) => onChange(rows.map((r, j) => (j === i ? v : r)))}
             />
           </Box>
@@ -440,6 +498,9 @@ export function PositionRow({
           claimedBy={claimedBy}
           usedElsewhere={usedElsewhere}
           meta={role === 'entry' ? 'core' : 'status'}
+          // Every position links onward, to the next position or to the
+          // directions, so every machine in a pool has to be able to build one.
+          needsLink
           addLabel={addNodeLabel}
           onChange={onNodes}
         />
@@ -463,11 +524,12 @@ export function PositionRow({
 
       <Stack gap={6} className="cascade-hop-field">
         <FieldLabel>{linkLabel}</FieldLabel>
+        {/* Same two cells as the older row above, and the same reason. */}
         <Select
-          data={protocolOptions(linkProtocol)}
+          data={linkCellOptions(linkProtocol, t)}
           value={linkProtocol}
           allowDeselect={false}
-          error={!isKnownProtocol(linkProtocol)}
+          error={!isRealisedLinkCell(linkProtocol)}
           onChange={(v) => v && onLinkProtocol(v as CascadeProtocol)}
         />
       </Stack>

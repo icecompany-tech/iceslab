@@ -33,6 +33,9 @@ export const PROTOCOL_OPTIONS: ProtocolOption[] = [
  *  parenthetical suffix. Falls back to the verbose label if no compact
  *  form exists. */
 const COMPACT: Record<string, string> = {
+  // Not a protocol of the node enum: the name of a cascade link cell, which
+  // shares this table so a pair label has one place to look up a name.
+  vless: 'VLESS',
   hysteria: 'Hysteria 2',
   xray: 'Xray',
   tuic: 'TUIC',
