@@ -38,27 +38,44 @@ export function effectiveEngineOf(profile: {
 }
 
 /**
- * What this node REPORTED it runs, or undefined when it never has.
+ * What this node REPORTED it runs, or undefined when we do not know.
  *
  * Three states, and the third is not decoration:
- *   - undefined    the node has not checked in with an agent that reports cores;
- *   - []           it checked in and renders nothing (an agent with no adapters);
+ *   - undefined    nothing usable was reported (see below for both ways);
+ *   - []           an agent that names its engines listed none;
  *   - non-empty    the fact.
  *
  * Deliberately no boolean beside it saying whether this is fact or guess: the
  * absence IS that signal, the same idiom as `cores: null` and an absent
  * `rendersPolicy`. A flag next to the list would let the two disagree.
+ *
+ * ⚠ A core WITHOUT `engine` makes the whole list undefined, and that is the
+ * point rather than a shortcut. An agent older than the field says only which
+ * PROTOCOL each core serves, and the protocol does not name the engine: main.go
+ * registers the sing-box adapter under Protocol "xray", "hysteria" and
+ * "shadowsocks" (the engine-choice adapters EC2/EC3/EC4, all of them older than
+ * the field), so `name: "xray"` from such an agent is a core that may be either
+ * xray or sing-box. Reading it as the native core answers "xray" for a sing-box
+ * node, which is the same mistake as reading `Node.protocol` as a capability
+ * list, one day later. Measured on the stand 2026-09-11: a node reported three
+ * engines while not one of its cores had said any.
+ *
+ * An incomplete list cannot be used to refuse: the entries it is missing are
+ * exactly the ones that could carry the engine being asked about. Partial is
+ * enough to answer yes and useless for answering no, and the gate needs no. So
+ * incomplete collapses into the state that already means "we do not know": for
+ * THIS question, "never reported" and "reported without engines" are the same.
+ *
+ * An EMPTY list stays empty, because it is complete: there is no core whose
+ * engine went unsaid. That an agent with zero adapters cannot happen (main.go
+ * always registers at least one) is what keeps this from mattering.
  */
 export function reportedEngines(node: { cores: unknown }): EngineName[] | undefined {
   const cores = (node.cores as NodeCores | null) ?? null;
   if (!cores) return undefined;
+  if (cores.cores.some((c) => c.engine === undefined)) return undefined;
   const out = new Set<EngineName>();
-  for (const c of cores.cores) {
-    // `engine` is absent on an agent older than the field; the protocol's
-    // native core is the honest reading for those, and it is what that agent
-    // was running anyway.
-    out.add((c.engine as EngineName | undefined) ?? nativeEngineFor(c.name));
-  }
+  for (const c of cores.cores) out.add(c.engine as EngineName);
   return [...out];
 }
 

@@ -39,6 +39,9 @@ export const app = {
     // The row is drawn but the screen behind it doesn't exist yet. A hover
     // title, so a click that goes nowhere doesn't read as a broken link.
     notWired: 'Screen not built yet',
+    // A word on the row itself, not only in a title: eight of these looked
+    // exactly like the live rows, and nobody hovers a nav item to check.
+    notWiredTag: 'no screen',
     systemGroup: 'System',
     insights: 'Insights',
     updateAvailable: 'Update available: {{version}}',

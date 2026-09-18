@@ -54,6 +54,9 @@ const MIST = '#7A8BA3';
 // enough that the top level still leads.
 const SUBLABEL = '#8A9BB2';
 const FAINT = '#5A6B82';
+// One step under FAINT, for the rows that name a screen which does not exist
+// yet: readable, and visibly not the same kind of row as a live one.
+const DIM = '#3A4A60';
 const CYAN = '#7DD3FC';
 const CYAN2 = '#67E8F9';
 const MOSS = '#A7D8B9';
@@ -126,6 +129,43 @@ function hoverOff(e: React.MouseEvent, isActive: boolean) {
   (e.currentTarget as HTMLElement).style.color = MIST;
 }
 
+/**
+ * A row that names a screen which does not exist yet.
+ *
+ * The eight of them used to be drawn exactly like the live rows: same ink,
+ * same icon weight, same everything, and only a hover title said otherwise.
+ * That is the biggest dead control in the panel and the first thing an
+ * operator sees, so it now reads as unfinished before it is touched: dimmer
+ * ink, and a word on the row rather than a tooltip nobody hovers.
+ *
+ * They are not deleted, deliberately. The list is also the map of the product,
+ * and an operator who cannot find DNS in it concludes the panel cannot do DNS,
+ * which is a different and worse wrong answer than "not yet".
+ */
+const PLACEHOLDER_ROW = { opacity: 0.55 } as const;
+
+function SoonTag() {
+  const { t } = useTranslation();
+  return (
+    <Box
+      component="span"
+      style={{
+        fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+        fontSize: 9,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: DIM,
+        border: `1px solid ${HAIRLINE}`,
+        borderRadius: 4,
+        padding: '1px 5px',
+        flexShrink: 0,
+      }}
+    >
+      {t('sidebar.notWiredTag')}
+    </Box>
+  );
+}
+
 function NavCount({ count, countDot }: { count: NavCount; countDot?: boolean }) {
   if (count === undefined || count === null) return null;
   return (
@@ -169,20 +209,20 @@ function NavItem({
 }: NavItemProps) {
   const renderInner = (isActive: boolean, interactive = true) => (
     <Box
-      style={navRowStyle(isActive)}
+      style={{ ...navRowStyle(isActive), ...(interactive ? null : PLACEHOLDER_ROW) }}
       onMouseEnter={interactive ? (e) => hoverOn(e, isActive) : undefined}
       onMouseLeave={interactive ? (e) => hoverOff(e, isActive) : undefined}
     >
-      <Box style={{ color: isActive ? CYAN : MIST, display: 'flex' }}>{icon}</Box>
+      <Box style={{ color: isActive ? CYAN : interactive ? MIST : DIM, display: 'flex' }}>{icon}</Box>
       <span style={{ flex: 1 }}>{label}</span>
-      <NavCount count={count} countDot={countDot} />
+      {interactive ? <NavCount count={count} countDot={countDot} /> : <SoonTag />}
       {trailing}
     </Box>
   );
 
   if (placeholder) {
     return (
-      <Box title={placeholderTitle} style={{ cursor: 'default' }}>
+      <Box title={placeholderTitle} aria-disabled="true" style={{ cursor: 'default' }}>
         {renderInner(false, false)}
       </Box>
     );
@@ -263,6 +303,7 @@ function SubNavItem({
         lineHeight: '16px',
         backgroundColor: isActive ? HOVER : 'transparent',
         transition: 'background-color 120ms, color 120ms',
+        ...(interactive ? null : PLACEHOLDER_ROW),
       }}
       onMouseEnter={
         interactive
@@ -283,9 +324,12 @@ function SubNavItem({
           : undefined
       }
     >
-      <Box style={{ color: isActive ? CYAN : FAINT, display: 'flex' }}>{icon}</Box>
+      <Box style={{ color: isActive ? CYAN : interactive ? FAINT : DIM, display: 'flex' }}>
+        {icon}
+      </Box>
       <span style={{ flex: 1 }}>{label}</span>
-      {count !== undefined && count !== null && (
+      {!interactive && <SoonTag />}
+      {interactive && count !== undefined && count !== null && (
         <span style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: FAINT }}>
           {count}
         </span>
@@ -295,7 +339,7 @@ function SubNavItem({
 
   if (placeholder || !to) {
     return (
-      <Box title={placeholderTitle} style={{ cursor: 'default' }}>
+      <Box title={placeholderTitle} aria-disabled="true" style={{ cursor: 'default' }}>
         {renderInner(false, false)}
       </Box>
     );

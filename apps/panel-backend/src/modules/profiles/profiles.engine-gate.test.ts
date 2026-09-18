@@ -90,13 +90,22 @@ async function bind(profileId: string, nodeId: string, port: number, expected = 
   return JSON.parse(res.body);
 }
 
-/** Pretend the agent checked in and listed these engines. */
-async function reportCores(nodeId: string, cores: { name: string; engine: string }[]) {
+/**
+ * Pretend the agent checked in and listed these cores.
+ *
+ * `engine` is optional here on purpose: that is exactly what an agent older than
+ * the field sends, and the whole fleet on the stand is that agent today.
+ */
+async function reportCores(nodeId: string, cores: { name: string; engine?: string }[]) {
   await prisma.node.update({
     where: { id: nodeId },
     data: {
       cores: observedCores(
-        cores.map((c) => ({ name: c.name as never, engine: c.engine as never, running: true })),
+        cores.map((c) => ({
+          name: c.name as never,
+          ...(c.engine !== undefined ? { engine: c.engine as never } : {}),
+          running: true,
+        })),
         new Date().toISOString(),
       ) as unknown as object,
     },
@@ -115,6 +124,37 @@ describe('the gate on deploying a profile', () => {
     const node = await makeNode({ protocol: 'hysteria' });
     const profile = await makeProfile('xray', XRAY_CONFIG);
     await bind(profile.id, node.id, 443);
+  });
+
+  it('says nothing either when the cores arrived without their engines', async () => {
+    // The fleet as it actually is on 2026-09-11: panel updated, agents not, so
+    // every core arrives as `{ name, version, provisioned }` and no core names
+    // an engine. The protocol does NOT name the engine: the agent registers the
+    // sing-box adapter under Protocol "xray" (and "hysteria", and
+    // "shadowsocks"), so `name: "xray"` here is a core that may be either.
+    //
+    // Reading it as the native core answers "xray", and a profile pinned to
+    // sing-box is then refused on a node that is very likely serving it. That is
+    // the same class as gating on `Node.protocol`, one day later.
+    const node = await makeNode({ protocol: 'xray', singboxEngine: true });
+    await reportCores(node.id, [{ name: 'xray' }, { name: 'hysteria' }]);
+    const pinned = await makeProfile('xray', XRAY_CONFIG, 'singbox');
+    await bind(pinned.id, node.id, 443);
+  });
+
+  it('treats a half-answered report as no answer', async () => {
+    // One core names its engine, the next does not. A partial list is enough to
+    // say YES and useless for saying NO: the core that stayed quiet is exactly
+    // the one that could be carrying the engine in question. The gate only ever
+    // needs NO, so a partial list is not usable at all.
+    //
+    // The quiet core here is `xray`, whose guess is the wrong one on purpose:
+    // the agent registers sing-box under that protocol too, so this is the node
+    // that would be refused while running exactly what was asked for.
+    const node = await makeNode({ protocol: 'hysteria', singboxEngine: true });
+    await reportCores(node.id, [{ name: 'hysteria', engine: 'hysteria' }, { name: 'xray' }]);
+    const pinned = await makeProfile('xray', XRAY_CONFIG, 'singbox');
+    await bind(pinned.id, node.id, 443);
   });
 
   it('refuses a profile whose core the node REPORTED it does not run', async () => {
@@ -274,6 +314,24 @@ describe('the flag on an existing binding', () => {
     expect('rendersProfile' in b).toBe(false);
   });
 
+  it('is absent while the report says nothing about engines', async () => {
+    // Same rule as the gate, and the visible half of the same bug: on the old
+    // fleet this said FALSE, so the frontend drew a warning on a working pair.
+    // The honest answer is that we do not know which core renders it.
+    const node = await makeNode({ protocol: 'xray' });
+    const profile = await makeProfile('xray', XRAY_CONFIG, 'singbox');
+    await bind(profile.id, node.id, 443);
+    await reportCores(node.id, [{ name: 'xray' }]);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/bindings?nodeId=${node.id}`,
+      headers: auth(),
+    });
+    const [b] = JSON.parse(res.body).bindings;
+    expect('rendersProfile' in b).toBe(false);
+  });
+
   it('turns true or false once the node reports', async () => {
     const node = await makeNode({ protocol: 'xray' });
     const profile = await makeProfile('xray', XRAY_CONFIG);
@@ -334,5 +392,24 @@ describe('the node DTO', () => {
     res = await app.inject({ method: 'GET', url: `/api/nodes/${node.id}`, headers: auth() });
     // Distinct: two sing-box protocols are one engine.
     expect(JSON.parse(res.body).engines.sort()).toEqual(['singbox', 'xray']);
+  });
+
+  it('keeps the field absent when the report named no engines', async () => {
+    // The stand showed the opposite of this: engines: ["hysteria","xray",
+    // "amneziawg"] on a node where not one core had said engine. Three names
+    // computed from three protocols, presented as what the node reports.
+    const node = await makeNode({ protocol: 'xray', singboxEngine: true });
+    await reportCores(node.id, [{ name: 'xray' }, { name: 'hysteria' }]);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/nodes/${node.id}`,
+      headers: auth(),
+    });
+    const body = JSON.parse(res.body);
+    expect('engines' in body).toBe(false);
+    // The inventory itself is still carried: the cores are a fact, only the
+    // engine reading of them is missing. That is what the frontend needs in
+    // order to say "unknown" rather than draw nothing.
+    expect(body.cores.cores).toHaveLength(2);
   });
 });
