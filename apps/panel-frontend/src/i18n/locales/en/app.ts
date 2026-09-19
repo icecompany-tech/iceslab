@@ -24,7 +24,9 @@ export const app = {
     subscribePage: 'Subscribe page',
     infraBilling: 'Infra billing',
     trafficGroup: 'Traffic',
-    policies: 'Policies',
+    // The door carries the same word as the three tabs behind it: node rules,
+    // user rules, device rules. «Policies» shared no word with the screen.
+    policies: 'Rules',
     torrentBlocker: 'Torrent Blocker',
     ruleSets: 'Rule sets',
     egress: 'Egress',

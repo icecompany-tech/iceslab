@@ -38,6 +38,12 @@ import { blankPreset } from '@/contours/traffic/lib/devicePresets';
  * The first two sit on the same machine, so naming them by place made them read
  * as one thing. They are told apart by reach, and the tabs say so.
  *
+ * They are NOT equal work, which is the other thing the screen has to say. Node
+ * rules are the tool an operator comes back to; device rules are a choice made
+ * once; user rules only exist where a squad is sold a separate plan. So the
+ * node pane is what opens, not by accident of order, and every tab carries a
+ * line about WHEN it is the one you want, above the line about whom it reaches.
+ *
  * Only two of the three write for real. Both policy kinds are stored data with
  * a full CRUD behind them, and saving the squad-granted kind re-pushes every
  * cascade entry, so the change reaches the fleet. Presets are still three fixed
@@ -49,6 +55,8 @@ type Pane = 'policy' | 'node' | 'device';
 
 export function RoutesPage() {
   const { t } = useTranslation();
+  // The pane people come here for. Stated rather than inherited from the order
+  // of the tabs, so moving a tab cannot silently change what opens.
   const [pane, setPane] = useState<Pane>('policy');
   const [policyDraft, setPolicyDraft] = useState<NodePolicy | null>(null);
   // A draft is a policy or preset that exists only here: written by New, or
@@ -101,6 +109,11 @@ export function RoutesPage() {
   }, [presetsQuery.data, t]);
 
   const nodePolicies = nodePoliciesQuery.data?.policies ?? [];
+
+  // The preset clients are actually handed today. It stands on the tab in place
+  // of a count, and it is a real answer to «which one is on» without a click.
+  const activePresetName =
+    presets.find((p) => p.id === defaultPreset)?.name ?? t('routes.presetUnknown');
 
   usePageMeta([
     t('routes.factNodePolicies', { count: nodePolicies.length }),
@@ -180,25 +193,29 @@ export function RoutesPage() {
             flexShrink: 0,
           }}
         >
+          {/* The figure beside a tab says how many of these the operator made.
+              On the device tab that question has no answer: the presets are
+              three fixed ones nobody creates, so it names the one in force
+              instead, which is what the number was standing in for. */}
           <PaneTab
             active={onPolicy}
             icon={<ServerIcon size={13} color={onPolicy ? CYAN : MIST} />}
             label={t('routes.panePolicy')}
-            count={nodePolicies.length}
+            badge={String(nodePolicies.length)}
             onClick={() => setPane('policy')}
           />
           <PaneTab
             active={onNode}
             icon={<ServerIcon size={13} color={onNode ? CYAN : MIST} />}
             label={t('routes.paneNode')}
-            count={policies.length}
+            badge={String(policies.length)}
             onClick={() => setPane('node')}
           />
           <PaneTab
             active={pane === 'device'}
             icon={<PhoneIcon size={13} color={pane === 'device' ? CYAN : MIST} />}
             label={t('routes.paneDevice')}
-            count={presets.length}
+            badge={activePresetName}
             onClick={() => setPane('device')}
           />
         </Box>
@@ -293,21 +310,33 @@ export function RoutesPage() {
         size, which is the point, since these three tabs are told apart by this
         sentence and by nothing else on the screen.
       */}
-      <Text
-        style={{
-          fontFamily: DISPLAY,
-          fontSize: 13,
-          lineHeight: '18px',
-          color: MIST,
-          marginTop: -8,
-        }}
-      >
-        {onPolicy
-          ? t('routes.panePolicyHint')
-          : onNode
-            ? t('routes.paneNodeHint')
-            : t('routes.paneDeviceHint')}
-      </Text>
+      {/*
+        Two sentences, because an operator asks two different questions and the
+        screen used to answer only the second.
+
+        WHEN you need this comes first and in the brighter ink: somebody opening
+        this screen is deciding which of three tabs is theirs, and the three are
+        not equal work. One is the tool you come back to, one is a choice made
+        once, one only exists if a squad is sold a separate plan. WHOM it
+        reaches stays underneath: that explains the mechanism, which is the next
+        question, not the first one.
+      */}
+      <Stack gap={2} style={{ marginTop: -8 }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '18px', color: SNOW }}>
+          {onPolicy
+            ? t('routes.panePolicyWhen')
+            : onNode
+              ? t('routes.paneNodeWhen')
+              : t('routes.paneDeviceWhen')}
+        </Text>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '18px', color: MIST }}>
+          {onPolicy
+            ? t('routes.panePolicyHint')
+            : onNode
+              ? t('routes.paneNodeHint')
+              : t('routes.paneDeviceHint')}
+        </Text>
+      </Stack>
 
       {onPolicy ? (
         <PolicyPane

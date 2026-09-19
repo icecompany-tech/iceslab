@@ -2,6 +2,11 @@ export const traffic = {
 
   routes: {
     panePolicy: 'Node rules',
+    // The «when you need this» line. It answers the question people arrive
+    // with, not the question of how the thing works: the three tabs are three
+    // different amounts of work, and while they looked alike an operator
+    // picked one by guessing.
+    panePolicyWhen: 'The everyday tool. Where the traffic of everyone on this node goes.',
     panePolicyHint: 'They hold for everyone going through the node: which door traffic leaves by.',
     factNodePolicies_one: '{{count}} node policy',
     factNodePolicies_other: '{{count}} node policies',
@@ -38,9 +43,14 @@ export const traffic = {
       viaDirection: 'By a cascade exit',
     },
     paneNode: 'User rules',
+    paneNodeWhen:
+      'Only needed if you sell a separate plan. An ad-free one for a single squad, say.',
     paneNodeHint: 'They hold for one user: domain lists a squad hands out with the subscription.',
     paneDevice: 'Device rules',
+    paneDeviceWhen:
+      'A choice of three, made once: do local sites go around the VPN. Your own domain lists are below, and those change whenever you like.',
     paneDeviceHint: "They hold on the user's device, before the tunnel: what never enters it.",
+    presetUnknown: 'no preset chosen',
     factPolicies_one: '{{count}} policy',
     factPolicies_other: '{{count}} policies',
     factPresets: '{{count}} presets',
