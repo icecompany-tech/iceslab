@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
   createNodePolicy,
@@ -119,6 +120,25 @@ export function NodePolicyEditor({
       setRefusal(r ? { message: r.message } : null);
     },
   });
+
+  /**
+   * Ask first, like the editor next door does.
+   *
+   * This used to delete on the click. One policy can sit on many nodes, and
+   * removing it rewrites the config of every one of them, so it is the last
+   * action on this screen that should happen without a question. The count is
+   * in the sentence, because that is the part an operator has not got in mind
+   * while looking at a rule list.
+   */
+  function confirmDelete() {
+    modals.openConfirmModal({
+      title: t('routes.nodeDeleteTitle', { name: policy.name }),
+      children: <Text size="sm">{t('routes.nodeDeleteBody', { count: nodeCount })}</Text>,
+      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => deleteMutation.mutate(),
+    });
+  }
 
   /**
    * Grab a rule.
@@ -270,6 +290,31 @@ export function NodePolicyEditor({
         >
           {t('routes.firstMatchWins')}
         </Text>
+        {/* Delete sits by the name, the way it does on the squad-granted
+            editor next door. It used to live in the footer, and on a policy
+            with a dozen rules that meant scrolling to find it: the two
+            operations on ONE policy belong within sight of each other. A draft
+            has nothing to delete, so the slot simply is not there. */}
+        {!isDraft && (
+          <UnstyledButton
+            type="button"
+            title={t('common.delete')}
+            onClick={confirmDelete}
+            disabled={deleteMutation.isPending}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 32,
+              height: 32,
+              borderRadius: 7,
+              border: `1px solid ${EDGE}`,
+              flexShrink: 0,
+            }}
+          >
+            <TrashIcon size={14} color={RED} />
+          </UnstyledButton>
+        )}
       </Box>
 
       {/* Column head */}
@@ -494,19 +539,8 @@ export function NodePolicyEditor({
           borderTop: `1px solid ${HAIRLINE}`,
         }}
       >
-        {!isDraft && (
-          <UnstyledButton
-            type="button"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 4px' }}
-          >
-            <TrashIcon size={13} color={MIST} />
-            <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: MIST }}>
-              {t('common.delete')}
-            </Text>
-          </UnstyledButton>
-        )}
+        {/* Delete moved up beside the name. The footer carries saving alone, so
+            nothing here shifts when a draft has no delete to show. */}
         <Box style={{ flex: 1, minWidth: 0 }} />
         <UnstyledButton
           type="button"

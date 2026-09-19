@@ -78,7 +78,15 @@ export function NodePane({
 
       {policy === null ? (
         <Stack gap={0} className="routes-detail">
-          <DetailHead title={t('routes.plainName')} chip={t('routes.builtIn')} note={t('routes.firstMatchWins')} />
+          {/* The plain profile is not a row anybody wrote, so it has no delete
+              either. Said in the same words and the same corner as on the
+              preset tab: an empty corner where the other policies carry a
+              delete reads as a button somebody forgot. */}
+          <DetailHead
+            title={t('routes.plainName')}
+            chip={t('routes.builtIn')}
+            note={t('routes.presetNoDelete')}
+          />
           <Box style={{ padding: '20px 22px' }}>
             <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: MIST }}>
               {t('routes.plainBody')}

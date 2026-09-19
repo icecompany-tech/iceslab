@@ -14,7 +14,7 @@ import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { ROUTING_PRESET_IDS, isRoutingPresetId, presetKey } from '@/lib/domain/routingPresets';
-import { ROUTE_POLICY_WRITES_LIVE, ROUTING_PRESET_WRITES_LIVE, listRoutePolicies, listRoutingPresets, type RoutePolicy, type RoutingPreset } from '@/lib/domain/routePolicies';
+import { ROUTING_PRESET_WRITES_LIVE, listRoutePolicies, listRoutingPresets, type RoutePolicy, type RoutingPreset } from '@/lib/domain/routePolicies';
 import { getSettings } from '@/lib/domain/settings';
 import { listSquads } from '@/lib/domain/squads';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -123,7 +123,8 @@ export function RoutesPage() {
 
   const onPolicy = pane === 'policy';
   const onNode = pane === 'node';
-  const canCreate = onPolicy ? true : onNode ? ROUTE_POLICY_WRITES_LIVE : ROUTING_PRESET_WRITES_LIVE;
+  // Both policy kinds are writable; only presets have nothing behind them.
+  const canCreate = onPolicy || onNode || ROUTING_PRESET_WRITES_LIVE;
 
   function stage(
     nodePolicy: NodePolicy | null,
@@ -254,13 +255,9 @@ export function RoutesPage() {
           <UnstyledButton
             type="button"
             disabled={!canCreate}
-            title={
-              canCreate
-                ? undefined
-                : onNode
-                  ? t('routes.writesDisabledPolicies')
-                  : t('routes.writesDisabledPresets')
-            }
+            // Only the preset pane can be uncreatable now, so there is one
+            // reason to give and no branch to pick it.
+            title={canCreate ? undefined : t('routes.writesDisabledPresets')}
             onClick={() =>
               onPolicy
                 ? stage(blankNodePolicy(), null, null)

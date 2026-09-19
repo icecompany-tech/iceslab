@@ -3,13 +3,13 @@ import { Action } from '@/contours/traffic/components/RoutePolicy/Action';
 import { Chip } from '@/contours/traffic/components/RoutePolicy/Chip';
 import { ColHead } from '@/contours/traffic/components/RoutePolicy/ColHead';
 import { IconAction } from '@/contours/traffic/components/RoutePolicy/IconAction';
-import { LockIcon, NoEntryIcon, TrashIcon, WarnIcon } from '@/contours/traffic/components/RoutePolicy/icons';
+import { LockIcon, NoEntryIcon, TrashIcon } from '@/contours/traffic/components/RoutePolicy/icons';
 import { NEW_POLICY_ID } from '@/contours/traffic/lib/routeRules';
 import { RulesList } from '@/contours/traffic/components/RoutePolicy/RulesList';
 import { useRoutePolicyForm } from '@/contours/traffic/components/RoutePolicy/useRoutePolicyForm';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
-import { ROUTE_POLICY_WRITES_LIVE, type RoutePolicy } from '@/lib/domain/routePolicies';
+import { type RoutePolicy } from '@/lib/domain/routePolicies';
 import { type Squad } from '@/lib/domain/squads';
 
 /**
@@ -90,16 +90,16 @@ export function RoutePolicyEditor({
         <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
           {t('routes.firstMatchWins')}
         </Text>
-        {policy.id !== NEW_POLICY_ID && ROUTE_POLICY_WRITES_LIVE && (
+        {policy.id !== NEW_POLICY_ID && (
           <IconAction title={t('common.delete')} onClick={confirmDelete}>
             <TrashIcon size={15} color={RED} />
           </IconAction>
         )}
         <Action
-          disabled={!ROUTE_POLICY_WRITES_LIVE || !dirty || saveMutation.isPending}
+          disabled={!dirty || saveMutation.isPending}
           // Saving is not a local edit: the API re-pushes the config to every
           // enabled cascade entry, so it reaches live machines immediately.
-          title={ROUTE_POLICY_WRITES_LIVE ? t('routes.saveReachesNodes') : t('routes.writesDisabledPolicies')}
+          title={t('routes.saveReachesNodes')}
           onClick={() => saveMutation.mutate()}
         >
           {t('common.save')}
@@ -194,23 +194,12 @@ export function RoutePolicyEditor({
         </Text>
       </Box>
 
-      {/* One line, always true today, and one line to delete when it stops
-          being true. */}
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 9,
-          padding: '12px 20px',
-          borderTop: `1px solid ${HAIRLINE}`,
-          backgroundColor: `${AMBER}0A`,
-        }}
-      >
-        <WarnIcon size={13} color={AMBER} />
-        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: AMBER, flex: 1 }}>
-          {t('routes.writesNotLive')}
-        </Text>
-      </Box>
+      {/* A banner used to stand here saying the write endpoints did not exist.
+          They shipped on 2026-07-30, and the line outlived the fact it was
+          describing: POST, PUT and DELETE are all live and covered by tests.
+          A working thing calling itself unfinished is the same defect as a
+          dead control calling itself live, and it costs the same way: an
+          operator reads it and does not use what works. */}
     </Stack>
   );
 }

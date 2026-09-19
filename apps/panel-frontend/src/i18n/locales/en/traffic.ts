@@ -16,6 +16,11 @@ export const traffic = {
     nodeCreate: 'Create',
     nodeSaved: 'Policy saved',
     nodeDeleted: 'Policy deleted',
+    nodeDeleteTitle: 'Delete policy "{{name}}"?',
+    nodeDeleteBody_zero: 'No node carries it, so deleting it touches nobody.',
+    nodeDeleteBody_one: '{{count}} node carries it: its config is rewritten without these rules.',
+    nodeDeleteBody_other:
+      '{{count}} nodes carry it: their configs are rewritten without these rules.',
     nodeOnNodes_one: 'on {{count}} node',
     nodeOnNodes_other: 'on {{count}} nodes',
     nodeOnNoNodes: 'on no nodes',
@@ -130,17 +135,18 @@ export const traffic = {
     },
     extra: 'Extra',
     writesDisabledPresets: 'Available once presets are data: the write endpoints do not exist yet.',
-    writesDisabledPolicies:
-      'Available once policies get write endpoints: today the API only lists them.',
     presetNamePlaceholder: 'Preset name',
     presetSaved: 'Preset saved',
     presetDeleted: 'Preset deleted',
     presetDeleteTitle: 'Delete preset "{{name}}"?',
     presetDeleteBody: 'Squads on it fall back to the default preset the next time a config is issued.',
+    // Stands where the delete button stands on the two neighbouring tabs. An
+    // empty corner reads as a button somebody forgot, so the absence is said.
+    presetNoDelete: 'built in, cannot be deleted',
+    presetBuiltInWhy:
+      'The three ready-made presets are compiled into the subscription builder rather than stored as data, so there is nothing to delete. Your own layer of rules is edited below.',
     presetWritesNotLive:
       'Saving needs the preset endpoints, which the API does not ship yet: today these are three rule sets compiled into the builder rather than data. Everything else on this screen is live, and Save will start working the moment they land.',
-    writesNotLive:
-      'Saving needs the policy write endpoints, which the API does not ship yet: it answers a single GET. Everything else on this screen is live, and Save will start working the moment they land.',
     actionDirect: 'Straight out',
     actionBlock: 'Dropped',
     actionDrop: 'Blocked',

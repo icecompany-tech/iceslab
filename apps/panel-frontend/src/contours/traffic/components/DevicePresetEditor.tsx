@@ -98,10 +98,26 @@ export function DevicePresetEditor({
         <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
           {t('routes.firstMatchWins')}
         </Text>
-        {!locked && preset.id !== NEW_PRESET_ID && ROUTING_PRESET_WRITES_LIVE && (
-          <IconAction title={t('common.delete')} onClick={confirmDelete}>
-            <TrashIcon size={15} color={RED} />
-          </IconAction>
+        {/* Delete stands in the same corner as on the two policy editors, so
+            the three tabs answer «where is it» the same way. A built-in preset
+            has no delete and never will: it is compiled into the subscription
+            builder rather than stored. That is said in words right here, in
+            the slot where the button would be, because an empty corner reads
+            as a button somebody forgot. */}
+        {locked ? (
+          <Text
+            title={t('routes.presetBuiltInWhy')}
+            style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT, flexShrink: 0 }}
+          >
+            {t('routes.presetNoDelete')}
+          </Text>
+        ) : (
+          preset.id !== NEW_PRESET_ID &&
+          ROUTING_PRESET_WRITES_LIVE && (
+            <IconAction title={t('common.delete')} onClick={confirmDelete}>
+              <TrashIcon size={15} color={RED} />
+            </IconAction>
+          )
         )}
         {!locked && (
           <Action

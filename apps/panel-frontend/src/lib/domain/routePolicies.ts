@@ -66,11 +66,16 @@ export function toPolicyInput(name: string, rules: Pick<RouteRule, 'match' | 'ac
 }
 
 /**
- * Whether the two write surfaces below exist yet. Policy writes shipped on
- * 2026-07-30; presets are still list-only, so their controls stay disabled and
- * say why rather than offering a button that answers 404.
+ * Whether the preset write surface exists yet. It does not: there is no
+ * /api/routing-presets route on the backend AT ALL, not even a GET, so the
+ * controls stay disabled and say why rather than offering a button that
+ * answers 404.
+ *
+ * The policy flag that used to stand beside this one is gone. Policy writes
+ * shipped on 2026-07-30, the constant stayed `true` for six weeks, and the
+ * banner it guarded went on telling operators the endpoints were missing. A
+ * flag that cannot be false is not a guard, it is a thing to forget.
  */
-export const ROUTE_POLICY_WRITES_LIVE = true;
 export const ROUTING_PRESET_WRITES_LIVE = false;
 
 /**
@@ -102,11 +107,17 @@ export async function deleteRoutePolicy(id: string): Promise<void> {
 /**
  * A routing preset: the rule set written into the client's own config.
  *
- * NOT LIVE either. Today a preset is one of three ids in `ROUTING_PRESET_IDS`
- * whose rules are compiled into the subscription builder, so there is nothing
- * to list, create or edit. This is the shape the editor is written against:
- * the three built-ins come back with `builtIn: true` and stay read-only, and
- * an operator's own presets are ordinary rows.
+ * ⚠ NOTHING is behind this on the backend. Not the writes, not the list: there
+ * is no /api/routing-presets route at all, so the four calls below answer 404
+ * to the last one. The screen does not depend on them, it reads the three ids
+ * out of `devicePresets.ts`, and the list call is made once with `retry: false`
+ * precisely so it can lose.
+ *
+ * Kept, not deleted, because this is the shape the editor is already written
+ * against and the call sites are behind ROUTING_PRESET_WRITES_LIVE. The line
+ * that used to stand here said «presets are still list-only», which was one
+ * word away from the truth and would have let the next reader assume a GET
+ * exists.
  *
  * A device can only bypass, block or tunnel. WARP is a node egress and has no
  * meaning here, which is why `RouteAction` is narrowed at the call site.
