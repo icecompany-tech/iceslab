@@ -9,7 +9,6 @@ import { DiscordIcon, GithubIcon, HeartIcon, StarIcon, TelegramIcon } from '@/ui
 import {
   NavBillingIcon,
   NavBlockIcon,
-  NavCascadesIcon,
   NavChevronIcon,
   NavDeliveryIcon,
   NavDnsIcon,
@@ -507,10 +506,23 @@ function AppLayoutInner() {
   const nodesTotal = dashQuery.data?.system.totalNodeCount;
   const nodesOnline = dashQuery.data?.system.onlineNodeCount ?? nodesTotal;
 
-  // Open by default: the sub-list is the only way to reach the node views now,
-  // so hiding it behind a click would bury three destinations.
-  const [nodesOpen, setNodesOpen] = useState(true);
   const nodesSectionActive = pathname === '/nodes' || pathname.startsWith('/nodes/');
+  /**
+   * Open only where it says something: on the pages of this group.
+   *
+   * It used to open always, to keep three destinations from being buried
+   * behind a click. Two of those are gone now: cascades live on a switch on
+   * the nodes page itself, and infra billing has no screen, so an always-open
+   * group shows one live row and one placeholder on every screen in the panel.
+   *
+   * Reading the route at MOUNT rather than in an effect. A reload while
+   * standing on /nodes/cascades/<id> would otherwise take away the only mark
+   * of where the operator is, and an effect would fight them the second they
+   * work the chevron themselves. The shell does not unmount between screens,
+   * so a group opened by hand stays open while navigating, which is what an
+   * operator means by opening it.
+   */
+  const [nodesOpen, setNodesOpen] = useState(() => nodesSectionActive);
   const notWired = t('sidebar.notWired');
 
   function handleLogout() {
@@ -852,11 +864,11 @@ function AppLayoutInner() {
                     icon={<NavNodesIcon size={14} />}
                     count={nodesTotal}
                   />
-                  <SubNavItem
-                    to="/cascades"
-                    label={t('sidebar.cascades')}
-                    icon={<NavCascadesIcon size={14} />}
-                  />
+                  {/* Cascades had a row here and it never opened: /cascades
+                      redirects to /nodes, where the view switch defaults to
+                      the node list, so the row led to the list it sat next to.
+                      Their home is that switch, which is live. The route stays
+                      in App.tsx for old bookmarks. */}
                   <SubNavItem
                     label={t('sidebar.infraBilling')}
                     icon={<NavBillingIcon size={14} />}

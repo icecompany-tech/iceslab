@@ -6,7 +6,6 @@ export const app = {
     squads: 'Squads',
     hosts: 'Hosts',
     nodes: 'Nodes',
-    cascades: 'Cascades',
     queues: 'Queues',
     queuesDesc: 'BullMQ overview',
     settings: 'Settings',
