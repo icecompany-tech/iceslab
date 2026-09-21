@@ -54,6 +54,21 @@ model Node {
   // landed on this hop. `lastStatusChange` cannot answer that, it only moves on
   // an online/offline transition, so a healthy node never updates it.
   lastInboundSyncAt     DateTime? @map("last_inbound_sync_at") @db.Timestamptz(6)
+  // Why the last push did NOT land, in the core's own words.
+  //
+  // Shape: { at, message }. NULL = the last push succeeded, or none has been
+  // tried yet; the two are told apart by lastInboundSyncAt above.
+  //
+  // Until now a refused config left nothing anywhere the operator looks. The
+  // core answers a bad field by refusing the WHOLE config, the agent returns
+  // ADAPTER_FAILED, the panel wrote one log line and rethrew, and on the node
+  // side lastInboundSyncAt simply stopped moving. So the panel showed "not
+  // applied yet" for a push that will never apply, and the only copy of the
+  // reason sat in the agent's journal, over ssh, if anyone thought to look.
+  //
+  // Written in the failure branch, cleared in the success branch beside the
+  // stamp above, so the pair reads as one state and never as two half-truths.
+  lastInboundSyncError  Json?     @map("last_inbound_sync_error")
   consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
 
   // Slice 27.5: region grouping + capacity hint. Both NULL by default

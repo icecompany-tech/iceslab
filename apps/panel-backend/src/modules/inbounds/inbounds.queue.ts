@@ -9,6 +9,7 @@ import type {
 } from '@iceslab/shared';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { redis } from '../../lib/infra/redis.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
 import { mtprotoSecret } from '../../core-adapters/mtproto/index.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
@@ -481,7 +482,14 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
     // Best-effort: this bookkeeping must never turn an otherwise successful push
     // into a failed job.
     await prisma.node
-      .update({ where: { id: nodeId }, data: { lastInboundSyncAt: new Date() } })
+      .update({
+        where: { id: nodeId },
+        // Cleared here, beside the stamp, so the pair always reads as one
+        // state. A stale error next to a fresh stamp would say the node is
+        // both current and broken, and an operator has no way to tell which
+        // half is the old one.
+        data: { lastInboundSyncAt: new Date(), lastInboundSyncError: Prisma.DbNull },
+      })
       .catch(() => null);
   } catch (err) {
     const detail =
@@ -492,6 +500,39 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
         : String(err);
     getLogger().info(`[worker:inbound-sync] applyInbounds ${node.name} FAILED: ${detail}`);
     inboundSyncJobs.inc({ result: 'fail' });
+    /**
+     * Keep the refusal where the operator looks.
+     *
+     * The core answers a bad field by refusing the WHOLE config, so a node that
+     * was serving fine goes dark on the next restart, and until now the panel
+     * said nothing at all: this branch logged one line and rethrew, and
+     * `lastInboundSyncAt` merely stopped moving. The screen then showed "not
+     * applied yet", which is what a push still in flight looks like, about one
+     * that will never apply. The only copy of the reason was in the agent's
+     * journal, behind ssh.
+     *
+     * `detail` is kept whole rather than cut at "core rejected the config":
+     * everything before that marker is the agent naming WHICH inbound and how
+     * many, and an operator with five inbounds needs that more than they need
+     * the tidier sentence.
+     *
+     * Best-effort and last, exactly like the stamp above: the job has already
+     * failed, and failing to record why must not replace the real error with a
+     * database one.
+     */
+    await prisma.node
+      .update({
+        where: { id: nodeId },
+        data: {
+          lastInboundSyncError: {
+            at: new Date().toISOString(),
+            // Bounded because it is the core's output, not ours: an unbounded
+            // field fed by another program's stderr grows a row without limit.
+            message: detail.slice(0, 2000),
+          },
+        },
+      })
+      .catch(() => null);
     throw err;
   }
 

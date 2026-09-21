@@ -25,6 +25,10 @@ type fakeAdapter struct {
 	applied     []appliedInbound
 	failOnAdd   bool
 	failOnStats bool
+	// What ApplyInbound refuses with, empty = it accepts. The TEXT is the point
+	// and not just the failure: it stands in for the core's own sentence, which
+	// is the only thing that tells an operator which field was rejected.
+	failOnApply string
 	stats       *core.Stats
 }
 
@@ -42,6 +46,9 @@ func (f *fakeAdapter) Stop(_ context.Context) error  { return nil }
 func (f *fakeAdapter) Healthy() bool                 { return !f.failOnStats /* flag re-used to simulate unhealthy */ }
 func (f *fakeAdapter) ApplyInbound(port int, cfg json.RawMessage) error {
 	f.applied = append(f.applied, appliedInbound{port: port, cfg: cfg})
+	if f.failOnApply != "" {
+		return errors.New(f.failOnApply)
+	}
 	return nil
 }
 func (f *fakeAdapter) AddUser(u core.User) error {
@@ -270,6 +277,75 @@ func TestApplyInboundsRoutesByEngine(t *testing.T) {
 	}
 	if len(native.applied) != 0 {
 		t.Errorf("native xray adapter should NOT have received the engine=singbox inbound: %+v", native.applied)
+	}
+}
+
+// A refused config has to say WHY, all the way back to the panel.
+//
+// The handler used to answer "1/1 inbounds failed to apply" and keep the core's
+// sentence in this process's journal. That sentence is the whole value of the
+// refusal: the core names the field it choked on, and without it the operator's
+// only route to the reason is ssh. The panel now stores this text on the node,
+// so what travels here is what an operator reads.
+func TestApplyInboundsReportsWhyTheCoreRefused(t *testing.T) {
+	const refusal = "core rejected the config: exit status 23 " +
+		"(infra/conf: unknown field 'realityNoSuchField')"
+	xry := &fakeAdapter{name: "xray", engine: "xray", failOnApply: refusal}
+	srv := newServerWith(t, xry)
+
+	body := `{"inbounds":[{"id":"i1","name":"reality-eu","protocol":"xray","port":0,"config":{}}]}`
+	req := httptest.NewRequest(http.MethodPost, "/applyInbounds", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status: got %d want 500; body=%s", rr.Code, rr.Body.String())
+	}
+	var resp dto.ErrorResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp.Error != "ADAPTER_FAILED" {
+		t.Errorf("error code: got %q want ADAPTER_FAILED", resp.Error)
+	}
+	if !strings.Contains(resp.Message, refusal) {
+		t.Errorf("the core's words did not travel back: %q", resp.Message)
+	}
+	// And which inbound it was: a node with five of them makes the count alone
+	// useless, and the panel shows a name, never a uuid.
+	if !strings.Contains(resp.Message, "reality-eu") {
+		t.Errorf("the refused inbound is not named: %q", resp.Message)
+	}
+	// The count is still there: it is the difference between one broken profile
+	// and a node where nothing applied at all.
+	if !strings.Contains(resp.Message, "1/1") {
+		t.Errorf("the count was dropped: %q", resp.Message)
+	}
+}
+
+// Only the first few reasons travel: a node with forty inbounds sharing one
+// broken profile would otherwise answer with the same sentence forty times.
+func TestApplyInboundsCapsTheReasons(t *testing.T) {
+	xry := &fakeAdapter{name: "xray", engine: "xray", failOnApply: "core rejected the config: boom"}
+	srv := newServerWith(t, xry)
+
+	inbounds := make([]string, 0, 5)
+	for i := 0; i < 5; i++ {
+		inbounds = append(inbounds,
+			`{"id":"i`+string(rune('1'+i))+`","name":"in-`+string(rune('1'+i))+
+				`","protocol":"xray","port":0,"config":{}}`)
+	}
+	body := `{"inbounds":[` + strings.Join(inbounds, ",") + `]}`
+	req := httptest.NewRequest(http.MethodPost, "/applyInbounds", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	var resp dto.ErrorResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if got := strings.Count(resp.Message, "core rejected the config"); got != 3 {
+		t.Errorf("expected the first 3 reasons only, got %d: %q", got, resp.Message)
+	}
+	// The count still speaks for all five, so the cap hides nothing.
+	if !strings.Contains(resp.Message, "5/5") {
+		t.Errorf("the count should still cover every failure: %q", resp.Message)
 	}
 }
 

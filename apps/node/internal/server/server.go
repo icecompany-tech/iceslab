@@ -522,6 +522,15 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 	// log and rely on the persisted inbounds.json for next-restart pickup.
 	applied := 0
 	failed := 0
+	// Why each one failed, in the core's own words, to travel back in the
+	// response. Until now these lived only in this process's journal: the panel
+	// was told "1/3 failed" and could not say which inbound or why, so the
+	// operator's only route to the reason was ssh. The core names the offending
+	// field, and that sentence is the whole value of the refusal.
+	//
+	// Capped at the first three: a node with forty inbounds and a broken shared
+	// profile would otherwise answer with a wall of the same sentence.
+	var reasons []string
 	for _, ib := range req.Inbounds {
 		s.logger.Info("applyInbounds received",
 			"id", ib.ID, "name", ib.Name, "protocol", ib.Protocol, "port", ib.Port)
@@ -548,6 +557,11 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 			s.logger.Error("adapter ApplyInbound failed",
 				"core", matched.Name(), "inboundId", ib.ID, "err", err)
 			failed++
+			if len(reasons) < 3 {
+				// The name, not the id: the operator reads this in the panel,
+				// where an inbound is a name and the uuid means nothing.
+				reasons = append(reasons, fmt.Sprintf("%s (%s): %v", ib.Name, ib.Protocol, err))
+			}
 			continue
 		}
 		// Open UFW for the inbound's port. Extracted into ensureInboundFirewall
@@ -586,7 +600,8 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 
 	if failed > 0 {
 		writeError(w, http.StatusInternalServerError, "ADAPTER_FAILED",
-			fmt.Sprintf("%d/%d inbounds failed to apply", failed, len(req.Inbounds)))
+			fmt.Sprintf("%d/%d inbounds failed to apply: %s",
+				failed, len(req.Inbounds), strings.Join(reasons, "; ")))
 		return
 	}
 

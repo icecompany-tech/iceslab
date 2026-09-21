@@ -1,0 +1,32 @@
+-- Why the last push did not land, kept where the operator looks.
+--
+-- A core answers a bad field by refusing the WHOLE config, the agent returns
+-- ADAPTER_FAILED, the panel logged one line and rethrew. Nothing was written
+-- anywhere: `last_inbound_sync_at` simply stopped moving, so the panel said
+-- "not applied yet" about a push that will never apply, and the only copy of
+-- the reason sat in the agent's journal behind ssh.
+--
+-- Shape { at, message }. NULL means the last push succeeded or none was ever
+-- tried; `last_inbound_sync_at` next to it tells those two apart. Nullable, no
+-- default, no backfill: an existing row genuinely has no known last error, and
+-- inventing one would be worse than the silence being fixed.
+--
+-- TRIMMED BY HAND per the rule in CLAUDE.local.md: `migrate dev` attached
+-- somebody else's drift to this one line. Thrown out, all of it real and none
+-- of it this change:
+--   * DROP DEFAULT on `id` for hosts, hwid_user_devices, regions, and on `id`
+--     plus `updated_at` for profiles and profile_node_bindings;
+--   * DROP DEFAULT on `direct_domains` and `block_domains` of route_policies
+--     (this one is NOT in the list CLAUDE.local.md records, so the drift has
+--     grown since it was written);
+--   * a drop and recreate of six foreign keys;
+--   * a rename of cascade_links_cascade_id_from_to_direction_key.
+-- A DROP DEFAULT on a uuid primary key breaks a raw INSERT six months later in
+-- somebody else's script with nothing pointing back here. Reconciling the
+-- drift is its own job with its own rollback, not a passenger on this one.
+--
+-- ROLLBACK (run by hand before this was committed, then the forward migration
+-- run again):
+--   ALTER TABLE "nodes" DROP COLUMN "last_inbound_sync_error";
+
+ALTER TABLE "nodes" ADD COLUMN "last_inbound_sync_error" JSONB;

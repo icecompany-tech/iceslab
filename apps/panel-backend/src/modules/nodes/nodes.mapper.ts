@@ -48,6 +48,20 @@ export interface PublicNodeDto {
    *  would put five aggregates behind every list page, so the comparison lives
    *  in GET /api/nodes/:id/sync-status instead. */
   lastInboundSyncAt: string | null;
+  /**
+   * Why the last push did NOT land, in the core's own words.
+   *
+   * null = the last push succeeded, or none was ever tried; the stamp above
+   * tells those two apart. The pair is written together, so a fresh stamp
+   * never sits next to a stale reason.
+   *
+   * `message` is the whole refusal as it travelled, agent prefix included: the
+   * part before "core rejected the config" names WHICH inbound of the several
+   * on this node was refused, and an operator needs that as much as the core's
+   * sentence. Bounded at 2000 characters, because it is another program's
+   * output and not ours.
+   */
+  lastInboundSyncError: { at: string; message: string } | null;
   consumptionMultiplier: string;
   // Slice 27.5: region grouping + capacity hint.
   regionId: string | null;
@@ -112,6 +126,8 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     coreRestarts: (node.coreRestarts as NodeCoreRestarts | null) ?? null,
     coreVersion: node.coreVersion,
     lastInboundSyncAt: node.lastInboundSyncAt?.toISOString() ?? null,
+    lastInboundSyncError:
+      (node.lastInboundSyncError as { at: string; message: string } | null) ?? null,
     consumptionMultiplier: node.consumptionMultiplier.toString(),
     regionId: node.regionId,
     maxUsers: node.maxUsers,
