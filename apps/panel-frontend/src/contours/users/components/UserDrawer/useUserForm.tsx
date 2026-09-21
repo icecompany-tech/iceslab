@@ -1,4 +1,4 @@
-import type { CreateUserInput, UpdateUserInput } from '@/lib/domain/users';
+﻿import type { CreateUserInput, UpdateUserInput } from '@/lib/domain/users';
 import type { FormValues } from '@/contours/users/lib/userForm';
 import type { Preset } from '@/contours/users/lib/userPresets';
 import type { PreviewData, PreviewRowData } from '@/contours/users/components/UserDrawer/PreviewCard';
@@ -11,7 +11,8 @@ import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { listNodes } from '@/lib/domain/nodes';
 import { listSquads } from '@/lib/domain/squads';
 import { loadPresets } from '@/contours/users/lib/userPresets';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNow } from '@/lib/ui/useNow';
 import { useForm } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -31,14 +32,22 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
    * expiry date, and the lookup that turns a stored day count back into "30
    * days", is measured from it: a clock read per render would let the label and
    * the date beside it disagree across midnight.
+   *
+   * Время берётся из `useNow`, а не из `Date.now()` посреди рендера: рендер
+   * обязан быть чистым. Шаг в минуту здесь ровно к месту, потому что стеречь
+   * надо переход через полночь, а не секунду.
    */
-  const [openedAt, setOpenedAt] = useState(() => Date.now());
+  const clock = useNow(60_000);
+  const [openedAt, setOpenedAt] = useState(clock);
   const now = useMemo(() => new Date(openedAt), [openedAt]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetId, setPresetId] = useState<string | null>(null);
   /** Set by "create and next": save, then stay open on a blank draft. */
   const [createNext, setCreateNext] = useState(false);
-  const presets = useMemo(() => loadPresets(), [opened]);
+  // Пресеты читаются из localStorage один раз на монтирование. `opened` в
+  // зависимостях был лишним: дровер живёт в дереве постоянно, а список пресетов
+  // от его открытия не меняется.
+  const presets = useMemo(() => loadPresets(), []);
 
   const form = useForm<FormValues>({
     initialValues: defaultValues(user),
@@ -54,8 +63,19 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
     },
   });
 
-  useEffect(() => {
-    if (opened) {
+  /**
+   * Заполнение дровера при открытии.
+   *
+   * Сравнением в рендере, а не эффектом: эффект заполнял форму ПОСЛЕ отрисовки,
+   * и первый кадр показывал прошлого юзера, а на создании ещё и пустые поля
+   * вместо пресета. Ключ собран из того, что делает содержимое другим: факт
+   * открытия, юзер и его версия.
+   */
+  const seedKey = opened ? `${user?.id ?? 'new'}:${user?.updatedAt ?? ''}` : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (seedKey !== null && seedKey !== seededFor) {
+    setSeededFor(seedKey);
+    {
       // A new account starts on the first preset rather than on nothing: an
       // empty form offers unlimited traffic and no expiry, which is the one
       // combination an operator almost never means.
@@ -75,10 +95,9 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
       setAdvancedOpen(false);
       setPresetId(first?.id ?? null);
       setCreateNext(false);
-      setOpenedAt(Date.now());
+      setOpenedAt(clock);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, user?.id, user?.updatedAt]);
+  }
 
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads, enabled: opened });
   const profilesQuery = useQuery({
