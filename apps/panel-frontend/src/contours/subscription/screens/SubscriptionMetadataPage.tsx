@@ -15,6 +15,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RoutingPresetId } from '@iceslab/shared';
+import { SettingsTabs } from '@/contours/subscription/components/SettingsTabs';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getSettings, updateSettings, type AdminSettings } from '@/lib/domain/settings';
@@ -226,6 +227,8 @@ export function SubscriptionMetadataPage() {
           </BarButton>
         </Box>
       </Box>
+
+      <SettingsTabs dirty={dirty} />
 
       <Box className="page-columns">
         <Box style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, minWidth: 0, width: '100%' }}>

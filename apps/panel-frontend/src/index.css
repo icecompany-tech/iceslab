@@ -252,6 +252,34 @@ html:root {
   }
 }
 
+/* Узкий вариант той же пары: рейл 440 и один предпросмотр в нём, поэтому он
+   держится рядом с формой заметно дольше обычного. Складывать его на 1740,
+   как широкий, значило бы растянуть предпросмотр страницы подписки во всю
+   ширину монитора, где он перестаёт быть предпросмотром телефона. */
+.page-columns--tight > .page-rail {
+  width: 440px;
+}
+@media (max-width: 1740px) {
+  .page-columns--tight {
+    flex-direction: row;
+  }
+  .page-columns--tight > .page-rail {
+    flex-direction: column;
+    width: 440px;
+  }
+}
+@media (max-width: 1180px) {
+  .page-columns--tight {
+    flex-direction: column;
+  }
+  /* Сложенный рейл не растягивается на всю строку: предпросмотр страницы
+     подписки во всю ширину показывает не то, что увидит человек с телефона. */
+  .page-columns--tight > .page-rail {
+    width: 100%;
+    max-width: 440px;
+  }
+}
+
 /* Routes: a list of policies or presets beside the one that is open. The list
    is narrow because its rows are two short lines; the detail takes the rest.
    Below 1100 the list becomes a strip above the detail rather than a column

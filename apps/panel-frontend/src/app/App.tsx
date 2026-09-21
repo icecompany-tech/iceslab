@@ -54,6 +54,9 @@ const SettingsPage = lazy(() =>
 const SubscriptionMetadataPage = lazy(() =>
   import('@/contours/subscription/screens/SubscriptionMetadataPage').then((m) => ({ default: m.SubscriptionMetadataPage })),
 );
+const SubscriptionDeliveryPage = lazy(() =>
+  import('@/contours/subscription/screens/SubscriptionDeliveryPage').then((m) => ({ default: m.SubscriptionDeliveryPage })),
+);
 
 export default function App() {
   return (
@@ -98,6 +101,10 @@ export default function App() {
           <Route path="/insights" element={<InsightsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/subscription/metadata" element={<SubscriptionMetadataPage />} />
+          {/* Вторая вкладка тех же «Настроек», а не сосед в меню: заголовки
+              ответа, тексты по состояниям и поведение выдачи это одна тема,
+              и зонтик над ними один. Пункт сайдбара остаётся один. */}
+          <Route path="/subscription/metadata/delivery" element={<SubscriptionDeliveryPage />} />
           {/* "Delivery": the page decides which config FORMAT a client gets by
               its User-Agent, it never decides where traffic goes. It held the
               name "Routing" while nothing else claimed it, which made every

@@ -157,6 +157,9 @@ export const common = {
     nodes: '/ NODES',
     hosts: '/ HOSTS',
     subscriptionMetadata: '/ SUBSCRIPTION · METADATA',
+    // The second tab of the same settings. Without a line of its own it would
+    // inherit the section crumb and claim to be metadata, which it is not.
+    subscriptionDeliverySetup: '/ SUBSCRIPTION · FORMAT AND ADDRESS',
     subscriptionRoutes: '/ SUBSCRIPTION · ROUTES',
     subscriptionDelivery: '/ SUBSCRIPTION · DELIVERY',
     insights: '/ SYSTEM · INSIGHTS',

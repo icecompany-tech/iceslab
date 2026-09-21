@@ -182,6 +182,9 @@ export const common = {
     nodes: '/ НОДЫ',
     hosts: '/ ХОСТЫ',
     subscriptionMetadata: '/ ПОДПИСКА · МЕТАДАННЫЕ',
+    // Вторая вкладка тех же настроек. Без своей строки она унаследовала бы
+    // крошку раздела и называлась бы «Метаданные», которых на ней нет.
+    subscriptionDeliverySetup: '/ ПОДПИСКА · ФОРМАТ И АДРЕС',
     subscriptionRoutes: '/ ПОДПИСКА · МАРШРУТЫ',
     subscriptionDelivery: '/ ПОДПИСКА · ВЫДАЧА',
     insights: '/ СИСТЕМА · АНАЛИТИКА',

@@ -56,6 +56,67 @@ export interface AdminSettings extends PublicSettings {
     proxy?: string[];
     block?: string[];
   } | null;
+
+  // ───── Выдача ─────
+
+  /** Что отдаётся, когда клиент открыл общую ссылку и ничего не выбрал. */
+  subscriptionDefaultFormat?: SubscriptionFormat;
+  subscriptionLinkShape?: SubscriptionLinkShape;
+  /** Слова оператора для состояний, в которых подключиться нельзя. Пусто
+   *  означает «взять наш текст», а не «показать пустую строку». */
+  subscriptionDeadTexts?: DeadTexts | null;
+  /** Хост без схемы. Правится, потому что влияет только на строки, которые
+   *  панель ПЕЧАТАЕТ. */
+  subscriptionPublicHost?: string | null;
+  /** ТОЛЬКО ЧТЕНИЕ. Маршрут регистрируется этим префиксом при старте, поэтому
+   *  запись в базу не перенесла бы маршрут: она заставила бы панель
+   *  рекламировать адрес, на котором никто не слушает. */
+  subscriptionPathPrefix?: string;
+  subscriptionPathPrefixSource?: 'env';
+  /** ТОЛЬКО ЧТЕНИЕ. Сколько действующих подписок выдано на текущий адрес.
+   *  Показывается ДО смены хоста: их ссылки не перепишутся. */
+  subscriptionActiveCount?: number;
+}
+
+/** Ровно те состояния, для которых оператор может написать свой текст.
+ *  `revoked` сюда не входит: отозванная ссылка это другой адрес, а не
+ *  состояние подписки, и говорит по ней наш текст. */
+export type DeadTextState = 'expired' | 'limited' | 'disabled';
+
+export type SubscriptionFormat = 'plain' | 'xrayjson' | 'xrayjson-array' | 'clash' | 'singbox';
+
+/** Одна строка на сервер против строки на каждый его выход. */
+export type SubscriptionLinkShape = 'per-node' | 'per-exit';
+
+export type DeadTexts = Partial<Record<DeadTextState, { ru?: string; en?: string }>>;
+
+/** Что вернула проверка адреса выдачи. `ok` это «панель достучалась», а не
+ *  «всё хорошо»: 404 по несуществующему токену тоже ответ, и правильный. */
+export interface SubscriptionProbe {
+  ok: boolean;
+  status: number;
+  ms: number;
+  tlsExpiresAt: string | null;
+  checkedAt: string;
+  url: string;
+  error?: string;
+}
+
+export async function probeSubscriptionAddress(): Promise<SubscriptionProbe> {
+  const { data } = await api.post<SubscriptionProbe>('/api/settings/subscription/probe');
+  return data;
+}
+
+/** Адрес страницы для предпросмотра. Токен случайный, живёт пятнадцать минут и
+ *  ведёт на ВЫДУМАННЫЕ данные: ссылка живого подписчика в iframe это его доступ
+ *  в истории браузера, в реферере и в логах каждого прокси по дороге. */
+export async function getSubscriptionPreviewUrl(
+  state?: 'active' | 'expiring' | 'expired' | 'limited' | 'disabled',
+): Promise<{ url: string }> {
+  const { data } = await api.get<{ url: string }>('/api/settings/subscription/preview-url', {
+    params: state ? { state } : undefined,
+  });
+  return data;
 }
 
 export interface UpdateSettingsInput {
@@ -76,6 +137,15 @@ export interface UpdateSettingsInput {
    *  language (set by the LanguageSwitcher). The /sub page has its own RU/EN
    *  selector that overrides this per visitor. */
   defaultLocale?: 'ru' | 'en';
+
+  // ───── Выдача. Только эти четыре: экран не редактирует ни префикс пути,
+  // ни счётчик подписок, и слать их значило бы предлагать серверу принять то,
+  // чего человек не менял. ─────
+
+  subscriptionDefaultFormat?: SubscriptionFormat;
+  subscriptionLinkShape?: SubscriptionLinkShape;
+  subscriptionDeadTexts?: DeadTexts | null;
+  subscriptionPublicHost?: string | null;
 }
 
 /** Fetch public-flagged settings, no auth required. Used by LoginPage so

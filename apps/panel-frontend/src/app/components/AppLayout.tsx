@@ -446,6 +446,9 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   '/hosts': 'breadcrumb.hosts',
   '/nodes': 'breadcrumb.nodes',
   '/subscription/metadata': 'breadcrumb.subscriptionMetadata',
+  // Стоит перед своим разделом сознательно: поиск идёт от самого длинного
+  // префикса вниз, поэтому у вкладки собственная крошка, а не унаследованная.
+  '/subscription/metadata/delivery': 'breadcrumb.subscriptionDeliverySetup',
   '/subscription/routes': 'breadcrumb.subscriptionRoutes',
   '/subscription/delivery': 'breadcrumb.subscriptionDelivery',
   '/insights': 'breadcrumb.insights',

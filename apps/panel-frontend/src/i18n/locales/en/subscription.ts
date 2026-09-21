@@ -1,5 +1,85 @@
 export const subscription = {
 
+  // The two tabs of one «Subscription settings». The names say what a tab
+  // EDITS rather than what the section is called: the sidebar item "Delivery"
+  // already belongs to the User-Agent rule list, and a second one would read
+  // as the same place.
+  settingsTabs: {
+    metadata: 'Metadata',
+    delivery: 'Format and address',
+    dirtyTitle: 'This tab has unsaved edits',
+    dirtyBody: 'The other tab is a separate page: it loads afresh and the edits are gone.',
+    dirtyStay: 'Stay here',
+    dirtyLeave: 'Leave without saving',
+  },
+
+  // Delivery settings: what a person opening the link gets, and in what shape.
+  // A separate key from `delivery`, which is the User-Agent rule list.
+  deliverySetup: {
+    title: 'Subscription delivery',
+    subtitle: 'What a person opening the link gets, and in what shape it reaches their client.',
+    saving: 'Saving',
+    saved: 'Delivery settings saved',
+
+    formatTitle: 'Default format',
+    formatHint: 'What goes out when a client opened the plain link and picked nothing.',
+
+    shapeTitle: 'Shape of delivery',
+    shapeHint: 'One server per line, or a separate line for each protocol of that server.',
+    shapePerNode: 'One config per server',
+    shapePerNodeNote:
+      'A short list. If a server has several inbounds the lines become identical and nobody can tell them apart.',
+    shapePerExit: 'A config per exit',
+    shapePerExitNote:
+      'A longer list, but every line differs from its neighbour and can be picked on purpose. The label comes from the node name and the protocol.',
+
+    deadTitle: 'Wording for a subscription that is not in force',
+    deadHint: 'What a person reads when they cannot connect. Empty means our own text is used.',
+    dead: {
+      expired: 'Ran out',
+      limited: 'Allowance used up',
+      disabled: 'Switched off',
+    },
+    // As a placeholder, not a value: an empty box must read as «leave it as it
+    // is», never as «erase the text».
+    deadDefault: {
+      expired: 'The subscription has run out. Renew it and this page works again, with the same link.',
+      limited: 'The traffic allowance is used up. Access resumes when the allowance is renewed.',
+      disabled: 'The subscription is switched off. Your operator can switch it back on.',
+    },
+
+    addressTitle: 'Delivery address',
+    addressHint: 'Clients fetch their config from here. Changed rarely, breaks painfully.',
+    publicHost: 'Public domain',
+    pathPrefix: 'Path prefix · read only',
+    pathPrefixWhy:
+      'Set in the environment: the route is registered with this prefix at boot, and the panel cannot change it.',
+    activeCountWarn:
+      'subscriptions in force were issued on this address. Changing the domain does not rewrite their links: they keep going to the old host for as long as it points at the panel.',
+
+    probe: 'Check',
+    probing: 'Checking',
+    probeOk: 'The address answers the panel',
+    probeBad: 'The address could not be reached',
+    probeFailed: 'The check did not run',
+    probeCode: 'Code',
+    probeMs: 'Answer',
+    probeTls: 'TLS',
+    probeUrl: 'Address checked',
+
+    previewTitle: 'Page preview',
+    previewHint:
+      'The real page on a temporary token with invented data, carrying the wording and the format from these settings. The link lives fifteen minutes.',
+    previewOpen: 'Open in a new tab',
+    previewState: {
+      active: 'active',
+      expiring: 'expiring',
+      expired: 'expired',
+      limited: 'limited',
+      disabled: 'disabled',
+    },
+  },
+
   // Delivery: which config FORMAT each client app is served. One page for the
   // rule list, one for writing a rule.
   delivery: {
