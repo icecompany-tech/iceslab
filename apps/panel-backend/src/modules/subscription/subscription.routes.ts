@@ -275,6 +275,9 @@ async function refusalPage(
     // No endpoints exist for a refused subscription, so no clients are named
     // and no config is offered. Both blocks take themselves off the page.
     protocols: [],
+    // Именно эта страница и читает тексты оператора: сюда попадает тот, кому
+    // отказали, и строка под его именем это единственное, что ему скажут.
+    deadTexts: settings.deadTexts,
   });
 }
 
@@ -576,6 +579,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             protocols,
             subUrlQrSvg: qrSvg(subUrl),
             awgNodes,
+            deadTexts: settings.deadTexts,
           }),
         );
       }

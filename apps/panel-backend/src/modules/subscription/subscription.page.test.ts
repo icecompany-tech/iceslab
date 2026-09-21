@@ -331,4 +331,78 @@ describe('buildSubscriptionPage', () => {
     // The attribute as MARKUP: the page's own script names it too.
     expect(html).not.toContain('class="platform" data-node-picker');
   });
+
+  describe('the operator wording for a subscription that is not in force', () => {
+    const lapsed = (over: Partial<SubscriptionPageData> = {}) =>
+      base({
+        user: {
+          username: 'alice',
+          status: 'expired',
+          expireAt: null,
+          trafficLimitBytes: null,
+          trafficUsedBytes: 0,
+        },
+        protocols: [],
+        ...over,
+      });
+
+    it('prints what the operator wrote, in the language being served', () => {
+      const html = buildSubscriptionPage(
+        lapsed({
+          lang: 'ru',
+          deadTexts: { expired: { ru: 'Пишите @support, продлим', en: 'Write to @support' } },
+        }),
+      );
+      expect(html).toContain('Пишите @support, продлим');
+      expect(html).not.toContain('The subscription has run out');
+    });
+
+    it('falls back to ours when the other language is the one filled in', () => {
+      const html = buildSubscriptionPage(
+        lapsed({ lang: 'en', deadTexts: { expired: { ru: 'Только по-русски' } } }),
+      );
+      expect(html).toContain('The subscription has run out');
+      expect(html).not.toContain('Только по-русски');
+    });
+
+    // An operator who cleared the box asked for OUR text back, not for a blank
+    // line. The reader of this page already cannot connect; taking the
+    // explanation away as well would be the worst of both.
+    it('treats an emptied box as "use ours", not as "print nothing"', () => {
+      for (const wording of ['', '   ']) {
+        const html = buildSubscriptionPage(
+          lapsed({ lang: 'en', deadTexts: { expired: { en: wording } } }),
+        );
+        expect(html).toContain('The subscription has run out');
+      }
+    });
+
+    it('does not let one state speak for another', () => {
+      const html = buildSubscriptionPage(
+        lapsed({ lang: 'en', deadTexts: { limited: { en: 'Out of traffic, ask us' } } }),
+      );
+      expect(html).toContain('The subscription has run out');
+      expect(html).not.toContain('Out of traffic, ask us');
+    });
+
+    // A withdrawn link is a different address, not a state of the subscription,
+    // and the settings carry no key for it on purpose.
+    it('keeps our own words for a withdrawn link', () => {
+      const html = buildSubscriptionPage(
+        lapsed({
+          lang: 'en',
+          user: {
+            username: 'alice',
+            status: 'revoked',
+            expireAt: null,
+            trafficLimitBytes: null,
+            trafficUsedBytes: 0,
+          },
+          deadTexts: { disabled: { en: 'Switched off by us' } },
+        }),
+      );
+      expect(html).toContain('This link has been withdrawn');
+      expect(html).not.toContain('Switched off by us');
+    });
+  });
 });

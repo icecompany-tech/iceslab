@@ -162,6 +162,21 @@ export const GLYPHS = {
     ink: 0.26,
     body: "<path d=\"M20.1587 31.9985C20.1587 31.9985 11.6426 31.9986 11.176 31.9985C10.7093 31.9984 4.64307 31.9986 4.64307 25.1157C4.64307 18.2329 10.3594 18 11.176 18C11.9926 18 16.7756 18 21.9086 18C27.0416 18 27.275 25.1159 27.275 25.1159\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M29.8413 18.0015C29.8413 18.0015 38.3574 18.0014 38.824 18.0015C39.2907 18.0016 45.3569 18.0014 45.3569 24.8843C45.3569 31.7671 39.6406 32 38.824 32C38.0074 32 33.2244 32 28.0914 32C22.9584 32 22.725 24.8841 22.725 24.8841\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M12.6929 24.8848H17.2426\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><path d=\"M32.7581 24.8848H37.3078\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"/>",
   },
+  // Взят с их собственного favicon.svg (incy.app, проверено 2026-09-21), а не
+  // нарисован по памяти. Оттуда же и пропорции: рамка 19 на 19 со скруглением
+  // 5.5 и уголок, упирающийся в её правую сторону.
+  //
+  // Выброшены две вещи, и обе намеренно. Подложка (сплошной светлый квадрат на
+  // всё поле) марке не нужна: она рисуется одним цветом поверх карточки, и
+  // залитый фон превратил бы водяной знак в наклейку. Белая линия, которой
+  // оригинал прорезает рамку под уголок, выброшена по той же причине: вырез
+  // одним цветом не выражается, а уголок и без него читается.
+  INCY: {
+    box: "0 0 32 32",
+    attrs: "fill=\"none\"",
+    ink: 0.26,
+    body: "<rect x=\"6.5\" y=\"6.5\" width=\"19\" height=\"19\" rx=\"5.5\" stroke=\"currentColor\" stroke-width=\"3.2\"/><path d=\"M20.3 13.5h5.2M20.3 13.5v5.2\" stroke=\"currentColor\" stroke-width=\"3.2\" stroke-linecap=\"square\"/>",
+  },
   KoalaClash: {
     box: "0 0 50 50",
     attrs: "fill=\"none\"",
@@ -421,6 +436,7 @@ export const APP_MARK: Record<string, GlyphKey> = {
   Hiddify: 'Hiddify',
   'sing-box': 'Singbox',
   Karing: 'Karing',
+  INCY: 'INCY',
   Streisand: 'Streisand',
   Shadowrocket: 'Shadowrocket',
   v2rayNG: 'VRayNG',

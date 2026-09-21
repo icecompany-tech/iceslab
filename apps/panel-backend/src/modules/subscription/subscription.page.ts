@@ -46,6 +46,20 @@ export interface SubscriptionPageData {
   };
   /** Distinct protocols present in this subscription. */
   protocols: ProtocolName[];
+  /**
+   * Что оператор написал своими словами для состояний, в которых подключиться
+   * нельзя. Пусто, пробелы или отсутствие ключа означают «оставить наш текст»,
+   * а не «показать пустую строку»: человек, читающий эту страницу, уже не может
+   * подключиться, и отнять у него ещё и объяснение было бы худшим из исходов.
+   *
+   * `revoked` сюда не входит намеренно: отозванная ссылка это не состояние
+   * подписки, а другой адрес, и говорить по нему должен наш текст.
+   */
+  deadTexts?: {
+    expired?: { ru?: string; en?: string };
+    limited?: { ru?: string; en?: string };
+    disabled?: { ru?: string; en?: string };
+  } | null;
   /** "Scan to import the whole subscription" QR for proxy clients. */
   subUrlQrSvg?: string;
   /** One entry per AmneziaWG node, each with its two QRs: the AmneziaVPN
@@ -688,10 +702,19 @@ const TRAFFIC_WARNING_SHARE = 0.05;
  * just who this is and why nothing works. The route decides which; see
  * `refusalPage` in subscription.routes.ts.
  */
-function statusView(u: SubscriptionPageData['user'], t: Labels): StatusView {
+function statusView(
+  u: SubscriptionPageData['user'],
+  t: Labels,
+  lang: 'ru' | 'en',
+  custom?: SubscriptionPageData['deadTexts'],
+): StatusView {
   // Not in force. Everything reads as stopped, and the line says what to do,
   // because this page is the last thing a lapsed subscriber sees.
   if (u.status !== 'active') {
+    // Слово оператора важнее нашего, но только если оно есть. Пустая строка и
+    // строка из пробелов это НЕ текст: оператор стёр поле, а не написал в него
+    // пустоту, и подставить её значило бы оставить читателя без объяснения.
+    const own = custom?.[u.status as 'expired' | 'limited' | 'disabled']?.[lang]?.trim();
     const dead: StatusView = {
       badge: ' sub-card__badge--bad',
       note: ' sub-card__note--bad',
@@ -699,7 +722,7 @@ function statusView(u: SubscriptionPageData['user'], t: Labels): StatusView {
       expiresTile: '',
       trafficTile: '',
       icon: 'AlertCircle',
-      line: t.noteStopped[u.status] ?? t.noteStopped.disabled!,
+      line: own || t.noteStopped[u.status] || t.noteStopped.disabled!,
     };
     // Tint the tile that explains the refusal, and only that one: on an
     // expired subscription the traffic figure is not the problem.
@@ -780,7 +803,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       : `${fmtBytes(used)} / ${fmtBytes(total)}`;
   const expiresStr = u.expireAt ? fmtDate(u.expireAt, data.lang) : t.noExpiry;
   const statusLabel = t.statusValues[u.status] ?? u.status;
-  const st = statusView(u, t);
+  const st = statusView(u, t, data.lang, data.deadTexts);
 
   const awgNodes = data.awgNodes ?? [];
   const multiAwg = awgNodes.length > 1;

@@ -49,7 +49,7 @@ describe('the glyph set', () => {
     const inks = Object.values(GLYPHS)
       .map((g) => g.ink)
       .filter((v): v is number => v !== undefined);
-    expect(inks.length).toBe(27);
+    expect(inks.length).toBe(28);
     expect(Math.min(...inks)).toBe(0.12);
     expect(Math.max(...inks)).toBe(0.3);
     expect(isMark('Happ')).toBe(true);
@@ -100,7 +100,7 @@ describe('the glyph set', () => {
     expect(sheet.mark('Happ', { watermark: true })).toContain('opacity:0.14');
     expect(sheet.mark('Shadowrocket', { watermark: true })).toContain('opacity:0.28');
     // An app we have no artwork for draws nothing, and says so by returning ''.
-    expect(sheet.mark('INCY', { watermark: true })).toBe('');
+    expect(sheet.mark('NekoBox', { watermark: true })).toBe('');
   });
 });
 
@@ -135,11 +135,11 @@ describe('what the page actually carries', () => {
   });
 
   it('draws no mark at all for an app whose artwork we do not have', () => {
-    // INCY, NekoBox, v2rayN and the router entries have no mark in the set. A
+    // NekoBox, v2rayN and the router entries have no mark in the set. A
     // near-enough mark from another company would be worse than none, so the
     // card is simply a card.
     expect(APP_MARK['OpenWrt']).toBeUndefined();
-    expect(APP_MARK['INCY']).toBeUndefined();
+    expect(APP_MARK['NekoBox']).toBeUndefined();
     const html = page({ protocols: ['xray'] });
     const router = html.slice(html.indexOf('data-platform="router"'));
     expect(router).toContain('OpenWrt');

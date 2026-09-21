@@ -268,6 +268,11 @@ export const APPS: AppDef[] = [
     // deep link (AES-GCM payload from @incy/link-encoder); wire that up once the
     // package is installed (see deeplinkHref). Until then: import via the link.
     name: 'INCY',
+    // incy.app раскладывает по магазинам сама: App Store id6756943388, Google
+    // Play llc.itdev.incy и релизы INCY-DEV/incy-platforms для десктопа и ТВ.
+    // Отдаём одну страницу, а не три ссылки: так читателю не надо выбирать
+    // магазин за свою платформу, и нам не надо следить за тремя адресами.
+    site: 'https://incy.app',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
