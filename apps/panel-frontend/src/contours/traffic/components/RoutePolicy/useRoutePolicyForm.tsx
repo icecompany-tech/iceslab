@@ -20,9 +20,12 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   const { t } = useTranslation();
 
   const qc = useQueryClient();
+  // Счётчик ТОЛЬКО для строк, которые оператор добавляет руками: там мы в
+  // обработчике события, а не в рендере. Ключи строк, пришедших с сервера,
+  // детерминированы и живут в `toRules`.
   const nextKey = useRef(0);
 
-  const initial = useMemo(() => toRules(policy, () => `r${nextKey.current++}`), [policy]);
+  const initial = useMemo(() => toRules(policy), [policy]);
   const [name, setName] = useState(policy.name);
   const [rules, setRules] = useState<DraftRule[]>(initial);
   const [loadedFor, setLoadedFor] = useState(policy.id);
@@ -32,7 +35,7 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   if (loadedFor !== policy.id) {
     setLoadedFor(policy.id);
     setName(policy.name);
-    setRules(toRules(policy, () => `r${nextKey.current++}`));
+    setRules(toRules(policy));
     setDragging(null);
   }
 
@@ -87,7 +90,7 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   function addRule() {
     setRules((prev) => [
       ...prev,
-      { id: `r${nextKey.current++}`, match: [], action: 'direct', note: '' },
+      { id: `new-${nextKey.current++}`, match: [], action: 'direct', note: '' },
     ]);
   }
   function removeRule(i: number) {

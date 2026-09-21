@@ -1,5 +1,14 @@
 import type { RoutePolicy, RouteRule } from '@/lib/domain/routePolicies';
-export interface DraftRule extends RouteRule {}
+
+/**
+ * Правило в черновике экрана.
+ *
+ * Псевдоним, а не интерфейс-наследник: пустое `extends` не добавляло ни одного
+ * поля и читалось как обещание, что черновик когда-нибудь разойдётся с
+ * контрактом. Он не разошёлся, и имя стоит здесь ровно затем, чтобы экраны
+ * говорили «черновик», а не «правило из ответа API».
+ */
+export type DraftRule = RouteRule;
 
 export const NEW_POLICY_ID = '__new__';
 
@@ -14,12 +23,27 @@ export function blankPolicy(): RoutePolicy {
  * The policy as an ordered rule list. When the API ships `rules` that is what
  * we use; until then the two flat arrays are unrolled into one rule per domain,
  * block first, which is the order the config generator emits them in.
+ *
+ * Ключи строк ДЕТЕРМИНИРОВАНЫ: позиция плюс префикс источника. Раньше их давал
+ * счётчик в `useRef`, который приходилось читать и увеличивать прямо в рендере,
+ * а рендер обязан быть чистым. Префикс `seed-` держит их врозь с ключами строк,
+ * которые оператор добавляет руками (`new-`), и пересечься они не могут.
  */
-export function toRules(policy: RoutePolicy, id: () => string): DraftRule[] {
-  if (policy.rules) return policy.rules.map((r) => ({ ...r, id: r.id || id() }));
+export function toRules(policy: RoutePolicy): DraftRule[] {
+  if (policy.rules) return policy.rules.map((r, i) => ({ ...r, id: r.id || `seed-${i}` }));
   return [
-    ...policy.blockDomains.map((d) => ({ id: id(), match: [d], action: 'block' as const, note: '' })),
-    ...policy.directDomains.map((d) => ({ id: id(), match: [d], action: 'direct' as const, note: '' })),
+    ...policy.blockDomains.map((d, i) => ({
+      id: `seed-b${i}`,
+      match: [d],
+      action: 'block' as const,
+      note: '',
+    })),
+    ...policy.directDomains.map((d, i) => ({
+      id: `seed-d${i}`,
+      match: [d],
+      action: 'direct' as const,
+      note: '',
+    })),
   ];
 }
 
