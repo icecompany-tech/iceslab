@@ -15,8 +15,9 @@ import {
   registerNodeWarp,
   updateNode,
 } from '@/lib/domain/nodes';
+import type { Node } from '@/lib/domain/nodes';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
-import { listCascades } from '@/lib/domain/cascades';
+import { listCascades, type Cascade } from '@/lib/domain/cascades';
 import { listHosts } from '@/lib/domain/hosts';
 import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/routePolicies';
 // Aliased: the state below holds the refusal and wants the plain name. An
@@ -115,23 +116,15 @@ export function useNodeEditForm() {
   const metrics = dashNode?.metrics ?? null;
 
   // A node sits in at most one cascade; the hop's position names its role.
-  const cascade = useMemo(() => {
-    for (const c of cascadesQuery.data?.cascades ?? []) {
-      const idx = c.hops.findIndex((h) => h.nodeId === id);
-      if (idx === -1) continue;
-      const role = idx === 0 ? 'entry' : idx === c.hops.length - 1 ? 'exit' : 'transit';
-      // What this node feeds is a set of DIRECTIONS, named by the country a
-      // client picks, not the next machine in a list. The node under a
-      // direction can be swapped without any of this changing.
-      const exits = c.mode === 'balancer' ? c.hops.slice(1) : c.hops.slice(-1);
-      const directions = exits
-        .map((h) => fleetQuery.data?.nodes.find((n) => n.id === h.nodeId)?.countryCode)
-        .filter((code): code is string => Boolean(code))
-        .map((code) => code.toUpperCase());
-      return { cascade: c, role, directions: role === 'exit' ? [] : directions };
-    }
-    return null;
-  }, [cascadesQuery.data, fleetQuery.data, id]);
+  //
+  // Тело вынесено в чистую функцию рядом с файлом: с циклом, `continue` и
+  // выходом из середины компилятор React не может доказать, что сохранит
+  // ручную мемоизацию, и отказывается оптимизировать хук целиком. Вызов одной
+  // функции он разбирает без труда, а читается это место так же.
+  const cascade = useMemo(
+    () => cascadeOfNode(cascadesQuery.data?.cascades ?? [], fleetQuery.data?.nodes ?? [], id ?? ''),
+    [cascadesQuery.data, fleetQuery.data, id],
+  );
 
   // Route profiles exist only where the panel builds them: the entry of an
   // enabled balancer cascade. Everywhere else the node carries no rule set.
@@ -287,3 +280,31 @@ export function useNodeEditForm() {
 
 /** Everything the edit screen hands to its sections. */
 export type NodeEditor = ReturnType<typeof useNodeEditForm>;
+
+/**
+ * Каскад, в котором стоит эта нода, с её ролью и списком направлений.
+ *
+ * `null`, когда нода не в каскаде. Нода стоит максимум в одном, поэтому первый
+ * найденный и есть ответ.
+ */
+function cascadeOfNode(
+  cascades: Cascade[],
+  fleet: Node[],
+  id: string,
+): { cascade: Cascade; role: 'entry' | 'exit' | 'transit'; directions: string[] } | null {
+  for (const c of cascades) {
+    const idx = c.hops.findIndex((h) => h.nodeId === id);
+    if (idx === -1) continue;
+    const role = idx === 0 ? 'entry' : idx === c.hops.length - 1 ? 'exit' : 'transit';
+    // What this node feeds is a set of DIRECTIONS, named by the country a
+    // client picks, not the next machine in a list. The node under a direction
+    // can be swapped without any of this changing.
+    const exits = c.mode === 'balancer' ? c.hops.slice(1) : c.hops.slice(-1);
+    const directions = exits
+      .map((h) => fleet.find((n) => n.id === h.nodeId)?.countryCode)
+      .filter((code): code is string => Boolean(code))
+      .map((code) => code.toUpperCase());
+    return { cascade: c, role, directions: role === 'exit' ? [] : directions };
+  }
+  return null;
+}

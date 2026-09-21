@@ -80,6 +80,15 @@ export function useNodeCreateForm() {
   // Watch for the agent's first check-in. There is no single-node endpoint, so
   // findNode walks the list; the poll stops the moment the node reports online.
   const registeredId = registered?.id ?? null;
+  /**
+   * Нода вышла на связь. Флаг ЗАПОМИНАЕТ этот факт, потому что им же и
+   * выключается опрос: без него запрос, перестав опрашивать, снова стал бы
+   * разрешённым.
+   *
+   * Ставится сравнением в рендере, а не эффектом. Эффект приезжал ПОСЛЕ
+   * отрисовки, и между ответом «online» и поднятым флагом оставался кадр, в
+   * котором экран всё ещё говорил «ждём агента», уже получив обратное.
+   */
   const [isOnline, setIsOnline] = useState(false);
   const nodeWatch = useQuery({
     queryKey: ['node', 'watch', registeredId],
@@ -87,9 +96,7 @@ export function useNodeCreateForm() {
     enabled: step === 2 && registeredId !== null && !isOnline,
     refetchInterval: 5000,
   });
-  useEffect(() => {
-    if (nodeWatch.data?.status === 'online') setIsOnline(true);
-  }, [nodeWatch.data]);
+  if (!isOnline && nodeWatch.data?.status === 'online') setIsOnline(true);
 
   // Seconds since the node was registered, for the "waiting" clock.
   const [waited, setWaited] = useState(0);
