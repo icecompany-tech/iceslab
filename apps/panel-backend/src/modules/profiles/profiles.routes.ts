@@ -165,14 +165,20 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileNotFoundError || err instanceof svc.NodeNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
+      // Who holds the port, in the same three codes and the same union the
+      // port check answers with, so one screen draws both. The English
+      // message stays as the fallback; the words belong to the panel, which
+      // has them in the operator's language and in the right case.
       if (
         err instanceof svc.PortInUseError ||
-        err instanceof svc.NodeAlreadyBoundError ||
-        // A cascade holds that port on that node. Same 409, different reason,
-        // and the message is what carries the difference: there is no other
-        // profile to go and look at.
-        err instanceof svc.PortHeldByCascadeError
+        err instanceof svc.PortHeldByCascadeError ||
+        err instanceof svc.PortHeldByCoreServiceError
       ) {
+        return reply
+          .code(409)
+          .send({ error: err.code, message: err.message, conflicts: err.conflicts });
+      }
+      if (err instanceof svc.NodeAlreadyBoundError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
       // No core on this node renders this profile, so the inbound would never
@@ -231,8 +237,14 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.BindingNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
-      if (err instanceof svc.PortInUseError || err instanceof svc.PortHeldByCascadeError) {
-        return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      if (
+        err instanceof svc.PortInUseError ||
+        err instanceof svc.PortHeldByCascadeError ||
+        err instanceof svc.PortHeldByCoreServiceError
+      ) {
+        return reply
+          .code(409)
+          .send({ error: err.code, message: err.message, conflicts: err.conflicts });
       }
       throw err;
     }

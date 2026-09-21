@@ -18,7 +18,7 @@ import {
 } from '../nodes/node-engines.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
-import { portOwnersOnNode } from '../nodes/node-ports.js';
+import { portOwnersOnNode, type PortOwner } from '../nodes/node-ports.js';
 import type {
   CreateBindingInput,
   CreateProfileInput,
@@ -67,6 +67,21 @@ export class ProfileNameTakenError extends Error {
  * use" cannot carry.
  */
 export class PortInUseError extends Error {
+  /**
+   * The code the panel switches on, and the conflicts it draws from.
+   *
+   * Both are here rather than only in the prose because the screen is
+   * bilingual and the words belong to it: the panel holds one dictionary for
+   * these, in the operator's language and in the right case inside a sentence,
+   * and a second dictionary on this side would drift from it within a week.
+   * The English message stays as the fallback for anything that has no screen.
+   *
+   * `conflicts` is the same union the port check answers with, so a screen that
+   * can draw one can draw the other without a second shape to learn.
+   */
+  readonly code = 'PORT_TAKEN_PROFILE';
+  readonly conflicts: PortOwner[];
+
   constructor(
     public port: number,
     public nodeName: string,
@@ -79,6 +94,7 @@ export class PortInUseError extends Error {
         `demultiplexer, which the panel does not do yet. Pick a different port.`,
     );
     this.name = 'PortInUseError';
+    this.conflicts = [{ kind: 'profile', name: conflictProfile, port, transport }];
   }
 }
 
@@ -95,6 +111,9 @@ export class PortInUseError extends Error {
  * range before they go hunting for a profile that does not exist.
  */
 export class PortHeldByCascadeError extends Error {
+  readonly code = 'PORT_TAKEN_CASCADE';
+  readonly conflicts: PortOwner[];
+
   constructor(
     public port: number,
     public nodeName: string,
@@ -106,6 +125,37 @@ export class PortHeldByCascadeError extends Error {
         `pick a port outside that range for this profile.`,
     );
     this.name = 'PortHeldByCascadeError';
+    this.conflicts = [{ kind: 'cascade', name: cascadeName, port, transport: 'tcp' }];
+  }
+}
+
+/**
+ * The port belongs to a service one of the node's cores opened for itself.
+ *
+ * The third remedy, and the bleakest: there is no profile to move and no
+ * cascade to re-plan, the number is simply spoken for. Its own class because
+ * the operator's next step is different again, and because the panel says so in
+ * words built from `ownerKey` rather than from a name anybody chose.
+ *
+ * Refused at the save although nothing in the database could have stopped it:
+ * the node is the only party that knows these ports, and without this the save
+ * succeeded and the core failed to bind, in the journal, hours later.
+ */
+export class PortHeldByCoreServiceError extends Error {
+  readonly code = 'PORT_TAKEN_CORE_SERVICE';
+
+  constructor(
+    public port: number,
+    public nodeName: string,
+    public ownerKey: string,
+    public transport: Transport,
+    public conflicts: PortOwner[],
+  ) {
+    super(
+      `Port ${port}/${transport.toUpperCase()} on node "${nodeName}" is held by a core service ` +
+        `(${ownerKey}). That one cannot be moved: pick a different port for this profile.`,
+    );
+    this.name = 'PortHeldByCoreServiceError';
   }
 }
 
@@ -536,27 +586,44 @@ function assertNodeRendersProfile(
 /**
  * The other half of the port question, the half no index can answer.
  *
- * Only asked for tcp: both cascade link cells ride xray over TCP, so a UDP
- * binding on 24000 is a different socket and legitimately free. Asking anyway
- * would refuse a Hysteria2 inbound for a reason that is not true, which is the
- * exact mistake the transport key was added to stop making.
+ * Two claimants live outside the uniqueness key: a cascade leg, in another
+ * table, and a service a core opened for itself, which only the node knows.
+ * Both are asked here, at the save, because the alternative is a save that
+ * succeeds and a listener that never comes up.
+ *
+ * ⚠ Only the transport asked about. A cascade leg is always TCP, a core service
+ * says what it is, and a UDP binding on 24000 is a different socket that is
+ * genuinely free. Refusing it would be the same untruth the transport key was
+ * added to stop telling.
+ *
+ * Exported because the legacy inbound save has to ask exactly the same
+ * question, and two copies of it would answer differently the first time one
+ * of them learned something.
  */
-async function assertPortNotHeldByCascade(
+export async function assertPortFreeOfOthers(
   nodeId: string,
   port: number,
   transport: Transport,
   nodeName?: string,
   exceptBindingId?: string,
 ): Promise<void> {
-  if (transport !== 'tcp') return;
-  const owners = await portOwnersOnNode(nodeId, [port], { exceptBindingId });
+  const owners = (await portOwnersOnNode(nodeId, [port], { exceptBindingId })).filter(
+    (o) => o.transport === transport,
+  );
   const cascade = owners.find((o) => o.kind === 'cascade');
-  if (!cascade) return;
+  const service = owners.find((o) => o.kind === 'core-service');
+  if (!cascade && !service) return;
+
   const name =
     nodeName ??
     (await prisma.node.findUnique({ where: { id: nodeId }, select: { name: true } }))?.name ??
     nodeId;
-  throw new PortHeldByCascadeError(port, name, cascade.name);
+  // The cascade first when both hold it: it is the one the operator can
+  // actually act on, and a dead end reads worse than a fixable conflict.
+  if (cascade) throw new PortHeldByCascadeError(port, name, cascade.name);
+  if (service?.kind === 'core-service') {
+    throw new PortHeldByCoreServiceError(port, name, service.ownerKey, transport, owners);
+  }
 }
 
 export async function createBinding(input: CreateBindingInput): Promise<PublicBindingDto> {
@@ -582,7 +649,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   if (portConflict) {
     throw new PortInUseError(input.port, node.name, portConflict.profile.name, transport);
   }
-  await assertPortNotHeldByCascade(input.nodeId, input.port, transport, node.name);
+  await assertPortFreeOfOthers(input.nodeId, input.port, transport, node.name);
   const dupBinding = await prisma.profileNodeBinding.findUnique({
     where: {
       profileId_nodeId: { profileId: input.profileId, nodeId: input.nodeId },
@@ -681,13 +748,7 @@ export async function updateBinding(
         transport,
       );
     }
-    await assertPortNotHeldByCascade(
-      existing.nodeId,
-      nextPort,
-      transport,
-      undefined,
-      id,
-    );
+    await assertPortFreeOfOthers(existing.nodeId, nextPort, transport, undefined, id);
   }
 
   const data: Prisma.ProfileNodeBindingUpdateInput = {};

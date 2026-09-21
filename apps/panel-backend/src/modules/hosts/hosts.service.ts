@@ -6,7 +6,10 @@ import { checkSniConsistency } from '../profiles/host-fields.js';
 // Reused rather than redefined so the operator gets the same wording whichever
 // route created the binding.
 import {
+  assertPortFreeOfOthers,
   NodeNotFoundError,
+  PortHeldByCascadeError,
+  PortHeldByCoreServiceError,
   PortInUseError,
   ProfileNotFoundError,
 } from '../profiles/profiles.service.js';
@@ -37,7 +40,13 @@ export class BindingNotFoundError extends Error {
 
 // Re-exported so the routes layer can catch them without importing the profiles
 // module, which it otherwise has no business knowing about.
-export { NodeNotFoundError, PortInUseError, ProfileNotFoundError };
+export {
+  NodeNotFoundError,
+  PortHeldByCascadeError,
+  PortHeldByCoreServiceError,
+  PortInUseError,
+  ProfileNotFoundError,
+};
 
 /** An SNI override REALITY will never complete a handshake for. Saving it
  *  yields a host that looks healthy and hands out URLs that cannot connect,
@@ -313,6 +322,11 @@ async function planHostCreate(input: CreateHostInput): Promise<{
     select: { profile: { select: { name: true } } },
   });
   if (clash) throw new PortInUseError(port, node.name, clash.profile.name, transport);
+  // And the two claimants no index can see: a cascade leg in another table, and
+  // a service one of the node's cores opened for itself. Creating a host
+  // creates the binding under it, so this route reaches the same socket the
+  // bindings route does and has to ask the same question.
+  await assertPortFreeOfOthers(nodeId, port, transport, node.name);
 
   return { bindingId: null, profile, nodeId, port };
 }

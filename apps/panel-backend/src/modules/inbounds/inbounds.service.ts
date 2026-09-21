@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Inbound } from '../../generated/prisma/client.js';
 import { transportOf, type ProtocolName } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
+import { assertPortFreeOfOthers } from '../profiles/profiles.service.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import {
@@ -123,6 +124,16 @@ export async function createInbound(input: CreateInboundInput): Promise<Inbound>
     }
   }
 
+  // The claimants no index can see: a cascade leg in another table, and a
+  // service one of the node's cores opened for itself. Asked here for the same
+  // reason as on a binding save, and with the same function, so the legacy
+  // route and the current one cannot answer differently.
+  await assertPortFreeOfOthers(
+    input.nodeId,
+    input.port,
+    transportOf(input.protocol as ProtocolName, configToStore as { network?: string }),
+  );
+
   let created: Inbound;
   try {
     // Slice 26 invariant: every new inbound gets attached to the "All" squad
@@ -212,6 +223,9 @@ export async function updateInbound(
     | { network?: string }
     | null;
   const nextTransport = transportOf(existing.protocol as ProtocolName, nextConfig);
+  if (input.port !== undefined || validatedConfig !== undefined) {
+    await assertPortFreeOfOthers(existing.nodeId, input.port ?? existing.port, nextTransport);
+  }
 
   let updated: Inbound;
   try {

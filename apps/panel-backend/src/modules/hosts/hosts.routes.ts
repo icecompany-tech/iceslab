@@ -57,8 +57,17 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
       }
       // Creating a host can now create the binding under it, so the port clash
       // that used to belong to the bindings route surfaces here too.
-      if (err instanceof svc.PortInUseError) {
-        return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+      if (
+        err instanceof svc.PortInUseError ||
+        err instanceof svc.PortHeldByCascadeError ||
+        err instanceof svc.PortHeldByCoreServiceError
+      ) {
+        // The same three codes and the same union as the bindings route and the
+        // port check: whichever screen the operator got here from, it draws the
+        // answer with the words it already has.
+        return reply
+          .code(409)
+          .send({ error: err.code, message: err.message, conflicts: err.conflicts });
       }
       // The form shows this next to the SNI field, so it carries the served
       // names rather than only prose.

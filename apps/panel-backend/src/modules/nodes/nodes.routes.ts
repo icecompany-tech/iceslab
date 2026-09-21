@@ -211,10 +211,22 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       exceptBindingId: body.exceptBindingId,
     });
     const conflicts = owners.filter((o) => o.transport === body.transport);
+    // Who holds the SAME number on the OTHER transport, when anybody does.
+    //
+    // The port is free and the screen should say more than "free": 443/UDP
+    // beside a REALITY on 443/TCP is the pair the panel used to refuse, and an
+    // operator who has just been told that is a collision deserves to be told,
+    // by name, that it is not. The panel cannot work it out on its own, because
+    // "who listens on the other socket" was never in any answer it gets.
+    //
+    // null when the number is free on both, so the screen has one thing to test
+    // rather than an empty object to interpret.
+    const other = owners.find((o) => o.transport !== body.transport);
     return reply.send({
       ok: conflicts.length === 0,
       certainty,
       conflicts,
+      otherTransport: other ? { holder: other } : null,
       // A KEY, like ownerKey, for the same reason: the screen is bilingual and
       // writes the sentence itself. null when there is nothing to explain.
       note:

@@ -217,6 +217,28 @@ describe('the port check', () => {
     expect((await check(nodeId, 443, 'tcp', bindingId)).ok).toBe(true);
   });
 
+  it('names who holds the same number on the other transport', async () => {
+    // The port IS free, and saying only "free" wastes what the panel knows.
+    // 443/UDP beside a REALITY on 443/TCP is the pair the panel used to refuse
+    // outright, so an operator looking at that number deserves to be told, by
+    // name, that the two do not collide.
+    const nodeId = await makeNode();
+    await bindProfile(nodeId, 'reality-main', 443);
+
+    const answer = await check(nodeId, 443, 'udp');
+    expect(answer.ok).toBe(true);
+    expect(answer.conflicts).toEqual([]);
+    expect(answer.otherTransport).toEqual({
+      holder: { kind: 'profile', name: 'reality-main', port: 443, transport: 'tcp' },
+    });
+  });
+
+  it('leaves otherTransport null when the number is free on both', async () => {
+    const nodeId = await makeNode();
+    const answer = await check(nodeId, 2053, 'tcp');
+    expect(answer.otherTransport).toBeNull();
+  });
+
   it('404s for a node that does not exist', async () => {
     // "No conflicts on a node that is not there" is true and useless.
     const res = await app.inject({
