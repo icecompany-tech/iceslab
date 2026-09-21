@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import {
+  AMBER,
   CARD,
   DISPLAY,
   FAINT,
@@ -15,6 +17,11 @@ import {
   SNOW,
   WELL,
 } from '@/contours/nodes/lib/colors';
+
+/** Что оператору делать с этим ядром. Имена состояний названы по ДЕЙСТВИЮ, а не
+ *  по полю отчёта: `absent` это «идти на машину», `idle` это «привязать
+ *  профиль», и путать их дорого. */
+type CoreState = 'configured' | 'idle' | 'absent';
 import { ChipIcon } from '@/contours/nodes/components/NodeEdit/icons';
 
 /**
@@ -27,26 +34,30 @@ import { ChipIcon } from '@/contours/nodes/components/NodeEdit/icons';
  * это нормальное состояние здоровой ноды: когда это один раз проглядели, весь
  * флот показывал `degraded` вечно, то есть статус перестал что-либо значить.
  *
- * ТРИ состояния строки, и третье не округление второго:
+ * ЧЕТЫРЕ состояния, и ни одно не округление соседнего:
  *
  *   настроено        у ядра есть инбаунд, и оно должно работать.
- *   не настроено     адаптер зарегистрирован, инбаунда нет. Обычное состояние
+ *   не настроено     бинарник на машине есть, инбаунда нет. Обычное состояние
  *                    здоровой ноды, а не беда: так выглядит ядро, которое
- *                    оператор ещё не включил.
+ *                    оператор ещё не включил. Действие тут ПАНЕЛЬНОЕ, привязать
+ *                    профиль.
+ *   бинарника нет    адаптер зарегистрирован, а файла на машине нет. Действие
+ *                    тут МАШИННОЕ, зайти по ssh и поставить, и смешивать эти
+ *                    два значит посылать человека не туда.
  *   панель не знает  `cores` пустой. Это НЕ «ядер нет»: так выглядит нода,
  *                    которая ещё ни разу не отчиталась, и заявлять по ней
  *                    что-либо про ядра нельзя.
+ *
+ * Отсутствие `installed` это НЕ `false`: агент старше поля не говорит про
+ * бинарник ничего, и строка ведёт себя ровно так, как вела до появления поля.
+ * Прочитать молчание как «нет файла» значило бы разослать весь сегодняшний флот
+ * ставить то, что уже стоит.
  *
  * Слова «работает» здесь нет, и это не забывчивость. `NodeCoreInfo` в панели
  * это ИНВЕНТАРЬ: `running` из отчёта агента сознательно не сохраняется, потому
  * что копия живости протухала бы рядом с нодой, про которую панель уже знает,
  * что та лежит (transport.ts, комментарий у типа). Живость целиком живёт в
  * статусе ноды, и секция отправляет туда, а не выдумывает её заново.
- *
- * Нет здесь и слов «не установлено». Агент отвечает, НАСТРОЕНО ли ядро
- * (`provisioned`), и ничего не говорит про то, лежит ли бинарник на машине.
- * Пока в отчёте нет отдельного `installed`, «не настроено» и «бинарника нет»
- * неразличимы, и писать второе значит выдумывать.
  */
 export function CoresPanel({ node }: { node: Node }) {
   const { t } = useTranslation();
@@ -88,7 +99,7 @@ export function CoresPanel({ node }: { node: Node }) {
       ) : (
         <Stack gap={0}>
           {cores.map((c) => (
-            <CoreRow key={`${c.name}:${c.engine ?? ''}`} core={c} />
+            <CoreRow key={`${c.name}:${c.engine ?? ''}`} core={c} nodeId={node.id} />
           ))}
           {/* Инвентарь, а не живость: поднято ли ядро прямо сейчас, говорит
               статус ноды, и повторять его здесь второй раз значит завести
@@ -120,17 +131,24 @@ const BOOTSTRAP: Record<string, string> = {
  *  по умолчанию в `scripts/install-iceslab-node.sh`. */
 const NODE_DIR = '/opt/iceslab-node';
 
-function CoreRow({ core }: { core: NodeCore }) {
+function CoreRow({ core, nodeId }: { core: NodeCore; nodeId: string }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [shown, setShown] = useState(false);
 
-  // `provisioned` ОТСУТСТВУЕТ у агента старше поля, и это не `false`: читаем
-  // как «настроено», то есть как вело себя всё до появления поля.
-  const state = core.provisioned === false ? 'idle' : 'configured';
-  const tone = state === 'configured' ? MOSS : FAINT;
+  // Порядок проверок задан тем, что оператору делать. Нет файла: идти на
+  // машину, и никакая привязка профиля этого не заменит, поэтому вопрос про
+  // инбаунд даже не задаётся. Оба поля ОТСУТСТВУЮТ у агента старше них, и это
+  // не `false`: молчание читается как «как было раньше».
+  const state: CoreState =
+    core.installed === false ? 'absent' : core.provisioned === false ? 'idle' : 'configured';
+  const tone = state === 'configured' ? MOSS : state === 'absent' ? AMBER : FAINT;
 
   const script = BOOTSTRAP[core.name];
   const command = script ? `sudo ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
+  // Строку показываем только там, где она к месту: у ядра, которое стоит и
+  // просто не занято, предложение переустановить его сбивает с толку.
+  const canShowCommand = state === 'absent' && command !== null;
 
   return (
     <Box style={{ borderTop: `1px solid ${HAIRLINE}`, padding: '14px 20px' }}>
@@ -181,28 +199,22 @@ function CoreRow({ core }: { core: NodeCore }) {
         {/* Кнопка НЕ ставит ядро. Панель не выполняет скрипты на чужой машине:
             это RCE по построению, и на публичном AGPL-продукте такого быть не
             может. Она открывает готовую строку для вставки в ssh. */}
-        {state === 'idle' && command && (
-          <UnstyledButton
-            type="button"
-            onClick={() => setShown((v) => !v)}
-            style={{
-              height: 28,
-              padding: '0 12px',
-              borderRadius: 8,
-              backgroundColor: WELL,
-              border: `1px solid ${HAIRLINE}`,
-              fontFamily: DISPLAY,
-              fontSize: 12,
-              color: MIST,
-              flexShrink: 0,
-            }}
-          >
-            {t(shown ? 'nodeEdit.coresHideCommand' : 'nodeEdit.coresShowCommand')}
-          </UnstyledButton>
+        {canShowCommand && (
+          <RowButton onClick={() => setShown((v) => !v)}>
+            {t(shown ? 'nodeEdit.coresHideCommand' : 'nodeEdit.coresHowToInstall')}
+          </RowButton>
+        )}
+
+        {/* Ядро стоит и свободно: дальше дело панельное, и нода уходит в адрес
+            заранее выбранной, чтобы её не искали заново в списке из тридцати. */}
+        {state === 'idle' && (
+          <RowButton onClick={() => navigate(`/hosts/new?nodeId=${nodeId}`)}>
+            {t('nodeEdit.coresAttachProfile')}
+          </RowButton>
         )}
       </Box>
 
-      {state === 'idle' && command && shown && (
+      {canShowCommand && shown && (
         <Stack gap={8} style={{ marginTop: 12 }}>
           <Box
             style={{
@@ -257,6 +269,30 @@ function CoreRow({ core }: { core: NodeCore }) {
         </Stack>
       )}
     </Box>
+  );
+}
+
+/** Кнопка в строке ядра. Обе выглядят одинаково намеренно: они равны по весу,
+ *  и подсвечивать одну значило бы говорить, что чинить надо сперва её. */
+function RowButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <UnstyledButton
+      type="button"
+      onClick={onClick}
+      style={{
+        height: 28,
+        padding: '0 12px',
+        borderRadius: 8,
+        backgroundColor: WELL,
+        border: `1px solid ${HAIRLINE}`,
+        fontFamily: DISPLAY,
+        fontSize: 12,
+        color: MIST,
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </UnstyledButton>
   );
 }
 

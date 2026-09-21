@@ -228,6 +228,10 @@
     coresState: {
       configured: 'configured',
       idle: 'not configured',
+      // A word of its own rather than a shade of "not configured": that one is
+      // panel work (attach a profile), this one is machine work (ssh in and
+      // install).
+      absent: 'binary missing on the machine',
     },
     coresInventoryNote:
       'This is the inventory, not liveness: whether a core is up right now is what the node status above says. An idle core is a normal state, the agent registers an adapter for every protocol.',
@@ -244,7 +248,8 @@
       'This node has not reported its cores yet, or its agent predates the field. That is neither an error nor «no cores»: wait for the first poll.',
     policyWhyNotInstalled:
       'The core that applies rules is not installed on this node. Install it from the «Cores» section below and the rules start working: there is nothing to detach.',
-    coresShowCommand: 'How to add',
+    coresHowToInstall: 'How to install',
+    coresAttachProfile: 'Attach a profile',
     coresHideCommand: 'Hide',
     coresCopied: 'Command copied',
     coresCopyFailed: 'Could not copy, select the line by hand',

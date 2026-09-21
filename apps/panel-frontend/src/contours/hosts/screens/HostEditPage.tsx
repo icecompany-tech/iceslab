@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -43,6 +43,9 @@ import {
   sniMismatch,
 } from '@/lib/domain/profiles';
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
+import { transportOf } from '@iceslab/shared';
+import { checkNodePort, type PortCheckResult } from '@/lib/domain/portCheck';
+import { PortCheckHint } from '@/ui/PortCheckHint';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -138,7 +141,14 @@ export function HostEditPage() {
   const [bindingId, setBindingId] = useState<string | null>(null);
   // The node the operator picked. On create this is what gets sent; the binding
   // is the API's business, not the form's.
-  const [nodeId, setNodeId] = useState<string | null>(null);
+  //
+  // `?nodeId=` читается тем же способом и по той же причине, что `?profileId=`:
+  // на страницу приходят из секции «Ядра» конкретной ноды, где ядро стоит, но
+  // инбаунда нет, и заставлять человека искать ту же ноду в списке из тридцати
+  // значит терять то, что он уже выбрал.
+  const [nodeId, setNodeId] = useState<string | null>(() =>
+    id === 'new' ? new URLSearchParams(window.location.search).get('nodeId') : null,
+  );
   const [address, setAddress] = useState('');
   const [sni, setSni] = useState('');
   const [hostHeader, setHostHeader] = useState('');
@@ -196,6 +206,56 @@ export function HostEditPage() {
   const [sniExpected, setSniExpected] = useState<string[] | null>(null);
   /** The API's own sentence about who holds the port, shown by the port field. */
   const [portConflictMsg, setPortConflictMsg] = useState<string | null>(null);
+
+  /**
+   * Что панель знает про выбранный порт на выбранной ноде.
+   *
+   * Спрашивается на blur, а не на каждое нажатие: пока человек набирает 8443,
+   * он проходит через 8, 84 и 844, и три ответа про чужие порты это шум и три
+   * лишних запроса.
+   */
+  const [portCheck, setPortCheck] = useState<PortCheckResult | null>(null);
+  const [portChecking, setPortChecking] = useState(false);
+
+  /**
+   * Транспорт берётся у `transportOf` с КОНФИГОМ профиля, а не по таблице
+   * протоколов: у xray с `network: kcp` это udp, и вывести это из имени
+   * протокола нельзя в принципе. Ошибка здесь сравнила бы порт не с теми
+   * соседями и назвала бы занятым свободный.
+   */
+  // Без `useMemo` намеренно: `profiles` это новый массив на каждый рендер, и
+  // хук с такой зависимостью считал бы ровно столько же раз, только с лишним
+  // предупреждением линта. Цена расчёта это `find` по нескольким профилям.
+  const portCheckProfile = profiles.find((p) => p.id === profileId);
+  const portCheckTransport = portCheckProfile
+    ? transportOf(portCheckProfile.protocol, portCheckProfile.config as { network?: string } | null)
+    : 'tcp';
+
+  const runPortCheck = useCallback(async () => {
+    // Спрашивать нечего, пока не выбраны нода, профиль и порт: ответ был бы про
+    // другое, а пустая строка честнее неправильной.
+    if (!nodeId || !profileId || port === '') {
+      setPortCheck(null);
+      return;
+    }
+    setPortChecking(true);
+    try {
+      const r = await checkNodePort(nodeId, {
+        port: Number(port),
+        transport: portCheckTransport,
+        // Правим существующую привязку: без этого она найдёт саму себя и
+        // объявит конфликтом сохранение, которое ничего не меняет.
+        exceptBindingId: bindingId ?? undefined,
+      });
+      setPortCheck(r);
+    } catch {
+      // Проверка не прошла, и это не «порт занят». Молчим: выдуманный отказ
+      // здесь дороже отсутствия подсказки.
+      setPortCheck(null);
+    } finally {
+      setPortChecking(false);
+    }
+  }, [nodeId, profileId, port, portCheckTransport, bindingId]);
 
   /** Set when the whole TLS and transport group is dead for this profile, which
    *  is the case for every protocol except xray. */
@@ -550,8 +610,13 @@ export function HostEditPage() {
                   onChange={(v) => {
                     setPort(typeof v === 'number' ? v : '');
                     setPortConflictMsg(null);
+                    // Ответ старой проверки к новому числу не относится, и
+                    // оставить его на экране значит соврать про порт, которого
+                    // ещё никто не проверял.
+                    setPortCheck(null);
                     setDirty(true);
                   }}
+                  onBlur={() => void runPortCheck()}
                 />
                 {/* The API's own sentence: it names the profile holding the port,
                     which is more use than repeating "port busy". */}
@@ -562,6 +627,15 @@ export function HostEditPage() {
                 ) : (
                   <Hint>{t('hostEdit.portHint')}</Hint>
                 )}
+                {/* Подсказка, а не запрет: Save остаётся живым, потому что
+                    состояние могло смениться между blur и сохранением, и
+                    последняя стена стоит на сервере. */}
+                <PortCheckHint
+                  result={portCheck}
+                  checking={portChecking}
+                  port={port === '' ? 0 : port}
+                  transport={portCheckTransport}
+                />
               </Box>
               <Box style={{ flex: 1 }}>
                 <Text style={{ ...LABEL, marginBottom: 8 }}>{t('hostEdit.state')}</Text>
