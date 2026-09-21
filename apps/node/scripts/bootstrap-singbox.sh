@@ -12,7 +12,8 @@
 #     later slice (shared with the hysteria/naive ACME work).
 #
 # Env overrides:
-#   SINGBOX_VERSION  pin a release tag (default: latest stable)
+#   SINGBOX_VERSION  release tag to install (default: the pinned one below,
+#                    or the literal `latest` to resolve the newest stable)
 #   SINGBOX_DEST     binary path     (default /usr/local/bin/sing-box)
 #   SINGBOX_DIR      cert/config dir (default /etc/sing-box)
 #   SINGBOX_SNI      cert CN / SNI   (default www.bing.com)
@@ -21,7 +22,23 @@ set -euo pipefail
 SINGBOX_DEST="${SINGBOX_DEST:-/usr/local/bin/sing-box}"
 SINGBOX_DIR="${SINGBOX_DIR:-/etc/sing-box}"
 SINGBOX_SNI="${SINGBOX_SNI:-www.bing.com}"
-SINGBOX_VERSION="${SINGBOX_VERSION:-}"
+# ───── pinned version ─────
+#
+# The version a node gets is a decision, not whatever GitHub answered the
+# minute somebody ran the installer. Every config this panel renders is
+# rendered FOR a version: a fleet installed across two weeks used to end up on
+# two different engines, and the same rendered config was then correct on one
+# node and wrong on the next, with nothing anywhere saying so.
+#
+# 1.13.14 is the stable line as of 2026-09-21. 1.14 is in beta and drops
+# compatibility with older config forms, so `latest` would have quietly moved
+# the fleet onto it.
+#
+# Moving this is a change in the repository with a test run behind it. Pass
+# SINGBOX_VERSION=latest to resolve the newest stable on purpose, which is a
+# thing you may want on a throwaway box and never on the fleet.
+SINGBOX_PINNED_VERSION="v1.13.14"
+SINGBOX_VERSION="${SINGBOX_VERSION:-$SINGBOX_PINNED_VERSION}"
 
 log()  { printf '[bootstrap-singbox] %s\n' "$*"; }
 fail() { printf '[bootstrap-singbox] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -39,8 +56,10 @@ case "$(uname -m)" in
 esac
 
 # ───── resolve version ─────
-if [[ -z "$SINGBOX_VERSION" ]]; then
-  log "resolving latest stable sing-box release"
+# Only the literal `latest` asks GitHub. Anything else, including the default,
+# installs exactly what it says.
+if [[ "$SINGBOX_VERSION" == "latest" ]]; then
+  log "resolving latest stable sing-box release (asked for explicitly)"
   SINGBOX_VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest \
     | grep -m1 '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')"
   [[ -n "$SINGBOX_VERSION" ]] || fail "could not resolve latest version (set SINGBOX_VERSION)"
