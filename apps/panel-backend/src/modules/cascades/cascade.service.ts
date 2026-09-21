@@ -1,4 +1,4 @@
-import type { XrayCascadeFragments } from '@iceslab/shared';
+import type { NodeCores, XrayCascadeFragments } from '@iceslab/shared';
 import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
@@ -105,18 +105,42 @@ export function versionAtLeast(v: string, min: string): boolean {
   return true;
 }
 
+/**
+ * The version of the core that will actually render this, or undefined.
+ *
+ * `Node.coreVersion` is ONE field on a node that runs several engines, so it
+ * cannot answer "which core". The poller fills it from the first core whose
+ * NAME is 'xray' (nodes.cron.ts), and the agent registers the sing-box adapter
+ * under that same protocol name (main.go:306), so on a node with both engines
+ * the field can hold the sing-box version: 1.13.14 where the real xray is
+ * 26.3.27. A gate reading it then refuses a cascade that works.
+ *
+ * The inventory answers properly, because a core there carries its engine
+ * beside its name. Undefined means we do not know, and the three ways to not
+ * know are one answer: no inventory at all, no xray core in it, or an xray
+ * core that reported no version.
+ */
+function xrayCoreVersion(cores: unknown): string | undefined {
+  const inv = (cores as NodeCores | null) ?? null;
+  if (!inv) return undefined;
+  const xray = inv.cores.find((c) => c.engine === 'xray' || (c.engine === undefined && c.name === 'xray'));
+  return xray?.version || undefined;
+}
+
 /** T7 gate: an ENABLED balancer entry hands every user vlessRoute-tagged exit
- *  configs, which a pre-25.9.5 xray rejects at auth. Block if the entry's core
- *  is known-old. Unknown version (null: pre-T7 agent, or not yet polled) is
- *  allowed, we can't prove it's old and shouldn't wedge the operator. */
+ *  configs, which a pre-25.9.5 xray rejects at auth. Block only when the entry's
+ *  xray core is KNOWN-old. Unknown stays allowed: we cannot prove it is old, and
+ *  an unprovable refusal wedges an operator for no reason. */
 async function assertBalancerEntrySupportsVlessRoute(entryNodeId: string): Promise<void> {
   const node = await prisma.node.findUnique({
     where: { id: entryNodeId },
-    select: { name: true, coreVersion: true },
+    select: { name: true, cores: true },
   });
-  if (!node?.coreVersion) return; // unknown -> allow
-  if (!versionAtLeast(node.coreVersion, MIN_XRAY_VLESSROUTE)) {
-    throw new CascadeEntryCoreTooOldError(node.name, node.coreVersion, MIN_XRAY_VLESSROUTE);
+  if (!node) return;
+  const version = xrayCoreVersion(node.cores);
+  if (!version) return; // unknown -> allow
+  if (!versionAtLeast(version, MIN_XRAY_VLESSROUTE)) {
+    throw new CascadeEntryCoreTooOldError(node.name, version, MIN_XRAY_VLESSROUTE);
   }
 }
 
