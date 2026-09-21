@@ -1,4 +1,4 @@
-import type { Transport } from '@iceslab/shared';
+import type { NodeCores, Transport } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { LINK_PORT_BASE } from '../cascades/cascade.config.js';
 
@@ -25,17 +25,47 @@ import { LINK_PORT_BASE } from '../cascades/cascade.config.js';
  * promise free is the port check of piece 2.3, and it carries a certainty flag
  * for exactly this reason.
  */
-export interface PortOwner {
-  kind: 'profile' | 'cascade';
-  /** Profile name or cascade name, whichever holds it. Shown to the operator. */
-  name: string;
+interface PortOwnerBase {
   port: number;
   /**
    * Cascade links are always tcp: both link cells, vless and SS2022, ride the
-   * node's xray over TCP. A binding says what it is.
+   * node's xray over TCP. A binding says what it is, a core service says what
+   * the agent reported.
    */
   transport: Transport;
 }
+
+/**
+ * On the wire this is `{ kind, name?, ownerKey?, port, transport }`. A UNION
+ * here rather than one object with two optional labels, so a caller that reads
+ * `name` off a core service does not compile: those two fields are not
+ * alternatives, they are different KINDS of identity.
+ *
+ * A profile and a cascade have a name the operator chose. A core service has
+ * none: it has a KEY (`hysteria-auth`, `singbox-api`) that the panel turns into
+ * words. The agent never sends a sentence, because the screen is bilingual and
+ * English prose from a node could not be translated.
+ *
+ * The key set is OPEN: a panel meeting an unknown key shows the key itself.
+ */
+export type PortOwner =
+  | (PortOwnerBase & { kind: 'profile'; name: string })
+  | (PortOwnerBase & { kind: 'cascade'; name: string })
+  | (PortOwnerBase & { kind: 'core-service'; ownerKey: string });
+
+/**
+ * How complete the answer is.
+ *
+ * `full` means all three sources spoke: bindings and cascade links always do
+ * (they are ours), and the node reported its cores. `partial` means the node
+ * has never reported, or reported cores of an agent too old to list reserved
+ * ports, so ports its services hold are invisible here.
+ *
+ * The distinction is the whole reason this is not a boolean. A partial answer
+ * is enough to REFUSE a port it names, and never enough to promise a port it
+ * does not: the same rule the engine gate is built on, learned there twice.
+ */
+export type PortCertainty = 'full' | 'partial';
 
 /**
  * Every claim on `ports` at `nodeId`, from both tables.
@@ -48,10 +78,25 @@ export async function portOwnersOnNode(
   ports: number[],
   opts: { exceptBindingId?: string } = {},
 ): Promise<PortOwner[]> {
-  if (ports.length === 0) return [];
+  return (await portClaimsOnNode(nodeId, ports, opts)).owners;
+}
+
+/**
+ * The same question, with the answer's completeness attached.
+ *
+ * Two functions rather than one with an ignored field: a caller that only wants
+ * to REFUSE does not need the certainty and should not have to carry it, while
+ * a caller that wants to say "free" cannot be allowed to forget it.
+ */
+export async function portClaimsOnNode(
+  nodeId: string,
+  ports: number[],
+  opts: { exceptBindingId?: string } = {},
+): Promise<{ owners: PortOwner[]; certainty: PortCertainty }> {
+  if (ports.length === 0) return { owners: [], certainty: 'full' };
   const wanted = [...new Set(ports)];
 
-  const [bindings, links, legacy] = await Promise.all([
+  const [bindings, links, legacy, node] = await Promise.all([
     prisma.profileNodeBinding.findMany({
       where: {
         nodeId,
@@ -65,6 +110,7 @@ export async function portOwnersOnNode(
       select: { port: true, cascade: { select: { name: true } } },
     }),
     legacyHopLinkPorts(nodeId, wanted),
+    prisma.node.findUnique({ where: { id: nodeId }, select: { cores: true } }),
   ]);
 
   const owners: PortOwner[] = bindings.map((b) => ({
@@ -87,7 +133,42 @@ export async function portOwnersOnNode(
     seen.add(key);
     owners.push({ kind: 'cascade', name: l.name, port: l.port, transport: 'tcp' });
   }
-  return owners;
+
+  // The third source, and the only one that can be missing. A node that never
+  // reported, or reported through an agent older than the field, holds ports
+  // nothing here can see.
+  const inventory = (node?.cores as NodeCores | null) ?? null;
+  for (const core of inventory?.cores ?? []) {
+    for (const rp of core.reservedPorts ?? []) {
+      if (!wanted.includes(rp.port)) continue;
+      owners.push({
+        kind: 'core-service',
+        ownerKey: rp.owner,
+        port: rp.port,
+        transport: rp.transport,
+      });
+    }
+  }
+
+  return { owners, certainty: certaintyOf(inventory) };
+}
+
+/**
+ * Can this answer promise a port is free?
+ *
+ * Only when the node has reported AND every core it listed answered about its
+ * ports. One silent core is enough to make the list incomplete, and it is
+ * exactly the core that might be holding the port being asked about.
+ *
+ * ⚠ A core that genuinely reserves nothing is indistinguishable from one that
+ * did not answer: the agent omits an empty list. That costs us certainty on
+ * nodes running such an adapter (mieru, naive, amneziawg), and the trade is
+ * deliberate: the alternative is promising a port on the strength of a field
+ * whose absence means two different things.
+ */
+function certaintyOf(inventory: NodeCores | null): PortCertainty {
+  if (!inventory || inventory.cores.length === 0) return 'partial';
+  return inventory.cores.every((c) => (c.reservedPorts?.length ?? 0) > 0) ? 'full' : 'partial';
 }
 
 /**

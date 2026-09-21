@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { TRANSPORTS } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import { config } from '../../config.js';
 import {
@@ -13,6 +14,7 @@ import * as nodesService from './nodes.service.js';
 import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import { getNodeSyncStatus } from './nodes.sync-status.js';
+import { portClaimsOnNode } from './node-ports.js';
 import { PolicyDoesNotFitNodeError } from '../node-policies/node-policies.service.js';
 import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
@@ -161,6 +163,65 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+  });
+
+  /**
+   * Is this port free on this node, and how sure are we?
+   *
+   * Its own endpoint rather than a warning on the 201, because the panel asks
+   * when the operator leaves the port field, and a 201 arrives after the save
+   * they were trying to get right.
+   *
+   * The answer never says "free" without saying how completely it looked.
+   * Three sources claim a node's ports: bindings and cascade legs, which are
+   * ours, and the services a core opens for itself, which only the node knows.
+   * A node that has never reported, or one whose agent predates that field,
+   * leaves the third source silent, and `certainty: 'partial'` is how the
+   * screen says "nothing known against it" instead of "free".
+   *
+   * `ok` answers the question asked, so it is false only when something is
+   * actually in the way. A partial answer with no conflicts is `ok: true,
+   * certainty: 'partial'`: refusing on ignorance would block the port a node
+   * has legitimately had free since before the agent could say so.
+   */
+  app.post('/api/nodes/:id/port-check', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    const body = z
+      .object({
+        port: z.number().int().min(1).max(65535),
+        // Required, not defaulted: 443/TCP and 443/UDP are different sockets,
+        // and a default here would answer a question nobody asked.
+        transport: z.enum(TRANSPORTS),
+        // The binding being edited, so an unchanged save does not report the
+        // row colliding with itself.
+        exceptBindingId: z.string().uuid().optional(),
+      })
+      .parse(request.body);
+    try {
+      // 404 before the check: "no conflicts on a node that does not exist" is
+      // a true sentence and a useless one.
+      await nodesService.getNodeById(params.id);
+    } catch (err) {
+      if (err instanceof nodesService.NodeNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+    const { owners, certainty } = await portClaimsOnNode(params.id, [body.port], {
+      exceptBindingId: body.exceptBindingId,
+    });
+    const conflicts = owners.filter((o) => o.transport === body.transport);
+    return reply.send({
+      ok: conflicts.length === 0,
+      certainty,
+      conflicts,
+      // A KEY, like ownerKey, for the same reason: the screen is bilingual and
+      // writes the sentence itself. null when there is nothing to explain.
+      note:
+        certainty === 'full'
+          ? null
+          : 'reserved-ports-unknown',
+    });
   });
 
   // WARP egress (feat/warp-native): register a free Cloudflare WARP device for

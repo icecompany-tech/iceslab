@@ -154,6 +154,10 @@ async function assertLinkPortsFree(
   const conflicts: { nodeName: string; port: number; profileName: string }[] = [];
   for (const [nodeId, ports] of byNode) {
     const owners = await portOwnersOnNode(nodeId, [...ports]);
+    // Profiles only, and deliberately: a core service holding 24000 is not
+    // something the operator can move, so refusing their cascade over it would
+    // be a dead end. That case belongs to the port check, which says who holds
+    // what, rather than to a refusal with no remedy.
     const taken = owners.filter((o) => o.kind === 'profile' && o.transport === 'tcp');
     if (taken.length === 0) continue;
     const node = await prisma.node.findUnique({
@@ -161,6 +165,9 @@ async function assertLinkPortsFree(
       select: { name: true },
     });
     for (const t of taken) {
+      // Narrowed by the filter above, and re-stated for the compiler: only a
+      // profile owner carries a name, which is the whole point of the union.
+      if (t.kind !== 'profile') continue;
       conflicts.push({
         nodeName: node?.name ?? nodeId,
         port: t.port,
