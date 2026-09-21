@@ -16,7 +16,9 @@ export const subscription = {
   // Delivery settings: what a person opening the link gets, and in what shape.
   // A separate key from `delivery`, which is the User-Agent rule list.
   deliverySetup: {
-    title: 'Subscription delivery',
+    // Not «Delivery»: that word names the sidebar item holding the User-Agent
+    // rule list, and two identical titles would read as one place.
+    title: 'Delivery format and address',
     subtitle: 'What a person opening the link gets, and in what shape it reaches their client.',
     saving: 'Saving',
     saved: 'Delivery settings saved',
