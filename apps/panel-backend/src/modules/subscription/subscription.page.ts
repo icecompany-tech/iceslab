@@ -18,7 +18,7 @@ import {
   type Glyph,
   type GlyphKey,
   type GlyphSheet,
-} from './page-icons.js';
+} from './subscription.page-icons.js';
 
 export interface SubscriptionPageData {
   brandTitle: string;
@@ -222,6 +222,16 @@ interface AppDef {
    * docs/plan/subscription-clients.md ("Класс второй, инструмент").
    */
   advanced?: boolean;
+  /**
+   * Куда идти за самим приложением.
+   *
+   * Официальный источник проекта, один на все платформы: магазинные
+   * идентификаторы у половины этих клиентов меняются и угаданный id ведёт на
+   * пустую страницу, а страница проекта сама раскладывает по магазинам. Нет
+   * достоверного адреса, поле пустое, и шаг остаётся без кнопки: отправить
+   * человека в никуда хуже, чем не отправить никуда.
+   */
+  site?: string;
 }
 
 const APPS: AppDef[] = [
@@ -234,6 +244,7 @@ const APPS: AppDef[] = [
     // Windows 10 (1809)+/11, macOS 13+, Linux, "Android TV 5.0+" and
     // "Apple TV (tvOS 15+)". Linux was missing here and is theirs.
     name: 'Happ',
+    site: 'https://happ.su',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'happ' },
@@ -249,6 +260,7 @@ const APPS: AppDef[] = [
     // stranger's binary. Google Play still serves com.v2raytun.android.
     // If it comes back, the fix is to put the platforms back on this line.
     name: 'v2RayTun',
+    site: 'https://v2raytun.com',
     platforms: ['android'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'v2raytun' },
@@ -260,6 +272,7 @@ const APPS: AppDef[] = [
     // remote cannot reach part of the screen (hiddify-app #1246, #969). The apk
     // installs on a TV, which is not the same as being usable with a remote.
     name: 'Hiddify',
+    site: 'https://hiddify.com',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android'],
     protocols: ['amneziawg', 'xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'hiddify' },
@@ -269,6 +282,7 @@ const APPS: AppDef[] = [
     // sing-box.sagernet.org/clients lists the Apple client as
     // "iOS/macOS/Apple tvOS", so tvOS was simply missing here.
     name: 'sing-box',
+    site: 'https://github.com/SagerNet/sing-box/releases',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'appletv'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'singbox' },
@@ -279,6 +293,7 @@ const APPS: AppDef[] = [
     // "Android TV Stable Version (armeabi-v7a)", Windows, macOS, Linux.
     // No deep link is documented, so the honest action is the link.
     name: 'Karing',
+    site: 'https://karing.app',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
@@ -289,6 +304,7 @@ const APPS: AppDef[] = [
     // No Apple TV, so the appletv that stood here offered tvOS owners an app
     // they cannot install.
     name: 'Streisand',
+    site: 'https://apps.apple.com/app/id6450534064',
     platforms: ['ios', 'macos'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'streisand' },
@@ -300,6 +316,7 @@ const APPS: AppDef[] = [
     // (Catalina, so a real Mac build rather than an iOS app on Apple silicon).
     // Both are the vendor's own claims on the store page.
     name: 'Shadowrocket',
+    site: 'https://apps.apple.com/app/id932747118',
     platforms: ['ios', 'macos', 'appletv'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'shadowrocket' },
@@ -309,6 +326,7 @@ const APPS: AppDef[] = [
     // app does not appear in a TV's app list at all (v2rayNG #1848, unanswered).
     // That is why a separate Android-TV fork exists.
     name: 'v2rayNG',
+    site: 'https://github.com/2dust/v2rayNG/releases',
     platforms: ['android'],
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'deeplink', scheme: 'v2rayng' },
@@ -316,6 +334,7 @@ const APPS: AppDef[] = [
   },
   {
     name: 'NekoBox',
+    site: 'https://github.com/MatsuriDayo/NekoBoxForAndroid/releases',
     platforms: ['android'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
@@ -323,6 +342,7 @@ const APPS: AppDef[] = [
   },
   {
     name: 'v2rayN',
+    site: 'https://github.com/2dust/v2rayN/releases',
     platforms: ['windows'],
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'manual' },
@@ -335,6 +355,7 @@ const APPS: AppDef[] = [
     // Windows/Linux/macOS out of the box. We were pointing readers at an
     // archive.
     name: 'Throne',
+    site: 'https://github.com/throneproj/Throne/releases',
     platforms: ['windows', 'linux', 'macos'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
@@ -342,6 +363,7 @@ const APPS: AppDef[] = [
   },
   {
     name: 'Clash Verge',
+    site: 'https://github.com/clash-verge-rev/clash-verge-rev/releases',
     platforms: ['windows', 'macos', 'linux'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'clash' },
@@ -349,6 +371,7 @@ const APPS: AppDef[] = [
   },
   {
     name: 'FlClash',
+    site: 'https://github.com/chen08209/FlClash/releases',
     platforms: ['android', 'windows', 'macos', 'linux'],
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'clash' },
@@ -370,6 +393,7 @@ const APPS: AppDef[] = [
     // Not in the brief's table, same defect as the rows that were: with an
     // AmneziaWG subscription this was the one app a TV owner was shown.
     name: 'AmneziaVPN',
+    site: 'https://amnezia.org',
     platforms: ['ios', 'macos', 'windows', 'linux', 'android'],
     protocols: ['amneziawg'],
     action: { kind: 'awg-vpn' },
@@ -377,6 +401,7 @@ const APPS: AppDef[] = [
   },
   {
     name: 'AmneziaWG',
+    site: 'https://github.com/amnezia-vpn/amneziawg-tools',
     platforms: ['ios', 'android'],
     protocols: ['amneziawg'],
     action: { kind: 'awg-conf' },
@@ -498,6 +523,9 @@ interface Labels {
   dlGet: string;
   dlCopy: string;
   dlDead: string;
+  /** Подписи кнопок, что ведут за выбранным приложением и в него. */
+  stepGet: string;
+  stepAdd: string;
   /** Подсказка про точку, показывается только в раскрытом блоке конфигов. */
   dlHint: string;
   /** Когда подписке не выдано ни одного сервера. */
@@ -520,6 +548,10 @@ interface Labels {
   copyKey: string;
   setup: string;
   scanTitle: string;
+  /** Said BEFORE the code, not after: a person with three servers must learn
+   *  it before they scan the first one they see. */
+  oneTunnel: string;
+  oneTunnelMany: string;
   support: string;
   routerLabel: string;
   statusValues: Record<string, string>;
@@ -627,6 +659,8 @@ const L: Record<'ru' | 'en', Labels> = {
     dlDead: 'While the subscription is not in force, no config is issued: these addresses answer with a refusal, the same one that brought you to this page. Everything comes back the moment it is renewed, on the same link.',
     dlGet: 'Download',
     dlCopy: 'Config',
+    stepGet: 'Get',
+    stepAdd: 'Add to',
     dlHint:
       'The dot marks what suits the platform you picked. The rest is left on purpose: a config is taken for another device more often than for this one.',
     noServersTitle: 'No servers yet. ',
@@ -675,7 +709,9 @@ const L: Record<'ru' | 'en', Labels> = {
     copied: 'Copied',
     copyKey: 'Copy key',
     setup: 'Set up',
-    scanTitle: 'Scan to add',
+    scanTitle: 'AmneziaWG keys',
+    oneTunnel: 'One key is one tunnel to one server, not the whole subscription.',
+    oneTunnelMany: 'One key is one tunnel to ONE server, not the whole subscription. Pick the server first, then scan: importing all of them gives you one connection each, not a set that switches.',
     support: 'Support',
     routerLabel: 'Router',
     statusValues: {
@@ -789,6 +825,8 @@ const L: Record<'ru' | 'en', Labels> = {
     dlDead: 'Пока подписка не действует, конфиги не выдаются: по этим адресам приходит тот же отказ, что привёл вас на эту страницу. Всё вернётся сразу после продления, ссылка та же.',
     dlGet: 'Скачать',
     dlCopy: 'Конфиг',
+    stepGet: 'Скачать',
+    stepAdd: 'Добавить в',
     dlHint:
       'Точкой отмечено то, что подходит выбранной платформе. Остальное оставлено нарочно: конфиг чаще забирают для другого устройства, чем для этого.',
     noServersTitle: 'Серверов пока нет. ',
@@ -837,7 +875,9 @@ const L: Record<'ru' | 'en', Labels> = {
     copied: 'Скопировано',
     copyKey: 'Скопировать ключ',
     setup: 'Установка',
-    scanTitle: 'Сканировать',
+    scanTitle: 'Ключи AmneziaWG',
+    oneTunnel: 'Один ключ это один туннель до одного сервера, а не вся подписка.',
+    oneTunnelMany: 'Один ключ это один туннель до ОДНОГО сервера, а не вся подписка. Сначала выберите сервер, потом сканируйте: если импортировать все, получится по отдельному подключению на каждый, а не набор с переключением.',
     support: 'Поддержка',
     routerLabel: 'Роутер',
     statusValues: {
@@ -904,7 +944,20 @@ function splitApps(apps: AppDef[]): { row: AppDef[]; rest: AppDef[] } {
  * that mark (Happ is nearly solid, Shadowrocket a thin outline), carried in a
  * css variable so the one rule in the stylesheet covers every card.
  */
-function renderAppCard(a: AppDef, subUrl: string, icons: GlyphSheet): string {
+/**
+ * Карточка приложения это ВЫБОР, а не действие.
+ *
+ * Нажатие раньше сразу дёргало deeplink, и на странице не было состояния
+ * «я ставлю вот этот клиент»: шаги под рядом говорили одно и то же про любой
+ * из двадцати, а карточка, по которой уже нажали, ничем не отличалась от
+ * соседней. Теперь она загорается, а шаги перерисовываются под неё: куда идти
+ * за этим приложением и какой кнопкой отдать подписку именно ему.
+ *
+ * Адреса едут на карточке атрибутами, а не в таблице внутри скрипта: их
+ * читает и подставляет один обработчик, и добавление клиента не требует
+ * трогать скрипт.
+ */
+function renderAppCard(a: AppDef, subUrl: string, icons: GlyphSheet, on = false): string {
   let href: string;
   let glyphKey: GlyphKey;
   switch (a.action.kind) {
@@ -941,8 +994,11 @@ function renderAppCard(a: AppDef, subUrl: string, icons: GlyphSheet): string {
     ? ''
     : `<span class="app-card__glyph">${icons.draw(glyphKey, { cls: 'ic' })}</span>`;
   return (
-    `<a class="app-card" href="${esc(href)}"${ink !== undefined ? ` style="--mark-o:${ink}"` : ''}>` +
-    `${dot}<span class="app-card__name">${esc(a.name)}</span>${glyph}${mark}</a>`
+    `<button type="button" class="app-card${on ? ' is-on' : ''}" data-app="${esc(a.name)}"` +
+    ` data-app-add="${esc(href)}" data-app-kind="${a.action.kind}"` +
+    (a.site ? ` data-app-site="${esc(a.site)}"` : '') +
+    `${ink !== undefined ? ` style="--mark-o:${ink}"` : ''}>` +
+    `${dot}<span class="app-card__name">${esc(a.name)}</span>${glyph}${mark}</button>`
   );
 }
 
@@ -995,12 +1051,16 @@ function cardRows(
   icons: GlyphSheet,
   cls: string,
   per: number = ROW_SIZE,
+  /** Имя клиента, чья карточка уже выбрана. */
+  selected?: string,
 ): string {
   const rows: string[] = [];
   for (let i = 0; i < apps.length; i += per) {
     const chunk = apps.slice(i, i + per);
     const pad = '<span class="spacer"></span>'.repeat(per - chunk.length);
-    rows.push(`<div class="${cls}">${chunk.map((a) => renderAppCard(a, subUrl, icons)).join('')}${pad}</div>`);
+    rows.push(
+      `<div class="${cls}">${chunk.map((a) => renderAppCard(a, subUrl, icons, a.name === selected)).join('')}${pad}</div>`,
+    );
   }
   return rows.join('');
 }
@@ -1076,6 +1136,8 @@ function renderSteps(
   hasAwg: boolean,
   t: Labels,
   icons: GlyphSheet,
+  /** Клиент, под который нарисованы кнопки шагов: тот, что загорится первым. */
+  first?: AppDef,
 ): string {
   const step = (
     icon: GlyphKey,
@@ -1126,9 +1188,25 @@ function renderSteps(
   }
 
   const s = t.stepsGeneric;
+  // Кнопки двух первых шагов принадлежат ВЫБРАННОМУ клиенту. Сервер рисует их
+  // под тот, что загорится первым, дальше их переписывает выбор карточки. Без
+  // скрипта они остаются рабочими и ведут туда же, куда вёл бы первый клиент.
+  const dlBtn = first?.site
+    ? `<div class="step__buttons"><a class="step-btn" data-app-get href="${esc(first.site)}" target="_blank" rel="noopener noreferrer">${icons.draw(
+        'ExternalLink',
+        { cls: 'ic' },
+      )}<span>${esc(t.stepGet)} <b data-app-label>${esc(first.name)}</b></span></a></div>`
+    : `<div class="step__buttons" hidden><a class="step-btn" data-app-get href="#">${icons.draw('ExternalLink', { cls: 'ic' })}<span>${esc(t.stepGet)} <b data-app-label></b></span></a></div>`;
+  const addBtn =
+    first && first.action.kind === 'deeplink'
+      ? `<div class="step__buttons"><a class="step-btn" data-app-put href="${esc(deeplinkHref(first.action.scheme, data.subUrl))}">${icons.draw(
+          'Plus',
+          { cls: 'ic' },
+        )}<span>${esc(t.stepAdd)} <b data-app-label>${esc(first.name)}</b></span></a></div>`
+      : `<div class="step__buttons" hidden><a class="step-btn" data-app-put href="#">${icons.draw('Plus', { cls: 'ic' })}<span>${esc(t.stepAdd)} <b data-app-label></b></span></a></div>`;
   return (
-    step('DownloadIcon', s[0]) +
-    step('Plus', s[1]) +
+    step('DownloadIcon', s[0], { body: dlBtn }) +
+    step('Plus', s[1], { body: addBtn }) +
     step('help', s[2], { tone: ' step__num--info' }) +
     step('Check', s[3], { tone: ' step__num--ok' })
   );
@@ -1146,11 +1224,11 @@ function renderPanel(
   if (apps.length === 0) return '';
   const { row, rest } = splitApps(apps);
   return (
-    `<div class="apps">${cardRows(row, data.subUrl, icons, 'apps__row')}` +
+    `<div class="apps">${cardRows(row, data.subUrl, icons, 'apps__row', ROW_SIZE, row[0]?.name)}` +
     renderTelegramRow(platform, data.protocols, t, icons) +
     `</div>` +
     renderAllApps(platform, apps, rest, data.subUrl, t, icons) +
-    renderSteps(platform, data, hasAwg, t, icons)
+    renderSteps(platform, data, hasAwg, t, icons, row[0])
   );
 }
 
@@ -1553,26 +1631,42 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     }
   });
 
+  // Server chooser. Same control as the platform one in "Set up", down to the
+  // classes: two selectors that behave differently on one page is a cost the
+  // reader pays, not us. Only when there is more than one server to choose.
   const targetSel =
     targets.length > 1
-      ? `<div class="segs tgsel" role="tablist">${targets
+      ? `<div class="platform" data-node-picker>
+        <button class="platform__btn" type="button" data-node-btn aria-haspopup="listbox" aria-expanded="false">
+          ${icons.draw('AmneziaWG', { cls: 'ic' })}
+          <span data-node-name>${esc(targets[0]!.label)}</span>
+          ${icons.draw('selector', { cls: 'ic ic--sel' })}
+        </button>
+        <div class="platform__menu" role="listbox">${targets
           .map(
             (tg, i) =>
-              `<button class="seg${i === 0 ? ' on' : ''}" data-target="${esc(tg.id)}">${esc(tg.label)}</button>`,
+              `<button class="platform__item${i === 0 ? ' is-on' : ''}" type="button" role="option" data-target="${esc(tg.id)}" aria-selected="${i === 0}">${icons.draw('AmneziaWG', { cls: 'ic' })}<span>${esc(tg.label)}</span></button>`,
           )
-          .join('')}</div>`
+          .join('')}</div>
+      </div>`
       : '';
-  // AmneziaVPN / AmneziaWG toggle, only meaningful for an AWG target. Hidden at
-  // first when the default target is the proxy subscription QR; the script
-  // reveals it the moment an AWG server is selected.
+  // AmneziaVPN against AmneziaWG is one thing in two forms, not two actions,
+  // so it is a segmented block like the pair in the header, not two buttons
+  // standing apart.
   const appSel = hasAwg
-    ? `<div class="segs appsel" role="tablist"><button class="seg on" data-app="vpn">AmneziaVPN</button><button class="seg" data-app="conf">AmneziaWG</button></div>`
+    ? `<div class="seg-group" role="tablist">
+      <button class="seg-btn is-on" type="button" role="tab" aria-selected="true" data-app="vpn">AmneziaVPN</button>
+      <button class="seg-btn" type="button" role="tab" aria-selected="false" data-app="conf">AmneziaWG</button>
+    </div>`
     : '';
   const scanSection =
     figures.length > 0
-      ? `<section class="card" id="scan">
-    <div class="lbl">${esc(t.scanTitle)}</div>
-    ${targetSel}
+      ? `<section class="card scan" id="scan">
+    <div class="install__head">
+      <h2 class="install__title">${esc(t.scanTitle)}</h2>
+      ${targetSel}
+    </div>
+    <div class="note-strip">${icons.draw('AlertCircle', { cls: 'ic' })}<div class="note-strip__text">${esc(multiAwg ? t.oneTunnelMany : t.oneTunnel)}</div></div>
     ${appSel}
     <div class="qrview">${figures.join('')}</div>
   </section>`
@@ -1680,13 +1774,17 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .head__brand{display:flex; align-items:center; gap:10px;}
   .head__title{font-size:19px; font-weight:700; line-height:24px; letter-spacing:-.01em; color:var(--brand);}
   .head__brand .ic{width:20px; height:20px; color:var(--brand);}
+  /* Две кнопки, а не сегментированная полоса.
+     Полоса давала три рамки подряд почти одного цвета: своя, потом 4 px фона,
+     потом кнопкина. На тёмном они сливались в одну линию, и кнопки читались
+     слипшимися. Рамку и фон обёртки убрал, зазор поднял до 10: теперь это
+     просто две кнопки, и между ними видно страницу. */
   .head__actions{
-    width:100%; max-width:var(--col); display:flex; gap:4px; padding:4px;
-    border-radius:13px; background:var(--card); border:1px solid var(--hair);
+    width:100%; max-width:var(--col); display:flex; gap:10px;
   }
   .hbtn{
     flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; gap:8px;
-    height:36px; border-radius:10px; background:var(--card2); border:1px solid var(--hair2);
+    height:42px; border-radius:12px; background:var(--card2); border:1px solid var(--hair2);
     font-size:13px; font-weight:500; color:#C8D4E3; text-decoration:none;
   }
   .hbtn .ic{width:14px; height:14px;}
@@ -1787,10 +1885,17 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
      нечем, и последний неполный ряд выходил шире полного. Колонки решают это
      по построению, и неполный ряд остаётся ровным без единой подпорки. */
   .apps__row{display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px;}
-  .app-card{min-width:0; display:flex; align-items:center; gap:8px; height:54px;
+  .app-card{min-width:0; width:100%; display:flex; align-items:center; gap:8px; height:54px;
     padding:0 14px; border-radius:12px; background:var(--card2); border:1px solid var(--hair2);
-    position:relative; overflow:hidden; text-align:left; text-decoration:none; color:inherit;}
+    position:relative; overflow:hidden; text-align:left; text-decoration:none; color:inherit;
+    font:inherit; cursor:pointer;}
   .app-card:hover{border-color:var(--edge-accent2);}
+  /* Выбранный клиент. Он же говорит, про что шаги ниже, поэтому отличаться
+     должен не намёком: заливка, рамка и имя цветом сразу. */
+  .app-card.is-on{background:var(--cyan-bg); border-color:var(--edge-accent);}
+  .app-card.is-on .app-card__name{color:var(--cyan);}
+  .app-card.is-on .app-card__mark{color:var(--cyan);}
+  .app-card.is-on .app-card__glyph{color:var(--cyan);}
   .app-card__dot{width:6px; height:6px; flex-shrink:0; border-radius:999px; background:var(--warn);}
   .app-card__name{font-size:14px; font-weight:600; line-height:18px; color:var(--snow);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -1877,6 +1982,21 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 
   .empty{color:var(--mist); font-size:13px; padding:6px 2px;}
 
+  /* AmneziaWG keys. The card repeats "Set up": same heading, same server
+     control. Two selectors behaving differently on one page is a cost the
+     reader pays. */
+  .scan{display:flex; flex-direction:column; gap:18px;}
+  .scan .install__title{font-size:20px;}
+  /* One thing in two forms, so one block with two halves, the way the header
+     pair is built. Two separate buttons would read as two actions. */
+  .seg-group{display:flex; gap:4px; padding:4px; border-radius:13px;
+    background:var(--card2); border:1px solid var(--hair);}
+  .seg-btn{flex:1 1 0; min-width:0; height:36px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:500; color:#C8D4E3; border:1px solid transparent;}
+  .seg-btn:hover{color:var(--snow);}
+  .seg-btn.is-on{background:var(--cyan-bg); border-color:var(--edge-accent); color:var(--cyan);}
+
   /* Compact import widget: segmented selectors + one QR shown at a time. */
   .segs{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;}
   .seg{cursor:pointer; background:var(--ground2); border:1px solid var(--hair); color:var(--mist);
@@ -1889,6 +2009,10 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .qrview{display:flex; justify-content:center; min-height:286px;}
   .qrf{display:none; margin:0; flex-direction:column; align-items:center; text-align:center;}
   .qrf.on{display:flex; animation:fade .25s ease both;}
+  /* No script, no way to switch: show every code, each under its own caption,
+     rather than one code and no route to the others. */
+  .nojs .qrf{display:flex;}
+  .nojs .qrview{flex-wrap:wrap; gap:18px;}
   .qbx{background:#fff; border-radius:12px; padding:11px; line-height:0;
     box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
   .qbx svg{display:block; width:240px; height:240px;}
@@ -1907,6 +2031,15 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .dl-card{padding:18px; border-radius:14px; background:var(--sunk); border:1px solid var(--hair2);}
   .dl-mark{width:17px; height:17px; color:var(--mist);}
   .note-strip__title{color:var(--snow); font-weight:700;}
+  /* Кнопки шага. Без них ссылка рисовалась подчёркнутым текстом браузера и
+     читалась как сноска, а не как то, что надо нажать. */
+  .step__buttons{display:flex; flex-wrap:wrap; gap:10px; padding-top:4px;}
+  .step-btn{display:inline-flex; align-items:center; gap:9px; height:36px; padding:0 14px;
+    border-radius:11px; background:var(--cyan-bg); border:1px solid var(--edge-accent2);
+    font-size:13px; font-weight:500; color:var(--cyan); text-decoration:none; white-space:nowrap;}
+  .step-btn:hover{border-color:var(--edge-accent);}
+  .step-btn .ic{width:13px; height:13px;}
+  .step-btn b{font-weight:700;}
   /* Свёрнуто подпись говорит, зачем блок вообще. Раскрыто она уже сказана
      самим списком, и её место занимает то, что нужно ЗДЕСЬ: что значит точка. */
   .all-apps.is-open .dl-note--shut{display:none;}
@@ -2021,7 +2154,8 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     .wrap{gap:18px; padding:0 16px;}
     .head{gap:14px; padding:20px 16px 0;}
     .head__title{font-size:17px; line-height:22px;}
-    .hbtn{height:34px; border-radius:9px; font-size:12px; gap:7px;}
+    .head__actions{gap:8px;}
+    .hbtn{height:40px; border-radius:11px; font-size:12px; gap:7px;}
     .hbtn__full{display:none;}
     .hbtn__short{display:inline;}
     .card{padding:17px; border-radius:16px;}
@@ -2227,30 +2361,60 @@ ${transferHtml}
         else { fallback(); }
       });
     });
-    // Compact import widget: server selector + AmneziaVPN/AmneziaWG toggle,
-    // one QR visible at a time. All QR figures are embedded; we just toggle .on.
+    // AmneziaWG keys: server chooser plus the AmneziaVPN/AmneziaWG pair, one
+    // code visible at a time. Every figure is already in the page; this only
+    // decides which one is shown.
     (function () {
       var figs = [].slice.call(document.querySelectorAll('.qrf'));
-      if (figs.length < 2) return; // single QR, nothing to switch
-      var tgBtns = [].slice.call(document.querySelectorAll('.tgsel .seg'));
-      var appBtns = [].slice.call(document.querySelectorAll('.appsel .seg'));
-      var appSel = document.querySelector('.appsel');
+      if (figs.length < 2) return; // one code, nothing to switch
+      var picker = document.querySelector('[data-node-picker]');
+      var nodeBtn = picker && picker.querySelector('[data-node-btn]');
+      var nodeItems = [].slice.call(document.querySelectorAll('[data-node-picker] .platform__item'));
+      var appBtns = [].slice.call(document.querySelectorAll('.seg-group .seg-btn'));
       var onFig = figs.filter(function (f) { return f.classList.contains('on'); })[0] || figs[0];
       var curTarget = onFig.getAttribute('data-target');
       var curApp = 'vpn';
-      function isAwg(x) { return !!x && x.indexOf('awg:') === 0; }
       function render() {
-        if (appSel) appSel.style.display = isAwg(curTarget) ? '' : 'none';
         figs.forEach(function (f) {
-          var show = f.getAttribute('data-target') === curTarget &&
-            (!isAwg(curTarget) || f.getAttribute('data-app') === curApp);
-          f.classList.toggle('on', show);
+          f.classList.toggle(
+            'on',
+            f.getAttribute('data-target') === curTarget && f.getAttribute('data-app') === curApp
+          );
         });
-        tgBtns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-target') === curTarget); });
-        appBtns.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-app') === curApp); });
+        nodeItems.forEach(function (it) {
+          var on = it.getAttribute('data-target') === curTarget;
+          it.classList.toggle('is-on', on);
+          it.setAttribute('aria-selected', on ? 'true' : 'false');
+          // The button repeats the chosen row's own label, so the two can
+          // never disagree about which server is selected.
+          if (on && picker) {
+            var name = picker.querySelector('[data-node-name]');
+            if (name) name.textContent = it.querySelector('span').textContent;
+          }
+        });
+        appBtns.forEach(function (b) {
+          var on = b.getAttribute('data-app') === curApp;
+          b.classList.toggle('is-on', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (picker) picker.classList.remove('is-open');
+        if (nodeBtn) nodeBtn.setAttribute('aria-expanded', 'false');
       }
-      tgBtns.forEach(function (b) { b.addEventListener('click', function () { curTarget = b.getAttribute('data-target'); render(); }); });
-      appBtns.forEach(function (b) { b.addEventListener('click', function () { curApp = b.getAttribute('data-app'); render(); }); });
+      if (nodeBtn) {
+        nodeBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var open = picker.classList.toggle('is-open');
+          nodeBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        document.addEventListener('click', function () { picker.classList.remove('is-open'); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') picker.classList.remove('is-open'); });
+      }
+      nodeItems.forEach(function (it) {
+        it.addEventListener('click', function () { curTarget = it.getAttribute('data-target'); render(); });
+      });
+      appBtns.forEach(function (b) {
+        b.addEventListener('click', function () { curApp = b.getAttribute('data-app'); render(); });
+      });
       render();
     })();
     // From here on the page is driven by script, so the no-script layout (every
@@ -2340,6 +2504,39 @@ ${transferHtml}
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape') picker.classList.remove('is-open'); });
     }
     items.forEach(function (it) { it.addEventListener('click', function () { show(it.getAttribute('data-pick')); }); });
+
+    // Выбор клиента. Карточка загорается, и два первых шага начинают говорить
+    // про НЕГО: куда идти за этим приложением и какой кнопкой отдать подписку
+    // именно ему. Ни один адрес не лежит в скрипте, всё читается с карточки.
+    function pickApp(card) {
+      var panel = card.closest('.panel');
+      if (!panel) return;
+      [].slice.call(panel.querySelectorAll('.app-card')).forEach(function (c) {
+        c.classList.toggle('is-on', c === card);
+      });
+      var name = card.getAttribute('data-app') || '';
+      [].slice.call(panel.querySelectorAll('[data-app-label]')).forEach(function (el) {
+        el.textContent = name;
+      });
+      var site = card.getAttribute('data-app-site');
+      var get = panel.querySelector('[data-app-get]');
+      if (get) {
+        // Кнопки нет у клиента без проверенного адреса: отправить человека в
+        // никуда хуже, чем не отправить никуда.
+        if (site) { get.setAttribute('href', site); get.parentNode.hidden = false; }
+        else { get.removeAttribute('href'); get.parentNode.hidden = true; }
+      }
+      var put = panel.querySelector('[data-app-put]');
+      if (put) {
+        var add = card.getAttribute('data-app-add');
+        var deep = card.getAttribute('data-app-kind') === 'deeplink';
+        if (deep && add) { put.setAttribute('href', add); put.parentNode.hidden = false; }
+        else { put.removeAttribute('href'); put.parentNode.hidden = true; }
+      }
+    }
+    [].slice.call(document.querySelectorAll('.app-card')).forEach(function (card) {
+      card.addEventListener('click', function () { pickApp(card); });
+    });
     // "Config" puts the BODY of that format in the clipboard, fetched from
     // the same address the download button uses.
     //

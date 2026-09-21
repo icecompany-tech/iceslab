@@ -11,7 +11,7 @@ import { buildOutlineJson } from './formats/outline.js';
 import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
-import { buildSubscriptionPage } from './formats/page.js';
+import { buildSubscriptionPage } from './subscription.page.js';
 import QRCode from 'qrcode-svg';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {

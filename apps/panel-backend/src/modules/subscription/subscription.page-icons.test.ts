@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildSubscriptionPage, type SubscriptionPageData } from './page.js';
-import { APP_MARK, GLYPHS, createGlyphSheet, isMark } from './page-icons.js';
+import { buildSubscriptionPage, type SubscriptionPageData } from './subscription.page.js';
+import { APP_MARK, GLYPHS, createGlyphSheet, isMark } from './subscription.page-icons.js';
 
 /**
  * The glyph set, and the one rule that makes inlining it affordable.

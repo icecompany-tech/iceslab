@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSubscriptionPage, type SubscriptionPageData } from './page.js';
+import { buildSubscriptionPage, type SubscriptionPageData } from './subscription.page.js';
 
 function base(overrides: Partial<SubscriptionPageData> = {}): SubscriptionPageData {
   return {
@@ -73,8 +73,11 @@ describe('buildSubscriptionPage', () => {
     for (const id of ['vpn-nl', 'conf-nl', 'vpn-de', 'conf-de']) {
       expect(html).toContain(`<svg id="${id}"></svg>`);
     }
-    // ...behind a per-node server selector...
-    expect(html).toContain('class="segs tgsel"');
+    // ...behind a per-node server selector, which is the same control as the
+    // platform one in "Set up": two selectors behaving differently on one
+    // page is a cost the reader pays.
+    expect(html).toContain('class="platform" data-node-picker');
+    expect(html).toContain('class="platform__item is-on"');
     expect(html).toContain('data-target="awg:awg"');
     expect(html).toContain('data-target="awg:awg-de"');
     // ...and an AmneziaVPN / AmneziaWG app toggle.
@@ -325,6 +328,7 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('<figcaption>AmneziaVPN</figcaption>');
     expect(html).not.toContain('<figcaption>AmneziaVPN · awg</figcaption>');
     // a single target → no server selector segment
-    expect(html).not.toContain('class="segs tgsel"');
+    // The attribute as MARKUP: the page's own script names it too.
+    expect(html).not.toContain('class="platform" data-node-picker');
   });
 });
