@@ -1,7 +1,8 @@
 export const hosts = {
 
-  // The Hosts *page*. `hosts` (further down) belongs to HostsManager, the
-  // per-binding editor, and predates this screen.
+  // The Hosts page and its editor. The older `hosts` namespace next to this
+  // one belonged to the per-binding editor, which is gone: nothing reads it
+  // any more, so it went with the component.
   hostsPage: {
     searchPlaceholder: 'Search by name, port or profile…',
     deleteTitle: 'Delete {{name}}?',
