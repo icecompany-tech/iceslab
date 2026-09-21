@@ -168,6 +168,44 @@ describe('the three ways a port is already taken', () => {
     await bind(await makeProfile('hy2-9999', 'hysteria', {}), node, 9999);
   });
 
+  it('never sends one of the three codes with an empty conflicts list', async () => {
+    /**
+     * The invariant behind the question FRONT asked: can a 409 arrive with a
+     * code and nothing to name? It cannot. Each of the three is constructed
+     * from the owner it found, so a code without a conflict would mean the
+     * refusal did not know why it refused.
+     *
+     * Pinned here rather than left to the screen's defensive branch: that
+     * branch can then stay what it is, a belt against a future bug, instead of
+     * quietly becoming the way this normally looks.
+     */
+    const node = await makeNode('inv-1');
+    await reportCores(node, [
+      { name: 'hysteria', reservedPorts: [{ owner: 'hysteria-auth', port: 8080, transport: 'tcp' }] },
+    ]);
+    const entry = await makeNode('inv-entry');
+    const nl = await makeNode('inv-nl');
+    const se = await makeNode('inv-se');
+    await makeCascade(entry, [nl, se]);
+    await bind(await makeProfile('inv-held'), node, 443);
+
+    const bodies = [
+      await bind(await makeProfile('inv-same'), node, 443, 409),
+      await bind(await makeProfile('inv-cascade'), nl, LINK_PORT_BASE, 409),
+      await bind(await makeProfile('inv-service'), node, 8080, 409),
+    ];
+
+    expect(bodies.map((b) => b.error)).toEqual([
+      'PORT_TAKEN_PROFILE',
+      'PORT_TAKEN_CASCADE',
+      'PORT_TAKEN_CORE_SERVICE',
+    ]);
+    for (const body of bodies) {
+      expect(Array.isArray(body.conflicts), body.error).toBe(true);
+      expect(body.conflicts.length, body.error).toBeGreaterThan(0);
+    }
+  });
+
   it('answers the same way when the binding is created through a host', async () => {
     /**
      * The second live save surface, and the one that is easy to forget: POST
