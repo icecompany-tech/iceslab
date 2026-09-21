@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -85,7 +85,7 @@ function cleanDead(d: DeadTexts): DeadTexts | null {
 }
 
 export function SubscriptionDeliveryPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ['settings', 'all'], queryFn: getSettings });
 
@@ -110,9 +110,17 @@ export function SubscriptionDeliveryPage() {
       notifications.show({ color: 'red', title: t('deliverySetup.probeFailed'), message: apiErrorMessage(err) }),
   });
 
+  /**
+   * Предпросмотр на языке, которым пользуется оператор.
+   *
+   * Язык входит в ключ кэша: смена языка панели должна давать новую ссылку, а
+   * не показывать прежнюю страницу на прежнем языке. Тексты неактивной
+   * подписки правятся на двух языках, и увидеть надо тот, который правят.
+   */
+  const previewLang = i18n.language.startsWith('ru') ? 'ru' : 'en';
   const previewQuery = useQuery({
-    queryKey: ['subscription-preview', previewState],
-    queryFn: () => getSubscriptionPreviewUrl(previewState),
+    queryKey: ['subscription-preview', previewState, previewLang],
+    queryFn: () => getSubscriptionPreviewUrl(previewState, previewLang),
   });
 
   const save = useMutation({

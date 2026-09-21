@@ -112,9 +112,18 @@ export async function probeSubscriptionAddress(): Promise<SubscriptionProbe> {
  *  в истории браузера, в реферере и в логах каждого прокси по дороге. */
 export async function getSubscriptionPreviewUrl(
   state?: 'active' | 'expiring' | 'expired' | 'limited' | 'disabled',
+  /**
+   * Язык, на котором смотрит оператор.
+   *
+   * Без него предпросмотр всегда строился на языке панели по умолчанию, и
+   * человек, правящий русские тексты неактивной подписки при английском
+   * умолчании, своей правки в рамке не видел вовсе. Настоящая страница
+   * `/sub/:token` параметр принимает давно, предпросмотр научился позже.
+   */
+  lang?: 'ru' | 'en',
 ): Promise<{ url: string }> {
   const { data } = await api.get<{ url: string }>('/api/settings/subscription/preview-url', {
-    params: state ? { state } : undefined,
+    params: { ...(state ? { state } : {}), ...(lang ? { lang } : {}) },
   });
   return data;
 }
