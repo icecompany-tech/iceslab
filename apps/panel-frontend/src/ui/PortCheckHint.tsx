@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Box, Text } from '@mantine/core';
 import type { PortCheckResult, PortOwner, PortTakenCode } from '@/lib/domain/portCheck';
+import { conflictSentence, holderWord, refusalSentence } from '@/lib/domain/portWords';
 
 /**
  * Что панель знает про этот порт на этой ноде, одной строкой.
@@ -19,8 +20,6 @@ const MOSS = '#A7D8B9';
 const MIST = '#7A8BA3';
 const RED = '#E07A5F';
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-
-type T = (key: string, vars?: Record<string, unknown>) => string;
 
 export function PortCheckHint({
   result,
@@ -95,33 +94,7 @@ export function PortRefusalLine({
   // Конфликт пришёл: он точнее кода, потому что называет и порт, и держателя.
   if (c) return <Line tone={RED}>{conflictSentence(c, t)}</Line>;
   // Списка нет, остаётся код. Фраза без подробностей, но верная.
-  return <Line tone={RED}>{t(`portCheck.refused.${code}`)}</Line>;
-}
-
-/** Одна фраза про одного держателя порта. Общая для подсказки и для отказа. */
-function conflictSentence(c: PortOwner, t: T): string {
-  const common = { port: c.port, transport: c.transport };
-  if (c.kind === 'profile') return t('portCheck.busyProfile', { ...common, name: c.name });
-  if (c.kind === 'cascade') return t('portCheck.busyCascade', { ...common, name: c.name });
-  return t('portCheck.busyCore', { ...common, owner: ownerWord(c.ownerKey, t) });
-}
-
-/** Кто держит порт, одним оборотом: имя профиля, имя каскада или служба ядра. */
-function holderWord(c: PortOwner, t: T): string {
-  if (c.kind === 'profile' || c.kind === 'cascade') return c.name;
-  return ownerWord(c.ownerKey, t);
-}
-
-/**
- * Имя служебного слушателя человеческими словами.
- *
- * Неизвестный ключ показывается КАК ЕСТЬ. Ядро может завести службу раньше, чем
- * панель узнает её имя, и подставить «неизвестная служба» значило бы стереть
- * единственную зацепку, по которой оператор найдёт её на машине.
- */
-function ownerWord(key: string, t: T): string {
-  const word = t(`portCheck.owner.${key}`);
-  return word === `portCheck.owner.${key}` ? key : word;
+  return <Line tone={RED}>{refusalSentence(code, t)}</Line>;
 }
 
 function Line({ children, tone }: { children: React.ReactNode; tone: string }) {
