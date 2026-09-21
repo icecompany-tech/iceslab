@@ -42,7 +42,7 @@ import {
   listProfiles,
   sniMismatch,
 } from '@/lib/domain/profiles';
-import { profilePairLabel } from '@/lib/domain/engines';
+import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -249,11 +249,22 @@ export function HostEditPage() {
 
     return nodes
       .map((n) => {
-        const wrongCore =
-          profile !== undefined &&
-          n.coreVersion !== null &&
-          profile.protocol === 'amneziawg' &&
-          !n.coreVersion.toLowerCase().includes('awg');
+        /**
+         * Возьмёт ли это ядро такой профиль: членство движка профиля в списке,
+         * который нода САМА сообщила.
+         *
+         * Раньше здесь читалась строка `coreVersion`: если профиль awg, а в
+         * версии основного ядра нет «awg», нода считалась неподходящей. Это то
+         * же чтение ярлыка как ограничения, из-за которого бэк 2026-09-11
+         * отказал 23 рабочим парам: `coreVersion` называет ОСНОВНОЕ ядро, а
+         * рядом с ним на машине штатно живёт второе.
+         *
+         * Третий ответ важнее двух первых. `undefined` = нода ни разу не
+         * отчиталась, и тогда не утверждается ничего: ни отказа, ни разрешения.
+         * Частичный список годится, чтобы сказать «да», и не годится, чтобы
+         * сказать «нет».
+         */
+        const wrongCore = profile !== undefined && nodeRunsEngine(n, profile.effectiveEngine) === false;
         const taken = takenPort.get(n.id);
         return {
           node: n,

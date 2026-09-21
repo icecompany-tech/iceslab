@@ -73,8 +73,11 @@ export const hosts = {
     profile: 'Profile',
     pickProfile: 'Pick a profile',
     openProfile: 'Open profile',
+    // Not «only matching nodes can take it»: about a node that has never
+    // reported the panel knows nothing, and promising on its behalf is a
+    // guess. The check by fact happens on save.
     profileHint:
-      'Only nodes running the matching core can take this host. Changing the profile re-checks every node below.',
+      'Nodes that reported their cores are marked below. Changing the profile re-checks the list.',
     profileLockedHint: 'The profile is fixed once a host exists: it is what the client already speaks.',
     addressHint: 'One link, possibly several nodes. They need one name between them.',
     aRecordTitle: 'Point an A record at the node IP',
@@ -116,7 +119,9 @@ export const hosts = {
     portFree: '{{port}} free',
     portUnset: 'set a port to check',
     portTaken: '{{port}} taken by {{host}}',
-    wrongCore: 'runs another core',
+    // From the core list the node reported itself, not from its label nor from
+    // the version string of its primary core: a second core lives beside it.
+    wrongCore: 'reported other cores',
     whatPeopleSee: 'What people see',
     unnamed: 'Unnamed host',
     previewHintNew:
