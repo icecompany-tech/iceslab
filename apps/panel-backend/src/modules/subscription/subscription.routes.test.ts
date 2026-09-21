@@ -537,3 +537,72 @@ describe('GET /sub/:token - audit', () => {
     expect(after[0]!.userAgent).toBe('test-client/1.0');
   });
 });
+
+describe('the download flag', () => {
+  /**
+   * `&dl=1` says "save this", and it is a flag of its own rather than a
+   * property of the format.
+   *
+   * The format addresses are a contract: `?format=clash` and
+   * `?format=singbox` get pasted into apps and polled for months. Attaching a
+   * Content-Disposition to them would probably change nothing, because a
+   * programmatic fetch ignores the header, and "probably" is not a reason to
+   * alter an address somebody else depends on.
+   */
+  it('leaves the plain addresses exactly as they were', async () => {
+    const user = await createUser('dl-1');
+    await createNode('dl-n1', '10.0.0.21:8443');
+    for (const url of [
+      `/sub/${user.subscriptionToken}?format=clash`,
+      `/sub/${user.subscriptionToken}?format=singbox`,
+      `/sub/${user.subscriptionToken}`,
+    ]) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, url).toBe(200);
+      expect(res.headers['content-disposition'], url).toBeUndefined();
+    }
+  });
+
+  it('turns a response into a file when asked, with a name that tells them apart', async () => {
+    const user = await createUser('dl-2');
+    await createNode('dl-n2', '10.0.0.22:8443');
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=clash&dl=1`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toBe('attachment; filename="dl-2-clash.yaml"');
+    // The body is untouched: this is the same response, delivered differently.
+    expect(res.headers['content-type']).toContain('text/yaml');
+  });
+
+  it('never attaches the flag to the raw subscription', async () => {
+    // `plain` is what a client pulls from the bare link. It is the one address
+    // that must behave identically with the flag and without it.
+    const user = await createUser('dl-3');
+    await createNode('dl-n3', '10.0.0.23:8443');
+    const withFlag = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=plain&dl=1`,
+    });
+    const without = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=plain`,
+    });
+    expect(withFlag.headers['content-disposition']).toBeUndefined();
+    expect(withFlag.body).toBe(without.body);
+  });
+
+  it('does not disturb the formats that already sent a filename', async () => {
+    // wgconf and xkeen attached one unconditionally long before this flag
+    // existed, and theirs is the better name (it carries the node).
+    const user = await createUser('dl-4');
+    await createNode('dl-n4', '10.0.0.24:8443');
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=xkeen`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toBe('attachment; filename="dl-4-xkeen.json"');
+  });
+});

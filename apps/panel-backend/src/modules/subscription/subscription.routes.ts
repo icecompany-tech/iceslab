@@ -71,6 +71,13 @@ const QuerySchema = z.object({
   // selector that links here; it wins over the panel default and the
   // Accept-Language guess. Only meaningful for the HTML page.
   lang: z.enum(['ru', 'en']).optional(),
+  // "Save this instead of showing it." A SEPARATE flag rather than a property
+  // of the format, because the format addresses are what clients subscribe to:
+  // `?format=clash` and `?format=singbox` are pasted into apps and polled for
+  // months, and quietly attaching a Content-Disposition to them changes a
+  // contract nobody asked us to change. The download buttons on the human page
+  // pass `&dl=1`; every existing address stays byte for byte what it was.
+  dl: z.enum(['0', '1']).optional(),
 });
 
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
@@ -239,6 +246,35 @@ function qrSvg(content: string, ecl: 'L' | 'M' | 'Q' | 'H' = 'M'): string | unde
 function sanitizeFilename(name: string): string {
   const cleaned = name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
   return cleaned || 'subscription';
+}
+
+/** What a saved file of this format should be called. */
+const DOWNLOAD_EXT: Partial<Record<Format, string>> = {
+  json: 'json',
+  clash: 'yaml',
+  singbox: 'json',
+  xrayjson: 'json',
+  'xrayjson-array': 'json',
+  xkeen: 'json',
+  outline: 'json',
+  wgconf: 'conf',
+  amneziavpn: 'txt',
+  surge: 'conf',
+  quantumultx: 'conf',
+  loon: 'conf',
+};
+
+/**
+ * `<user>[-<node>]-<format>.<ext>`, so several saved files can be told apart.
+ *
+ * ⚠ `plain` is deliberately absent from the table above and never reaches
+ * here: it is the raw subscription clients pull from the link itself, and it
+ * is the one address this flag must not touch at all.
+ */
+function downloadFilename(format: Format, username: string, node?: string): string {
+  const ext = DOWNLOAD_EXT[format] ?? 'txt';
+  const nodePart = node ? `-${sanitizeFilename(node)}` : '';
+  return `${sanitizeFilename(username)}${nodePart}-${format}.${ext}`;
 }
 
 export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
@@ -497,6 +533,19 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         customDomainLists = settings.customDomainLists ?? undefined;
         tlsFragment =
           query.fragment !== undefined ? query.fragment === '1' : settings.tlsFragment;
+      }
+
+      // "Save it" rather than "show it", asked for by the page's download
+      // buttons. Set once here instead of in a dozen branches, and NOT for
+      // `plain`: that is the raw subscription a client pulls from the bare
+      // link, and it must keep behaving exactly as it always has. `wgconf` and
+      // `xkeen` set their own, better, filename further down and win by
+      // writing the header after this.
+      if (query.dl === '1' && format !== 'plain') {
+        reply.header(
+          'Content-Disposition',
+          `attachment; filename="${downloadFilename(format, result.json.user.username, query.node)}"`,
+        );
       }
 
       switch (format) {
