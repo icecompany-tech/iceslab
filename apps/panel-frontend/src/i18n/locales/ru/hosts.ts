@@ -38,6 +38,10 @@ export const hosts = {
       'shadowsocks-api': 'gRPC-API второго xray под Shadowsocks',
       'singbox-api': 'v2ray-API sing-box',
       'mtproto-stats': 'статистикой mtg',
+      // Фаза 4, цепь отдельным процессом. Ключ заведён заранее: он ничего не
+      // рисует, пока агент его не пришлёт, а неизвестный ключ показался бы
+      // человеку как «chain-socks» вместо человеческих слов.
+      'chain-socks': 'socks-портом цепи',
     },
   },
 
