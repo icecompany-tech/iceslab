@@ -195,14 +195,9 @@ export function pageScript(o: PageScriptOpts): string {
       // Точка на строках, которые подходят этой платформе. Число строк при
       // этом не меняется: если счётчик над блоком поедет, значит резка по
       // платформе вернулась, а её тут быть не должно.
-      // Отметки не ставятся, пока подписка не действует: сегодня не подойдёт
-      // ни одна строка, и подсвечивать там нечего. Гасится здесь, а не
-      // каскадом, иначе сброс акцента пришлось бы повторять для точки, для
-      // строки и для каждой кнопки.
-      var dlDead = !!document.querySelector('#downloads .is-dead');
       [].slice.call(document.querySelectorAll('[data-dl-fits]')).forEach(function (r) {
         var fits = r.getAttribute('data-dl-fits');
-        r.classList.toggle('is-fit', !dlDead && !!fits && fits.split(' ').indexOf(p) !== -1);
+        r.classList.toggle('is-fit', !!fits && fits.split(' ').indexOf(p) !== -1);
       });
     }
     if (pickerBtn) {

@@ -54,7 +54,13 @@ export const PAGE_CSS = String.raw`
             mask-image:radial-gradient(closest-side at 50% 18%, #000 60%, transparent 100%);
   }
   .page{display:flex; flex-direction:column; align-items:center; min-height:100vh;}
-  .wrap{width:100%; max-width:var(--col); padding:0 16px; display:flex; flex-direction:column; gap:24px;}
+  /* Колонка ровно --col ШИРИНОЙ СОДЕРЖИМОГО, а не вместе с полями.
+     Полоса кнопок в шапке ограничена --col без полей и выходила 740, а
+     карточки под ней 708: два края, разъехавшиеся на 32 px, и пропорция
+     ломалась ровно на стыке шапки и первой карточки. Поля по 16 нужны только
+     на узком экране, поэтому они добавляются к пределу, а не вычитаются. */
+  .wrap{width:100%; max-width:calc(var(--col) + 32px); padding:0 16px;
+    display:flex; flex-direction:column; gap:24px;}
 
   /* Размер значка по умолчанию.
      Размеры задаются контекстом (.hbtn .ic, .tile__label .ic и так далее), и
@@ -70,7 +76,11 @@ export const PAGE_CSS = String.raw`
   /* Header: the mark and the name centred, the two things a reader does with
      this page on one row under them. The theme button the old header carried
      is deliberately gone - it promised a light theme that does not exist. */
-  .head{width:100%; display:flex; flex-direction:column; align-items:center; gap:18px; padding:30px 16px 0;}
+  /* Нижнее поле у шапки есть, и оно не декоративное. В макете кнопки сидели
+     в обёртке с полем 4 и рамкой, и именно она отделяла их от карточки под
+     ними. Обёртку убрали, воздух ушёл вместе с ней, и кнопки слиплись с
+     карточкой. Здесь он возвращён явно, тем же числом, что и зазор колонки. */
+  .head{width:100%; display:flex; flex-direction:column; align-items:center; gap:18px; padding:30px 16px 24px;}
   .head__brand{display:flex; align-items:center; gap:10px;}
   .head__title{font-size:19px; font-weight:700; line-height:24px; letter-spacing:-.01em; color:var(--brand);}
   .head__brand .ic{width:20px; height:20px; color:var(--brand);}
@@ -84,7 +94,7 @@ export const PAGE_CSS = String.raw`
   }
   .hbtn{
     flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; gap:8px;
-    height:42px; border-radius:12px; background:var(--card2); border:1px solid var(--hair2);
+    height:38px; border-radius:11px; background:var(--card2); border:1px solid var(--hair2);
     font-size:13px; font-weight:500; color:#C8D4E3; text-decoration:none;
   }
   .hbtn .ic{width:14px; height:14px;}
@@ -344,6 +354,13 @@ export const PAGE_CSS = String.raw`
      самим списком, и её место занимает то, что нужно ЗДЕСЬ: что значит точка. */
   .all-apps.is-open .dl-note--shut{display:none;}
   .all-apps:not(.is-open) .dl-note--open{display:none;}
+  /* В мёртвом состоянии подсказка про точку врала бы: строк нет, отмечать
+     нечего. Возвращается обычная подпись, объясняющая, зачем блок вообще. */
+  .all-apps.is-dead .dl-note--open{display:none;}
+  .all-apps.is-dead .dl-note--shut{display:block;}
+  /* Предупреждение про пароли в конфиге тоже ни к чему, когда конфигов не
+     выдают. */
+  .all-apps.is-dead .dl-warn{display:none;}
   /* Предупреждение про пароли стоит под списком, а не над ним: сверху его
      читают до того, как есть что забирать, и оно превращается в шум. */
   .dl-warn{margin-top:2px;}
@@ -351,9 +368,6 @@ export const PAGE_CSS = String.raw`
     background:var(--bad-bg); border:1px solid var(--bad-edge); color:var(--bad);
     font-size:12px; line-height:17px;}
   .dl-dead .ic{width:14px; height:14px; margin-top:2px;}
-  /* Dimmed, still clickable: the file is the same file, it just will not
-     authorise today. */
-  .is-dead .dl-row{opacity:.72;}
   .dl-groups{display:flex; flex-direction:column; gap:16px;}
   .dl-group{display:flex; flex-direction:column; gap:8px;}
   .dl-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px;
@@ -452,10 +466,10 @@ export const PAGE_CSS = String.raw`
      и имя формата обрезается на середине слова. */
   @media (max-width:720px){
     .wrap{gap:18px; padding:0 16px;}
-    .head{gap:14px; padding:20px 16px 0;}
+    .head{gap:14px; padding:20px 16px 18px;}
     .head__title{font-size:17px; line-height:22px;}
     .head__actions{gap:8px;}
-    .hbtn{height:40px; border-radius:11px; font-size:12px; gap:7px;}
+    .hbtn{height:36px; border-radius:10px; font-size:12px; gap:7px;}
     .hbtn__full{display:none;}
     .hbtn__short{display:inline;}
     .card{padding:17px; border-radius:16px;}

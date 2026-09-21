@@ -574,11 +574,7 @@ function renderDownloads(
   ];
   const other: Row[] = [
     ...(hasAwg ? perNode('amneziavpn') : []),
-    // Not while the subscription is refused: every one of these addresses
-    // answers 403 for such a user, and a row that cannot deliver is the kind
-    // of dead control the whole page is being cleaned of. See the note in
-    // the card body, which says so in words.
-    ...(dead ? [] : [{ fmt: 'plain', noDownload: true }]),
+    { fmt: 'plain', noDownload: true },
   ];
 
   const row = (r: Row) => {
@@ -616,16 +612,26 @@ function renderDownloads(
         rows.map(row).join('') +
         `</div>`;
 
-  const body =
-    group(t.dlGroupClients, 'clients', clients) +
-    group(t.dlGroupRouter, 'router', router) +
-    group(t.dlGroupOther, 'other', other);
-  // Nothing to offer and the subscription is in force: no card. Nothing to
-  // offer BECAUSE it is not in force: the card stays, empty, with the red
-  // line explaining why. A block that vanishes teaches the reader it was
-  // never there, and the person who has just renewed goes looking for it.
-  if (body === '' && !dead) return '';
+  // Пока подписка не действует, строк НЕТ НИ ОДНОЙ.
+  //
+  // Не «приглушены, но кликабельны», как было: все форматы идут через тот же
+  // generateSubscription, который и бросил отказ, поэтому 403 придёт по любому
+  // адресу, включая саму ссылку подписки. Приглушённая кликабельная строка
+  // вела бы в стену, а это ровно тот мёртвый контроль, от которого страницу
+  // чистят. Вместо строк красная плашка, она говорит, когда всё вернётся.
+  //
+  // Счётчик при этом остаётся: он называет, сколько форматов у подписки, а не
+  // сколько кнопок можно нажать сегодня.
+  const body = dead
+    ? ''
+    : group(t.dlGroupClients, 'clients', clients) +
+      group(t.dlGroupRouter, 'router', router) +
+      group(t.dlGroupOther, 'other', other);
   const count = clients.length + router.length + other.length;
+  // Нечего предложить и подписка в силе: карточки нет. Нечего предложить
+  // ПОТОМУ ЧТО она не в силе: карточка остаётся. Блок, который исчезает, учит
+  // читателя, что его там и не было, и продливший идёт искать вчерашнюю кнопку.
+  if (count === 0 && !dead) return '';
   // Folded by the same expander as "all apps", and behind the same amber line
   // as the transfer window: one mechanism each, not a second of each.
   // This is the only block on the page that changes with the state.
