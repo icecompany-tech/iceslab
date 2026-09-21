@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect } from 'react';
 
 /**
  * Facts the active page contributes to the topbar line, appended after the
@@ -9,20 +8,20 @@ import type { ReactNode } from 'react';
  *
  * Pages call `usePageMeta([...])`; the facts clear on unmount, so a page that
  * says nothing simply leaves the breadcrumb alone.
+ *
+ * Хуки и контекст живут ЗДЕСЬ, а провайдер в своём `.tsx` рядом. Причина не
+ * вкусовая: файл с компонентом, который экспортирует ещё и хуки, ломает
+ * hot-reload, потому что сборщик не может обновить компонент, не тронув всё
+ * остальное из того же файла. Шестнадцать экранов импортируют `usePageMeta` по
+ * пути без расширения, поэтому разрез им не виден.
  */
 
-type PageMetaValue = {
+export type PageMetaValue = {
   facts: string[];
   setFacts: (facts: string[]) => void;
 };
 
-const PageMetaContext = createContext<PageMetaValue | null>(null);
-
-export function PageMetaProvider({ children }: { children: ReactNode }) {
-  const [facts, setFacts] = useState<string[]>([]);
-  const value = useMemo(() => ({ facts, setFacts }), [facts]);
-  return <PageMetaContext.Provider value={value}>{children}</PageMetaContext.Provider>;
-}
+export const PageMetaContext = createContext<PageMetaValue | null>(null);
 
 /** Read the current facts. Layout side. */
 export function usePageMetaFacts(): string[] {
