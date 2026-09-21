@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -115,9 +115,12 @@ export function HostEditPage() {
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
 
   const host = isNew ? null : (hostsQuery.data?.hosts.find((h) => h.id === id) ?? null);
-  const bindings = bindingsQuery.data?.bindings ?? [];
-  const nodes = nodesQuery.data?.nodes ?? [];
-  const profiles = profilesQuery.data?.profiles ?? [];
+  // Через `useMemo`, хотя выражение и выглядит безобидно: `?? []` даёт НОВЫЙ
+  // пустой массив на каждый рендер, и всё, что держит его в зависимостях,
+  // пересчитывается всегда, то есть мемоизация ниже перестаёт работать молча.
+  const bindings = useMemo(() => bindingsQuery.data?.bindings ?? [], [bindingsQuery.data]);
+  const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
+  const profiles = useMemo(() => profilesQuery.data?.profiles ?? [], [profilesQuery.data]);
 
   const [name, setName] = useState('');
   const [country, setCountry] = useState<string | null>(null);
@@ -269,8 +272,24 @@ export function HostEditPage() {
     'securityLayer',
   ]);
 
-  useEffect(() => {
-    if (!host) return;
+  /**
+   * Заполнение формы тем, что пришло с сервера.
+   *
+   * Сравнением в рендере, а не эффектом. Эффект приезжал ПОСЛЕ отрисовки, то
+   * есть первый кадр редактирования показывал пустые поля, и он же стирал
+   * `dirty`, из-за чего правка, сделанная между отрисовкой и эффектом,
+   * считалась несделанной.
+   *
+   * Ключ собран из того, ОТ ЧЕГО зависит содержимое: сам хост, его версия и
+   * факт, что списки привязок и нод уже пришли. Их длины в ключе не потому, что
+   * важна длина, а потому, что до их прихода имя ноды и порт прочитать неоткуда.
+   */
+  const seedKey = host
+    ? `${host.id}:${host.updatedAt}:${bindings.length}:${nodes.length}`
+    : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (host && seedKey !== seededFor) {
+    setSeededFor(seedKey);
     const binding = bindings.find((b) => b.id === host.bindingId);
     const node = binding ? nodes.find((n) => n.id === binding.nodeId) : undefined;
     setName(host.remark);
@@ -289,7 +308,7 @@ export function HostEditPage() {
     setSecurityLayer(host.securityLayer);
     setDisabledFormats(host.disableForFormats);
     setDirty(false);
-  }, [host?.id, host?.updatedAt, bindings.length, nodes.length]);
+  }
 
   /**
    * Every node, annotated with why it can or cannot take this host: wrong core,
