@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -36,6 +36,7 @@ import { apiErrorMessage } from '@/lib/net/client';
 import { createBinding } from '@/lib/domain/profiles';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
+import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
   createNode,
   deleteNode,
@@ -1032,6 +1033,10 @@ export function NodesPage() {
                   // на обзоре его нет, и вывести его из статуса нельзя, потому
                   // что нода с отвергнутым конфигом остаётся online.
                   syncRefusal: refusalOf(n),
+                  // `null` значит «карточке сказать нечего», и решает это одна
+                  // функция: «политики нет» и «политика не работает» слишком
+                  // легко спутать, чтобы разбирать их в разметке.
+                  policyReach: policyBadgeFacts(n),
                   protocol: n.protocol,
                   maxUsers: n.maxUsers ?? null,
                   // approxUsers: capacity bar source. Real per-node user

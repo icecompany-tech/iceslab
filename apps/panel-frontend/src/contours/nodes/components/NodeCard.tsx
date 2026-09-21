@@ -31,6 +31,7 @@ import { countryFlag } from '@/lib/domain/countries';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import { SyncRefusalStrip } from '@/contours/nodes/components/SyncRefusalStrip';
 import type { SyncRefusal } from '@/contours/nodes/lib/syncRefusal';
+import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
@@ -79,6 +80,15 @@ interface CardNode {
    *  `status`: нода с отвергнутым конфигом продолжает отвечать и остаётся
    *  online, поэтому по статусу это не видно вообще. */
   syncRefusal?: SyncRefusal | null;
+  /**
+   * Достанет ли назначенная политика до этой машины, и `null`, когда политики
+   * нет вовсе.
+   *
+   * `null` и «не применима» это РАЗНЫЕ вещи, и бейдж рисуется только во
+   * второй: сказать «политика здесь не работает» про ноду, которой политику не
+   * назначали, значит выдумать беду на ровном месте.
+   */
+  policyReach?: PolicyReachFacts | null;
 }
 
 interface Props {
@@ -261,6 +271,14 @@ export function NodeCard({
             отвергнутым конфигом отвечает и числится online, и без этой строки
             карточка выглядит здоровой. */}
         {node.syncRefusal && <SyncRefusalStrip refusal={node.syncRefusal} compact />}
+
+        {/* Бейдж политики ТОЛЬКО когда она назначена и не работает либо про
+            неё ничего не известно. В «применяется» карточка молчит: зелёная
+            метка на каждой здоровой ноде это шум, из-за которого перестают
+            замечать две другие. */}
+        {node.policyReach && node.policyReach.state !== 'applies' && (
+          <PolicyBadge facts={node.policyReach} />
+        )}
 
         {m ? (
           <Stack gap={6}>
@@ -624,4 +642,58 @@ function formatBytes(n: number): string {
   const i = Math.min(Math.floor(Math.log2(Math.max(1, n)) / 10), units.length - 1);
   const v = n / 1024 ** i;
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
+}
+
+/**
+ * Что с политикой на этой ноде, одной меткой.
+ *
+ * Два состояния из трёх, и они просят РАЗНОГО. «Не применима» это факт: ядра
+ * ответили, и ни одно правил не рисует, значит оператору надо либо поставить
+ * ядро, либо не ждать от политики ничего. «Панель не знает» это отсутствие
+ * факта, и делать по нему нечего, кроме как подождать опроса.
+ *
+ * Поэтому первая метка янтарная, вторая серая: одинаковый цвет учил бы читать
+ * незнание как поломку.
+ */
+function PolicyBadge({ facts }: { facts: PolicyReachFacts }) {
+  const { t } = useTranslation();
+  const unknown = facts.state === 'unknown';
+  const tone = unknown ? MIST : AMBER;
+  // Причина у «не применима» бывает двух видов, и действия у них разные: ждать
+  // ядро, которое рисует правила, или поставить бинарник того, которое умеет.
+  const why = unknown
+    ? t('nodeEdit.policyWhyUnknown')
+    : facts.gap === 'router-not-installed'
+      ? t('nodeEdit.policyWhyNotInstalled')
+      : t('nodeEdit.policyApplicabilityWhy');
+  return (
+    <Tooltip label={why} multiline w={300}>
+      <Box
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          alignSelf: 'flex-start',
+          padding: '3px 9px',
+          borderRadius: 999,
+          backgroundColor: `${tone}14`,
+          border: `1px solid ${tone}33`,
+        }}
+      >
+        <Box style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: tone, flexShrink: 0 }} />
+        <Text
+          style={{
+            fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            lineHeight: '13px',
+            textTransform: 'uppercase',
+            color: tone,
+          }}
+        >
+          {t(`nodeCard.policyBadge.${facts.state}`)}
+        </Text>
+      </Box>
+    </Tooltip>
+  );
 }

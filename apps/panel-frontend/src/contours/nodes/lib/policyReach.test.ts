@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { policyReachFacts } from '@/contours/nodes/lib/policyReach';
+import { policyBadgeFacts, policyReachFacts } from '@/contours/nodes/lib/policyReach';
 import type { NodeCore } from '@/lib/domain/nodes';
 
 /**
@@ -71,5 +71,45 @@ describe('policyReachFacts', () => {
     const facts = policyReachFacts([core({ name: 'xray', rendersPolicy: true })]);
     expect(facts.state).toBe('applies');
     expect(facts.gap).toBeUndefined();
+  });
+});
+
+/**
+ * Что метка политики скажет в СПИСКЕ нод.
+ *
+ * Здесь проверяется ровно одна путаница, и она дороже остальных: «политику не
+ * назначали» и «назначенная политика не работает» выглядят на карточке
+ * одинаково страшно, а значат противоположное. Первое не беда вообще.
+ */
+describe('policyBadgeFacts', () => {
+  const noRouter = [core({ name: 'hysteria', rendersPolicy: false })];
+  const router = [core({ name: 'xray', version: '25.9.5', rendersPolicy: true })];
+
+  it('1. политики нет: молчим, даже если ядра её не рисуют', () => {
+    expect(policyBadgeFacts({ policyId: null, cores: { cores: noRouter } })).toBeNull();
+  });
+
+  it('2. политика есть и применяется: тоже молчим, метка была бы шумом', () => {
+    expect(policyBadgeFacts({ policyId: 'p1', cores: { cores: router } })).toBeNull();
+  });
+
+  it('3. политика есть и не применима: метка с причиной', () => {
+    const f = policyBadgeFacts({ policyId: 'p1', cores: { cores: noRouter } });
+    expect(f?.state).toBe('not-applicable');
+    expect(f?.gap).toBe('no-router');
+  });
+
+  it('4. политика есть, ядро умеет, но не установлено: причина другая', () => {
+    const f = policyBadgeFacts({
+      policyId: 'p1',
+      cores: { cores: [core({ name: 'xray', rendersPolicy: true, installed: false })] },
+    });
+    expect(f?.state).toBe('not-applicable');
+    expect(f?.gap).toBe('router-not-installed');
+  });
+
+  it('5. политика есть, нода молчит: метка про незнание, а не про поломку', () => {
+    expect(policyBadgeFacts({ policyId: 'p1', cores: null })?.state).toBe('unknown');
+    expect(policyBadgeFacts({ policyId: 'p1' })?.state).toBe('unknown');
   });
 });

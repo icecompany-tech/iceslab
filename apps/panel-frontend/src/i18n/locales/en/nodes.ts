@@ -344,6 +344,13 @@
   },
 
   nodeCard: {
+    // The policy badge in the list. Short on purpose: this is a card, and the
+    // per-core detail lives on the node page. What travels here is only the
+    // reason to go and look.
+    policyBadge: {
+      'not-applicable': 'policy does nothing',
+      unknown: 'policy · no data',
+    },
     reBootstrap: 'Re-bootstrap',
     metricsPending: 'Metrics pending - first poll within 15s',
     loadLabel: 'Load',

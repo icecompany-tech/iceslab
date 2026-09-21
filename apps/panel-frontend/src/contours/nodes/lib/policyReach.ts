@@ -49,6 +49,27 @@ function draws(c: NodeCore): boolean {
   return c.rendersPolicy === true && c.installed !== false;
 }
 
+/**
+ * Что показать про политику в СПИСКЕ нод, где место есть только на метку.
+ *
+ * `null` означает «молчать», и таких случая два, разных по смыслу: политику
+ * этой ноде не назначали, и назначенная политика применяется. Первое не повод
+ * ничего говорить, второе тоже: зелёная метка на каждой здоровой ноде это шум,
+ * из-за которого перестают замечать две другие.
+ *
+ * Отдельной функцией, а не условием в разметке, потому что путаница «нет
+ * политики» и «политика не работает» это ровно та ошибка, которую метка
+ * показала бы оператору как беду на ровном месте.
+ */
+export function policyBadgeFacts(node: {
+  policyId: string | null;
+  cores?: { cores: NodeCore[] } | null;
+}): PolicyReachFacts | null {
+  if (!node.policyId) return null;
+  const facts = policyReachFacts(node.cores?.cores);
+  return facts.state === 'applies' ? null : facts;
+}
+
 export function policyReachFacts(
   cores: NodeCore[] | null | undefined,
 ): PolicyReachFacts {
