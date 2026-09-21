@@ -13,6 +13,7 @@ import { SyncStatusStrip } from '@/contours/nodes/components/NodeEdit/SyncStatus
 import { SystemPanel } from '@/contours/nodes/components/NodeEdit/SystemPanel';
 import { TabButton } from '@/contours/nodes/components/NodeEdit/TabButton';
 import { useNodeEditForm } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
+import { CoresPanel } from '@/contours/nodes/components/NodeEdit/CoresPanel';
 import { AMBER, CARD, DISPLAY, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
 import { ServerIcon } from '@/contours/nodes/components/NodeCreate/icons';
 import { useTranslation } from 'react-i18next';
@@ -233,6 +234,11 @@ export function NodeEditPage() {
               />
 
               <EgressCard navigate={navigate} cascade={cascade} warpMutation={warpMutation} egress={egress} />
+
+              {/* Состав ядер приходит от самой ноды, поэтому секция стоит
+                  рядом с параметрами, а не в системной панели справа: это
+                  свойство ноды, а не метрика хоста. */}
+              <CoresPanel node={node} />
             </Box>
 
             <SystemPanel hostsQuery={hostsQuery} dashNode={dashNode} metrics={metrics} exposureMutation={exposureMutation} />

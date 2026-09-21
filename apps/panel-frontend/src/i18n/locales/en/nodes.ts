@@ -290,6 +290,23 @@ export const nodes = {
     syncChangedAt: 'changed {{at}}',
     syncLastApplied: 'last applied {{at}}',
     syncNever: 'this node has never taken a config',
+    coresTitle: 'Cores · what is on the machine',
+    coresReportedAt: 'node reported {{at}}',
+    coresUnknown:
+      'This node has never reported its cores. That is not «no cores»: the panel simply does not know, and there is nothing to invent on its behalf. The list appears on its own once the agent checks in.',
+    coresVia: 'on {{engine}}',
+    coresState: {
+      configured: 'configured',
+      idle: 'not configured',
+    },
+    coresInventoryNote:
+      'This is the inventory, not liveness: whether a core is up right now is what the node status above says. An idle core is a normal state, the agent registers an adapter for every protocol.',
+    coresShowCommand: 'How to add',
+    coresHideCommand: 'Hide',
+    coresCopied: 'Command copied',
+    coresCopyFailed: 'Could not copy, select the line by hand',
+    coresAfterInstall:
+      'The panel runs nothing on the machine: this is a command for your own ssh. Once it is installed the node reports the new core within a minute, nothing to push by hand.',
     egressTitle: 'Egress · the door out',
     egressHint: 'One node, one door. Pick one.',
     egressDirect: 'Direct',
