@@ -147,9 +147,11 @@ export function SquadsPage() {
     });
   }
 
-  const squads = squadsQuery.data?.squads ?? [];
-  const profiles = profilesQuery.data?.profiles ?? [];
-  const cascades = cascadesQuery.data?.cascades ?? [];
+  // Через `useMemo`: `?? []` возвращает новый массив на каждый рендер, и
+  // мемоизация ниже, держащая его в зависимостях, молча перестаёт работать.
+  const squads = useMemo(() => squadsQuery.data?.squads ?? [], [squadsQuery.data]);
+  const profiles = useMemo(() => profilesQuery.data?.profiles ?? [], [profilesQuery.data]);
+  const cascades = useMemo(() => cascadesQuery.data?.cascades ?? [], [cascadesQuery.data]);
   const routePolicies = policiesQuery.data?.policies ?? [];
 
   const bindingsByProfile = useMemo(() => {

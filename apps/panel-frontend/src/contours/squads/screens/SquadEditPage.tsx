@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -201,8 +201,13 @@ export function SquadEditPage() {
   const [seededId, setSeededId] = useState<string | null>(null);
   const seeded = squad !== null && seededId === squad.id;
 
-  useEffect(() => {
-    if (!squad) return;
+  // Сравнением в рендере, а не эффектом: эффект заполнял поля ПОСЛЕ отрисовки,
+  // и кадр между ними показывал чужой сквад как этот. Ключ включает `updatedAt`,
+  // потому что после сохранения приходит тот же id с новым содержимым.
+  const seedKey = squad ? `${squad.id}:${squad.updatedAt}` : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (squad && seedKey !== seededFor) {
+    setSeededFor(seedKey);
     setName(squad.name);
     setDescription(squad.description ?? '');
     setRoutingPreset(squad.routingPreset ?? '');
@@ -218,7 +223,7 @@ export function SquadEditPage() {
     setRestricted((squad.hostIds ?? []).length > 0);
     setDirty(false);
     setSeededId(squad.id);
-  }, [squad?.id, squad?.updatedAt]);
+  }
 
   const saveMutation = useMutation({
     mutationFn: () => {
