@@ -141,6 +141,27 @@ jobs:
           echo "XRAY_BIN=/tmp/xray-bin/xray" >> "$GITHUB_ENV"
           /tmp/xray-bin/xray version | head -1
 
+      # A sing-box binary, for the same reason and with the same shape as xray
+      # above: phase 4 moves the chain into a sing-box process whose config the
+      # PANEL renders, and structure tests cannot answer the only question that
+      # matters on a node, will the engine start. `sing-box check` can.
+      #
+      # Same version the node installs (bootstrap-singbox.sh pins v1.13.14) and
+      # the same tarball name, so CI validates against the build the fleet
+      # actually runs rather than against a newer parser. Bump both together.
+      #
+      # Without SINGBOX_BIN those tests skip themselves, exactly like the xray
+      # ones, so a laptop with no sing-box still runs the suite.
+      - name: Install sing-box (for chain config-validity tests)
+        run: |
+          curl -fsSL -o /tmp/sing-box.tar.gz \
+            https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz
+          tar -xzf /tmp/sing-box.tar.gz -C /tmp
+          mkdir -p /tmp/sing-box-bin
+          install -m 0755 /tmp/sing-box-1.13.14-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
+          echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
+          /tmp/sing-box-bin/sing-box version | head -1
+
       - name: Typecheck backend
         working-directory: apps/panel-backend
         run: pnpm exec tsc --noEmit
