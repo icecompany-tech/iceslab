@@ -39,6 +39,38 @@ export class NodeNotFoundError extends Error {
   }
 }
 
+/**
+ * The node is a hop or a way out of a cascade that is switched on.
+ *
+ * Deleting it used to be allowed, and on 2026-09-22 it cost two cascade entries
+ * a day of pushes: the v4 topology kept pointing at the deleted row, the
+ * renderer refused to build anything for the entries rather than half-render a
+ * chain, and nothing said so until their cores were restarted and came up
+ * empty.
+ *
+ * The cascades are named because the operator's next step is in them, not here:
+ * either take the cascade down or move the way out to another node, and only
+ * then retire this one.
+ */
+export class NodeInUseByCascadeError extends Error {
+  readonly code = 'NODE_IN_USE_BY_CASCADE';
+
+  constructor(
+    public nodeName: string,
+    public cascades: string[],
+  ) {
+    super(
+      `Node "${nodeName}" is part of the enabled cascade${cascades.length > 1 ? 's' : ''} ` +
+        `${cascades.map((c) => `"${c}"`).join(', ')}. Deleting it would leave ${
+          cascades.length > 1 ? 'those chains' : 'that chain'
+        } pointing at a node that is gone, and the panel would stop pushing config to ` +
+        `every node in ${cascades.length > 1 ? 'them' : 'it'}. Take the cascade down, or move ` +
+        `the way out to another node, and then delete this one.`,
+    );
+    this.name = 'NodeInUseByCascadeError';
+  }
+}
+
 // ───── Helpers ─────
 
 const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
@@ -408,6 +440,37 @@ export async function deleteNode(id: string): Promise<void> {
     select: { id: true, name: true, address: true },
   });
   if (!node) throw new NodeNotFoundError(id);
+
+  /**
+   * A live cascade keeps its node.
+   *
+   * THE INCIDENT, 2026-09-22. A node was deleted while an enabled cascade
+   * routed a direction through it. Nothing stopped that: the code below drops
+   * cascades the node is a legacy HOP of, and the v4 topology, where the node
+   * was a direction member, was left pointing at a row with no address. From
+   * then on the renderer refused to build a push for the cascade's entries at
+   * all, so the two RU entries stopped receiving config, and nobody found out
+   * until their cores were restarted a day later and came up empty.
+   *
+   * Refused rather than cascaded-deleted, and only for ENABLED cascades: taking
+   * somebody's live chain down as a side effect of retiring one VPS is a bigger
+   * decision than the click that triggered it. A disabled cascade is not
+   * serving anyone, so the old behaviour stands there.
+   */
+  const live = await prisma.cascade.findMany({
+    where: {
+      enabled: true,
+      OR: [
+        { hops: { some: { nodeId: id } } },
+        { positions: { some: { nodes: { some: { nodeId: id } } } } },
+        { directions: { some: { nodes: { some: { nodeId: id } } } } },
+      ],
+    },
+    select: { name: true },
+  });
+  if (live.length > 0) {
+    throw new NodeInUseByCascadeError(node.name, live.map((c) => c.name));
+  }
 
   // A cascade is a chain: drop one hop and it can't route. So deleting a node
   // that's a hop deletes the whole cascade(s) it belongs to. We collect the

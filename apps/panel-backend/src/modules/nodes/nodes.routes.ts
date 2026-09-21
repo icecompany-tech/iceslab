@@ -333,6 +333,16 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof nodesService.NodeNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
+      // The node is a hop or a way out of a cascade that is switched on.
+      // Named separately from CONFLICT so the screen can link straight to the
+      // cascades instead of leaving the operator to find them.
+      if (err instanceof nodesService.NodeInUseByCascadeError) {
+        return reply.code(409).send({
+          error: err.code,
+          message: err.message,
+          cascades: err.cascades,
+        });
+      }
       throw err;
     }
   });
