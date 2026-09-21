@@ -10,7 +10,7 @@
 // stack + a monospace accent, not a downloaded display face). Everything
 // interpolated from admin/user input is HTML-escaped (esc).
 
-import type { ProtocolName } from '@iceslab/shared';
+import { PROTOCOL_NAMES, type ProtocolName } from '@iceslab/shared';
 import {
   APP_MARK,
   GLYPHS,
@@ -468,6 +468,8 @@ interface Labels {
   noteNoExpiry: string;
   noteExpiring: string;
   noteTrafficLow: string;
+  /** The line for a subscription that is not in force, keyed by status. */
+  noteStopped: Record<string, string>;
   /** day / days, in the three Russian forms and the two English ones. */
   days: readonly [string, string, string];
   telegram: string;
@@ -496,6 +498,13 @@ interface Labels {
   dlGet: string;
   dlCopy: string;
   dlDead: string;
+  /** Подсказка про точку, показывается только в раскрытом блоке конфигов. */
+  dlHint: string;
+  /** Когда подписке не выдано ни одного сервера. */
+  noServersTitle: string;
+  noServers: string;
+  /** Короткое имя строки: чем формат ЯВЛЯЕТСЯ для читателя. */
+  formatNames: Record<string, string>;
   formats: Record<string, string>;
   /** Transfer window. */
   transferTitle: string;
@@ -530,6 +539,12 @@ const L: Record<'ru' | 'en', Labels> = {
     noteNoExpiry: 'Active, no expiry date',
     noteExpiring: 'Expires in {n}, renew before it does',
     noteTrafficLow: '{left} of {total} left, and access stops at the limit',
+    noteStopped: {
+      expired: 'The subscription has run out. Renew it and this page works again, with the same link.',
+      limited: 'The traffic allowance is used up. Access resumes when the allowance is renewed.',
+      disabled: 'The subscription is switched off. Your operator can switch it back on.',
+      revoked: 'This link has been withdrawn. Ask your operator for a new one.',
+    },
     days: ['day', 'days', 'days'],
     telegram: 'Telegram',
     telegramNote:
@@ -606,25 +621,45 @@ const L: Record<'ru' | 'en', Labels> = {
       'For when the app cannot be given a subscription link: a router, an offline machine, a client that only imports files.',
     dlWarn:
       'A config file carries your keys and passwords in plain text. Anyone who gets the file gets your access.',
-    dlGroupClients: 'FOR CLIENTS ON A DEVICE',
+    dlGroupClients: 'FOR CLIENTS ON THIS DEVICE',
     dlGroupRouter: 'FOR A ROUTER',
-    dlGroupOther: 'THE SUBSCRIPTION ITSELF',
-    dlDead: 'The subscription is not in force. These files will download and import, but the node will refuse the connection until it is renewed.',
+    dlGroupOther: 'FOR ANOTHER DEVICE',
+    dlDead: 'While the subscription is not in force, no config is issued: these addresses answer with a refusal, the same one that brought you to this page. Everything comes back the moment it is renewed, on the same link.',
     dlGet: 'Download',
     dlCopy: 'Config',
+    dlHint:
+      'The dot marks what suits the platform you picked. The rest is left on purpose: a config is taken for another device more often than for this one.',
+    noServersTitle: 'No servers yet. ',
+    noServers:
+      'This subscription has not been issued a single server, so there is nothing to name an app for and nothing to hand out as a config. It all appears here the moment the operator grants access, on this same link: you will not need to fetch it again.',
+    formatNames: {
+      clash: 'Clash-compatible',
+      singbox: 'sing-box',
+      xrayjson: 'Xray JSON',
+      'xrayjson-array': 'Xray JSON, as an array',
+      outline: 'Outline',
+      surge: 'Surge',
+      quantumultx: 'Quantumult X',
+      loon: 'Loon',
+      json: 'List of endpoints',
+      xkeen: 'XKeen on Keenetic',
+      wgconf: 'wg-quick / awg',
+      amneziavpn: 'AmneziaVPN key',
+      plain: 'Subscription link',
+    },
     formats: {
-      clash: 'Clash-compatible: Clash Verge, FlClash, Clash Mi',
-      singbox: 'sing-box core: sing-box, Karing, Hiddify',
-      xrayjson: 'One Xray config: v2rayN, Throne, Happ',
-      'xrayjson-array': 'The same servers as separate Xray configs, which is how Happ and v2RayTun read them',
+      clash: 'Clash Verge, FlClash, Clash Mi. The whole subscription in one file',
+      singbox: 'sing-box, Karing, Hiddify. The whole subscription in one file',
+      xrayjson: 'v2rayN, Throne, Happ. The whole subscription in one file',
+      'xrayjson-array': 'The same servers as separate configs, which is how Happ and v2RayTun read them',
       outline: 'Shadowsocks only, SIP008: Outline and the shadowsocks clients',
-      surge: 'Surge, iOS and macOS',
-      quantumultx: 'Quantumult X, iOS',
-      loon: 'Loon, iOS',
-      json: 'The panel’s own list of endpoints, for tooling and for a support ticket',
+      surge: 'iOS and macOS. Paid app',
+      quantumultx: 'iOS. Paid app',
+      loon: 'iOS. Paid app',
+      json: 'The panel’s own list of endpoints, for tooling',
       xkeen: 'Keenetic with XKeen: outbounds and routing, no inbound',
-      wgconf: 'AmneziaWG tunnel, one file per server',
-      amneziavpn: 'The vpn:// key for the AmneziaVPN app, one per server',
+      wgconf: 'One tunnel to one server, not the whole subscription',
+      amneziavpn: 'Copy it and paste it into the app, which reads it itself. One tunnel to one server',
       plain: 'The subscription itself, base64. This is what a client pulls from the link',
     },
     transferTitle: 'Move this to another device',
@@ -645,6 +680,7 @@ const L: Record<'ru' | 'en', Labels> = {
     routerLabel: 'Router',
     statusValues: {
       active: 'active',
+      revoked: 'withdrawn',
       disabled: 'disabled',
       expired: 'expired',
       limited: 'limit reached',
@@ -663,6 +699,12 @@ const L: Record<'ru' | 'en', Labels> = {
     noteNoExpiry: 'Активна, без срока',
     noteExpiring: 'Истекает через {n}, продлите заранее',
     noteTrafficLow: 'Осталось {left} из {total}, на лимите доступ остановится',
+    noteStopped: {
+      expired: 'Срок подписки закончился. Продлите, и страница снова заработает, ссылка та же.',
+      limited: 'Лимит трафика исчерпан. Доступ вернётся, когда лимит обновят.',
+      disabled: 'Подписка выключена. Включить её может оператор.',
+      revoked: 'Эта ссылка отозвана. Запросите у оператора новую.',
+    },
     days: ['день', 'дня', 'дней'],
     telegram: 'Телеграм',
     telegramNote:
@@ -739,25 +781,47 @@ const L: Record<'ru' | 'en', Labels> = {
       'На случай, когда приложению нельзя отдать ссылку подписки: роутер, машина без интернета, клиент, который умеет только файл.',
     dlWarn:
       'В файле конфигурации ключи и пароли лежат открытым текстом. Кто получит файл, получит и ваш доступ.',
-    dlGroupClients: 'ДЛЯ КЛИЕНТОВ НА УСТРОЙСТВЕ',
+    dlGroupClients: 'ДЛЯ КЛИЕНТОВ НА ЭТОМ УСТРОЙСТВЕ',
     dlGroupRouter: 'ДЛЯ РОУТЕРА',
-    dlGroupOther: 'САМА ПОДПИСКА',
-    dlDead: 'Подписка не действует. Файлы скачаются и импортируются, но узел откажет в подключении, пока её не продлят.',
+    // Не «сама подписка»: в группе лежат ключи AmneziaVPN, а их как раз
+    // переносят на соседнее устройство, и заголовок должен называть повод.
+    dlGroupOther: 'ДЛЯ ДРУГОГО УСТРОЙСТВА',
+    dlDead: 'Пока подписка не действует, конфиги не выдаются: по этим адресам приходит тот же отказ, что привёл вас на эту страницу. Всё вернётся сразу после продления, ссылка та же.',
     dlGet: 'Скачать',
     dlCopy: 'Конфиг',
+    dlHint:
+      'Точкой отмечено то, что подходит выбранной платформе. Остальное оставлено нарочно: конфиг чаще забирают для другого устройства, чем для этого.',
+    noServersTitle: 'Серверов пока нет. ',
+    noServers:
+      'Этой подписке не выдано ни одного сервера, поэтому называть приложение и выдавать конфиг пока нечем. Всё появится здесь сразу, как оператор выдаст доступ, и ссылка останется той же: брать её заново не нужно.',
+    formatNames: {
+      clash: 'Clash-совместимые',
+      singbox: 'sing-box',
+      xrayjson: 'Xray JSON',
+      'xrayjson-array': 'Xray JSON, массивом',
+      outline: 'Outline',
+      surge: 'Surge',
+      quantumultx: 'Quantumult X',
+      loon: 'Loon',
+      json: 'Список точек входа',
+      xkeen: 'XKeen на Keenetic',
+      wgconf: 'wg-quick / awg',
+      amneziavpn: 'Ключ AmneziaVPN',
+      plain: 'Ссылка подписки',
+    },
     formats: {
-      clash: 'Clash-совместимые: Clash Verge, FlClash, Clash Mi',
-      singbox: 'Ядро sing-box: sing-box, Karing, Hiddify',
-      xrayjson: 'Один конфиг Xray: v2rayN, Throne, Happ',
-      'xrayjson-array': 'Те же серверы отдельными конфигами Xray, именно так их читают Happ и v2RayTun',
+      clash: 'Clash Verge, FlClash, Clash Mi. Вся подписка одним файлом',
+      singbox: 'sing-box, Karing, Hiddify. Вся подписка одним файлом',
+      xrayjson: 'v2rayN, Throne, Happ. Вся подписка одним файлом',
+      'xrayjson-array': 'Те же серверы отдельными конфигами, именно так их читают Happ и v2RayTun',
       outline: 'Только Shadowsocks, SIP008: Outline и клиенты shadowsocks',
-      surge: 'Surge, iOS и macOS',
-      quantumultx: 'Quantumult X, iOS',
-      loon: 'Loon, iOS',
-      json: 'Собственный список точек входа панели, для инструментов и для обращения в поддержку',
+      surge: 'iOS и macOS. Приложение платное',
+      quantumultx: 'iOS. Приложение платное',
+      loon: 'iOS. Приложение платное',
+      json: 'Собственный список точек входа панели, для инструментов',
       xkeen: 'Keenetic с XKeen: исходящие и маршрутизация, без входящего',
-      wgconf: 'Туннель AmneziaWG, по файлу на сервер',
-      amneziavpn: 'Ключ vpn:// для приложения AmneziaVPN, по одному на сервер',
+      wgconf: 'Один туннель на один сервер, а не вся подписка',
+      amneziavpn: 'Скопировать и вставить в приложение, оно разберёт само. Один туннель на один сервер',
       plain: 'Сама подписка, base64. Именно это забирает клиент по ссылке',
     },
     transferTitle: 'Перенести на другое устройство',
@@ -778,6 +842,7 @@ const L: Record<'ru' | 'en', Labels> = {
     routerLabel: 'Роутер',
     statusValues: {
       active: 'активна',
+      revoked: 'отозвана',
       disabled: 'отключена',
       expired: 'истекла',
       limited: 'лимит исчерпан',
@@ -803,6 +868,9 @@ function appsFor(platform: PlatformId, userProtocols: ProtocolName[], hasAwg: bo
 /** How many apps stand in the row above the fold. Four fits the column at 740
  *  and two at phone width; everything else goes under "all apps". */
 const ROW_SIZE = 4;
+
+/** Столько карточек в ряду второго уровня. См. комментарий у вызова. */
+const ALL_ROW_SIZE = 3;
 
 /**
  * The row is the recommended ones, topped up to ROW_SIZE from the rest.
@@ -864,10 +932,17 @@ function renderAppCard(a: AppDef, subUrl: string, icons: GlyphSheet): string {
     ? `<span class="app-card__mark">${icons.draw(markKey, { cls: 'mrk-big' })}</span>`
     : '';
   const dot = a.recommended ? '<span class="app-card__dot"></span>' : '';
+  // Знак и значок действия занимают ОДИН угол, и когда стоят оба, кубик
+  // sing-box лежит под стрелкой, а знак AmneziaVPN под кодом: читается как
+  // грязь, а не как две вещи. В макете на карточке с маркой значка нет вовсе,
+  // марка и есть опознание. Значок остаётся там, где марки не нашлось: угол
+  // свободен, и он единственное, что говорит, чем кончится нажатие.
+  const glyph = markKey
+    ? ''
+    : `<span class="app-card__glyph">${icons.draw(glyphKey, { cls: 'ic' })}</span>`;
   return (
     `<a class="app-card" href="${esc(href)}"${ink !== undefined ? ` style="--mark-o:${ink}"` : ''}>` +
-    `${dot}<span class="app-card__name">${esc(a.name)}</span>` +
-    `<span class="app-card__glyph">${icons.draw(glyphKey, { cls: 'ic' })}</span>${mark}</a>`
+    `${dot}<span class="app-card__name">${esc(a.name)}</span>${glyph}${mark}</a>`
   );
 }
 
@@ -914,11 +989,17 @@ function renderTelegramRow(
 }
 
 /** Cards in rows of ROW_SIZE, the last row padded so the widths stay equal. */
-function cardRows(apps: AppDef[], subUrl: string, icons: GlyphSheet, cls: string): string {
+function cardRows(
+  apps: AppDef[],
+  subUrl: string,
+  icons: GlyphSheet,
+  cls: string,
+  per: number = ROW_SIZE,
+): string {
   const rows: string[] = [];
-  for (let i = 0; i < apps.length; i += ROW_SIZE) {
-    const chunk = apps.slice(i, i + ROW_SIZE);
-    const pad = '<span class="spacer"></span>'.repeat(ROW_SIZE - chunk.length);
+  for (let i = 0; i < apps.length; i += per) {
+    const chunk = apps.slice(i, i + per);
+    const pad = '<span class="spacer"></span>'.repeat(per - chunk.length);
     rows.push(`<div class="${cls}">${chunk.map((a) => renderAppCard(a, subUrl, icons)).join('')}${pad}</div>`);
   }
   return rows.join('');
@@ -953,7 +1034,10 @@ function renderAllApps(
     list.length === 0
       ? ''
       : `<div class="all-apps__group"><div class="all-apps__group-title">${esc(title)}</div>` +
-        cardRows(list, subUrl, icons, 'all-apps__row') +
+        // Второй уровень идёт по ТРИ в ряд, а не по четыре, как ряд над ним:
+      // карточек тут вдвое больше, имена длиннее («AmneziaVPN», «Quantumult X»),
+      // и на четвёртой колонке они обрезались многоточием. В макете ровно так же.
+      cardRows(list, subUrl, icons, 'all-apps__row', ALL_ROW_SIZE) +
         `</div>`;
   return `<div class="all-apps" data-all-apps>
       <div class="all-apps__top">
@@ -1091,6 +1175,27 @@ function renderPanel(
  * Shadowsocks-only list without Shadowsocks, the AmneziaWG files without an
  * AmneziaWG node.
  */
+/**
+ * Каким платформам подходит формат.
+ *
+ * Точка ОТМЕЧАЕТ и ничего не прячет: за конфигом идут как раз тогда, когда
+ * устройство другое, и человек, настраивающий Keenetic с ноутбука, обязан
+ * видеть файл для Keenetic. Поэтому список строк один и тот же на всех
+ * платформах, и счётчик над ним от выбора платформы не меняется. Пустой список
+ * значит «ни одной платформе не отмечаем», а не «спрятать».
+ */
+const DL_FITS: Record<string, PlatformId[]> = {
+  plain: ['windows', 'ios', 'android', 'macos', 'linux', 'androidtv', 'appletv', 'router'],
+  clash: ['windows', 'ios', 'android', 'macos', 'linux'],
+  singbox: ['windows', 'ios', 'android', 'macos', 'linux', 'androidtv', 'appletv'],
+  xrayjson: ['windows', 'ios', 'android', 'macos', 'linux'],
+  surge: ['ios', 'macos'],
+  quantumultx: ['ios'],
+  loon: ['ios'],
+  xkeen: ['router'],
+  wgconf: ['router'],
+};
+
 function renderDownloads(
   data: SubscriptionPageData,
   hasAwg: boolean,
@@ -1142,21 +1247,38 @@ function renderDownloads(
   ];
   const other: Row[] = [
     ...(hasAwg ? perNode('amneziavpn') : []),
-    { fmt: 'plain', noDownload: true },
+    // Not while the subscription is refused: every one of these addresses
+    // answers 403 for such a user, and a row that cannot deliver is the kind
+    // of dead control the whole page is being cleaned of. See the note in
+    // the card body, which says so in words.
+    ...(dead ? [] : [{ fmt: 'plain', noDownload: true }]),
   ];
 
   const row = (r: Row) => {
     const href = `${sub}?format=${r.fmt}${r.q ?? ''}`;
-    const name = r.label ? `${r.fmt} · ${r.label}` : r.fmt;
+    // Имя это то, ЧЕМ строка является для читателя, а не ключ формата.
+    // «clash» подписчику не значит ничего, «Clash-совместимые» значит, а сами
+    // клиенты уходят в подпись под именем.
+    const title = t.formatNames[r.fmt] ?? r.fmt;
+    const name = r.label ? `${title} · ${r.label}` : title;
+    // Строка, которая выдаёт один туннель на один сервер, а не всю подписку,
+    // говорит об этом янтарным: иначе человек с тремя AWG-нодами скачает один
+    // файл и решит, что забрал всё. Такие строки это ровно понодовые.
+    const note = r.label ? ' dl-row__note--warn' : '';
     return (
-      `<div class="dl-row"><div class="dl-row__col">` +
-      `<div class="dl-row__name">${esc(name)}</div>` +
-      `<div class="dl-row__note">${esc(t.formats[r.fmt] ?? '')}</div></div>` +
+      `<div class="dl-row" data-dl-fits="${DL_FITS[r.fmt]?.join(' ') ?? ''}"><div class="dl-row__col">` +
+      `<div class="dl-row__name"><span class="dl-row__dot" aria-hidden="true"></span>${esc(name)}</div>` +
+      `<div class="dl-row__note${note}">${esc(t.formats[r.fmt] ?? '')}</div></div>` +
+      // Кнопки в своей обёртке: на телефоне строка становится колонкой, и они
+      // уезжают под текст одной парой, а не рвут строку пополам.
+      `<div class="dl-row__actions">` +
+      // У строки без скачивания копирование и есть основное действие, поэтому
+      // приглушённой она не идёт: приглушают вторую кнопку, а не единственную.
+      `<button class="dl-btn${r.noDownload ? '' : ' dl-btn--ghost'}" type="button" data-copy-config="${href}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(t.dlCopy)}</span></button>` +
       (r.noDownload
         ? ''
         : `<a class="dl-btn" href="${href}&amp;dl=1">${icons.draw('DownloadIcon', { cls: 'ic' })}<span>${esc(t.dlGet)}</span></a>`) +
-      `<button class="dl-btn dl-btn--ghost" type="button" data-copy-config="${href}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(t.dlCopy)}</span></button>` +
-      `</div>`
+      `</div></div>`
     );
   };
   const group = (title: string, id: string, rows: Row[]) =>
@@ -1171,15 +1293,15 @@ function renderDownloads(
     group(t.dlGroupClients, 'clients', clients) +
     group(t.dlGroupRouter, 'router', router) +
     group(t.dlGroupOther, 'other', other);
-  if (body === '') return '';
+  // Nothing to offer and the subscription is in force: no card. Nothing to
+  // offer BECAUSE it is not in force: the card stays, empty, with the red
+  // line explaining why. A block that vanishes teaches the reader it was
+  // never there, and the person who has just renewed goes looking for it.
+  if (body === '' && !dead) return '';
   const count = clients.length + router.length + other.length;
   // Folded by the same expander as "all apps", and behind the same amber line
   // as the transfer window: one mechanism each, not a second of each.
-  // A subscription that is not in force keeps this block, OPEN, with a red
-  // line on it. Hiding it would be the wrong kindness: the files are the same
-  // files, they simply will not authorise today, and somebody who has just
-  // renewed would go looking for a button that vanished. This is the only
-  // block on the page that depends on the state at all.
+  // This is the only block on the page that changes with the state.
   return `<div class="dl-card" id="downloads">
     <div class="all-apps all-apps--flat${dead ? ' is-open is-dead' : ''}" data-all-apps>
       <div class="all-apps__top">
@@ -1191,12 +1313,13 @@ function renderDownloads(
             <span>${esc(dead ? t.hideAll : t.showAll)}</span>${icons.draw('chevron', { cls: 'ic ic--sel' })}
           </button>
         </div>
-        <div class="all-apps__note">${esc(t.dlNote)}</div>
+        <div class="all-apps__note dl-note--shut">${esc(t.dlNote)}</div>
+        <div class="all-apps__note dl-note--open">${esc(t.dlHint)}</div>
       </div>
       <div class="all-apps__body">
         ${dead ? `<div class="dl-dead">${icons.draw('AlertCircle', { cls: 'ic' })}<span>${esc(t.dlDead)}</span></div>` : ''}
-        <div class="modal__warn">${icons.draw('alert', { cls: 'ic' })}<span>${esc(t.dlWarn)}</span></div>
         <div class="dl-groups">${body}</div>
+        <div class="modal__warn dl-warn">${icons.draw('alert', { cls: 'ic' })}<span>${esc(t.dlWarn)}</span></div>
       </div>
     </div>
   </div>`;
@@ -1223,15 +1346,38 @@ const EXPIRY_WARNING_DAYS = 7;
 const TRAFFIC_WARNING_SHARE = 0.05;
 
 /**
- * ⚠ Only the states a reader can actually reach are here.
+ * The six states of the card.
  *
- * `generateSubscription` throws SubscriptionForbiddenError for a revoked,
- * disabled, expired or limited user (subscription.service.ts:519-531) and the
- * route answers 403 JSON before this page is ever built, so `status` arriving
- * here is always 'active'. The mockup's other cards would be dead branches
- * until that route learns to answer HTML for a refusal; see the handoff report.
+ * Four of them (expired, limit reached, disabled, revoked) belong to a
+ * subscription that is NOT in force. `generateSubscription` refuses those
+ * before it has any endpoints (subscription.service.ts:519-531), so the page
+ * is built for them from the refusal itself: no protocols, no install block,
+ * just who this is and why nothing works. The route decides which; see
+ * `refusalPage` in subscription.routes.ts.
  */
 function statusView(u: SubscriptionPageData['user'], t: Labels): StatusView {
+  // Not in force. Everything reads as stopped, and the line says what to do,
+  // because this page is the last thing a lapsed subscriber sees.
+  if (u.status !== 'active') {
+    const dead: StatusView = {
+      badge: ' sub-card__badge--bad',
+      note: ' sub-card__note--bad',
+      statusTile: ' tile--bad',
+      expiresTile: '',
+      trafficTile: '',
+      icon: 'AlertCircle',
+      line: t.noteStopped[u.status] ?? t.noteStopped.disabled!,
+    };
+    // Tint the tile that explains the refusal, and only that one: on an
+    // expired subscription the traffic figure is not the problem.
+    if (u.status === 'expired') return { ...dead, expiresTile: ' tile--bad' };
+    if (u.status === 'limited') return { ...dead, trafficTile: ' tile--bad' };
+    if (u.status === 'disabled' || u.status === 'revoked') {
+      return { ...dead, icon: 'power', statusTile: ' tile--mute', badge: ' sub-card__badge--mute' };
+    }
+    return dead;
+  }
+
   const ok: StatusView = {
     badge: '',
     note: '',
@@ -1307,15 +1453,29 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   const multiAwg = awgNodes.length > 1;
   const hasAwg = awgNodes.length > 0;
 
-  // Platform tabs: hide a tab entirely if it has no app for this subscription.
+  // Инструкция по установке НЕ ждёт, пока нода ответит.
   //
+  // Приложения и шаги это справочник: какой клиент поставить, куда нажать,
+  // что разрешить системе. Он одинаков у всех и ничего не выдаёт. Пока список
+  // строился только от протоколов подписки, страница у юзера с семью
+  // профилями и тридцатью привязками оказывалась ПУСТОЙ просто потому, что
+  // статус-поллер пометил ноды недоступными: справочник исчезал вслед за
+  // живостью флота, хотя не зависит от неё ни одной строкой.
+  //
+  // Поэтому: есть протоколы, режем по ним, как и раньше. Нет ни одного,
+  // показываем весь справочник. Выдача при этом не подделывается: конфиги и
+  // ссылки по-прежнему идут от настоящих данных, а полоса выше говорит, что
+  // серверов пока нет.
+  const noServers = data.protocols.length === 0;
+  const appData = noServers ? { ...data, protocols: [...PROTOCOL_NAMES] as ProtocolName[] } : data;
+
   // Rendered ONCE per platform and kept. The previous shape rendered every
   // platform a second time just to ask whether its panel would be empty, which
   // was only wasteful while renderApps was pure. It now records which artwork
   // the page needs, and throwing away output that had a side effect is the
   // kind of thing that comes back as a mark in the sprite nobody references.
   const rendered = PLATFORM_ORDER.map(
-    (p) => [p, renderPanel(p, data, hasAwg, t, icons)] as const,
+    (p) => [p, renderPanel(p, appData, hasAwg || noServers, t, icons)] as const,
   ).filter(([, html]) => html !== '');
   const platforms = rendered.map(([p]) => p);
   const first = platforms[0];
@@ -1621,8 +1781,13 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 
   /* App card: the name, and the app's own mark bleeding off the corner. */
   .apps{display:flex; flex-direction:column; gap:10px;}
-  .apps__row{display:flex; gap:12px;}
-  .app-card{flex:1 1 0; min-width:0; display:flex; align-items:center; gap:8px; height:54px;
+  /* Сетка, а не флекс с распорками.
+     На флексе распорка и карточка расходились на 30 px: при flex-basis:0
+     карточку не дают ужать меньше её боковых полей и рамки, распорке ужиматься
+     нечем, и последний неполный ряд выходил шире полного. Колонки решают это
+     по построению, и неполный ряд остаётся ровным без единой подпорки. */
+  .apps__row{display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px;}
+  .app-card{min-width:0; display:flex; align-items:center; gap:8px; height:54px;
     padding:0 14px; border-radius:12px; background:var(--card2); border:1px solid var(--hair2);
     position:relative; overflow:hidden; text-align:left; text-decoration:none; color:inherit;}
   .app-card:hover{border-color:var(--edge-accent2);}
@@ -1667,8 +1832,10 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .all-apps__group{display:flex; flex-direction:column; gap:10px;}
   .all-apps__group-title{font-family:var(--mono); font-size:10px; line-height:12px;
     letter-spacing:.14em; color:var(--faint);}
-  .all-apps__row{display:flex; gap:12px;}
-  .spacer{flex:1 1 0;}
+  .all-apps__row{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;}
+  /* Пустая ячейка сетки. Ширину держит колонка, поэтому распорке нечего
+     задавать, но и убирать её из разметки незачем: ряд остаётся читаемым. */
+  .spacer{display:block;}
 
   /* A line that explains rather than offers: used where the short list IS the
      answer, and later where a television cannot do what a phone can. */
@@ -1735,11 +1902,18 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
      be a box inside a box. */
   .all-apps--flat{padding:0; background:none; border:0;}
   /* Та же утопленная плашка, что и «все приложения»: блок живёт внутри
-     карточки «Установка», а не рядом с ней. Когда установки нет и он остаётся
-     сам по себе, снаружи его оборачивает .card, и рамка не удваивается. */
+     карточки «Установка», а не рядом с ней, в том числе когда выдавать нечего
+     и на её месте стоит объяснение. */
   .dl-card{padding:18px; border-radius:14px; background:var(--sunk); border:1px solid var(--hair2);}
-  .dl-solo>.dl-card{padding:0; background:none; border:0;}
   .dl-mark{width:17px; height:17px; color:var(--mist);}
+  .note-strip__title{color:var(--snow); font-weight:700;}
+  /* Свёрнуто подпись говорит, зачем блок вообще. Раскрыто она уже сказана
+     самим списком, и её место занимает то, что нужно ЗДЕСЬ: что значит точка. */
+  .all-apps.is-open .dl-note--shut{display:none;}
+  .all-apps:not(.is-open) .dl-note--open{display:none;}
+  /* Предупреждение про пароли стоит под списком, а не над ним: сверху его
+     читают до того, как есть что забирать, и оно превращается в шум. */
+  .dl-warn{margin-top:2px;}
   .dl-dead{display:flex; align-items:flex-start; gap:9px; padding:12px 14px; border-radius:12px;
     background:var(--bad-bg); border:1px solid var(--bad-edge); color:var(--bad);
     font-size:12px; line-height:17px;}
@@ -1752,13 +1926,28 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .dl-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px;
     border-radius:12px; background:var(--card2); border:1px solid var(--hair2);}
   .dl-row__col{flex:1 1 220px; min-width:0; display:flex; flex-direction:column; gap:3px;}
-  .dl-row__name{font-family:var(--mono); font-size:13px; font-weight:600; line-height:17px; color:var(--snow);}
+  .dl-row__actions{display:flex; gap:8px; flex-shrink:0;}
+  .dl-row__name{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600;
+    line-height:18px; color:var(--snow);}
   .dl-row__note{font-size:12px; line-height:16px; color:var(--mist);}
+  .dl-row__note--warn{color:var(--warn);}
+  /* Точка отмечает то, что подходит выбранной платформе. Строк это не
+     убавляет: место под точку держится всегда, иначе имена дёргались бы влево
+     и вправо при каждом переключении платформы. */
+  .dl-row__dot{width:6px; height:6px; flex-shrink:0; border-radius:999px; background:transparent;}
+  .dl-row.is-fit{background:var(--cyan-bg); border-color:var(--edge-accent);}
+  .dl-row.is-fit .dl-row__dot{background:var(--cyan);}
+  /* Ровный вид у обеих кнопок, а бирюзу получает только строка, отмеченная
+     точкой: акцент на КАЖДОЙ строке перестаёт быть акцентом, а отмечена та,
+     что подходит выбранной платформе. Приглушённая кнопка остаётся рабочей,
+     это не «выключено». */
   .dl-btn{display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 13px;
-    border-radius:10px; background:var(--cyan-bg); border:1px solid var(--edge-accent2);
-    font-size:13px; font-weight:500; color:var(--cyan); text-decoration:none; white-space:nowrap;}
+    border-radius:10px; background:var(--tile); border:1px solid var(--hair2);
+    font-size:13px; font-weight:500; color:#C8D4E3; text-decoration:none; white-space:nowrap;}
   .dl-btn .ic{width:13px; height:13px;}
   .dl-btn--ghost{background:var(--card2); border-color:var(--hair2); color:var(--mist);}
+  .dl-row.is-fit .dl-btn:not(.dl-btn--ghost){background:var(--cyan-bg);
+    border-color:var(--edge-accent2); color:var(--cyan);}
   .dl-btn:hover{border-color:var(--edge-accent);}
   /* The chosen platform lifts its group to the top and tints its title. It
      never removes a group: taking a config file is what people do FOR another
@@ -1824,6 +2013,58 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   .wrap>.card:nth-of-type(4){animation-delay:.18s}
   .wrap>.card:nth-of-type(5){animation-delay:.22s}
   @keyframes rise{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
+  /* ───── Телефон ─────
+     Одна колонка везде, где на широком их четыре или две, и кнопки строки
+     уезжают под её текст во всю ширину: на 390 они иначе рвут строку пополам
+     и имя формата обрезается на середине слова. */
+  @media (max-width:720px){
+    .wrap{gap:18px; padding:0 16px;}
+    .head{gap:14px; padding:20px 16px 0;}
+    .head__title{font-size:17px; line-height:22px;}
+    .hbtn{height:34px; border-radius:9px; font-size:12px; gap:7px;}
+    .hbtn__full{display:none;}
+    .hbtn__short{display:inline;}
+    .card{padding:17px; border-radius:16px;}
+    .sub-card{gap:16px;}
+    .sub-card__head{gap:12px;}
+    .sub-card__badge{width:38px; height:38px;}
+    .sub-card__name{font-size:17px; line-height:22px;}
+    .sub-card__row{flex-direction:column;}
+    .tile{height:auto; min-height:66px; padding:11px 13px; gap:5px; border-radius:12px;}
+    .tile__value{font-size:14px; line-height:18px;}
+    .install__head{flex-wrap:wrap; gap:10px;}
+    .install__title{font-size:18px;}
+    .apps__row,.all-apps__row{grid-template-columns:minmax(0, 1fr);}
+    .app-card{height:50px;}
+    .spacer{display:none;}
+    /* Иначе «Показать» ломается пополам: заголовку с названием платформы и
+       счётчику на 390 не остаётся места, и переключатель ужимается до буквы. */
+    .all-apps__line{flex-wrap:wrap;}
+    .all-apps__toggle{white-space:nowrap;}
+    .tg-row__col{padding-right:70px;}
+    .step{padding:16px; gap:12px;}
+    .step__num{width:34px; height:34px;}
+    .step__field-value{font-size:14px; line-height:20px;}
+    .linkrow{flex-direction:column; align-items:stretch; gap:8px;}
+    .linkrow .copy{width:100%;}
+    .dl-card{padding:14px;}
+    .dl-row{align-items:stretch; flex-direction:column; gap:10px; padding:11px 12px;}
+    .dl-row__col{flex:0 0 auto;}
+    .dl-btn{flex:1 1 0; min-width:0; justify-content:center; height:34px; padding:0 10px;}
+    .foot{padding:22px 16px 34px;}
+    /* Шторка снизу вместо окна по центру: до верхнего угла большим пальцем не
+       дотянуться, а из-под шторки видно, что страница на месте. */
+    .overlay{align-items:flex-end; justify-content:center; padding:0;}
+    .modal{max-width:none; border-radius:22px 22px 0 0; border-left:0; border-right:0;
+      border-bottom:0; padding:10px 20px 26px; gap:16px; align-items:center; max-height:92vh;}
+    .modal__handle{display:block; width:38px; height:4px; border-radius:2px;
+      background:var(--hair2); flex-shrink:0; margin-bottom:6px;}
+    .modal__head,.link-box,.modal__copy,.modal__warn{width:100%;}
+    .qr-plate{width:100%; padding:20px;}
+    .qr-plate svg{width:262px; height:262px;}
+    .modal__title{font-size:17px; line-height:22px;}
+  }
+
   @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
@@ -1894,21 +2135,30 @@ ${SPRITE_SLOT}
   ${
     /* «Забрать конфигом» это последний блок ВНУТРИ «Установки», а не карточка
        под ней: за конфигом идут, когда установка по ссылке не сложилась, и
-       искать его надо там же, где инструкция. Отдельной карточкой он остаётся
-       только тогда, когда установки нет вовсе (ни одно приложение не говорит
-       на протоколах этой подписки), иначе блок пропал бы вместе с ней. */
+       искать его надо там же, где инструкция.
+
+       Когда серверов ещё нет, карточка всё равно на месте и со всем
+       справочником: исчезала она раньше, и страница из-за этого читалась как
+       сломанная, хотя сломаны были данные. Полоса сверху говорит правду, а
+       инструкция остаётся: ставить приложение можно и до выдачи доступа. */
     platforms.length > 0
       ? `<section class="card install">
     <div class="install__head">
       <h1 class="install__title">${esc(t.setup)}</h1>
       ${pickerHtml}
     </div>
+    ${
+      noServers
+        ? `<div class="note-strip">
+      ${icons.draw('AlertCircle', { cls: 'ic' })}
+      <div class="note-strip__text"><b class="note-strip__title">${esc(t.noServersTitle)}</b>${esc(t.noServers)}</div>
+    </div>`
+        : ''
+    }
     ${panelsHtml}
     ${downloadsHtml}
   </section>`
-      : downloadsHtml
-        ? `<section class="card dl-solo">${downloadsHtml}</section>`
-        : ''
+      : ''
   }
 
   ${scanSection}
@@ -2067,6 +2317,18 @@ ${transferHtml}
       [].slice.call(document.querySelectorAll('[data-dl-group]')).forEach(function (g) {
         g.classList.toggle('is-relevant', g.getAttribute('data-dl-group') === want);
       });
+      // Точка на строках, которые подходят этой платформе. Число строк при
+      // этом не меняется: если счётчик над блоком поедет, значит резка по
+      // платформе вернулась, а её тут быть не должно.
+      // Отметки не ставятся, пока подписка не действует: сегодня не подойдёт
+      // ни одна строка, и подсвечивать там нечего. Гасится здесь, а не
+      // каскадом, иначе сброс акцента пришлось бы повторять для точки, для
+      // строки и для каждой кнопки.
+      var dlDead = !!document.querySelector('#downloads .is-dead');
+      [].slice.call(document.querySelectorAll('[data-dl-fits]')).forEach(function (r) {
+        var fits = r.getAttribute('data-dl-fits');
+        r.classList.toggle('is-fit', !dlDead && !!fits && fits.split(' ').indexOf(p) !== -1);
+      });
     }
     if (pickerBtn) {
       pickerBtn.addEventListener('click', function (e) {
@@ -2122,7 +2384,13 @@ ${transferHtml}
     else if (/Macintosh|Mac OS X/.test(ua)) guess = 'macos';
     else if (/Windows/.test(ua)) guess = 'windows';
     else if (/Linux/.test(ua)) guess = 'linux';
-    if (guess && items.some(function (it) { return it.getAttribute('data-pick') === guess; })) show(guess);
+    // Показать надо в любом случае, а не только когда UA угадался: панель
+    // сервер уже открыл, но отметки в блоке конфигов ставит этот же вызов, и
+    // без него читатель с неузнанным UA не увидел бы ни одной точки.
+    var known = guess && items.some(function (it) { return it.getAttribute('data-pick') === guess; });
+    var first = items[0] && items[0].getAttribute('data-pick');
+    if (known) show(guess);
+    else if (first) show(first);
   })();
 </script>
 </body>

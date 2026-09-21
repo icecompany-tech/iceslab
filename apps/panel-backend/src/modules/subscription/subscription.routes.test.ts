@@ -538,6 +538,108 @@ describe('GET /sub/:token - audit', () => {
   });
 });
 
+describe('a subscription that is not in force', () => {
+  /**
+   * The worst page of the product used to be the one a lapsed subscriber saw:
+   * a raw JSON error object, shown to exactly the person worth getting back.
+   *
+   * The rule is narrow. Only a request already recognised as a browser asking
+   * for a page gets HTML; the status stays 403; everyone else gets the same
+   * JSON, byte for byte, so anything reading that 403 sees no change at all.
+   */
+  const browser = {
+    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+  };
+
+  it('shows the page, and still answers 403', async () => {
+    const user = await createUser('lapsed');
+    await createNode('lapsed-n', '10.0.0.31:8443');
+    await prisma.user.update({ where: { id: user.id }, data: { status: 'expired' } });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}`,
+      headers: browser,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.body).toContain('<!DOCTYPE html>');
+    expect(res.body).toContain('lapsed');
+    // It says what happened and what to do, not "FORBIDDEN".
+    expect(res.body).toContain('Renew it');
+    expect(res.body).not.toContain('"error":"FORBIDDEN"');
+  });
+
+  it('leaves the JSON refusal exactly as it was for everyone else', async () => {
+    const user = await createUser('lapsed-2');
+    await createNode('lapsed-n2', '10.0.0.32:8443');
+    await prisma.user.update({ where: { id: user.id }, data: { status: 'expired' } });
+
+    const cases: Array<[Record<string, string>, string]> = [
+      [{}, ''],
+      [{ 'user-agent': 'Happ/1.0' }, ''],
+      [{ accept: 'application/json' }, ''],
+      // A browser that asked for a FORMAT is a client, not a reader: the
+      // page is only for the request that wanted a page.
+      [browser, '?format=clash'],
+    ];
+    for (const [headers, qs] of cases) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/sub/${user.subscriptionToken}${qs}`,
+        headers,
+      });
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body).toEqual({
+        error: 'FORBIDDEN',
+        message: 'Subscription is expired',
+        reason: 'EXPIRED',
+      });
+    }
+  });
+
+  it('never calls a withdrawn subscription active', async () => {
+    // A revoked link belongs to a user whose row still says `active`, and
+    // that is the one word this page must not print to somebody it has just
+    // turned away. The refusal decides the wording, not the stored status.
+    const user = await createUser('revoked-1');
+    await createNode('revoked-n', '10.0.0.33:8443');
+    await prisma.user.update({ where: { id: user.id }, data: { subRevokedAt: new Date() } });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}`,
+      headers: browser,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('withdrawn');
+    expect(res.body).not.toContain('>active<');
+  });
+
+  it('offers no config it cannot deliver, and says why', async () => {
+    // The downloads block stays on the page (somebody who has just renewed
+    // must not find it gone) but hands out nothing: every one of those
+    // addresses answers with the same refusal.
+    const user = await createUser('lapsed-3');
+    await createNode('lapsed-n3', '10.0.0.34:8443');
+    await prisma.user.update({ where: { id: user.id }, data: { status: 'limited' } });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}`,
+      headers: browser,
+    });
+    expect(res.body).toContain('id="downloads"');
+    expect(res.body).toContain('is-dead');
+    expect(res.body).toContain('no config is issued');
+    expect(res.body).not.toContain('format=plain');
+    // No clients are named either: there are no endpoints to name them for.
+    expect(res.body).not.toContain('data-platform=');
+  });
+});
+
 describe('the download flag', () => {
   /**
    * `&dl=1` says "save this", and it is a flag of its own rather than a

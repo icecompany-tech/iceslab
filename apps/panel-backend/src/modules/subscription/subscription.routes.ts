@@ -206,6 +206,60 @@ function pickLang(acceptLanguage: string | undefined): 'ru' | 'en' {
   return (acceptLanguage ?? '').toLowerCase().includes('ru') ? 'ru' : 'en';
 }
 
+/**
+ * The page for a subscription that is not in force.
+ *
+ * Built from the refusal rather than from a subscription: there are no
+ * endpoints to show and no configs to offer, so what is left is who this is,
+ * why nothing works, and how to fix it. The install block renders itself away
+ * on an empty protocol list, which is the honest shape here.
+ *
+ * `reason` beats the stored status on purpose. A revoked link belongs to a
+ * user whose row still says `active`, and "active" is the one word this page
+ * must not print to somebody it has just turned away.
+ *
+ * Returns undefined when even the name cannot be found (a token pointing at a
+ * deleted user): the caller then falls back to the JSON, because a page about
+ * nobody is worse than an error object.
+ */
+async function refusalPage(
+  token: string,
+  reason: 'REVOKED' | 'DISABLED' | 'EXPIRED' | 'LIMITED',
+  query: { lang?: 'ru' | 'en' },
+  request: FastifyRequest,
+): Promise<string | undefined> {
+  const user = await prisma.user.findFirst({
+    where: { subscriptionToken: token, deletedAt: null },
+    select: {
+      username: true,
+      expireAt: true,
+      trafficLimitBytes: true,
+      traffic: { select: { usedTrafficBytes: true } },
+    },
+  });
+  if (!user) return undefined;
+  const settings = await getSubscriptionSettings();
+  return buildSubscriptionPage({
+    brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
+    lang:
+      query.lang ??
+      settings.defaultLocale ??
+      pickLang(request.headers['accept-language'] as string | undefined),
+    subUrl: `${subscriptionOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${token}`,
+    supportUrl: settings.supportUrl,
+    user: {
+      username: user.username,
+      status: reason.toLowerCase(),
+      expireAt: user.expireAt ? user.expireAt.toISOString() : null,
+      trafficLimitBytes: user.trafficLimitBytes !== null ? Number(user.trafficLimitBytes) : null,
+      trafficUsedBytes: user.traffic ? Number(user.traffic.usedTrafficBytes) : 0,
+    },
+    // No endpoints exist for a refused subscription, so no clients are named
+    // and no config is offered. Both blocks take themselves off the page.
+    protocols: [],
+  });
+}
+
 // Render a QR SVG for arbitrary text. Soft-fails to undefined (the page treats
 // the QR as optional) so a too-large payload or any qrcode-svg edge never
 // breaks the whole subscription page. `join` collapses modules into one path
@@ -657,6 +711,19 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
       if (err instanceof service.SubscriptionForbiddenError) {
+        // A person in a browser gets the page instead of the JSON. Until now
+        // the subscriber whose subscription had just run out - precisely the
+        // one worth getting back - was shown a raw error object.
+        //
+        // The status stays 403 and the JSON stays byte for byte what it was.
+        // The only thing that changes is the BODY, and only when the request
+        // was already recognised as a browser asking for a page: same
+        // condition as the success path, so nothing that reads the 403 sees
+        // any difference.
+        if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
+          const page = await refusalPage(params.token, err.reason, query, request);
+          if (page) return reply.code(403).type('text/html; charset=utf-8').send(page);
+        }
         return reply.code(403).send({
           error: 'FORBIDDEN',
           message: err.message,
