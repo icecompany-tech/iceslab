@@ -209,7 +209,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       global: true,
       encodings: ['gzip', 'deflate'],
       threshold: 1024,
-      customTypes: /^application\/json$/,
+      // ⚠ `customTypes` REPLACES the mime-db check, it does not extend it
+      // (@fastify/compress 8.3.1, index.js:140-143). So this regex is the
+      // whole list, and until 2026-09-21 it left the human subscription page
+      // out: text/html was going over the wire raw. That page is opened on
+      // exactly the networks where bytes cost the most, and it gzips from
+      // 131 KB to 26 KB, which is a bigger saving than every other weight
+      // decision on it put together. The VPN-client formats stay excluded on
+      // purpose (see above): they are text/plain and YAML, and those clients
+      // do not always negotiate Accept-Encoding correctly.
+      customTypes: /^(application\/json|text\/html)$/,
     });
   }
 
