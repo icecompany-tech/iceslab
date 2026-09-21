@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -63,6 +63,17 @@ const PRESETS: { id: RoutingPresetId; title: string; hint: string }[] = ROUTING_
  *  expiring in under a fortnight. Fixed on purpose, so the preview shows the
  *  SHAPE of the headers rather than one real subscriber's numbers. */
 const SAMPLE = { totalBytes: 53_687_091_200, usedBytes: 7_900_000_000, daysLeft: 12 };
+
+/**
+ * Отсчётная точка примера, снятая ОДИН РАЗ при загрузке модуля.
+ *
+ * Не в рендере: рендер обязан быть чистым, а `Date.now()` в нём выдаёт при
+ * каждом вызове своё число. Компонент от этого не зависит по существу, ему
+ * нужен правдоподобный `expire=` в заголовке, а не текущая секунда, и
+ * зафиксировать её на загрузку страницы точнее, чем пересчитывать на каждую
+ * набранную в поле букву.
+ */
+const SAMPLE_NOW_SECONDS = Math.floor(Date.now() / 1000);
 
 interface Draft {
   profileTitle: string;
@@ -414,10 +425,7 @@ function toDraft(s: AdminSettings): Draft {
  */
 function Preview({ draft, brandName }: { draft: Draft; brandName: string }) {
   const { t } = useTranslation();
-  const expire = useMemo(
-    () => Math.floor(Date.now() / 1000) + SAMPLE.daysLeft * 86400,
-    [],
-  );
+  const expire = SAMPLE_NOW_SECONDS + SAMPLE.daysLeft * 86400;
   const title = draft.profileTitle.trim() || brandName;
   const support = draft.supportUrl.trim();
   const announce = draft.announce
