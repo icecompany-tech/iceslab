@@ -206,6 +206,21 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     admin.get('/api/settings', async (_req, reply) => {
       const rows = await prisma.appSetting.findMany();
       const out: Record<string, unknown> = {};
+      /**
+       * Every writable key is present, as null when nobody has set it.
+       *
+       * The read used to dump the rows that exist, so a key nobody had ever
+       * saved was simply absent. The screen fell back to its defaults and
+       * looked right, but "the operator never set this" and "the operator
+       * cleared it" arrived as the same thing, and no screen can tell the
+       * difference between a missing key and a missing answer.
+       *
+       * The list is taken from the schema that accepts writes rather than
+       * written out again here: a second list would go stale the first time a
+       * setting was added, and go stale invisibly, because a missing key looks
+       * exactly like the state this is fixing.
+       */
+      for (const key of Object.keys(UpsertInput.shape)) out[key] = null;
       for (const r of rows) out[r.key] = r.value;
       // Values the screen must show and must not offer to edit. Emitted after
       // the rows so a stale hand-written row can never shadow the truth.
