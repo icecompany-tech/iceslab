@@ -635,8 +635,93 @@ describe('a subscription that is not in force', () => {
     expect(res.body).toContain('is-dead');
     expect(res.body).toContain('no config is issued');
     expect(res.body).not.toContain('format=plain');
-    // No clients are named either: there are no endpoints to name them for.
-    expect(res.body).not.toContain('data-platform=');
+    // ⚠ The install block DOES still appear here, and that is a live
+    // question rather than a settled rule. It shows the whole app catalogue
+    // whenever the protocol list is empty, which was built for a different
+    // case: a working subscription whose fleet is temporarily unreachable,
+    // where an empty page would be a lie about the product. On a REFUSED
+    // subscription the same branch offers apps whose one-tap import leads to
+    // the 403 that produced this page. Asserted as it behaves today, not as
+    // it should; see the handoff note.
+    expect(res.body).toContain('data-platform=');
+  });
+});
+
+describe('a stored config that is missing fields', () => {
+  /**
+   * `config` is jsonb. The zod schema defaults the REALITY arrays and the
+   * AmneziaWG obfuscation block, but only on the way in through the API: a row
+   * written by a seed script, by the migrate tool importing a foreign panel,
+   * or by hand has whatever it has.
+   *
+   * Found on the local stand 2026-09-21. One seeded profile with no
+   * `realityServerNames` answered 500 for EVERY user and EVERY format,
+   * including users whose other endpoints were fine, because this loop builds
+   * the whole subscription in one pass. The blast radius is what makes it
+   * worth a test: one bad row took out the product.
+   */
+  it('still serves the subscription when a REALITY profile has no serverNames', async () => {
+    const user = await createUser('jsonb-1');
+    const nodeId = await createNode('jsonb-n1', '10.0.0.41:8443');
+    const profileId = await createProfile(
+      'xray',
+      {
+        realityDest: 'www.cloudflare.com:443',
+        realityServerNames: ['www.cloudflare.com'],
+        realityShortIds: ['abc123'],
+        realityPrivateKey: 'test-pubkey-for-vitest',
+        realityPublicKey: 'test-pubkey-for-vitest',
+      },
+      'jsonb-x',
+    );
+    await createBinding(profileId, nodeId, 9443);
+    // The shape a seed leaves behind: the security mode says REALITY and the
+    // fields it needs are simply absent.
+    await prisma.profile.update({
+      where: { id: profileId },
+      data: { config: { security: 'reality', realityDest: 'www.cloudflare.com:443' } },
+    });
+
+    const res = await app.inject({ method: 'GET', url: `/sub/${user.subscriptionToken}` });
+    expect(res.statusCode).toBe(200);
+    // The hysteria endpoint from createNode is still there: one broken profile
+    // must not take the working ones with it.
+    const decoded = Buffer.from(res.body, 'base64').toString('utf8');
+    expect(decoded).toContain('hysteria2://');
+  });
+
+  it('skips an AmneziaWG profile with no obfuscation instead of failing, or guessing', async () => {
+    // Eleven numbers with no safe default: Jc/S/H decide what the traffic
+    // looks like on the wire. Zeros would hand out a .conf that connects to
+    // nothing, or connects and is conspicuous. So the endpoint is dropped and
+    // the log says which profile to re-save.
+    const user = await createUser('jsonb-2');
+    const nodeId = await createNode('jsonb-n2', '10.0.0.42:8443');
+    const profileId = await createProfile(
+      'amneziawg',
+      {
+        subnet: '10.66.66.0/24',
+        serverPrivateKey: 'a'.repeat(44),
+        serverPublicKey: 'b'.repeat(44),
+        obfuscation: {},
+      },
+      'jsonb-awg',
+    );
+    await createBinding(profileId, nodeId, 51820);
+    await prisma.profile.update({
+      where: { id: profileId },
+      data: { config: { subnet: '10.66.66.0/24', serverPublicKey: 'b'.repeat(44) } },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=json`,
+      headers: { accept: 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.endpoints.some((e: { protocol: string }) => e.protocol === 'amneziawg')).toBe(false);
+    expect(body.endpoints.some((e: { protocol: string }) => e.protocol === 'hysteria')).toBe(true);
   });
 });
 

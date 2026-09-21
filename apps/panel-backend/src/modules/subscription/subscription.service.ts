@@ -40,6 +40,7 @@ import {
 } from './subscription.formats.js';
 import { engineSpeaksHysteriaObfs } from '../../core-adapters/hysteria/index.js';
 import { effectiveEngineOf } from '../nodes/node-engines.js';
+import { getLogger } from '../../lib/infra/logger.js';
 import { endpointId } from './endpoint-identity.js';
 import { withVlessRouteTag } from './formats/xrayjson.js';
 
@@ -84,6 +85,23 @@ const UNREACHABLE_GRACE_MS = 90_000;
  * dropping out reshuffles only its own users.
  */
 const ENTRY_POOL_SIZE_DEFAULT = 0;
+
+/**
+ * Say "this profile is broken" once per profile, not once per binding per
+ * request.
+ *
+ * A subscription is rebuilt on every client poll, and a broken profile is
+ * usually bound to the whole fleet, so the naive version writes thirty lines
+ * per user per poll. That is not a log, it is a way of losing the one line
+ * that mattered. In-process and never cleared: the point is to tell the
+ * operator once, and a restart is when they would want telling again.
+ */
+const warnedProfiles = new Set<string>();
+function warnBrokenProfileOnce(profileId: string, message: string): void {
+  if (warnedProfiles.has(profileId)) return;
+  warnedProfiles.add(profileId);
+  getLogger().warn(message);
+}
 
 export interface RequestContext {
   ip?: string | null;
@@ -177,6 +195,59 @@ interface NaiveInboundConfig {
   hostname: string;
   tlsEmail: string;
   masqueradeRoot: string;
+}
+
+/**
+ * Which protocol speaks for a node when several of them could.
+ *
+ * Operator's order, not a measurement: xray first because it is what the
+ * fleet is built on, then hysteria, then the sing-box family, then the rest.
+ * A protocol missing from this list sorts last and keeps its relative order.
+ */
+const LINE_PREFERENCE = [
+  'xray',
+  'hysteria',
+  'tuic',
+  'anytls',
+  'shadowtls',
+  'shadowsocks',
+] as const;
+
+/**
+ * One line per SERVER instead of one per server-and-protocol.
+ *
+ * Only bites where there is a choice: a node carrying a single hy2 keeps its
+ * hy2, and no xray appears out of nowhere. Where a node carries several, the
+ * preference order above decides, and an equal protocol is settled by the
+ * lower port, which is stable and does not depend on the order rows came back
+ * from the database.
+ *
+ * ⚠ Scoped to the LINE LIST (the base64 URI list a client imports as its
+ * server list). The whole-config formats are left alone on purpose: that is
+ * where a collapsed protocol stays reachable, so choosing per-node hides a
+ * line, never an endpoint.
+ */
+export function collapseToOneLinePerNode(
+  endpoints: SubscriptionEndpoint[],
+): SubscriptionEndpoint[] {
+  const rank = (p: string) => {
+    const i = (LINE_PREFERENCE as readonly string[]).indexOf(p);
+    return i === -1 ? LINE_PREFERENCE.length : i;
+  };
+  const best = new Map<string, SubscriptionEndpoint>();
+  const order: string[] = [];
+  for (const e of endpoints) {
+    const key = e.nodeName;
+    const current = best.get(key);
+    if (!current) {
+      best.set(key, e);
+      order.push(key);
+      continue;
+    }
+    const byProtocol = rank(e.protocol) - rank(current.protocol);
+    if (byProtocol < 0 || (byProtocol === 0 && e.port < current.port)) best.set(key, e);
+  }
+  return order.map((k) => best.get(k)!);
 }
 
 /**
@@ -922,7 +993,18 @@ export async function generateSubscription(
         }),
       });
     } else if (ib.protocol === 'xray' && user.xrayUuid) {
-      const cfg = ib.config as unknown as XrayInboundConfig & {
+      // ⚠ Every field here is OPTIONAL, whatever the schema says. This is
+      // jsonb: the zod schema defaults `realityServerNames` and
+      // `realityShortIds` to [], but only on the way in through the API. A row
+      // written any other way - a seed script, the migrate tool importing a
+      // foreign panel, a hand-fixed config - has whatever it has.
+      //
+      // Found on the local stand 2026-09-21: a `vless-reality` profile with
+      // `security: "reality"` and no serverNames at all. `cfg.realityServerNames[0]`
+      // threw, and because this loop builds the WHOLE subscription, one such
+      // profile answered 500 for every format and every user, including the
+      // users whose other endpoints were fine.
+      const cfg = ib.config as unknown as Partial<XrayInboundConfig> & {
         subprotocol?: 'vless' | 'trojan' | 'vmess';
         security?: 'reality' | 'none' | 'tls';
         tlsServerName?: string;
@@ -941,9 +1023,13 @@ export async function generateSubscription(
           ? (b.node.domain ?? '')
           : cfg.security === 'tls'
             ? cfg.tlsServerName
-            : cfg.realityServerNames[0]) ??
+            : cfg.realityServerNames?.[0]) ??
         '';
-      const shortId = cfg.realityShortIds[0] ?? '';
+      const shortId = cfg.realityShortIds?.[0] ?? '';
+      // Same reason as the arrays above: a row written outside the API may
+      // carry no key at all, and an empty string is what every builder here
+      // already treats as "no REALITY".
+      const realityPublicKey = cfg.realityPublicKey ?? '';
       const network = cfg.network ?? 'raw';
       const subprotocol = cfg.subprotocol ?? 'vless';
       const fingerprint =
@@ -977,7 +1063,7 @@ export async function generateSubscription(
           password: user.xrayUuid,
           host,
           port,
-          publicKey: cfg.realityPublicKey,
+          publicKey: realityPublicKey,
           shortId,
           sni,
           fingerprint,
@@ -1012,7 +1098,7 @@ export async function generateSubscription(
           uuid: user.xrayUuid,
           host,
           port,
-          publicKey: cfg.realityPublicKey,
+          publicKey: realityPublicKey,
           shortId,
           sni,
           flow: cfg.flow,
@@ -1035,11 +1121,11 @@ export async function generateSubscription(
         ...hostMeta,
         securityLayer: effectiveSecurityLayer,
         uuid: user.xrayUuid,
-        publicKey: cfg.realityPublicKey,
+        publicKey: realityPublicKey,
         shortId,
         sni,
-        flow: cfg.flow,
-        fingerprint,
+        flow: cfg.flow ?? '',
+        fingerprint: fingerprint ?? '',
         network,
         path: xrayPath,
         hostHeader: xrayHostHeader,
@@ -1051,7 +1137,28 @@ export async function generateSubscription(
         cascadeExits: balancerExits.get(b.node.id),
       });
     } else if (ib.protocol === 'amneziawg' && user.amneziawgPrivateKey) {
-      const cfg = ib.config as unknown as AmneziawgInboundConfig;
+      const cfg = ib.config as unknown as Partial<AmneziawgInboundConfig>;
+      // Same jsonb lesson as the xray branch above, with a sharper edge: the
+      // obfuscation block is eleven numbers, and there is no safe default for
+      // them. Jc/S/H decide what the traffic looks like on the wire; emitting
+      // zeros would hand out a .conf that connects to nothing, or connects and
+      // is conspicuous, which is worse than handing out nothing.
+      //
+      // So a profile whose config has no obfuscation block is SKIPPED, not
+      // guessed at and not fatal. Found on the local stand 2026-09-21, where a
+      // seeded `awg` profile had none: `cfg.obfuscation.jc` threw and took the
+      // whole subscription with it, for every user and every format, including
+      // the xray and hysteria endpoints that were perfectly fine.
+      const obf = cfg.obfuscation;
+      if (!obf || !cfg.subnet) {
+        warnBrokenProfileOnce(
+          ib.profileId,
+          `[subscription] profile ${ib.profileId} (amneziawg) has no ` +
+            `${!cfg.subnet ? 'subnet' : 'obfuscation block'} in its stored config; ` +
+            `skipping this endpoint. Re-save the profile in the panel to repair it.`,
+        );
+        continue;
+      }
       // Slice 27: peer is keyed on profileId (one allocation per logical
       // AmneziaWG profile, shared across all nodes the profile is bound to).
       const peer = await allocatePeer(ib.profileId, user.id, cfg.subnet);
@@ -1063,23 +1170,23 @@ export async function generateSubscription(
         ...hostMeta,
         privateKey: user.amneziawgPrivateKey,
         allowedIp: `${peer.ip}/32`,
-        serverPublicKey: cfg.serverPublicKey,
-        jc: cfg.obfuscation.jc,
-        jmin: cfg.obfuscation.jmin,
-        jmax: cfg.obfuscation.jmax,
-        s1: cfg.obfuscation.s1,
-        s2: cfg.obfuscation.s2,
-        s3: cfg.obfuscation.s3,
-        s4: cfg.obfuscation.s4,
-        h1: cfg.obfuscation.h1,
-        h2: cfg.obfuscation.h2,
-        h3: cfg.obfuscation.h3,
-        h4: cfg.obfuscation.h4,
-        i1: cfg.obfuscation.i1 ?? '',
-        i2: cfg.obfuscation.i2 ?? '',
-        i3: cfg.obfuscation.i3 ?? '',
-        i4: cfg.obfuscation.i4 ?? '',
-        i5: cfg.obfuscation.i5 ?? '',
+        serverPublicKey: cfg.serverPublicKey ?? '',
+        jc: obf.jc,
+        jmin: obf.jmin,
+        jmax: obf.jmax,
+        s1: obf.s1,
+        s2: obf.s2,
+        s3: obf.s3,
+        s4: obf.s4,
+        h1: obf.h1,
+        h2: obf.h2,
+        h3: obf.h3,
+        h4: obf.h4,
+        i1: obf.i1 ?? '',
+        i2: obf.i2 ?? '',
+        i3: obf.i3 ?? '',
+        i4: obf.i4 ?? '',
+        i5: obf.i5 ?? '',
         // No standardised URI format for AmneziaWG; clients fetch ?format=wgconf.
         uri: '',
       });

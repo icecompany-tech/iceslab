@@ -187,7 +187,10 @@ async function resolveFormat(
   const matched = await matchFormatForUserAgent(userAgent);
   if (matched && isFormat(matched)) return matched;
   if (acceptHeader.toLowerCase().includes('application/json')) return 'json';
-  return 'plain';
+  // Last resort, and since 2026-09-21 the operator's choice rather than ours.
+  // plain stays the default of that setting: it is the one form every
+  // client can read, so an operator who has not decided keeps what worked.
+  return (await getSubscriptionSettings()).defaultFormat;
 }
 
 // Wave-14 #6: a browser navigating to /sub/<token> should see a human page,
@@ -202,6 +205,21 @@ function wantsHtmlPage(
   return acceptHeader.toLowerCase().includes('text/html');
 }
 
+/**
+ * The origin every subscription link is printed on.
+ *
+ * The panel-settable host wins over the environment: an operator who moves
+ * /sub to its own domain should not need a redeploy to make the panel say so.
+ * Falls back to subscriptionOrigin(), which is SUBSCRIPTION_PUBLIC_URL or the
+ * panel's own URL, exactly as before.
+ *
+ * Scheme is always https here: the host field stores a bare host, and there is
+ * no case for handing subscribers a plaintext link.
+ */
+async function subscriptionLinkOrigin(): Promise<string> {
+  const { publicHost } = await getSubscriptionSettings();
+  return publicHost ? `https://${publicHost}` : subscriptionOrigin();
+}
 function pickLang(acceptLanguage: string | undefined): 'ru' | 'en' {
   return (acceptLanguage ?? '').toLowerCase().includes('ru') ? 'ru' : 'en';
 }
@@ -245,7 +263,7 @@ async function refusalPage(
       query.lang ??
       settings.defaultLocale ??
       pickLang(request.headers['accept-language'] as string | undefined),
-    subUrl: `${subscriptionOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${token}`,
+    subUrl: `${await subscriptionLinkOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${token}`,
     supportUrl: settings.supportUrl,
     user: {
       username: user.username,
@@ -492,7 +510,15 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       const filtered = result.endpoints.filter(
         (e) => !(e.disableForFormats ?? []).includes(format),
       );
-      const filteredPlain = result.endpoints
+      // One line per server, when the operator asked for that. Applied here
+      // and nowhere else: the whole-config formats keep every endpoint, so a
+      // collapsed protocol is still downloadable from the page.
+      const lineShape = (await getSubscriptionSettings()).linkShape;
+      const plainSource =
+        lineShape === 'per-node'
+          ? service.collapseToOneLinePerNode(result.endpoints)
+          : result.endpoints;
+      const filteredPlain = plainSource
         .filter((e) => !(e.disableForFormats ?? []).includes('plain'))
         // A4: a balancer-cascade entry expands into one re-tagged URI per exit;
         // other endpoints pass through. (This note used to claim the JSON array
@@ -511,7 +537,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // config, just links + copy + per-format download buttons.
       if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
         const settings = await getSubscriptionSettings();
-        const subUrl = `${subscriptionOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
+        const subUrl = `${await subscriptionLinkOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
         // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
         // are single-tunnel-per-key, so a user with several AWG servers gets each

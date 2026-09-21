@@ -43,6 +43,49 @@ export interface SubscriptionSettings {
    * surface instead of all of it. Worth having, not worth defaulting to.
    */
   entryPoolSize: number;
+  /**
+   * What a client gets from the bare link when it asks for nothing in
+   * particular: no `?format=`, no user-agent rule, no JSON in Accept.
+   *
+   * Was hard-coded to `plain` (the base64 URI list), which is the safe answer
+   * because every client can read it. An operator whose subscribers are all on
+   * one app can do better than the lowest common denominator, and this is
+   * where they say so.
+   */
+  defaultFormat: 'plain' | 'xrayjson' | 'xrayjson-array' | 'clash' | 'singbox';
+  /**
+   * One line per SERVER or one line per server-and-protocol.
+   *
+   * `per-exit` is what the panel has always done: a line per binding, so a
+   * node serving vless and hy2 appears twice. `per-node` collapses those to
+   * the one line the operator would have picked, by protocol preference and
+   * then by the lower port. Nothing is lost by collapsing: every protocol is
+   * still downloadable from the page's config block.
+   */
+  linkShape: 'per-node' | 'per-exit';
+  /**
+   * Operator's own wording for a subscription that is not in force, per state
+   * and per language. Absent, or an absent language inside it, means the
+   * page's built-in text.
+   *
+   * One setting rather than six keys because they are written on one screen,
+   * saved by one button and read together.
+   */
+  deadTexts: {
+    expired?: { ru?: string; en?: string };
+    limited?: { ru?: string; en?: string };
+    disabled?: { ru?: string; en?: string };
+  } | null;
+  /**
+   * The host subscription links are built on, without a scheme
+   * (`nw.example.com`), or null to use SUBSCRIPTION_PUBLIC_URL / PUBLIC_URL.
+   *
+   * Settable from the panel because it only affects strings we PRINT. Its
+   * neighbour, the path prefix, is not: the route is registered with it at
+   * boot, so a value from the database would not move the route, it would
+   * only make the panel advertise an address nothing answers on.
+   */
+  publicHost: string | null;
 }
 
 // B5 - in-process cache for the subscription settings. `/sub/:token` is hit on
@@ -122,6 +165,41 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
   const localeRaw = asString('defaultLocale');
   const defaultLocale = localeRaw === 'ru' || localeRaw === 'en' ? localeRaw : null;
 
+  // Every read below is defensive for the same reason the rest of this
+  // function is: app_settings is a jsonb key-value table, a row can be
+  // hand-edited, and a garbage value must fall back to the old behaviour
+  // rather than change what subscribers get.
+  const FORMATS = ['plain', 'xrayjson', 'xrayjson-array', 'clash', 'singbox'] as const;
+  const fmtRaw = map.get('subscriptionDefaultFormat');
+  const defaultFormat = FORMATS.includes(fmtRaw as (typeof FORMATS)[number])
+    ? (fmtRaw as (typeof FORMATS)[number])
+    : 'plain';
+
+  const shapeRaw = map.get('subscriptionLinkShape');
+  const linkShape = shapeRaw === 'per-node' ? 'per-node' : 'per-exit';
+
+  // Only the three known states, only the two known languages, only non-empty
+  // strings. An empty object collapses to null so the page keeps its own text
+  // instead of rendering blanks.
+  const deadRaw = map.get('subscriptionDeadTexts');
+  const deadTexts = (() => {
+    if (!deadRaw || typeof deadRaw !== 'object' || Array.isArray(deadRaw)) return null;
+    const src = deadRaw as Record<string, unknown>;
+    const out: NonNullable<SubscriptionSettings['deadTexts']> = {};
+    for (const state of ['expired', 'limited', 'disabled'] as const) {
+      const v = src[state];
+      if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+      const rec = v as Record<string, unknown>;
+      const pair: { ru?: string; en?: string } = {};
+      for (const lang of ['ru', 'en'] as const) {
+        const s = rec[lang];
+        if (typeof s === 'string' && s.trim().length > 0) pair[lang] = s;
+      }
+      if (pair.ru || pair.en) out[state] = pair;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+  })();
+
   const value: SubscriptionSettings = {
     profileTitle: asString('subscriptionProfileTitle'),
     updateIntervalHours: asInt('subscriptionUpdateIntervalHours', 24),
@@ -136,6 +214,13 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
     // Negative or garbage reads as "no cap": the failure mode of a bad row must
     // be a subscriber seeing everything, never a subscriber seeing nothing.
     entryPoolSize: Math.max(0, asInt('subscriptionEntryPoolSize', 0)),
+    defaultFormat,
+    linkShape,
+    deadTexts,
+    // Stored without a scheme, and the one thing worth rejecting here is a
+    // value carrying one: `https://host` would concatenate into
+    // `https://https://host`.
+    publicHost: asString('subscriptionPublicHost')?.replace(/^https?:\/\//, '') ?? null,
   };
   settingsCache = { value, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS };
   return value;
