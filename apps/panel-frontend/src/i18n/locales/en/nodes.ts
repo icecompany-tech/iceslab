@@ -98,11 +98,17 @@ export const nodes = {
       quickDeployHint: 'Quick-deploy - compatible profiles:',
       addProtocolLabel: 'Add protocol',
       addProtocolHint:
-        'Deploy another profile here. Each one is a new binding the agent runs as a child process - a node can serve several protocols at once. Matching-core profiles lead; cross-protocol ones need the binary on the node.',
-      addProtocolMatch:
-        '{{protocol}} matches this node\'s installed core - deploys live on a free port.',
-      addProtocolMismatch:
-        '{{protocol}} differs from the node\'s {{node}} core. The binding deploys, but the agent runs it callback-only until the {{protocol}} binary is installed on the node (SSH for now; one-button install lands later).',
+        'Deploy another profile here. Each one is a new binding the agent runs as a child process - a node can serve several protocols at once. The ones whose core the node found on itself lead.',
+      // Three states from the core list the node reported itself. The old pair
+      // compared the node's LABEL with the profile's protocol, so an xray
+      // profile happily running on a node labelled tuic was warned about a
+      // missing binary.
+      addProtocolWillRun:
+        '{{engine}} is present on this node: the binding deploys live on a free port.',
+      addProtocolWontRun:
+        'The node reported other cores: {{engines}}. The binding is created and saved, but while {{engine}} is absent the agent keeps it callback-only.',
+      addProtocolUnknown:
+        'The node has not reported its cores yet, so nothing is promised about {{engine}} here. Compatibility is checked on save.',
       hostsLabel: 'Hosts · access variants',
       removeBindingTooltip: 'Undeploy from this node',
       uptime: 'uptime {{value}}',

@@ -63,6 +63,12 @@ import {
   type UpdateNodeInput,
 } from '@/lib/domain/nodes';
 import { listSquads } from '@/lib/domain/squads';
+import {
+  engineCoreWord,
+  engineListWords,
+  nodeRunsEngine,
+  type EngineName,
+} from '@/lib/domain/engines';
 import { apiErrorMessage } from '@/lib/net/client';
 import { useOverview } from '@/lib/domain/dashboard';
 import { COUNTRY_OPTIONS, countryFlag } from '@/lib/domain/countries';
@@ -335,16 +341,21 @@ export function NodeEditModal({
   // F-P1-b "+ Add protocol": every profile not yet bound here is deployable,
   // NOT just ones matching the node's installed core. The old `p.protocol ===
   // form.values.protocol` gate is exactly why adding hy2 to an xray node from
-  // the node modal was impossible (the chip never appeared). Now all show;
-  // cross-protocol ones are flagged (binary may be absent -> callback-only).
-  // Sorted matching-core-first so the "just works" options lead.
+  // the node modal was impossible (the chip never appeared).
+  //
+  // Порядок задаёт то, что нода СООБЩИЛА, а не её ярлык: сперва профили, чей
+  // движок у неё есть, потом те, про которые она молчит, и последними те, чьего
+  // движка у неё точно нет. Сортировка по ярлыку ставила первым тот протокол,
+  // что записан в карточке, хотя работать могло ровно наоборот.
   const availableProfiles = (profilesQuery.data?.profiles ?? [])
     .filter((p) => !bindingsWithProfile.some((bp) => bp.binding.profileId === p.id))
-    .sort((a, b) => {
-      const am = a.protocol === node?.protocol ? 0 : 1;
-      const bm = b.protocol === node?.protocol ? 0 : 1;
-      return am - bm || a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+
+  function order(p: { effectiveEngine: EngineName }): number {
+    if (!node) return 1;
+    const runs = nodeRunsEngine(node, p.effectiveEngine);
+    return runs === true ? 0 : runs === undefined ? 1 : 2;
+  }
   const nodeAgentPort = parseNodeAgentPort(node?.address);
   const addBindingMutation = useMutation({
     mutationFn: (profileId: string) => {
@@ -1009,30 +1020,43 @@ export function NodeEditModal({
               </Text>
               <Group gap={6} wrap="wrap">
                 {availableProfiles.map((p) => {
-                  // Cross-protocol = the node's installed core differs, so the
-                  // protocol binary is likely absent and the agent runs the
-                  // inbound callback-only until it's installed (SSH / F-P2).
-                  const mismatch = p.protocol !== node.protocol;
+                  /**
+                   * Возьмёт ли ядро этой ноды такой профиль: членство движка
+                   * профиля в списке, который нода сообщила сама.
+                   *
+                   * Три ответа, и третий тут главный. Раньше сравнивался
+                   * `p.protocol` с `node.protocol`, то есть ЯРЛЫК читался как
+                   * ограничение, и на ноде с ярлыком tuic штатно живущий
+                   * xray-профиль получал жёлтый чип и предупреждение о
+                   * недостающем бинаре. `undefined` = нода ни разу не
+                   * отчиталась: ни чипа, ни обещаний, потому что сказать
+                   * «нет» по неполному списку нельзя.
+                   */
+                  const runs = nodeRunsEngine(node, p.effectiveEngine);
+                  const willNotRun = runs === false;
+                  const engineWord = engineCoreWord(p.effectiveEngine, t);
                   return (
                     <Tooltip
                       key={p.id}
                       label={
-                        mismatch
-                          ? t('nodes.edit.addProtocolMismatch', {
-                              protocol: p.protocol,
-                              node: node.protocol,
-                            })
-                          : t('nodes.edit.addProtocolMatch', { protocol: p.protocol })
+                        runs === undefined
+                          ? t('nodes.edit.addProtocolUnknown', { engine: engineWord })
+                          : willNotRun
+                            ? t('nodes.edit.addProtocolWontRun', {
+                                engine: engineWord,
+                                engines: engineListWords(node, t),
+                              })
+                            : t('nodes.edit.addProtocolWillRun', { engine: engineWord })
                       }
                       multiline
                       w={280}
                     >
                       <Button
                         variant="light"
-                        color={mismatch ? 'yellow' : 'violet'}
+                        color={willNotRun ? 'yellow' : runs === true ? 'violet' : 'gray'}
                         size="xs"
                         leftSection={
-                          mismatch ? <IconAlertTriangle size={12} /> : <IconLink size={12} />
+                          willNotRun ? <IconAlertTriangle size={12} /> : <IconLink size={12} />
                         }
                         rightSection={
                           <Text span size="9px" ff="monospace" tt="uppercase" style={{ opacity: 0.7 }}>
