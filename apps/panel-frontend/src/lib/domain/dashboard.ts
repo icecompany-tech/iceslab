@@ -4,8 +4,9 @@ import { api } from '@/lib/net/client';
 /**
  * F1 - single source of the `/dashboard/overview` poll.
  *
- * Previously five call sites (AppLayout, DashboardPage, NodesPage, UsersPage,
- * NodeEditModal) each declared their own `refetchInterval` (30s / 15s / 10s /
+ * Previously five call sites (AppLayout, DashboardPage, NodesPage, UsersPage
+ * and the node modal that has since been removed) each declared their own
+ * `refetchInterval` (30s / 15s / 10s /
  * none) against the SAME query key, so the effective cadence was an accidental
  * min-of-whatever-happened-to-be-mounted - a backend-load papercut.
  *

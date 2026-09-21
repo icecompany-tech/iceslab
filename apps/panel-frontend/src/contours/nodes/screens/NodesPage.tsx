@@ -42,16 +42,13 @@ import {
   listNodes,
   listRegions,
   refreshNodeBootstrap,
-  updateNode,
   type CreateNodeInput,
   type Node,
-  type UpdateNodeInput,
 } from '@/lib/domain/nodes';
 import { listCascades } from '@/lib/domain/cascades';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { NodeFormModal } from '@/contours/nodes/components/NodeFormModal';
-import { NodeEditModal } from '@/contours/nodes/components/NodeEditModal';
 import { NodePayloadModal } from '@/contours/nodes/components/NodePayloadModal';
 import { NodeCard } from '@/contours/nodes/components/NodeCard';
 import { CascadesPanel } from '@/contours/nodes/components/CascadesPanel';
@@ -428,7 +425,6 @@ export function NodesPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [createOpen, { close: closeCreate }] = useDisclosure(false);
-  const [editing, setEditing] = useState<Node | null>(null);
   const [payload, setPayload] = useState<{
     name: string;
     payload: string;
@@ -617,20 +613,6 @@ export function NodesPage() {
       notifications.show({
         color: 'red',
         title: 'Create failed',
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateNodeInput }) => updateNode(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['nodes'] });
-      notifications.show({ color: 'green', message: 'Node updated' });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: 'Update failed',
         message: err instanceof Error ? err.message : String(err),
       }),
   });
@@ -1250,31 +1232,6 @@ export function NodesPage() {
               });
             }
           }
-        }}
-      />
-
-      <NodeEditModal
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        node={editing}
-        saving={updateMutation.isPending}
-        refreshing={
-          refreshBootstrapMutation.isPending &&
-          refreshBootstrapMutation.variables?.id === editing?.id
-        }
-        onSubmit={async (input) => {
-          if (!editing) return;
-          await updateMutation.mutateAsync({ id: editing.id, input });
-          setEditing(null);
-        }}
-        onDelete={() => {
-          if (!editing) return;
-          handleDelete(editing);
-          setEditing(null);
-        }}
-        onRefreshBootstrap={() => {
-          if (!editing) return;
-          handleRefreshBootstrap(editing);
         }}
       />
 

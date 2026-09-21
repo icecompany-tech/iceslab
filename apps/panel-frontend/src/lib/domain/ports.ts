@@ -1,6 +1,6 @@
-// Port helpers shared by the node editor (NodeEditModal) and the node-create
-// flow (NodesPage). Kept here so both surfaces pick deploy ports the same way
-// instead of one hardcoding 443 (which made multi-profile deploys collide).
+// Port helpers shared by the node-create flow (NodesPage) and the host page.
+// Kept here so both surfaces pick deploy ports the same way instead of one
+// hardcoding 443 (which made multi-profile deploys collide).
 
 // Quick-deploy chip ports tried in order. 443 first (standard TLS), then common
 // Cloudflare-friendly TLS alternates. Pre-2026-05-21 the chip hardcoded 443

@@ -1,4 +1,4 @@
-export const nodes = {
+﻿export const nodes = {
   nodes: {
     title: 'Nodes',
     bar: {
@@ -87,82 +87,6 @@ export const nodes = {
       submitCreate: 'Create node',
       submitWithBindings: 'Create node + {{count}} bindings',
       submitEdit: 'Save',
-    },
-    edit: {
-      params: 'Parameters',
-      system: 'System',
-      bindings: 'Bindings',
-      bindingsCount: 'Bindings ({{count}})',
-      noBindings:
-        'Nothing deployed on this node yet. Use "Deploy to nodes" in a profile card, or quick-deploy below.',
-      quickDeployHint: 'Quick-deploy - compatible profiles:',
-      addProtocolLabel: 'Add protocol',
-      addProtocolHint:
-        'Deploy another profile here. Each one is a new binding the agent runs as a child process - a node can serve several protocols at once. The ones whose core the node found on itself lead.',
-      // Three states from the core list the node reported itself. The old pair
-      // compared the node's LABEL with the profile's protocol, so an xray
-      // profile happily running on a node labelled tuic was warned about a
-      // missing binary.
-      addProtocolWillRun:
-        '{{engine}} is present on this node: the binding deploys live on a free port.',
-      addProtocolWontRun:
-        'The node reported other cores: {{engines}}. The binding is created and saved, but while {{engine}} is absent the agent keeps it callback-only.',
-      addProtocolUnknown:
-        'The node has not reported its cores yet, so nothing is promised about {{engine}} here. Compatibility is checked on save.',
-      hostsLabel: 'Hosts · access variants',
-      removeBindingTooltip: 'Undeploy from this node',
-      uptime: 'uptime {{value}}',
-      coresLabel: 'Cores',
-      paramsName: 'Name',
-      paramsNameDesc: 'unique',
-      paramsProtocol: 'Protocol',
-      paramsProtocolDesc: "node's main core",
-      paramsAddress: 'Address',
-      paramsAddressDesc: 'IP or DNS',
-      paramsPort: 'Node Port',
-      paramsPortDesc: 'mTLS',
-      paramsCountry: 'Country',
-      paramsCountryDesc: 'ISO 3166-1',
-      paramsMultiplier: 'Multiplier',
-      paramsMultiplierDesc: '1 = standard',
-      paramsRegion: 'Region',
-      paramsRegionDesc: 'filter grouping + smart selection',
-      paramsRegionPlaceholder: 'no region',
-      paramsMaxUsers: 'Max users',
-      paramsMaxUsersDesc: 'capacity bar hint',
-      paramsMaxUsersPlaceholder: 'no limit',
-      cpu: 'CPU',
-      cpuHint: '{{cores}} cores · LA {{la}}',
-      ram: 'RAM',
-      disk: 'Disk',
-      todayBytes: 'Today',
-      reachingUsers: 'User reach',
-      exposureLabel: 'Probe exposure',
-      exposureCheck: 'Check open ports',
-      exposureExtra: 'Unexpected open ports: {{ports}}. Close them or confirm they are intended.',
-      exposureClean: 'No unexpected open ports.',
-      exposureSkipped: 'Exposure check unavailable ({{note}}).',
-      // WARP egress (feat/warp-native)
-      warpSection: 'WARP egress',
-      warpSectionDesc: 'Route this node\'s traffic out through Cloudflare WARP.',
-      warpToggle: 'Egress through WARP',
-      warpToggleDesc: 'Registers a free Cloudflare WARP device and sends this node\'s xray traffic out via WARP (a Cloudflare egress IP). Note: using WARP as a proxy egress is a grey area under Cloudflare\'s ToS.',
-      warpEnabled: 'WARP egress enabled',
-      warpDisabled: 'WARP egress disabled',
-      warpFailed: 'WARP action failed',
-      refreshBootstrapBtn: 'Re-issue bootstrap',
-      deleteBtn: 'Delete node',
-      cancel: 'Cancel',
-      save: 'Save',
-      bindingAdded: 'Binding added on port {{port}}',
-      bindingRemoved: 'Binding removed',
-      bindingFailed: 'Deploy failed',
-      bindingRemoveFailed: 'Undeploy failed',
-      bindingPortUpdated: 'Port updated',
-      bindingPortUpdateFailed: 'Port update failed',
-      bindingPortSave: 'Save port',
-      bindingPortAgentConflict: 'Conflict: port {{port}} is the node-agent mTLS listener. Binding will fail to start.',
-      bindingPortBindingConflict: 'Conflict: port {{port}} is already used by another binding on this node.',
     },
     cardSummary: '{{count}} bindings · {{bytes}} today',
     regionFilterAll: 'All regions',

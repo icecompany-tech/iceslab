@@ -70,7 +70,7 @@ const FORMAT_OPTIONS = [
 interface HostsManagerProps {
   bindingId: string;
   protocol: ProtocolName;
-  // F7 - hosts are fetched ONCE at the node level by NodeEditModal and passed
+  // F7 - hosts are fetched ONCE at the node level by the caller and passed
   // down pre-filtered per binding, so this component no longer mounts its own
   // ['hosts', bindingId] query (a node with N bindings used to fire N requests).
   hosts: Host[];
