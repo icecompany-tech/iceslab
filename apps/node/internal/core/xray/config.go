@@ -1073,6 +1073,14 @@ func buildWarpOutbound(w *WarpConfig) map[string]any {
 // panel validates its fragments in CI, but with OUR pinned xray; the node may
 // run a different build, and it is the node's core that has to accept it.
 //
+// WHAT IT DOES NOT CATCH, verified against the pinned v26.3.27 on 2026-09-21:
+// `-test` catches invalid VALUES, not unknown FIELDS. A `realityNoSuchField`
+// added to a working REALITY inbound answers "Configuration OK." and exit 0,
+// so a field we mistype, or one upstream renames, produces no refusal at all
+// and the inbound quietly runs as something other than what the panel shows.
+// Until the rendered config is checked against the core's own schema, the only
+// wall against that is the golden tests in this package.
+//
 // An empty binary path (config-only mode) skips the check: there is nothing to
 // ask, and nothing will be started either.
 func validateConfig(ctx context.Context, run RunCmdFunc, binary string, blob []byte) error {
