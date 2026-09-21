@@ -196,9 +196,18 @@ export async function buildApp(): Promise<FastifyInstance> {
   // to ~2 KB. Below threshold (small lists, error bodies) we skip compression
   // to avoid the CPU/latency cost on responses where the savings are noise.
   //
-  // Restricted to application/json so subscription URIs (text/plain, YAML,
-  // wgconf) stay raw, those clients are mobile VPN apps that don't always
-  // negotiate Accept-Encoding correctly, and the payloads are small.
+  // ⚠ `customTypes` does NOT restrict anything, and the line above this one
+  // used to claim it did ("so subscription URIs stay raw"). Read the plugin:
+  // `shouldCompress` (8.3.1, index.js:516-521) asks the regex FIRST and, when
+  // it says no, falls through to mime-db anyway. mime-db 1.52 marks
+  // text/html, text/plain and text/yaml compressible, so every one of those
+  // is compressed whatever this regex says. It is an extra yes, never a no.
+  //
+  // So: the subscription page and the client formats have always been
+  // compressed for any client that sends Accept-Encoding, and a client that
+  // does not send it would get raw bytes under any setting. To genuinely
+  // exclude a type, the plugin has to be registered with `global: false` and
+  // turned on per route.
   //
   // Skipped under NODE_ENV=test: vitest's app.inject() advertises
   // Accept-Encoding but light-my-request doesn't auto-decode the response,
@@ -209,16 +218,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       global: true,
       encodings: ['gzip', 'deflate'],
       threshold: 1024,
-      // ⚠ `customTypes` REPLACES the mime-db check, it does not extend it
-      // (@fastify/compress 8.3.1, index.js:140-143). So this regex is the
-      // whole list, and until 2026-09-21 it left the human subscription page
-      // out: text/html was going over the wire raw. That page is opened on
-      // exactly the networks where bytes cost the most, and it gzips from
-      // 131 KB to 26 KB, which is a bigger saving than every other weight
-      // decision on it put together. The VPN-client formats stay excluded on
-      // purpose (see above): they are text/plain and YAML, and those clients
-      // do not always negotiate Accept-Encoding correctly.
-      customTypes: /^(application\/json|text\/html)$/,
+      customTypes: /^application\/json$/,
     });
   }
 
