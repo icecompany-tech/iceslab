@@ -150,6 +150,28 @@ function CoreRow({ core }: { core: NodeCore }) {
           <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>{core.version}</Text>
         )}
 
+        {/* Одно слово, и только при ответе ДА. Политику уровня ноды сегодня
+            применяет ровно одно ядро из девяти, и здесь видно, какое именно.
+            Отсутствие поля означает «агент старше поля», а не «не рисует»,
+            поэтому молчание тут это молчание, а не отрицание. */}
+        {core.rendersPolicy === true && (
+          <Text
+            style={{
+              fontFamily: MONO,
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: MOSS,
+              padding: '2px 7px',
+              borderRadius: 999,
+              backgroundColor: `${MOSS}14`,
+              flexShrink: 0,
+            }}
+          >
+            {t('nodeEdit.coresRendersPolicy')}
+          </Text>
+        )}
+
         <Box style={{ flex: 1 }} />
 
         <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: tone }}>

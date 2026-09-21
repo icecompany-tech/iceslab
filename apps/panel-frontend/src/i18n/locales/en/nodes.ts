@@ -301,6 +301,14 @@ export const nodes = {
     },
     coresInventoryNote:
       'This is the inventory, not liveness: whether a core is up right now is what the node status above says. An idle core is a normal state, the agent registers an adapter for every protocol.',
+    coresRendersPolicy: 'applies the policy',
+    policyApplicability: {
+      applies: 'the policy applies',
+      'not-applicable': 'the policy is not applicable on this node',
+      unknown: 'the panel does not know whether the policy applies',
+    },
+    policyApplicabilityWhy:
+      'This node has no core that applies rules: they start working once the node gets a router. The assignment stays where it is, there is nothing to detach.',
     coresShowCommand: 'How to add',
     coresHideCommand: 'Hide',
     coresCopied: 'Command copied',
