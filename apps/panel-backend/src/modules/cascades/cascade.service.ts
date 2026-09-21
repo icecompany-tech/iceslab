@@ -1257,7 +1257,66 @@ export function toWireFragments(mine: HopConfig): XrayCascadeFragments {
   };
 }
 
+/**
+ * The fragments for this node, and a word in the log when there are none but
+ * there should have been.
+ *
+ * A cascade can be enabled, drawn on the screen, and carry nothing at all: a
+ * hop whose stored cred is missing or malformed makes the builders return null,
+ * which is the right call (shipping half a chain blackholes user traffic) and
+ * says nothing anywhere. The panel then shows an enabled cascade, the
+ * subscription keeps handing out its entry, and the traffic goes nowhere.
+ *
+ * Found on live data: the only cascade in the local database is enabled, has
+ * two hops and NULL `link_config` on both, so it has been shipping nothing
+ * since it was written.
+ *
+ * A log line rather than a status or a refusal, deliberately: nobody has
+ * measured how often this happens on a real fleet, and a red badge built on a
+ * guess is worse than a line that tells us. The line names the cascade and the
+ * node, which is what a search needs.
+ */
 export async function getCascadeFragmentsForNode(
+  nodeId: string,
+): Promise<XrayCascadeFragments | null> {
+  const fragments = await buildCascadeFragmentsForNode(nodeId);
+  if (fragments) return fragments;
+  // Only on the null path, so a node in no cascade at all pays nothing on the
+  // way through, and the ordinary case stays one query lighter.
+  const empty = await enabledCascadesTouching(nodeId);
+  for (const name of empty) {
+    getLogger().warn(
+      `[cascade] cascade "${name}" is enabled but builds no fragments for node ${nodeId}: ` +
+        `the chain carries nothing for it. Usually a hop with a missing or malformed link cred; ` +
+        `re-save the cascade to regenerate them.`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Enabled cascades this node is a hop of, by name, in whichever storage.
+ *
+ * Both shapes are asked because a cascade lives in both: the legacy hops and
+ * the v4 positions/directions. Reading one would call a cascade absent while
+ * the other holds it.
+ */
+async function enabledCascadesTouching(nodeId: string): Promise<string[]> {
+  const rows = await prisma.cascade.findMany({
+    where: {
+      enabled: true,
+      OR: [
+        { hops: { some: { nodeId } } },
+        { positions: { some: { nodes: { some: { nodeId } } } } },
+        { directions: { some: { nodes: { some: { nodeId } } } } },
+      ],
+    },
+    select: { name: true },
+  });
+  return rows.map((r) => r.name);
+}
+
+async function buildCascadeFragmentsForNode(
   nodeId: string,
 ): Promise<XrayCascadeFragments | null> {
   // v4 first. Falls through to the hop path for cascades written before the
