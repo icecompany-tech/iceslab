@@ -218,6 +218,47 @@ type ApplyInboundsRequest struct {
 	Dns json.RawMessage `json:"dns,omitempty"`
 	// This node's hop in a cascade. Absent = not part of one.
 	Cascade *NodeCascade `json:"cascade,omitempty"`
+	// The chain as its own process (phase 4). Absent = this node draws the
+	// chain inside its user core, which is what every node does today.
+	//
+	// ⚠ For one transitional release the panel sends BOTH this and Cascade. An
+	// agent that understands Chain must IGNORE Cascade: two link-outs for one
+	// chain would fight over the link port. An older agent never sees this
+	// field and keeps reading Cascade, so a half-updated fleet keeps serving.
+	Chain *NodeChain `json:"chain,omitempty"`
+}
+
+// NodeChain mirrors NodeChain in shared/transport.ts: the chain drawn by a
+// separate process, rendered by the PANEL.
+//
+// Config is raw for the same reason Fragments is: there is one renderer and one
+// chain engine, so a second vocabulary in the middle would buy nothing and go
+// stale against the engine's own schema. The agent asks the engine whether it
+// loads (`sing-box check`), writes it, starts it.
+type NodeChain struct {
+	// Which engine runs the chain. Checked rather than assumed: an agent that
+	// does not know the name must refuse the block, not guess at the JSON.
+	Engine string `json:"engine"`
+	// The engine's own config, verbatim.
+	Config json.RawMessage `json:"config"`
+	// One loopback socks listener per WAY OUT, not per node: a pool of exits on
+	// a direction shares one, the same way it shares one link port.
+	Socks []ChainSocks `json:"socks"`
+	// Password for every listener above. On 127.0.0.1 and still authenticated:
+	// a VPS has other users, and an unauthenticated proxy on loopback is an
+	// open relay for anyone with a shell on that machine.
+	SocksPassword string `json:"socksPassword"`
+}
+
+type ChainSocks struct {
+	// The way out this listener carries, as a cascade direction tag. 0 is the
+	// "Auto" line that names no direction; direction tags are issued from a
+	// counter starting at 1, so zero cannot collide with one.
+	Tag int `json:"tag"`
+	// Always loopback, always CHAIN_SOCKS_BASE + Tag. Sent rather than derived
+	// here: the agent must open exactly these and no others, and a rule the
+	// wire does not carry is one two programs keep in step by hand.
+	Port int `json:"port"`
 }
 
 // NodeCascade mirrors NodeCascade in shared/transport.ts: this node's hop in a

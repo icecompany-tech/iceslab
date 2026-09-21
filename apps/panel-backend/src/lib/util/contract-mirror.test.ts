@@ -113,3 +113,57 @@ describe('the wire enumerations against the agent that fills them', () => {
     }
   });
 });
+
+/**
+ * The `chain` block, key by key, against the Go struct that decodes it.
+ *
+ * The one-commit rule guards the SHAPE of the wire by asking a human to change
+ * both files together. That works when something exercises the pair soon
+ * after: a rename breaks a push and somebody notices. This block ships BEFORE
+ * anything renders or reads it, by design, so a rename on either side would sit
+ * there silently until phase 4 pushed a config the agent decodes into zeroes.
+ *
+ * So the keys are pinned from here while nothing else can catch them. This is
+ * not a general shape checker and does not pretend to be: it reads the JSON
+ * tags of two structs and compares them with the names this side sends.
+ */
+const DTO_GO = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../../apps/node/internal/dto/dto.go',
+);
+
+/** JSON keys of one Go struct, in declaration order, `omitempty` stripped. */
+function jsonKeysOf(struct: string): string[] {
+  const src = readFileSync(DTO_GO, 'utf8');
+  const body = new RegExp(`type ${struct} struct \\{([\\s\\S]*?)\\n\\}`).exec(src)?.[1];
+  if (body === undefined) return [];
+  return [...body.matchAll(/`json:"([^",]+)(?:,omitempty)?"`/g)].map((m) => m[1]!);
+}
+
+describe('the chain block against the agent that will decode it', () => {
+  it('carries the same four keys on both sides', () => {
+    const keys = jsonKeysOf('NodeChain');
+    // Fails rather than passes empty: if the struct is renamed or the file
+    // moves, this test has to say so instead of checking nothing.
+    expect(
+      keys.length,
+      'NodeChain was not found in dto.go, so this test is checking nothing. ' +
+        'Fix the pattern or the struct name, do not delete the test.',
+    ).toBe(4);
+    expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword']);
+  });
+
+  it('carries both socks keys on both sides', () => {
+    expect(jsonKeysOf('ChainSocks')).toEqual(['tag', 'port']);
+  });
+
+  it('keeps the block optional on the request, beside the cascade it replaces', () => {
+    // Optional on the wire is what lets it ship before anything reads it, and
+    // what lets an older agent keep running on `cascade` through the one
+    // transitional release when both travel.
+    const src = readFileSync(DTO_GO, 'utf8');
+    const req = /type ApplyInboundsRequest struct \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
+    expect(req).toContain('`json:"chain,omitempty"`');
+    expect(req).toContain('`json:"cascade,omitempty"`');
+  });
+});

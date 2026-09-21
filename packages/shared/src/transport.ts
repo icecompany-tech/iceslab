@@ -608,6 +608,78 @@ export interface ApplyInboundsRequest {
   /** This node's hop in a cascade. Absent = not part of one, which renders
    *  exactly as before. See NodeCascade. */
   cascade?: NodeCascade;
+  /**
+   * The chain as its own process (phase 4). Absent = this node draws the chain
+   * inside its user core, which is what every node does today.
+   *
+   * ⚠ Ships BEFORE anything renders it, deliberately, and for one transitional
+   * release the panel sends BOTH this and `cascade`. An agent that understands
+   * `chain` must then IGNORE the cascade fragments: two link-outs for one chain
+   * would fight over the link port. An older agent sees no `chain` at all and
+   * keeps reading `cascade`, so a half-updated fleet keeps serving. Same shape
+   * of migration as the one that moved the cascade off the inbound.
+   */
+  chain?: NodeChain;
+}
+
+/**
+ * The chain drawn by a separate process, rendered by the PANEL.
+ *
+ * Raw engine JSON rather than a described shape: there is one renderer and one
+ * chain engine, so a second vocabulary in the middle would buy nothing and go
+ * stale against the engine's own schema. The agent asks the engine whether it
+ * loads (`sing-box check`), writes it, starts it. The same division as the xray
+ * cascade fragments, which the panel has always authored.
+ */
+export interface NodeChain {
+  /**
+   * Which engine runs the chain. A union of one on purpose: the field exists so
+   * a second engine is a value rather than a new block, and so an agent can
+   * refuse a name it does not know instead of guessing at the JSON.
+   */
+  engine: 'singbox';
+  /**
+   * The engine's own config, verbatim. Opaque to the panel's transport layer
+   * and to the agent alike.
+   */
+  config: Record<string, unknown>;
+  /**
+   * Where the user's core hands traffic over: one loopback socks listener per
+   * WAY OUT, not per node. A pool of exits on a direction shares one, the same
+   * way a pool shares one link port.
+   *
+   * The port is derived, never stored: CHAIN_SOCKS_BASE + tag, so both sides
+   * compute it and cannot disagree. It is sent anyway, because the agent must
+   * be able to open exactly these and no others, and because a derivation the
+   * wire does not carry is a rule two programs have to keep in step by hand.
+   */
+  socks: ChainSocks[];
+  /**
+   * Password for every socks listener above.
+   *
+   * On 127.0.0.1 and still authenticated: a VPS has other users, and an
+   * unauthenticated proxy on loopback is an open relay for anyone with a shell
+   * on that machine.
+   *
+   * The VALUE, not a reference: the agent has no store to resolve one against,
+   * and a field named for a lookup that does not happen is worse than a field
+   * named for what it carries. It is generated panel-side and kept on the
+   * cascade, like the heartbeat secret.
+   */
+  socksPassword: string;
+}
+
+export interface ChainSocks {
+  /**
+   * The way out this listener carries, as a CascadeDirection tag.
+   *
+   * 0 means the "Auto" line, the one that names no direction and lets the
+   * entry pick. Zero is free by construction: direction tags are issued from a
+   * counter that starts at 1, so nothing else can ever be it.
+   */
+  tag: number;
+  /** Always loopback, always CHAIN_SOCKS_BASE + tag. */
+  port: number;
 }
 
 /**
