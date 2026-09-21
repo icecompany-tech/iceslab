@@ -34,6 +34,62 @@ export const PROTOCOL_NAMES = [
 
 export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
 
+/** What a listener occupies on the wire. A port is only taken for one of these. */
+export const TRANSPORTS = ['tcp', 'udp'] as const;
+export type Transport = (typeof TRANSPORTS)[number];
+
+/**
+ * Which transport a protocol listens on, by default.
+ *
+ * The panel treated a port as one resource and refused a second binding on it,
+ * which is not caution, it is a refusal of a standard configuration: 443/TCP
+ * and 443/UDP are different sockets, and every browser on earth speaks H2 on
+ * the first and H3 on the second at the same time. REALITY on 443/TCP next to
+ * Hysteria2 on 443/UDP is the same shape.
+ *
+ * ⚠ DEFAULT, not gospel, and exactly one protocol has an exception: xray
+ * carries its own stream transport, and `network: "kcp"` puts it on UDP. The
+ * table cannot see that, because it is keyed on the protocol alone, so a
+ * caller holding the profile config must ask `transportOf` instead. Everything
+ * else here is fixed by the protocol: hysteria2 and tuic are QUIC, amneziawg
+ * is WireGuard, and none of them has a knob that moves it.
+ */
+export const PROTOCOL_TRANSPORT: Record<ProtocolName, Transport> = {
+  // QUIC.
+  hysteria: 'udp',
+  tuic: 'udp',
+  // WireGuard, in its own obfuscated dialect.
+  amneziawg: 'udp',
+  // TCP by default; see transportOf for the kcp exception.
+  xray: 'tcp',
+  // TLS-shaped things, all of them TCP listeners.
+  naive: 'tcp',
+  anytls: 'tcp',
+  shadowtls: 'tcp',
+  // Shadowsocks listens on TCP; its UDP relay rides the same port number but
+  // is not a separate listener anybody else can take.
+  shadowsocks: 'tcp',
+  // Both speak TCP in the shapes this panel deploys.
+  mtproto: 'tcp',
+  mieru: 'tcp',
+};
+
+/**
+ * The transport of a concrete deployment, config included.
+ *
+ * The one place that knows about xray's `network`. Anything that has the
+ * profile config in hand should come through here rather than read the table
+ * directly, or a kcp inbound will be filed as TCP and collide with a REALITY
+ * that is not actually in its way.
+ */
+export function transportOf(
+  protocol: ProtocolName,
+  config?: { network?: string } | null,
+): Transport {
+  if (protocol === 'xray' && config?.network === 'kcp') return 'udp';
+  return PROTOCOL_TRANSPORT[protocol];
+}
+
 /**
  * Which proxy core renders something: the name an agent's adapter answers with.
  *
