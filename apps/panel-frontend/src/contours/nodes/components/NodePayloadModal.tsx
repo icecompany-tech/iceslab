@@ -21,6 +21,7 @@ import {
 } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 import { copyToClipboard } from '@/lib/ui/clipboard';
+import { useNow } from '@/lib/ui/useNow';
 
 interface BootstrapInfo {
   token: string;
@@ -52,6 +53,10 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
   const { t } = useTranslation();
   const [copiedKey, setCopiedKey] = useState<'cmd' | 'payload' | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  // Токен живёт минуты, и человек смотрит на эту цифру, решая, успеет ли он
+  // дойти до ssh. Раньше она снималась один раз при отрисовке и застывала:
+  // «через 12 мин» держалось на экране и тогда, когда прошло двадцать.
+  const now = useNow();
 
   async function handleCopy(key: 'cmd' | 'payload', value: string) {
     try {
@@ -59,7 +64,6 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
       setCopiedKey(key);
       window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1500);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('clipboard copy failed', err);
     }
   }
@@ -99,7 +103,7 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
                   {t('nodePayloadModal.expiresIn', {
                     min: Math.max(
                       0,
-                      Math.round((new Date(bootstrap.expiresAt).getTime() - Date.now()) / 60000),
+                      Math.round((new Date(bootstrap.expiresAt).getTime() - now) / 60000),
                     ),
                   })}
                 </Badge>
