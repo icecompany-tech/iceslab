@@ -254,6 +254,18 @@ HYSTERIA_VERSION=${HYSTERIA_VERSION:-}   # passed as --version to the script; em
 # defence; production operators should set it.
 XRAY_INSTALLER_REF=${XRAY_INSTALLER_REF:-e741a4f56d368afbb9e5be3361b40c4552d3710d}
 XRAY_INSTALLER_SHA=${XRAY_INSTALLER_SHA:-}
+# The installer is pinned; the CORE it installs was not. Without this the
+# script took whatever xray was latest on the day the node was built, so two
+# nodes installed a week apart ran different cores and the panel had no way to
+# know. That is the same hole sing-box and the AmneziaWG module had until they
+# were pinned, and xray was the last one left.
+#
+# v26.3.27 is what the four stand nodes run, confirmed 2026-09-11, so this
+# default changes nothing about the fleet and stops it drifting further.
+# Unlike HYSTERIA_VERSION, this is not empty-by-default: an empty value here
+# means "latest", which is exactly what is being closed. Moving to a newer
+# core is its own decision, made by bumping this line deliberately.
+XRAY_VERSION=${XRAY_VERSION:-v26.3.27}
 
 # pinned_fetch <url> <out-path> [<expected-sha256>]
 # Fetches a URL over HTTPS with no redirects, optionally verifying the
@@ -841,7 +853,7 @@ case "$PROTOCOL" in
     ;;
   xray)
     if ! command -v xray >/dev/null; then
-      log "Installing xray via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
+      log "Installing xray $XRAY_VERSION via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
       XR_TMP=$(mktemp)
       pinned_fetch \
         "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
@@ -852,7 +864,7 @@ case "$PROTOCOL" in
       # An earlier copy of this line had `@ install`; the stray `@` made
       # the installer print "unknown option -- -" and abort. Pass the
       # operation directly.
-      bash "$XR_TMP" install
+      bash "$XR_TMP" install --version "$XRAY_VERSION"
       rm -f "$XR_TMP"
     else
       log "xray already present: $(xray version | head -1)"
@@ -883,7 +895,7 @@ case "$PROTOCOL" in
     # to its own xray-api inbound on 127.0.0.1:8081 (one above the VLESS
     # adapter's :8080 to avoid collision when both adapters live on one node).
     if ! command -v xray >/dev/null; then
-      log "Installing xray (SS2022 runs inside xray-core) via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
+      log "Installing xray $XRAY_VERSION (SS2022 runs inside xray-core) via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
       XR_TMP=$(mktemp)
       pinned_fetch \
         "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
@@ -894,7 +906,7 @@ case "$PROTOCOL" in
       # An earlier copy of this line had `@ install`; the stray `@` made
       # the installer print "unknown option -- -" and abort. Pass the
       # operation directly.
-      bash "$XR_TMP" install
+      bash "$XR_TMP" install --version "$XRAY_VERSION"
       rm -f "$XR_TMP"
     else
       log "xray already present: $(xray version | head -1)"
