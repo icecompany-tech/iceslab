@@ -309,6 +309,11 @@ export const nodes = {
     },
     policyApplicabilityWhy:
       'This node has no core that applies rules: they start working once the node gets a router. The assignment stays where it is, there is nothing to detach.',
+    policyWhyApplies: 'Drawn by the {{core}} {{version}} core on this node.',
+    policyWhyUnknown:
+      'This node has not reported its cores yet, or its agent predates the field. That is neither an error nor «no cores»: wait for the first poll.',
+    policyWhyNotInstalled:
+      'The core that applies rules is not installed on this node. Install it from the «Cores» section below and the rules start working: there is nothing to detach.',
     coresShowCommand: 'How to add',
     coresHideCommand: 'Hide',
     coresCopied: 'Command copied',

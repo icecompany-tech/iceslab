@@ -7,7 +7,7 @@ import { PolicyReach } from '@/contours/nodes/components/NodeEdit/PolicyReach';
 import { PROTOCOL_OPTIONS } from '@/contours/nodes/lib/nodeProtocols';
 import { ServerIcon } from '@/contours/nodes/components/NodeEdit/icons';
 import { useTranslation } from 'react-i18next';
-import { policyApplicability, type PolicyApplicability } from '@/contours/nodes/lib/policyReach';
+import { policyReachFacts, type PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
 import { FAINT, MIST, MONO, MOSS } from '@/contours/nodes/lib/colors';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
 
@@ -22,7 +22,8 @@ export function NodeParamsForm({
   policyRefusal,
 }: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'node' | 'nodePoliciesQuery' | 'policyRefusal'>) {
   const { t } = useTranslation();
-  const applicability = policyApplicability(node?.cores?.cores);
+  const reach = policyReachFacts(node?.cores?.cores);
+  const applicability = reach.state;
 
   return (
               <Stack
@@ -177,14 +178,25 @@ export function NodeParamsForm({
                     hasPolicy={Boolean(form.values.policyId)}
                   />
                 )}
-                {/* Пояснение только там, где оно меняет чтение: «применяется»
-                    и «панель не знает» говорят сами за себя, а «не применима»
-                    обязана сказать, почему и что будет дальше. */}
-                {applicability === 'not-applicable' && (
-                  <Text style={{ fontSize: 12, lineHeight: '17px', color: MIST }}>
-                    {t('nodeEdit.policyApplicabilityWhy')}
-                  </Text>
-                )}
+                {/* Пояснение у ВСЕХ трёх состояний, и это не многословие: в
+                    каждом лежит факт, которого у оператора иначе нет. Кто
+                    именно применяет правила и какой версии. Почему не
+                    применяет и что будет дальше. Что молчание это не «нет
+                    ядер», а «ещё не спрашивали». */}
+                <Text style={{ fontSize: 12, lineHeight: '17px', color: MIST }}>
+                  {applicability === 'applies'
+                    ? t('nodeEdit.policyWhyApplies', {
+                        core: reach.router?.name ?? '',
+                        version: reach.router?.version ?? '',
+                      }).trim()
+                    : applicability === 'unknown'
+                      ? t('nodeEdit.policyWhyUnknown')
+                      : t(
+                          reach.gap === 'router-not-installed'
+                            ? 'nodeEdit.policyWhyNotInstalled'
+                            : 'nodeEdit.policyApplicabilityWhy',
+                        )}
+                </Text>
                 {policyRefusal && (
                   <Box
                     style={{
@@ -211,7 +223,7 @@ export function NodeParamsForm({
  * вещи на экране. «Панель не знает» стоит отдельно от «не применима», потому
  * что отсутствие ответа это не ответ «нет».
  */
-function PolicyApplicabilityLine({ state }: { state: PolicyApplicability }) {
+function PolicyApplicabilityLine({ state }: { state: PolicyReachFacts['state'] }) {
   const { t } = useTranslation();
   const tone = state === 'applies' ? MOSS : state === 'not-applicable' ? MIST : FAINT;
 
