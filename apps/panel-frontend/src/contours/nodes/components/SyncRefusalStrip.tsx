@@ -72,7 +72,13 @@ export function SyncRefusalStrip({
           </Text>
         )}
         {/* Причина моноширинным: это дословный текст чужой программы, и в нём
-            значимы кавычки, скобки и имя поля. */}
+            значимы кавычки, скобки и имя поля.
+
+            В списке она обрезается тремя строками. Ядро отвечает и без цепочки
+            «>», и тогда правило хвоста отдаёт весь абзац: живой отказ «Cascade
+            topology is broken...» это 292 символа, одиннадцать строк, и
+            карточка уезжала вниз, утаскивая метрики за край экрана. Три строки
+            говорят, что случилось; остальное за раскрытием, оно рядом. */}
         <Text
           style={{
             fontFamily: MONO,
@@ -80,6 +86,14 @@ export function SyncRefusalStrip({
             lineHeight: compact ? '16px' : '18px',
             color: SNOW,
             wordBreak: 'break-word',
+            ...(compact && !open
+              ? {
+                  display: '-webkit-box',
+                  WebkitBoxOrient: 'vertical' as const,
+                  WebkitLineClamp: 3,
+                  overflow: 'hidden',
+                }
+              : {}),
           }}
         >
           {refusal.reason}
