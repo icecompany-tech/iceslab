@@ -77,6 +77,13 @@ type Adapter struct {
 	healthCheckedAt time.Time
 	healthResult    bool
 	healthProbing   bool
+
+	// Whether the `awg` on this machine is really amneziawg-tools, asked once
+	// and remembered (guarded by mu). Installed() runs on every healthcheck
+	// poll, and this answer changes only when somebody reinstalls the tools,
+	// which does not happen while the agent is running.
+	toolsChecked    bool
+	toolsAreAmnezia bool
 }
 
 type peerCounters struct {
@@ -682,13 +689,60 @@ func ensureCIDR(ip string) string {
 // the log line says what was found; a node running amneziawg-go is a case to
 // teach this function about when one actually exists, not one to guess at now.
 func (a *Adapter) Installed() bool {
-	tools := core.BinaryPresent(a.cfg.AwgBin) && core.BinaryPresent(a.cfg.AwgQuickBin)
+	present := core.BinaryPresent(a.cfg.AwgBin) && core.BinaryPresent(a.cfg.AwgQuickBin)
+	// Present is not enough, and the stand proved it: ru-02 carries a binary
+	// called `awg` that is ordinary wireguard-tools v1.0.20210914. It answers
+	// every command and speaks none of the obfuscation, so a check that looked
+	// only for the file would report this node as running AmneziaWG.
+	genuine := present && a.toolsAreAmneziawg()
 	module := kernelModuleLoaded()
-	if tools != module {
+	if genuine != module {
 		a.logger.Warn("amneziawg is half installed, reporting it as not installed",
-			"tools", tools, "kernelModule", module, "awgBin", a.cfg.AwgBin)
+			"awgBinPresent", present,
+			"toolsAreAmneziawg", genuine,
+			"kernelModule", module,
+			"awgBin", a.cfg.AwgBin)
 	}
-	return tools && module
+	return genuine && module
+}
+
+// toolsAreAmneziawg asks the binary who it is.
+//
+// amneziawg-tools and wireguard-tools both answer `--version` with
+// "<name> vX - <url>", and the name is the only thing that tells them apart:
+// the fork keeps every command, every flag and the file name. A node with the
+// wrong one accepts the config, brings the interface up and carries traffic
+// with NO obfuscation at all, which is the failure this whole product exists to
+// avoid, and it looks healthy the entire time.
+//
+// Asked once and cached: Installed() runs on every healthcheck poll, and the
+// answer cannot change under a running agent. A failure to run it at all
+// (missing, not executable, timeout) counts as "not amneziawg": an answer we
+// could not get is not a yes.
+func (a *Adapter) toolsAreAmneziawg() bool {
+	a.mu.Lock()
+	if a.toolsChecked {
+		defer a.mu.Unlock()
+		return a.toolsAreAmnezia
+	}
+	run := a.cfg.runCmd
+	bin := a.cfg.AwgBin
+	a.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := run(ctx, bin, "--version")
+	verdict := err == nil && strings.Contains(strings.ToLower(string(out)), "amneziawg")
+	if err == nil && !verdict {
+		a.logger.Warn("the binary at AwgBin is not amneziawg-tools",
+			"awgBin", bin, "version", strings.TrimSpace(string(out)))
+	}
+
+	a.mu.Lock()
+	a.toolsChecked = true
+	a.toolsAreAmnezia = verdict
+	a.mu.Unlock()
+	return verdict
 }
 
 // kernelModuleLoaded reports whether the amneziawg kernel module is loaded.

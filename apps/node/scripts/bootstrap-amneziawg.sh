@@ -44,22 +44,34 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y "linux-headers-${KERNEL_VER}" 
 # no way to know: the fleet drifted silently and only DPI would ever have said
 # so.
 #
-# The refs below are what `master` resolved to on 2026-09-21, so a fresh
-# install gets EXACTLY what it got yesterday. What changes is tomorrow: the
-# version moves when this file moves, with a run behind it.
+# The refs below are WHAT THE FLEET RUNS, read off the stand on 2026-09-21
+# (docs/qa/field-test/00-stand.md): ru-01 and se-01 carry module
+# 1.0.20260611 and amneziawg-tools v1.0.20260618-2.
 #
-# ⚠ The tag also carries the AmneziaWG PROTOCOL generation (the v1 / v3 in
-# front). Changing it is not a version bump, it is a re-issue of every config
-# already handed to a person, so it is a decision taken elsewhere and not a
-# side effect of updating this script. Keep the generation, move the date.
+# The first pin (8444c70) froze `master` instead, which was v3.1 by then, so a
+# node installed after it would have joined the fleet on the OTHER protocol
+# generation. That is not a version skew, it is a different protocol: see the
+# warning below. Corrected here to match the machines that exist.
+#
+# ⚠ The tag carries the AmneziaWG PROTOCOL generation (the v1 / v3 in front).
+# Changing it is not a version bump, it is a re-issue of every config already
+# handed to a person, and every client older than 4.8.12.9 stops connecting. It
+# is a decision about the operator's PEOPLE, taken elsewhere and never as a side
+# effect of updating this script. Keep the generation, move the date. The test
+# beside this file refuses anything that does not start with `v1.` for exactly
+# that reason.
+#
+# ⚠ The tools tag ends in `-2` and that is part of the TAG, not a packaging
+# suffix: upstream has both v1.0.20260618 and v1.0.20260618-2, at different
+# commits. Verified against the GitHub API before this was written.
 #
 # The SHA is checked after the clone because a tag can be moved and a commit
 # cannot. If upstream ever re-tags, the install fails loudly instead of
 # installing something else under a familiar name.
-AWG_MODULE_TAG="${AWG_MODULE_TAG:-v3.1.20260906}"
-AWG_MODULE_SHA="${AWG_MODULE_SHA:-4569c4c67f3a57414969260cafbbd04694fbaae0}"
-AWG_TOOLS_TAG="${AWG_TOOLS_TAG:-v3.1.20260812}"
-AWG_TOOLS_SHA="${AWG_TOOLS_SHA:-ee0f0a9aa34ff0a0da4b3433b9512781cfe02843}"
+AWG_MODULE_TAG="${AWG_MODULE_TAG:-v1.0.20260611}"
+AWG_MODULE_SHA="${AWG_MODULE_SHA:-2a6e1a02ac024f54a23e18f894a279b7f870b8fb}"
+AWG_TOOLS_TAG="${AWG_TOOLS_TAG:-v1.0.20260618-2}"
+AWG_TOOLS_SHA="${AWG_TOOLS_SHA:-61e741780e8465a67a7d7fb6cffe14a8a15d624a}"
 
 # Clone one ref and refuse anything but the commit we asked for.
 clone_pinned() {

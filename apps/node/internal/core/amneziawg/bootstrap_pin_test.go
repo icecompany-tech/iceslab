@@ -15,13 +15,17 @@ import (
 // Two nodes installed a fortnight apart ran different modules and the panel
 // had no way to know: only DPI would ever have told us.
 //
-// The values here are what master resolved to on 2026-09-21, so a fresh
-// install gets what it already got. What is fixed is the drift.
+// The first pin froze `master`, which was v3.1 by then. The stand says the
+// fleet is on 1.x (ru-01 and se-01: module 1.0.20260611, tools
+// v1.0.20260618-2), so that pin would have installed the OTHER PROTOCOL
+// GENERATION on the next node built, and every client older than 4.8.12.9
+// would have stopped connecting to it. These values are the fleet's, read off
+// docs/qa/field-test/00-stand.md and verified against the GitHub API.
 const (
-	pinnedModuleTag  = "v3.1.20260906"
-	pinnedModuleSHA  = "4569c4c67f3a57414969260cafbbd04694fbaae0"
-	pinnedToolsTag   = "v3.1.20260812"
-	pinnedToolsSHA   = "ee0f0a9aa34ff0a0da4b3433b9512781cfe02843"
+	pinnedModuleTag  = "v1.0.20260611"
+	pinnedModuleSHA  = "2a6e1a02ac024f54a23e18f894a279b7f870b8fb"
+	pinnedToolsTag   = "v1.0.20260618-2"
+	pinnedToolsSHA   = "61e741780e8465a67a7d7fb6cffe14a8a15d624a"
 	bootstrapRelPath = "../../../scripts/bootstrap-amneziawg.sh"
 )
 
@@ -32,6 +36,33 @@ func readBootstrap(t *testing.T) string {
 		t.Fatalf("read %s: %v", bootstrapRelPath, err)
 	}
 	return string(blob)
+}
+
+// The generation, on its own, because it is the half that costs people rather
+// than packets.
+//
+// A date that moves is a version bump. A leading v3 instead of v1 is a
+// DIFFERENT PROTOCOL: every config already handed out stops working, and every
+// AmneziaVPN older than 4.8.12.9 cannot speak it at all. That decision is the
+// operator's, about their subscribers, and it must never arrive as the side
+// effect of somebody refreshing a pin to whatever master says today. Which is
+// exactly how it arrived once: see the constants above.
+func TestBootstrapPinsTheProtocolGeneration(t *testing.T) {
+	script := readBootstrap(t)
+	for _, name := range []string{"AWG_MODULE_TAG", "AWG_TOOLS_TAG"} {
+		m := regexp.MustCompile(name + `="\$\{` + name + `:-([^}]+)\}"`).FindStringSubmatch(script)
+		if m == nil {
+			t.Fatalf("%s is not pinned at all, or the shape of the line changed; "+
+				"this test is checking nothing. Fix the pattern, do not delete the test.", name)
+		}
+		if !strings.HasPrefix(m[1], "v1.") {
+			t.Errorf("%s is %q, which is not the protocol generation the fleet runs (v1.x).\n"+
+				"If the move to another generation is deliberate, it is a decision about the\n"+
+				"operator's subscribers: every AmneziaWG config already issued stops working,\n"+
+				"and clients older than 4.8.12.9 cannot connect at all. Change this test in the\n"+
+				"same commit that carries that decision, and not before.", name, m[1])
+		}
+	}
 }
 
 func TestBootstrapPinsBothRefs(t *testing.T) {
