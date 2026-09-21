@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/lib/net/client';
 import { deleteSrrRule, listSrrRules, updateSrrRule, type SrrRule } from '@/lib/domain/srr';
 import { SRR_FORMATS, formatTone } from '@/contours/subscription/lib/srrFormats';
-import { compilePattern, matchingRules } from '@/contours/subscription/lib/srrMatch';
+import { isCatchAll, matchingRules } from '@/contours/subscription/lib/srrMatch';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 
 /**
@@ -501,18 +501,6 @@ export function SrrPage() {
   );
 }
 
-/**
- * A pattern that matches every User-Agent. An unanchored regex matching the
- * empty string matches any input, since the empty match can be found anywhere;
- * the second probe rules out anchored `^$`, which matches only the empty one.
- */
-export function isCatchAll(pattern: string): boolean {
-  // An empty field is not a catch-all, it is an unfinished rule, even though
-  // the empty regex would technically match anything.
-  if (pattern.length === 0) return false;
-  const re = compilePattern(pattern);
-  return re !== null && re.test('') && re.test('Mozilla/5.0');
-}
 
 /* ───── Pieces ──────────────────────────────────────────────────────────── */
 

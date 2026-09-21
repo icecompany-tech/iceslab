@@ -17,7 +17,12 @@ import {
   SRR_FORMATS,
   formatTone,
 } from '@/contours/subscription/lib/srrFormats';
-import { compilePattern, patternCompiles, shadowedBy } from '@/contours/subscription/lib/srrMatch';
+import {
+  compilePattern,
+  isCatchAll,
+  patternCompiles,
+  shadowedBy,
+} from '@/contours/subscription/lib/srrMatch';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import {
   BarButton,
@@ -26,7 +31,6 @@ import {
   InfoIcon,
   TickIcon,
   WarnIcon,
-  isCatchAll,
 } from '@/contours/subscription/screens/SrrPage';
 
 /**

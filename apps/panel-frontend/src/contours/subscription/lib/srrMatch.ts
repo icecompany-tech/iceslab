@@ -83,3 +83,21 @@ export function shadowedBy(
   ).filter((r) => r.priority < draft.priority);
   return earlier[0] ?? null;
 }
+
+/**
+ * Правило, ловящее ЛЮБОЙ User-Agent.
+ *
+ * Незаякоренная регулярка, совпадающая с пустой строкой, совпадает с чем
+ * угодно: пустое совпадение находится в любом месте входа. Вторая проба
+ * отсекает якорный `^$`, который ловит только пустую строку и больше ничего.
+ *
+ * Живёт рядом с `compilePattern`, а не в экране: его зовут два экрана, и
+ * функция без JSX в файле с компонентами лишает их hot-reload.
+ */
+export function isCatchAll(pattern: string): boolean {
+  // Пустое поле это не catch-all, а недописанное правило, хотя пустая
+  // регулярка технически совпала бы с чем угодно.
+  if (pattern.length === 0) return false;
+  const re = compilePattern(pattern);
+  return re !== null && re.test('') && re.test('Mozilla/5.0');
+}
