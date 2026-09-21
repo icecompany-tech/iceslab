@@ -7,11 +7,8 @@ import { listCascades, updateCascade, deleteCascade, type Cascade } from '@/lib/
 import { listNodes } from '@/lib/domain/nodes';
 import { apiErrorMessage } from '@/lib/net/client';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
-import {
-  CascadesView,
-  useCascadeRows,
-  type CascadeLayout,
-} from '@/contours/nodes/components/CascadesView';
+import { CascadesView, type CascadeLayout } from '@/contours/nodes/components/CascadesView';
+import { useCascadeRows } from '@/contours/nodes/lib/cascadeRows';
 
 /**
  * The "Cascades" sub-view of the Nodes page. A cascade is a chain of nodes, so
