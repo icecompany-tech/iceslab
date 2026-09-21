@@ -180,6 +180,12 @@ jobs:
         working-directory: apps/panel-frontend
         run: pnpm exec tsc -b
 
+      # Before the build, not after: a broken assertion is cheaper to read on
+      # its own than inside a bundle log.
+      - name: Test frontend
+        working-directory: apps/panel-frontend
+        run: pnpm exec vitest run
+
       # The same build the frontend Dockerfile runs, ten seconds here instead
       # of a failed image job after the merge.
       - name: Build frontend
