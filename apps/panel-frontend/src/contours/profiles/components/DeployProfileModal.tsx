@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -33,6 +33,9 @@ import {
   nodeRunsEngine,
   type EngineName,
 } from '@/lib/domain/engines';
+import { transportOf } from '@iceslab/shared';
+import { checkNodePort, type PortCheckResult } from '@/lib/domain/portCheck';
+import { PortCheckHint } from '@/ui/PortCheckHint';
 
 interface Props {
   profile: Profile | null;
@@ -117,6 +120,50 @@ export function DeployProfileModal({ profile, onClose }: Props) {
       cancelled = true;
     };
   }, [opened, portTouched, firstNewNodeId]);
+
+  /** Что панель знает про этот порт на выбранных нодах. */
+  const [portCheck, setPortCheck] = useState<PortCheckResult | null>(null);
+  const [portChecking, setPortChecking] = useState(false);
+
+  /** С конфигом профиля, а не по таблице протоколов: у xray с `network: kcp`
+   *  это udp, и по имени протокола этого не видно. */
+  const portCheckTransport = useMemo(
+    () =>
+      profile
+        ? transportOf(profile.protocol, profile.config as { network?: string } | null)
+        : ('tcp' as const),
+    [profile],
+  );
+
+  const runPortCheck = useCallback(async () => {
+    // Спрашиваем ровно про те ноды, которые ДОБАВЛЯЮТСЯ: у уже развёрнутых
+    // порт свой и этим полем не меняется, а «занято вами же» это не ответ.
+    const targets = [...selected].filter((id) => !initialSelected.has(id));
+    if (targets.length === 0) {
+      setPortCheck(null);
+      return;
+    }
+    setPortChecking(true);
+    try {
+      const all = await Promise.all(
+        targets.map((id) => checkNodePort(id, { port, transport: portCheckTransport })),
+      );
+      // Первый отказ важнее общей картины: человеку менять порт, и достаточно
+      // одной ноды, где он занят. Если отказов нет, но хоть одна нода молчала,
+      // сводный ответ не может быть увереннее самого слабого из них.
+      const busy = all.find((r) => !r.ok);
+      if (busy) {
+        setPortCheck(busy);
+      } else {
+        const partial = all.find((r) => r.certainty === 'partial');
+        setPortCheck(partial ?? all[0] ?? null);
+      }
+    } catch {
+      setPortCheck(null);
+    } finally {
+      setPortChecking(false);
+    }
+  }, [selected, initialSelected, port, portCheckTransport]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -225,7 +272,20 @@ export function DeployProfileModal({ profile, onClose }: Props) {
           onChange={(v) => {
             setPortTouched(true);
             setPort(typeof v === 'number' ? v : Number(v) || defaultPort);
+            // Старый ответ относится к старому числу, держать его на экране
+            // значит отвечать не про тот порт.
+            setPortCheck(null);
           }}
+          onBlur={() => void runPortCheck()}
+        />
+        {/* Порт здесь один на все выбранные ноды, поэтому и ответ сводный:
+            строка говорит про первую ноду, где порт занят, а не про каждую по
+            очереди. Запрета нет, отказ по факту даёт сохранение. */}
+        <PortCheckHint
+          result={portCheck}
+          checking={portChecking}
+          port={port}
+          transport={portCheckTransport}
         />
 
         {loading ? (

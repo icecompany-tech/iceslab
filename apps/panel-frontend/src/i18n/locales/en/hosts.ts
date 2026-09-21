@@ -1,5 +1,32 @@
 export const hosts = {
 
+  // The port check on a node. Lives in the shared namespace rather than in
+  // hostEdit: both forms show the line, the binding and the inbound, and a
+  // second copy of the text would drift from the first on the first edit.
+  portCheck: {
+    checking: 'Checking the port on the node…',
+    free: '{{port}}/{{transport}} is free',
+    partial:
+      'No collisions among bindings and cascades; the service ports of this node\'s cores are unknown, the node has not reported.',
+    busyProfile:
+      'Profile "{{name}}" already listens on {{port}}/{{transport}}. A second {{transport}} protocol on the same port needs a demultiplexer, which the panel cannot do yet. Pick another port.',
+    busyCascade:
+      '{{port}}/{{transport}} is taken by cascade "{{name}}": that is the link port between hops, opened by the chain itself. Pick another port.',
+    busyCore:
+      '{{port}}/{{transport}} is taken on this node by {{owner}} (loopback only). It does not face outward, but it listens. Pick another port.',
+    // The dictionary of service listeners. A key that is not here is NOT
+    // invented: it is shown as it came, being the only handle for finding that
+    // service on the machine.
+    owner: {
+      'hysteria-auth': 'the Hysteria 2 auth endpoint',
+      'hysteria-stats': 'the Hysteria 2 stats endpoint',
+      'xray-api': 'the xray API',
+      'shadowsocks-api': 'the API of the second xray behind Shadowsocks',
+      'singbox-api': 'the sing-box API',
+      'mtproto-stats': 'the MTProto stats endpoint',
+    },
+  },
+
   // The Hosts page and its editor. The older `hosts` namespace next to this
   // one belonged to the per-binding editor, which is gone: nothing reads it
   // any more, so it went with the component.
