@@ -3,7 +3,7 @@ import type { RouteRule } from '@/lib/domain/routePolicies';
 import { NEW_PRESET_ID } from '@/contours/traffic/lib/devicePresets';
 import { apiErrorMessage } from '@/lib/net/client';
 import { createRoutingPreset, deleteRoutingPreset, updateRoutingPreset } from '@/lib/domain/routePolicies';
-import { findShadows, strip } from '@/contours/traffic/lib/devicePresetRules';
+import { findShadows, seedRules, strip } from '@/contours/traffic/lib/devicePresetRules';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useRef, useState } from 'react';
@@ -20,12 +20,12 @@ export function useDevicePresetForm(preset: RoutingPreset, onSaved?: () => void)
   const { t } = useTranslation();
 
   const qc = useQueryClient();
+  // Счётчик ТОЛЬКО для строк, которые добавляет оператор: там мы в обработчике
+  // события. Ключи пришедших с сервера строк детерминированы позицией, потому
+  // что читать и увеличивать ref посреди рендера значит делать рендер нечистым.
   const nextKey = useRef(0);
 
-  const initial = useMemo(
-    () => preset.rules.map((r) => ({ ...r, id: r.id || `d${nextKey.current++}` })),
-    [preset],
-  );
+  const initial = useMemo(() => seedRules(preset.rules), [preset]);
   const [name, setName] = useState(preset.name);
   const [rules, setRules] = useState<RouteRule[]>(initial);
   const [loadedFor, setLoadedFor] = useState(preset.id);
@@ -34,7 +34,7 @@ export function useDevicePresetForm(preset: RoutingPreset, onSaved?: () => void)
   if (loadedFor !== preset.id) {
     setLoadedFor(preset.id);
     setName(preset.name);
-    setRules(preset.rules.map((r) => ({ ...r, id: r.id || `d${nextKey.current++}` })));
+    setRules(seedRules(preset.rules));
     setDragging(null);
   }
 
@@ -79,7 +79,7 @@ export function useDevicePresetForm(preset: RoutingPreset, onSaved?: () => void)
     setRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
   function addRule() {
-    setRules((prev) => [...prev, { id: `d${nextKey.current++}`, match: [], action: 'direct', note: '' }]);
+    setRules((prev) => [...prev, { id: `new-${nextKey.current++}`, match: [], action: 'direct', note: '' }]);
   }
   function removeRule(i: number) {
     setRules((prev) => prev.filter((_, j) => j !== i));
