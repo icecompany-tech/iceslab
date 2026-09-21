@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+﻿import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -43,7 +43,7 @@ import {
   sniMismatch,
 } from '@/lib/domain/profiles';
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
-import { transportOf } from '@iceslab/shared';
+import { profileTransport } from '@/lib/domain/profileTransport';
 import {
   checkNodePort,
   portRefusalOf,
@@ -240,10 +240,7 @@ export function HostEditPage() {
   // Без `useMemo` намеренно: `profiles` это новый массив на каждый рендер, и
   // хук с такой зависимостью считал бы ровно столько же раз, только с лишним
   // предупреждением линта. Цена расчёта это `find` по нескольким профилям.
-  const portCheckProfile = profiles.find((p) => p.id === profileId);
-  const portCheckTransport = portCheckProfile
-    ? transportOf(portCheckProfile.protocol, portCheckProfile.config as { network?: string } | null)
-    : 'tcp';
+  const portCheckTransport = profileTransport(profiles.find((p) => p.id === profileId));
 
   const runPortCheck = useCallback(async () => {
     // Спрашивать нечего, пока не выбраны нода, профиль и порт: ответ был бы про
