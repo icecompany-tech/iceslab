@@ -95,6 +95,11 @@ func (s *Server) Run(ctx context.Context) error {
 	// transiently (it has no retry) or the rule was lost to a reimage.
 	s.ensureFirewallFromStore(ctx)
 
+	// And the cores themselves, from the same file. See restoreFromStore: until
+	// 2026-09-22 a restarted agent brought back the firewall and nothing else,
+	// and waited for a panel that could not always speak.
+	s.restoreFromStore(ctx)
+
 	cert, err := tls.X509KeyPair(
 		[]byte(s.cfg.Payload.NodeCertPem),
 		[]byte(s.cfg.Payload.NodeKeyPem),
@@ -473,13 +478,44 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.cfg.InboundsStorePath != "" {
-		if err := writeInboundsAtomically(s.cfg.InboundsStorePath, req.Inbounds); err != nil {
+		// The WHOLE push, not only the inbounds: this file is what a restart
+		// restores from, and inbounds without the node-level policy and
+		// resolver would come back as a node quietly running other routing
+		// than the operator saved.
+		if err := writePushStore(s.cfg.InboundsStorePath, req); err != nil {
 			s.logger.Error("persist inbounds failed", "err", err, "path", s.cfg.InboundsStorePath)
 			writeError(w, http.StatusInternalServerError, "PERSIST_FAILED", err.Error())
 			return
 		}
 	}
 
+	applied, failed, reasons := s.applyPush(r.Context(), req)
+	if failed > 0 {
+		writeError(w, http.StatusInternalServerError, "ADAPTER_FAILED",
+			fmt.Sprintf("%d/%d inbounds failed to apply: %s",
+				failed, len(req.Inbounds), strings.Join(reasons, "; ")))
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.ApplyInboundsResponse{
+		OK:      true,
+		Applied: applied,
+		Skipped: len(req.Inbounds) - applied,
+	})
+}
+
+/*
+applyPush hands one push to the adapters: the node-level blocks first, then the
+inbounds, then the reconcile pass.
+
+Split out of the handler because the agent must be able to do this to ITSELF on
+boot, from the copy on disk, with the panel saying nothing. One body for both,
+so a restart cannot apply a push in a different order or skip a step the live
+path takes. See restoreFromStore.
+*/
+func (s *Server) applyPush(
+	ctx context.Context,
+	req dto.ApplyInboundsRequest,
+) (applied int, failed int, reasons []string) {
 	// The node-level policy goes out BEFORE the inbounds, so the render that
 	// each inbound triggers already carries it. The other order would restart
 	// the core twice for one push: once without the policy, once with it.
@@ -554,8 +590,6 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 	// that don't recognise the protocol return nil (defensive no-op contract).
 	// Slice 24b: Xray has a real reconfig impl; the others are stubs that
 	// log and rely on the persisted inbounds.json for next-restart pickup.
-	applied := 0
-	failed := 0
 	// Why each one failed, in the core's own words, to travel back in the
 	// response. Until now these lived only in this process's journal: the panel
 	// was told "1/3 failed" and could not say which inbound or why, so the
@@ -564,7 +598,6 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 	//
 	// Capped at the first three: a node with forty inbounds and a broken shared
 	// profile would otherwise answer with a wall of the same sentence.
-	var reasons []string
 	for _, ib := range req.Inbounds {
 		s.logger.Info("applyInbounds received",
 			"id", ib.ID, "name", ib.Name, "protocol", ib.Protocol, "port", ib.Port)
@@ -601,10 +634,10 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		// Open UFW for the inbound's port. Extracted into ensureInboundFirewall
 		// so the exact same logic also runs on boot (ensureFirewallFromStore),
 		// not only when a push lands.
-		s.ensureInboundFirewall(r.Context(), ib)
+		s.ensureInboundFirewall(ctx, ib)
 		// And for the cascade inter-hop link port (buried in the xray cascade
 		// fragment, not a top-level inbound, so ensureInboundFirewall misses it).
-		s.ensureCascadeFirewall(r.Context(), ib)
+		s.ensureCascadeFirewall(ctx, ib)
 		applied++
 	}
 
@@ -632,18 +665,7 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if failed > 0 {
-		writeError(w, http.StatusInternalServerError, "ADAPTER_FAILED",
-			fmt.Sprintf("%d/%d inbounds failed to apply: %s",
-				failed, len(req.Inbounds), strings.Join(reasons, "; ")))
-		return
-	}
-
-	writeJSON(w, http.StatusOK, dto.ApplyInboundsResponse{
-		OK:      true,
-		Applied: applied,
-		Skipped: len(req.Inbounds) - applied,
-	})
+	return applied, failed, reasons
 }
 
 // ensureInboundFirewall opens UFW for one inbound's port. Per-protocol UDP vs
@@ -709,15 +731,14 @@ func (s *Server) ensureFirewallFromStore(ctx context.Context) {
 	if s.cfg.InboundsStorePath == "" {
 		return
 	}
-	body, err := os.ReadFile(s.cfg.InboundsStorePath)
+	req, err := readPushStore(s.cfg.InboundsStorePath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Warn("ensureFirewallFromStore: cannot parse persisted inbounds", "err", err)
+		}
 		return // no persisted inbounds yet
 	}
-	var inbounds []dto.InboundDto
-	if err := json.Unmarshal(body, &inbounds); err != nil {
-		s.logger.Warn("ensureFirewallFromStore: cannot parse persisted inbounds", "err", err)
-		return
-	}
+	inbounds := req.Inbounds
 	for _, ib := range inbounds {
 		s.ensureInboundFirewall(ctx, ib)
 		s.ensureCascadeFirewall(ctx, ib)
@@ -725,6 +746,57 @@ func (s *Server) ensureFirewallFromStore(ctx context.Context) {
 	if len(inbounds) > 0 {
 		s.logger.Info("ensureFirewallFromStore: re-ensured firewall for persisted inbounds", "count", len(inbounds))
 	}
+}
+
+/*
+restoreFromStore brings the cores back up from the last push, without the panel.
+
+THE INCIDENT, 2026-09-22. Four agents were restarted. The old process stopped
+xray cleanly; the new one logged "no REALITY key yet, waiting for ApplyInbound
+from panel" (adapter.go, Start) and sat there, because an adapter's idea of what
+it serves lives in memory and a new process has none. Two of the four were
+cascade entries whose push the panel could not build at all, so nothing ever
+came: `pgrep xray` stayed empty for over an hour while a config that had been
+valid a second earlier sat on disk, unread.
+
+The config on disk is the panel's own last word, written atomically when it
+landed. A node that has it needs nobody's permission to come back up.
+
+Deliberately the same body as a live push (applyPush), not a private shortcut:
+a restore that applied things in a different order, or skipped the reconcile,
+would be a second way for a node to be configured, and the whole point is that
+there is one.
+
+Best-effort throughout. A missing store is a fresh node with nothing to restore.
+A push that fails here is logged and the agent carries on: refusing to start
+because one inbound cannot be applied would turn a partial outage into a total
+one, and the panel's next push is still coming.
+*/
+func (s *Server) restoreFromStore(ctx context.Context) {
+	if s.cfg.InboundsStorePath == "" {
+		return
+	}
+	req, err := readPushStore(s.cfg.InboundsStorePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Warn("restore from disk: cannot read the last push",
+				"err", err, "path", s.cfg.InboundsStorePath)
+		}
+		return
+	}
+	if len(req.Inbounds) == 0 {
+		return
+	}
+
+	applied, failed, reasons := s.applyPush(ctx, req)
+	if failed > 0 {
+		s.logger.Error("restored from disk with failures",
+			"applied", applied, "failed", failed,
+			"total", len(req.Inbounds), "reasons", strings.Join(reasons, "; "))
+		return
+	}
+	s.logger.Info("restored from disk",
+		"applied", applied, "total", len(req.Inbounds), "path", s.cfg.InboundsStorePath)
 }
 
 // writeInboundsAtomically marshals the inbound set and delegates to the
