@@ -518,3 +518,26 @@ func sortedClients(in map[string]ssClient) []ssClient {
 	sort.Slice(out, func(i, j int) bool { return out[i].Email < out[j].Email })
 	return out
 }
+
+// Installed reports whether the xray binary SS2022 runs inside is on this
+// machine. Empty path is config-only mode.
+func (a *Adapter) Installed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return core.BinaryPresent(a.cfg.BinaryPath)
+}
+
+// ReservedPorts: this adapter's own loopback gRPC stats port.
+//
+// Its own, and not xray's: SS2022 runs in a second xray process with a separate
+// api inbound, one above the first so the two never collide on a node serving
+// both. The panel has to know both numbers for the same reason.
+func (a *Adapter) ReservedPorts() []core.ReservedPort {
+	a.mu.Lock()
+	apiPort := a.cfg.Inbound.ApiPort
+	a.mu.Unlock()
+	if apiPort == 0 {
+		apiPort = 8081
+	}
+	return []core.ReservedPort{{Owner: "shadowsocks-api", Port: apiPort}}
+}

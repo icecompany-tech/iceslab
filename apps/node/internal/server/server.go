@@ -263,6 +263,33 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 				provisioned := p.Provisioned()
 				cs.Provisioned = &provisioned
 			}
+			// And whether it is even on the machine, which is a different
+			// question: a core can be configured perfectly and absent from
+			// disk, and then it renders nothing. The panel showed a node
+			// applying a routing policy no installed core carries out.
+			if i, ok := adapter.(core.Installable); ok {
+				installed := i.Installed()
+				cs.Installed = &installed
+			}
+			// Ports this core's own services hold. The panel refuses a binding
+			// on a port a profile or a cascade leg already has, and had nothing
+			// to say about these: the save went through and the node failed to
+			// bring one of the two listeners up.
+			if pr, ok := adapter.(core.PortReserver); ok {
+				for _, rp := range pr.ReservedPorts() {
+					if rp.Port <= 0 {
+						continue
+					}
+					cs.ReservedPorts = append(cs.ReservedPorts, dto.ReservedPortDto{
+						Owner: rp.Owner,
+						Port:  rp.Port,
+						// Every one of them is a loopback TCP socket. Sent
+						// rather than assumed by the panel, which compares it
+						// against a binding's transport.
+						Transport: "tcp",
+					})
+				}
+			}
 			// Restart tally, same optional-interface pattern. Without it a
 			// memory-watchdog restart is invisible: the core bounces, users
 			// see drops, and this endpoint keeps saying "running: true".

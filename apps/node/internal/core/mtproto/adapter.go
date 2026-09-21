@@ -382,3 +382,17 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	a.logger.Info("mtproto (mtg) (re)started", "domain", inbound.Domain)
 	return nil
 }
+
+// Installed reports whether the mtg binary is on this machine.
+func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath) }
+
+// ReservedPorts: mtg's own stats endpoint.
+func (a *Adapter) ReservedPorts() []core.ReservedPort {
+	a.mu.Lock()
+	port := a.cfg.Inbound.StatsPort
+	a.mu.Unlock()
+	if port <= 0 {
+		return nil
+	}
+	return []core.ReservedPort{{Owner: "mtproto-stats", Port: port}}
+}

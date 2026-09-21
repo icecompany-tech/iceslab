@@ -262,3 +262,8 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 	a.logger.Info("mieru (mita) reloaded", "users", len(users), "mtu", inbound.MTU)
 	return nil
 }
+
+// Installed reports whether the mita binary is on this machine. mita holds no
+// port of its own beyond the inbound the panel already knows about, so this
+// adapter reserves nothing.
+func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath) }

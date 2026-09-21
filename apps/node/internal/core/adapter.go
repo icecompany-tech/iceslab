@@ -221,6 +221,51 @@ type RestartReporter interface {
 	RestartStats() RestartStats
 }
 
+// Installable is an OPTIONAL interface for adapters that can say whether their
+// core's BINARY is on the machine.
+//
+// Not the same question as Provisioned above, and both are needed: Provisioned
+// is about configuration the panel pushed, this is about the machine. A core
+// that is configured and absent from the disk renders nothing, and the panel
+// had no way to see the difference: it showed a node applying a routing policy
+// that no installed core carries out.
+//
+// Adapters that don't implement this report nothing, and the panel reads
+// nothing as "installed", the behaviour that predates the interface.
+type Installable interface {
+	// Installed must be cheap: it is called on every healthcheck poll (every
+	// 30s per node), so it stats a path rather than executing anything.
+	Installed() bool
+}
+
+// ReservedPort is a port an adapter's own SERVICE holds, as opposed to the user
+// inbound the panel knows about.
+//
+// Owner is a stable KEY and not a sentence ("hysteria-auth", "singbox-api"):
+// the panel is bilingual and renders the words itself.
+type ReservedPort struct {
+	Owner string
+	Port  int
+}
+
+// PortReserver is an OPTIONAL interface for adapters that open ports of their
+// own: the hysteria auth callback, the loopback gRPC APIs xray and sing-box use
+// for per-user counters, mtg's stats port.
+//
+// The panel refuses a binding on a port already taken by a profile or a cascade
+// leg, and until this existed it had nothing to say about these: the operator
+// saved a profile on 9999, the node failed to bring one of the two listeners
+// up, and the only trace was in the agent's journal.
+//
+// Reported rather than tabulated in the panel for the usual reason: a table
+// there drifts from the agent the day a default port changes, and drifts
+// silently.
+type PortReserver interface {
+	// ReservedPorts must be cheap and goroutine-safe: called on every
+	// healthcheck poll.
+	ReservedPorts() []ReservedPort
+}
+
 // Versioner is an OPTIONAL interface an adapter may implement to report the
 // version of its underlying core binary (e.g. the output of `xray version`).
 // The /healthz handler type-asserts each adapter against it and, when present,

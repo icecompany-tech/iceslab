@@ -351,3 +351,8 @@ func usersSlice(in map[string]User) []User {
 	}
 	return out
 }
+
+// Installed reports whether the caddy-naive binary is on this machine. The fork
+// is required for multi-user naive, so a plain caddy at this path is not the
+// same thing; the path is the one the installer writes.
+func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.CaddyBin) }

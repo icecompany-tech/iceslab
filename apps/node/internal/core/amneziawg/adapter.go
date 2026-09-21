@@ -667,3 +667,37 @@ func ensureCIDR(ip string) string {
 	}
 	return ip + "/32"
 }
+
+// Installed reports whether AmneziaWG is on this machine, and it takes BOTH
+// halves: the userspace tools and the kernel module.
+//
+// Half of it is not an installation. `awg` present with no module answers every
+// command with an error at the first interface it is asked to bring up, and the
+// panel showing such a node as carrying AmneziaWG is exactly the lie this field
+// exists to stop. So a disagreement reports false and says which half is
+// missing, rather than true on the strength of the half that is there.
+//
+// ⚠ The userspace amneziawg-go implementation needs no module and would be
+// reported false here. Nothing refuses anything on this field, it is shown, and
+// the log line says what was found; a node running amneziawg-go is a case to
+// teach this function about when one actually exists, not one to guess at now.
+func (a *Adapter) Installed() bool {
+	tools := core.BinaryPresent(a.cfg.AwgBin) && core.BinaryPresent(a.cfg.AwgQuickBin)
+	module := kernelModuleLoaded()
+	if tools != module {
+		a.logger.Warn("amneziawg is half installed, reporting it as not installed",
+			"tools", tools, "kernelModule", module, "awgBin", a.cfg.AwgBin)
+	}
+	return tools && module
+}
+
+// kernelModuleLoaded reports whether the amneziawg kernel module is loaded.
+//
+// /sys/module rather than shelling out to lsmod: this runs on every healthcheck
+// poll, and the directory is the same thing lsmod reads. Absent on a kernel
+// without the module, and on any non-Linux host, which is the right answer in
+// both cases.
+func kernelModuleLoaded() bool {
+	info, err := os.Stat("/sys/module/amneziawg")
+	return err == nil && info.IsDir()
+}

@@ -273,8 +273,20 @@ export function observedCores(cores: CoreStatus[], observedAt: string): NodeCore
       ...(c.engine !== undefined ? { engine: c.engine } : {}),
       ...(c.version ? { version: c.version } : {}),
       ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
+      ...(c.installed !== undefined ? { installed: c.installed } : {}),
       ...(c.rendersPolicy !== undefined ? { rendersPolicy: c.rendersPolicy } : {}),
       ...(c.rendersDns !== undefined ? { rendersDns: c.rendersDns } : {}),
+      // Kept, unlike `running`, because it is inventory: the ports a core holds
+      // change when the node is reconfigured, and the port check has to answer
+      // between two healthchecks rather than by calling the node.
+      //
+      // An empty list is dropped rather than stored: the agent omits the field
+      // when an adapter reserves nothing, and storing `[]` would turn "this
+      // adapter holds nothing" and "this agent does not report" into the same
+      // value, which is the distinction `certainty` is built on.
+      ...(c.reservedPorts && c.reservedPorts.length > 0
+        ? { reservedPorts: c.reservedPorts }
+        : {}),
     })),
   };
 }

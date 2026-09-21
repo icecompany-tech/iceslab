@@ -546,3 +546,16 @@ func (w shadowtlsWire) toInboundConfig(port int) (InboundConfig, error) {
 		ServerPSK:          w.SsPassword,
 	}, nil
 }
+
+// Installed reports whether the sing-box binary is on this machine.
+func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath) }
+
+// ReservedPorts: the loopback v2ray_api socket sing-box opens for per-user
+// counters. Empty StatsListen means stats are off and nothing is held.
+func (a *Adapter) ReservedPorts() []core.ReservedPort {
+	p := core.PortOfListenAddr(a.cfg.StatsListen)
+	if p == 0 {
+		return nil
+	}
+	return []core.ReservedPort{{Owner: "singbox-api", Port: p}}
+}

@@ -166,3 +166,80 @@ func TestPerCoreFlagIsReported(t *testing.T) {
 		t.Error("a core that cannot report provisioning must omit the field")
 	}
 }
+
+// portHoldingCore stands for a real adapter: it knows where its binary is and
+// which sockets it opens for itself.
+type portHoldingCore struct {
+	fakeCore
+	installed bool
+	reserved  []core.ReservedPort
+}
+
+func (p *portHoldingCore) Installed() bool                    { return p.installed }
+func (p *portHoldingCore) ReservedPorts() []core.ReservedPort { return p.reserved }
+
+// A node holds ports nobody asked it to: the hysteria auth callback, the
+// loopback gRPC sockets xray and sing-box open for per-user counters. The panel
+// knew none of them, so a profile could be saved onto one and the node would
+// then fail to bring one of the two listeners up, in its journal, hours later.
+func TestCoresReportTheirOwnPorts(t *testing.T) {
+	got := health(t, &portHoldingCore{
+		fakeCore:  fakeCore{name: "hysteria", engine: "hysteria", running: true},
+		installed: true,
+		reserved: []core.ReservedPort{
+			{Owner: "hysteria-auth", Port: 8080},
+			{Owner: "hysteria-stats", Port: 9999},
+		},
+	})
+	if len(got.Cores) != 1 {
+		t.Fatalf("cores = %d, want 1", len(got.Cores))
+	}
+	c := got.Cores[0]
+	if len(c.ReservedPorts) != 2 {
+		t.Fatalf("reservedPorts = %+v, want both", c.ReservedPorts)
+	}
+	// The OWNER is a key, not a sentence: the panel is bilingual and writes the
+	// words itself.
+	if c.ReservedPorts[0].Owner != "hysteria-auth" || c.ReservedPorts[0].Port != 8080 {
+		t.Errorf("first reserved port = %+v", c.ReservedPorts[0])
+	}
+	// And the transport travels rather than being assumed panel-side, the same
+	// rule the port key follows: 443/TCP and 443/UDP are different sockets.
+	if c.ReservedPorts[1].Transport != "tcp" {
+		t.Errorf("transport = %q, want tcp", c.ReservedPorts[1].Transport)
+	}
+	if c.Installed == nil || !*c.Installed {
+		t.Error("a core that knows its binary is present has to say so")
+	}
+}
+
+// Absent is not false. An adapter that does not implement the interfaces must
+// leave both fields out, so a panel can tell "this agent does not report" from
+// "this core holds nothing" and refuse to promise a port on the strength of it.
+func TestACoreThatDoesNotReportPortsStaysSilent(t *testing.T) {
+	got := health(t, &fakeCore{name: "xray", running: true})
+	c := got.Cores[0]
+	if c.ReservedPorts != nil {
+		t.Errorf("reservedPorts = %+v, want absent", c.ReservedPorts)
+	}
+	if c.Installed != nil {
+		t.Errorf("installed = %v, want absent", *c.Installed)
+	}
+}
+
+// A core that is configured but NOT on the machine renders nothing, and the
+// panel used to show such a node applying the operator's routing policy.
+func TestInstalledIsSeparateFromProvisioned(t *testing.T) {
+	got := health(t, &portHoldingCore{
+		fakeCore:  fakeCore{name: "xray", engine: "xray", running: false},
+		installed: false,
+	})
+	c := got.Cores[0]
+	if c.Installed == nil || *c.Installed {
+		t.Fatal("a core whose binary is missing has to say installed:false, not stay silent")
+	}
+	// It reserves nothing, and an empty list is omitted rather than sent as [].
+	if c.ReservedPorts != nil {
+		t.Errorf("reservedPorts = %+v, want omitted when empty", c.ReservedPorts)
+	}
+}

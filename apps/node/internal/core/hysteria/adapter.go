@@ -562,3 +562,24 @@ func (a *Adapter) LookupByPassword(password string) (userID string, ok bool) {
 	}
 	return entry.UserID, true
 }
+
+// Installed reports whether the hysteria binary is on this machine. An empty
+// path is callback-only mode: the auth server runs, the core does not, and
+// calling that installed would tell the panel a core is here to serve people.
+func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath) }
+
+// ReservedPorts: the auth callback and the traffic-stats API.
+//
+// Neither is an inbound the panel knows about, and both are ordinary listening
+// sockets. A profile saved onto one of them bound cleanly in the panel and then
+// failed to listen on the node, in the journal, hours later.
+func (a *Adapter) ReservedPorts() []core.ReservedPort {
+	out := make([]core.ReservedPort, 0, 2)
+	if a.cfg.AuthCallbackPort > 0 {
+		out = append(out, core.ReservedPort{Owner: "hysteria-auth", Port: a.cfg.AuthCallbackPort})
+	}
+	if p := core.PortOfListenAddr(a.cfg.TrafficStatsListen); p > 0 {
+		out = append(out, core.ReservedPort{Owner: "hysteria-stats", Port: p})
+	}
+	return out
+}

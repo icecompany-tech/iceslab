@@ -311,6 +311,27 @@ type CoreRestartsDto struct {
 	RssBytes         uint64 `json:"rssBytes,omitempty"`
 }
 
+// ReservedPortDto is a port held by a core's own SERVICE rather than by a user
+// inbound: hysteria's auth callback and stats API, the loopback gRPC port xray
+// and sing-box open for per-user counters, mtg's stats port.
+//
+// Owner is a KEY, never a phrase ("hysteria-auth", "singbox-api"). The panel is
+// bilingual and turns it into words; a sentence written here would arrive in
+// English and could never be translated.
+//
+// The set of keys is OPEN. A new adapter adds its own, and a panel that does
+// not know it shows the key rather than refusing to draw the row, so adding an
+// adapter stays a one-repo change.
+type ReservedPortDto struct {
+	Owner string `json:"owner"`
+	Port  int    `json:"port"`
+	// Transport is "tcp" or "udp". Every reserved port is tcp today and it is
+	// sent anyway: the panel compares it with a binding's transport, and
+	// assuming would repeat the mistake the port key made before it learned
+	// that 443/TCP and 443/UDP are different sockets.
+	Transport string `json:"transport"`
+}
+
 type CoreStatus struct {
 	Name    ProtocolName `json:"name"`
 	Running bool         `json:"running"`
@@ -353,6 +374,22 @@ type CoreStatus struct {
 	// field, which is NOT the same as false. A panel reading absent must assume
 	// configured, the behaviour that predates it.
 	Provisioned *bool `json:"provisioned,omitempty"`
+	// Installed answers a different question from Provisioned: is the core's
+	// BINARY on this machine. Provisioned is about configuration the panel
+	// pushed; a core can be configured perfectly and absent from the disk, and
+	// then it renders nothing. An adapter is registered for every protocol the
+	// operator might switch on later, so this is a normal state, not a fault.
+	//
+	// Pointer + omitempty, same rule again: absent means the agent predates the
+	// field and must be read as installed, or today's whole fleet reads as
+	// empty machines.
+	Installed *bool `json:"installed,omitempty"`
+	// ReservedPorts are the ports this core's own services hold. See
+	// ReservedPortDto. Omitted when the adapter reserves nothing, which a panel
+	// cannot tell apart from an agent that predates the field: that is why the
+	// panel's port check reports how certain it is rather than promising a port
+	// is free.
+	ReservedPorts []ReservedPortDto `json:"reservedPorts,omitempty"`
 }
 
 type HealthcheckResponse struct {

@@ -750,6 +750,36 @@ export interface NodeCoreRestarts extends CoreRestarts {
   observedAt: string;
 }
 
+/**
+ * A port on the node held by a core's own SERVICE, not by a user inbound.
+ *
+ * Every core opens sockets nobody asked it to: hysteria listens for its auth
+ * callback and its traffic-stats API, xray and sing-box each open a loopback
+ * gRPC port for per-user counters, mtg has its stats port. The panel knew none
+ * of them, so a binding could be saved onto one and the node would then fail to
+ * bind one of the two listeners, in its journal, hours later.
+ *
+ * `owner` is a KEY and not a phrase: `hysteria-auth`, `singbox-api`. The panel
+ * turns it into words in the operator's language; a sentence from the agent
+ * would arrive in English on a bilingual screen and could never be translated.
+ *
+ * The set is OPEN on purpose. A new adapter adds its own key, and a panel that
+ * does not know it shows the key itself rather than refusing to draw the row.
+ * That is why there is no guard here pinning the list: it would turn adding an
+ * adapter into a two-repo change for no gain.
+ */
+export interface ReservedPort {
+  owner: string;
+  port: number;
+  /**
+   * Which socket it takes. Every one of them is tcp today, and it travels
+   * anyway: the panel compares it against a binding's transport, and assuming
+   * would be the same mistake as the port key made before it learned about
+   * transports.
+   */
+  transport: Transport;
+}
+
 export interface CoreStatus {
   name: ProtocolName;
   running: boolean;
@@ -795,6 +825,31 @@ export interface CoreStatus {
    *  distinction a healthy node reported `degraded` forever (every node of the
    *  field fleet did), so the status stopped changing when something broke. */
   provisioned?: boolean;
+  /**
+   * Whether the core's BINARY is on the machine.
+   *
+   * A different question from `provisioned`, and the pair is not redundant:
+   * `provisioned` is about configuration the panel pushed, this is about the
+   * machine. An adapter is registered for every protocol the operator might
+   * switch on later, so a node can report a core that nothing has installed,
+   * and a core that is absent renders nothing however well it is configured.
+   * The policy card already needs both to say "this node applies the policy"
+   * without lying.
+   *
+   * ⚠ Absent means the agent predates the field, which is NOT false. Read it
+   * as installed, the behaviour that came before, or the whole current fleet
+   * reads as empty machines.
+   */
+  installed?: boolean;
+  /**
+   * Ports this core's own services hold, see ReservedPort.
+   *
+   * Absent = this adapter reserves nothing, OR the agent predates the field,
+   * and the panel cannot tell those apart. That is why the port check reports
+   * `certainty`: a list that may be missing entries is enough to refuse a port
+   * it names and never enough to promise one it does not.
+   */
+  reservedPorts?: ReservedPort[];
 }
 
 export interface HealthcheckResponse {
@@ -835,8 +890,15 @@ export interface NodeCoreInfo {
   engine?: EngineName;
   version?: string;
   provisioned?: boolean;
+  installed?: boolean;
   rendersPolicy?: boolean;
   rendersDns?: boolean;
+  /**
+   * Stored, unlike `running`, because it is inventory and not liveness: which
+   * ports a core holds changes when the node is reconfigured, not from tick to
+   * tick, and the port check has to answer between two healthchecks.
+   */
+  reservedPorts?: ReservedPort[];
 }
 
 // ───── GET /metrics ─────

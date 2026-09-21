@@ -1390,3 +1390,26 @@ func sortedClients(users map[string]xrayClient) []xrayClient {
 	sort.Slice(out, func(i, j int) bool { return out[i].Email < out[j].Email })
 	return out
 }
+
+// Installed reports whether the xray binary is on this machine. Empty path is
+// config-only mode, which writes a config and spawns nothing.
+func (a *Adapter) Installed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return core.BinaryPresent(a.cfg.BinaryPath)
+}
+
+// ReservedPorts: the loopback gRPC port xray opens for per-user counters.
+//
+// The default is mirrored from withDefaults rather than left at zero: the
+// running core listens on 8080 whether or not anybody wrote it down, so a list
+// that omitted it would leave the panel promising a port that is taken.
+func (a *Adapter) ReservedPorts() []core.ReservedPort {
+	a.mu.Lock()
+	apiPort := a.cfg.Inbound.ApiPort
+	a.mu.Unlock()
+	if apiPort == 0 {
+		apiPort = 8080
+	}
+	return []core.ReservedPort{{Owner: "xray-api", Port: apiPort}}
+}
