@@ -73,10 +73,6 @@ export function DeployProfileModal({ profile, onClose }: Props) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (opened) setSelected(new Set(initialSelected));
-  }, [opened, initialSelected]);
-
   const defaultPort = useMemo(() => {
     const cfg = profile?.config as { port?: number } | undefined;
     return cfg?.port ?? 443;
@@ -89,12 +85,26 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   // F-P1-b: once the admin types a port, stop auto-suggesting so we don't
   // clobber their choice. Reset on each open.
   const [portTouched, setPortTouched] = useState(false);
-  useEffect(() => {
-    if (opened) {
-      setPort(defaultPort);
-      setPortTouched(false);
-    }
-  }, [opened, defaultPort]);
+
+  /**
+   * Заполнение черновика при открытии, БЕЗ эффекта.
+   *
+   * Раньше этим занимались два эффекта, и оба зависели от данных запроса. Из-за
+   * этого фоновый рефетч привязок молча возвращал набор нод к серверному, стирая
+   * то, что оператор уже отметил. Здесь сидирование привязано к СОБЫТИЮ (открыли
+   * модалку для такого-то профиля, данные пришли), а не к идентичности объекта,
+   * поэтому повторный ответ сервера с тем же содержимым ничего не трогает.
+   */
+  const seedKey = opened
+    ? `${profile?.id ?? ''}:${bindingsQuery.data ? 'loaded' : 'pending'}`
+    : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (seedKey !== null && seedKey !== seededFor) {
+    setSeededFor(seedKey);
+    setSelected(new Set(initialSelected));
+    setPort(defaultPort);
+    setPortTouched(false);
+  }
 
   // F-P1-b auto-free-port: when the admin picks a node that isn't deployed yet,
   // suggest the next free port on it instead of blindly reusing 443 (which
