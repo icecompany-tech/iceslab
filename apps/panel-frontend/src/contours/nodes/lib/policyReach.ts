@@ -1,4 +1,4 @@
-import type { NodeCore } from '@/lib/domain/nodes';
+﻿import type { NodeCore } from '@/lib/domain/nodes';
 
 /**
  * Достанет ли политика уровня ноды до этой машины.
@@ -34,21 +34,6 @@ export interface PolicyReachFacts {
 }
 
 /**
- * Поле, которого в контракте ещё нет.
- *
- * `installed` (стоит ли бинарник на машине) BACK добавит у `CoreStatus` вместе
- * с `reservedPorts`. Описано здесь локально, а не в `transport.ts`: контракт
- * панель-нода меняется одним коммитом с агентом, и трогать его отсюда нельзя.
- * До того коммита поле приезжает `undefined`, и всё ниже ведёт себя ровно так,
- * как вело до него.
- *
- * УДАЛИТЬ, когда `installed` появится в `CoreStatus` в `transport.ts`: держать
- * рядом с контрактом вторую копию поля значит завести третью, как только
- * кто-нибудь этот тип не заметит.
- */
-type CoreWithInstalled = NodeCore & { installed?: boolean };
-
-/**
  * Рисует ли ЭТО ядро политику на самом деле.
  *
  * Два факта из разных источников, и агент их не сводит: `rendersPolicy` это
@@ -60,7 +45,7 @@ type CoreWithInstalled = NodeCore & { installed?: boolean };
  * поля», и читать его как «не установлено» значило бы погасить политику на
  * всём сегодняшнем флоте.
  */
-function draws(c: CoreWithInstalled): boolean {
+function draws(c: NodeCore): boolean {
   return c.rendersPolicy === true && c.installed !== false;
 }
 
@@ -73,8 +58,7 @@ export function policyReachFacts(
   // даёт оснований утверждать что-либо про политику.
   if (!cores || cores.length === 0) return { state: 'unknown' };
 
-  const all = cores as CoreWithInstalled[];
-  const router = all.find(draws);
+  const router = cores.find(draws);
   if (router) {
     return { state: 'applies', router: { name: router.name, version: router.version } };
   }
@@ -86,12 +70,12 @@ export function policyReachFacts(
   // списку. Частичный ответ годится, чтобы сказать «да», и не годится, чтобы
   // сказать «нет»: на этом же правиле стоят ворота движков, и оно писано после
   // двух инцидентов.
-  const everyoneAnswered = all.every((c) => c.rendersPolicy !== undefined);
+  const everyoneAnswered = cores.every((c) => c.rendersPolicy !== undefined);
   if (!everyoneAnswered) return { state: 'unknown' };
 
   // Ядро умеет, но бинарника на машине нет. Отдельная причина, потому что
   // оператору тут надо не ждать цепь, а поставить ядро.
-  if (all.some((c) => c.rendersPolicy === true)) {
+  if (cores.some((c) => c.rendersPolicy === true)) {
     return { state: 'not-applicable', gap: 'router-not-installed' };
   }
 
