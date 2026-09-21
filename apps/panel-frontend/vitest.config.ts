@@ -1,0 +1,33 @@
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Свой конфиг, а не `test` внутри `vite.config.ts`: сборочный конфиг этого
+ * приложения уже ловит предупреждение про `configLoader: 'native'` из-за
+ * `__dirname`, и мешать в него тестовую секцию значит чинить потом две вещи
+ * сразу.
+ *
+ * `jsdom` на всё приложение, хотя первый тест это чистая функция: разделять
+ * окружения по файлам стоит тогда, когда набор вырастет и станет заметно
+ * медленным, а не заранее.
+ */
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    // Тот же алиас, что у сборки: тесты импортируют код так же, как экраны,
+    // иначе первый же перенос файла разойдётся с линтом.
+    alias: { '@': resolve(__dirname, 'src') },
+  },
+  test: {
+    globals: false,
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // Здесь нет общей базы и общего порта, в отличие от бэкенда: файлы
+    // независимы, и последовательный прогон был бы платой ни за что.
+    fileParallelism: true,
+  },
+});
