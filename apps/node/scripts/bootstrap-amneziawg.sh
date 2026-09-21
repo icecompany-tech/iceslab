@@ -36,6 +36,45 @@ log "Running kernel: $KERNEL_VER"
 DEBIAN_FRONTEND=noninteractive apt-get install -y "linux-headers-${KERNEL_VER}" || \
   warn "linux-headers-${KERNEL_VER} not found, DKMS build may fail"
 
+# ───── Pinned upstream refs ─────
+#
+# Both of these used to be `git clone --depth 1` of the default branch, so the
+# module a node got was whatever upstream had pushed that morning. Two nodes
+# installed a fortnight apart ran different kernel modules, and the panel had
+# no way to know: the fleet drifted silently and only DPI would ever have said
+# so.
+#
+# The refs below are what `master` resolved to on 2026-09-21, so a fresh
+# install gets EXACTLY what it got yesterday. What changes is tomorrow: the
+# version moves when this file moves, with a run behind it.
+#
+# ⚠ The tag also carries the AmneziaWG PROTOCOL generation (the v1 / v3 in
+# front). Changing it is not a version bump, it is a re-issue of every config
+# already handed to a person, so it is a decision taken elsewhere and not a
+# side effect of updating this script. Keep the generation, move the date.
+#
+# The SHA is checked after the clone because a tag can be moved and a commit
+# cannot. If upstream ever re-tags, the install fails loudly instead of
+# installing something else under a familiar name.
+AWG_MODULE_TAG="${AWG_MODULE_TAG:-v3.1.20260906}"
+AWG_MODULE_SHA="${AWG_MODULE_SHA:-4569c4c67f3a57414969260cafbbd04694fbaae0}"
+AWG_TOOLS_TAG="${AWG_TOOLS_TAG:-v3.1.20260812}"
+AWG_TOOLS_SHA="${AWG_TOOLS_SHA:-ee0f0a9aa34ff0a0da4b3433b9512781cfe02843}"
+
+# Clone one ref and refuse anything but the commit we asked for.
+clone_pinned() {
+  local repo="$1" dir="$2" tag="$3" sha="$4"
+  rm -rf "$dir"
+  git clone --depth 1 --branch "$tag" "$repo" "$dir" \
+    || fail "could not clone $repo at $tag"
+  local got
+  got="$(git -C "$dir" rev-parse HEAD)"
+  if [[ "$got" != "$sha" ]]; then
+    fail "$repo $tag is $got, expected $sha. The tag moved upstream; check what changed before updating the pin."
+  fi
+  log "$repo pinned at $tag ($sha)"
+}
+
 # ───── 3. Kernel module via DKMS ─────
 AWG_MODULE_REPO=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
 AWG_MODULE_DIR=/usr/src/amneziawg-src
@@ -45,9 +84,7 @@ if lsmod | grep -q '^amneziawg\b'; then
 else
   log "Installing amneziawg kernel module via DKMS from $AWG_MODULE_REPO"
 
-  # Fresh clone, no branch pin (repo default may be master)
-  rm -rf "$AWG_MODULE_DIR"
-  git clone --depth 1 "$AWG_MODULE_REPO" "$AWG_MODULE_DIR"
+  clone_pinned "$AWG_MODULE_REPO" "$AWG_MODULE_DIR" "$AWG_MODULE_TAG" "$AWG_MODULE_SHA"
 
   # dkms.conf may be at root or one level deep
   DKMS_CONF=$(find "$AWG_MODULE_DIR" -maxdepth 2 -name 'dkms.conf' | head -1)
@@ -90,8 +127,7 @@ if command -v awg >/dev/null && command -v awg-quick >/dev/null; then
 else
   log "Building amneziawg-tools from $AWG_TOOLS_REPO"
 
-  rm -rf "$AWG_TOOLS_DIR"
-  git clone --depth 1 "$AWG_TOOLS_REPO" "$AWG_TOOLS_DIR"
+  clone_pinned "$AWG_TOOLS_REPO" "$AWG_TOOLS_DIR" "$AWG_TOOLS_TAG" "$AWG_TOOLS_SHA"
 
   make -C "$AWG_TOOLS_DIR/src" -j"$(nproc)"
   make -C "$AWG_TOOLS_DIR/src" install
