@@ -34,8 +34,14 @@ import {
   type EngineName,
 } from '@/lib/domain/engines';
 import { transportOf } from '@iceslab/shared';
-import { checkNodePort, type PortCheckResult } from '@/lib/domain/portCheck';
-import { PortCheckHint } from '@/ui/PortCheckHint';
+import {
+  checkNodePort,
+  portRefusalOf,
+  type PortCheckResult,
+  type PortOwner,
+  type PortTakenCode,
+} from '@/lib/domain/portCheck';
+import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
 
 interface Props {
   profile: Profile | null;
@@ -134,6 +140,11 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   /** Что панель знает про этот порт на выбранных нодах. */
   const [portCheck, setPortCheck] = useState<PortCheckResult | null>(null);
   const [portChecking, setPortChecking] = useState(false);
+  /** Отказ сохранения по порту: код плюс держатели, в машинной форме. */
+  const [portRefusal, setPortRefusal] = useState<{
+    code: PortTakenCode;
+    conflicts: PortOwner[];
+  } | null>(null);
 
   /** С конфигом профиля, а не по таблице протоколов: у xray с `network: kcp`
    *  это udp, и по имени протокола этого не видно. */
@@ -220,12 +231,27 @@ export function DeployProfileModal({ profile, onClose }: Props) {
       }
       onClose();
     },
-    onError: (err) =>
+    onError: (err) => {
+      /**
+       * Порт занят на одной из выбранных нод.
+       *
+       * Строкой у поля порта, а не тостом: тост уезжает, а менять надо именно
+       * это поле. Слова те же, что у подсказки, потому что событие то же.
+       */
+      const refusal = portRefusalOf(err);
+      if (refusal) {
+        setPortRefusal(refusal);
+        // Подсказка отвечала «свободен» до сохранения, а сервер ответил
+        // обратное: держать обе строки значит спорить с самим собой.
+        setPortCheck(null);
+        return;
+      }
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
         message: apiErrorMessage(err),
-      }),
+      });
+    },
   });
 
   function toggle(nodeId: string) {
@@ -283,11 +309,15 @@ export function DeployProfileModal({ profile, onClose }: Props) {
             setPortTouched(true);
             setPort(typeof v === 'number' ? v : Number(v) || defaultPort);
             // Старый ответ относится к старому числу, держать его на экране
-            // значит отвечать не про тот порт.
+            // значит отвечать не про тот порт. Отказ сервера тем более.
             setPortCheck(null);
+            setPortRefusal(null);
           }}
           onBlur={() => void runPortCheck()}
         />
+        {/* Отказ сервера выше подсказки: он про то же поле, но он уже
+            случился, а подсказка только предполагала. */}
+        {portRefusal && <PortRefusalLine code={portRefusal.code} conflicts={portRefusal.conflicts} />}
         {/* Порт здесь один на все выбранные ноды, поэтому и ответ сводный:
             строка говорит про первую ноду, где порт занят, а не про каждую по
             очереди. Запрета нет, отказ по факту даёт сохранение. */}

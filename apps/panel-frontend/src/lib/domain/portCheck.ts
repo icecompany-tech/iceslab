@@ -34,8 +34,44 @@ export interface PortCheckResult {
   ok: boolean;
   certainty: PortCertainty;
   conflicts: PortOwner[];
+  /**
+   * Тот же номер порта, занятый ДРУГИМ транспортом.
+   *
+   * Не конфликт: 443/tcp и 443/udp это разные сокеты, и рядом они стоят
+   * штатно. Сказано отдельным полем как раз затем, чтобы соседство было видно
+   * и не пугало: человек, набравший занятый на вид номер, должен понимать, что
+   * панель это заметила и не возражает.
+   */
+  otherTransport: { holder: PortOwner } | null;
   /** Ключ пояснения либо `null`, когда пояснять нечего. */
   note: 'reserved-ports-unknown' | null;
+}
+
+/** Коды, которыми сохранение отказывает по занятому порту. */
+export type PortTakenCode =
+  | 'PORT_TAKEN_PROFILE'
+  | 'PORT_TAKEN_CASCADE'
+  | 'PORT_TAKEN_CORE_SERVICE';
+
+/**
+ * Отказ сохранения по порту, если это он.
+ *
+ * Код лежит в поле `error`, как у всех соседних отказов, а `conflicts` приходит
+ * ТЕМ ЖЕ союзом, что у проверки порта. Поэтому экран рисует отказ тем же кодом
+ * и теми же словами, что и подсказку: две формулировки одного события разошлись
+ * бы на первой же правке.
+ */
+export function portRefusalOf(err: unknown): { code: PortTakenCode; conflicts: PortOwner[] } | null {
+  const body = (err as { response?: { data?: unknown } } | null)?.response?.data as
+    | { error?: string; conflicts?: PortOwner[] }
+    | undefined;
+  const code = body?.error;
+  if (code !== 'PORT_TAKEN_PROFILE' && code !== 'PORT_TAKEN_CASCADE' && code !== 'PORT_TAKEN_CORE_SERVICE') {
+    return null;
+  }
+  // Пустой список тоже ответ: код уже говорит, ЧТО случилось, а строку без
+  // подробностей экран покажет по коду.
+  return { code, conflicts: body?.conflicts ?? [] };
 }
 
 export async function checkNodePort(

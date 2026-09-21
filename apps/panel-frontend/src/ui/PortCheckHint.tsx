@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Box, Text } from '@mantine/core';
-import type { PortCheckResult } from '@/lib/domain/portCheck';
+import type { PortCheckResult, PortOwner, PortTakenCode } from '@/lib/domain/portCheck';
 
 /**
  * Что панель знает про этот порт на этой ноде, одной строкой.
@@ -11,13 +11,16 @@ import type { PortCheckResult } from '@/lib/domain/portCheck';
  * обещать за ноду, которая молчит.
  *
  * Строка ничего не запрещает. Save остаётся живым: последняя стена это бэкенд
- * на сохранении, и его отказ показывается своими словами, как отказ ядра.
+ * на сохранении, и его отказ рисуется ЭТИМ ЖЕ кодом и теми же словами, см.
+ * `PortRefusalLine` ниже.
  */
 
 const MOSS = '#A7D8B9';
 const MIST = '#7A8BA3';
 const RED = '#E07A5F';
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+type T = (key: string, vars?: Record<string, unknown>) => string;
 
 export function PortCheckHint({
   result,
@@ -39,10 +42,29 @@ export function PortCheckHint({
   if (result.ok) {
     // Порт и транспорт называются вместе всегда: 443/tcp и 443/udp это разные
     // сокеты, и «443 свободен» без второй половины отвечает не на тот вопрос.
-    return result.certainty === 'full' ? (
-      <Line tone={MOSS}>{t('portCheck.free', { port, transport })}</Line>
-    ) : (
-      <Line tone={MIST}>{t('portCheck.partial')}</Line>
+    const free =
+      result.certainty === 'full' ? (
+        <Line tone={MOSS}>{t('portCheck.free', { port, transport })}</Line>
+      ) : (
+        <Line tone={MIST}>{t('portCheck.partial')}</Line>
+      );
+
+    // Сосед по номеру, но не по сокету. Второй строкой и серым: это не
+    // возражение, а предупреждение о том, что номер в списке уже мелькает.
+    const other = result.otherTransport?.holder;
+    return (
+      <>
+        {free}
+        {other && (
+          <Line tone={MIST}>
+            {t('portCheck.freeOtherTransport', {
+              port: other.port,
+              otherTransport: other.transport,
+              holder: holderWord(other, t),
+            })}
+          </Line>
+        )}
+      </>
     );
   }
 
@@ -50,11 +72,44 @@ export function PortCheckHint({
   // порт, а не прочитать список причин, по которым этот занят.
   const c = result.conflicts[0];
   if (!c) return <Line tone={MIST}>{t('portCheck.partial')}</Line>;
+  return <Line tone={RED}>{conflictSentence(c, t)}</Line>;
+}
 
+/**
+ * Отказ сохранения по занятому порту, теми же словами, что и подсказка.
+ *
+ * Отдельный компонент, а не ветка в предыдущем: подсказка отвечает на вопрос
+ * «можно ли», а это уже ответ «нельзя, и вот почему». Но предложение общее,
+ * потому что событие одно, и держать для него два текста значит однажды
+ * получить два разных объяснения одной беды.
+ */
+export function PortRefusalLine({
+  code,
+  conflicts,
+}: {
+  code: PortTakenCode;
+  conflicts: PortOwner[];
+}) {
+  const { t } = useTranslation();
+  const c = conflicts[0];
+  // Конфликт пришёл: он точнее кода, потому что называет и порт, и держателя.
+  if (c) return <Line tone={RED}>{conflictSentence(c, t)}</Line>;
+  // Списка нет, остаётся код. Фраза без подробностей, но верная.
+  return <Line tone={RED}>{t(`portCheck.refused.${code}`)}</Line>;
+}
+
+/** Одна фраза про одного держателя порта. Общая для подсказки и для отказа. */
+function conflictSentence(c: PortOwner, t: T): string {
   const common = { port: c.port, transport: c.transport };
-  if (c.kind === 'profile') return <Line tone={RED}>{t('portCheck.busyProfile', { ...common, name: c.name })}</Line>;
-  if (c.kind === 'cascade') return <Line tone={RED}>{t('portCheck.busyCascade', { ...common, name: c.name })}</Line>;
-  return <Line tone={RED}>{t('portCheck.busyCore', { ...common, owner: ownerWord(c.ownerKey, t) })}</Line>;
+  if (c.kind === 'profile') return t('portCheck.busyProfile', { ...common, name: c.name });
+  if (c.kind === 'cascade') return t('portCheck.busyCascade', { ...common, name: c.name });
+  return t('portCheck.busyCore', { ...common, owner: ownerWord(c.ownerKey, t) });
+}
+
+/** Кто держит порт, одним оборотом: имя профиля, имя каскада или служба ядра. */
+function holderWord(c: PortOwner, t: T): string {
+  if (c.kind === 'profile' || c.kind === 'cascade') return c.name;
+  return ownerWord(c.ownerKey, t);
 }
 
 /**
@@ -64,7 +119,7 @@ export function PortCheckHint({
  * панель узнает её имя, и подставить «неизвестная служба» значило бы стереть
  * единственную зацепку, по которой оператор найдёт её на машине.
  */
-function ownerWord(key: string, t: (k: string) => string): string {
+function ownerWord(key: string, t: T): string {
   const word = t(`portCheck.owner.${key}`);
   return word === `portCheck.owner.${key}` ? key : word;
 }

@@ -44,8 +44,14 @@ import {
 } from '@/lib/domain/profiles';
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
 import { transportOf } from '@iceslab/shared';
-import { checkNodePort, type PortCheckResult } from '@/lib/domain/portCheck';
-import { PortCheckHint } from '@/ui/PortCheckHint';
+import {
+  checkNodePort,
+  portRefusalOf,
+  type PortCheckResult,
+  type PortOwner,
+  type PortTakenCode,
+} from '@/lib/domain/portCheck';
+import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -219,6 +225,11 @@ export function HostEditPage() {
    */
   const [portCheck, setPortCheck] = useState<PortCheckResult | null>(null);
   const [portChecking, setPortChecking] = useState(false);
+  /** Отказ сохранения по порту, в машинной форме: код плюс держатели. */
+  const [portRefusal, setPortRefusal] = useState<{
+    code: PortTakenCode;
+    conflicts: PortOwner[];
+  } | null>(null);
 
   /**
    * Транспорт берётся у `transportOf` с КОНФИГОМ профиля, а не по таблице
@@ -434,8 +445,25 @@ export function HostEditPage() {
         notifications.show({ color: 'red', message: t('hostEdit.sniMismatchToast') });
         return;
       }
-      // The port is taken on that node, and the API names the profile holding
-      // it. Shown verbatim next to the port, which is the control to change.
+      /**
+       * Порт занят на этой ноде.
+       *
+       * Отказ приходит кодом и тем же союзом `conflicts`, что у проверки
+       * порта, поэтому рисуется ТЕМ ЖЕ компонентом и теми же словами: два
+       * текста про одно событие разошлись бы на первой правке.
+       *
+       * Английская фраза сервера остаётся запасной для кодов, которых панель
+       * ещё не знает: показать её как есть честнее, чем промолчать.
+       */
+      const refusal = portRefusalOf(err);
+      if (refusal) {
+        setPortRefusal(refusal);
+        // Подсказку гасим: она отвечала «свободен» до сохранения, а сервер
+        // только что ответил обратное. Две строки про один порт, зелёная над
+        // красной, читаются как спор панели с самой собой.
+        setPortCheck(null);
+        return;
+      }
       const conflict = portConflict(err);
       if (conflict !== null) {
         setPortConflictMsg(conflict || t('hostEdit.portConflictFallback'));
@@ -631,8 +659,10 @@ export function HostEditPage() {
                     setPortConflictMsg(null);
                     // Ответ старой проверки к новому числу не относится, и
                     // оставить его на экране значит соврать про порт, которого
-                    // ещё никто не проверял.
+                    // ещё никто не проверял. Отказ сервера тем более: он был
+                    // про прошлое число.
                     setPortCheck(null);
+                    setPortRefusal(null);
                     setDirty(true);
                   }}
                   onBlur={() => void runPortCheck()}
@@ -649,6 +679,11 @@ export function HostEditPage() {
                 {/* Подсказка, а не запрет: Save остаётся живым, потому что
                     состояние могло смениться между blur и сохранением, и
                     последняя стена стоит на сервере. */}
+                {/* Отказ сервера важнее подсказки и потому стоит выше неё:
+                    подсказка отвечала «можно», а сервер уже ответил «нельзя». */}
+                {portRefusal && (
+                  <PortRefusalLine code={portRefusal.code} conflicts={portRefusal.conflicts} />
+                )}
                 <PortCheckHint
                   result={portCheck}
                   checking={portChecking}

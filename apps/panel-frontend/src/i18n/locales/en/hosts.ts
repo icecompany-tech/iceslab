@@ -14,16 +14,29 @@ export const hosts = {
       '{{port}}/{{transport}} is taken by cascade "{{name}}": that is the link port between hops, opened by the chain itself. Pick another port.',
     busyCore:
       '{{port}}/{{transport}} is taken on this node by {{owner}} (loopback only). It does not face outward, but it listens. Pick another port.',
+    // Not an objection, a heads-up: the number already appears in the list, but
+    // the socket is a different one and the two sit side by side routinely.
+    freeOtherTransport: '"{{holder}}" listens on {{port}}/{{otherTransport}}, which is a different socket.',
+    // The refusal on save when no conflict list came with it: the code says
+    // what happened, and that is enough not to stay silent.
+    refused: {
+      PORT_TAKEN_PROFILE: 'Not saved: another profile already listens on that port.',
+      PORT_TAKEN_CASCADE: 'Not saved: that port is held by a cascade.',
+      PORT_TAKEN_CORE_SERVICE: 'Not saved: that port is held by a core service listener.',
+    },
     // The dictionary of service listeners. A key that is not here is NOT
     // invented: it is shown as it came, being the only handle for finding that
     // service on the machine.
     owner: {
       'hysteria-auth': 'the Hysteria 2 auth endpoint',
       'hysteria-stats': 'the Hysteria 2 stats endpoint',
-      'xray-api': 'the xray API',
-      'shadowsocks-api': 'the API of the second xray behind Shadowsocks',
-      'singbox-api': 'the sing-box API',
-      'mtproto-stats': 'the MTProto stats endpoint',
+      // Interface names are exact: xray speaks gRPC, sing-box historically
+      // exposes the v2ray API. A plain "API" reads easier and searches worse
+      // when the operator goes looking in the config on the machine.
+      'xray-api': 'the xray gRPC API',
+      'shadowsocks-api': 'the gRPC API of the second xray behind Shadowsocks',
+      'singbox-api': 'the sing-box v2ray API',
+      'mtproto-stats': 'the mtg stats endpoint',
     },
   },
 
