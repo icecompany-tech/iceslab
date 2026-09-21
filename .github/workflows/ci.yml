@@ -180,6 +180,12 @@ jobs:
         working-directory: apps/panel-frontend
         run: pnpm exec tsc -b
 
+      # The debt this step used to carry is zero as of 2026-09-21, so the step
+      # can finally fail the build instead of printing a wall nobody reads.
+      - name: Lint frontend
+        working-directory: apps/panel-frontend
+        run: pnpm exec eslint .
+
       # Before the build, not after: a broken assertion is cheaper to read on
       # its own than inside a bundle log.
       - name: Test frontend
