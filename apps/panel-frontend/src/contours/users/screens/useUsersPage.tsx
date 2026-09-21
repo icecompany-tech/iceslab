@@ -1,4 +1,4 @@
-import { useDebouncedValue } from '@mantine/hooks';
+﻿import { useDebouncedValue } from '@mantine/hooks';
 import { Text } from '@mantine/core';
 import type { StatusFilter } from '@/contours/users/lib/userStatus';
 import type { UpdateUserInput, User, UserFilters, UserSort } from '@/lib/domain/users';
@@ -11,7 +11,7 @@ import { listSquads } from '@/lib/domain/squads';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useDisclosure } from '@mantine/hooks';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -256,11 +256,27 @@ export function useUsersPage() {
     t('pageMeta.usersActive', { count: stats.active }),
   ]);
 
-  // Reset to page 1 whenever any server-filter input changes so a narrowed
-  // result set doesn't drop us into an empty page (page 5 of 1 page).
-  useEffect(() => {
+  /**
+   * Сменился любой серверный фильтр: возвращаемся на первую страницу, иначе
+   * суженный список роняет нас в пустую (пятая страница из одной).
+   *
+   * Сравнением в рендере, а не эффектом. Эффект срабатывал ПОСЛЕ отрисовки, то
+   * есть один кадр запрос уходил со старым номером страницы и новым фильтром, и
+   * при узком фильтре этот кадр был пустым экраном.
+   */
+  const filterKey = JSON.stringify([
+    statusFilter,
+    debouncedSearch,
+    rowsPerPage,
+    squadFilter,
+    tagFilter,
+    routingFilter,
+  ]);
+  const [pagedFor, setPagedFor] = useState(filterKey);
+  if (pagedFor !== filterKey) {
+    setPagedFor(filterKey);
     setPage(1);
-  }, [statusFilter, debouncedSearch, rowsPerPage, squadFilter, tagFilter, routingFilter]);
+  }
 
   const totalPages = Math.max(1, Math.ceil(totalUsers / rowsPerPage));
   const safePage = Math.min(page, totalPages);
@@ -273,9 +289,7 @@ export function useUsersPage() {
   // out-of-range page while the footer shows a clamped range. Reconcile `page`
   // back into range (single source of truth) so the fetch + Prev/Next stay
   // correct. Filter-driven shrink is already handled by the reset-to-1 effect.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  if (page > totalPages) setPage(totalPages);
 
   const createMutation = useMutation({
     mutationFn: createUser,
