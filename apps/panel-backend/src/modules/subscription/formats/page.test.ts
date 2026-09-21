@@ -54,8 +54,9 @@ describe('buildSubscriptionPage', () => {
     const withAwg = buildSubscriptionPage(
       base({ protocols: ['hysteria', 'amneziawg'], awgNodes: [{ nodeName: 'awg' }] }),
     );
-    // .conf download is pinned to the node with &node=.
-    expect(withAwg).toContain('format=wgconf&node=awg');
+    // .conf download is pinned to the node with &node=, and the ampersand is
+    // written as an entity now, which is what an href should carry.
+    expect(withAwg).toContain('format=wgconf&amp;node=awg');
   });
 
   it('multi-node: a server selector + one QR per (node, app), not a stacked tower', () => {
@@ -83,7 +84,105 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('data-target="awg:awg-de" data-app="vpn"');
     expect(html).toContain('data-target="awg:awg-de" data-app="conf"');
     // per-node .conf download still offered in the downloads card.
-    expect(html).toContain('format=wgconf&node=awg-de');
+    expect(html).toContain('format=wgconf&amp;node=awg-de');
+  });
+
+  it('gives Android TV exactly three apps, and these three', () => {
+    // The one test worth more than the rest of this file. Three clients cover
+    // a television honestly: Happ, Karing, INCY. Everything else either has no
+    // Android TV build or installs and then cannot be driven with a remote,
+    // and both of those were in the registry as recently as this week. This
+    // fails the day somebody "fixes" the registry from memory.
+    const html = buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks', 'hysteria'] }));
+    const panel = html.slice(html.indexOf('data-platform="androidtv"'));
+    const body = panel.slice(0, panel.indexOf('</section>'));
+    const names = [...body.matchAll(/class="app-card__name">([^<]+)</g)].map((m) => m[1]);
+    expect(names).toEqual(['Happ', 'Karing', 'INCY']);
+    // And it says so out loud, because a short list reads like a sample.
+    expect(body).toContain('whole list');
+  });
+
+  it('hides a platform that has nothing to offer instead of showing an empty one', () => {
+    // An AmneziaWG-only subscription has no client for a television at all:
+    // AmneziaVPN does not build for one. The platform leaves the selector.
+    const html = buildSubscriptionPage(
+      base({ protocols: ['amneziawg'], awgNodes: [{ nodeName: 'de-01' }] }),
+    );
+    expect(html).not.toContain('data-pick="androidtv"');
+    expect(html).not.toContain('data-platform="androidtv"');
+    // The ones that do have a client are still there.
+    expect(html).toContain('data-pick="android"');
+  });
+
+  it('offers the Telegram row only where the proxy exists and the app has the field', () => {
+    // Two conditions, and neither is cosmetic: Telegram on a television and on
+    // a router does not exist, the web client has no proxy settings at all,
+    // and a subscription without an MTProto endpoint has no telegram proxy to
+    // configure in the first place.
+    const withTg = buildSubscriptionPage(base({ protocols: ['xray', 'mtproto'] }));
+    const panelOf = (html: string, p: string) => {
+      const from = html.slice(html.indexOf(`data-platform="${p}"`));
+      return from.slice(0, from.indexOf('</section>'));
+    };
+    for (const p of ['ios', 'android', 'windows', 'macos', 'linux']) {
+      expect(panelOf(withTg, p), p).toContain('class="tg-row"');
+    }
+    for (const p of ['androidtv', 'appletv']) {
+      expect(panelOf(withTg, p), p).not.toContain('class="tg-row"');
+    }
+    // No MTProto in the subscription, no row anywhere.
+    expect(buildSubscriptionPage(base({ protocols: ['xray'] }))).not.toContain('class="tg-row"');
+  });
+
+  it('splits the apps into the ones that just work and the ones that do not', () => {
+    const html = buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks', 'hysteria'] }));
+    const from = html.slice(html.indexOf('data-platform="windows"'));
+    const panel = from.slice(0, from.indexOf('</section>'));
+    expect(panel).toContain('INSTALL AND IT WORKS');
+    expect(panel).toContain('FOR FINE CONTROL, HARDER');
+    // v2rayN is a routing console and must never be in the row above the fold:
+    // it is the wrong answer to "what do I install".
+    const row = panel.slice(0, panel.indexOf('all-apps'));
+    expect(row).not.toContain('v2rayN');
+    expect(row).toContain('Happ');
+  });
+
+  it('names what each download format is for, and never prints the config itself', () => {
+    const html = buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks'] }));
+    expect(html).toContain('Clash-compatible');
+    // Grouped by purpose. A router file must stay reachable from a laptop:
+    // taking a config file is what people do FOR another device.
+    expect(html).toContain('data-dl-group="router"');
+    expect(html).toContain('data-dl-group="clients"');
+    // The download flag is separate from the format, and `plain` never gets it.
+    expect(html).toContain('format=clash&amp;dl=1');
+    expect(html).not.toContain('format=plain&amp;dl=1');
+    // The one place a secret would stop being hidden behind the token.
+    expect(html).toContain('plain text');
+  });
+
+  it('leaves out a format that would come back empty', () => {
+    // Outline is Shadowsocks-only; offering it to a subscription without any
+    // is the same defect as naming an app that does not exist on the platform.
+    expect(buildSubscriptionPage(base({ protocols: ['xray'] }))).not.toContain('format=outline');
+    expect(buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks'] }))).toContain(
+      'format=outline',
+    );
+  });
+
+  it('warns before the traffic runs out, and says what actually happens then', () => {
+    // "Speed will drop" would be a lie here: the limit flips the user to
+    // `limited` and the subscription stops answering (subscription.service.ts).
+    const gib = 1024 * 1024 * 1024;
+    const html = buildSubscriptionPage(
+      base({
+        lang: 'ru',
+        user: { ...base().user, trafficLimitBytes: 200 * gib, trafficUsedBytes: 196 * gib },
+      }),
+    );
+    expect(html).toContain('Осталось 4.0 GiB из 200 GiB');
+    expect(html).toContain('доступ остановится');
+    expect(html).toContain('tile--warn');
   });
 
   it('always offers the generic proxy format downloads', () => {
@@ -111,22 +210,64 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
-  it('renders a traffic bar only when a limit is set', () => {
+  it('states the traffic as a figure, with or without a limit', () => {
+    // The progress bar is gone on purpose: the card is four tiles now, and a
+    // bar that is 25% full says less than "25 / 100 GiB" in the same space.
     const unlimited = buildSubscriptionPage(base({ user: { ...base().user, trafficLimitBytes: null } }));
     expect(unlimited).not.toContain('class="bar"');
+    expect(unlimited).toContain('unlimited');
 
     const limited = buildSubscriptionPage(
       base({
         user: { ...base().user, trafficLimitBytes: 100 * 1024 * 1024 * 1024, trafficUsedBytes: 25 * 1024 * 1024 * 1024 },
       }),
     );
-    expect(limited).toContain('class="bar"');
-    expect(limited).toContain('width:25%');
+    expect(limited).toContain('25.0 GiB / 100 GiB');
   });
 
   it('localizes labels by lang', () => {
     expect(buildSubscriptionPage(base({ lang: 'en' }))).toContain('Subscription link');
     expect(buildSubscriptionPage(base({ lang: 'ru' }))).toContain('Ссылка подписки');
+  });
+
+  it('prints the date the way a person writes it, in their language', () => {
+    // It used to print toISOString().slice(0,10). 2026-12-10 is a machine's
+    // date: half the world reads it as the tenth of December and the other
+    // half reads nothing at all.
+    const at = '2026-12-10T00:00:00.000Z';
+    expect(buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: at } })))
+      // Genitive, which is what makes it Russian rather than translated.
+      .toContain('10 декабря, 2026');
+    expect(buildSubscriptionPage(base({ lang: 'en', user: { ...base().user, expireAt: at } })))
+      .toContain('December 10, 2026');
+  });
+
+  it('counts the days left, and counts them in Russian', () => {
+    // Three forms, and the wrong one is the loudest sign a page was written
+    // somewhere else. The dates are far enough out to stay in the plain state.
+    const days = (n: number) => new Date(Date.now() + n * 86400000).toISOString();
+    expect(buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: days(82) } })))
+      .toContain('осталось 82 дня');
+    expect(buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: days(21) } })))
+      .toContain('осталось 21 день');
+    expect(buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: days(15) } })))
+      .toContain('осталось 15 дней');
+    expect(buildSubscriptionPage(base({ lang: 'en', user: { ...base().user, expireAt: days(82) } })))
+      .toContain('82 days left');
+    // No date at all is its own sentence, not "0 days".
+    expect(buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: null } })))
+      .toContain('без срока');
+  });
+
+  it('turns amber in the last week, while the subscription still works', () => {
+    const soon = new Date(Date.now() + 3 * 86400000).toISOString();
+    const html = buildSubscriptionPage(base({ lang: 'ru', user: { ...base().user, expireAt: soon } }));
+    expect(html).toContain('Истекает через 3 дня');
+    expect(html).toContain('sub-card__badge--warn');
+    expect(html).toContain('tile--warn');
+    // The status itself is still green: it works, and that is the difference
+    // between a warning and a refusal.
+    expect(html).toContain('tile--ok');
   });
 
   it('renders an in-page RU/EN selector marking the active locale', () => {
@@ -150,13 +291,28 @@ describe('buildSubscriptionPage', () => {
     );
   });
 
-  it('renders the scan card only when at least one QR is provided', () => {
-    expect(buildSubscriptionPage(base())).not.toContain('class="qrview"');
-    // proxy protocol + a subscription QR → the QR is a selectable target
+  it('puts the subscription QR in the transfer window, and only there', () => {
+    // It used to sit in the scan card as well. One QR svg is 25 KB, this page
+    // is opened over a link that may barely work, and the same code twice is
+    // the most expensive decoration available.
+    expect(buildSubscriptionPage(base())).not.toContain('class="overlay" data-transfer');
     const withQr = buildSubscriptionPage(base({ subUrlQrSvg: '<svg id="sub"></svg>' }));
-    expect(withQr).toContain('class="qrview"');
+    expect(withQr).toContain('class="overlay" data-transfer');
     // QR SVG markup is embedded raw (trusted, server-generated), not escaped.
-    expect(withQr).toContain('<svg id="sub"></svg>');
+    expect(withQr.split('<svg id="sub"></svg>').length - 1).toBe(1);
+    // The scan card is now the AmneziaWG widget alone: a proxy-only
+    // subscription has nothing to put in it.
+    expect(withQr).not.toContain('class="qrview"');
+  });
+
+  it('offers the transfer button only where a camera could read the code', () => {
+    // A television and a router have no camera, and the code works the other
+    // way round there anyway: what is needed is getting the link ONTO the
+    // device. The button is in the page header, so the platform switch is what
+    // takes it away, and the list it switches on is in the page's own script.
+    const html = buildSubscriptionPage(base({ subUrlQrSvg: '<svg id="sub"></svg>' }));
+    expect(html).toContain('data-open-transfer');
+    expect(html).toContain('var NO_TRANSFER = ["androidtv","appletv","router"]');
   });
 
   it('single AWG node: no server selector, caption is just the app name', () => {
@@ -167,7 +323,7 @@ describe('buildSubscriptionPage', () => {
     // figure caption is the app name, never a "· awg" node suffix (the node
     // lives in the selector now)
     expect(html).toContain('<figcaption>AmneziaVPN</figcaption>');
-    expect(html).not.toContain('· awg');
+    expect(html).not.toContain('<figcaption>AmneziaVPN · awg</figcaption>');
     // a single target → no server selector segment
     expect(html).not.toContain('class="segs tgsel"');
   });
