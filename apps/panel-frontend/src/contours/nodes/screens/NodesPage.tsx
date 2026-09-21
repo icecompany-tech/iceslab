@@ -495,7 +495,9 @@ export function NodesPage() {
   const overviewQuery = useOverview();
   // Cascade membership drives the ⛓ badge + the standalone/in-cascade filter.
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
-  const allCascades = cascadesQuery.data?.cascades ?? [];
+  // Через `useMemo`: `?? []` даёт новый массив на каждый рендер, и карта ниже,
+  // держащая его в зависимостях, пересобиралась бы всегда.
+  const allCascades = useMemo(() => cascadesQuery.data?.cascades ?? [], [cascadesQuery.data]);
 
   // nodeId -> the cascade it belongs to + its role (entry/transit/exit). A node
   // can be in at most one cascade (v1 model).

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -199,15 +199,21 @@ export function NodeFormModal({ opened, onClose, node, onSubmit, loading }: Prop
     },
   });
 
-  // Reset wizard state every time the modal opens fresh (or switches mode).
-  useEffect(() => {
-    if (opened) {
-      setStep(0);
-      setSelectedProfileIds([]);
-      form.setValues(defaults(node));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, node]);
+  /**
+   * Сброс мастера при каждом открытии (и при смене ноды).
+   *
+   * Сравнением в рендере, а не эффектом: эффект сбрасывал шаг ПОСЛЕ отрисовки,
+   * и кадр между открытием и сбросом показывал прошлое состояние мастера, то
+   * есть третий шаг чужой ноды.
+   */
+  const seedKey = opened ? (node?.id ?? 'new') : null;
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (seedKey !== null && seedKey !== seededFor) {
+    setSeededFor(seedKey);
+    setStep(0);
+    setSelectedProfileIds([]);
+    form.setValues(defaults(node));
+  }
 
   const profilesQuery = useQuery({
     queryKey: ['profiles'],
