@@ -7,6 +7,7 @@ import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { applyInboundsForNode } from './inbounds.queue.js';
+import { createCascade } from '../cascades/cascade.service.js';
 
 /**
  * A refused config has to leave a trace where the operator looks.
@@ -131,6 +132,53 @@ describe('a push the core refuses', () => {
     // Both halves together, or the node reads as current and broken at once.
     expect(after.lastInboundSyncError).toBeNull();
     expect(after.lastInboundSyncAt).not.toBeNull();
+  });
+
+  it('records a push that could not even be BUILT', async () => {
+    /**
+     * The 2026-09-22 incident, in one test.
+     *
+     * A direction of the cascade pointed at a soft-deleted node, so building
+     * the push threw before anything was sent. The throw missed the catch that
+     * writes this field, BullMQ retired the job with removeOnFail, and the
+     * panel showed two RU cascade entries that had simply never applied. The
+     * only copy of the reason was a failedReason in a Redis key nobody reads.
+     *
+     * A refusal to build is a failure of the push in exactly the way a refusal
+     * to deliver it is.
+     */
+    const nodeId = await createNode('ru-01', '10.0.0.1:8443');
+    const gone = await createNode('exit-1', '10.0.0.2:8443');
+    const other = await createNode('exit-2', '10.0.0.3:8443');
+
+    // Built through the service, so the v4 links exist exactly as they do in
+    // production: this failure comes from the link that names a node the
+    // renderer can no longer find an address for.
+    await createCascade({
+      name: 'ru',
+      enabled: true,
+      positions: [
+        { position: 0, nodeIds: [nodeId], entryProtocol: 'xray', linkProtocol: 'xray' },
+      ],
+      directions: [
+        { tag: 1, countryCode: 'NL', nodeIds: [gone] },
+        { tag: 2, countryCode: 'SE', nodeIds: [other] },
+      ],
+    } as never);
+
+    // And then the way out is deleted underneath it, which is what an operator
+    // retiring a VPS does and what nothing stopped them doing.
+    await prisma.node.update({ where: { id: gone }, data: { deletedAt: new Date() } });
+
+    // Nothing is mocked: the failure is real and happens before any transport.
+    await expect(applyInboundsForNode(nodeId)).rejects.toThrow();
+
+    const recorded = (await syncStateOf(nodeId)).lastInboundSyncError as {
+      message: string;
+    } | null;
+    expect(recorded, 'a push that could not be built must still say so on the node').not.toBeNull();
+    expect(recorded!.message).toContain('Cascade topology is broken');
+    expect(recorded!.message).toContain(gone);
   });
 
   it('does not let a huge core dump grow the row without limit', async () => {

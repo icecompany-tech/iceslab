@@ -442,16 +442,33 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
     return;
   }
 
-  const req = await buildApplyInboundsRequest(node);
-  const inbounds = req.inbounds;
-
-  getLogger().info(
-    `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,
-  );
-
+  /**
+   * BUILDING the push is inside the try, not before it.
+   *
+   * It used to sit outside, and on 2026-09-22 that cost two cascade entries a
+   * night: a direction pointed at a soft-deleted node, so the builder threw
+   * "Cascade topology is broken around node ...", the throw missed this catch,
+   * nothing was written to the node, and BullMQ retired the job with
+   * removeOnFail. The panel showed two RU entries that simply never applied,
+   * and the only copy of the reason was a failedReason in a Redis key nobody
+   * reads. The pushes had been failing for a day before anyone looked.
+   *
+   * A refusal to build is a failure of this push in exactly the way a refusal
+   * to deliver it is, so it belongs in the same branch and lands on the node
+   * card the same way.
+   */
+  let req: ApplyInboundsRequest;
+  let inbounds: InboundDto[];
   const transport = new NodeTransport(node);
 
   try {
+    req = await buildApplyInboundsRequest(node);
+    inbounds = req.inbounds;
+
+    getLogger().info(
+      `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,
+    );
+
     const res = await transport.applyInbounds(req);
     if (res.skipped > 0) {
       // The agent answers 200 even for an inbound whose (protocol, engine) pair
@@ -672,7 +689,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
 // ───── Worker ─────
 
 export function startInboundSyncWorker(): Worker<ApplyNodeInboundsJobData> {
-  return new Worker<ApplyNodeInboundsJobData>(
+  const worker = new Worker<ApplyNodeInboundsJobData>(
     QUEUE_NAME,
     async (job: Job<ApplyNodeInboundsJobData>) => {
       switch (job.name) {
@@ -692,4 +709,28 @@ export function startInboundSyncWorker(): Worker<ApplyNodeInboundsJobData> {
       concurrency: 5,
     },
   );
+
+  /**
+   * Why a job died, in the log, every attempt.
+   *
+   * `removeOnFail: true` is deliberate (a failed job would hold its jobId and
+   * deadlock every later enqueue for that node), and its price is that the
+   * failure leaves no trace in Redis either. On 2026-09-22 that price came due:
+   * two cascade entries failed three attempts each and vanished, and the only
+   * record was a `failedReason` inside `bull:inbound-sync:events`, which is not
+   * somewhere anybody looks. The same failures had been happening for a day.
+   *
+   * The attempt number is here because it is what tells a transient blip from a
+   * standing refusal: attempt 1 of 3 on a network hiccup reads nothing like
+   * attempt 3 of 3 on a broken cascade topology.
+   */
+  worker.on('failed', (job, err) => {
+    getLogger().error(
+      `[worker:inbound-sync] job ${job?.name ?? 'unknown'} FAILED ` +
+        `(attempt ${job?.attemptsMade ?? '?'} of ${job?.opts?.attempts ?? '?'}) ` +
+        `node=${job?.data?.nodeId ?? 'unknown'}: ${err?.message ?? String(err)}`,
+    );
+  });
+
+  return worker;
 }
