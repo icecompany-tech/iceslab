@@ -215,7 +215,9 @@ export function CascadeCreatePage() {
   }
 
   const trimmedName = name.trim();
-  const entryIds = pools[0]?.nodeIds.filter(Boolean) ?? [];
+  // Через `useMemo`: и `filter`, и `?? []` дают новый массив на каждый рендер,
+  // а проверка версии ядра ниже держит его в зависимостях.
+  const entryIds = useMemo(() => pools[0]?.nodeIds.filter(Boolean) ?? [], [pools]);
   const poolsFilled = pools.every((p) => p.nodeIds.some(Boolean));
   // Country is enough. A direction with an empty pool is legitimate in v4: the
   // tag exists and waits for a node, and clients are simply not offered it.

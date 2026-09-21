@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
@@ -124,14 +124,13 @@ export function CascadeEditPage() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
-  const nextKey = useRef(0);
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
   // on every refetch would throw away an edit the moment the list poll returns.
   if (cascade && nodesQuery.isSuccess && loadedFor !== cascade.id) {
     setLoadedFor(cascade.id);
-    setDraft(toDraft(cascade, nodeById, () => nextKey.current++));
+    setDraft(toDraft(cascade, nodeById));
   }
 
   usePageMeta([t('cascadeCreate.crumbSection'), cascade?.name ?? '']);
@@ -161,7 +160,7 @@ export function CascadeEditPage() {
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['cascade-status', id] });
       // Re-seed from what came back, so the bar stops claiming unsaved changes.
-      setDraft(toDraft(saved, nodeById, () => nextKey.current++));
+      setDraft(toDraft(saved, nodeById));
       watchCascadeProvisioning(id, t);
     },
     onError: (err) => {
@@ -288,7 +287,7 @@ export function CascadeEditPage() {
     links <= MAX_LINKS &&
     legacy.length === 0;
   const dirty =
-    JSON.stringify(frozen(draft)) !== JSON.stringify(toDraft(cascade, nodeById, () => 0, true));
+    JSON.stringify(frozen(draft)) !== JSON.stringify(frozen(toDraft(cascade, nodeById)));
 
   // T7: below this a node rejects the per-direction UUID at auth, so a client
   // landing on it loses the choice. Any entry node can be that one, and the
@@ -610,7 +609,7 @@ export function CascadeEditPage() {
                   patch({
                     directions: [
                       ...directions,
-                      { key: nextKey.current++, id: null, countryCode: '', nodeIds: [''], tag: null },
+                      { key: nextFreeKey(directions), id: null, countryCode: '', nodeIds: [''], tag: null },
                     ],
                   })
                 }
@@ -629,7 +628,7 @@ export function CascadeEditPage() {
                 patch({
                   pools: [
                     ...pools,
-                    { key: nextKey.current++, nodeIds: [''], entryProtocol: 'xray', linkProtocol: 'xray' },
+                    { key: nextFreeKey(pools), nodeIds: [''], entryProtocol: 'xray', linkProtocol: 'xray' },
                   ],
                 })
               }
@@ -919,14 +918,14 @@ interface Draft {
  * `frozenKeys` makes the React keys constant, which is what the dirty
  * comparison needs: a key counter would make every re-seed compare unequal.
  */
-function toDraft(
-  c: Cascade,
-  byId: Map<string, Node>,
-  nextKey: () => number,
-  frozenKeys = false,
-): Draft {
+function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
   const sorted = [...c.hops].sort((a, b) => a.position - b.position);
-  const key = () => (frozenKeys ? 0 : nextKey());
+  // Ключ это ПОЗИЦИЯ строки, а не значение счётчика. Счётчик жил в `useRef` и
+  // читался посреди рендера, то есть делал его нечистым; позиция даёт то же
+  // самое и воспроизводимо. Сравнение на «изменено» и так зануляет ключи через
+  // `frozen`, поэтому отдельный режим замороженных ключей стал не нужен.
+  let n = 0;
+  const key = () => n++;
 
   // v4 (2026-08-04): the API answers in positions and directions, and that
   // answer wins. It carries two things the hop list cannot express and this
@@ -1111,4 +1110,10 @@ function relativeTime(iso: string, t: (k: string, o?: Record<string, unknown>) =
   const h = Math.floor(min / 60);
   if (h < 24) return t('cascadeEdit.hourAgo', { n: h });
   return t('cascadeEdit.dayAgo', { n: Math.floor(h / 24) });
+}
+
+/** Ключ, которого в списке точно нет. Считается из самого списка, поэтому не
+ *  нужен ни счётчик в ref, ни чтение чего-либо во время рендера. */
+function nextFreeKey(rows: { key: number }[]): number {
+  return rows.reduce((max, r) => Math.max(max, r.key), -1) + 1;
 }
