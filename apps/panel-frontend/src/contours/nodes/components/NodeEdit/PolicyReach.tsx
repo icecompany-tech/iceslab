@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text } from '@mantine/core';
 import type { NodeCore } from '@/lib/domain/nodes';
+import { policyCoverage } from '@/contours/nodes/lib/policyReach';
 import { AMBER, MIST, MONO, RED, SNOW } from '@/contours/nodes/lib/colors';
 
 /**
@@ -28,7 +29,9 @@ import { AMBER, MIST, MONO, RED, SNOW } from '@/contours/nodes/lib/colors';
  *                   applies it is worse than saying nothing, and it is the
  *                   mistake this whole screen exists to avoid.
  *
- * Nothing at all is drawn while the node has never reported (`cores` null).
+ * Nothing at all is drawn while the node has never reported (`cores` null), and
+ * nothing is drawn when every core on the machine sits unused: coverage is a
+ * statement about traffic, and there is none to cover.
  */
 export function PolicyReach({
   cores,
@@ -40,10 +43,12 @@ export function PolicyReach({
   const { t } = useTranslation();
   if (!cores || cores.length === 0) return null;
 
-  const name = (c: NodeCore) => (c.engine && c.engine !== c.name ? `${c.name} (${c.engine})` : c.name);
-  const applied = cores.filter((c) => c.rendersPolicy === true).map(name);
-  const missing = cores.filter((c) => c.rendersPolicy === false).map(name);
-  const unknown = cores.filter((c) => c.rendersPolicy === undefined).map(name);
+  // Охват считается по ЗАНЯТЫМ ядрам: пустое ядро никого не обслуживает, и
+  // числить его обходящим правила значит придумать дыру, в которую некому
+  // пролезть. Правило и причина в `policyCoverage`.
+  const { applied, missing, unknown } = policyCoverage(cores);
+  // Занятых ядер нет вовсе: охвата не существует, и говорить не о чем.
+  if (applied.length === 0 && missing.length === 0 && unknown.length === 0) return null;
   const list = (names: string[]) => names.join(', ');
 
   // Nothing to say yet: every core came from an agent that does not report the

@@ -50,6 +50,47 @@ function draws(c: NodeCore): boolean {
 }
 
 /**
+ * Кого на этой ноде политика достанет, по именам ядер.
+ *
+ * Считается ТОЛЬКО по занятым ядрам. Ядро с `provisioned === false` не
+ * обслуживает никого: инбаунда у него нет, подключений через него нет, и
+ * назвать его «ходящим мимо политики» значит придумать дыру, в которую некому
+ * пролезть. На стенде это выглядело так: нода перечисляла hysteria,
+ * shadowsocks и amneziawg как обходящих правила, притом что все три стояли
+ * пустыми.
+ *
+ * `provisioned !== false`, а не `=== true`: отсутствие поля это «агент старше
+ * поля», и читать молчание как «не настроено» значило бы вычеркнуть из охвата
+ * весь сегодняшний флот.
+ *
+ * Пустой результат по всем трём спискам означает, что говорить не о чем:
+ * занятых ядер на ноде нет вовсе.
+ */
+export interface PolicyCoverage {
+  /** Ядра, которые политику применяют. */
+  applied: string[];
+  /** Ядра, которые её НЕ применяют, то есть настоящая дыра в охвате. */
+  missing: string[];
+  /** Ядра, которые про это молчат. Не «нет» и не «да». */
+  unknown: string[];
+}
+
+export function policyCoverage(cores: NodeCore[] | null | undefined): PolicyCoverage {
+  const busy = (cores ?? []).filter((c) => c.provisioned !== false);
+  return {
+    applied: busy.filter((c) => c.rendersPolicy === true).map(coreLabel),
+    missing: busy.filter((c) => c.rendersPolicy === false).map(coreLabel),
+    unknown: busy.filter((c) => c.rendersPolicy === undefined).map(coreLabel),
+  };
+}
+
+/** Имя ядра для перечисления. Движок называется только когда он не родной для
+ *  протокола: иначе строка «hysteria (hysteria)» повторяет сама себя. */
+export function coreLabel(c: NodeCore): string {
+  return c.engine && c.engine !== c.name ? `${c.name} (${c.engine})` : c.name;
+}
+
+/**
  * Что показать про политику в СПИСКЕ нод, где место есть только на метку.
  *
  * `null` означает «молчать», и таких случая два, разных по смыслу: политику

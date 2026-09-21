@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { policyBadgeFacts, policyReachFacts } from '@/contours/nodes/lib/policyReach';
+﻿import { describe, expect, it } from 'vitest';
+import { policyBadgeFacts, policyCoverage, policyReachFacts } from '@/contours/nodes/lib/policyReach';
 import type { NodeCore } from '@/lib/domain/nodes';
 
 /**
@@ -111,5 +111,79 @@ describe('policyBadgeFacts', () => {
   it('5. политика есть, нода молчит: метка про незнание, а не про поломку', () => {
     expect(policyBadgeFacts({ policyId: 'p1', cores: null })?.state).toBe('unknown');
     expect(policyBadgeFacts({ policyId: 'p1' })?.state).toBe('unknown');
+  });
+});
+
+/**
+ * Кого политика достанет, по занятым ядрам.
+ *
+ * Поймано на стенде 2026-09-22: ru-02 перечисляла hysteria, shadowsocks и
+ * amneziawg как обходящих правила, притом что все три стояли пустыми, без
+ * единого инбаунда. Оператор читал это как дыру в охвате, которой нет:
+ * пролезть в неё некому.
+ */
+describe('policyCoverage', () => {
+  it('1. пустое ядро не считается обходящим политику', () => {
+    const c = policyCoverage([
+      core({ name: 'xray', rendersPolicy: true, provisioned: true }),
+      core({ name: 'hysteria', rendersPolicy: false, provisioned: false }),
+    ]);
+    expect(c.applied).toEqual(['xray']);
+    expect(c.missing).toEqual([]);
+  });
+
+  it('2. три пустых ядра, как на стенде: дыры нет ни одной', () => {
+    const c = policyCoverage([
+      core({ name: 'xray', rendersPolicy: true, provisioned: true }),
+      core({ name: 'hysteria', rendersPolicy: false, provisioned: false }),
+      core({ name: 'shadowsocks', rendersPolicy: false, provisioned: false }),
+      core({ name: 'amneziawg', rendersPolicy: false, provisioned: false }),
+    ]);
+    expect(c.applied).toEqual(['xray']);
+    expect(c.missing).toEqual([]);
+    expect(c.unknown).toEqual([]);
+  });
+
+  it('3. занятое ядро, которое правил не рисует, это настоящая дыра', () => {
+    const c = policyCoverage([
+      core({ name: 'xray', rendersPolicy: true, provisioned: true }),
+      core({ name: 'amneziawg', rendersPolicy: false, provisioned: true }),
+    ]);
+    expect(c.missing).toEqual(['amneziawg']);
+  });
+
+  it('4. provisioned отсутствует: ядро считается занятым, как вело себя до поля', () => {
+    const c = policyCoverage([core({ name: 'hysteria', rendersPolicy: false })]);
+    expect(c.missing).toEqual(['hysteria']);
+  });
+
+  it('5. молчащее ядро остаётся в своём списке, а не уходит ни в да, ни в нет', () => {
+    const c = policyCoverage([core({ name: 'mieru', provisioned: true })]);
+    expect(c.unknown).toEqual(['mieru']);
+    expect(c.applied).toEqual([]);
+    expect(c.missing).toEqual([]);
+  });
+
+  it('6. все ядра пустые: все три списка пусты, экрану нечего сказать', () => {
+    const c = policyCoverage([
+      core({ name: 'xray', rendersPolicy: true, provisioned: false }),
+      core({ name: 'hysteria', rendersPolicy: false, provisioned: false }),
+    ]);
+    expect(c).toEqual({ applied: [], missing: [], unknown: [] });
+  });
+
+  it('7. движок называется, только когда он не родной протоколу', () => {
+    const c = policyCoverage([
+      core({ name: 'hysteria', engine: 'singbox', rendersPolicy: false, provisioned: true }),
+      core({ name: 'xray', engine: 'xray', rendersPolicy: true, provisioned: true }),
+    ]);
+    expect(c.missing).toEqual(['hysteria (singbox)']);
+    expect(c.applied).toEqual(['xray']);
+  });
+
+  it('8. ядер нет вовсе: пустые списки, без падения', () => {
+    expect(policyCoverage(null)).toEqual({ applied: [], missing: [], unknown: [] });
+    expect(policyCoverage(undefined)).toEqual({ applied: [], missing: [], unknown: [] });
+    expect(policyCoverage([])).toEqual({ applied: [], missing: [], unknown: [] });
   });
 });
