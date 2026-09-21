@@ -187,7 +187,9 @@ export function ProfilesPage() {
     });
   }
 
-  const profiles = profilesQuery.data?.profiles ?? [];
+  // Через `useMemo`: `?? []` даёт новый массив на каждый рендер, и фильтрация
+  // ниже, держащая его в зависимостях, считалась бы заново всегда.
+  const profiles = useMemo(() => profilesQuery.data?.profiles ?? [], [profilesQuery.data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
