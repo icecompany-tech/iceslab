@@ -29,6 +29,8 @@ import type { CoreRestarts } from '@/lib/domain/nodes';
 import type { DashboardOverview } from '@/lib/domain/dashboard';
 import { countryFlag } from '@/lib/domain/countries';
 import { relativeTime } from '@/lib/ui/relativeTime';
+import { SyncRefusalStrip } from '@/contours/nodes/components/SyncRefusalStrip';
+import type { SyncRefusal } from '@/contours/nodes/lib/syncRefusal';
 
 const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
@@ -73,6 +75,10 @@ interface CardNode {
    *  the card would have to print "no data" on every node that will never have
    *  any. */
   protocol?: string;
+  /** Последний пуш конфига отвергнут ядром, null = не отвергнут. Отдельно от
+   *  `status`: нода с отвергнутым конфигом продолжает отвечать и остаётся
+   *  online, поэтому по статусу это не видно вообще. */
+  syncRefusal?: SyncRefusal | null;
 }
 
 interface Props {
@@ -250,6 +256,11 @@ export function NodeCard({
             </Menu>
           </Group>
         </Group>
+
+        {/* Сразу под статусом: по самому статусу отказа не видно, нода с
+            отвергнутым конфигом отвечает и числится online, и без этой строки
+            карточка выглядит здоровой. */}
+        {node.syncRefusal && <SyncRefusalStrip refusal={node.syncRefusal} compact />}
 
         {m ? (
           <Stack gap={6}>

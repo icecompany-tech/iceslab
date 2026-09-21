@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '@/lib/net/client';
 import { createBinding } from '@/lib/domain/profiles';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
+import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
 import {
   createNode,
   deleteNode,
@@ -1043,6 +1044,10 @@ export function NodesPage() {
                   // /api/nodes, not on the overview blob, so it refreshes on
                   // the nodes query's own tick.
                   coreRestarts: n.coreRestarts ?? null,
+                  // Отказ ядра берётся с /api/nodes, а не с обзорного блоба:
+                  // на обзоре его нет, и вывести его из статуса нельзя, потому
+                  // что нода с отвергнутым конфигом остаётся online.
+                  syncRefusal: refusalOf(n),
                   protocol: n.protocol,
                   maxUsers: n.maxUsers ?? null,
                   // approxUsers: capacity bar source. Real per-node user

@@ -394,6 +394,20 @@ export const nodes = {
     },
   },
 
+  // The core refusing a config. Its own namespace rather than a branch of
+  // nodeCard or nodeEdit: the same strip stands on the card in the list, on the
+  // node's page, and in the binding row.
+  syncRefusal: {
+    tag: 'CORE REFUSED',
+    title: 'The node refused the config',
+    showFull: 'Show the whole answer',
+    hideFull: 'Collapse the answer',
+    selfClears:
+      'The line clears itself the moment the node takes a config. There is no retry button: the push repeats with the next edit.',
+    bindingTag: 'config refused',
+    bindingWhy: 'The refusal is about the whole node config, not about this row alone.',
+  },
+
   nodeCard: {
     reBootstrap: 'Re-bootstrap',
     metricsPending: 'Metrics pending - first poll within 15s',

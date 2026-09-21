@@ -6,7 +6,8 @@ import { PROTOCOL_DOT, shapeOf } from '@/contours/nodes/lib/nodeFormat';
 import { engineWord, profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN2, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/nodes/lib/colors';
+import { CARD, CYAN2, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
+import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
 import { useTranslation } from 'react-i18next';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
 
@@ -27,6 +28,9 @@ export function HostsPanel({
 
   // The page only renders this panel for a node that exists.
   if (!node) return null;
+
+  // Отказ один на ноду, а не на строку: считаем его здесь, а не в каждой.
+  const refusal = refusalOf(node);
 
   return (
     <>
@@ -179,6 +183,41 @@ export function HostsPanel({
                       </Box>
                     )}
                     <Box style={{ flex: 1 }} />
+                    {/* Метка стоит РЯДОМ с «работает», а не вместо него, и это
+                        не противоречие: ядро продолжает крутить конфиг, который
+                        приняло в прошлый раз, а отвергнут новый. Подменять тут
+                        статус значило бы объявить порт мёртвым, не зная этого. */}
+                    {refusal && (
+                      <Box
+                        title={t('syncRefusal.bindingWhy')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '4px 9px',
+                          borderRadius: 6,
+                          flexShrink: 0,
+                          backgroundColor: `${RED}14`,
+                          border: `1px solid ${RED}33`,
+                        }}
+                      >
+                        <Box
+                          style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: RED, flexShrink: 0 }}
+                        />
+                        <Text
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 10,
+                            letterSpacing: '0.08em',
+                            lineHeight: '12px',
+                            textTransform: 'uppercase',
+                            color: RED,
+                          }}
+                        >
+                          {t('syncRefusal.bindingTag')}
+                        </Text>
+                      </Box>
+                    )}
                     <Box style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                       <Box
                         style={{
