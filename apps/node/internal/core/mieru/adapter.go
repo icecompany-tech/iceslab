@@ -267,3 +267,12 @@ func (a *Adapter) regenerateAndReload(ctx context.Context) error {
 // port of its own beyond the inbound the panel already knows about, so this
 // adapter reserves nothing.
 func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath) }
+
+// ReservedPorts: none. mita listens on the inbound the panel already knows
+// about and opens nothing of its own.
+//
+// An EMPTY list and not a missing method: implementing the interface is how
+// this adapter says "I hold nothing", which is an answer. Staying silent is
+// what an adapter says when it cannot speak at all, and the panel refuses to
+// call a port free on a node where anything is silent.
+func (a *Adapter) ReservedPorts() []core.ReservedPort { return nil }

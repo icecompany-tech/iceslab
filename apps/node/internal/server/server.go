@@ -276,11 +276,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			// to say about these: the save went through and the node failed to
 			// bring one of the two listeners up.
 			if pr, ok := adapter.(core.PortReserver); ok {
+				// Non-nil from the start, so an adapter that implements the
+				// interface and holds nothing answers `[]` rather than
+				// vanishing. Saying "I hold nothing" is what lets the panel be
+				// certain about the node; staying silent is what it does when
+				// it cannot say.
+				held := []dto.ReservedPortDto{}
 				for _, rp := range pr.ReservedPorts() {
 					if rp.Port <= 0 {
 						continue
 					}
-					cs.ReservedPorts = append(cs.ReservedPorts, dto.ReservedPortDto{
+					held = append(held, dto.ReservedPortDto{
 						Owner: rp.Owner,
 						Port:  rp.Port,
 						// Every one of them is a loopback TCP socket. Sent
@@ -289,6 +295,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 						Transport: "tcp",
 					})
 				}
+				cs.ReservedPorts = &held
 			}
 			// Restart tally, same optional-interface pattern. Without it a
 			// memory-watchdog restart is invisible: the core bounces, users

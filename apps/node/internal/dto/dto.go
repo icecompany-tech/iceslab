@@ -385,11 +385,21 @@ type CoreStatus struct {
 	// empty machines.
 	Installed *bool `json:"installed,omitempty"`
 	// ReservedPorts are the ports this core's own services hold. See
-	// ReservedPortDto. Omitted when the adapter reserves nothing, which a panel
-	// cannot tell apart from an agent that predates the field: that is why the
-	// panel's port check reports how certain it is rather than promising a port
-	// is free.
-	ReservedPorts []ReservedPortDto `json:"reservedPorts,omitempty"`
+	// ReservedPortDto.
+	//
+	// A POINTER to a slice, and the indirection is the whole point: it is the
+	// only way JSON can carry three states where a bare slice carries two.
+	//
+	//	absent  - this core cannot speak about its ports (no interface, or an
+	//	          agent older than the field). The panel must not promise any
+	//	          port on this node is free.
+	//	[]      - it spoke, and it holds nothing. An ANSWER, not a silence.
+	//	[...]   - it holds these.
+	//
+	// With `omitempty` on a bare slice the middle state was unreachable: an
+	// adapter that reserves nothing looked exactly like one that cannot say,
+	// so a node running mieru or naive could never reach full certainty.
+	ReservedPorts *[]ReservedPortDto `json:"reservedPorts,omitempty"`
 }
 
 type HealthcheckResponse struct {

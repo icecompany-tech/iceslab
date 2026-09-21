@@ -160,15 +160,15 @@ export async function portClaimsOnNode(
  * ports. One silent core is enough to make the list incomplete, and it is
  * exactly the core that might be holding the port being asked about.
  *
- * ⚠ A core that genuinely reserves nothing is indistinguishable from one that
- * did not answer: the agent omits an empty list. That costs us certainty on
- * nodes running such an adapter (mieru, naive, amneziawg), and the trade is
- * deliberate: the alternative is promising a port on the strength of a field
- * whose absence means two different things.
+ * An EMPTY list is an answer, not a silence: the agent sends `[]` from an
+ * adapter that reserves nothing and no key at all from one that cannot speak.
+ * Without that distinction a node running only mieru or naive could never be
+ * answered about with certainty, which is a permanent "we do not know" about a
+ * machine that is in fact fully known.
  */
 function certaintyOf(inventory: NodeCores | null): PortCertainty {
   if (!inventory || inventory.cores.length === 0) return 'partial';
-  return inventory.cores.every((c) => (c.reservedPorts?.length ?? 0) > 0) ? 'full' : 'partial';
+  return inventory.cores.every((c) => c.reservedPorts !== undefined) ? 'full' : 'partial';
 }
 
 /**

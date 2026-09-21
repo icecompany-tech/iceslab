@@ -356,3 +356,11 @@ func usersSlice(in map[string]User) []User {
 // is required for multi-user naive, so a plain caddy at this path is not the
 // same thing; the path is the one the installer writes.
 func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.CaddyBin) }
+
+// ReservedPorts: none. caddy-naive serves its inbound and opens no side
+// channel; the admin API the upstream fork can expose is not enabled here.
+//
+// Empty rather than absent, for the reason in the interface doc: saying "I hold
+// nothing" is an answer, and it is what lets the panel be certain about a node
+// running only this core.
+func (a *Adapter) ReservedPorts() []core.ReservedPort { return nil }

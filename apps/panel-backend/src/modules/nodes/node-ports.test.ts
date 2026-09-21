@@ -142,6 +142,23 @@ describe('the port check', () => {
     expect((await check(nodeId, 443)).note).toBeNull();
   });
 
+  it('counts a core that holds NOTHING as having answered', async () => {
+    // `[]` and a missing key are different answers on the wire: an adapter that
+    // reserves nothing says so, one that cannot speak sends no key. Reading
+    // both as silence would leave a node running only such cores permanently
+    // unanswerable, which is a "we do not know" about a machine fully known.
+    const nodeId = await makeNode();
+    await reportCores(nodeId, [
+      { name: 'naive', engine: 'naive', reservedPorts: [] },
+      { name: 'amneziawg', engine: 'amneziawg', reservedPorts: [] },
+    ]);
+
+    const answer = await check(nodeId, 443);
+    expect(answer.certainty).toBe('full');
+    expect(answer.note).toBeNull();
+    expect(answer.ok).toBe(true);
+  });
+
   it('falls back to partial the moment one core stays silent', async () => {
     // One quiet core is enough: it is exactly the one that might be holding the
     // port being asked about.

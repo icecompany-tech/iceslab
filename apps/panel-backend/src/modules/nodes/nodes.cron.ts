@@ -280,13 +280,11 @@ export function observedCores(cores: CoreStatus[], observedAt: string): NodeCore
       // change when the node is reconfigured, and the port check has to answer
       // between two healthchecks rather than by calling the node.
       //
-      // An empty list is dropped rather than stored: the agent omits the field
-      // when an adapter reserves nothing, and storing `[]` would turn "this
-      // adapter holds nothing" and "this agent does not report" into the same
-      // value, which is the distinction `certainty` is built on.
-      ...(c.reservedPorts && c.reservedPorts.length > 0
-        ? { reservedPorts: c.reservedPorts }
-        : {}),
+      // An EMPTY list is kept, and that is the point of it. The agent sends
+      // `[]` from an adapter that reserves nothing and sends no key at all
+      // from one that cannot speak, so the two are different answers and
+      // dropping the empty one would turn them back into the same silence.
+      ...(c.reservedPorts !== undefined ? { reservedPorts: c.reservedPorts } : {}),
     })),
   };
 }

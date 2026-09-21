@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
@@ -49,6 +50,24 @@ type provisionableCore struct {
 }
 
 func (p *provisionableCore) Provisioned() bool { return p.provisioned }
+
+// healthBody is the raw JSON, for the assertions that are about the WIRE rather
+// than about the decoded struct: a decoder cannot tell an absent key from an
+// empty list once it has filled a slice in.
+func healthBody(t *testing.T, adapters ...core.CoreAdapter) string {
+	t.Helper()
+	s, err := New(Config{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Payload:  &payload.Payload{},
+		Adapters: adapters,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleHealth(rec, httptest.NewRequest("GET", "/healthz", nil))
+	return rec.Body.String()
+}
 
 func health(t *testing.T, adapters ...core.CoreAdapter) dto.HealthcheckResponse {
 	t.Helper()
@@ -195,18 +214,19 @@ func TestCoresReportTheirOwnPorts(t *testing.T) {
 		t.Fatalf("cores = %d, want 1", len(got.Cores))
 	}
 	c := got.Cores[0]
-	if len(c.ReservedPorts) != 2 {
+	if c.ReservedPorts == nil || len(*c.ReservedPorts) != 2 {
 		t.Fatalf("reservedPorts = %+v, want both", c.ReservedPorts)
 	}
+	held := *c.ReservedPorts
 	// The OWNER is a key, not a sentence: the panel is bilingual and writes the
 	// words itself.
-	if c.ReservedPorts[0].Owner != "hysteria-auth" || c.ReservedPorts[0].Port != 8080 {
-		t.Errorf("first reserved port = %+v", c.ReservedPorts[0])
+	if held[0].Owner != "hysteria-auth" || held[0].Port != 8080 {
+		t.Errorf("first reserved port = %+v", held[0])
 	}
 	// And the transport travels rather than being assumed panel-side, the same
 	// rule the port key follows: 443/TCP and 443/UDP are different sockets.
-	if c.ReservedPorts[1].Transport != "tcp" {
-		t.Errorf("transport = %q, want tcp", c.ReservedPorts[1].Transport)
+	if held[1].Transport != "tcp" {
+		t.Errorf("transport = %q, want tcp", held[1].Transport)
 	}
 	if c.Installed == nil || !*c.Installed {
 		t.Error("a core that knows its binary is present has to say so")
@@ -238,8 +258,31 @@ func TestInstalledIsSeparateFromProvisioned(t *testing.T) {
 	if c.Installed == nil || *c.Installed {
 		t.Fatal("a core whose binary is missing has to say installed:false, not stay silent")
 	}
-	// It reserves nothing, and an empty list is omitted rather than sent as [].
-	if c.ReservedPorts != nil {
-		t.Errorf("reservedPorts = %+v, want omitted when empty", c.ReservedPorts)
+	// It implements the interface and holds nothing, and that is an ANSWER: the
+	// empty list travels. Silence is what a core says when it cannot speak, and
+	// the panel treats the two differently on purpose, or a node running only
+	// cores that reserve nothing could never be answered about with certainty.
+	if c.ReservedPorts == nil {
+		t.Fatal("an adapter that reserves nothing must say so with [], not stay silent")
+	}
+	if len(*c.ReservedPorts) != 0 {
+		t.Errorf("reservedPorts = %+v, want empty", *c.ReservedPorts)
+	}
+}
+
+// The empty list has to survive the JSON, not just the struct: `[]` and a
+// missing key are the two states this whole field exists to tell apart, and a
+// stray omitempty would collapse them again without failing anything else.
+func TestAnEmptyReservationTravelsAsAListAndSilenceAsNothing(t *testing.T) {
+	body := healthBody(t,
+		&portHoldingCore{fakeCore: fakeCore{name: "naive", running: true}, installed: true},
+	)
+	if !strings.Contains(body, `"reservedPorts":[]`) {
+		t.Errorf("an adapter holding nothing must send an empty list: %s", body)
+	}
+
+	body = healthBody(t, &fakeCore{name: "xray", running: true})
+	if strings.Contains(body, "reservedPorts") {
+		t.Errorf("an adapter that cannot speak must send no key at all: %s", body)
 	}
 }

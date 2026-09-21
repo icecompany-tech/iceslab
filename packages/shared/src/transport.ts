@@ -844,10 +844,15 @@ export interface CoreStatus {
   /**
    * Ports this core's own services hold, see ReservedPort.
    *
-   * Absent = this adapter reserves nothing, OR the agent predates the field,
-   * and the panel cannot tell those apart. That is why the port check reports
-   * `certainty`: a list that may be missing entries is enough to refuse a port
-   * it names and never enough to promise one it does not.
+   * THREE states, and the middle one is why this is not a plain array:
+   *   absent - this core cannot speak about its ports (the adapter has no
+   *            such interface, or the agent predates the field);
+   *   []     - it spoke, and holds nothing. An answer;
+   *   [...]  - it holds these.
+   *
+   * The port check turns that into `certainty`: one core that cannot speak is
+   * enough to make the whole list incomplete, and an incomplete list may refuse
+   * a port it names and may never promise one it does not.
    */
   reservedPorts?: ReservedPort[];
 }

@@ -701,3 +701,11 @@ func kernelModuleLoaded() bool {
 	info, err := os.Stat("/sys/module/amneziawg")
 	return err == nil && info.IsDir()
 }
+
+// ReservedPorts: none. AmneziaWG is a kernel interface driven through the awg
+// CLI, so there is no loopback API to hold a port, and the listen port itself
+// is the inbound the panel already knows.
+//
+// Empty rather than absent, same rule as the other two: an answer, not a
+// silence.
+func (a *Adapter) ReservedPorts() []core.ReservedPort { return nil }
