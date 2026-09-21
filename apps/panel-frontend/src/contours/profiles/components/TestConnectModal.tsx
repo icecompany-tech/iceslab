@@ -46,15 +46,29 @@ export function TestConnectModal({ profile, onClose }: Props) {
     mutationFn: (id: string) => testConnectProfile(id),
     onSuccess: (data) => setResults(data.results),
   });
+  const { mutate } = mutation;
+  const profileId = profile?.id ?? null;
 
-  // Auto-fire on open so the admin doesn't have to click twice.
+  /**
+   * Открыли для другого профиля: старые результаты больше не про него.
+   *
+   * Сброс делается сравнением в рендере, а не в эффекте. В эффекте он приезжал
+   * ПОСЛЕ отрисовки, то есть кадр между открытием и ответом показывал чужие
+   * результаты как свои.
+   */
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  if (profileId !== null && shownFor !== profileId) {
+    setShownFor(profileId);
+    setResults(null);
+  }
+
+  // Запрос сам по себе это побочное действие, и ему место именно в эффекте.
+  // `mutate` у react-query стабильна, поэтому список зависимостей честный и
+  // глушить правило нечем.
   useEffect(() => {
-    if (profile) {
-      setResults(null);
-      mutation.mutate(profile.id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+    if (!profileId) return;
+    mutate(profileId);
+  }, [profileId, mutate]);
 
   return (
     <Modal
