@@ -18,6 +18,7 @@ import {
 } from '../nodes/node-engines.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
+import { portOwnersOnNode } from '../nodes/node-ports.js';
 import type {
   CreateBindingInput,
   CreateProfileInput,
@@ -78,6 +79,33 @@ export class PortInUseError extends Error {
         `demultiplexer, which the panel does not do yet. Pick a different port.`,
     );
     this.name = 'PortInUseError';
+  }
+}
+
+/**
+ * The port is taken by a CASCADE, not by another profile.
+ *
+ * A cascade leg listens on the receiving node at LINK_PORT_BASE + step, and
+ * nothing stopped a binding from being saved onto it: the uniqueness key covers
+ * bindings against bindings and cannot reach cascade_links. The node then fails
+ * to bring one of the two listeners up, in its journal, hours after the save.
+ *
+ * Separate from PortInUseError because the remedy is different: there is no
+ * "other profile" to look at, and the operator has to know a cascade owns that
+ * range before they go hunting for a profile that does not exist.
+ */
+export class PortHeldByCascadeError extends Error {
+  constructor(
+    public port: number,
+    public nodeName: string,
+    public cascadeName: string,
+  ) {
+    super(
+      `Port ${port}/TCP on node "${nodeName}" is the inter-hop link port of cascade ` +
+        `"${cascadeName}". Cascade link ports are assigned automatically from 24000 up; ` +
+        `pick a port outside that range for this profile.`,
+    );
+    this.name = 'PortHeldByCascadeError';
   }
 }
 
@@ -505,6 +533,32 @@ function assertNodeRendersProfile(
   throw new ProfileDoesNotRunOnNodeError(node.name, wanted, engines, justEnabled);
 }
 
+/**
+ * The other half of the port question, the half no index can answer.
+ *
+ * Only asked for tcp: both cascade link cells ride xray over TCP, so a UDP
+ * binding on 24000 is a different socket and legitimately free. Asking anyway
+ * would refuse a Hysteria2 inbound for a reason that is not true, which is the
+ * exact mistake the transport key was added to stop making.
+ */
+async function assertPortNotHeldByCascade(
+  nodeId: string,
+  port: number,
+  transport: Transport,
+  nodeName?: string,
+  exceptBindingId?: string,
+): Promise<void> {
+  if (transport !== 'tcp') return;
+  const owners = await portOwnersOnNode(nodeId, [port], { exceptBindingId });
+  const cascade = owners.find((o) => o.kind === 'cascade');
+  if (!cascade) return;
+  const name =
+    nodeName ??
+    (await prisma.node.findUnique({ where: { id: nodeId }, select: { name: true } }))?.name ??
+    nodeId;
+  throw new PortHeldByCascadeError(port, name, cascade.name);
+}
+
 export async function createBinding(input: CreateBindingInput): Promise<PublicBindingDto> {
   const profile = await prisma.profile.findUnique({ where: { id: input.profileId } });
   if (!profile) throw new ProfileNotFoundError(input.profileId);
@@ -528,6 +582,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   if (portConflict) {
     throw new PortInUseError(input.port, node.name, portConflict.profile.name, transport);
   }
+  await assertPortNotHeldByCascade(input.nodeId, input.port, transport, node.name);
   const dupBinding = await prisma.profileNodeBinding.findUnique({
     where: {
       profileId_nodeId: { profileId: input.profileId, nodeId: input.nodeId },
@@ -626,6 +681,13 @@ export async function updateBinding(
         transport,
       );
     }
+    await assertPortNotHeldByCascade(
+      existing.nodeId,
+      nextPort,
+      transport,
+      undefined,
+      id,
+    );
   }
 
   const data: Prisma.ProfileNodeBindingUpdateInput = {};

@@ -31,6 +31,17 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       policies: err.policyNames,
     });
   }
+  if (err instanceof svc.CascadeLinkPortInUseError) {
+    // 409: the cascade is well-formed, and a profile already listens on the
+    // port one of its legs needs. The list travels in machine form because the
+    // operator has to move those profiles, and the cascade screen has no field
+    // to fix instead.
+    return reply.code(409).send({
+      error: 'LINK_PORT_IN_USE',
+      message: err.message,
+      conflicts: err.conflicts,
+    });
+  }
   if (err instanceof svc.CascadeEntryCoreTooOldError) {
     // T7: entry node's xray is too old for exit selection. 409: the request is
     // well-formed but conflicts with the node's current core version.

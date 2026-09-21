@@ -21,6 +21,7 @@ import {
   parseLinkCred,
   routeTag,
   serializeLinkCred,
+  topologyReceivingPorts,
   type CascadeConfigHopInput,
   type CascadePolicy,
   type HopConfig,
@@ -36,6 +37,7 @@ import type {
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { isConfigApplied } from '../nodes/nodes.sync-status.js';
+import { portOwnersOnNode } from '../nodes/node-ports.js';
 
 export class CascadeNotFoundError extends Error {
   constructor(id: string) {
@@ -72,6 +74,101 @@ export class CascadeNodeMissingError extends Error {
     super(`Node ${nodeId} does not exist`);
     this.name = 'CascadeNodeMissingError';
   }
+}
+
+/**
+ * A leg of this cascade would land on a port a profile already listens on.
+ *
+ * The mirror image of PortHeldByCascadeError, and both halves are needed: the
+ * pair that collides lives in two tables, no index spans them, so whichever
+ * save happens second has to ask about the other. A cascade picks its ports
+ * automatically, so the operator cannot fix this from the cascade screen, and
+ * the message says which profile to move instead.
+ */
+export class CascadeLinkPortInUseError extends Error {
+  constructor(
+    public conflicts: { nodeName: string; port: number; profileName: string }[],
+  ) {
+    super(
+      `The inter-hop link ports this cascade needs are already taken: ` +
+        conflicts
+          .map(
+            (c) =>
+              `node "${c.nodeName}" port ${c.port}/TCP (profile "${c.profileName}")`,
+          )
+          .join('; ') +
+        `. Link ports are assigned automatically from 24000 up; move those profiles to ` +
+        `another port and save again.`,
+    );
+    this.name = 'CascadeLinkPortInUseError';
+  }
+}
+
+/**
+ * Which node listens on which link port, for the legacy hop storage.
+ *
+ * The cred on hop[i] is DIALLED by hop[i] and LISTENED ON by hop[i+1], and a
+ * balancer's cred sits on the exit that listens on it: in position order both
+ * come out as "the hop after the one that holds the cred", because a
+ * balancer's exits are exactly hops[1..]. One mapping, not two.
+ */
+function receivingLinkPorts(
+  hops: { nodeId: string }[],
+  creds: { port: number }[],
+): { nodeId: string; port: number }[] {
+  return hops
+    .slice(1)
+    .map((h, i) => (creds[i] ? { nodeId: h.nodeId, port: creds[i]!.port } : null))
+    .filter((x): x is { nodeId: string; port: number } => x !== null);
+}
+
+/**
+ * Refuse before writing, and ask about EVERY leg rather than the first.
+ *
+ * A cascade is saved whole: refusing one leg at a time would walk an operator
+ * through as many saves as it has hops, each one looking like a new problem.
+ *
+ * Both storages are asked, because a cascade is saved into both: the legacy
+ * hops carry their ports in creds computed by the caller, the v4 topology
+ * computes them from the shape (positions and directions) without minting
+ * creds for a save that may be about to be refused.
+ */
+async function assertLinkPortsFree(
+  fromHops: { nodeId: string; port: number }[],
+  positions?: { nodeIds: string[] }[],
+  directions?: { nodeIds: string[] }[],
+): Promise<void> {
+  const wanted = [
+    ...fromHops,
+    ...(positions && directions ? topologyReceivingPorts(positions, directions) : []),
+  ];
+  if (wanted.length === 0) return;
+
+  const byNode = new Map<string, Set<number>>();
+  for (const w of wanted) {
+    const set = byNode.get(w.nodeId) ?? new Set<number>();
+    set.add(w.port);
+    byNode.set(w.nodeId, set);
+  }
+
+  const conflicts: { nodeName: string; port: number; profileName: string }[] = [];
+  for (const [nodeId, ports] of byNode) {
+    const owners = await portOwnersOnNode(nodeId, [...ports]);
+    const taken = owners.filter((o) => o.kind === 'profile' && o.transport === 'tcp');
+    if (taken.length === 0) continue;
+    const node = await prisma.node.findUnique({
+      where: { id: nodeId },
+      select: { name: true },
+    });
+    for (const t of taken) {
+      conflicts.push({
+        nodeName: node?.name ?? nodeId,
+        port: t.port,
+        profileName: t.name,
+      });
+    }
+  }
+  if (conflicts.length > 0) throw new CascadeLinkPortInUseError(conflicts);
 }
 export class CascadeEntryCoreTooOldError extends Error {
   constructor(
@@ -805,6 +902,9 @@ async function writeTopologyV4(
         directionTag: l.directionTag,
         protocol: l.protocol,
         config: serializeLinkCred(l.cred),
+        // The same value as config.port, lifted out so a binding save can see
+        // it. Written from one source here, so the two cannot disagree.
+        port: l.cred.port,
       })),
     });
   }
@@ -868,6 +968,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // Cred index for hop `idx`, or -1 if it carries no link cred.
   const credIdx = (idx: number): number =>
     isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < hops.length - 1 ? idx : -1;
+  await assertLinkPortsFree(receivingLinkPorts(hops, creds), input.positions, input.directions);
   // v4 topology, validated separately from the fold: the fold answers "can the
   // old storage hold this", these rules answer "is this a sane cascade at all".
   const topology =
@@ -1022,6 +1123,15 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // Cred index for hop `idx` (of `n` total), or -1 if it carries no link cred.
   const credIdx = (idx: number, n: number): number =>
     isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < n - 1 ? idx : -1;
+
+  // An edit re-picks the legs, so it can walk onto a port that was free when
+  // the cascade was created. Asked here for the same reason as on create, and
+  // before the transaction: a refusal must not leave half a cascade behind.
+  await assertLinkPortsFree(
+    hops ? receivingLinkPorts(hops, creds) : [],
+    input.positions,
+    input.directions,
+  );
 
   try {
     const c = await prisma.$transaction(async (tx) => {

@@ -167,7 +167,11 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       }
       if (
         err instanceof svc.PortInUseError ||
-        err instanceof svc.NodeAlreadyBoundError
+        err instanceof svc.NodeAlreadyBoundError ||
+        // A cascade holds that port on that node. Same 409, different reason,
+        // and the message is what carries the difference: there is no other
+        // profile to go and look at.
+        err instanceof svc.PortHeldByCascadeError
       ) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
@@ -227,7 +231,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.BindingNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
-      if (err instanceof svc.PortInUseError) {
+      if (err instanceof svc.PortInUseError || err instanceof svc.PortHeldByCascadeError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
       throw err;

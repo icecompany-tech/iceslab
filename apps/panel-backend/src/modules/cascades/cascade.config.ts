@@ -257,6 +257,51 @@ export function generateTopologyLinks(
   return links;
 }
 
+/**
+ * Which node ends up LISTENING on which port, for a topology about to be saved.
+ *
+ * Same walk as generateTopologyLinks and deliberately not folded into it: this
+ * one answers before anything is generated, because the question it feeds is
+ * "may this cascade be saved at all". Generating creds first and asking after
+ * would mean minting REALITY keypairs for a save that is about to be refused.
+ *
+ * Deduplicated: N directions share one port on the receiving step, so the raw
+ * walk would ask the same question N times.
+ */
+export function topologyReceivingPorts(
+  positions: { position?: number; nodeIds: string[] }[],
+  directions: { nodeIds: string[] }[],
+): { nodeId: string; port: number }[] {
+  // Sorted here rather than trusting the caller: the port IS the step index, so
+  // an array that arrived in another order would compute ports for the wrong
+  // nodes. generateTopologyLinks runs on the validated topology, which is
+  // already sorted; this one runs on raw input, before validation, because its
+  // answer decides whether the save may happen at all.
+  const ordered =
+    positions.every((p) => typeof p.position === 'number')
+      ? [...positions].sort((a, b) => a.position! - b.position!)
+      : positions;
+  const seen = new Set<string>();
+  const out: { nodeId: string; port: number }[] = [];
+  const add = (nodeId: string, port: number): void => {
+    const key = `${nodeId}:${port}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ nodeId, port });
+  };
+
+  for (let step = 0; step < ordered.length - 1; step++) {
+    for (const to of ordered[step + 1]!.nodeIds) add(to, LINK_PORT_BASE + step);
+  }
+  const last = ordered.length - 1;
+  if (last >= 0) {
+    for (const d of directions) {
+      for (const to of d.nodeIds) add(to, LINK_PORT_BASE + last);
+    }
+  }
+  return out;
+}
+
 /** Serialise a link cred to the plain JSON persisted in CascadeHop.linkConfig
  *  (a typed LinkCred lacks the index signature Prisma's Json input needs). */
 export function serializeLinkCred(cred: LinkCred): Record<string, string | number> {

@@ -187,6 +187,24 @@ model CascadeLink {
   // Serialised LinkCred (see cascade.config.ts): vless uuid or shadowsocks psk
   // plus the listen port on the receiving side.
   config       Json
+  // The same port as `config.port`, lifted out of the JSON so a port check can
+  // find it.
+  //
+  // It is listened on by `toNodeId`, the RECEIVING side, and it is always TCP:
+  // both link cells (vless and SS2022) ride the node's xray over TCP.
+  //
+  // Duplicated rather than moved, and that is deliberate: `config` is a
+  // serialised LinkCred that the config builders parse as a whole, and pulling
+  // one field out of it would mean teaching every reader a second shape. The
+  // service writes both from one value.
+  //
+  // ⚠ NOT a uniqueness key, and it cannot be one: the pair that actually
+  // collides is (this row, a binding on the same node), and those live in two
+  // tables. No index spans both, so the refusal is the service's job in BOTH
+  // directions, a binding save asking about links and a cascade save asking
+  // about bindings. This column exists to make that question cheap, not to
+  // answer it.
+  port         Int
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   cascade  Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
@@ -196,5 +214,9 @@ model CascadeLink {
   @@unique([cascadeId, fromNodeId, toNodeId, directionTag])
   @@index([fromNodeId])
   @@index([toNodeId])
+  // "What holds this port on this node": the question a binding save asks
+  // before it writes. Receiving side first, because the port is only ever
+  // occupied there.
+  @@index([toNodeId, port])
   @@map("cascade_links")
 }
