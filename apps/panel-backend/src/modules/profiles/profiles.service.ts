@@ -1,4 +1,4 @@
-import type { EngineName } from '@iceslab/shared';
+import type { EngineName, Transport } from '@iceslab/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
@@ -17,6 +17,7 @@ import {
   renderableAtSave,
 } from '../nodes/node-engines.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
+import { transportForBinding } from './profiles.transport.js';
 import type {
   CreateBindingInput,
   CreateProfileInput,
@@ -52,12 +53,61 @@ export class ProfileNameTakenError extends Error {
     this.name = 'ProfileNameTakenError';
   }
 }
+/**
+ * The port is taken ON THAT TRANSPORT.
+ *
+ * The transport is in the message and in the fields because without it the
+ * sentence is wrong in the way that matters: "port 443 is in use" is what the
+ * panel used to say to somebody adding Hysteria2 beside REALITY, and it was
+ * not true. It is true only of the same socket.
+ *
+ * Machine fields travel beside the prose so the panel can say this in the
+ * operator's language, with the demultiplexer explanation that a bare "port in
+ * use" cannot carry.
+ */
 export class PortInUseError extends Error {
-  constructor(public port: number, nodeName: string, conflictProfile: string) {
+  constructor(
+    public port: number,
+    public nodeName: string,
+    public conflictProfile: string,
+    public transport: Transport,
+  ) {
     super(
-      `Port ${port} on node "${nodeName}" is already used by profile "${conflictProfile}". Pick a different port.`,
+      `Port ${port}/${transport.toUpperCase()} on node "${nodeName}" is already used by profile ` +
+        `"${conflictProfile}". A second ${transport.toUpperCase()} protocol on the same port needs a ` +
+        `demultiplexer, which the panel does not do yet. Pick a different port.`,
     );
     this.name = 'PortInUseError';
+  }
+}
+
+/**
+ * The edit moves deployed bindings onto a socket somebody else already holds.
+ *
+ * Only `xray` can do this: switching `network` to kcp moves every binding of
+ * the profile from TCP to UDP, and a port free on one is not free on the other.
+ * The profile edit is therefore refused as a whole, before anything is written,
+ * rather than saved with the bindings left describing the wrong socket.
+ *
+ * Every blocked pair is named, not just the first: a profile on eight nodes
+ * would otherwise be fixed one 409 at a time.
+ */
+export class TransportMoveBlockedError extends Error {
+  constructor(
+    public transport: Transport,
+    public conflicts: { nodeName: string; port: number; conflictProfile: string }[],
+  ) {
+    super(
+      `Moving this profile to ${transport.toUpperCase()} would collide on: ` +
+        conflicts
+          .map(
+            (c) =>
+              `node "${c.nodeName}" port ${c.port}/${transport.toUpperCase()} (held by profile "${c.conflictProfile}")`,
+          )
+          .join('; ') +
+        `. Change the port on those nodes first, or leave the transport as it is.`,
+    );
+    this.name = 'TransportMoveBlockedError';
   }
 }
 
@@ -294,10 +344,71 @@ export async function updateProfile(
     ) as never;
   }
 
-  const updated = await prisma.profile.update({
-    where: { id },
-    data,
-    include: { _count: { select: { bindings: true } } },
+  /**
+   * A config edit can move every deployed binding onto another socket.
+   *
+   * `network` = kcp is the whole of it: xray then listens on UDP, and the
+   * stored `transport` is half of the uniqueness key. Left alone, the rows
+   * would keep claiming TCP while the node listens on UDP, which is the exact
+   * lie the column exists to prevent. So the new value is computed per binding
+   * (overrides merged, because a binding may pin its own `network`), checked
+   * against what is already on that socket, and written together with the
+   * profile in one transaction: either the profile and all its bindings agree,
+   * or nothing moved.
+   */
+  const moves: { id: string; port: number; nodeId: string; transport: Transport }[] = [];
+  if (data.config !== undefined) {
+    const bindings = await prisma.profileNodeBinding.findMany({
+      where: { profileId: id },
+      select: { id: true, port: true, nodeId: true, transport: true, overrides: true },
+    });
+    const nextProfile = { protocol: existing.protocol, config: data.config as unknown };
+    for (const b of bindings) {
+      const next = transportForBinding(nextProfile, b.overrides);
+      if (next !== b.transport) moves.push({ ...b, transport: next });
+    }
+  }
+
+  if (moves.length > 0) {
+    // Asked before the write, not caught after it, because the key says only
+    // that something collided, and the operator needs to know which node.
+    const taken = await prisma.profileNodeBinding.findMany({
+      where: {
+        profileId: { not: id },
+        OR: moves.map((m) => ({ nodeId: m.nodeId, port: m.port, transport: m.transport })),
+      },
+      select: {
+        port: true,
+        nodeId: true,
+        transport: true,
+        node: { select: { name: true } },
+        profile: { select: { name: true } },
+      },
+    });
+    if (taken.length > 0) {
+      throw new TransportMoveBlockedError(
+        taken[0]!.transport as Transport,
+        taken.map((t) => ({
+          nodeName: t.node.name,
+          port: t.port,
+          conflictProfile: t.profile.name,
+        })),
+      );
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    for (const m of moves) {
+      await tx.profileNodeBinding.update({
+        where: { id: m.id },
+        data: { transport: m.transport },
+      });
+    }
+    return tx.profile.update({
+      where: { id },
+      data,
+      include: { _count: { select: { bindings: true } } },
+    });
   });
   eventBus.emit('profile.updated', { profileId: id });
   return mapProfile(updated, await userReachForProfile(id));
@@ -402,12 +513,21 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   });
   if (!node) throw new NodeNotFoundError(input.nodeId);
 
-  // Pre-flight uniqueness checks for friendlier error messages.
+  // Which socket this binding will take. Everything below asks about the port
+  // AND the transport, because those are two different resources: 443/TCP and
+  // 443/UDP are not the same listener, and the panel used to refuse the pair.
+  const transport = transportForBinding(profile, input.overrides);
+
+  // Pre-flight uniqueness check, for a message better than a constraint name.
   const portConflict = await prisma.profileNodeBinding.findUnique({
-    where: { nodeId_port: { nodeId: input.nodeId, port: input.port } },
+    where: {
+      nodeId_port_transport: { nodeId: input.nodeId, port: input.port, transport },
+    },
     include: { profile: { select: { name: true } } },
   });
-  if (portConflict) throw new PortInUseError(input.port, node.name, portConflict.profile.name);
+  if (portConflict) {
+    throw new PortInUseError(input.port, node.name, portConflict.profile.name, transport);
+  }
   const dupBinding = await prisma.profileNodeBinding.findUnique({
     where: {
       profileId_nodeId: { profileId: input.profileId, nodeId: input.nodeId },
@@ -424,6 +544,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
       publicHost: input.publicHost ?? null,
       publicPort: input.publicPort ?? null,
       overrides: (input.overrides as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
+      transport,
       enabled: input.enabled,
     },
   });
@@ -474,19 +595,36 @@ export async function updateBinding(
   id: string,
   input: UpdateBindingInput,
 ): Promise<PublicBindingDto> {
-  const existing = await prisma.profileNodeBinding.findUnique({ where: { id } });
+  const existing = await prisma.profileNodeBinding.findUnique({
+    where: { id },
+    include: { profile: { select: { protocol: true, config: true } } },
+  });
   if (!existing) throw new BindingNotFoundError(id);
 
-  if (input.port !== undefined && input.port !== existing.port) {
+  // The overrides can move an xray binding onto or off kcp, which changes the
+  // socket it takes, so the transport is recomputed from what the row will be
+  // after this edit rather than from what it was.
+  const nextOverrides = input.overrides !== undefined ? input.overrides : existing.overrides;
+  const transport = transportForBinding(existing.profile, nextOverrides);
+  const nextPort = input.port ?? existing.port;
+
+  if (nextPort !== existing.port || transport !== existing.transport) {
     const portConflict = await prisma.profileNodeBinding.findUnique({
-      where: { nodeId_port: { nodeId: existing.nodeId, port: input.port } },
+      where: {
+        nodeId_port_transport: { nodeId: existing.nodeId, port: nextPort, transport },
+      },
       include: {
         profile: { select: { name: true } },
         node: { select: { name: true } },
       },
     });
     if (portConflict && portConflict.id !== id) {
-      throw new PortInUseError(input.port, portConflict.node.name, portConflict.profile.name);
+      throw new PortInUseError(
+        nextPort,
+        portConflict.node.name,
+        portConflict.profile.name,
+        transport,
+      );
     }
   }
 
@@ -501,6 +639,10 @@ export async function updateBinding(
         ? Prisma.JsonNull
         : (input.overrides as Prisma.InputJsonValue);
   }
+  // Always written, not only when it changed: the column is part of the
+  // uniqueness key, and a row whose transport drifted from its config is a row
+  // the key is protecting the wrong way round.
+  data.transport = transport;
 
   const updated = await prisma.profileNodeBinding.update({ where: { id }, data });
   eventBus.emit('binding.updated', {

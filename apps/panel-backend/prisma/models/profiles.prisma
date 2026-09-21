@@ -61,6 +61,15 @@ model ProfileNodeBinding {
   // Used for fields that MUST differ per node: ACME domain, AmneziaWG
   // server private key, Shadowsocks server PSK, MTProto derived secret, etc.
   overrides  Json?
+  // Which socket this binding actually occupies, 'tcp' or 'udp'.
+  //
+  // DERIVED, never asked of the operator: it comes from the profile's protocol
+  // and, for xray alone, from its `network` (kcp is UDP). It is stored here,
+  // denormalised, for one reason: a unique index cannot reach into another
+  // table, and the protocol lives on `profiles`. Kept in step by the service
+  // on every write, including a profile edit that moves an xray inbound onto
+  // or off kcp.
+  transport  String   @map("transport") @db.VarChar(3)
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -69,9 +78,12 @@ model ProfileNodeBinding {
   node    Node    @relation(fields: [nodeId], references: [id], onDelete: Restrict)
   hosts   Host[]
 
-  // Same port can't be reused on the same node (different protocols would
-  // collide on the underlying socket).
-  @@unique([nodeId, port])
+  // A port is taken per TRANSPORT, not per number. 443/TCP and 443/UDP are
+  // different sockets: every browser speaks H2 on the first and H3 on the
+  // second at once, and REALITY next to Hysteria2 is that same shape. The key
+  // used to be [nodeId, port] and refused it, which is not caution, it is a
+  // refusal of a standard configuration.
+  @@unique([nodeId, port, transport])
   @@unique([profileId, nodeId])
   @@index([profileId])
   @@index([nodeId])
@@ -167,13 +179,17 @@ model Inbound {
   // (fallback to node.address).
   publicHost String?  @map("public_host") @db.VarChar(253)
   publicPort Int?     @map("public_port")
+  // Same meaning as on ProfileNodeBinding, and cheaper here: this row carries
+  // its own protocol and config, so nothing has to be joined to know which
+  // socket it takes.
+  transport  String   @map("transport") @db.VarChar(3)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   node          Node           @relation(fields: [nodeId], references: [id], onDelete: Restrict)
   groupInbounds GroupInbound[]
 
-  @@unique([nodeId, port])
+  @@unique([nodeId, port, transport])
   @@index([nodeId])
   @@index([protocol])
   @@map("inbounds")

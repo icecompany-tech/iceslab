@@ -1,6 +1,7 @@
 import { Prisma } from '../../generated/prisma/client.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
+import { transportForBinding } from '../profiles/profiles.transport.js';
 import { checkSniConsistency } from '../profiles/host-fields.js';
 // Reused rather than redefined so the operator gets the same wording whichever
 // route created the binding.
@@ -226,6 +227,7 @@ export async function createHost(input: CreateHostInput): Promise<PublicHostDto>
           profileId: plan.profile.id,
           nodeId: plan.nodeId!,
           port: plan.port!,
+          transport: transportForBinding(plan.profile),
           enabled: true,
         },
         select: { id: true, profileId: true, nodeId: true },
@@ -301,13 +303,16 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   });
   if (existing) return { bindingId: existing.id, profile };
 
-  // The port is unique per node across ALL profiles, so a clash names the
-  // profile squatting on it rather than saying "taken".
+  // A port is taken per TRANSPORT across all profiles on that node, so a clash
+  // names the profile squatting on the same socket rather than saying "taken"
+  // about a number. REALITY on 443/TCP does not stand in the way of Hysteria2
+  // on 443/UDP, and this used to refuse exactly that.
+  const transport = transportForBinding(profile);
   const clash = await prisma.profileNodeBinding.findUnique({
-    where: { nodeId_port: { nodeId, port } },
+    where: { nodeId_port_transport: { nodeId, port, transport } },
     select: { profile: { select: { name: true } } },
   });
-  if (clash) throw new PortInUseError(port, node.name, clash.profile.name);
+  if (clash) throw new PortInUseError(port, node.name, clash.profile.name, transport);
 
   return { bindingId: null, profile, nodeId, port };
 }

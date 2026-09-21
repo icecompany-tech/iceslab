@@ -125,6 +125,18 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
           canWait: err.canWait,
         });
       }
+      // The edit moves the profile onto the other transport, and somebody else
+      // already holds that socket on one of its nodes. Named separately from
+      // CONFLICT for the same reason as above: the screen points at the nodes,
+      // and the list of them travels in machine form.
+      if (err instanceof svc.TransportMoveBlockedError) {
+        return reply.code(409).send({
+          error: 'TRANSPORT_MOVE_BLOCKED',
+          message: err.message,
+          transport: err.transport,
+          conflicts: err.conflicts,
+        });
+      }
       throw err;
     }
   });

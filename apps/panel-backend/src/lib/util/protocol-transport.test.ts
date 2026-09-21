@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   PROTOCOL_NAMES,
   PROTOCOL_TRANSPORT,
@@ -66,5 +69,46 @@ describe('every protocol says what it occupies', () => {
     for (const p of PROTOCOL_NAMES as readonly ProtocolName[]) {
       expect(transportOf(p), p).toBe(PROTOCOL_TRANSPORT[p]);
     }
+  });
+
+  /**
+   * The table has ONE reader, and that is the point of it.
+   *
+   * `PROTOCOL_TRANSPORT[protocol]` looks like the obvious thing to write at a
+   * call site, and it is wrong at every call site: it misses the one exception
+   * the table cannot express, xray on kcp, which is UDP. A second reader would
+   * therefore not fail, it would answer TCP for a UDP listener and let two
+   * things onto one socket. `transportOf` is the only place allowed to know
+   * that, so the table stays inside `packages/shared` and is read here only to
+   * be checked.
+   */
+  it('is read by transportOf alone, everywhere in the backend', () => {
+    const BACKEND_SRC = join(dirname(fileURLToPath(import.meta.url)), '../..');
+    const SELF = fileURLToPath(import.meta.url);
+
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          // Prisma writes its client here; it is generated, not ours to police.
+          if (entry.name === 'generated' || entry.name === 'node_modules') continue;
+          walk(path);
+          continue;
+        }
+        if (!entry.name.endsWith('.ts')) continue;
+        if (path === SELF) continue;
+        if (readFileSync(path, 'utf8').includes('PROTOCOL_TRANSPORT')) {
+          offenders.push(relative(BACKEND_SRC, path));
+        }
+      }
+    };
+    walk(BACKEND_SRC);
+
+    expect(
+      offenders,
+      `these read PROTOCOL_TRANSPORT directly: ${offenders.join(', ')}. ` +
+        `Call transportOf(protocol, config) instead: the table alone does not know that xray on kcp is UDP.`,
+    ).toEqual([]);
   });
 });

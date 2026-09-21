@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { Inbound } from '../../generated/prisma/client.js';
+import { transportOf, type ProtocolName } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
@@ -141,6 +142,10 @@ export async function createInbound(input: CreateInboundInput): Promise<Inbound>
           publicHost: input.publicHost ?? null,
           publicPort: input.publicPort ?? null,
           config: configToStore as never,
+          // Which socket this listener takes. Legacy table, and cheaper here
+          // than on a binding: the row carries its own protocol and config, so
+          // nothing has to be joined to know.
+          transport: transportOf(input.protocol as ProtocolName, configToStore as { network?: string }),
         },
       });
       await tx.groupInbound.upsert({
@@ -199,6 +204,15 @@ export async function updateInbound(
     }
   }
 
+  // A config edit can move the listener onto another socket: xray with
+  // `network` = kcp listens on UDP. The stored transport is part of the
+  // uniqueness key, so it is recomputed from the config that is about to be
+  // written, not from the one already on the row.
+  const nextConfig = (validatedConfig === undefined ? existing.config : validatedConfig) as
+    | { network?: string }
+    | null;
+  const nextTransport = transportOf(existing.protocol as ProtocolName, nextConfig);
+
   let updated: Inbound;
   try {
     updated = await prisma.inbound.update({
@@ -211,6 +225,7 @@ export async function updateInbound(
         publicHost: input.publicHost === undefined ? undefined : input.publicHost,
         publicPort: input.publicPort === undefined ? undefined : input.publicPort,
         config: validatedConfig === undefined ? undefined : (validatedConfig as never),
+        transport: nextTransport,
       },
     });
   } catch (err) {
