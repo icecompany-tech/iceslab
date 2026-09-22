@@ -54,7 +54,10 @@ const HAIRLINE = '#1C2A3D';
 const CARD = '#0F1A28';
 const WELL = '#0B1420';
 const ROW = '#152233';
-const SUNK = '#08101A';
+// Тот же фон страницы, что везде. Раньше стоял под именем SUNK, а тем же
+// словом в других файлах назывался ДРУГОЙ фон (#0B1420): имя убито при
+// сведении палитры 2026-09-22.
+const GROUND = '#08101A';
 const SNOW = '#C8D4E3';
 const MIST = '#7A8BA3';
 const FAINT = '#5A6B82';
@@ -923,7 +926,7 @@ export function SquadEditPage() {
                   height: 28,
                   padding: '0 10px',
                   borderRadius: 8,
-                  backgroundColor: SUNK,
+                  backgroundColor: GROUND,
                   border: `1px solid ${HAIRLINE}`,
                 }}
               >

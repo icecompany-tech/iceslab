@@ -11,7 +11,7 @@ import type { UserForm } from '@/contours/users/components/UserDrawer/useUserFor
 /**
  * The one control shape both halves of the row wear.
  *
- * Quieter than the username field above it: that one is SUNK inside
+ * Quieter than the username field above it: that one is GROUND inside
  * BORDER_INPUT, this one a shade lighter inside a much darker edge. Reusing
  * the louder pair here, which is what the first cut did, made the plan row
  * compete with the one field that is actually required.

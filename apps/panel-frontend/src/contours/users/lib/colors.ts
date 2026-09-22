@@ -1,6 +1,5 @@
 export const HAIRLINE = '#1C2A3D';
 export const CARD = '#0F1A28';
-export const SUNK = '#08101A';
 export const WELL = '#0B1420';
 export const BORDER_INPUT = '#2C3A4E';
 export const SNOW = '#C8D4E3';
@@ -19,13 +18,19 @@ export const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospac
  * Three tones the artboard uses that the palette above did not carry.
  *
  * They are not decoration: the plan controls are deliberately quieter than the
- * username field above them (WELL on FIELD_EDGE against SUNK on BORDER_INPUT),
- * and reusing the louder pair made the two rows compete.
+ * username field above them (WELL on FIELD_EDGE against GROUND on
+ * BORDER_INPUT), and reusing the louder pair made the two rows compete.
  */
 export const FIELD_EDGE = '#16243F';
 export const BADGE = '#152233';
 export const DIM_TEXT = '#5A6B82';
 
 export const AMBER = '#F5B14C';
-/** Same ink as SUNK above, under the name the users table uses. */
+/**
+ * Фон страницы, и в этом файле он же стоял под вторым именем `SUNK`.
+ *
+ * Имя убито при сведении палитры 2026-09-22: тем же словом в других файлах
+ * назывался ДРУГОЙ фон (`#0B1420`), и пока оба имени жили рядом, любая замена
+ * по имени перекрашивала экран молча. Осталось одно имя на одну краску.
+ */
 export const GROUND = '#08101A';

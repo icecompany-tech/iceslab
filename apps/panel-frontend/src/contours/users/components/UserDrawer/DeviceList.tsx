@@ -1,6 +1,6 @@
 import { IconDeviceDesktop, IconX } from '@tabler/icons-react';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
-import { DISPLAY, HAIRLINE, MIST, MONO, RED, SNOW, SUNK, WELL } from '@/contours/users/lib/colors';
+import { DISPLAY, GROUND, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { deleteHwidDevice, listUserDevices } from '@/lib/domain/users';
 import { notifications } from '@mantine/notifications';
@@ -39,7 +39,7 @@ export function DeviceList({ userId, limit }: { userId: string; limit: number | 
       style={{
         borderRadius: 8,
         border: `1px solid ${HAIRLINE}`,
-        backgroundColor: SUNK,
+        backgroundColor: GROUND,
         padding: '10px 12px',
       }}
     >
