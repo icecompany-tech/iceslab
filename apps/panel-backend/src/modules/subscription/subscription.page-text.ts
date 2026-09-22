@@ -57,6 +57,8 @@ export interface Labels {
   dlGroupRouter: string;
   dlGroupOther: string;
   dlGet: string;
+  /** Кнопка строки MTProto: ссылка открывается в самом мессенджере. */
+  tgOpen: string;
   dlCopy: string;
   dlDead: string;
   /** Подписи кнопок, что ведут за выбранным приложением и в него. */
@@ -207,6 +209,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlGroupOther: 'FOR ANOTHER DEVICE',
     dlDead: 'While the subscription is not in force, no config is issued: these addresses answer with a refusal, the same one that brought you to this page. Everything comes back the moment it is renewed, on the same link.',
     dlGet: 'Download',
+    tgOpen: 'Open in Telegram',
     dlCopy: 'Config',
     stepGet: 'Get',
     stepAdd: 'Add to',
@@ -229,6 +232,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       wgconf: 'wg-quick / awg',
       amneziavpn: 'AmneziaVPN key',
       plain: 'Subscription link',
+      mtproto: 'Telegram proxy',
     },
     formats: {
       clash: 'Clash Verge, FlClash, Clash Mi. The whole subscription in one file',
@@ -244,6 +248,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       wgconf: 'One tunnel to one server, not the whole subscription',
       amneziavpn: 'Copy it and paste it into the app, which reads it itself. One tunnel to one server',
       plain: 'The subscription itself, base64. This is what a client pulls from the link',
+      mtproto: 'Inside Telegram only, and nothing else goes through it. No config file carries it',
     },
     transferTitle: 'Move this to another device',
     transferNote:
@@ -376,6 +381,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlGroupOther: 'ДЛЯ ДРУГОГО УСТРОЙСТВА',
     dlDead: 'Пока подписка не действует, конфиги не выдаются: по этим адресам приходит тот же отказ, что привёл вас на эту страницу. Всё вернётся сразу после продления, ссылка та же.',
     dlGet: 'Скачать',
+    tgOpen: 'Открыть в Telegram',
     dlCopy: 'Конфиг',
     stepGet: 'Скачать',
     stepAdd: 'Добавить в',
@@ -398,6 +404,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       wgconf: 'wg-quick / awg',
       amneziavpn: 'Ключ AmneziaVPN',
       plain: 'Ссылка подписки',
+      mtproto: 'Прокси для Telegram',
     },
     formats: {
       clash: 'Clash Verge, FlClash, Clash Mi. Вся подписка одним файлом',
@@ -413,6 +420,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       wgconf: 'Один туннель на один сервер, а не вся подписка',
       amneziavpn: 'Скопировать и вставить в приложение, оно разберёт само. Один туннель на один сервер',
       plain: 'Сама подписка, base64. Именно это забирает клиент по ссылке',
+      mtproto: 'Только внутри Telegram, остальной трафик через него не идёт. Ни в один файл конфига он не попадает',
     },
     transferTitle: 'Перенести на другое устройство',
     transferNote:

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { connect as tlsConnect } from 'node:tls';
 import { request } from 'undici';
-import { ROUTING_PRESET_IDS } from '@iceslab/shared';
+import { DEFAULT_FORMAT_NAMES, ROUTING_PRESET_IDS } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import { prisma } from '../../prisma.js';
 import { redis } from '../../lib/infra/redis.js';
@@ -129,8 +129,14 @@ const UpsertInput = z.object({
   defaultLocale: z.enum(['ru', 'en']).optional(),
   // What the bare link hands a client that asked for nothing: no ?format=, no
   // user-agent rule, no JSON in Accept. Was hard-coded to `plain`.
+  // From the shared list: the frontend's selector reads the same one, so the
+  // screen cannot offer a value this refuses. The refusal names the value,
+  // because "Invalid enum" about a field the operator did not type by hand is
+  // a message with nothing in it.
   subscriptionDefaultFormat: z
-    .enum(['plain', 'xrayjson', 'xrayjson-array', 'clash', 'singbox'])
+    .enum(DEFAULT_FORMAT_NAMES, {
+      message: `not a format the bare link can default to. Available: ${DEFAULT_FORMAT_NAMES.join(', ')}`,
+    })
     .optional(),
   // One line per server, or one line per server-and-protocol. See
   // SubscriptionSettings.linkShape for the collapsing rule.

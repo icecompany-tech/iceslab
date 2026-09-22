@@ -1,5 +1,11 @@
-import { isRoutingPresetId, type RoutingPresetId } from '@iceslab/shared';
+import {
+  DEFAULT_FORMAT_NAMES,
+  isRoutingPresetId,
+  type DefaultSubscriptionFormat,
+  type RoutingPresetId,
+} from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
+import { getLogger } from '../../lib/infra/logger.js';
 
 /**
  * Resolved subscription-related settings. Read by `/sub/:token` to set
@@ -52,7 +58,7 @@ export interface SubscriptionSettings {
    * one app can do better than the lowest common denominator, and this is
    * where they say so.
    */
-  defaultFormat: 'plain' | 'xrayjson' | 'xrayjson-array' | 'clash' | 'singbox';
+  defaultFormat: DefaultSubscriptionFormat;
   /**
    * One line per SERVER or one line per server-and-protocol.
    *
@@ -169,11 +175,27 @@ export async function getSubscriptionSettings(): Promise<SubscriptionSettings> {
   // function is: app_settings is a jsonb key-value table, a row can be
   // hand-edited, and a garbage value must fall back to the old behaviour
   // rather than change what subscribers get.
-  const FORMATS = ['plain', 'xrayjson', 'xrayjson-array', 'clash', 'singbox'] as const;
+  //
+  // ⚠ THE FALLBACK STAYS HERE, and only here. The write path refuses an
+  // unknown value with a 400 that names it, which is where an operator can be
+  // told anything at all. This is the READ path: its input is a row, a restored
+  // dump or somebody's SQL session, and the reader is every subscriber's client
+  // polling the bare link. Refusing here would take the whole subscription
+  // surface down over one bad row, so it falls back to what the panel did
+  // before the setting existed.
+  //
+  // What it no longer does is fall back in silence: the line below is the only
+  // trace that a stored setting is being ignored.
   const fmtRaw = map.get('subscriptionDefaultFormat');
-  const defaultFormat = FORMATS.includes(fmtRaw as (typeof FORMATS)[number])
-    ? (fmtRaw as (typeof FORMATS)[number])
-    : 'plain';
+  const known = (DEFAULT_FORMAT_NAMES as readonly string[]).includes(fmtRaw as string);
+  if (fmtRaw !== undefined && fmtRaw !== null && !known) {
+    getLogger().warn(
+      `[settings] subscriptionDefaultFormat is ${JSON.stringify(fmtRaw)}, which this build ` +
+        `cannot serve as a default; the bare link answers with "plain" until it is fixed. ` +
+        `Available: ${DEFAULT_FORMAT_NAMES.join(', ')}`,
+    );
+  }
+  const defaultFormat = known ? (fmtRaw as DefaultSubscriptionFormat) : 'plain';
 
   const shapeRaw = map.get('subscriptionLinkShape');
   const linkShape = shapeRaw === 'per-node' ? 'per-node' : 'per-exit';

@@ -243,6 +243,29 @@ export function pageScript(o: PageScriptOpts): string {
     [].slice.call(document.querySelectorAll('.app-card')).forEach(function (card) {
       card.addEventListener('click', function () { pickApp(card); });
     });
+    // A link that is already in the markup, copied as it stands. The MTProto
+    // rows use this: there is nothing to fetch, the proxy link IS the thing,
+    // and it carries no user credential beyond the proxy secret that every
+    // user of that inbound shares anyway.
+    [].slice.call(document.querySelectorAll('[data-copy-text]')).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var word = btn.querySelector('span');
+        var text = btn.getAttribute('data-copy-text') || '';
+        var original = word ? word.textContent : '';
+        var say = function (s) { if (word) word.textContent = s; };
+        var done = function () { say(${JSON.stringify(o.copied)}); setTimeout(function () { say(original); }, 1500); };
+        var fallback = function () {
+          var ta = document.createElement('textarea'); ta.value = text;
+          ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta); done();
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(fallback);
+        } else { fallback(); }
+      });
+    });
     // "Config" puts the BODY of that format in the clipboard, fetched from
     // the same address the download button uses.
     //

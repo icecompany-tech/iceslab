@@ -1,18 +1,18 @@
 import { z } from 'zod';
+import { FORMAT_NAMES } from '@iceslab/shared';
 
-export const SrrFormat = z.enum([
-  'plain',
-  'json',
-  'clash',
-  'singbox',
-  'wgconf',
-  'xrayjson',
-  'xkeen',
-  'outline',
-  'surge',
-  'quantumultx',
-  'loon',
-]);
+/**
+ * Which format a rule may serve.
+ *
+ * ⚠ The SHARED list. This was its own copy of eleven names, missing
+ * `xrayjson-array` and `amneziavpn`, so an operator could not write a rule for
+ * two formats the subscription hands out every day: the route served them, the
+ * rule editor refused them, and nothing said why (issue #41).
+ *
+ * A rule naming a format is only ever a NARROWING of what /sub already does, so
+ * this list has no reason to be smaller than the one /sub accepts.
+ */
+export const SrrFormat = z.enum(FORMAT_NAMES);
 
 /** Does the pattern compile as a RegExp? Mirrors the runtime matcher's
  *  inline-flag handling (`(?i)` prefix) in srr.service.ts. */

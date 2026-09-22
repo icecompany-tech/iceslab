@@ -10,7 +10,12 @@
 // stack + a monospace accent, not a downloaded display face). Everything
 // interpolated from admin/user input is HTML-escaped (esc).
 
-import { PROTOCOL_NAMES, type ProtocolName } from '@iceslab/shared';
+import {
+  PROTOCOL_NAMES,
+  formatCarriesAny,
+  type ProtocolName,
+  type SubscriptionFormat,
+} from '@iceslab/shared';
 import { PAGE_CSS } from './subscription.page-styles.js';
 import { pageScript } from './subscription.page-script.js';
 import { QR_SCRIPT, qrBox } from './subscription.page-qr.js';
@@ -81,6 +86,19 @@ export interface SubscriptionPageData {
      *  robust import path. */
     vpnKey?: string;
   }>;
+  /**
+   * One entry per MTProto node, with its proxy link already built.
+   *
+   * MTProto is in no config format at all: not clash, not sing-box, not
+   * xray-json, not Surge. So a row here is not a convenience, it is the ONLY
+   * way to use such a node from this page, and its absence is what made an
+   * MTProto subscription look empty (issue #41).
+   *
+   * Both forms travel because they are for different places: `tmeUri` is a
+   * plain https link that works anywhere and is what a person sends to
+   * somebody, `uri` is the `tg://` form that opens the app directly.
+   */
+  mtprotoNodes?: Array<{ nodeName: string; uri: string; tmeUri: string }>;
 }
 
 function esc(s: string): string {
@@ -552,8 +570,6 @@ function renderDownloads(
   icons: GlyphSheet,
 ): string {
   const sub = esc(data.subUrl);
-  const hasSs = data.protocols.includes('shadowsocks');
-  const hasProxy = data.protocols.some((p) => p !== 'amneziawg');
 
   interface Row {
     /** ?format= value, and the key into the phrase dictionary. */
@@ -567,19 +583,33 @@ function renderDownloads(
     noDownload?: boolean;
   }
 
-  const clients: Row[] = hasProxy
-    ? [
-        { fmt: 'clash' },
-        { fmt: 'singbox' },
-        { fmt: 'xrayjson' },
-        { fmt: 'xrayjson-array' },
-        ...(hasSs ? [{ fmt: 'outline' }] : []),
-        { fmt: 'surge' },
-        { fmt: 'quantumultx' },
-        { fmt: 'loon' },
-        { fmt: 'json' },
-      ]
-    : [];
+  /**
+   * A row is offered when the format CARRIES something this subscription has.
+   *
+   * It used to be offered when the subscription had anything that was not
+   * AmneziaWG, which reads as "not a tunnel, therefore a proxy". MTProto is
+   * neither: no builder emits it, so a subscription whose only node was MTProto
+   * was handed five files that each came back without its only server.
+   *
+   * `hasSs` is gone with it, because it was the same question asked once by
+   * hand for the one format anybody had noticed.
+   */
+  const carries = (fmt: SubscriptionFormat) => formatCarriesAny(fmt, data.protocols);
+  const clients: Row[] = (
+    [
+      'clash',
+      'singbox',
+      'xrayjson',
+      'xrayjson-array',
+      'outline',
+      'surge',
+      'quantumultx',
+      'loon',
+      'json',
+    ] as const
+  )
+    .filter(carries)
+    .map((fmt) => ({ fmt }));
   // One tunnel per server, and that shape must survive: a person with three
   // AmneziaWG nodes who is handed one file walks away thinking they took
   // everything.
@@ -590,13 +620,45 @@ function renderDownloads(
       label: n.nodeName,
     }));
   const router: Row[] = [
-    ...(hasProxy ? [{ fmt: 'xkeen' }] : []),
+    ...(carries('xkeen') ? [{ fmt: 'xkeen' }] : []),
     ...(hasAwg ? perNode('wgconf') : []),
   ];
   const other: Row[] = [
     ...(hasAwg ? perNode('amneziavpn') : []),
     { fmt: 'plain', noDownload: true },
   ];
+
+  /**
+   * MTProto, one row per node, with the link itself.
+   *
+   * Not a `?format=` row, because there is no format: no builder emits MTProto,
+   * so this row IS the way to use such a node from this page. Until now the
+   * page drew a Telegram card of instructions with no link in it, and the only
+   * way to get one was to read the raw subscription by hand.
+   *
+   * The https form on the button, because it opens the app from anywhere and
+   * survives being sent to somebody; the same link on the copy button, so a
+   * person who cannot follow it here can paste it where they can.
+   */
+  const telegram = (data.mtprotoNodes ?? [])
+    .map((n) => {
+      const link = n.tmeUri || n.uri;
+      const name = `${t.formatNames['mtproto'] ?? 'Telegram'} · ${n.nodeName}`;
+      return (
+        `<div class="dl-row" data-dl-fits="">` +
+        `<div class="dl-row__col">` +
+        `<div class="dl-row__name"><span class="dl-row__dot" aria-hidden="true"></span>${esc(name)}</div>` +
+        // Amber, like every other row that hands out ONE server rather than the
+        // whole subscription.
+        `<div class="dl-row__note dl-row__note--warn">${esc(t.formats['mtproto'] ?? '')}</div>` +
+        `</div>` +
+        `<div class="dl-row__actions">` +
+        `<button class="dl-btn dl-btn--ghost" type="button" data-copy-text="${esc(link)}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(t.dlCopy)}</span></button>` +
+        `<a class="dl-btn" href="${esc(link)}">${icons.draw('ExternalLink', { cls: 'ic' })}<span>${esc(t.tgOpen)}</span></a>` +
+        `</div></div>`
+      );
+    })
+    .join('');
 
   const row = (r: Row) => {
     const href = `${sub}?format=${r.fmt}${r.q ?? ''}`;
@@ -647,8 +709,14 @@ function renderDownloads(
     ? ''
     : group(t.dlGroupClients, 'clients', clients) +
       group(t.dlGroupRouter, 'router', router) +
+      // The Telegram rows sit with the other per-server handouts, which is what
+      // they are: one node, one link, not the subscription.
+      (telegram
+        ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>${telegram}</div>`
+        : '') +
       group(t.dlGroupOther, 'other', other);
-  const count = clients.length + router.length + other.length;
+  const count =
+    clients.length + router.length + other.length + (data.mtprotoNodes?.length ?? 0);
   // Нечего предложить и подписка в силе: карточки нет. Нечего предложить
   // ПОТОМУ ЧТО она не в силе: карточка остаётся. Блок, который исчезает, учит
   // читателя, что его там и не было, и продливший идёт искать вчерашнюю кнопку.
@@ -1103,7 +1171,13 @@ ${SPRITE_SLOT}
        справочником: исчезала она раньше, и страница из-за этого читалась как
        сломанная, хотя сломаны были данные. Полоса сверху говорит правду, а
        инструкция остаётся: ставить приложение можно и до выдачи доступа. */
-    !dead && platforms.length > 0
+    /* ⚠ `downloadsHtml` counts too, and that is not a detail. A subscription
+       whose only node is MTProto names no app on any platform: MTProto is not
+       a client, it is a setting inside Telegram. So `platforms` came out empty
+       and this whole section disappeared, taking with it the one row that
+       could have handed the reader their proxy link. The page then showed a
+       working subscription with nothing on it at all (issue #41). */
+    !dead && (platforms.length > 0 || downloadsHtml !== '')
       ? `<section class="card install">
     <div class="install__head">
       <h1 class="install__title">${esc(t.setup)}</h1>

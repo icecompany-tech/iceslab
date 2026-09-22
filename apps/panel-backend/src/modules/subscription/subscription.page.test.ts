@@ -106,6 +106,52 @@ describe('buildSubscriptionPage', () => {
     expect(body).toContain('whole list');
   });
 
+  it('offers an MTProto-only subscription no config format at all', () => {
+    // The bug this is about: the page asked "is there anything that is not
+    // AmneziaWG" and called that a proxy, so an MTProto node was offered
+    // Clash, sing-box, Xray JSON and two paid iOS clients. No builder emits
+    // MTProto, so every one of those files came back without its only server.
+    const html = buildSubscriptionPage(base({ protocols: ['mtproto'] }));
+    for (const fmt of ['clash', 'singbox', 'xrayjson', 'xrayjson-array', 'surge', 'loon']) {
+      expect(html, `${fmt} was offered to a subscription it cannot carry`).not.toContain(
+        `?format=${fmt}`,
+      );
+    }
+    // `plain` stays: it is the subscription itself, and it carries everything.
+    expect(html).toContain('?format=plain');
+  });
+
+  it('hands an MTProto node its proxy link, which is the only way to use one', () => {
+    // MTProto is in no config format, so without this row the page shows a
+    // Telegram card of instructions and no link: the only route was reading
+    // the raw subscription by hand.
+    const html = buildSubscriptionPage(
+      base({
+        protocols: ['mtproto'],
+        mtprotoNodes: [
+          {
+            nodeName: 'se-01',
+            uri: 'tg://proxy?server=se-01.example.com&port=443&secret=ee00',
+            tmeUri: 'https://t.me/proxy?server=se-01.example.com&port=443&secret=ee00',
+          },
+        ],
+      }),
+    );
+    // The https form on the button: it opens the app from anywhere and
+    // survives being sent to somebody.
+    expect(html).toContain('https://t.me/proxy?server=se-01.example.com&amp;port=443');
+    expect(html).toContain('data-copy-text=');
+    // Named by node, like the per-server AmneziaWG files, because that is what
+    // it is: one server, not the subscription.
+    expect(html).toContain('se-01');
+  });
+
+  it('says nothing about Telegram when no node serves it', () => {
+    const html = buildSubscriptionPage(base({ protocols: ['xray'] }));
+    expect(html).not.toContain('data-copy-text=');
+    expect(html).not.toContain('t.me/proxy');
+  });
+
   it('hides a platform that has nothing to offer instead of showing an empty one', () => {
     // An AmneziaWG-only subscription has no client for a television at all:
     // AmneziaVPN does not build for one. The platform leaves the selector.

@@ -124,6 +124,43 @@ export const FORMAT_PROTOCOLS: Record<SubscriptionFormat, readonly ProtocolName[
   loon: ['shadowsocks', 'hysteria', 'xray'],
 };
 
+/**
+ * What the bare link may be set to answer with.
+ *
+ * Narrower than FORMAT_NAMES, and the reason is what a DEFAULT has to survive:
+ * it is served to a client that asked for nothing, about a subscription whose
+ * contents the operator will change later.
+ *
+ *   - the per-node files are out (`wgconf`, `amneziavpn`): they carry ONE
+ *     server and need `&node=` to say which. As a default they would hand every
+ *     subscriber the first tunnel and silently drop the rest;
+ *   - `outline` is out because it carries Shadowsocks only. The day the
+ *     operator adds an xray node, every bare link would quietly stop including
+ *     it, which is the failure mode this codebase refuses everywhere else.
+ *
+ * Everything else stays, including the three paid iOS formats and `xkeen`: they
+ * carry the whole subscription across protocols, and an operator whose
+ * subscribers are all on one client knows better than we do what to hand them.
+ *
+ * ⚠ The five-name list this replaced (`plain`, `xrayjson`, `xrayjson-array`,
+ * `clash`, `singbox`) was a UI shortlist that had leaked into validation: no
+ * rule anywhere explained why Surge could not be a default while Clash could.
+ */
+export const DEFAULT_FORMAT_NAMES = [
+  'plain',
+  'json',
+  'clash',
+  'singbox',
+  'xrayjson',
+  'xrayjson-array',
+  'xkeen',
+  'surge',
+  'quantumultx',
+  'loon',
+] as const;
+
+export type DefaultSubscriptionFormat = (typeof DEFAULT_FORMAT_NAMES)[number];
+
 /** Does this format carry anything a subscription with these protocols has?
  *  The question the page asks before offering a file. */
 export function formatCarriesAny(
