@@ -141,7 +141,7 @@ function jsonKeysOf(struct: string): string[] {
 }
 
 describe('the chain block against the agent that will decode it', () => {
-  it('carries the same four keys on both sides', () => {
+  it('carries the same five keys on both sides', () => {
     const keys = jsonKeysOf('NodeChain');
     // Fails rather than passes empty: if the struct is renamed or the file
     // moves, this test has to say so instead of checking nothing.
@@ -149,12 +149,34 @@ describe('the chain block against the agent that will decode it', () => {
       keys.length,
       'NodeChain was not found in dto.go, so this test is checking nothing. ' +
         'Fix the pattern or the struct name, do not delete the test.',
-    ).toBe(4);
-    expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword']);
+    ).toBe(5);
+    // `userCore` joined in К6 and is the reason this guard earns its keep: it
+    // carries the drawing the user's core renders while the chain process holds
+    // the chain, and it ships before anything reads it, so a rename on either
+    // side would sit silent until a push decoded into zeroes and an entry
+    // quietly egressed from its own country.
+    expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword', 'userCore']);
+  });
+
+  it('carries both user-core keys on both sides', () => {
+    expect(jsonKeysOf('ChainUserCore')).toEqual(['engine', 'fragments']);
   });
 
   it('carries both socks keys on both sides', () => {
     expect(jsonKeysOf('ChainSocks')).toEqual(['tag', 'port']);
+  });
+
+  it('answers with the same four keys as the panel reads back', () => {
+    // The other direction of the same block: what the agent SAYS about its
+    // chain. `reservedPorts` moved in here from a core's list on 2026-09-22,
+    // because reporting them there said "xray holds 26000" about a port the
+    // chain holds; the panel's port check reads this key by name.
+    expect(jsonKeysOf('ChainStatusDto')).toEqual([
+      'running',
+      'version',
+      'error',
+      'reservedPorts',
+    ]);
   });
 
   it('keeps the block optional on the request, beside the cascade it replaces', () => {

@@ -1,4 +1,4 @@
-import type { NodeCores, XrayCascadeFragments } from '@iceslab/shared';
+import type { NodeChain, NodeCores, XrayCascadeFragments } from '@iceslab/shared';
 import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
@@ -26,6 +26,7 @@ import {
   type CascadePolicy,
   type HopConfig,
   type LinkCred,
+  type TopologyInput,
   type TopologyLinkRow,
 } from './cascade.config.js';
 import type {
@@ -36,6 +37,9 @@ import type {
   UpdateCascadeInput,
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
+import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
+import { chainSocksPort } from './chain.ports.js';
+import { chainSecretFor } from '../nodes/chain-secret.js';
 import { isConfigApplied } from '../nodes/nodes.sync-status.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
 
@@ -1368,6 +1372,121 @@ export async function getCascadeFragmentsForNode(
 }
 
 /**
+ * The chain block for one node: the config its own chain process runs, plus
+ * what its user core must render while that process holds the chain.
+ *
+ * Phase 4, К6. Returns null for a node with no v4 topology, which is both "not
+ * in a cascade" and "in a cascade written before the topology tables". The
+ * second is deliberate: the chain renderer only knows the v4 shape, and a
+ * legacy cascade keeps being drawn the way it always was rather than being
+ * half-moved to a process that cannot express it.
+ *
+ * ⚠ THE PUSH SENDS THIS AND `cascade` TOGETHER for one release. They are two
+ * drawings of one cascade for two kinds of agent, and they are NOT
+ * interchangeable: `cascade` stays the legacy leg-dialling version because an
+ * agent that cannot see this block applies it, and this block carries the
+ * handover version because an agent that can see it ignores the other one.
+ * Sending the handover drawing as `cascade` would point an old agent's xray at
+ * a loopback port nothing on that machine is listening on.
+ */
+export async function getChainForNode(nodeId: string): Promise<NodeChain | null> {
+  const topology = await readTopologyForNode(nodeId);
+  if (!topology) return null;
+  // Same read for both drawings, so the pair cannot disagree about the shape of
+  // the cascade they describe.
+  const role = chainRoleOf(nodeId, topology);
+  if (!role) return null;
+
+  const secret = await chainSecretFor(nodeId);
+  const input = chainInputFor(nodeId, topology, role, secret);
+  if (!input) return null;
+
+  const config = renderChainConfig(input);
+  // One listener per way out this node offers its user core. Only an entry has
+  // any: a transit and an exit receive on a link and hand nothing over.
+  const socks = (input.directionTags ?? []).map((tag) => ({ tag, port: chainSocksPort(tag) }));
+
+  // ⚠ ONLY AN ENTRY HANDS ANYTHING OVER. A transit and an exit have their whole
+  // side of the chain inside the process: their link-in listens on the link
+  // port, and giving their user core the old fragments as well would put xray
+  // on that same port, where one of the two loses the bind and the leg into
+  // this node goes dark.
+  const handover =
+    role === 'entry'
+      ? buildTopologyFragmentsForNode(nodeId, { ...topology, chainSocksPassword: secret })
+      : null;
+  return {
+    engine: 'singbox',
+    config: config as Record<string, unknown>,
+    socks,
+    socksPassword: secret,
+    ...(handover ? { userCore: { engine: 'xray' as const, fragments: toWireFragments(handover) } } : {}),
+  };
+}
+
+/** Which end of the chain this node is. Null when it is in the topology but
+ *  carries no leg, which the fragment builder also refuses. */
+function chainRoleOf(nodeId: string, t: TopologyInput): ChainRole | null {
+  const incoming = t.links.some((l) => l.toNodeId === nodeId);
+  const outgoing = t.links.some((l) => l.fromNodeId === nodeId);
+  if (!incoming && !outgoing) return null;
+  if (t.positions[0]?.nodeIds.includes(nodeId)) return 'entry';
+  if (t.directions.some((d) => d.nodeIds.includes(nodeId))) return 'exit';
+  return 'transit';
+}
+
+/**
+ * The topology as the chain renderer wants it, from this node's point of view.
+ *
+ * The entry offers one way out per direction plus the Auto line when the
+ * cascade has one; a transit receives on a link and forwards per direction; an
+ * exit receives and stops.
+ */
+function chainInputFor(
+  nodeId: string,
+  t: TopologyInput,
+  role: ChainRole,
+  socksPassword: string,
+): ChainRenderInput | null {
+  const out = t.links
+    .filter((l) => l.fromNodeId === nodeId)
+    .map((l) => {
+      const host = t.hosts.get(l.toNodeId);
+      return host ? { tag: l.directionTag, host, cred: l.cred } : null;
+    })
+    .filter((l): l is NonNullable<typeof l> => l !== null);
+  // A leg pointing at a node whose address we no longer have is the case the
+  // fragment builder refuses out loud. Here the same answer, quietly: the push
+  // that carries this block is already refused by that builder, and rendering
+  // half a chain beside it would be worse than rendering none.
+  if (out.length !== t.links.filter((l) => l.fromNodeId === nodeId).length) return null;
+
+  const incoming = t.links.filter((l) => l.toNodeId === nodeId);
+  const inLeg = incoming[0]
+    ? {
+        cred: incoming[0].cred,
+        clients: incoming.map((l) => ({
+          tag: l.directionTag,
+          uuid: l.cred.protocol === 'vless' ? l.cred.uuid : undefined,
+        })),
+      }
+    : undefined;
+
+  if (role === 'entry') {
+    // The tags the user core may ask for, Auto first when the cascade offers
+    // it. Auto has no leg of its own: the chain renders it as a group over the
+    // other ways out.
+    const tags = [...new Set(out.map((l) => l.tag))].sort((a, b) => a - b);
+    const directionTags = t.auto && tags.length > 1 ? [0, ...tags] : tags;
+    return { role, socksPassword, directionTags, out, policy: null };
+  }
+  if (!inLeg) return null;
+  return role === 'exit'
+    ? { role, socksPassword, in: inLeg, policy: null }
+    : { role, socksPassword, in: inLeg, out, policy: null };
+}
+
+/**
  * Enabled cascades this node is a hop of, by name, in whichever storage.
  *
  * Both shapes are asked because a cascade lives in both: the legacy hops and
@@ -1494,6 +1613,22 @@ async function buildCascadeFragmentsForNode(
 async function getTopologyFragmentsForNode(
   nodeId: string,
 ): Promise<XrayCascadeFragments | null> {
+  const input = await readTopologyForNode(nodeId);
+  if (!input) return null;
+  const mine = buildTopologyFragmentsForNode(nodeId, input);
+  if (!mine) return null;
+  return toWireFragments(mine);
+}
+
+/**
+ * The v4 topology around one node, as the renderers want it.
+ *
+ * One reader for both of them. The xray fragments and the chain config are two
+ * drawings of the SAME cascade, and a node that got them from two reads could
+ * be handed a leg in one and not in the other: the pair would be internally
+ * consistent and wrong together, which is the hardest kind of wrong to see.
+ */
+async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null> {
   const link = await prisma.cascadeLink.findFirst({
     where: {
       cascade: { enabled: true },
@@ -1561,7 +1696,7 @@ async function getTopologyFragmentsForNode(
     });
   }
 
-  const mine = buildTopologyFragmentsForNode(nodeId, {
+  return {
     positions: positions.map((p) => ({
       position: p.position,
       nodeIds: p.nodes.map((n) => n.nodeId),
@@ -1578,10 +1713,7 @@ async function getTopologyFragmentsForNode(
     // profile whose rule is missing at the entry egresses from the entry
     // country instead of failing, which is the one outcome worth preventing.
     auto: cascadeRow?.autoProfile ?? false,
-  });
-  if (!mine) return null;
-
-  return toWireFragments(mine);
+  };
 }
 
 export async function deleteCascade(id: string): Promise<void> {

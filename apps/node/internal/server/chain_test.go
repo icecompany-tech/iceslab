@@ -71,12 +71,20 @@ func chainManager(t *testing.T, logger *slog.Logger) *chain.Manager {
 	})
 }
 
+// The handover drawing the chain block carries for the user's core: the same
+// cascade, ending in a loopback socks outbound instead of a leg.
+const handoverFragments = `{"outbounds":[{"tag":"cascade-link-out-chain-d1","protocol":"socks"}]}`
+
 func chainBlock() *dto.NodeChain {
 	return &dto.NodeChain{
 		Engine:        "singbox",
 		Config:        json.RawMessage(`{"log":{"level":"warn"},"outbounds":[{"type":"direct","tag":"direct"}]}`),
 		Socks:         []dto.ChainSocks{{Tag: 0, Port: 26000}, {Tag: 1, Port: 26001}},
 		SocksPassword: "chain-socks-fixture-password-0000",
+		UserCore: &dto.ChainUserCore{
+			Engine:    "xray",
+			Fragments: json.RawMessage(handoverFragments),
+		},
 	}
 }
 
@@ -120,11 +128,13 @@ func TestAChainInForceMakesTheCascadeFragmentsIgnored(t *testing.T) {
 	if len(xray.got) != 1 {
 		t.Fatalf("the cascade receiver was called %d times, want once", len(xray.got))
 	}
-	// nil, not the fragments: that call is what tells the core to STOP drawing
-	// the chain it used to draw. Silence would leave the old drawing in place
-	// next to the new process.
-	if xray.got[0] != nil {
-		t.Fatalf("the core was handed cascade fragments while the chain process holds the chain: %s", xray.got[0])
+	// The CHAIN's drawing, not the one in `cascade`. The old block is still on
+	// the wire for agents that cannot see `chain` at all, and applying it here
+	// would put two processes on one chain; dropping it and handing the core
+	// nothing would be worse still, because an entry with no cascade routing
+	// does not fail, it sends users out of the entry country.
+	if string(xray.got[0]) != handoverFragments {
+		t.Fatalf("the core did not get the handover drawing: %s", xray.got[0])
 	}
 	// The line an incident review starts from, verbatim.
 	if !strings.Contains(logs.String(), "chain block present, xray cascade fragments ignored") {
@@ -157,8 +167,50 @@ func TestWithoutAChainTheFragmentsStillReachTheCore(t *testing.T) {
 	if len(xray.got) != 2 {
 		t.Fatalf("the cascade receiver was called %d times, want twice", len(xray.got))
 	}
+	if string(xray.got[0]) != handoverFragments {
+		t.Fatalf("with the chain in force the core did not get the handover drawing: %s", xray.got[0])
+	}
 	if string(xray.got[1]) != string(fragments) {
-		t.Fatalf("after the chain was withdrawn the core did not get the fragments back: %s", xray.got[1])
+		t.Fatalf("after the chain was withdrawn the core did not get the legacy fragments back: %s", xray.got[1])
+	}
+}
+
+func TestATransitGetsNoDrawingAndNoAlarm(t *testing.T) {
+	// A transit and an exit have no user core to hand over from: their whole
+	// chain lives in the process. The core receives nil, and that is correct
+	// rather than a failure, so the "nobody draws the cascade" alarm must stay
+	// quiet. It fires on what there WAS to deliver, not on which block arrived.
+	xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, xray)
+
+	block := chainBlock()
+	block.UserCore = nil
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{
+		Chain:   block,
+		Cascade: &dto.NodeCascade{Engine: "xray", Fragments: json.RawMessage(`{"outbounds":[]}`)},
+	})
+
+	if len(xray.got) != 1 || xray.got[0] != nil {
+		t.Fatalf("a transit's core was handed a drawing: %+v", xray.got)
+	}
+	if strings.Contains(logs.String(), "the chain is NOT applied") {
+		t.Fatalf("the fail-closed alarm fired on a transit that has nothing to draw:\n%s", logs.String())
+	}
+}
+
+func TestADrawingNobodyTakesIsStillLoud(t *testing.T) {
+	// The other side of the same condition: the chain handed over a drawing for
+	// a core this node does not run. That is the case the alarm exists for, and
+	// moving the fragments into the chain block must not have silenced it.
+	other := &cascadeCore{fakeCore: fakeCore{name: "tuic", engine: "singbox", running: true}}
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, other)
+
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: chainBlock()})
+
+	if !strings.Contains(logs.String(), "the chain is NOT applied") {
+		t.Fatalf("no core draws the handover and nothing was said:\n%s", logs.String())
 	}
 }
 

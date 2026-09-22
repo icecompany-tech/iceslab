@@ -615,8 +615,19 @@ func (s *Server) applyPush(
 
 	var cascadeFragments json.RawMessage
 	router := ""
-	if req.Cascade != nil && chainInForce {
-		s.cfg.Chain.NoteCascadeIgnored()
+	if chainInForce {
+		// The chain block brings its own drawing for the user's core: the same
+		// fragments with a loopback socks outbound where each leg used to be.
+		// The `cascade` block is the OLD drawing, kept on the wire for agents
+		// that cannot see `chain` at all, and applying it here would put two
+		// processes on one chain.
+		if req.Cascade != nil {
+			s.cfg.Chain.NoteCascadeIgnored()
+		}
+		if req.Chain != nil && req.Chain.UserCore != nil {
+			cascadeFragments = req.Chain.UserCore.Fragments
+			router = string(req.Chain.UserCore.Engine)
+		}
 	} else if req.Cascade != nil {
 		cascadeFragments = req.Cascade.Fragments
 		router = string(req.Cascade.Engine)
@@ -639,10 +650,11 @@ func (s *Server) applyPush(
 	// Loud, because the quiet version of this is the worst outcome the cascade
 	// has: a chain nobody drew is a user egressing from the ENTRY country while
 	// their client shows the exit. Same fail-closed rule as a router that dies.
-	// Not when the chain process holds it: there the cores are MEANT to receive
-	// nil, that is what stops the old drawing, and shouting about it would
-	// teach an operator to ignore the one line that matters.
-	if req.Cascade != nil && !deliveredCascade && !chainInForce {
+	// Asked about what there WAS to deliver, not about which block it came in.
+	// Under handover the fragments are the chain's, and a transit or an exit
+	// has none at all: there the cores are meant to receive nil, and shouting
+	// about it would teach an operator to ignore the one line that matters.
+	if router != "" && !deliveredCascade {
 		s.logger.Error("applyInbounds: no core on this node draws the cascade, the chain is NOT applied",
 			"engine", router)
 	}

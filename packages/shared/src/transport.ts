@@ -34,6 +34,28 @@ export const PROTOCOL_NAMES = [
 
 export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
 
+/**
+ * What a cascade ENTRY may serve users with today.
+ *
+ * Not a list of what the panel can deploy, which is the whole of PROTOCOL_NAMES
+ * above, but of what the CHAIN can take traffic from. A cascade is stored with
+ * the entry protocol the operator picked, and until phase 4 nothing read that
+ * value: an entry saved as hysteria2 or AmneziaWG looked finished and either
+ * sent those users straight out of the entry node, past every exit and every
+ * protection while the panel showed them a cascade, or dropped the whole chain
+ * with one line in a log.
+ *
+ * ⚠ ONE LIST, read by the save that refuses (ENTRY_NOT_CHAINABLE) and by the
+ * screen that offers the choices. A second copy on the frontend is how the two
+ * come to disagree, and the disagreement shows up as a form that offers an
+ * option the server rejects.
+ *
+ * It grows with the phases: hysteria2 in 6, amneziawg in 7.
+ */
+export const CHAIN_ENTRY_PROTOCOLS = ['xray'] as const;
+
+export type ChainEntryProtocol = (typeof CHAIN_ENTRY_PROTOCOLS)[number];
+
 /** What a listener occupies on the wire. A port is only taken for one of these. */
 export const TRANSPORTS = ['tcp', 'udp'] as const;
 export type Transport = (typeof TRANSPORTS)[number];
@@ -667,6 +689,38 @@ export interface NodeChain {
    * cascade, like the heartbeat secret.
    */
   socksPassword: string;
+  /**
+   * What the USER'S core must render while the chain process holds the chain:
+   * the same cascade fragments as ever, except that each direction ends in a
+   * socks outbound to the loopback port above instead of a leg dialled across
+   * the internet.
+   *
+   * ⚠ IT TRAVELS HERE AND NOT IN `cascade`, and the reason is the whole
+   * transitional release. Both blocks go out together so a half-updated fleet
+   * keeps serving, which fixes what each one may contain:
+   *
+   *   - `cascade` is what an OLD agent applies. It must stay the legacy
+   *     drawing, legs and all, or an agent that cannot see `chain` would
+   *     configure its xray to hand traffic to a socks port no process on that
+   *     machine is listening on, and every user behind that entry would stop;
+   *   - so a NEW agent cannot use `cascade` either, because it holds the
+   *     drawing the chain process has taken over. It ignores it and renders
+   *     THIS instead.
+   *
+   * Without it the new agent would have nothing to give its user core at all,
+   * and an entry with no cascade routing does not fail: it sends users out of
+   * the ENTRY country while their client shows the exit they chose. That is the
+   * one outcome this whole phase is arranged to prevent.
+   *
+   * Absent on a transit or an exit, which have no user core to hand over from.
+   */
+  userCore?: {
+    /** The core that renders it. Named for the same reason `NodeCascade.engine`
+     *  is: the agent must be able to refuse a name it does not know rather than
+     *  guess at the JSON. */
+    engine: EngineName;
+    fragments: XrayCascadeFragments;
+  };
 }
 
 export interface ChainSocks {

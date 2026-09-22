@@ -15,7 +15,7 @@ import { mtprotoSecret } from '../../core-adapters/mtproto/index.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
 import { inboundSyncJobs } from '../../lib/infra/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
-import { getCascadeFragmentsForNode } from '../cascades/cascade.service.js';
+import { getCascadeFragmentsForNode, getChainForNode } from '../cascades/cascade.service.js';
 import { resolvePolicyForNode } from '../node-policies/node-policies.service.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
 import { getLogger } from '../../lib/infra/logger.js';
@@ -404,11 +404,28 @@ async function buildApplyInboundsRequest(node: NodeRow): Promise<ApplyInboundsRe
   // behaviour it has. When a second router arrives this becomes a lookup over
   // node.cores (the core reporting rendersPolicy is the router).
   const cascade = fragments ? { engine: 'xray' as const, fragments } : undefined;
+  // Phase 4, К6: the chain as its own process. Sent BESIDE the cascade above,
+  // not instead of it, for one release.
+  //
+  // ⚠ The two blocks are two drawings of one cascade for two kinds of agent,
+  // and they must not be swapped. `cascade` stays the legacy leg-dialling
+  // version because an agent that cannot see `chain` applies it; `chain`
+  // carries the handover version inside `userCore`, because an agent that can
+  // see it ignores `cascade` entirely. Put the handover drawing in `cascade`
+  // and an old agent points its xray at a loopback port nothing on that machine
+  // is listening on, which is every user behind that entry.
+  //
+  // The rollback runs on the same rule from the other side: a panel rolled back
+  // to a version that does not send `chain` simply sends the old block alone,
+  // the agent stops holding a chain and hands its core the legacy fragments
+  // again. Nobody logs in to the box.
+  const chain = await getChainForNode(node.id);
   return {
     inbounds,
     ...(policy ? { policy } : {}),
     ...(dns ? { dns } : {}),
     ...(cascade ? { cascade } : {}),
+    ...(chain ? { chain } : {}),
   };
 }
 

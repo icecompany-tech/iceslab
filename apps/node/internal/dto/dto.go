@@ -248,6 +248,23 @@ type NodeChain struct {
 	// a VPS has other users, and an unauthenticated proxy on loopback is an
 	// open relay for anyone with a shell on that machine.
 	SocksPassword string `json:"socksPassword"`
+	// What the USER'S core renders while the chain process holds the chain: the
+	// same cascade fragments, ending in a socks outbound to the loopback ports
+	// above instead of a leg dialled across the internet.
+	//
+	// ⚠ HERE and not in Cascade, because both blocks go out together for one
+	// release. Cascade is what an OLD agent applies, so it must stay the legacy
+	// drawing or that agent would point its xray at a socks port nothing is
+	// listening on. A new agent therefore ignores Cascade and renders this.
+	//
+	// Absent on a transit or an exit: they have no user core to hand over from.
+	UserCore *ChainUserCore `json:"userCore,omitempty"`
+}
+
+// ChainUserCore mirrors NodeChain.userCore in shared/transport.ts.
+type ChainUserCore struct {
+	Engine    EngineName      `json:"engine"`
+	Fragments json.RawMessage `json:"fragments"`
 }
 
 type ChainSocks struct {
