@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { LINK_CELLS } from '@iceslab/shared';
 import {
   DEFAULT_LINK_CONGESTION,
+  generateTopologyLinks,
   newLinkCred,
   parseLinkCred,
   serializeLinkCred,
@@ -108,6 +109,31 @@ describe('the link credentials', () => {
       secrets.add(hy2.obfsPassword);
     }
     expect(secrets.size).toBe(10);
+  });
+
+  it('reaches a direction over ITS cell, and over the entry cell when it names none', async () => {
+    /**
+     * The one leg a direction may choose, phase 5.
+     *
+     * Null is not "unset waiting for a value", it is the answer every cascade
+     * gave before the field existed: the entry's cell. That is why the goldens
+     * of the four-hop fixture do not move with this change, and why no stored
+     * cascade needed a backfill.
+     */
+    const positions = [{ nodeIds: ['n-entry'], linkProtocol: 'vless' }];
+    const links = await generateTopologyLinks(positions, [
+      // Names its own cell: reached over tuic, with the operator's controller.
+      { tag: 1, nodeIds: ['n-nl'], linkProtocol: 'tuic', linkParams: { congestion: 'cubic' } },
+      // Names none: reached over the entry's cell, as always.
+      { tag: 2, nodeIds: ['n-se'] },
+    ]);
+    const byTag = new Map(links.map((l) => [l.directionTag, l]));
+    expect(byTag.get(1)!.cred.protocol).toBe('tuic');
+    expect((byTag.get(1)!.cred as { congestion: string }).congestion).toBe('cubic');
+    expect(byTag.get(2)!.cred.protocol).toBe('vless');
+    // Both land on the same port: a direction is not a step of its own, so the
+    // leg into it terminates on the step after the last position.
+    expect(byTag.get(1)!.cred.port).toBe(byTag.get(2)!.cred.port);
   });
 
   it('keeps the two QUIC cells out of the legacy xray drawing', async () => {

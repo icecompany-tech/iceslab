@@ -16,6 +16,8 @@ import {
   buildBalancerCascadeConfigs,
   buildTopologyFragmentsForNode,
   generateLinkCreds,
+  LINK_PORT_BASE,
+  type LinkCongestion,
   generateTopologyLinks,
   normalizeLinkProtocol,
   parseLinkCred,
@@ -860,7 +862,14 @@ async function writeTopologyV4(
   tx: Prisma.TransactionClient,
   cascadeId: string,
   positions: { nodeIds: string[]; position: number; entryProtocol?: string; linkProtocol?: string }[],
-  directions: { id?: string; nodeIds: string[]; countryCode?: string | null }[],
+  directions: {
+    id?: string;
+    nodeIds: string[];
+    countryCode?: string | null;
+    /** Phase 5: the last leg's cell and knobs. Null means the entry's cell. */
+    linkProtocol?: string | null;
+    linkParams?: { congestion?: LinkCongestion } | null;
+  }[],
 ): Promise<void> {
   const stored = await tx.cascadeDirection.findMany({
     where: { cascadeId },
@@ -934,7 +943,28 @@ async function writeTopologyV4(
       },
     });
   }
+  /**
+   * The port the last leg lands on, written HERE and never read from a request.
+   *
+   * It follows from the shape of the cascade: LINK_PORT_BASE + the number of
+   * the last step, the same number `generateTopologyLinks` gives that leg's
+   * credential. A client that could set it could point a leg at a port the node
+   * already serves users on, and the panel would refuse the binding afterwards
+   * rather than the leg.
+   *
+   * One value for every direction, because they all terminate on the step after
+   * the last position: a direction is not a step of its own.
+   */
+  const directionLinkPort = LINK_PORT_BASE + Math.max(0, positions.length - 1);
+
   for (const d of resolved) {
+    // Phase 5. Null is a VALUE here, not an absence: it means "the entry's
+    // cell", which is what every direction did before the field existed.
+    const leg = {
+      linkProtocol: d.linkProtocol ?? null,
+      linkParams: d.linkParams ? (d.linkParams as Prisma.InputJsonValue) : Prisma.DbNull,
+      linkPort: directionLinkPort,
+    };
     if (d.keepId) {
       // The pool is rewritten, the row is not: its id is what policy rules hold.
       await tx.cascadeDirectionNode.deleteMany({ where: { directionId: d.keepId } });
@@ -942,6 +972,7 @@ async function writeTopologyV4(
         where: { id: d.keepId },
         data: {
           countryCode: d.countryCode ?? null,
+          ...leg,
           nodes: { create: d.nodeIds.map((nodeId) => ({ nodeId })) },
         },
       });
@@ -952,12 +983,13 @@ async function writeTopologyV4(
         cascadeId,
         tag: d.tag,
         countryCode: d.countryCode ?? null,
+        ...leg,
         nodes: { create: d.nodeIds.map((nodeId) => ({ nodeId })) },
       },
     });
   }
 
-  const links = generateTopologyLinks(positions, resolved);
+  const links = await generateTopologyLinks(positions, resolved);
   if (links.length > 0) {
     await tx.cascadeLink.createMany({
       data: links.map((l) => ({

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LINK_CELLS } from '@iceslab/shared';
+import { LINK_CONGESTIONS } from './cascade.config.js';
 
 // Max hops in a single cascade. Each hop adds latency + an inter-hop link
 // (UFW port LINK_PORT_BASE+i), so the chain is capped. Enforced at the schema
@@ -111,6 +112,37 @@ export const CascadeDirectionSchema = z.object({
    *  not yet". Serving skips such a direction until it has a node. The old
    *  model could not express this, because a direction WAS a node. */
   nodeIds: z.array(z.uuid()).default([]),
+  /**
+   * The cell of the LAST leg, the one that reaches this direction (phase 5).
+   *
+   * `null` means "the entry's cell", which is what every direction did before
+   * this existed. Absent and null are the same thing here on purpose: a client
+   * that omits the field is not asking for a change.
+   */
+  linkProtocol: LinkCellValue.nullish(),
+  /**
+   * What the operator chose about that leg beyond the cell.
+   *
+   * Only the tuic congestion controller today, and only the three values the
+   * ENGINE takes: sing-box answers "unknown congestion control algorithm:
+   * brutal" for anything else, so offering a fourth would be a control that
+   * refuses the config on the node while the panel reports the leg saved.
+   *
+   * No secret is ever accepted here. The obfuscation salt and every password
+   * are minted by the panel and live in the credential.
+   */
+  linkParams: z
+    .object({ congestion: z.enum(LINK_CONGESTIONS).optional() })
+    .strict()
+    .nullish(),
+  /**
+   * ⚠ NEVER READ FROM A REQUEST. The port is derived from the shape of the
+   * cascade (LINK_PORT_BASE + the last step) and written by the server, so a
+   * client that could set it could point a leg at a port the node already uses
+   * for something else. Kept in the schema and IGNORED so a client can
+   * round-trip its own payload without stripping fields, exactly as `tag` is.
+   */
+  linkPort: z.number().int().nullish(),
 });
 
 const CascadeBaseFields = {

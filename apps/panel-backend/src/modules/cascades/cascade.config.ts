@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
-import type { LinkCell } from '@iceslab/shared';
+import { LINK_CELLS, type LinkCell } from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
@@ -202,7 +202,11 @@ const LEGACY_CELL_ALIASES: Record<string, LinkProtocol> = { xray: 'vless' };
  */
 export function linkCellFor(p: string | null | undefined): LinkProtocol | null {
   if (p === null || p === undefined || p === '') return 'vless';
-  if (p === 'vless' || p === 'shadowsocks') return p;
+  // Every cell there is, read from the one list. It used to name two of them
+  // inline, which was true for exactly as long as there were two: the day hy2
+  // and tuic became cells, a stored `tuic` read as "no cell" and the save threw
+  // "this should have been refused" about a value the schema had just accepted.
+  if ((LINK_CELLS as readonly string[]).includes(p)) return p as LinkProtocol;
   const legacy = LEGACY_CELL_ALIASES[p];
   if (legacy) {
     getLogger().warn(
@@ -351,28 +355,28 @@ export interface TopologyLink {
  * `directionNodeIds` may be empty for a direction whose pool is not filled yet:
  * it simply contributes no links, and the tag stays reserved.
  */
-export function generateTopologyLinks(
+export async function generateTopologyLinks(
   positions: { nodeIds: string[]; linkProtocol?: string | null }[],
-  directions: { tag: number; nodeIds: string[] }[],
-): TopologyLink[] {
+  directions: {
+    tag: number;
+    nodeIds: string[];
+    /** Phase 5: the cell of the LAST leg, the one reaching this direction.
+     *  Null or absent means the entry's cell, which is what every direction
+     *  did before the field existed. */
+    linkProtocol?: string | null;
+    linkParams?: { congestion?: LinkCongestion } | null;
+  }[],
+): Promise<TopologyLink[]> {
   const links: TopologyLink[] = [];
-  const emit = (
+  const emit = async (
     from: string,
     to: string,
     directionTag: number,
     protocol: LinkProtocol,
     step: number,
-  ): void => {
-    const port = LINK_PORT_BASE + step;
-    const cred: LinkCred =
-      protocol === 'shadowsocks'
-        ? {
-            protocol: 'shadowsocks',
-            port,
-            psk: randomBytes(32).toString('base64'),
-            method: SS_LINK_METHOD,
-          }
-        : { protocol: 'vless', port, uuid: randomUUID(), reality: newLinkReality() };
+    congestion?: LinkCongestion,
+  ): Promise<void> => {
+    const cred = await newLinkCred(protocol, LINK_PORT_BASE + step, congestion);
     links.push({ fromNodeId: from, toNodeId: to, directionTag, protocol, cred });
   };
 
@@ -382,20 +386,29 @@ export function generateTopologyLinks(
     const proto = normalizeLinkProtocol(positions[step]!.linkProtocol);
     for (const from of positions[step]!.nodeIds) {
       for (const to of positions[step + 1]!.nodeIds) {
-        for (const d of directions) emit(from, to, d.tag, proto, step);
+        for (const d of directions) await emit(from, to, d.tag, proto, step);
       }
     }
   }
 
   // Last position -> the directions themselves. This leg is where a direction
   // stops being an abstraction and becomes concrete machines.
+  //
+  // ⚠ And since phase 5 it is the one leg a DIRECTION may choose the cell of.
+  // Null means the entry's cell, so every cascade written before the field
+  // behaves exactly as it did. The knobs travel with it: a tuic leg takes the
+  // operator's congestion controller, and the other cells ignore it because
+  // they have none (hy2's rate control is a bandwidth pair, not a name).
   const last = positions[positions.length - 1];
   if (last) {
     const step = positions.length - 1;
-    const proto = normalizeLinkProtocol(last.linkProtocol);
+    const fallback = normalizeLinkProtocol(last.linkProtocol);
     for (const from of last.nodeIds) {
       for (const d of directions) {
-        for (const to of d.nodeIds) emit(from, to, d.tag, proto, step);
+        const proto = d.linkProtocol ? normalizeLinkProtocol(d.linkProtocol) : fallback;
+        for (const to of d.nodeIds) {
+          await emit(from, to, d.tag, proto, step, d.linkParams?.congestion);
+        }
       }
     }
   }

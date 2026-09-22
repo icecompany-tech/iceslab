@@ -106,11 +106,18 @@ describe('the link cells', () => {
     for (const protocolOnly of ['hysteria', 'mieru', 'naive', 'amneziawg', 'anytls']) {
       expect(linkCellFor(protocolOnly), `${protocolOnly} is not a cell`).toBeNull();
     }
-    // ⚠ `tuic` above all: it is a legal PROTOCOL and, from phase 5, a legal
-    // CELL. A row holding it predates the cell, so it described nothing, and
-    // reading it as a working tuic leg is exactly the confusion the migration
-    // removed.
-    expect(linkCellFor('tuic')).toBeNull();
+    /**
+     * ⚠ `tuic` reads as a CELL now, and only because the migration made that
+     * safe.
+     *
+     * It is a legal protocol AND, since phase 5, a legal cell. Every row that
+     * held the word before the cells landed was rewritten to NULL by
+     * `20260922061809_link_protocol_is_a_cell`, so a stored `tuic` can no
+     * longer be the protocol somebody once picked for a leg that never worked.
+     * Doing the dictionary before the cells is what buys this line.
+     */
+    expect(linkCellFor('tuic')).toBe('tuic');
+    expect(linkCellFor('hy2')).toBe('hy2');
   });
 
   it('still takes the old engine name for one release, and says so', () => {

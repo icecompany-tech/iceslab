@@ -174,6 +174,36 @@ export function validateCascadeTopology(
     }
   }
 
+  /**
+   * One node under TWO directions of one cascade, named.
+   *
+   * The generic "a node cannot appear more than once" below catches this too,
+   * and says nothing an operator can act on: with five directions on a screen
+   * they are left to find which two. Since phase 5 it is also a harder refusal
+   * than it looks, because each direction may choose its own CELL, and the two
+   * legs would land on the same node at the same port speaking two protocols.
+   * One of them would not bind, and which one is a race.
+   */
+  const byNode = new Map<string, string[]>();
+  directions.forEach((d, i) => {
+    const label = d.countryCode ? `${d.countryCode} (#${i + 1})` : `#${i + 1}`;
+    for (const nodeId of d.nodeIds) {
+      const holders = byNode.get(nodeId) ?? [];
+      holders.push(label);
+      byNode.set(nodeId, holders);
+    }
+  });
+  for (const [nodeId, holders] of byNode) {
+    if (holders.length > 1) {
+      throw new CascadeValidationError(
+        `node ${nodeId} is behind two directions of this cascade at once (${holders.join(
+          ' and ',
+        )}). Each direction reaches its nodes over its own leg, and two legs cannot share one ` +
+          `node and one port: give the node to one of them, or put a second node behind the other.`,
+      );
+    }
+  }
+
   const seen = new Set<string>();
   for (const nodeId of [
     ...sorted.flatMap((p) => p.nodeIds),

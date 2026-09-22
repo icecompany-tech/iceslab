@@ -146,8 +146,17 @@ describe('validateCascadeTopology', () => {
       validateCascadeTopology([entry([N(1)]), transit(1, [N(1)])], [dir([N(2)])]),
     ).toThrow(/more than once/);
     expect(() => validateCascadeTopology([entry([N(1)])], [dir([N(1)])])).toThrow(/more than once/);
+    // ⚠ Two DIRECTIONS on one node is refused by a message of its own since
+    // phase 5, and the difference is the point: each direction reaches its
+    // nodes over its own leg, so the two legs would land on one node at one
+    // port speaking two cells, and which one fails to bind is a race. The
+    // message names both directions, because with five on a screen "a node
+    // appears twice" leaves the operator to find which two.
     expect(() => validateCascadeTopology([entry([N(1)])], [dir([N(2)]), dir([N(2)])])).toThrow(
-      /more than once/,
+      /behind two directions/,
+    );
+    expect(() => validateCascadeTopology([entry([N(1)])], [dir([N(2)]), dir([N(2)])])).toThrow(
+      /#1 and #2/,
     );
   });
 
