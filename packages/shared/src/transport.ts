@@ -35,6 +35,60 @@ export const PROTOCOL_NAMES = [
 export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
 
 /**
+ * The cells a LEG between two hops can be made of.
+ *
+ * ⚠ A DIFFERENT DICTIONARY from ProtocolName, sharing two of its words. A cell
+ * is what one step of the path says to the next; a protocol is what a node
+ * serves users with. `hy2` is the cell, `hysteria` is the protocol, and they
+ * are the same wire format worn by two different jobs. The overlap on `vless`
+ * and `shadowsocks` is real and is the reason this needs saying: one stored
+ * column has carried both vocabularies since the cascade was written, which is
+ * how "hysteria" once quietly became a vless leg.
+ */
+export const LINK_CELLS = ['vless', 'shadowsocks', 'hy2', 'tuic'] as const;
+
+export type LinkCell = (typeof LINK_CELLS)[number];
+
+/**
+ * Which engine can RECEIVE a leg of this cell.
+ *
+ * Since phase 4 the receiving side is always the chain process, so all four
+ * cells name sing-box and the table looks like it says nothing. It says two
+ * things.
+ *
+ * The first is the transitional fleet: an agent that predates the chain still
+ * terminates `vless` and `shadowsocks` legs inside its xray, and a panel that
+ * forgot that would refuse a cascade which works today.
+ *
+ * The second is the shape of the refusal. "This node cannot receive an hy2 leg"
+ * is a sentence about ENGINES, and without a table naming them it would have to
+ * be inferred from a protocol list, which is the mistake that refused 23
+ * working pairs on 2026-09-11.
+ */
+export const LINK_CELL_ENGINES: Record<LinkCell, readonly EngineName[]> = {
+  vless: ['singbox', 'xray'],
+  shadowsocks: ['singbox', 'xray'],
+  hy2: ['singbox'],
+  tuic: ['singbox'],
+};
+
+/**
+ * What a leg of this cell occupies on the wire.
+ *
+ * Derived from the cell rather than stored beside it: the port a leg listens on
+ * is 24000 + step whatever the cell, so the only thing that tells a UDP leg
+ * from a TCP one is which cell it is. The port check compares (port, transport)
+ * pairs, and a leg that arrived without a transport would be compared against
+ * the wrong half of every binding.
+ */
+export const LINK_CELL_TRANSPORT: Record<LinkCell, Transport> = {
+  vless: 'tcp',
+  shadowsocks: 'tcp',
+  hy2: 'udp',
+  tuic: 'udp',
+};
+
+/**
  * What a cascade ENTRY may serve users with today.
  *
  * Not a list of what the panel can deploy, which is the whole of PROTOCOL_NAMES
