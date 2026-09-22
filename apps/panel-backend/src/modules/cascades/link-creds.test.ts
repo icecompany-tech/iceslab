@@ -49,19 +49,33 @@ describe('the link credentials', () => {
     }
   });
 
-  it("gives a QUIC leg the default congestion, and takes the operator choice", () => {
-    expect((newLinkCred('hy2', 24000) as { congestion: string }).congestion).toBe(
+  it('gives a tuic leg the default controller, and takes the operator choice', () => {
+    expect((newLinkCred('tuic', 24000) as { congestion: string }).congestion).toBe(
       DEFAULT_LINK_CONGESTION,
     );
-    expect((newLinkCred('tuic', 24000, 'brutal') as { congestion: string }).congestion).toBe(
-      'brutal',
+    expect((newLinkCred('tuic', 24000, 'new_reno') as { congestion: string }).congestion).toBe(
+      'new_reno',
     );
   });
 
-  it('reads an unreadable congestion as the default rather than refusing the leg', () => {
-    // The knob is a preference, not a credential: a row that predates the field
-    // or was hand-edited into nonsense should still bring the leg up.
-    const broken = { protocol: 'hy2', port: 24000, authPassword: 'a', obfsPassword: 'b', congestion: 'turbo' };
+  it('gives an hy2 leg no controller at all, because the engine refuses one', () => {
+    // ⚠ MEASURED. sing-box 1.13.14 rejects `congestion_control` on a hysteria2
+    // endpoint at decode, so a field here would be a control that refuses the
+    // config on the node while the panel reports the leg saved. Hysteria2's
+    // rate control is Brutal, expressed as a bandwidth pair, which is a
+    // different question and not this one.
+    expect(newLinkCred('hy2', 24000)).not.toHaveProperty('congestion');
+  });
+
+  it('reads an unreadable controller as the default rather than refusing the leg', () => {
+    // The knob is a preference, not a credential: a row hand-edited into
+    // nonsense should still bring the leg up.
+    //
+    // `brutal` is the trap and the reason this case uses it: it is a real word
+    // in the hysteria2 world, it was in this panel's own type for a day, and
+    // sing-box answers "unknown congestion control algorithm: brutal" for a
+    // tuic endpoint. Stored, it must read as the default, not travel through.
+    const broken = { protocol: 'tuic', port: 24000, uuid: 'u', password: 'p', congestion: 'brutal' };
     expect((parseLinkCred(broken) as { congestion: string }).congestion).toBe(
       DEFAULT_LINK_CONGESTION,
     );

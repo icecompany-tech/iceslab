@@ -103,7 +103,21 @@ interface Hy2LinkCred {
   /** Salamander obfuscation salt. Absent means no obfuscation, which a leg
    *  between two datacenters could live with; we always set it. */
   obfsPassword: string;
-  congestion: LinkCongestion;
+  /**
+   * ⚠ NO `congestion` HERE, and that is measured, not an omission.
+   *
+   * sing-box 1.13.14 REFUSES `congestion_control` on a hysteria2 inbound or
+   * outbound: the config is rejected at decode, not ignored. Asked of the
+   * binary on 2026-09-22, not read off a page. Hysteria2's rate control is
+   * Brutal, and Brutal is expressed as a BANDWIDTH pair rather than an
+   * algorithm name, which is a different kind of knob: a number the operator
+   * has to know about their link, not a word they can pick blind.
+   *
+   * So the field is absent until somebody decides what the panel should ask
+   * for. `up_mbps` / `down_mbps` are accepted on both ends (also asked), and
+   * adding them later needs no migration: an absent pair means "no Brutal",
+   * which is what every leg does today.
+   */
 }
 
 /**
@@ -119,17 +133,17 @@ interface TuicLinkCred {
 }
 
 /**
- * The congestion controller a QUIC leg uses.
+ * ⚠ `new_reno`, NOT `brutal`, and the list is the ENGINE'S, asked of it.
  *
- * The operator's one knob on a leg, and it is theirs because the right answer
- * depends on the route rather than on us: `bbr` is the default and the right
- * answer on a long fat pipe with loss, `brutal` forces a fixed rate and is for
- * links where the middle deliberately throttles, `cubic` is what to fall back
- * to when a provider's shaper reacts badly to the other two.
+ * sing-box 1.13.14 answers "unknown congestion control algorithm: brutal" for a
+ * tuic inbound and accepts exactly `bbr`, `cubic` and `new_reno`. Brutal is a
+ * hysteria2 thing, and there it is a bandwidth pair rather than a name (see
+ * Hy2LinkCred). Offering `brutal` here would be a control that refuses the
+ * config on the node while the panel says the leg is saved.
  */
-export type LinkCongestion = 'bbr' | 'brutal' | 'cubic';
+export type LinkCongestion = 'bbr' | 'cubic' | 'new_reno';
 
-export const LINK_CONGESTIONS: readonly LinkCongestion[] = ['bbr', 'brutal', 'cubic'];
+export const LINK_CONGESTIONS: readonly LinkCongestion[] = ['bbr', 'cubic', 'new_reno'];
 
 /** What a leg gets when the operator says nothing. See LinkCongestion. */
 export const DEFAULT_LINK_CONGESTION: LinkCongestion = 'bbr';
@@ -249,7 +263,6 @@ export function newLinkCred(
         port,
         authPassword: randomBytes(24).toString('base64url'),
         obfsPassword: randomBytes(16).toString('base64url'),
-        congestion,
       };
     case 'tuic':
       return {
@@ -432,7 +445,6 @@ export function serializeLinkCred(cred: LinkCred): Record<string, string | numbe
         port: cred.port,
         authPassword: cred.authPassword,
         obfsPassword: cred.obfsPassword,
-        congestion: cred.congestion,
       };
     case 'tuic':
       return {
@@ -476,7 +488,6 @@ export function parseLinkCred(raw: unknown): LinkCred | null {
       port: o.port,
       authPassword: o.authPassword,
       obfsPassword: o.obfsPassword,
-      congestion: parseCongestion(o.congestion),
     };
   }
   if (o.protocol === 'tuic') {
