@@ -48,6 +48,17 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       conflicts: err.conflicts,
     });
   }
+  if (err instanceof svc.CascadeCellNotCarriedError) {
+    // 409 and not 400, for the same reason as ENTRY_CORE_TOO_OLD: the request
+    // is well-formed, it conflicts with what those nodes currently run. The
+    // list travels in machine form because the fix is per node and the screen
+    // has to point at the right leg rather than at the whole cascade.
+    return reply.code(409).send({
+      error: err.code,
+      message: err.message,
+      conflicts: err.conflicts,
+    });
+  }
   if (err instanceof svc.CascadeEntryCoreTooOldError) {
     // T7: entry node's xray is too old for exit selection. 409: the request is
     // well-formed but conflicts with the node's current core version.

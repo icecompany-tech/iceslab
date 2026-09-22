@@ -10,7 +10,7 @@ import type {
   CascadePositionInput,
 } from './cascade.schemas.js';
 import { linkCellFor } from './cascade.config.js';
-import { CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
+import { CHAIN_ENTRY_PROTOCOLS, LINK_CELLS } from '@iceslab/shared';
 
 /**
  * A link protocol nothing can carry is refused here, at the save.
@@ -24,9 +24,12 @@ import { CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 function assertLinkCellExists(protocol: string | null | undefined, where: string): void {
   if (linkCellFor(protocol)) return;
   throw new CascadeValidationError(
-    `${where}: ${JSON.stringify(protocol)} is not an inter-hop link protocol this build can ` +
-      `carry. Available: vless (also stored as "xray") and shadowsocks. A hop link is not the ` +
-      `same thing as the protocol the entry serves users with.`,
+    `${where}: ${JSON.stringify(protocol)} is not an inter-hop link cell this build can ` +
+      // Read from the list rather than spelled out: it said "vless and
+      // shadowsocks" for exactly as long as there were two, and phase 5 made
+      // that message name half of what the schema accepts.
+      `carry. Available: ${LINK_CELLS.join(', ')} (vless is also stored as "xray"). A hop link ` +
+      `is not the same thing as the protocol the entry serves users with.`,
   );
 }
 

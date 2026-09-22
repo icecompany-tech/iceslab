@@ -27,6 +27,7 @@ import {
   parseLinkCred,
   routeTag,
   serializeLinkCred,
+  topologyReceivingCells,
   topologyReceivingPorts,
   type CascadeConfigHopInput,
   type CascadePolicy,
@@ -46,6 +47,7 @@ import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
 import { chainSocksPort } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
+import { carriesCellAtSave } from './cell-carriage.js';
 import { isConfigApplied } from '../nodes/nodes.sync-status.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
 
@@ -198,6 +200,82 @@ async function assertLinkPortsFree(
   }
   if (conflicts.length > 0) throw new CascadeLinkPortInUseError(conflicts);
 }
+/**
+ * A leg of this cascade would land on a node that cannot terminate its cell.
+ *
+ * Phase 5 let a direction choose the cell of the leg that reaches it, and two
+ * of the four cells exist only inside the chain process. A node whose reported
+ * engines are xray and nothing else ends a vless or a shadowsocks leg inside
+ * that xray, as it always has, and has never ended a QUIC one: saving such a
+ * pair would draw a config the node refuses, hours later, in a journal.
+ *
+ * Every blocked node is named, not the first, for the same reason the port
+ * refusal names every conflict: a cascade is saved whole, and one refusal per
+ * leg walks the operator through as many saves as it has exits.
+ *
+ * The engines are carried out with it because they are what the refusal rests
+ * on. "This node cannot receive an hy2 leg" with nothing beside it is a rule
+ * the operator can only obey; with the list, it is a fact they can check.
+ */
+export class CascadeCellNotCarriedError extends Error {
+  readonly code = 'CELL_NOT_CARRIED';
+  constructor(public conflicts: { nodeName: string; cell: string; engines: string[] }[]) {
+    super(
+      `Some nodes of this cascade cannot terminate the link cell chosen for them: ` +
+        conflicts
+          .map(
+            (c) =>
+              `node "${c.nodeName}" would receive a ${c.cell} leg but reports ` +
+              (c.engines.length > 0 ? `only ${c.engines.join(', ')}` : 'no engines'),
+          )
+          .join('; ') +
+        `. The two QUIC cells (hy2, tuic) are terminated by the chain process, which is ` +
+        `sing-box: choose vless or shadowsocks for those legs, or install sing-box on those ` +
+        `nodes.`,
+    );
+    this.name = 'CascadeCellNotCarriedError';
+  }
+}
+
+/**
+ * Refuse before writing, by FACT, and ask about every leg rather than the first.
+ *
+ * The three answers and what each is worth are in `carriesCellAtSave`. What
+ * belongs here is the shape of the question: the walk is over RECEIVING sides,
+ * because the cell is terminated where the leg lands, and the nodes are read in
+ * one query because a cascade with a pool on every step asks about the same
+ * handful of machines many times over.
+ *
+ * Silent on a fleet that reports nothing, which is most of it today. That is
+ * the honest order, the same one the profile gate took: it can only refuse what
+ * a node has actually said about itself.
+ */
+async function assertNodesCarryCells(
+  positions?: { position?: number; nodeIds: string[]; linkProtocol?: string | null }[],
+  directions?: { nodeIds: string[]; linkProtocol?: string | null }[],
+): Promise<void> {
+  if (!positions || !directions) return;
+  const wanted = topologyReceivingCells(positions, directions);
+  if (wanted.length === 0) return;
+  const nodes = await prisma.node.findMany({
+    where: { id: { in: [...new Set(wanted.map((w) => w.nodeId))] } },
+    select: { id: true, name: true, cores: true, chainStatus: true },
+  });
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const conflicts: { nodeName: string; cell: string; engines: string[] }[] = [];
+  for (const w of wanted) {
+    const node = byId.get(w.nodeId);
+    // A node that is not there is not this gate's refusal to make:
+    // assertNodesExistNamed has already said it by name, and saying it twice in
+    // two vocabularies helps nobody.
+    if (!node) continue;
+    const carriage = carriesCellAtSave(node, w.cell);
+    if (carriage.ok) continue;
+    conflicts.push({ nodeName: node.name, cell: w.cell, engines: carriage.engines });
+  }
+  if (conflicts.length > 0) throw new CascadeCellNotCarriedError(conflicts);
+}
+
 export class CascadeEntryCoreTooOldError extends Error {
   constructor(
     public readonly nodeName: string,
@@ -1075,6 +1153,11 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   const credIdx = (idx: number): number =>
     isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < hops.length - 1 ? idx : -1;
   await assertLinkPortsFree(receivingLinkPorts(hops, creds), input.positions, input.directions);
+  // Phase 5: and can the receiving side end the cell at all. After the ports
+  // and before the write, because both answer the same question ("may this be
+  // saved") about the same walk, and an operator fixing one wants to hear about
+  // the other in the same breath.
+  await assertNodesCarryCells(input.positions, input.directions);
   // v4 topology, validated separately from the fold: the fold answers "can the
   // old storage hold this", these rules answer "is this a sane cascade at all".
   const topology =
@@ -1257,6 +1340,11 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
     input.positions,
     input.directions,
   );
+  // An edit re-picks the cells too, and this is the edit that matters: choosing
+  // a QUIC cell for a direction that has been served over vless since C3 is one
+  // dropdown, and the node it lands on may be an xray-only machine nobody has
+  // touched since.
+  await assertNodesCarryCells(input.positions, input.directions);
 
   try {
     const c = await prisma.$transaction(async (tx) => {

@@ -466,6 +466,63 @@ export function topologyReceivingPorts(
 }
 
 /**
+ * Which node ends up RECEIVING which cell, for a topology about to be saved.
+ *
+ * The third walk of the same path, beside the links themselves and the ports,
+ * and separate for the same reason the ports are: it answers before anything is
+ * generated, because what it feeds is "may this cascade be saved at all". A
+ * receiving side that cannot terminate the cell is a leg that never comes up,
+ * and finding that out after minting its credentials helps nobody.
+ *
+ * ⚠ Runs on RAW input, so an unreadable cell is SKIPPED rather than thrown on.
+ * A value with no cell is refused by validation with a message about that
+ * value; throwing here would replace it with an internal error about a walk the
+ * operator has never heard of.
+ *
+ * Deduplicated: one node receiving one cell is one question however many
+ * directions ride that leg.
+ */
+export function topologyReceivingCells(
+  positions: { position?: number; nodeIds: string[]; linkProtocol?: string | null }[],
+  directions: { nodeIds: string[]; linkProtocol?: string | null }[],
+): { nodeId: string; cell: LinkProtocol }[] {
+  // Sorted for the same reason as the ports walk: the cell of a leg comes from
+  // the step BEFORE it, so an array in another order would ask about the wrong
+  // pairs. See topologyReceivingPorts.
+  const ordered =
+    positions.every((p) => typeof p.position === 'number')
+      ? [...positions].sort((a, b) => a.position! - b.position!)
+      : positions;
+  const seen = new Set<string>();
+  const out: { nodeId: string; cell: LinkProtocol }[] = [];
+  const add = (nodeId: string, cell: LinkProtocol | null): void => {
+    if (!cell) return;
+    const key = `${nodeId}:${cell}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ nodeId, cell });
+  };
+
+  for (let step = 0; step < ordered.length - 1; step++) {
+    const cell = linkCellFor(ordered[step]!.linkProtocol);
+    for (const to of ordered[step + 1]!.nodeIds) add(to, cell);
+  }
+  const last = ordered[ordered.length - 1];
+  if (last) {
+    // The one leg a direction may choose, phase 5: its own cell, or the cell of
+    // the step before it when it names none. Same fallback as
+    // generateTopologyLinks, and it has to stay the same one: this walk decides
+    // whether the leg that walk builds is allowed to exist.
+    const fallback = linkCellFor(last.linkProtocol);
+    for (const d of directions) {
+      const cell = d.linkProtocol ? linkCellFor(d.linkProtocol) : fallback;
+      for (const to of d.nodeIds) add(to, cell);
+    }
+  }
+  return out;
+}
+
+/**
  * The JSON shape a stored cred takes.
  *
  * Spelled out rather than `Record<string, unknown>` because Prisma's Json
