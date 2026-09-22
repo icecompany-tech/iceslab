@@ -61,17 +61,34 @@ describe('the link cells', () => {
     expect(LINK_CELL_ENGINES.tuic).not.toContain('xray');
   });
 
-  it('overlaps the protocol names on exactly the two words it should', () => {
-    // ⚠ `hy2` is the cell and `hysteria` is the protocol: the same wire format
-    // under two jobs. The test is here because the temptation to "unify" them
-    // is permanent, and unifying them would make the stored column ambiguous
-    // again rather than less so.
-    const shared = LINK_CELLS.filter((c) => (PROTOCOL_NAMES as readonly string[]).includes(c));
-    expect(shared).toEqual(['vless', 'shadowsocks'].filter((c) =>
-      (PROTOCOL_NAMES as readonly string[]).includes(c),
-    ));
+  it('overlaps the protocol names on exactly two words, and they are not the expected two', () => {
+    /**
+     * ⚠ MEASURED, not assumed, and the measurement corrected the assumption.
+     *
+     * The overlap between cells and protocols is `shadowsocks` and `tuic`, NOT
+     * `vless` and `shadowsocks`:
+     *
+     *   - `vless` is a cell and is NOT a ProtocolName at all. What a node
+     *     serves users with is `xray`, the engine; vless is a subprotocol
+     *     inside it. So the two dictionaries do not even agree on the word
+     *     everybody calls the default cell;
+     *   - `tuic` is BOTH: a protocol a node serves users with (sing-box, since
+     *     the tuic slice) and, from phase 5, a cell between hops. Same word,
+     *     two jobs, and a `linkProtocol` column holding "tuic" is ambiguous on
+     *     its face.
+     *
+     * This is why the column and the tables must never be merged "because the
+     * names look the same". They look the same in two places out of four, and
+     * neither is the place one would guess.
+     */
+    const overlap = LINK_CELLS.filter((c) => (PROTOCOL_NAMES as readonly string[]).includes(c));
+    expect(overlap.sort()).toEqual(['shadowsocks', 'tuic']);
+    // The pair that reads as one thing and is two: cell `hy2`, protocol
+    // `hysteria`.
     expect(LINK_CELLS as readonly string[]).not.toContain('hysteria');
     expect(PROTOCOL_NAMES as readonly string[]).not.toContain('hy2');
+    // And the cell nobody can name as a protocol.
+    expect(PROTOCOL_NAMES as readonly string[]).not.toContain('vless');
   });
 
   it('gives the two new cells UDP and the two old ones TCP', () => {
