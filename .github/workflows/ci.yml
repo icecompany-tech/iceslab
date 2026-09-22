@@ -18,6 +18,71 @@ concurrency:
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────
+  # What this commit touched.
+  #
+  # Every job below that can be skipped asks this one, and none of them infers
+  # it for itself: one filter, read in one place, so "why did the backend not
+  # run" has a single answer on the run page.
+  #
+  # ⚠ A skipped job is GREEN in the checks list, and green is what branch
+  # protection reads. That is why `gate` exists at the bottom and why it takes
+  # these outputs: skipped-because-nothing-changed and skipped-because-a-
+  # dependency-failed look identical from outside, and only one of them may
+  # pass.
+  # ───────────────────────────────────────────────────────────────────────
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      node: ${{ steps.filter.outputs.node }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # The lockfile, the workspace file and THIS FILE are in every list: an
+          # install affects all three apps whichever one the commit was about,
+          # and a pipeline change that only runs on the next unrelated commit is
+          # a pipeline change nobody tested.
+          filters: |
+            common: &common
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+              - '.nvmrc'
+              - '.github/workflows/ci.yml'
+              - '.github/scripts/**'
+            backend:
+              - *common
+              - 'apps/panel-backend/**'
+              - 'packages/shared/**'
+            frontend:
+              - *common
+              - 'apps/panel-frontend/**'
+              - 'packages/shared/**'
+            node:
+              - *common
+              - 'apps/node/**'
+              - 'packages/shared/**'
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### changes"
+            echo ""
+            echo "| area | runs |"
+            echo "| --- | --- |"
+            echo "| backend | ${{ steps.filter.outputs.backend }} |"
+            echo "| frontend | ${{ steps.filter.outputs.frontend }} |"
+            echo "| node-agent | ${{ steps.filter.outputs.node }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────
   # Dependency audit. Its own job on purpose: the lockfile is one per
   # workspace, so the audit belongs to neither app, and when it was the first
   # step of a combined panel job a fresh advisory hid whether typecheck and
@@ -37,7 +102,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          # ⚠ From .nvmrc, never a literal. The workflow and the backend image
+          # drifted apart once (22.x against 22.22) and the image crash-looped on
+          # a resolution difference the workflow could not see.
+          node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -65,6 +133,8 @@ jobs:
     name: backend (panel)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true'
 
     # Real Postgres + Redis. The backend's vitest suite mostly mocks Prisma
     # but `subscription.routes.test.ts` and a handful of others import the
@@ -111,7 +181,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          # ⚠ From .nvmrc, never a literal. The workflow and the backend image
+          # drifted apart once (22.x against 22.22) and the image crash-looped on
+          # a resolution difference the workflow could not see.
+          node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -132,10 +205,22 @@ jobs:
       #
       # Pinned, not "latest": a moving core version would make CI fail for
       # reasons unrelated to the commit under test. Bump deliberately.
+      #
+      # ⚠ RETRIED, and retries live on the two downloads and nowhere else. A
+      # GitHub release download is the one step here that fails for reasons
+      # having nothing to do with the commit. A retry around a TEST would hide
+      # the races we spend our time hunting, so the suites get none.
       - name: Install xray (for config-validity tests)
         run: |
-          curl -fsSL -o /tmp/xray.zip \
-            https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/xray.zip \
+              https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip
+            then break; fi
+            echo "xray download failed (attempt ${attempt}/3)"
+            [ "$attempt" = 3 ] && exit 1
+            sleep $(( attempt * 5 ))
+          done
           unzip -o /tmp/xray.zip xray -d /tmp/xray-bin
           chmod +x /tmp/xray-bin/xray
           echo "XRAY_BIN=/tmp/xray-bin/xray" >> "$GITHUB_ENV"
@@ -154,8 +239,15 @@ jobs:
       # ones, so a laptop with no sing-box still runs the suite.
       - name: Install sing-box (for chain config-validity tests)
         run: |
-          curl -fsSL -o /tmp/sing-box.tar.gz \
-            https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/sing-box.tar.gz \
+              https://github.com/SagerNet/sing-box/releases/download/v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz
+            then break; fi
+            echo "sing-box download failed (attempt ${attempt}/3)"
+            [ "$attempt" = 3 ] && exit 1
+            sleep $(( attempt * 5 ))
+          done
           tar -xzf /tmp/sing-box.tar.gz -C /tmp
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
@@ -166,9 +258,34 @@ jobs:
         working-directory: apps/panel-backend
         run: pnpm exec tsc --noEmit
 
+      # `github-actions` puts a failing assertion on the diff as an annotation,
+      # so a red suite is readable without opening the log; `json` is what the
+      # summary below counts. The default reporter stays, because the log is
+      # still where a human looks when the annotation is not enough.
       - name: Test backend
         working-directory: apps/panel-backend
-        run: pnpm test
+        run: >-
+          pnpm exec vitest run --passWithNoTests
+          --reporter=default --reporter=github-actions
+          --reporter=json --outputFile=/tmp/backend-vitest.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### backend (panel)"
+            echo ""
+            if [ -f /tmp/backend-vitest.json ]; then
+              jq -r '"- tests: \(.numPassedTests) passed, \(.numPendingTests) skipped, " +
+                     "\(.numFailedTests) failed, over \(.numTotalTestSuites) files"' \
+                /tmp/backend-vitest.json
+              jq -r '"- suite ran in \(((.testResults | map(.endTime - .startTime) | add) / 1000 | floor))s"' \
+                /tmp/backend-vitest.json
+            else
+              echo "- tests: no report, so the suite did not get as far as running"
+            fi
+            echo "- config validity asked of the pinned engines: xray v26.3.27, sing-box v1.13.14"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # No Postgres, no Redis, no Prisma: the SPA never touches them. Its own job
   # so a backend test failure and a frontend type error stop sharing one red
@@ -178,6 +295,8 @@ jobs:
     name: frontend (panel)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -187,7 +306,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          # ⚠ From .nvmrc, never a literal. The workflow and the backend image
+          # drifted apart once (22.x against 22.22) and the image crash-looped on
+          # a resolution difference the workflow could not see.
+          node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -279,6 +401,8 @@ jobs:
     name: node-agent (Go)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.node == 'true'
 
     steps:
       - uses: actions/checkout@v7
@@ -299,7 +423,22 @@ jobs:
 
       - name: Test
         working-directory: apps/node
-        run: go test ./...
+        run: go test ./... | tee /tmp/go-test.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### node-agent (Go)"
+            echo ""
+            if [ -f /tmp/go-test.txt ]; then
+              echo "- packages ok: $(grep -c '^ok' /tmp/go-test.txt || true)"
+              echo "- packages failed: $(grep -c '^FAIL' /tmp/go-test.txt || true)"
+              echo "- packages with no test files: $(grep -c 'no test files' /tmp/go-test.txt || true)"
+            else
+              echo "- the suite produced no output, so it did not get as far as running"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Slice 36 follow-up: build + publish container images to GHCR on every
   # push to main or develop and on every tag. Pull requests build but don't
@@ -316,8 +455,13 @@ jobs:
   docker:
     name: docker (build + publish)
     runs-on: ubuntu-latest
-    # audit stays in the chain: an image must not publish past a high advisory.
-    needs: [audit, backend, frontend, node-agent]
+    # ⚠ EVERY check, not the three that happen to be about code. Until
+    # 2026-09-22 this waited on audit/backend/frontend/node-agent only, so a RED
+    # SECRETS SCAN still published `develop` to GHCR and the operator's test
+    # server pulled it. A pipeline that ships past its own alarm is not a
+    # pipeline. go-lint is in the list for the same reason while it is still
+    # report-only: the day it starts failing is the day it must stop a publish.
+    needs: [changes, audit, backend, frontend, node-agent, secrets-scan, go-lint]
     # Runs on a pull request too, but only BUILDS there (see `push:` below).
     # A Dockerfile break used to surface after merge, when the job first ran on
     # develop - which is also the branch the operator's test server pulls from,
@@ -329,13 +473,20 @@ jobs:
     # code on our runner. The repo is public and fork PRs are routine here, so
     # that is not theoretical. A fork PR still gets the panel and node-agent
     # checks; only the image build is withheld.
+    #
+    # The first two clauses are what a path filter costs: a job whose `needs`
+    # were skipped is itself skipped unless it says otherwise, and an image has
+    # to exist for every commit whether or not this one touched the backend. So
+    # the condition asks about FAILURE rather than about success.
     if: >-
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/main' ||
-        github.ref == 'refs/heads/develop' ||
-        startsWith(github.ref, 'refs/tags/v')))
+      !cancelled() &&
+      !contains(needs.*.result, 'failure') &&
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+       (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' ||
+         github.ref == 'refs/heads/develop' ||
+         startsWith(github.ref, 'refs/tags/v'))))
     permissions:
       contents: read
       packages: write
@@ -362,6 +513,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
+
+      # The runtime the images are built on comes from the same file the
+      # workflow's own Node comes from. The Dockerfiles keep a default so a
+      # plain `docker build` off a checkout still works.
+      - name: Node version from .nvmrc
+        id: node
+        run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       # Only needed to publish. Skipped on a pull request, where the job builds
       # and throws the image away - a fork PR has no write token anyway, so
@@ -396,10 +554,30 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NODE_VERSION=${{ steps.node.outputs.version }}-alpine
           # Cache via GHA cache (free, ephemeral), speeds up incremental
           # builds dramatically without needing a paid registry tier.
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,scope=${{ matrix.image.name }},mode=max
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### docker: ${{ matrix.image.name }}"
+            echo ""
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "published:"
+            else
+              echo "built and discarded (pull request), tags it would have carried:"
+            fi
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo "- node ${{ steps.node.outputs.version }}-alpine, from \`.nvmrc\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # I7 (Trivy image scan) intentionally deferred: a pinned trivy-action
       # version must be verified against a live run (a bad ref fails the whole
@@ -416,6 +594,10 @@ jobs:
     name: secrets
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # For the SARIF upload below.
+      security-events: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -434,7 +616,34 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
             detect --source=/repo --config=/repo/.gitleaks.toml \
-            --redact --verbose --no-banner
+            --redact --verbose --no-banner \
+            --report-format sarif --report-path /repo/gitleaks.sarif
+
+      # Findings belong in Security -> Code scanning, where they are a list
+      # somebody can work through, rather than in a log line at the bottom of a
+      # red job. `always()` because the interesting case is the failing one, and
+      # the report stays redacted: this repository is public.
+      - name: Upload findings
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### secrets"
+            echo ""
+            if [ -f gitleaks.sarif ]; then
+              echo "- findings: $(jq '[.runs[].results[]] | length' gitleaks.sarif) (redacted, full list in Security -> Code scanning)"
+            else
+              echo "- the scan produced no report, so it did not get as far as scanning"
+            fi
+            echo "- the whole history is scanned, because a secret removed three commits later is still there"
+            echo "- fixtures are allowed by VALUE in \`.gitleaks.toml\`, never by directory"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────────────────────────────────────────────────
   # Go static analysis. `go vet` in the node-agent job is the bare minimum;
@@ -446,6 +655,8 @@ jobs:
     name: go lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.node == 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -462,6 +673,16 @@ jobs:
           # baseline is clean.
           args: --timeout=5m --issues-exit-code=0
 
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### go lint"
+            echo ""
+            echo "- golangci-lint, report-only (\`--issues-exit-code=0\`): findings are in the log, not in the verdict"
+            echo "- it still gates the image build, so the day it starts failing it stops a publish"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ───────────────────────────────────────────────────────────────────────
   # Smoke: does the BUILT IMAGE actually come up?
   #
@@ -470,10 +691,22 @@ jobs:
   # gap bit us in production once already, when @iceslab/shared failed to
   # resolve inside the container while every test and build was green.
   # ───────────────────────────────────────────────────────────────────────
+  #
+  # ⚠ On a push this pulls the PUBLISHED image by its sha tag instead of
+  # building its own. Building a second time proved the Dockerfile works, which
+  # is not the question: the question is whether the artifact the test server
+  # will pull boots, and a local rebuild can differ from the published one for
+  # any of the reasons builds ever differ. On a pull request nothing is
+  # published, so there the local build stays and the summary says so.
   smoke:
     name: smoke (image boots)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: [docker]
+    if: "!cancelled() && needs.docker.result == 'success'"
+    permissions:
+      contents: read
+      packages: read
     services:
       postgres:
         image: postgres:16-alpine
@@ -496,8 +729,32 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
+        if: github.event_name != 'push'
 
-      - name: Build backend image
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The published artifact, by the same sha tag the docker job wrote.
+      - name: Pull the published image
+        id: image
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/${{ github.repository_owner }}/iceslab-backend:sha-$(echo "${{ github.sha }}" | cut -c1-7)"
+          docker pull "$ref"
+          docker tag "$ref" iceslab-backend:smoke
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      # No publish on a pull request, so there is nothing to pull: build it here
+      # and be explicit that this proves the Dockerfile, not a deployable
+      # artifact.
+      - name: Build backend image (pull request only)
+        if: github.event_name != 'push'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -525,11 +782,13 @@ jobs:
             iceslab-backend:smoke
 
       - name: Wait for /health
+        id: health
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
               echo "panel answered after ${i}s"
+              echo "seconds=${i}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 1
@@ -541,3 +800,112 @@ jobs:
       - name: Container logs on failure
         if: failure()
         run: docker logs smoke || true
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### smoke (image boots)"
+            echo ""
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "- ran the PUBLISHED image: \`${{ steps.image.outputs.ref }}\`"
+            else
+              echo "- pull request: nothing is published, so the image was built here"
+            fi
+            echo "- migrations applied from inside the image, then \`/health\` answered after ${{ steps.health.outputs.seconds || '-' }}s"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # One check to protect the branch with.
+  #
+  # Branch protection reads the checks list, and a SKIPPED job is green there.
+  # With path filters that is most of the list on most commits, so "all checks
+  # passed" stopped meaning anything the moment filters landed. This job is the
+  # one thing that knows the difference between the two kinds of skip:
+  #
+  #   - skipped because this commit did not touch that area, which is the point
+  #     of the filter and is fine;
+  #   - skipped because something it needed failed or was cancelled, which is a
+  #     failure wearing a grey tick.
+  #
+  # So it takes the filter OUTPUTS as well as the results and reads them
+  # together. Protect `develop` and `main` with THIS check and nothing else.
+  # ───────────────────────────────────────────────────────────────────────
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      [changes, audit, secrets-scan, backend, frontend, node-agent, go-lint, docker, smoke]
+    steps:
+      - name: Every check accounted for
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          RUNS_BACKEND: ${{ needs.changes.outputs.backend }}
+          RUNS_FRONTEND: ${{ needs.changes.outputs.frontend }}
+          RUNS_NODE: ${{ needs.changes.outputs.node }}
+          EVENT: ${{ github.event_name }}
+          SAME_REPO: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          verdict=0
+          rows=""
+
+          # $1 job, $2 "yes"/"no": may this job legitimately be skipped?
+          check() {
+            local job="$1" may_skip="$2"
+            local result ok="no"
+            result=$(jq -r --arg j "$job" '.[$j].result // "missing"' <<<"$RESULTS")
+            case "$result" in
+              success) ok="yes" ;;
+              skipped) [ "$may_skip" = "yes" ] && ok="yes" ;;
+            esac
+            [ "$ok" = "yes" ] || verdict=1
+            rows="${rows}| ${job} | ${result} | ${ok} |"$'\n'
+          }
+
+          # Never filtered, never optional.
+          check changes no
+          check audit no
+          check secrets-scan no
+
+          # Filtered by area. A skip is legitimate exactly when the filter said
+          # the area was untouched, which is why the outputs are read here
+          # instead of assumed.
+          check backend "$([ "$RUNS_BACKEND" = "true" ] && echo no || echo yes)"
+          check frontend "$([ "$RUNS_FRONTEND" = "true" ] && echo no || echo yes)"
+          check node-agent "$([ "$RUNS_NODE" = "true" ] && echo no || echo yes)"
+          check go-lint "$([ "$RUNS_NODE" = "true" ] && echo no || echo yes)"
+
+          # docker builds on a same-repo pull request and on the branches that
+          # something pulls. A fork PR gets no image build at all, by design, so
+          # there its skip is the expected answer.
+          docker_may_skip=yes
+          if [ "$EVENT" = "push" ]; then
+            case "$REF" in
+              refs/heads/main|refs/heads/develop|refs/tags/v*) docker_may_skip=no ;;
+            esac
+          elif [ "$EVENT" = "pull_request" ] && [ "$SAME_REPO" = "true" ]; then
+            docker_may_skip=no
+          fi
+          check docker "$docker_may_skip"
+          # Smoke follows docker: no image, nothing to boot.
+          check smoke "$docker_may_skip"
+
+          {
+            echo "### gate"
+            echo ""
+            echo "| check | result | accepted |"
+            echo "| --- | --- | --- |"
+            printf '%s' "$rows"
+            echo ""
+            if [ "$verdict" = 0 ]; then
+              echo "Every check either passed or was skipped for a reason this job can name."
+            else
+              echo "**A check did not pass, or was skipped without the filter asking for it.**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$verdict"

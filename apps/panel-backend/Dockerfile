@@ -11,6 +11,11 @@
 # the shared package). Minor-pinning still pulls 22.22.x security patches but
 # never silently jumps a minor again. Digest-pinning (@sha256) is the
 # production-grade follow-up (I4b) once we wire Renovate.
+#
+# ⚠ ONE PLACE, TWO READERS: `.nvmrc` at the repo root holds the version, CI
+# passes it in as this build arg, and the default below is the same string so a
+# plain `docker build` still works. Changing it here alone is how the workflow
+# and the image came to run different runtimes once already.
 ARG NODE_VERSION=22.22-alpine
 
 # ───── Build stage ─────
