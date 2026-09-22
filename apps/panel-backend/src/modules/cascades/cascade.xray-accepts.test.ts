@@ -180,6 +180,53 @@ describe.skipIf(!XRAY_BIN)('xray accepts the generated cascade config', () => {
     expect(r.ok, r.output).toBe(true);
   });
 
+  /**
+   * TWO legs on ONE listener, sharing the node's keypair, phase 5b.
+   *
+   * The shape the engines force: a receiving node has one inbound for the whole
+   * step and xray takes a single `privateKey` with a LIST of `shortIds`. Until
+   * 5b this listener was rendered with `security: 'none'` whatever the creds
+   * said, so this is the first time xray is asked about the real thing.
+   *
+   * A pool on the ENTRY is what produces it: two entry nodes dialling one exit
+   * is two legs landing on one port. Two directions on one node cannot, they
+   * are refused at save.
+   */
+  const sharedKey = {
+    privateKey: Buffer.alloc(32, 7).toString('base64url'),
+    publicKey: Buffer.alloc(32, 9).toString('base64url'),
+    serverName: 'www.microsoft.com',
+    dest: 'www.microsoft.com:443',
+  };
+  const pooledReality = {
+    positions: [{ position: 0, nodeIds: [ENTRY, TRANSIT] }],
+    directions: [{ tag: 1, nodeIds: [EXIT_A] }],
+    links: [
+      {
+        ...link(ENTRY, EXIT_A, 1, 24000),
+        cred: { protocol: 'vless' as const, port: 24000, uuid: N(5), reality: { ...sharedKey, shortId: '0123abcd' } },
+      },
+      {
+        ...link(TRANSIT, EXIT_A, 1, 24000),
+        cred: { protocol: 'vless' as const, port: 24000, uuid: N(6), reality: { ...sharedKey, shortId: '89ab0000' } },
+      },
+    ],
+    hosts,
+    policies: [],
+  };
+
+  it('loads a listener holding two REALITY legs with one key and two short ids', () => {
+    const r = xrayAccepts(wrap(buildTopologyFragmentsForNode(EXIT_A, pooledReality)));
+    expect(r.ok, r.output).toBe(true);
+  });
+
+  it('loads each dialler of that pooled leg', () => {
+    for (const node of [ENTRY, TRANSIT]) {
+      const r = xrayAccepts(wrap(buildTopologyFragmentsForNode(node, pooledReality)));
+      expect(r.ok, r.output).toBe(true);
+    }
+  });
+
   // A pool on the next step turns into a balancer; balancers and their selectors
   // are a separate corner of xray's config parser.
   it('loads an entry whose direction is served by a pool', () => {
