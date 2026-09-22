@@ -1,120 +1,128 @@
-import { describe, expect, it } from 'vitest';
-import {
-  buildTopologyFragmentsForNode,
-  CascadeTopologyBrokenError,
-  type TopologyLinkRow,
-} from './cascade.config.js';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { buildApp } from '../../app.js';
+import { prisma } from '../../prisma.js';
+import { closeRedis } from '../../lib/infra/redis.js';
+import { cleanDatabase } from '../../../tests/helpers/db.js';
+import { registerAndLogin } from '../../../tests/helpers/auth.js';
 
 /**
- * A cascade that still points at a node which is gone.
+ * A cascade cannot be saved naming a node that is not there.
  *
- * Found on the field stand: a direction listed a node id that `/api/nodes` does
- * not return. Measured on 2026-09-11, the old behaviour (skip the leg) had three
- * outcomes and every one of them was silent, the worst being a client that
- * egresses from the ENTRY country while its own config says otherwise.
+ * Two guards, one hole each, and they are not the same hole. Deleting a node a
+ * live cascade uses is refused now, which closes the road forward. This one
+ * closes what is ALREADY stored: a cascade written before that guard carries a
+ * dead id, the panel receives it as a nodeId with no row in the node list, and
+ * "Save and push" sent it straight back. That is the state the cascade was in
+ * on 2026-09-22, and every push to its entries failed for a day afterwards.
  *
- * These tests pin the refusal. They are written on the shapes the field row
- * actually has: a direction with a POOL of two (one gone, one alive), and a
- * direction with a single node that is gone.
+ * The refusal names the DIRECTION, not only the uuid: the operator is looking
+ * at a screen of named ways out, and the id belongs to a node that no longer
+ * exists, so they cannot look it up either.
  */
-const ENTRY = 'e1111111-1111-1111-1111-111111111111';
-const ALIVE = 'a2222222-2222-2222-2222-222222222222';
-const GONE = 'd0b08fe3-3333-3333-3333-333333333333';
+let app: FastifyInstance;
+let token: string;
+let seq = 0;
 
-function poolLinks(): TopologyLinkRow[] {
-  return [
-    {
-      fromNodeId: ENTRY,
-      toNodeId: ALIVE,
-      directionTag: 1,
-      cred: { protocol: 'vless', port: 24000, uuid: 'u-alive' },
-    },
-    {
-      fromNodeId: ENTRY,
-      toNodeId: GONE,
-      directionTag: 1,
-      cred: { protocol: 'vless', port: 24000, uuid: 'u-gone' },
-    },
-  ];
+beforeEach(async () => {
+  app = await buildApp();
+  await cleanDatabase();
+  token = await registerAndLogin(app);
+  seq = 0;
+});
+
+afterEach(async () => {
+  await app.close();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+  await closeRedis();
+});
+
+const auth = () => ({ authorization: `Bearer ${token}` });
+
+async function makeNode(name: string): Promise<string> {
+  seq += 1;
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/nodes',
+    headers: auth(),
+    payload: { name, address: `dang-${seq}.test`, protocol: 'xray' },
+  });
+  expect(res.statusCode, res.body).toBe(201);
+  return JSON.parse(res.body).id as string;
 }
 
-const hostsWithout = (...ids: string[]) =>
-  new Map(
-    [
-      [ENTRY, 'entry.example.com'],
-      [ALIVE, 'alive.example.com'],
-      [GONE, 'gone.example.com'],
-    ].filter(([id]) => !ids.includes(id as string)) as [string, string][],
-  );
+function payload(entry: string, exits: { id: string; cc: string }[], name = 'ru') {
+  return {
+    name,
+    enabled: true,
+    positions: [{ position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'xray' }],
+    directions: exits.map((e, i) => ({ tag: i + 1, countryCode: e.cc, nodeIds: [e.id] })),
+  };
+}
 
-describe('a direction pointing at a node that is gone', () => {
-  it('refuses instead of quietly shrinking the pool', () => {
-    // The old outcome: two link-outs became one and the rule flipped from
-    // `balancerTag` to a fixed `outboundTag`. The pool stopped being a pool and
-    // nothing in the config said so.
-    expect(() =>
-      buildTopologyFragmentsForNode(ENTRY, {
-        positions: [{ position: 0, nodeIds: [ENTRY] }],
-        directions: [{ tag: 1, nodeIds: [ALIVE, GONE] }],
-        links: poolLinks(),
-        hosts: hostsWithout(GONE),
-      }),
-    ).toThrow(CascadeTopologyBrokenError);
+const save = (body: unknown) =>
+  app.inject({ method: 'POST', url: '/api/cascades', headers: auth(), payload: body as never });
+
+const update = (id: string, body: unknown) =>
+  app.inject({ method: 'PUT', url: `/api/cascades/${id}`, headers: auth(), payload: body as never });
+
+describe('a cascade that names a node the panel cannot find', () => {
+  it('is refused on create, with the direction named', async () => {
+    const entry = await makeNode('ru-01');
+    const nl = await makeNode('nl-exit');
+    const se = await makeNode('se-exit');
+    await prisma.node.update({ where: { id: se }, data: { deletedAt: new Date() } });
+
+    const res = await save(payload(entry, [{ id: nl, cc: 'NL' }, { id: se, cc: 'SE' }]));
+    expect(res.statusCode, res.body).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.message).toContain(se);
+    expect(body.message).toContain('direction "SE"');
   });
 
-  it('names the node and the direction, so the operator can find it', () => {
-    expect(() =>
-      buildTopologyFragmentsForNode(ENTRY, {
-        positions: [{ position: 0, nodeIds: [ENTRY] }],
-        directions: [{ tag: 1, nodeIds: [ALIVE, GONE] }],
-        links: poolLinks(),
-        hosts: hostsWithout(GONE),
-      }),
-    ).toThrow(new RegExp(`${GONE}`));
+  it('is refused on UPDATE, which is where the incident came through', async () => {
+    // The save that the panel let an operator press: the cascade already holds
+    // the dead id, the screen shows it as a row it has no node for, and the
+    // payload comes back unchanged.
+    const entry = await makeNode('ru-01');
+    const nl = await makeNode('nl-exit');
+    const se = await makeNode('se-exit');
+    const created = await save(payload(entry, [{ id: nl, cc: 'NL' }, { id: se, cc: 'SE' }]));
+    expect(created.statusCode, created.body).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+
+    // The node goes away behind the cascade's back, the way it did before the
+    // delete guard existed.
+    await prisma.node.update({ where: { id: se }, data: { deletedAt: new Date() } });
+
+    const res = await update(id, payload(entry, [{ id: nl, cc: 'NL' }, { id: se, cc: 'SE' }]));
+    expect(res.statusCode, res.body).toBe(400);
+    expect(JSON.parse(res.body).message).toContain('direction "SE"');
   });
 
-  it('refuses when the direction loses its only node', () => {
-    // The worst of the three: no outbound AND no routing rule for that
-    // direction, and a v4 entry has no catch-all, so the client falls through to
-    // `freedom` and leaves from the entry country.
-    expect(() =>
-      buildTopologyFragmentsForNode(ENTRY, {
-        positions: [{ position: 0, nodeIds: [ENTRY] }],
-        directions: [{ tag: 1, nodeIds: [GONE] }],
-        links: [poolLinks()[1]!],
-        hosts: hostsWithout(GONE, ALIVE),
-      }),
-    ).toThrow(CascadeTopologyBrokenError);
+  it('names a POSITION when the dangling id is a hop', async () => {
+    const entry = await makeNode('ru-01');
+    const nl = await makeNode('nl-exit');
+    await prisma.node.update({ where: { id: entry }, data: { deletedAt: new Date() } });
+
+    const res = await save(payload(entry, [{ id: nl, cc: 'NL' }]));
+    expect(res.statusCode, res.body).toBe(400);
+    expect(JSON.parse(res.body).message).toContain('position 0');
   });
 
-  it('refuses when a link ARRIVES from a node with no address', () => {
-    // The allow-list would come out empty, and an empty allow-list makes the
-    // agent open the link port to anyone.
-    expect(() =>
-      buildTopologyFragmentsForNode(ALIVE, {
-        positions: [{ position: 0, nodeIds: [ENTRY] }],
-        directions: [{ tag: 1, nodeIds: [ALIVE] }],
-        links: [
-          {
-            fromNodeId: GONE,
-            toNodeId: ALIVE,
-            directionTag: 1,
-            cred: { protocol: 'vless', port: 24000, uuid: 'u-in' },
-          },
-        ],
-        hosts: hostsWithout(GONE),
-      }),
-    ).toThrow(CascadeTopologyBrokenError);
-  });
+  it('saves normally when every node is there', async () => {
+    const entry = await makeNode('ru-01');
+    const nl = await makeNode('nl-exit');
+    const se = await makeNode('se-exit');
 
-  it('builds normally while every node is still there', () => {
-    const out = buildTopologyFragmentsForNode(ENTRY, {
-      positions: [{ position: 0, nodeIds: [ENTRY] }],
-      directions: [{ tag: 1, nodeIds: [ALIVE, GONE] }],
-      links: poolLinks(),
-      hosts: hostsWithout(),
-    });
-    expect(out?.outbounds).toHaveLength(3); // two link-outs plus freedom
-    expect(out?.balancers?.[0]?.tag).toBe('bal-d1');
+    const created = await save(payload(entry, [{ id: nl, cc: 'NL' }, { id: se, cc: 'SE' }]));
+    expect(created.statusCode, created.body).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+
+    const again = await update(id, payload(entry, [{ id: nl, cc: 'NL' }, { id: se, cc: 'SE' }]));
+    expect(again.statusCode, again.body).toBe(200);
   });
 });

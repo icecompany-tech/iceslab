@@ -70,8 +70,19 @@ export class CascadeNameTakenError extends Error {
   }
 }
 export class CascadeNodeMissingError extends Error {
-  constructor(nodeId: string) {
-    super(`Node ${nodeId} does not exist`);
+  constructor(
+    public nodeId: string,
+    /** Where in the payload it was named, e.g. `direction "NL"`. Empty when
+     *  the caller had no place to attach it to. */
+    public where = '',
+  ) {
+    super(
+      where
+        ? `${where} points at node ${nodeId}, which does not exist (deleted?). ` +
+            `Remove it there and save again: a cascade that names a node the panel cannot ` +
+            `find stops receiving config on every one of its nodes, not just this one.`
+        : `Node ${nodeId} does not exist`,
+    );
     this.name = 'CascadeNodeMissingError';
   }
 }
@@ -267,14 +278,57 @@ const hopInclude = {
 };
 
 async function assertNodesExist(nodeIds: string[]): Promise<void> {
+  await assertNodesExistNamed(nodeIds.map((id) => ({ id, where: '' })));
+}
+
+/**
+ * The same check, able to say WHERE the dangling id sits.
+ *
+ * A bare uuid in a 400 is a puzzle: the operator is looking at a screen of
+ * named directions and positions, and the panel hands them a string that
+ * appears nowhere on it. Worse, the id belongs to a node that no longer
+ * exists, so they cannot look it up either.
+ *
+ * ⚠ This is the check for rows ALREADY STORED. Deleting a node that a live
+ * cascade uses is refused now (NodeInUseByCascadeError), which closes the road
+ * forward; a cascade saved before that guard can still carry a dead id, and it
+ * arrives at the panel as a nodeId with no row in the node list, which "Save
+ * and push" happily sent back. That is how the 2026-09-22 incident's cascade
+ * got into the state it was in.
+ */
+async function assertNodesExistNamed(
+  refs: { id: string; where: string }[],
+): Promise<void> {
+  if (refs.length === 0) return;
   const found = await prisma.node.findMany({
-    where: { id: { in: nodeIds }, deletedAt: null },
+    where: { id: { in: refs.map((r) => r.id) }, deletedAt: null },
     select: { id: true },
   });
   const ok = new Set(found.map((n) => n.id));
-  for (const id of nodeIds) {
-    if (!ok.has(id)) throw new CascadeNodeMissingError(id);
+  for (const ref of refs) {
+    if (!ok.has(ref.id)) throw new CascadeNodeMissingError(ref.id, ref.where);
   }
+}
+
+/**
+ * Every node id a v4 payload names, with the place it was named in.
+ *
+ * Directions carry a country code and a tag, which is what the screen shows,
+ * so that is what the refusal says back.
+ */
+function nodeRefsOfTopology(
+  positions: { position: number; nodeIds: string[] }[] | undefined,
+  directions: { tag?: number; countryCode?: string | null; nodeIds: string[] }[] | undefined,
+): { id: string; where: string }[] {
+  const refs: { id: string; where: string }[] = [];
+  for (const p of positions ?? []) {
+    for (const id of p.nodeIds) refs.push({ id, where: `position ${p.position}` });
+  }
+  for (const d of directions ?? []) {
+    const name = d.countryCode ? `"${d.countryCode}"` : `tag ${d.tag ?? '?'}`;
+    for (const id of d.nodeIds) refs.push({ id, where: `direction ${name}` });
+  }
+  return refs;
 }
 
 // ───── Subscription exposure (cascade leak fix) ─────
@@ -955,6 +1009,11 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
           ...(input.directions ?? []).flatMap((d) => d.nodeIds),
         ]),
       ];
+  // Named where they were named, and asked FIRST: a v4 payload usually folds
+  // into hops as well, so checking the folded list first would answer with a
+  // bare uuid about a screen full of named directions. The hop check stays for
+  // a payload that carries hops and nothing else.
+  await assertNodesExistNamed(nodeRefsOfTopology(input.positions, input.directions));
   await assertNodesExist(allNodeIds);
   // T7: an enabled balancer entry serves vlessRoute-tagged exit configs; gate
   // it on the entry's xray version. Disabled cascades don't expand in subs.
@@ -1110,6 +1169,20 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   const isBalancer = mode === 'balancer';
   const incomingHops = folded ? folded.hops : input.hops;
   const hops = incomingHops ? validateCascadeHops(incomingHops, mode) : null;
+  /**
+   * Every node this save names, checked, not only the folded hops.
+   *
+   * The hop list was the only thing asked about, and a v4-only payload folds
+   * to nothing, so a save that carried positions and directions was never
+   * checked at all. That is the hole the 2026-09-22 cascade came through: a
+   * direction held a node that had been deleted, the panel sent the id back
+   * unchanged because its node list simply had no row for it, and "Save and
+   * push" went through. Afterwards the renderer refused to build anything for
+   * the cascade's entries, and they stopped receiving config for a day.
+   *
+   * Both shapes are asked about, because both can be sent.
+   */
+  await assertNodesExistNamed(nodeRefsOfTopology(input.positions, input.directions));
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
   // T7: gate an effectively-enabled balancer on the entry node's xray version
   // (covers both enabling an existing cascade and swapping in a new entry hop).
