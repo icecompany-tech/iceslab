@@ -25,6 +25,7 @@ import {
 import {
   ROLE_TONE,
   isKnownProtocol,
+  legParamFacts,
   poolRowFacts,
   protocolOptions,
   statusTone,
@@ -32,13 +33,7 @@ import {
   type HopRole,
   type LegFacts,
 } from '@/contours/cascades/lib/cascadeForm';
-import {
-  DEFAULT_LINK_CONGESTION,
-  LINK_CONGESTIONS,
-  type LinkCell,
-  type LinkCongestion,
-  type LinkParams,
-} from '@/lib/domain/cascades';
+import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
 import {
   engineListWords,
   isRealisedLinkCell,
@@ -681,6 +676,7 @@ export function DirectionLegRow({
         ? t('engine.cellUnrealised', { name: facts.cell })
         : t('cascadeCreate.legFromEntry');
   const tone = facts.state === 'unrealised' ? RED : facts.state === 'known' ? SNOW : FAINT;
+  const paramFacts = legParamFacts(cell);
 
   return (
     <Stack gap={8} style={{ width: '100%', paddingLeft: 14 }}>
@@ -713,28 +709,25 @@ export function DirectionLegRow({
         </Box>
       </Box>
 
-      {/* Параметры принадлежат ячейке, и «пустых настроек» тут нет.
-          У hy2 показывать нечего: соль Salamander рождает панель, а скорость
-          там задаётся парой чисел про полосу, и такого решения ещё нет.
-          У tuic ровно один выбор, и список у него ДВИЖКА: sing-box отвергает
-          `brutal` на tuic, так что предложить его значило бы положить конфиг
-          на ноде, пока панель пишет «сохранено». */}
-      {available && cell === 'hy2' && (
+      {/* Что у ячейки настраивается, решает `legParamFacts`, а не разметка:
+          список спрошен у движка, и ошибка тут роняет ногу при зелёном
+          «сохранено». Здесь остаётся только покраска. */}
+      {available && paramFacts.kind === 'minted' && (
         <Box style={{ paddingLeft: 24 }}>
           <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
             {t('cascadeCreate.legObfsMinted')}
           </Text>
         </Box>
       )}
-      {available && cell === 'tuic' && (
+      {available && paramFacts.kind === 'congestion' && (
         <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 10, paddingLeft: 24 }}>
           <Stack gap={4} style={{ width: 180 }}>
             <FieldLabel>{t('cascadeCreate.legCongestion')}</FieldLabel>
             <Select
               size="xs"
-              data={[...LINK_CONGESTIONS]}
+              data={paramFacts.options}
               value={params?.congestion ?? null}
-              placeholder={t('cascadeCreate.legCongestionDefault', { value: DEFAULT_LINK_CONGESTION })}
+              placeholder={t('cascadeCreate.legCongestionDefault', { value: paramFacts.fallback })}
               allowDeselect={false}
               onChange={(v) => v && onParams({ congestion: v as LinkCongestion })}
             />

@@ -9,6 +9,7 @@ import {
   toDirectionInputs,
   lastAttemptFacts,
   legFacts,
+  legParamFacts,
   poolRowFacts,
 } from '@/contours/cascades/lib/cascadeForm';
 
@@ -271,6 +272,43 @@ describe('cellGaps', () => {
     expect(cellGaps([''], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
     // Нода, которой нет в списке, это пропажа, и о ячейке она ничего не говорит.
     expect(cellGaps(['n-gone'], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
+  });
+});
+
+/**
+ * Что нога предлагает настроить.
+ *
+ * Тест сторожит не разметку, а конфиг на ноде: `congestion_control` на
+ * hysteria2 sing-box 1.13.14 отвергает при разборе, а `brutal` на tuic не
+ * знает вовсе. Селектор, предложивший такое, кладёт ногу, пока панель пишет
+ * «сохранено», и на экране это выглядит как исправная настройка.
+ */
+describe('legParamFacts', () => {
+  it('1. hy2: настраивать НЕЧЕГО, и congestion тут не появляется никогда', () => {
+    expect(legParamFacts('hy2')).toEqual({ kind: 'minted', options: [], fallback: null });
+  });
+
+  it('2. tuic: три значения движка и дефолт bbr', () => {
+    expect(legParamFacts('tuic')).toEqual({
+      kind: 'congestion',
+      options: ['bbr', 'cubic', 'new_reno'],
+      fallback: 'bbr',
+    });
+  });
+
+  it('3. new_reno пишется с подчёркиванием: строка уходит на сервер как есть', () => {
+    expect(legParamFacts('tuic').options).toContain('new_reno');
+    expect(legParamFacts('tuic').options).not.toContain('brutal');
+  });
+
+  it('4. встроенные ячейки и «не выбрано»: настроек нет', () => {
+    for (const cell of ['vless', 'shadowsocks', null, undefined, '']) {
+      expect(legParamFacts(cell).kind).toBe('none');
+    }
+  });
+
+  it('5. чужая ячейка не получает настроек по догадке', () => {
+    expect(legParamFacts('hysteria2').kind).toBe('none');
   });
 });
 

@@ -1,7 +1,8 @@
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
 import { linkCellPair, type EnginePair, type EngineName } from '@/lib/domain/engines';
-import type { LinkCell, LinkParams } from '@/lib/domain/cascades';
+import { DEFAULT_LINK_CONGESTION, LINK_CONGESTIONS } from '@/lib/domain/cascades';
+import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
 import { AMBER, CYAN, DIM, MIST, MOSS, RED, VIOLET } from '@/contours/cascades/lib/colors';
 
 /**
@@ -389,6 +390,42 @@ export interface CellGap {
   nodeId: string;
   name: string;
   engines: EngineName[];
+}
+
+/**
+ * Что у ноги настраивается сверх выбора ячейки.
+ *
+ * Решает не разметка: список спрошен у ДВИЖКА, и цена ошибки тут не косметика,
+ * а лежачая нода при зелёном «сохранено» в панели.
+ *
+ * `minted` (hy2): настраивать нечем. Соль Salamander рождает панель, как и
+ * остальные креды линка, а `congestion_control` sing-box 1.13.14 на hysteria2
+ * отвергает ПРИ РАЗБОРЕ конфига, то есть поле там не игнорируется. Скорость у
+ * hy2 это Brutal, и задаётся она парой чисел про полосу; решено 2026-09-22 не
+ * спрашивать её здесь вовсе: полоса это свойство канала НОДЫ, а не ноги, и без
+ * пары чисел sing-box ведёт hy2 по BBR, что для линка между дата-центрами
+ * рабочий дефолт.
+ *
+ * `congestion` (tuic): ровно три значения, и это ответ движка, а не выписка со
+ * страницы документации. `brutal` sing-box на tuic не знает и отвечает
+ * «unknown congestion control algorithm», поэтому предложить его значило бы
+ * положить ногу. `new_reno` пишется с подчёркиванием, ровно так он принимается.
+ */
+export type LegParamKind = 'none' | 'minted' | 'congestion';
+
+export interface LegParamFacts {
+  kind: LegParamKind;
+  /** Только у `congestion`: что предлагать и что стоит, если не выбрали. */
+  options: LinkCongestion[];
+  fallback: LinkCongestion | null;
+}
+
+export function legParamFacts(cell: string | null | undefined): LegParamFacts {
+  if (cell === 'hy2') return { kind: 'minted', options: [], fallback: null };
+  if (cell === 'tuic') {
+    return { kind: 'congestion', options: [...LINK_CONGESTIONS], fallback: DEFAULT_LINK_CONGESTION };
+  }
+  return { kind: 'none', options: [], fallback: null };
 }
 
 export function cellGaps(
