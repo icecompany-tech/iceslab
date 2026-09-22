@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { LINK_CELLS } from '@iceslab/shared';
-import { LINK_CONGESTIONS } from './cascade.config.js';
+import { LINK_CELLS, LINK_CONGESTIONS } from '@iceslab/shared';
 
 // Max hops in a single cascade. Each hop adds latency + an inter-hop link
 // (UFW port LINK_PORT_BASE+i), so the chain is capped. Enforced at the schema

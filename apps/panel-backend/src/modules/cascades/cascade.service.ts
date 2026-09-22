@@ -1,4 +1,9 @@
-import type { NodeChain, NodeCores, XrayCascadeFragments } from '@iceslab/shared';
+import type {
+  LinkCongestion,
+  NodeChain,
+  NodeCores,
+  XrayCascadeFragments,
+} from '@iceslab/shared';
 import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
@@ -17,7 +22,6 @@ import {
   buildTopologyFragmentsForNode,
   generateLinkCreds,
   LINK_PORT_BASE,
-  type LinkCongestion,
   generateTopologyLinks,
   normalizeLinkProtocol,
   parseLinkCred,
@@ -1107,7 +1111,12 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
       if (topology) {
         await writeTopologyV4(tx, created.id, topology.positions, topology.directions);
       }
-      return created;
+      // Re-read, as the update path already does: `created` was captured BEFORE
+      // the topology was written, so answering with it reports a cascade whose
+      // positions and directions are empty, every time. The shape is stored
+      // correctly and the next GET shows it, which is why this survived: what
+      // the create ANSWERS has never carried the v4 topology at all.
+      return tx.cascade.findUniqueOrThrow({ where: { id: created.id }, include: hopInclude });
     });
     // Push the chaining fragments to every hop now, not on some later unrelated
     // edit. inbounds.events re-syncs each node's inbound set, where

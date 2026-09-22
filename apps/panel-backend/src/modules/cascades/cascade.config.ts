@@ -1,6 +1,12 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
-import { LINK_CELLS, type LinkCell } from '@iceslab/shared';
+import {
+  DEFAULT_LINK_CONGESTION,
+  LINK_CELLS,
+  LINK_CONGESTIONS,
+  type LinkCell,
+  type LinkCongestion,
+} from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
@@ -139,20 +145,19 @@ interface TuicLinkCred {
 }
 
 /**
- * ⚠ `new_reno`, NOT `brutal`, and the list is the ENGINE'S, asked of it.
+ * The controllers a leg may be given, re-exported and not declared.
  *
- * sing-box 1.13.14 answers "unknown congestion control algorithm: brutal" for a
- * tuic inbound and accepts exactly `bbr`, `cubic` and `new_reno`. Brutal is a
- * hysteria2 thing, and there it is a bandwidth pair rather than a name (see
- * Hy2LinkCred). Offering `brutal` here would be a control that refuses the
- * config on the node while the panel says the leg is saved.
+ * It was declared here, and the same three words were also a literal union on
+ * `TuicInboundCfg.congestionControl` and a third copy in the frontend: the same
+ * class of drift as the formats and the cells. The list now lives with the
+ * other wire dictionaries in `packages/shared/src/transport.ts`, which carries
+ * the measurement, the reason `brutal` is absent, and what the two field names
+ * mean. The default went with it: the screen prints it next to an empty
+ * control, so it has to come from where the server takes it.
+ *
+ * Kept exported from here so the cascade module reads as one vocabulary.
  */
-export type LinkCongestion = 'bbr' | 'cubic' | 'new_reno';
-
-export const LINK_CONGESTIONS: readonly LinkCongestion[] = ['bbr', 'cubic', 'new_reno'];
-
-/** What a leg gets when the operator says nothing. See LinkCongestion. */
-export const DEFAULT_LINK_CONGESTION: LinkCongestion = 'bbr';
+export { LINK_CONGESTIONS, DEFAULT_LINK_CONGESTION, type LinkCongestion };
 
 export type LinkCred = VlessLinkCred | Ss2022LinkCred | Hy2LinkCred | TuicLinkCred;
 

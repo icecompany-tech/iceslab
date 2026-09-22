@@ -718,6 +718,46 @@ export interface MieruInboundCfg {
 }
 
 /**
+ * The QUIC congestion controllers, and the only three of them.
+ *
+ * ⚠ MEASURED, not copied from a document: asked of sing-box 1.13.14 with
+ * `sing-box check` on 2026-09-22. It accepts `bbr`, `cubic` and `new_reno` and
+ * answers "unknown congestion control algorithm: brutal" for anything else.
+ * `brutal` is the trap: it is a real word in the hysteria2 world, where it is a
+ * bandwidth PAIR rather than a name, and a fourth option here would be a
+ * control that refuses the config on the node while the panel reports it saved.
+ *
+ * The same three values are worn under two names, which is two LAYERS and not
+ * two names for one thing:
+ *
+ *   - `linkParams.congestion` is the operator's choice for a cascade LEG, our
+ *     own API, rendered to the engine's `congestion_control` in ONE place,
+ *     panel-backend `chain.config.ts`;
+ *   - `TuicInboundCfg.congestionControl` is the node's USER inbound, mirroring
+ *     the engine key in our camelCase wire style, rendered in one place too,
+ *     the agent's sing-box adapter.
+ *
+ * Neither name travels into the other layer. What is shared is this list, and
+ * it is shared because the engine is the same engine: a value legal in a leg
+ * and illegal in an inbound has never existed and would be a bug in whichever
+ * layer invented it.
+ */
+export const LINK_CONGESTIONS = ['bbr', 'cubic', 'new_reno'] as const;
+export type LinkCongestion = (typeof LINK_CONGESTIONS)[number];
+
+/**
+ * What a leg gets when the operator chooses nothing, in the one place both
+ * sides read it from.
+ *
+ * The screen prints "bbr by default" next to an empty control, and a default
+ * written twice is a label that goes on saying `bbr` for a week after the
+ * server has started minting something else. `bbr` is sing-box's own default
+ * for a tuic endpoint, so an unset knob and this value render the same config
+ * today; the point is that changing it is one edit rather than three.
+ */
+export const DEFAULT_LINK_CONGESTION: LinkCongestion = 'bbr';
+
+/**
  * TUIC v5 inbound config (sing-box engine, slice singbox-S2). `serverName` is
  * the TLS SNI the node's cert is issued for; `congestionControl` tunes the QUIC
  * sender. TLS is the node's self-signed pair for the alpha (client connects
@@ -725,7 +765,7 @@ export interface MieruInboundCfg {
  */
 export interface TuicInboundCfg {
   serverName?: string;
-  congestionControl?: 'bbr' | 'cubic' | 'new_reno';
+  congestionControl?: LinkCongestion;
 }
 
 /**

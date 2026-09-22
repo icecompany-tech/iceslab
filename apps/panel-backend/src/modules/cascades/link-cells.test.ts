@@ -6,11 +6,14 @@ import {
   LINK_CELLS,
   LINK_CELL_ENGINES,
   LINK_CELL_TRANSPORT,
+  LINK_CONGESTIONS,
+  DEFAULT_LINK_CONGESTION,
   PROTOCOL_NAMES,
   TRANSPORTS,
   ENGINE_NAMES,
 } from '@iceslab/shared';
-import { linkCellFor } from './cascade.config.js';
+import { DEFAULT_LINK_CONGESTION as REEXPORTED_DEFAULT, linkCellFor } from './cascade.config.js';
+import { CascadeDirectionSchema } from './cascade.schemas.js';
 import { getLogger } from '../../lib/infra/logger.js';
 
 /**
@@ -165,6 +168,41 @@ describe('the link cells', () => {
         label,
       );
     }
+  });
+
+  it('offers the three controllers the engine takes, and never brutal', () => {
+    /**
+     * The composition guard for the congestion dictionary, which used to exist
+     * in three copies: here, on `TuicInboundCfg.congestionControl` as a literal
+     * union, and again in the frontend. One list now, in shared.
+     *
+     * `brutal` is the value the guard is really about. It is a real word in the
+     * hysteria2 world, it was in this panel's own type for a day, and sing-box
+     * 1.13.14 answers "unknown congestion control algorithm: brutal" for a tuic
+     * endpoint: offering it would be a control that refuses the config on the
+     * node while the panel reports the leg saved.
+     *
+     * Asserted through the API SCHEMA and not only against the array, because
+     * the array is what the schema is built from and comparing it with itself
+     * would pass whatever it said.
+     */
+    expect([...LINK_CONGESTIONS]).toEqual(['bbr', 'cubic', 'new_reno']);
+    // The default is a member of the list it defaults within, which is the one
+    // way a shared default can still be wrong: the screen would print a word
+    // the schema refuses the moment it is sent back.
+    expect(LINK_CONGESTIONS as readonly string[]).toContain(DEFAULT_LINK_CONGESTION);
+    // And the cascade module re-exports THAT one rather than keeping its own.
+    expect(REEXPORTED_DEFAULT).toBe(DEFAULT_LINK_CONGESTION);
+    for (const cc of LINK_CONGESTIONS) {
+      expect(
+        CascadeDirectionSchema.safeParse({ nodeIds: [], linkParams: { congestion: cc } }).success,
+        `${cc} is refused by the schema`,
+      ).toBe(true);
+    }
+    expect(
+      CascadeDirectionSchema.safeParse({ nodeIds: [], linkParams: { congestion: 'brutal' } })
+        .success,
+    ).toBe(false);
   });
 
   it('gives the two new cells UDP and the two old ones TCP', () => {
