@@ -6,7 +6,7 @@ import { PROTOCOL_DOT, shapeOf } from '@/contours/nodes/lib/nodeFormat';
 import { engineWord, profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN2, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
+import { CARD, CYAN_HI, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { useTranslation } from 'react-i18next';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
@@ -129,7 +129,7 @@ export function HostsPanel({
                         fontSize: 13,
                         fontWeight: 500,
                         lineHeight: '16px',
-                        color: CYAN2,
+                        color: CYAN_HI,
                         width: 70,
                         flexShrink: 0,
                       }}

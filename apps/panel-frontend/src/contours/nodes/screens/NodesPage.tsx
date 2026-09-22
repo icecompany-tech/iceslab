@@ -57,21 +57,7 @@ import { CascadesPanel } from '@/contours/nodes/components/CascadesPanel';
 import type { CascadeLayout } from '@/contours/nodes/components/CascadesView';
 import { countryFlag } from '@/lib/domain/countries';
 import { parseNodeAgentPort, pickFreeQuickDeployPort } from '@/lib/domain/ports';
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-
-const GROUND = '#08101A';
-const WELL = '#0B1420';
-const EDGE = '#2C3A4E';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 
 const MONO_FAMILY = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 const MONO = { fontFamily: MONO_FAMILY };

@@ -34,18 +34,7 @@ import type { SyncRefusal } from '@/lib/domain/syncRefusal';
 import type { ChainFacts } from '@/lib/domain/chainStatus';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
+import { AMBER, CARD, CYAN, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/nodes/lib/colors';
 
 type DashboardNode = DashboardOverview['nodes'][number];
 

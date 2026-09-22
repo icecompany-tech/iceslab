@@ -17,6 +17,7 @@ import {
 } from '@tabler/icons-react';
 import { countryFlag } from '@/lib/domain/countries';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
+import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
 
 /**
  * One VPS, as the fleet reads it: is it up, how loaded is it, what does it
@@ -24,19 +25,6 @@ import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
  * artboard rather than grown from the old card, so the vertical rhythm and the
  * metric rows match the design exactly.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
-const CYAN = '#7DD3FC';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

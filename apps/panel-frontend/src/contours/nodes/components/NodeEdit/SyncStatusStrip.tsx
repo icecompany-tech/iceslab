@@ -4,7 +4,6 @@ import type { NodeSyncStatus } from '@/lib/domain/nodes';
 import { AMBER, MIST, SNOW } from '@/contours/nodes/lib/colors';
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
-const SLATE = '#7A8BA3';
 
 /**
  * "Saved, but not applied yet" on one node.
@@ -24,7 +23,7 @@ export function SyncStatusStrip({ status }: { status: NodeSyncStatus | undefined
   if (!status || status.applied) return null;
 
   const waiting = !status.online;
-  const tone = waiting ? SLATE : AMBER;
+  const tone = waiting ? MIST : AMBER;
   const never = status.lastInboundSyncAt === null;
 
   return (

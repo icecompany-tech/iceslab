@@ -1,11 +1,11 @@
-import { AMBER, CYAN, CYAN2, MIST, MOSS, VIOLET } from '@/contours/nodes/lib/colors';
+import { AMBER, CYAN, CYAN_HI, MIST, MOSS, VIOLET } from '@/contours/nodes/lib/colors';
 export const PROTOCOL_DOT: Record<string, string> = {
   xray: VIOLET,
   shadowsocks: '#F5A3B8',
   hysteria: CYAN,
   amneziawg: MOSS,
   naive: AMBER,
-  mtproto: CYAN2,
+  mtproto: CYAN_HI,
   mieru: '#C78BFA',
   tuic: CYAN,
   anytls: MIST,

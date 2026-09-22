@@ -5,6 +5,7 @@ import { getCascadeStatus, type Cascade } from '@/lib/domain/cascades';
 import { engineListWords } from '@/lib/domain/engines';
 import { countryFlag } from '@/lib/domain/countries';
 import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/cascadeRows';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
 
 /**
  * The cascade inventory, in two densities. Cards draw the path as a path, which
@@ -12,25 +13,10 @@ import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/ca
  * list stays scannable. Same data behind both, the toggle only changes shape.
  */
 
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
-
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 export type CascadeLayout = 'cards' | 'rows';
-
 
 export function CascadesView({
   rows,
