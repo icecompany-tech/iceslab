@@ -42,6 +42,29 @@ const REALITY = {
   dest: 'www.microsoft.com:443',
 };
 
+/**
+ * The socks password the fixtures carry, written to be recognised.
+ *
+ * A fixture credential is key-shaped by necessity, and the secret scanner
+ * judges a string by how much it looks like one: the previous value read as a
+ * password and turned CI red from inside a golden, one directory away from the
+ * test the allowlist covers. So the value says what it is, and `.gitleaks.toml`
+ * allows THIS VALUE rather than the directory, which keeps the golden a place
+ * where a real key pasted in would still be caught.
+ */
+const FIXTURE_SOCKS_PASSWORD = 'chain-socks-fixture-password-0000';
+
+/**
+ * The SS2022 key on the transit's second leg, same reasoning.
+ *
+ * This one cannot merely say what it is: 2022-blake3-aes-256-gcm takes exactly
+ * 32 bytes of base64, and a key of the wrong length does not exercise the code
+ * path the fixture exists for. So it is base64 of the readable literal
+ * "iceslab-chain-fixture-psk-000000", which is 32 bytes and decodes to a
+ * sentence, the same trick the cascade goldens' fake REALITY key uses.
+ */
+const FIXTURE_SS_PSK = 'aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA=';
+
 const uuidFor = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 const POLICY = { directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] };
@@ -49,7 +72,7 @@ const POLICY = { directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] 
 /** The entry: two ways out and the Auto line beside them. */
 export const entryInput: ChainRenderInput = {
   role: 'entry',
-  socksPassword: 'chain-secret-0123456789',
+  socksPassword: FIXTURE_SOCKS_PASSWORD,
   directionTags: [0, 1, 2],
   out: [
     {
@@ -75,7 +98,7 @@ export const entryInput: ChainRenderInput = {
  *  one of each cell so the renderer is exercised on both. */
 export const transitInput: ChainRenderInput = {
   role: 'transit',
-  socksPassword: 'chain-secret-0123456789',
+  socksPassword: FIXTURE_SOCKS_PASSWORD,
   in: {
     cred: { protocol: 'vless', port: LINK_PORT_BASE, uuid: uuidFor(2), reality: REALITY },
     clients: [
@@ -95,7 +118,7 @@ export const transitInput: ChainRenderInput = {
       cred: {
         protocol: 'shadowsocks',
         port: LINK_PORT_BASE + 1,
-        psk: '1GPU7kQeM6IuQXEDMSlfBdFSrLP4nJFgIQO2TAuMrXk=',
+        psk: FIXTURE_SS_PSK,
         method: '2022-blake3-aes-256-gcm',
       },
     },
@@ -105,7 +128,7 @@ export const transitInput: ChainRenderInput = {
 
 export const exitInput: ChainRenderInput = {
   role: 'exit',
-  socksPassword: 'chain-secret-0123456789',
+  socksPassword: FIXTURE_SOCKS_PASSWORD,
   in: {
     cred: { protocol: 'vless', port: LINK_PORT_BASE + 1, uuid: uuidFor(4), reality: REALITY },
     clients: [{ tag: 1, uuid: uuidFor(4) }],
@@ -137,6 +160,13 @@ describe('the chain config', () => {
     it(`matches the golden for the ${role}`, () => {
       const got = `${JSON.stringify(renderChainConfig(input), null, 2)}\n`;
       const path = join(GOLDEN_DIR, `chain-${role}.json`);
+      // Retaking a golden is a deliberate act with a flag on it, never a test
+      // that quietly rewrites what it is checking: UPDATE_GOLDEN=1 writes the
+      // file, and the diff is then read by a human before it is committed.
+      if (process.env.UPDATE_GOLDEN) {
+        writeFileSync(path, got);
+        return;
+      }
       if (!existsSync(path)) {
         throw new Error(
           `no golden at ${path}. A golden is taken on the first green run, with the ` +
@@ -254,3 +284,5 @@ describe('the chain config', () => {
     expect(cfg.outbounds.map((o) => o.tag)).toEqual(['out-d0', 'out-d1', 'out-d2', 'direct']);
   });
 });
+
+

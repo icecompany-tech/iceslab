@@ -60,4 +60,15 @@ regexes = [
   # reference config is to copy a live one, and an allowed directory would
   # swallow that without a word.
   '''aGVsbG8td29ybGQtdGhpcy1pcy1hLWZha2Uta2V5MDA''',
+  # The chain goldens (chain-entry/transit/exit.json), same story one phase
+  # later: a socks password and an SS2022 key, both of which have to be
+  # credential-shaped to render a config the engine will accept, and both of
+  # which turned CI red from inside a golden that `paths` does not cover.
+  #
+  # Written to be recognised rather than allowed by directory: the socks one
+  # says what it is outright, the SS2022 one is base64 of
+  # "iceslab-chain-fixture-psk-000000" because the cipher takes exactly 32
+  # bytes. A real key pasted into the same file is still caught.
+  '''chain-socks-fixture-password-0000''',
+  '''aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA''',
 ]

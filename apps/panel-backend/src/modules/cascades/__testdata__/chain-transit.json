@@ -63,7 +63,7 @@
       "server": "se-2.example.com",
       "server_port": 24001,
       "method": "2022-blake3-aes-256-gcm",
-      "password": "1GPU7kQeM6IuQXEDMSlfBdFSrLP4nJFgIQO2TAuMrXk="
+      "password": "aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA="
     },
     {
       "type": "direct",

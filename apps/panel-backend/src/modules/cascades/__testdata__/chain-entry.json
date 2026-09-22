@@ -11,7 +11,7 @@
       "users": [
         {
           "username": "chain",
-          "password": "chain-secret-0123456789"
+          "password": "chain-socks-fixture-password-0000"
         }
       ]
     },
@@ -23,7 +23,7 @@
       "users": [
         {
           "username": "chain",
-          "password": "chain-secret-0123456789"
+          "password": "chain-socks-fixture-password-0000"
         }
       ]
     },
@@ -35,7 +35,7 @@
       "users": [
         {
           "username": "chain",
-          "password": "chain-secret-0123456789"
+          "password": "chain-socks-fixture-password-0000"
         }
       ]
     }
