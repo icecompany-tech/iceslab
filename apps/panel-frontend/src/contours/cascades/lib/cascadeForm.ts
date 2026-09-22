@@ -199,3 +199,53 @@ export function poolRowFacts(nodeId: string, nodes: { id: string }[]): PoolRowFa
   if (nodes.some((n) => n.id === nodeId)) return { state: 'known', nodeId };
   return { state: 'missing', nodeId, shortId: nodeId.slice(0, 8) };
 }
+
+/**
+ * Когда каскад в последний раз ПЫТАЛИСЬ разослать, и чем это кончилось.
+ *
+ * Карточка «последний пуш» показывала время сохранения каскада и слово «ещё не
+ * применено». По отдельности верно, вместе врёт: «36 дней назад, не
+ * применено» читается как «давно ничего не делали», тогда как сегодня пытались
+ * трижды и трижды получили отказ. Отвергнутый пуш не двигает
+ * `lastInboundSyncAt`, потому что тот штампуется только при успехе, и время
+ * попытки лежит в `lastInboundSyncError.at`.
+ *
+ * Попытка хопа это ПОЗДНЕЙШЕЕ из двух. Попытка каскада это позднейшая по
+ * хопам: цепь рассылается разом, и последняя из них и есть «когда пробовали».
+ *
+ * `null` означает «сказать нечего»: ни один хоп не отчитался ни успехом, ни
+ * отказом. Строки тогда нет вовсе, потому что пустое время хуже молчания.
+ */
+export interface LastAttemptFacts {
+  /** ISO позднейшей попытки по всем хопам. */
+  at: string;
+  /** Сколько хопов отвергли её последними. */
+  refused: number;
+  /** Сколько хопов вообще отчитались, то есть знаменатель для «2 из 4». */
+  answered: number;
+}
+
+export function lastAttemptFacts(
+  hops: { nodeId: string }[],
+  nodeById: Map<string, { lastInboundSyncAt?: string | null; lastInboundSyncError?: { at: string } | null }>,
+): LastAttemptFacts | null {
+  let at: string | null = null;
+  let refused = 0;
+  let answered = 0;
+
+  for (const hop of hops) {
+    const node = nodeById.get(hop.nodeId);
+    const ok = node?.lastInboundSyncAt ?? null;
+    const bad = node?.lastInboundSyncError?.at ?? null;
+    if (!ok && !bad) continue;
+    answered++;
+    // Сравнение строк ISO работает как сравнение моментов, пока обе в UTC с
+    // одинаковой точностью, а сервер отдаёт именно такие. Date здесь дал бы то
+    // же самое дороже.
+    const last = ok && bad ? (bad > ok ? bad : ok) : (bad ?? ok)!;
+    if (bad && (!ok || bad > ok)) refused++;
+    if (!at || last > at) at = last;
+  }
+
+  return at ? { at, refused, answered } : null;
+}

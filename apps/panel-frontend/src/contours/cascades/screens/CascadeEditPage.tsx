@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
@@ -72,6 +72,7 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   isKnownProtocol,
+  lastAttemptFacts,
   poolRoleAt,
   statusTone,
   toDirectionInputs,
@@ -124,6 +125,9 @@ export function CascadeEditPage() {
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  /** Слова сервера, которыми он отказался сохранить эту форму. Показываются у
+   *  строк, о которых он говорит, а не тостом. */
+  const [saveRefusal, setSaveRefusal] = useState<string | null>(null);
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
@@ -169,11 +173,19 @@ export function CascadeEditPage() {
       qc.invalidateQueries({ queryKey: ['cascades'] });
       // The form blocks both unstorable shapes, so a 400 means the API saw
       // something this page did not. Its sentence is the useful one.
+      //
+      // Оно остаётся НА ЭКРАНЕ, а не уезжает тостом: сервер называет место
+      // («direction "DE"»), и читать это надо рядом со строками направлений, а
+      // не вдогонку исчезающему уведомлению. Так же сделано с занятым портом.
       const shape = cascadeShapeError(err);
+      if (shape) {
+        setSaveRefusal(shape);
+        return;
+      }
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
-        message: shape ?? apiErrorMessage(err),
+        message: apiErrorMessage(err),
       });
     },
   });
@@ -201,8 +213,17 @@ export function CascadeEditPage() {
   }
 
   const { name, enabled, hideHops, autoProfile, pools, directions } = draft;
-  const patch = (p: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...p } : d));
+  const patch = (p: Partial<Draft>) => {
+    // Отказ был про прошлую форму: любая правка делает его неверным быстрее,
+    // чем человек успеет её сохранить.
+    setSaveRefusal(null);
+    setDraft((d) => (d ? { ...d, ...p } : d));
+  };
   const positionCount = pools.length + 1;
+
+  // Когда цепь в последний раз ПЫТАЛИСЬ разослать. Считается по тем же нодам,
+  // что уже загружены для селекторов, отдельного запроса это не стоит.
+  const attempt = lastAttemptFacts(statusQuery.data?.hops ?? [], nodeById);
 
   const allIds = [...pools.flatMap((p) => p.nodeIds), ...directions.flatMap((d) => d.nodeIds)].filter(
     Boolean,
@@ -618,6 +639,16 @@ export function CascadeEditPage() {
               <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
                 {t('cascadeCreate.directionsFoot')}
               </Text>
+
+              {/* Слова сервера там, где он их сказал: отказ по висячей ноде
+                  называет направление, и читать это надо рядом с ними. Текст
+                  показывается КАК ЕСТЬ, потому что место в нём и есть самое
+                  ценное, а пересказать его своими словами значит его потерять. */}
+              {saveRefusal && (
+                <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                  {saveRefusal}
+                </Note>
+              )}
             </Stack>
 
             <DashedAdd
@@ -806,10 +837,35 @@ export function CascadeEditPage() {
               <TickCircleIcon size={15} color={statusQuery.data?.done ? MOSS : AMBER} />
               <CardCaption>{t('cascadeEdit.pushTitle')}</CardCaption>
               <Box style={{ flex: 1, minWidth: 0 }} />
+              {/* Время подписано тем, что оно есть. Голое «36 дней назад» под
+                  заголовком про пуш читалось как время пуша, а это время
+                  СОХРАНЕНИЯ каскада, и пушей оно не касается вовсе. */}
               <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
-                {relativeTime(cascade.updatedAt, t)}
+                {t('cascadeEdit.savedAgo', { when: relativeTime(cascade.updatedAt, t) })}
               </Text>
             </Box>
+
+            {/* Когда пробовали на самом деле. Отдельной строкой, потому что
+                это другой факт: сохранение и рассылка расходятся во времени,
+                а при отказе расходятся навсегда. */}
+            {attempt && (
+              <Text
+                style={{
+                  fontFamily: DISPLAY,
+                  fontSize: 12,
+                  lineHeight: '16px',
+                  color: attempt.refused > 0 ? RED : MIST,
+                }}
+              >
+                {attempt.refused > 0
+                  ? t('cascadeEdit.attemptRefused', {
+                      when: relativeTime(attempt.at, t),
+                      refused: attempt.refused,
+                      total: attempt.answered,
+                    })
+                  : t('cascadeEdit.attemptApplied', { when: relativeTime(attempt.at, t) })}
+              </Text>
+            )}
 
             <Text
               style={{

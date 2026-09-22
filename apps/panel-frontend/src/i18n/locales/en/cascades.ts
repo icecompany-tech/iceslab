@@ -107,6 +107,11 @@ export const cascades = {
     // in its place read as "the operator did not choose one", which is a lie
     // about the cause.
     nodeGone: 'node deleted',
+    // The timestamp in the header is the SAVE time, and it has to say so: a
+    // bare "36 d ago" under a heading about pushes read as the push time.
+    savedAgo: 'saved {{when}}',
+    attemptApplied: 'Last attempt {{when}} · all took it',
+    attemptRefused: 'Last attempt {{when}} · {{refused}} of {{total}} refused',
     save: 'Save and push',
     saving: 'Saving...',
     unsaved: 'Unsaved changes',

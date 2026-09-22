@@ -128,6 +128,14 @@ export interface Node {
    * хранимое лишает оператора того самого куска, ради которого он смотрит.
    */
   lastInboundSyncError?: { at: string; message: string } | null;
+  /**
+   * Когда нода в последний раз ПРИНЯЛА конфиг. Ставится только при удачном
+   * пуше, поэтому рядом с `lastInboundSyncError.at` читается как пара: что
+   * позже, то и было последним.
+   *
+   * ⚠ Само по себе это не «когда пробовали»: отвергнутый пуш его не двигает.
+   */
+  lastInboundSyncAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
