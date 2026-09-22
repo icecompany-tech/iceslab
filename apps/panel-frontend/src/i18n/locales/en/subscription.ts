@@ -191,6 +191,19 @@ export const subscription = {
     body: 'Body',
     bodyHint:
       'A whole client config. The panel fills the slots of its type with servers; everything else stays as written.',
+    // Default: never deleted or renamed, but it can be restored.
+    restoreAction: 'Restore Default',
+    restoring: 'Restoring...',
+    restored: 'Default restored',
+    restoreFailed: 'The restore did not happen',
+    restoreTitle: 'Restore the built-in Default?',
+    restoreBody:
+      'The body is replaced with the built-in one. Your edits to it are gone, and there is nowhere to get them back from: the panel keeps no copy.',
+    defaultProtected: 'Default cannot be deleted: everyone without a template of their own runs on it.',
+    deleteTitle: 'Delete {{name}}?',
+    deleteBody:
+      'Delivery rules that named this template start serving the Default of their type. The template itself cannot be brought back.',
+    deleted: 'Template deleted',
     // The dry run: the template is built over three synthetic nodes and the
     // core says whether such a config would load at all.
     dryRun: 'Dry run',

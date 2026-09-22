@@ -11,9 +11,11 @@ import { PrimaryButton } from '@/ui/PrimaryButton';
 import {
   TEMPLATE_TYPES,
   createTemplate,
+  deleteTemplate,
   dryRunTemplate,
   isNotImplemented,
   listTemplates,
+  restoreDefaultTemplate,
   templateBodyLanguage,
   templateFormat,
   templateRefusal,
@@ -24,6 +26,7 @@ import {
 import {
   dryRunFacts,
   dryRunForBody,
+  templateActions,
   templateEditorFacts,
 } from '@/contours/subscription/lib/templateFacts';
 import { CodeArea } from '@/contours/subscription/components/CodeArea';
@@ -143,6 +146,76 @@ export function TemplateEditPage() {
     },
   });
 
+  const actions = templateActions({ isDefault: template?.isDefault ?? false });
+
+  const restore = useMutation({
+    mutationFn: () => restoreDefaultTemplate(id),
+    onSuccess: (fresh) => {
+      qc.invalidateQueries({ queryKey: ['subscription-templates'] });
+      // Перечитываем прямо в форму: иначе на экране осталось бы прежнее тело,
+      // и человек решил бы, что кнопка не сработала.
+      setBody(fresh.body);
+      setRun(null);
+      setRanForBody(null);
+      setErrorLine(null);
+      setRefusal(null);
+      notifications.show({ color: 'green', message: t('templates.restored') });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: isNotImplemented(err) ? 'yellow' : 'red',
+        title: t('templates.restoreFailed'),
+        message: isNotImplemented(err) ? t('templates.dryRunUnavailable') : apiErrorMessage(err),
+      }),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => deleteTemplate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscription-templates'] });
+      notifications.show({ color: 'green', message: t('templates.deleted') });
+      navigate('/subscription/templates');
+    },
+    onError: (err) => {
+      // Сервер защищает Default и сам: экран это ПЕРВАЯ стена, а не
+      // единственная, и его отказ показывается теми же словами.
+      const r = templateRefusal(err);
+      notifications.show({
+        color: 'red',
+        title: t('common.deleteError'),
+        message:
+          r?.code === 'TEMPLATE_DEFAULT_PROTECTED' ? t('templates.defaultProtected') : apiErrorMessage(err),
+      });
+    },
+  });
+
+  function confirmRestore() {
+    modals.openConfirmModal({
+      title: t('templates.restoreTitle'),
+      children: (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '19px', color: SNOW }}>
+          {t('templates.restoreBody')}
+        </Text>
+      ),
+      labels: { confirm: t('templates.restoreAction'), cancel: t('common.cancel') },
+      onConfirm: () => restore.mutate(),
+    });
+  }
+
+  function confirmDelete() {
+    modals.openConfirmModal({
+      title: t('templates.deleteTitle', { name }),
+      children: (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '19px', color: SNOW }}>
+          {t('templates.deleteBody')}
+        </Text>
+      ),
+      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => remove.mutate(),
+    });
+  }
+
   /**
    * Сохранение с оглядкой на прогон.
    *
@@ -203,6 +276,24 @@ export function TemplateEditPage() {
         {facts.blocker && (
           <Text style={{ fontFamily: DISPLAY, fontSize: 11, color: FAINT }}>
             {t(`templates.blocker.${facts.blocker}`)}
+          </Text>
+        )}
+        {/* Действия над готовым шаблоном. У Default кнопки удаления НЕТ, а не
+            выключенная: выключенная кнопка обещает, что когда-нибудь можно.
+            Вместо неё стоит строка с причиной. */}
+        {!isNew && actions.canRestore && (
+          <BarButton disabled={restore.isPending} onClick={confirmRestore}>
+            {restore.isPending ? t('templates.restoring') : t('templates.restoreAction')}
+          </BarButton>
+        )}
+        {!isNew && actions.canDelete && (
+          <BarButton disabled={remove.isPending} onClick={confirmDelete}>
+            {t('common.delete')}
+          </BarButton>
+        )}
+        {!isNew && actions.protectedReason === 'default' && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT, maxWidth: 260 }}>
+            {t('templates.defaultProtected')}
           </Text>
         )}
         <BarButton disabled={body.trim() === '' || dryRun.isPending} onClick={() => dryRun.mutate()}>
