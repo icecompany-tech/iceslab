@@ -203,6 +203,38 @@ export const traffic = {
     sourceUrl: 'from a URL · {{url}}',
     sourceUpload: 'uploaded · {{filename}}',
     invalidNoMessage: 'the core refused the file, with no explanation',
+    // Expanding a set: what sits on each node, by name.
+    showNodes: 'By node',
+    hideNodes: 'Collapse',
+    noVersion: 'never reported',
+    noNodes: 'No nodes: nothing to roll out to.',
+    applied: 'applied {{when}}',
+    rolloutUnknownLong:
+      'The server has not sent the rollout yet. This is not "nowhere": the panel simply does not know what sits on the nodes.',
+    state: {
+      same: 'same version',
+      behind: 'behind',
+      diverged: 'ahead, the file was placed by hand',
+      unknown: 'no data',
+    },
+    // Actions on a set.
+    refresh: 'Refresh',
+    refreshing: 'Refreshing...',
+    refreshFailed: 'The refresh did not happen',
+    upload: 'Upload a file',
+    uploadAction: 'Upload',
+    uploading: 'Uploading...',
+    uploaded: 'Set uploaded',
+    uploadFailed: 'The upload did not happen',
+    uploadName: 'Set name',
+    uploadKind: 'Kind',
+    uploadFile: 'File',
+    deleted: 'Set deleted',
+    deleteTitle: 'Delete {{name}}?',
+    deleteBody:
+      'The file leaves the nodes on the next push. Rules that referenced it fall back to the lists built into the core.',
+    inUse: 'These policies hold the set: {{policies}}. Detach it there and the delete goes through.',
+    inUseUnnamed: 'the server did not name them',
     soonTitle: 'Arrives with phase 9',
     soonBody:
       'A geo set is a list of domains or addresses that rules use to decide whether traffic goes direct, through the tunnel, or nowhere. The screen is here, the set store on the server is not, so an empty list is not because you created nothing.',
