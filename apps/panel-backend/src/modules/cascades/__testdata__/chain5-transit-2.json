@@ -1,0 +1,127 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "tuic",
+      "tag": "link-in",
+      "listen": "0.0.0.0",
+      "listen_port": 24001,
+      "users": [
+        {
+          "uuid": "00000000-0000-4000-8000-000000000002",
+          "password": "tuic-fixture-pass-not-a-secret"
+        }
+      ],
+      "congestion_control": "bbr",
+      "tls": {
+        "enabled": true,
+        "server_name": "link.iceslab.local",
+        "certificate": [
+          "-----BEGIN CERTIFICATE-----",
+          "MIIDODCCAiCgAwIBAgIQKDUpfzR9oI0uJDDco7y/EjANBgkqhkiG9w0BAQsFADAn",
+          "MSUwIwYDVQQDExxpY2VzbGFiLWZpeHR1cmUtbm90LWEtc2VjcmV0MCAXDTI2MDky",
+          "MjA2MjU1NloYDzIxMjYwOTIyMDcyNTU2WjAnMSUwIwYDVQQDExxpY2VzbGFiLWZp",
+          "eHR1cmUtbm90LWEtc2VjcmV0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC",
+          "AQEAqF0y7OrzYAWi+/PMOFAH7Q6i1HmqOpFvBhiKOClNTz1HuJHzODM9kPwTYftn",
+          "vL6vaWQUZcArYv+X0FLE8PHgytvp49zj6GHGtl6HuhT0UVwwhLWctt4NzCsnyZ7p",
+          "qGaDT16u5PLcXw+Ccwdm8U4mTgs2VJbEMn+hlvs67MaPa8tb/yy1G/HKre0jfOfs",
+          "LQx0NWRhHq1YaDEGZj0a/3zZPlBcpKKv2RDK+UhUEQTOmQq8p8gUwsqm76twm/pw",
+          "/ct2YJGrukvFHK6MltLcVkJjtM+m4Qwc1ltZmyVtD3UEFW4UsP5sICSNn4jjF4H0",
+          "Q2vAEr5XU3gf1iXFK7/xDdH/SQIDAQABo14wXDAOBgNVHQ8BAf8EBAMCBaAwEwYD",
+          "VR0lBAwwCgYIKwYBBQUHAwEwDAYDVR0TAQH/BAIwADAnBgNVHREEIDAeghxpY2Vz",
+          "bGFiLWZpeHR1cmUtbm90LWEtc2VjcmV0MA0GCSqGSIb3DQEBCwUAA4IBAQAtUEnL",
+          "KLPwN56HCmtS2XtLVj7qDj8XNb7yceIPhshzao5Q1z3SbQBaGqXiPTZdhstR43Bd",
+          "VDrtHfykYBUDgEHELKUrt1pkWC57PaOSEYvvvf3EiNgT8h69mnsalQcVeEksrRrs",
+          "oLFqNlBilChcH7LDUBCAcM3s+DMr4TMgwaRZ3rgb7Go9DvIHBWxhVzazusOW3v1x",
+          "kkPXb7muDHJT3rp7bVmWow8XlkU2WEEBY6EmKPgulf0Ow3VPKoy9BoQB8Knv0bd/",
+          "ReMex77N1xOCix6EjEh0i/D0sWUjVcGCUNS4uhMotnhxB9Xxf0WoodhkQOAi9aCY",
+          "OWoBwk2rg2090FnQ",
+          "-----END CERTIFICATE-----"
+        ],
+        "key": [
+          "-----BEGIN PRIVATE KEY-----",
+          "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCoXTLs6vNgBaL7",
+          "88w4UAftDqLUeao6kW8GGIo4KU1PPUe4kfM4Mz2Q/BNh+2e8vq9pZBRlwCti/5fQ",
+          "UsTw8eDK2+nj3OPoYca2Xoe6FPRRXDCEtZy23g3MKyfJnumoZoNPXq7k8txfD4Jz",
+          "B2bxTiZOCzZUlsQyf6GW+zrsxo9ry1v/LLUb8cqt7SN85+wtDHQ1ZGEerVhoMQZm",
+          "PRr/fNk+UFykoq/ZEMr5SFQRBM6ZCrynyBTCyqbvq3Cb+nD9y3Zgkau6S8UcroyW",
+          "0txWQmO0z6bhDBzWW1mbJW0PdQQVbhSw/mwgJI2fiOMXgfRDa8ASvldTeB/WJcUr",
+          "v/EN0f9JAgMBAAECggEAGR14AowE3JrSpouGeBMGL6hqhVAV4vE9ctcXzUtp9ytQ",
+          "xtlswwIvybA0sv3WCnuWfp35hfkt77Fpg9/I9ZlbW1+FSyKxE8H8Ksm8rPdBv95E",
+          "9ZMC6uuCeuWoJIUyXVbXeTBKXihVU8/kOYUN5+qsv6EgDGvGHjNYV0WoU1hGXkGk",
+          "aMhCS2KmJXYop09v96f+yc0yjm9pWVgXKEOh7fL1sXuT8ZimdJoNgfwZpwSxw/Kk",
+          "SEYlLxKLeOgVF7iMCOpSRAvDgcZtQw1T19jU4undBaWJjamkEzcoCbC9goTNu6oT",
+          "BFXX2UIVfubdnMjscY/zcktPX5oSJ9JNKM1dbCESdQKBgQDdc//VF63+mmT4kHJT",
+          "8JECTWQjIYd1BZOtK385oo65zIZVj4J8IdJf5UUJT0mGELB2fvKwX+IrIymnqN6Q",
+          "zHAu15K++7TZ/f5kJA/rb6hOWCJB7VMc72lKK+SUVJc8ue7qwRbPPp8QKlhjv3a1",
+          "/gy5UhdzNOYTluWC/DaGzoLz9QKBgQDCoQXlNEjjtnWNksba+aMZMZccBAXL5yFJ",
+          "ReBQ9xiXt8bp2RKOzACi5HgyBxG/ke68UAJz4EzH74d5T3Mo58+G6+6TrA7lDvKy",
+          "+vMoAKuDCO7oADBIhqW4w2NNUOCPmhYK0vdnlwflUxX/NlrUT2CBcl5025hOWzFH",
+          "29iRs/ydhQKBgDrd0/rEIadVSVPdqdZwU0umYOEJz6Umx1u3/UjH0mLHYEosLMZs",
+          "gyykmFZiMiwmEZJeKosB4fAPl8oOlKMvBP8epM6JwEhWQSJDh8vQ0Y+J1AlsWbSO",
+          "W5Gw20Emv1EQJ9dVXofWoJe+eeKCCb9U+fLlRICGZkZ8zSOlgaUSDjNlAoGBAJfA",
+          "a1NSF/8Mtc2EAu6btFKhetvKOybH+QkjpYobj55EGaEdsr2KTHi1wQ3ouyruQwGr",
+          "NK5a1iMSHUQ18WmUjRf6/1M+1YI9zHhG+K5ZD2Gk5noYI415Bt/v4I5ZIC53ivY3",
+          "ldW8SdjBlqYeIGXn2iw0G3fr/G4j5mHMBaldd/rtAoGAA9laE5YB6FGp6yOfLxlt",
+          "YDswAc7c93L+vPlp3X2EV3kd0e7giCt+8vg+5wYF0xMV4GsY9S7rykxE/BM/1TqW",
+          "iraDf96ftVEGwoC07PNE136eb7og4gJBXA1JWcsfZiIFxRkg/oTcLebbkak1ZK1H",
+          "9iEUJesQNn+Hqdopb796G/o=",
+          "-----END PRIVATE KEY-----"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "out-d1",
+      "server": "exit.example.com",
+      "server_port": 24002,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA="
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "ads.example"
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "gosuslugi.ru"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      }
+    ]
+  }
+}

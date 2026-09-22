@@ -1,0 +1,58 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "link-in",
+      "listen": "0.0.0.0",
+      "listen_port": 24002,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA="
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "ads.example"
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "gosuslugi.ru"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      }
+    ]
+  }
+}

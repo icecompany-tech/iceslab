@@ -81,4 +81,20 @@ regexes = [
   # two lines of allowlist, and neither value ever guarded anything.
   '''chain-secret-0123456789''',
   '''1GPU7kQeM6IuQXEDMSlfBdFSrLP4nJFgIQO2TAuMrXk''',
+  # The fixture TLS pair the phase-5 chain goldens carry, allowed by the first
+  # line of its own key body.
+  #
+  # A QUIC leg cannot be configured without a certificate, so a golden of one
+  # contains a private key by construction: not an accident to be cleaned up,
+  # the thing under test. It is minted once, it guards nothing, and it says so
+  # in its own subject: `CN=iceslab-fixture-not-a-secret`. Regenerating it means
+  # retaking the goldens and changing the line below, which is the intended
+  # amount of friction.
+  #
+  # By VALUE and not by directory, for the reason at the top of this file: a
+  # golden is exactly where somebody will one day paste a real key, because the
+  # easiest way to capture a reference config is to copy a live one, and an
+  # allowed directory would swallow that without a word. A test in
+  # chain.legs.test.ts keeps these bytes from appearing outside __testdata__.
+  '''MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ''',
 ]
