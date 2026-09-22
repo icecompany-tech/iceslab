@@ -1,4 +1,4 @@
-import type { NodeCores, Transport } from '@iceslab/shared';
+import type { ChainStatus, NodeCores, Transport } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { LINK_PORT_BASE } from '../cascades/cascade.config.js';
 
@@ -110,7 +110,7 @@ export async function portClaimsOnNode(
       select: { port: true, cascade: { select: { name: true } } },
     }),
     legacyHopLinkPorts(nodeId, wanted),
-    prisma.node.findUnique({ where: { id: nodeId }, select: { cores: true } }),
+    prisma.node.findUnique({ where: { id: nodeId }, select: { cores: true, chainStatus: true } }),
   ]);
 
   const owners: PortOwner[] = bindings.map((b) => ({
@@ -138,16 +138,24 @@ export async function portClaimsOnNode(
   // reported, or reported through an agent older than the field, holds ports
   // nothing here can see.
   const inventory = (node?.cores as NodeCores | null) ?? null;
-  for (const core of inventory?.cores ?? []) {
-    for (const rp of core.reservedPorts ?? []) {
-      if (!wanted.includes(rp.port)) continue;
-      owners.push({
-        kind: 'core-service',
-        ownerKey: rp.owner,
-        port: rp.port,
-        transport: rp.transport,
-      });
-    }
+  const chain = (node?.chainStatus as ChainStatus | null) ?? null;
+  // ONE set out of two lists. The chain process is not a core and reports its
+  // loopback socks ports in its own block, which is what keeps the answer from
+  // saying "xray holds 26000" about a port the chain holds. Here that
+  // distinction has already done its work: what a caller needs is who holds the
+  // port, and the owner KEY says that, whichever list it arrived in.
+  const reserved = [
+    ...(inventory?.cores ?? []).flatMap((c) => c.reservedPorts ?? []),
+    ...(chain?.reservedPorts ?? []),
+  ];
+  for (const rp of reserved) {
+    if (!wanted.includes(rp.port)) continue;
+    owners.push({
+      kind: 'core-service',
+      ownerKey: rp.owner,
+      port: rp.port,
+      transport: rp.transport,
+    });
   }
 
   return { owners, certainty: certaintyOf(inventory) };
@@ -165,6 +173,11 @@ export async function portClaimsOnNode(
  * Without that distinction a node running only mieru or naive could never be
  * answered about with certainty, which is a permanent "we do not know" about a
  * machine that is in fact fully known.
+ *
+ * The CHAIN needs no seat in this judgement, and that is a property of its
+ * shape rather than an omission: it either runs socks listeners or does not
+ * exist, so the presence of its block IS the answer and its list can never be
+ * the empty-or-silent pair the cores have to be read through.
  */
 function certaintyOf(inventory: NodeCores | null): PortCertainty {
   if (!inventory || inventory.cores.length === 0) return 'partial';

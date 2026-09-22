@@ -354,34 +354,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// a protocol.
 	var chainStatus *dto.ChainStatusDto
 	if s.cfg.Chain != nil {
+		// Its ports come with it, inside its own block. They were briefly
+		// appended to a core's list, which read as "xray holds 26000" about a
+		// port the chain holds, and made the answer depend on which cores the
+		// node happens to run.
 		chainStatus = s.cfg.Chain.Status()
-		// The loopback ports it holds ride along with the core that runs the
-		// same engine, because that is where the panel already looks for
-		// reserved ports. Appended to what the core reports rather than
-		// replacing it: both are real sockets on this machine.
-		if held := s.cfg.Chain.ReservedPorts(); len(held) > 0 {
-			// The core running the same engine if there is one, otherwise the
-			// first core that speaks about ports at all. A node whose users are
-			// served by xray alone still runs a sing-box chain, and its
-			// loopback ports are just as taken.
-			target := -1
-			for i := range cores {
-				if cores[i].ReservedPorts == nil {
-					continue
-				}
-				if cores[i].Engine == chain.Engine {
-					target = i
-					break
-				}
-				if target < 0 {
-					target = i
-				}
-			}
-			if target >= 0 {
-				merged := append(*cores[target].ReservedPorts, held...)
-				cores[target].ReservedPorts = &merged
-			}
-		}
 	}
 
 	status := "ok"

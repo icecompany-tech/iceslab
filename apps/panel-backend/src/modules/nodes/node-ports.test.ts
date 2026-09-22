@@ -171,6 +171,46 @@ describe('the port check', () => {
     expect((await check(nodeId, 443)).certainty).toBe('partial');
   });
 
+  it('reads the chain process ports as readily as a core service one', async () => {
+    // The chain is not a core: it reports its loopback socks ports in its OWN
+    // block, because putting them in a core's list said "xray holds 26000"
+    // about a port the chain holds and made the answer depend on what else the
+    // node runs. To this question the difference does not matter, and that is
+    // the point: the owner KEY names the holder, whichever list it came in.
+    const nodeId = await makeNode();
+    await reportCores(nodeId, [
+      { name: 'xray', engine: 'xray', reservedPorts: [{ owner: 'xray-api', port: 8081, transport: 'tcp' }] },
+    ]);
+    await prisma.node.update({
+      where: { id: nodeId },
+      data: {
+        chainStatus: {
+          running: true,
+          version: '1.13.14',
+          reservedPorts: [
+            { owner: 'chain-socks', port: 26000, transport: 'tcp' },
+            { owner: 'chain-socks', port: 26001, transport: 'tcp' },
+          ],
+        } as never,
+      },
+    });
+
+    const answer = await check(nodeId, 26001);
+    expect(answer.ok).toBe(false);
+    expect(answer.conflicts).toEqual([
+      { kind: 'core-service', ownerKey: 'chain-socks', port: 26001, transport: 'tcp' },
+    ]);
+    // Certainty is untouched by the chain, and that is a property of its shape:
+    // a chain either runs socks listeners or does not exist, so it can never be
+    // the silent-or-empty pair the cores have to be read through.
+    expect(answer.certainty).toBe('full');
+    // The core's own port still answers too, so the union did not replace one
+    // list with the other.
+    expect((await check(nodeId, 8081)).conflicts).toEqual([
+      { kind: 'core-service', ownerKey: 'xray-api', port: 8081, transport: 'tcp' },
+    ]);
+  });
+
   it('names a core service by KEY, with no profile name to look for', async () => {
     const nodeId = await makeNode();
     await reportCores(nodeId, [

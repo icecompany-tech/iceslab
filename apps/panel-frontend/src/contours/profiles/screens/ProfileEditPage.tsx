@@ -14,6 +14,7 @@ import {
 } from '@/lib/domain/profiles';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
+import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
 /**
  * Create / edit a profile as a page. A profile is a protocol template with a
@@ -25,13 +26,6 @@ import { usePageMeta } from '@/lib/ui/usePageMeta';
  * protocol option and the recipe registry, and forking it would give two
  * editors to keep in sync.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

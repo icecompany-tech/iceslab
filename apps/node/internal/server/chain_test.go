@@ -213,19 +213,54 @@ func TestHealthReportsTheChainAndTheLoopbackPortsItHolds(t *testing.T) {
 		t.Fatalf("a node whose chain is down is %q, want degraded", out.Status)
 	}
 
-	// The loopback ports ride along with a core's reserved ports, which is
-	// where the panel already looks, and they keep the core's own entries.
+	// The loopback ports come inside the chain's own block.
+	got := map[int]string{}
+	for _, p := range out.Chain.ReservedPorts {
+		got[p.Port] = p.Owner
+		if p.Transport != "tcp" {
+			t.Fatalf("socks port %d is reported as %q, want tcp", p.Port, p.Transport)
+		}
+	}
+	if got[26000] != chain.PortOwner || got[26001] != chain.PortOwner {
+		t.Fatalf("the chain's loopback ports are not in its block: %+v", out.Chain.ReservedPorts)
+	}
+
+	// ⚠ And NOT in a core's list. They were there for one afternoon, which said
+	// "xray holds 26000" about a port the chain holds and made the answer
+	// depend on which cores the node runs. Asserted on the core's own entries:
+	// the xray-api socket must survive and nothing else may appear beside it.
 	if len(out.Cores) != 1 || out.Cores[0].ReservedPorts == nil {
 		t.Fatalf("no reserved ports on the core: %+v", out.Cores)
 	}
-	byOwner := map[string]int{}
 	for _, p := range *out.Cores[0].ReservedPorts {
-		byOwner[p.Owner] = p.Port
+		if p.Owner == chain.PortOwner {
+			t.Fatalf("a chain port is reported as the core's: %+v", p)
+		}
 	}
-	if byOwner["xray-api"] != 10085 {
-		t.Fatalf("the core's own reserved port was lost: %+v", byOwner)
+	if len(*out.Cores[0].ReservedPorts) != 1 || (*out.Cores[0].ReservedPorts)[0].Port != 10085 {
+		t.Fatalf("the core's own reserved ports changed: %+v", *out.Cores[0].ReservedPorts)
 	}
-	if byOwner[chain.PortOwner] == 0 {
-		t.Fatalf("the chain's loopback ports are not reported: %+v", byOwner)
+}
+
+func TestChainPortsAreNotInTheCoresRawJson(t *testing.T) {
+	// The same rule read off the WIRE rather than the decoded struct, because
+	// the mistake this guards was a placement mistake and a decoder hides
+	// placement: it would fill the same field whichever list the entry came in.
+	xray := &cascadeCore{
+		fakeCore: fakeCore{name: "vless", engine: "xray", running: true},
+		reserved: []dto.ReservedPortDto{{Owner: "xray-api", Port: 10085}},
+	}
+	s, _ := serverWithChain(t, nil, xray)
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: chainBlock()})
+	rec := httptest.NewRecorder()
+	s.handleHealth(rec, httptest.NewRequest("GET", "/healthz", nil))
+
+	body := rec.Body.String()
+	coresPart := body[strings.Index(body, `"cores"`):strings.Index(body, `"chain"`)]
+	if strings.Contains(coresPart, chain.PortOwner) {
+		t.Fatalf("chain-socks appears inside cores:\n%s", coresPart)
+	}
+	if !strings.Contains(body[strings.Index(body, `"chain"`):], chain.PortOwner) {
+		t.Fatalf("chain-socks does not appear inside the chain block:\n%s", body)
 	}
 }

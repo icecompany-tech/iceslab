@@ -143,6 +143,9 @@ func (m *Manager) Status() *dto.ChainStatusDto {
 	st := dto.ChainStatusDto{
 		Running: m.proc != nil && m.proc.Running(),
 		Version: m.version,
+		// The ports ride inside the chain's own block: they are the chain's,
+		// and saying so in a core's list was a lie about the owner.
+		ReservedPorts: m.reservedPortsLocked(),
 	}
 	if !st.Running {
 		st.Error = m.lastErr
@@ -164,6 +167,12 @@ func (m *Manager) Status() *dto.ChainStatusDto {
 func (m *Manager) ReservedPorts() []dto.ReservedPortDto {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.reservedPortsLocked()
+}
+
+// reservedPortsLocked is the body of the above, for callers that already hold
+// the lock. Status needs it and taking the mutex twice would deadlock.
+func (m *Manager) reservedPortsLocked() []dto.ReservedPortDto {
 	held := make([]dto.ReservedPortDto, 0, len(m.socks))
 	for _, s := range m.socks {
 		if s.Port <= 0 {

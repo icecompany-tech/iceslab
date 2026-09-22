@@ -50,18 +50,7 @@ import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { profilePairLabel } from '@/lib/domain/engines';
 import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
-const PURPLE = '#C78BFA';
-const PINK = '#F5A3B8';
-const CYAN2 = '#67E8F9';
+import { AMBER, CARD, CYAN, CYAN_HI, HAIRLINE, MIST, MOSS, PINK, PURPLE, SNOW, VIOLET } from '@/contours/profiles/lib/colors';
 
 const PROTOCOL_ACCENT: Record<string, string> = {
   hysteria: CYAN,
@@ -69,7 +58,7 @@ const PROTOCOL_ACCENT: Record<string, string> = {
   amneziawg: MOSS,
   naive: AMBER,
   shadowsocks: PINK,
-  mtproto: CYAN2,
+  mtproto: CYAN_HI,
   mieru: PURPLE,
 };
 

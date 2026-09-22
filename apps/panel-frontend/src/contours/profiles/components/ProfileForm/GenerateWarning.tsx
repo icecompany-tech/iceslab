@@ -1,10 +1,8 @@
 import { Box, Text } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import type { GenerateImpact } from '@/contours/profiles/lib/generateImpact';
+import { AMBER, MIST, SNOW } from '@/contours/profiles/lib/colors';
 
-const AMBER = '#F5B14C';
-const MIST = '#7A8BA3';
-const SNOW = '#C8D4E3';
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 

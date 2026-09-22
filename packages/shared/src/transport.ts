@@ -950,6 +950,23 @@ export interface ChainStatus {
    * a refused config, a failed start. Absent while it runs.
    */
   error?: string;
+  /**
+   * The loopback socks ports the chain holds, one per way out, under the owner
+   * key `chain-socks`.
+   *
+   * HERE and not folded into some core's `reservedPorts`, which is where they
+   * briefly were. That said "xray holds 26000" about a port the chain holds,
+   * and picking which core to attach them to made the answer depend on what
+   * else the node happens to run. The panel reads this list and the cores' ones
+   * as one set; the owner key is what names the holder, not the field it
+   * arrived in.
+   *
+   * Never empty and never absent while `chain` is present: a chain either
+   * carries socks listeners or does not exist. So unlike `CoreStatus.
+   * reservedPorts`, this needs no third state, and the presence of the `chain`
+   * block is itself the "it answered".
+   */
+  reservedPorts: ReservedPort[];
 }
 
 export interface HealthcheckResponse {

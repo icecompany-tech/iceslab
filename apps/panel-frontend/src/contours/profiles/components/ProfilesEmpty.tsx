@@ -1,12 +1,7 @@
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
+import { CARD, CYAN, EDGE, HAIRLINE, MIST, SNOW } from '@/contours/profiles/lib/colors';
 
-const CARD = '#0F1A28';
-const HAIRLINE = '#1C2A3D';
-const BORDER_INPUT = '#2C3A4E';
-const CYAN = '#7DD3FC';
-const MIST = '#7A8BA3';
-const SNOW = '#C8D4E3';
 const DISPLAY =
   "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
@@ -88,7 +83,7 @@ export function ProfilesEmpty({
             height: 34,
             paddingInline: 15,
             borderRadius: 8,
-            border: `1px solid ${BORDER_INPUT}`,
+            border: `1px solid ${EDGE}`,
           }}
         >
           <Text style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, color: MIST }}>

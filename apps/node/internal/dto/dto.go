@@ -457,6 +457,19 @@ type ChainStatusDto struct {
 	// Why it is not running, in the engine's own words: a refused config, a
 	// failed start. Empty while it runs.
 	Error string `json:"error,omitempty"`
+	// The loopback socks ports the chain holds, one per way out, owner
+	// "chain-socks".
+	//
+	// HERE rather than folded into a core's ReservedPorts, which is where they
+	// briefly were: that said "xray holds 26000" about a port the chain holds,
+	// and choosing which core to attach them to made the answer depend on what
+	// else the node runs. The panel reads both lists as one set, and the owner
+	// key names the holder.
+	//
+	// No omitempty and no pointer: while there is a chain there are listeners,
+	// so this needs none of the three-state machinery CoreStatus.ReservedPorts
+	// carries. The presence of the chain block is the "it answered".
+	ReservedPorts []ReservedPortDto `json:"reservedPorts"`
 }
 
 type HealthcheckResponse struct {
