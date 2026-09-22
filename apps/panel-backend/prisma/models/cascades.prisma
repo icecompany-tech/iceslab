@@ -135,6 +135,27 @@ model CascadeDirection {
   // empty or its nodes carry no country, which is legitimate in v4: a direction
   // can exist with its tag frozen while it has no live node.
   countryCode String?  @map("country_code") @db.Char(2)
+  // Phase 5: the LAST leg of the path, the one that reaches this direction.
+  //
+  // A CELL (vless / shadowsocks / hy2 / tuic), never a protocol name: see
+  // LINK_CELLS in shared and the migration that made this column one
+  // dictionary. NULL means "whatever cell the entry uses", which is what every
+  // direction did before this field existed, so an old row needs no backfill.
+  linkProtocol String? @map("link_protocol")
+  // What the operator chose about that leg beyond the cell. Today that is the
+  // congestion controller of a tuic leg and nothing else: every secret is
+  // minted by the panel and lives in the credential, not here.
+  //
+  // jsonb rather than a column per knob, because the knobs differ per cell and
+  // a column would be NULL for three cells out of four.
+  linkParams Json? @map("link_params")
+  // The port the RECEIVING side of that leg listens on, LINK_PORT_BASE + the
+  // last step's number.
+  //
+  // ⚠ WRITTEN BY THE SERVER, never read from a request. It is derived from the
+  // shape of the cascade, so a client that could set it could point a leg at a
+  // port the node uses for something else. NULL until the cascade is saved.
+  linkPort Int? @map("link_port")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   cascade Cascade                @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
