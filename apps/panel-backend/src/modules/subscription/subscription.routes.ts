@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ROUTING_PRESET_IDS, type RoutingPresetId } from '@iceslab/shared';
+import { FORMAT_NAMES, ROUTING_PRESET_IDS, type RoutingPresetId } from '@iceslab/shared';
 import * as service from './subscription.service.js';
 import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
@@ -30,10 +30,10 @@ const TokenParamSchema = z.object({
   token: z.string().min(8).max(128),
 });
 
-const FormatEnum = z.enum([
-  'plain', 'json', 'clash', 'singbox', 'wgconf', 'amneziavpn', 'xrayjson', 'xrayjson-array',
-  'xkeen', 'outline', 'surge', 'quantumultx', 'loon',
-]);
+// From the shared list, not a copy of it. The copy in hosts.schemas.ts drifted
+// by two names in one direction and one in the other, and the visible symptom
+// was a 400 on saving a host with a format this route serves happily.
+const FormatEnum = z.enum(FORMAT_NAMES);
 type Format = z.infer<typeof FormatEnum>;
 
 const QuerySchema = z.object({
@@ -369,6 +369,21 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     },
   }, async (request, reply) => {
     const params = TokenParamSchema.parse(request.params);
+    // A format nobody serves is answered by NAME. `QuerySchema.parse` throws a
+    // Zod error that the handler turns into a bare 400, so a client asking for
+    // a format this build does not have got "Bad Request" and no way to tell a
+    // typo from a version that is too old. The reader here is usually a client
+    // app's config, not a person, but the person debugging it is who needs the
+    // sentence.
+    const raw = (request.query ?? {}) as { format?: unknown };
+    if (typeof raw.format === 'string' && !isFormat(raw.format)) {
+      return reply.code(400).send({
+        error: 'UNKNOWN_FORMAT',
+        message:
+          `unknown subscription format ${JSON.stringify(raw.format)}. This build serves: ` +
+          `${FORMAT_NAMES.join(', ')}`,
+      });
+    }
     const query = QuerySchema.parse(request.query);
     const userAgent = typeof request.headers['user-agent'] === 'string'
       ? request.headers['user-agent']
@@ -534,6 +549,30 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               vpnKey: vpn || undefined,
             };
           });
+        /**
+         * One row per MTProto node, with the link already built.
+         *
+         * The page showed a Telegram card with instructions and NO proxy link,
+         * so the only way to actually use an MTProto node was to read the raw
+         * subscription and find the `tg://` line by hand (issue #41). Both
+         * forms exist on the endpoint already: `tg://` opens the app directly,
+         * `https://t.me/proxy?...` works as a clickable link anywhere, which is
+         * the one to hand somebody.
+         *
+         * Deduped by node, like the AmneziaWG files: mtg is single-secret per
+         * inbound, so every user on that squad gets the same link, and a node
+         * appearing twice would be the same link twice.
+         */
+        const mtSeen = new Set<string>();
+        const mtprotoNodes = filtered
+          .filter((e) => e.protocol === 'mtproto')
+          .filter((e) => !mtSeen.has(e.nodeName) && !!mtSeen.add(e.nodeName))
+          .map((e) => ({
+            nodeName: e.nodeName,
+            uri: (e as { uri?: string }).uri ?? '',
+            tmeUri: (e as { tmeUri?: string }).tmeUri ?? '',
+          }))
+          .filter((n) => n.uri !== '');
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
@@ -549,6 +588,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             user: result.json.user,
             protocols,
             awgNodes,
+            mtprotoNodes,
             deadTexts: settings.deadTexts,
           }),
         );

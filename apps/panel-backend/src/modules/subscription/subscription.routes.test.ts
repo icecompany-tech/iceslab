@@ -204,6 +204,27 @@ describe('GET /sub/:token (JSON format)', () => {
     expect(body.endpoints[0].uri).toMatch(/^hysteria2:\/\//);
   });
 
+  it('refuses a format it does not serve, by name', async () => {
+    // A client asking for something this build has no builder for used to get
+    // a bare 400 from the schema: no way to tell a typo from a panel older
+    // than the client. The reader is usually a config file, but the person
+    // debugging it needs the sentence.
+    const user = await createUser('alice');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/sub/${user.subscriptionToken}?format=mieru-json`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('UNKNOWN_FORMAT');
+    expect(body.message).toContain('mieru-json');
+    // And it lists what IS served, so the answer is actionable on its own.
+    expect(body.message).toContain('clash');
+    expect(body.message).toContain('xrayjson-array');
+  });
+
   it('returns JSON when Accept: application/json', async () => {
     const user = await createUser('alice');
 

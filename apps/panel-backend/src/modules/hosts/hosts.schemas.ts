@@ -1,20 +1,15 @@
 import { z } from 'zod';
+import { FORMAT_NAMES } from '@iceslab/shared';
 
-// Format names accepted in `disableForFormats[]`. Mirrors the union in
-// subscription.routes.ts (?format=...). Keep in sync.
-const FormatEnum = z.enum([
-  'plain',
-  'clash',
-  'singbox',
-  'xrayjson',
-  'xkeen',
-  'wgconf',
-  'mieru-json',
-  'outline',
-  'surge',
-  'quantumultx',
-  'loon',
-]);
+// Format names accepted in `disableForFormats[]`.
+//
+// ⚠ The SHARED list, not a mirror of it. "Keep in sync" is what this comment
+// used to say, and it had not been true for months: this copy was missing
+// `xrayjson-array` and `amneziavpn` and carried `mieru-json`, which the
+// subscription has never served. So a host disabled for a format the operator
+// could see on the page was refused with a 400 here, and a host disabled for
+// `mieru-json` disabled nothing at all.
+const FormatEnum = z.enum(FORMAT_NAMES);
 
 const SecurityLayerEnum = z.enum(['default', 'tls', 'none']);
 

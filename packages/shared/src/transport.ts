@@ -54,6 +54,86 @@ export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
  */
 export const CHAIN_ENTRY_PROTOCOLS = ['xray'] as const;
 
+/**
+ * The formats a subscription can be served in.
+ *
+ * ⚠ ONE LIST, and it earns that the way PROTOCOL_TRANSPORT did. There were
+ * THREE: the subscription route accepted thirteen names, the host schema
+ * eleven (missing `xrayjson-array` and `amneziavpn`, carrying `mieru-json`
+ * which the subscription has never served), and the frontend's host editor
+ * offered five of its own. An operator picking a format the editor showed got a
+ * 400 from a schema that had never heard of it, and the panel looked broken for
+ * a reason no screen could explain (issue #41, reported 2026-08-17).
+ *
+ * A name here is what `?format=` takes and what a host's `disableForFormats`
+ * may name. It is not one-to-one with the builders in
+ * `subscription/formats/`: `plain` and `json` are rendered inline, `xkeen` and
+ * `xrayjson-array` are shapes of the xray builder. What the composition test
+ * holds is the other direction: every builder is reachable by a name in this
+ * list, and every name in this list is handled by the route.
+ */
+export const FORMAT_NAMES = [
+  'plain',
+  'json',
+  'clash',
+  'singbox',
+  'wgconf',
+  'amneziavpn',
+  'xrayjson',
+  'xrayjson-array',
+  'xkeen',
+  'outline',
+  'surge',
+  'quantumultx',
+  'loon',
+] as const;
+
+export type SubscriptionFormat = (typeof FORMAT_NAMES)[number];
+
+/**
+ * Which protocols each format actually carries.
+ *
+ * ⚠ Read off the BUILDERS, one branch at a time, not off what a client's
+ * documentation claims to support. The page used to decide this with
+ * `protocols.some(p => p !== 'amneziawg')`, which reads as "anything that is
+ * not a tunnel is a proxy, so every proxy format applies". MTProto is not
+ * amneziawg and appears in NO builder: `surge.ts` skips it, and so do clash,
+ * sing-box, xray-json, Quantumult X and Loon. A subscription with an MTProto
+ * node was therefore offered five files, every one of which came back without
+ * its only server (issue #41).
+ *
+ * `plain` and `json` carry everything by construction: one is the raw URI list
+ * the clients subscribe to, the other is this panel's own dump.
+ *
+ * When a builder learns a protocol, the entry here moves with it. The test
+ * beside the builders is what keeps the two together.
+ */
+export const FORMAT_PROTOCOLS: Record<SubscriptionFormat, readonly ProtocolName[]> = {
+  plain: PROTOCOL_NAMES,
+  json: PROTOCOL_NAMES,
+  clash: ['hysteria', 'xray', 'shadowsocks', 'tuic', 'anytls', 'shadowtls', 'mieru'],
+  singbox: ['hysteria', 'xray', 'shadowsocks', 'tuic', 'anytls', 'shadowtls'],
+  wgconf: ['amneziawg'],
+  amneziavpn: ['amneziawg'],
+  xrayjson: ['xray', 'hysteria'],
+  'xrayjson-array': ['xray', 'hysteria'],
+  xkeen: ['xray', 'hysteria'],
+  outline: ['shadowsocks'],
+  surge: ['shadowsocks', 'hysteria', 'xray'],
+  quantumultx: ['shadowsocks', 'xray'],
+  loon: ['shadowsocks', 'hysteria', 'xray'],
+};
+
+/** Does this format carry anything a subscription with these protocols has?
+ *  The question the page asks before offering a file. */
+export function formatCarriesAny(
+  format: SubscriptionFormat,
+  protocols: readonly ProtocolName[],
+): boolean {
+  const carried = FORMAT_PROTOCOLS[format];
+  return protocols.some((p) => carried.includes(p));
+}
+
 export type ChainEntryProtocol = (typeof CHAIN_ENTRY_PROTOCOLS)[number];
 
 /** What a listener occupies on the wire. A port is only taken for one of these. */
