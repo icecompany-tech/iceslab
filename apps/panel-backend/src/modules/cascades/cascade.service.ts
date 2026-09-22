@@ -982,6 +982,35 @@ async function directionsForSave(
 }
 
 /**
+ * The positions this save will write, with the knobs it did not mention.
+ *
+ * The same rule as the directions and for the same reason, one step simpler:
+ * a position has no id and no pool matching, it IS its index. What it does NOT
+ * do is carry the pool or the cell forward, and that is deliberate: those two
+ * are what every screen sends on every save (a position with no nodes is
+ * refused, a position with no cell is refused), so an absent one is a malformed
+ * payload rather than "leave it alone". The knob is the only field a client can
+ * legitimately stay silent about.
+ */
+async function positionsForSave(
+  cascadeId: string | null,
+  incoming: CascadePositionInput[] | undefined,
+): Promise<CascadePositionInput[] | undefined> {
+  if (!incoming) return undefined;
+  if (!cascadeId) return incoming;
+  const stored = await prisma.cascadePosition.findMany({
+    where: { cascadeId },
+    select: { position: true, linkParams: true },
+  });
+  const byIndex = new Map(stored.map((p) => [p.position, p]));
+  return incoming.map((p) =>
+    'linkParams' in p
+      ? p
+      : { ...p, linkParams: storedLinkParams(byIndex.get(p.position)?.linkParams) },
+  );
+}
+
+/**
  * Fold a v4 payload into hops, or return null when the shape cannot be held by
  * the old model (a pool, or transits with several directions).
  *
@@ -1022,7 +1051,13 @@ function tryFoldPositions(
 async function writeTopologyV4(
   tx: Prisma.TransactionClient,
   cascadeId: string,
-  positions: { nodeIds: string[]; position: number; entryProtocol?: string; linkProtocol?: string }[],
+  positions: {
+    nodeIds: string[];
+    position: number;
+    entryProtocol?: string;
+    linkProtocol?: string;
+    linkParams?: { congestion?: LinkCongestion } | null;
+  }[],
   directions: {
     id?: string;
     nodeIds: string[];
@@ -1113,6 +1148,10 @@ async function writeTopologyV4(
         position: p.position,
         entryProtocol: p.entryProtocol ?? null,
         linkProtocol: p.linkProtocol ?? null,
+        // Absence never reaches here: positionsForSave already carried the
+        // stored knob forward, so `?? DbNull` writes a choice rather than
+        // reading a silence as one. Same shape as the direction below.
+        linkParams: p.linkParams ? (p.linkParams as Prisma.InputJsonValue) : Prisma.DbNull,
         nodes: { create: p.nodeIds.map((nodeId) => ({ nodeId })) },
       },
     });
@@ -1209,8 +1248,8 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // pool a payload left out. Run through the same function as the edit so the
   // two paths cannot grow apart: every rule about absent keys is in one place.
   const directions = await directionsForSave(null, input.directions);
-  const folded =
-    input.positions && directions ? tryFoldPositions(input.positions, directions) : null;
+  const positions = await positionsForSave(null, input.positions);
+  const folded = positions && directions ? tryFoldPositions(positions, directions) : null;
   const mode = folded ? folded.mode : (input.mode ?? 'chain');
   const isBalancer = mode === 'balancer';
   // Validate the topology in the effective mode (balancer exits carry no
@@ -1224,7 +1263,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
     ? hops.map((h) => h.nodeId)
     : [
         ...new Set([
-          ...(input.positions ?? []).flatMap((p) => p.nodeIds),
+          ...(positions ?? []).flatMap((p) => p.nodeIds),
           ...(directions ?? []).flatMap((d) => d.nodeIds),
         ]),
       ];
@@ -1232,12 +1271,12 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // into hops as well, so checking the folded list first would answer with a
   // bare uuid about a screen full of named directions. The hop check stays for
   // a payload that carries hops and nothing else.
-  await assertNodesExistNamed(nodeRefsOfTopology(input.positions, directions));
+  await assertNodesExistNamed(nodeRefsOfTopology(positions, directions));
   await assertNodesExist(allNodeIds);
   // T7: an enabled balancer entry serves vlessRoute-tagged exit configs; gate
   // it on the entry's xray version. Disabled cascades don't expand in subs.
   // A v4-only shape gates on its entry position instead.
-  const entryNodeId = hops[0]?.nodeId ?? input.positions?.find((p) => p.position === 0)?.nodeIds[0];
+  const entryNodeId = hops[0]?.nodeId ?? positions?.find((p) => p.position === 0)?.nodeIds[0];
   if (input.enabled && entryNodeId && (isBalancer || !folded)) {
     await assertBalancerEntrySupportsVlessRoute(entryNodeId);
   }
@@ -1253,16 +1292,16 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // Cred index for hop `idx`, or -1 if it carries no link cred.
   const credIdx = (idx: number): number =>
     isBalancer ? (idx >= 1 ? idx - 1 : -1) : idx < hops.length - 1 ? idx : -1;
-  await assertLinkPortsFree(receivingLinkPorts(hops, creds), input.positions, directions);
+  await assertLinkPortsFree(receivingLinkPorts(hops, creds), positions, directions);
   // Phase 5: and can the receiving side end the cell at all. After the ports
   // and before the write, because both answer the same question ("may this be
   // saved") about the same walk, and an operator fixing one wants to hear about
   // the other in the same breath.
-  await assertNodesCarryCells(input.positions, directions);
+  await assertNodesCarryCells(positions, directions);
   // v4 topology, validated separately from the fold: the fold answers "can the
   // old storage hold this", these rules answer "is this a sane cascade at all".
   const topology =
-    input.positions && directions ? validateCascadeTopology(input.positions, directions) : null;
+    positions && directions ? validateCascadeTopology(positions, directions) : null;
   try {
     const c = await prisma.$transaction(async (tx) => {
       const created = await tx.cascade.create({
@@ -1390,12 +1429,12 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // `directions` and not `input.directions`, because a check run on the payload
   // would judge a leg this save is not going to build. See direction-merge.ts.
   const directions = await directionsForSave(id, input.directions);
+  const positions = await positionsForSave(id, input.positions);
 
   // Same fold as create. A v4 payload also decides the mode, since the shape
   // now says it: one direction is a chain, several are a balancer.
   // Best-effort, same as create: a v4-only shape saves without hops.
-  const folded =
-    input.positions && directions ? tryFoldPositions(input.positions, directions) : null;
+  const folded = positions && directions ? tryFoldPositions(positions, directions) : null;
   const mode = (folded?.mode ?? input.mode ?? existing.mode) as 'chain' | 'balancer';
   const isBalancer = mode === 'balancer';
   const incomingHops = folded ? folded.hops : input.hops;
@@ -1413,7 +1452,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
    *
    * Both shapes are asked about, because both can be sent.
    */
-  await assertNodesExistNamed(nodeRefsOfTopology(input.positions, directions));
+  await assertNodesExistNamed(nodeRefsOfTopology(positions, directions));
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
   // T7: gate an effectively-enabled balancer on the entry node's xray version
   // (covers both enabling an existing cascade and swapping in a new entry hop).
@@ -1438,16 +1477,12 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // An edit re-picks the legs, so it can walk onto a port that was free when
   // the cascade was created. Asked here for the same reason as on create, and
   // before the transaction: a refusal must not leave half a cascade behind.
-  await assertLinkPortsFree(
-    hops ? receivingLinkPorts(hops, creds) : [],
-    input.positions,
-    directions,
-  );
+  await assertLinkPortsFree(hops ? receivingLinkPorts(hops, creds) : [], positions, directions);
   // An edit re-picks the cells too, and this is the edit that matters: choosing
   // a QUIC cell for a direction that has been served over vless since C3 is one
   // dropdown, and the node it lands on may be an xray-only machine nobody has
   // touched since.
-  await assertNodesCarryCells(input.positions, directions);
+  await assertNodesCarryCells(positions, directions);
 
   try {
     const c = await prisma.$transaction(async (tx) => {
@@ -1463,7 +1498,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
           ...(input.autoProfile !== undefined ? { autoProfile: input.autoProfile } : {}),
         },
       });
-      if (!hops && input.positions && directions) {
+      if (!hops && positions && directions) {
         // v4-only shape replacing a foldable one: the stale hop rows would
         // otherwise keep describing a topology that no longer exists.
         await tx.cascadeHop.deleteMany({ where: { cascadeId: id } });
@@ -1489,8 +1524,8 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
       }
       // Shadow-write the v4 topology alongside the hops. Only when the payload
       // actually carried one: an enabled-only toggle must not wipe positions.
-      if (input.positions && directions) {
-        const topology = validateCascadeTopology(input.positions, directions);
+      if (positions && directions) {
+        const topology = validateCascadeTopology(positions, directions);
         await writeTopologyV4(tx, id, topology.positions, topology.directions);
       }
       return tx.cascade.findUniqueOrThrow({ where: { id }, include: hopInclude });
@@ -1503,7 +1538,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
     // payload whose entry carries a pool writes no hops at all.
     const newNodeIds = [
       ...(hops ?? []).map((h) => h.nodeId),
-      ...(input.positions ?? []).flatMap((p) => p.nodeIds),
+      ...(positions ?? []).flatMap((p) => p.nodeIds),
       ...(directions ?? []).flatMap((d) => d.nodeIds),
     ];
     emitCascadeChanged(id, [...new Set([...oldNodeIds, ...newNodeIds])], 'update');

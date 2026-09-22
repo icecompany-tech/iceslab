@@ -363,7 +363,13 @@ export interface TopologyLink {
  * it simply contributes no links, and the tag stays reserved.
  */
 export async function generateTopologyLinks(
-  positions: { nodeIds: string[]; linkProtocol?: string | null }[],
+  positions: {
+    nodeIds: string[];
+    linkProtocol?: string | null;
+    /** Phase 5: the knobs of the leg OUT of this position, the same field a
+     *  direction carries for the leg that reaches it. */
+    linkParams?: { congestion?: LinkCongestion } | null;
+  }[],
   directions: {
     tag: number;
     nodeIds: string[];
@@ -405,9 +411,13 @@ export async function generateTopologyLinks(
   // be able to route each direction onwards separately.
   for (let step = 0; step < positions.length - 1; step++) {
     const proto = normalizeLinkProtocol(positions[step]!.linkProtocol);
+    // The knob of THIS position's leg, which is the half the contract promised
+    // and only directions got: without it a tuic leg between two steps took
+    // the default whatever the operator picked.
+    const congestion = positions[step]!.linkParams?.congestion;
     for (const from of positions[step]!.nodeIds) {
       for (const to of positions[step + 1]!.nodeIds) {
-        for (const d of directions) await emit(from, to, d.tag, proto, step);
+        for (const d of directions) await emit(from, to, d.tag, proto, step, congestion);
       }
     }
   }

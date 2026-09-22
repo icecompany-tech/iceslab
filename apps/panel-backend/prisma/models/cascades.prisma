@@ -96,6 +96,15 @@ model CascadePosition {
   // Protocol of the hop OUT of this position, towards the next position or a
   // direction. Concrete credentials live per node pair in CascadeLink.
   linkProtocol  String?  @map("link_protocol") @db.VarChar(32)
+  // What the operator chose about that leg beyond the cell, phase 5. The same
+  // column a DIRECTION has, for the same reason and read by the same code:
+  // today the congestion controller of a tuic leg, and nothing else.
+  //
+  // It was promised to positions and delivered only to directions, so a
+  // position's leg took the default and the screen said "bbr, not selectable"
+  // in words. jsonb rather than a column per knob: the knobs differ per cell,
+  // and a column would be NULL for three cells out of four.
+  linkParams    Json?    @map("link_params")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   cascade Cascade               @relation(fields: [cascadeId], references: [id], onDelete: Cascade)

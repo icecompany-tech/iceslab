@@ -250,6 +250,140 @@ describe('what a PUT does not mention', () => {
   });
 });
 
+describe('the knobs of a POSITION leg', () => {
+  /**
+   * The half of the phase-5 contract that shipped late.
+   *
+   * `linkParams` was promised to a position exactly as to a direction, and the
+   * migration gave it to directions only. So the leg BETWEEN two steps took the
+   * default controller whatever the operator picked, and the screen had to say
+   * "bbr, not selectable" in words rather than offer a control.
+   */
+  it('answers the key on every position, always', async () => {
+    const entry = await makeNode('ru-entry');
+    const transit = await makeNode('de-transit');
+    const nl = await makeNode('nl-exit');
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: 'ru-out',
+        enabled: true,
+        positions: [
+          { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic', linkParams: { congestion: 'cubic' } },
+          { position: 1, nodeIds: [transit], linkProtocol: 'vless' },
+        ],
+        directions: [{ countryCode: 'NL', nodeIds: [nl] }],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const c = JSON.parse(created.body);
+
+    for (const p of c.positions as { linkParams: unknown }[]) {
+      expect(Object.keys(p)).toEqual(expect.arrayContaining(['linkParams']));
+    }
+    expect(c.positions[0].linkParams).toEqual({ congestion: 'cubic' });
+    // The one that chose nothing reads as the defaults, not as a missing field.
+    expect(c.positions[1].linkParams).toBeNull();
+  });
+
+  it('reaches the credential of the leg it describes', async () => {
+    // The point of the column: a knob nobody renders is a control that lies.
+    const entry = await makeNode('ru-entry');
+    const transit = await makeNode('de-transit');
+    const nl = await makeNode('nl-exit');
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: 'ru-out',
+        enabled: true,
+        positions: [
+          { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic', linkParams: { congestion: 'new_reno' } },
+          { position: 1, nodeIds: [transit], linkProtocol: 'vless' },
+        ],
+        directions: [{ countryCode: 'NL', nodeIds: [nl] }],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    const leg = await prisma.cascadeLink.findFirstOrThrow({
+      where: { toNodeId: transit },
+      select: { config: true },
+    });
+    expect((leg.config as { protocol: string; congestion: string }).congestion).toBe('new_reno');
+  });
+
+  it('keeps the knob when a PUT does not mention it', async () => {
+    // The same three states as the direction, and the same incident behind
+    // them: a save that edits the pool must not silently reset the controller.
+    const entry = await makeNode('ru-entry');
+    const transit = await makeNode('de-transit');
+    const nl = await makeNode('nl-exit');
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: 'ru-out',
+        enabled: true,
+        positions: [
+          { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic', linkParams: { congestion: 'cubic' } },
+          { position: 1, nodeIds: [transit], linkProtocol: 'vless' },
+        ],
+        directions: [{ countryCode: 'NL', nodeIds: [nl] }],
+      },
+    });
+    const c = JSON.parse(created.body);
+
+    const kept = await put(c.id, {
+      positions: [
+        { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic' },
+        { position: 1, nodeIds: [transit], linkProtocol: 'vless' },
+      ],
+      directions: [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }],
+    });
+    expect(kept.positions[0].linkParams).toEqual({ congestion: 'cubic' });
+
+    // And an explicit null still clears it, or the rule would read as "this
+    // field can never be unset".
+    const cleared = await put(c.id, {
+      positions: [
+        { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic', linkParams: null },
+        { position: 1, nodeIds: [transit], linkProtocol: 'vless' },
+      ],
+      directions: [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }],
+    });
+    expect(cleared.positions[0].linkParams).toBeNull();
+  });
+
+  it('refuses a knob the engine does not take, on a position as on a direction', async () => {
+    // One schema for both, so `brutal` is refused in both places or the two
+    // would drift the way the congestion dictionary already did once.
+    const entry = await makeNode('ru-entry');
+    const nl = await makeNode('nl-exit');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: 'ru-out',
+        enabled: true,
+        positions: [
+          { position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'tuic', linkParams: { congestion: 'brutal' } },
+        ],
+        directions: [{ countryCode: 'NL', nodeIds: [nl] }],
+      },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+  });
+});
+
 describe('the merge rule itself', () => {
   const stored = [
     {

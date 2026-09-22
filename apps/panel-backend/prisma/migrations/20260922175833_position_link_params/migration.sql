@@ -1,0 +1,22 @@
+-- A position's leg gets the knobs a direction's leg already had.
+--
+-- The phase-5 contract promised `linkParams` to a POSITION as well, and
+-- 20260922073242 gave it to directions only. So the leg between two steps took
+-- the default controller whatever the operator picked, and the screen had to
+-- say "bbr, not selectable" in words instead of offering a control.
+--
+-- One nullable jsonb column, same name and same shape as the one on
+-- `cascade_directions`, read by the same code: NULL is the defaults, and every
+-- stored position means exactly what it meant before, so there is no backfill.
+--
+-- Hand-written, like every migration here since 2026-09-22: `migrate dev
+-- --create-only` stops on "Drift detected" before generating anything. Nothing
+-- was discarded from a draft because there was no draft.
+--
+-- Rollback, faithful: the column is new and nothing read it before this
+-- release, so dropping it restores the previous behaviour exactly.
+--   ALTER TABLE "cascade_positions" DROP COLUMN "link_params";
+-- Proven on the dev database before applying: added, dropped, added again, and
+-- the column list compared with the untouched test database.
+ALTER TABLE "cascade_positions"
+  ADD COLUMN "link_params" JSONB;

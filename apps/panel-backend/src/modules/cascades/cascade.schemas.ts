@@ -57,6 +57,28 @@ export const CascadeProtocol = z.enum([
  * not. It is translated and logged in `linkCellFor`.
  */
 const LinkCellValue = z.enum([...LINK_CELLS, 'xray']);
+
+/**
+ * The knobs of a leg, wherever a leg is chosen.
+ *
+ * ONE definition for the position and for the direction, because they are one
+ * field: same column name, same reader in the service, same three values. Two
+ * copies would be the third copy of this dictionary, and the first two already
+ * drifted apart once.
+ *
+ * `.strict()` so a knob this build does not know is a refusal rather than a
+ * silent no-op: a control that saves and changes nothing is worse than a 400.
+ * Only the tuic congestion controller lives here, and only the three values the
+ * ENGINE takes, measured with `sing-box check`: anything else is answered with
+ * "unknown congestion control algorithm" on the node, long after the save.
+ *
+ * No secret is ever accepted here. Every password and salt is minted by the
+ * panel and lives in the credential.
+ */
+const LinkParamsValue = z
+  .object({ congestion: z.enum(LINK_CONGESTIONS).optional() })
+  .strict()
+  .nullish();
 export const CascadeHopSchema = z.object({
   nodeId: z.uuid(),
   /** 0 = entry, highest = exit. Must be contiguous 0..N-1 across the cascade. */
@@ -93,6 +115,19 @@ export const CascadePositionSchema = z.object({
   position: z.number().int().min(0).max(MAX_CASCADE_HOPS - 1),
   entryProtocol: CascadeProtocol.optional(),
   linkProtocol: LinkCellValue.optional(),
+  /**
+   * What the operator chose about THIS position's leg beyond the cell.
+   *
+   * The same field a direction has, with the same guard and the same reader:
+   * only the tuic congestion controller today, and only the three values the
+   * engine takes. It was promised to positions when the contract was written
+   * and shipped to directions only, so the leg between two steps took the
+   * default whatever the screen offered.
+   *
+   * ⚠ Absent is not null here either, see the rule on the direction schema
+   * below: a payload that does not mention the knob is not asking to clear it.
+   */
+  linkParams: LinkParamsValue,
 });
 
 /**
@@ -160,10 +195,7 @@ export const CascadeDirectionSchema = z.object({
    * No secret is ever accepted here. The obfuscation salt and every password
    * are minted by the panel and live in the credential.
    */
-  linkParams: z
-    .object({ congestion: z.enum(LINK_CONGESTIONS).optional() })
-    .strict()
-    .nullish(),
+  linkParams: LinkParamsValue,
   /**
    * ⚠ NEVER READ FROM A REQUEST. The port is derived from the shape of the
    * cascade (LINK_PORT_BASE + the last step) and written by the server, so a

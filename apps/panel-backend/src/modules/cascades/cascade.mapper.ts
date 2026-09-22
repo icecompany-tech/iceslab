@@ -16,6 +16,15 @@ export interface CascadePositionDto {
   nodeIds: string[];
   entryProtocol: string | null;
   linkProtocol: string | null;
+  /**
+   * What the operator chose about the leg OUT of this position, beyond the
+   * cell: the congestion controller of a tuic leg, and nothing else today.
+   *
+   * Always present, like the direction's three keys and for the same reason: a
+   * screen tells "no value" from "the server does not send this field", and the
+   * second reading would hide the control for good. `null` is the defaults.
+   */
+  linkParams: { congestion?: string } | null;
 }
 
 /**
@@ -109,6 +118,9 @@ interface CascadeRow {
     position: number;
     entryProtocol: string | null;
     linkProtocol: string | null;
+    /** Whatever jsonb holds; read, not trusted. Optional on the ROW so a narrow
+     *  select still type-checks, while the DTO key stays mandatory. */
+    linkParams?: unknown;
     nodes: { nodeId: string }[];
   }[];
   directions?: {
@@ -160,6 +172,7 @@ export function mapCascade(c: CascadeRow): CascadeDto {
         nodeIds: p.nodes.map((n) => n.nodeId),
         entryProtocol: p.entryProtocol,
         linkProtocol: p.linkProtocol,
+        linkParams: legParams(p.linkParams),
       })),
     directions: (c.directions ?? [])
       .slice()
