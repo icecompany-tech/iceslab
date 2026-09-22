@@ -14,8 +14,13 @@ import { FORMAT_NAMES, type SubscriptionFormat } from '@iceslab/shared';
  */
 export const HOST_FORMATS: readonly SubscriptionFormat[] = FORMAT_NAMES;
 
+/**
+ * Ключ подписи. Словарь ОБЩИЙ (`common.formatName`), а не хостовый: те же
+ * имена называют настройка «формат по умолчанию» и правило выдачи, и второй
+ * словарь разошёлся бы с первым на первой же правке.
+ */
 export function formatLabelKey(name: string): string {
-  return `hostEdit.formatName.${name}`;
+  return `formatName.${name}`;
 }
 
 export function formatLabel(

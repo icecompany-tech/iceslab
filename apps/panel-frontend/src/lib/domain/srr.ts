@@ -1,8 +1,15 @@
+import type { SubscriptionFormat as SharedFormat } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
-export type SubscriptionFormat =
-  | 'plain' | 'json' | 'clash' | 'singbox' | 'wgconf' | 'xrayjson' | 'xrayjson-array' | 'xkeen'
-  | 'outline' | 'surge' | 'quantumultx' | 'loon';
+/**
+ * Формат, который правило выдаёт клиенту.
+ *
+ * ⚠ Тот же союз, что у подписки, из контракта. Свой список здесь не знал
+ * `xrayjson-array` и `amneziavpn`, хотя `/sub` их отдаёт: правило на них
+ * завести было нельзя, и это выглядело как «панель не умеет», а не как
+ * разошедшаяся копия.
+ */
+export type SubscriptionFormat = SharedFormat;
 
 export interface SrrRule {
   id: string;

@@ -341,6 +341,28 @@ export const common = {
     fragmentHint:
       'Дайлит каждый сервер через fragment-outbound, который рубит ClientHello на куски, так что DPI по SNI не может его чётко опознать. Только формат Xray JSON.',
   },
+  // Подпись на каждое имя формата подписки, ОДНА на панель: её читают экран
+  // хоста, настройка «формат по умолчанию» и правило выдачи. Состав стережёт
+  // contours/subscription/lib/srrFormats.test.ts.
+  //
+  // Это КОРОТКОЕ имя, а не описание. Описания живут отдельно
+  // (`delivery.format.*`) и отвечают на другой вопрос: не «как называется», а
+  // «что это даёт клиенту».
+  formatName: {
+    plain: 'Ссылки (plain)',
+    json: 'JSON',
+    clash: 'Clash / Mihomo',
+    singbox: 'sing-box',
+    wgconf: 'WireGuard .conf',
+    amneziavpn: 'AmneziaVPN',
+    xrayjson: 'Xray JSON',
+    'xrayjson-array': 'Xray JSON (массив)',
+    xkeen: 'XKeen',
+    outline: 'Outline',
+    surge: 'Surge',
+    quantumultx: 'Quantumult X',
+    loon: 'Loon',
+  },
   // Процесс цепи на ноде. Читается парой полей, см. lib/domain/chainStatus.ts:
   // молчание ноды это «нет данных», а не поломка.
   chain: {

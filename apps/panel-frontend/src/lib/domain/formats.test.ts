@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FORMAT_NAMES } from '@iceslab/shared';
-import { HOST_FORMATS, formatLabelKey } from '@/contours/hosts/lib/formats';
+import { HOST_FORMATS, formatLabelKey } from '@/lib/domain/formats';
 import ru from '@/i18n/locales/ru';
 import en from '@/i18n/locales/en';
 
@@ -47,7 +47,8 @@ describe('форматы подписки на экране хоста', () => {
   });
 
   it('5. лишних подписей нет: словарь не переживает удалённый формат', () => {
-    const dict = label(ru as Dict, 'hostEdit.formatName') as Dict;
+    // Словарь ОБЩИЙ на панель, поэтому и проверяется по общему ключу.
+    const dict = label(ru as Dict, 'formatName') as Dict;
     expect(Object.keys(dict).sort()).toEqual([...FORMAT_NAMES].sort());
   });
 });

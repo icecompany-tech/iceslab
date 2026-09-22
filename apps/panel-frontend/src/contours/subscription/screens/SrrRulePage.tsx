@@ -17,6 +17,7 @@ import {
   SRR_FORMATS,
   formatTone,
 } from '@/contours/subscription/lib/srrFormats';
+import { formatLabel } from '@/lib/domain/formats';
 import {
   compilePattern,
   isCatchAll,
@@ -109,7 +110,7 @@ export function SrrRulePage() {
   // A stored rule can hold a format this panel no longer offers, so keep it in
   // the list rather than silently rewriting it on the next save.
   const formats = useMemo<SubscriptionFormat[]>(
-    () => (SRR_FORMATS.includes(draft.format) ? SRR_FORMATS : [...SRR_FORMATS, draft.format]),
+    () => (SRR_FORMATS.includes(draft.format) ? [...SRR_FORMATS] : [...SRR_FORMATS, draft.format]),
     [draft.format],
   );
 
@@ -409,7 +410,7 @@ export function SrrRulePage() {
                       flexShrink: 0,
                     }}
                   >
-                    {f}
+                    {formatLabel(f, t)}
                   </Text>
                   <Text
                     style={{
@@ -421,7 +422,10 @@ export function SrrRulePage() {
                       minWidth: 0,
                     }}
                   >
-                    {t(`delivery.format.${f}`)}
+                    {/* Описание, а не имя: имя стоит слева и приходит из общего
+                        словаря. Ключа может не быть у формата, добавленного в
+                        контракт позже, и тогда строка пустая, а не «ключ». */}
+                    {t(`delivery.format.${f}`, { defaultValue: '' })}
                   </Text>
                   {/* A balancer cascade only survives in a format that expands
                       one entry into a server per exit. */}

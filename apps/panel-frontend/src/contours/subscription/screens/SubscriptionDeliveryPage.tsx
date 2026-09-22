@@ -1,9 +1,11 @@
 ﻿import { useState } from 'react';
+import { DEFAULT_FORMAT_NAMES } from '@iceslab/shared';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, Textarea, TextInput, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SettingsTabs } from '@/contours/subscription/components/SettingsTabs';
+import { formatLabel } from '@/lib/domain/formats';
 import { apiErrorMessage } from '@/lib/net/client';
 import {
   getSettings,
@@ -33,8 +35,15 @@ import { AMBER, CARD, CYAN, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, WELL
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
-/** Порядок из макета: сперва то, что отдают чаще всего. */
-const FORMATS: SubscriptionFormat[] = ['plain', 'xrayjson', 'xrayjson-array', 'clash', 'singbox'];
+/**
+ * Форматы, которые принимает настройка «по умолчанию», из контракта.
+ *
+ * ⚠ Свой список здесь держал пять имён из десяти: `json`, `xkeen`, `surge`,
+ * `quantumultx` и `loon` выбрать было нельзя, хотя сервер их принимает. Порядок
+ * теперь контрактный, а не «из макета»: макет пережил бы добавление формата
+ * молча, а список из контракта нет.
+ */
+const FORMATS: readonly SubscriptionFormat[] = DEFAULT_FORMAT_NAMES;
 
 const DEAD_STATES: { key: DeadTextState; tone: string }[] = [
   { key: 'expired', tone: RED },
@@ -210,7 +219,7 @@ export function SubscriptionDeliveryPage() {
                     color: draft.format === f ? '#08101A' : MIST,
                   }}
                 >
-                  {f === 'singbox' ? 'sing-box' : f}
+                  {formatLabel(f, t)}
                 </UnstyledButton>
               ))}
             </Box>

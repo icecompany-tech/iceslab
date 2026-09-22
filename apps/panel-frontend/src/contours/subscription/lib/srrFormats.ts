@@ -1,27 +1,15 @@
+import { FORMAT_NAMES } from '@iceslab/shared';
 import type { SubscriptionFormat } from '@/lib/domain/srr';
 
 /**
- * The formats a delivery rule may select, in the order the picker lists them.
+ * Форматы, которые может выбрать правило выдачи.
  *
- * This is the SRR enum from `srr.schemas.ts`, not the wider set `/sub?format=`
- * accepts. The subscription endpoint also serves `xrayjson-array` and
- * `amneziavpn`, but a stored rule cannot name them: the rule schema predates
- * both. Offering them here would produce a 400 on save, so the picker stays
- * honest and the gap is a backend follow-up.
+ * ⚠ Список из контракта, своей копии больше нет. Она стояла здесь не по
+ * недосмотру: энум правил на бэкенде правда был уже, без `xrayjson-array` и
+ * `amneziavpn`, и предлагать их значило бы получить 400 на сохранении. Теперь
+ * правило принимает весь `FORMAT_NAMES`, и оба формата заводятся.
  */
-export const SRR_FORMATS: SubscriptionFormat[] = [
-  'plain',
-  'xrayjson',
-  'singbox',
-  'clash',
-  'xkeen',
-  'wgconf',
-  'outline',
-  'surge',
-  'quantumultx',
-  'loon',
-  'json',
-];
+export const SRR_FORMATS: readonly SubscriptionFormat[] = FORMAT_NAMES;
 
 /**
  * Formats in which a balancer cascade survives. Those two expand a cascade

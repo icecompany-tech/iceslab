@@ -312,6 +312,28 @@ export const common = {
     fragmentHint:
       'Dials each server through a fragment outbound that chops the ClientHello into pieces, so SNI-based DPI cannot cleanly match it. Xray JSON format only.',
   },
+  // One label per subscription format name, ONE for the whole panel: the host
+  // screen, the "default format" setting and the delivery rule all read it.
+  // Its contents are guarded by contours/subscription/lib/srrFormats.test.ts.
+  //
+  // This is the SHORT name, not a description. Descriptions live separately
+  // (`delivery.format.*`) and answer a different question: not what it is
+  // called, but what it gives the client.
+  formatName: {
+    plain: 'Links (plain)',
+    json: 'JSON',
+    clash: 'Clash / Mihomo',
+    singbox: 'sing-box',
+    wgconf: 'WireGuard .conf',
+    amneziavpn: 'AmneziaVPN',
+    xrayjson: 'Xray JSON',
+    'xrayjson-array': 'Xray JSON (array)',
+    xkeen: 'XKeen',
+    outline: 'Outline',
+    surge: 'Surge',
+    quantumultx: 'Quantumult X',
+    loon: 'Loon',
+  },
   // The chain process on a node. Read as a pair of fields, see
   // lib/domain/chainStatus.ts: a silent node means no data, not a fault.
   chain: {

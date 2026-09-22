@@ -156,24 +156,6 @@ export const hosts = {
     securityLayer: 'Слой безопасности',
     formats: 'ФОРМАТЫ ПОДПИСКИ',
     formatsComputed: 'СЧИТАЕТСЯ ИЗ ПРОФИЛЯ И ПЕРЕОПРЕДЕЛЕНИЙ',
-    // Подпись на каждое имя из FORMAT_NAMES контракта. Тест в
-    // contours/hosts/lib/formats.test.ts следит, чтобы ни одно не осталось без
-    // подписи: новый формат иначе появился бы на экране голым идентификатором.
-    formatName: {
-      plain: 'Ссылки (plain)',
-      json: 'JSON',
-      clash: 'Clash / Mihomo',
-      singbox: 'sing-box',
-      wgconf: 'WireGuard .conf',
-      amneziavpn: 'AmneziaVPN',
-      xrayjson: 'Xray JSON',
-      'xrayjson-array': 'Xray JSON (массив)',
-      xkeen: 'XKeen',
-      outline: 'Outline',
-      surge: 'Surge',
-      quantumultx: 'Quantumult X',
-      loon: 'Loon',
-    },
     optional: 'НЕОБЯЗАТЕЛЬНО',
     needName: 'Сначала имя',
     needProfile: 'Выберите профиль',

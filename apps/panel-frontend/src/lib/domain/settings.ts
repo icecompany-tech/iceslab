@@ -1,4 +1,4 @@
-import type { RoutingPresetId } from '@iceslab/shared';
+import type { DefaultSubscriptionFormat, RoutingPresetId } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 export interface ApiToken {
@@ -83,7 +83,17 @@ export interface AdminSettings extends PublicSettings {
  *  состояние подписки, и говорит по ней наш текст. */
 export type DeadTextState = 'expired' | 'limited' | 'disabled';
 
-export type SubscriptionFormat = 'plain' | 'xrayjson' | 'xrayjson-array' | 'clash' | 'singbox';
+/**
+ * Формат, которым подписка отвечает, когда правило по клиенту ни одно не
+ * подошло.
+ *
+ * ⚠ Имя берётся из контракта (`DEFAULT_FORMAT_NAMES`), а не из своего союза.
+ * Своя копия здесь держала пять имён из десяти, и пять недостающих оператор не
+ * мог выбрать вовсе; а если бы разошлась в другую сторону, сервер молча
+ * подменил бы значение на `plain` (`settings.service.ts`), что ещё хуже: экран
+ * показывал бы одно, подписка отдавала другое.
+ */
+export type SubscriptionFormat = DefaultSubscriptionFormat;
 
 /** Одна строка на сервер против строки на каждый его выход. */
 export type SubscriptionLinkShape = 'per-node' | 'per-exit';

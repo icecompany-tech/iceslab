@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -52,7 +52,7 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
-import { HOST_FORMATS, formatLabel } from '@/contours/hosts/lib/formats';
+import { HOST_FORMATS, formatLabel } from '@/lib/domain/formats';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
