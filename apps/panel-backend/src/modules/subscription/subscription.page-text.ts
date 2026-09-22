@@ -91,6 +91,10 @@ export interface Labels {
   copy: string;
   copied: string;
   copyKey: string;
+  /** Stands in the place of a code that the browser has not drawn: with
+   *  JavaScript off the reader gets the link itself and this one line, so the
+   *  empty square does not read as a broken page. */
+  qrNeedsJs: string;
   setup: string;
   scanTitle: string;
   /** Said BEFORE the code, not after: a person with three servers must learn
@@ -255,6 +259,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copy: 'Copy',
     copied: 'Copied',
     copyKey: 'Copy key',
+    qrNeedsJs: 'The QR is drawn in the browser: turn JavaScript on, or copy the text above.',
     setup: 'Set up',
     scanTitle: 'AmneziaWG keys',
     oneTunnel: 'One key is one tunnel to one server, not the whole subscription.',
@@ -423,6 +428,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copy: 'Копировать',
     copied: 'Скопировано',
     copyKey: 'Скопировать ключ',
+    qrNeedsJs: 'QR рисуется в браузере: включите JavaScript или скопируйте текст выше.',
     setup: 'Установка',
     scanTitle: 'Ключи AmneziaWG',
     oneTunnel: 'Один ключ это один туннель до одного сервера, а не вся подписка.',

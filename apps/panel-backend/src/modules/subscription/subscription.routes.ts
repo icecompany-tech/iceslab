@@ -12,7 +12,6 @@ import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
 import { buildSubscriptionPage } from './subscription.page.js';
-import QRCode from 'qrcode-svg';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {
   formatBytes,
@@ -281,38 +280,6 @@ async function refusalPage(
   });
 }
 
-// Render a QR SVG for arbitrary text. Soft-fails to undefined (the page treats
-// the QR as optional) so a too-large payload or any qrcode-svg edge never
-// breaks the whole subscription page. `join` collapses modules into one path
-// for a much smaller SVG. ecl=M balances density vs scan robustness.
-function qrSvg(content: string, ecl: 'L' | 'M' | 'Q' | 'H' = 'M'): string | undefined {
-  if (!content) return undefined;
-  try {
-    const svg = new QRCode({
-      content,
-      padding: 0,
-      width: 160,
-      height: 160,
-      // ecl 'L' for long payloads (the AmneziaWG .conf with obfuscation params):
-      // less error correction means fewer modules for the same data, so the QR
-      // stays scannable at 160px instead of degrading into an unreadable mesh.
-      ecl,
-      join: true,
-    }).svg();
-    // qrcode-svg emits `<svg width="160" height="160">` with NO viewBox, so a
-    // CSS width/height (e.g. the 300px vpn:// QR) resizes the viewport but NOT
-    // the 160-unit drawing - the code ends up crammed in the top-left corner
-    // with dead white space around it. Swap the svg tag's fixed size for a
-    // viewBox so any CSS size scales the whole code uniformly. The non-greedy
-    // capture stays inside the opening tag, leaving the 160x160 background
-    // <rect> untouched. Also strip the `<?xml ...?>` prolog (noise inline).
-    return svg
-      .replace(/^<\?xml[^>]*\?>\s*/, '')
-      .replace(/(<svg\b[^>]*?)\s*width="160"\s+height="160"/, '$1 viewBox="0 0 160 160"');
-  } catch {
-    return undefined;
-  }
-}
 
 // Strip characters Content-Disposition can't legally carry to keep
 // browsers happy across OSes. Username comes from admin-controlled
@@ -556,10 +523,14 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             const vpn = buildAwgVpnLink(filtered, e.nodeName);
             return {
               nodeName: e.nodeName,
-              confQrSvg: conf ? qrSvg(conf, 'L') : undefined,
-              vpnQrSvg: vpn ? qrSvg(vpn, 'L') : undefined,
-              // Raw vpn:// key for a copy button: the AmneziaVPN key QR is dense
-              // enough to be unreliable on screen, so paste-the-key is the robust path.
+              // The PAYLOADS, not pictures of them. The codes are drawn in the
+              // browser now: three server-rendered SVGs cost about 49 KB gzip
+              // on this page, the encoder costs 4.3 KB once, and the code on
+              // the wire is the same code. See subscription.page-qr.ts.
+              conf: conf || undefined,
+              // Raw vpn:// key: also what the copy button hands over, since the
+              // dense key QR is unreliable on screen and paste-the-key is the
+              // robust path.
               vpnKey: vpn || undefined,
             };
           });
@@ -577,7 +548,6 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             supportUrl: settings.supportUrl,
             user: result.json.user,
             protocols,
-            subUrlQrSvg: qrSvg(subUrl),
             awgNodes,
             deadTexts: settings.deadTexts,
           }),

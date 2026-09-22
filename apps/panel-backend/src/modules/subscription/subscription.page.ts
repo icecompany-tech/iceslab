@@ -13,6 +13,7 @@
 import { PROTOCOL_NAMES, type ProtocolName } from '@iceslab/shared';
 import { PAGE_CSS } from './subscription.page-styles.js';
 import { pageScript } from './subscription.page-script.js';
+import { QR_SCRIPT, qrBox } from './subscription.page-qr.js';
 import { L, type Labels, type StepText } from './subscription.page-text.js';
 import {
   APPS,
@@ -60,18 +61,24 @@ export interface SubscriptionPageData {
     limited?: { ru?: string; en?: string };
     disabled?: { ru?: string; en?: string };
   } | null;
-  /** "Scan to import the whole subscription" QR for proxy clients. */
-  subUrlQrSvg?: string;
-  /** One entry per AmneziaWG node, each with its two QRs: the AmneziaVPN
-   *  "vpn://" key (for the AmneziaVPN app) and the native .conf (for the
-   *  AmneziaWG app). Single-tunnel-per-key, so a user with several AWG servers
-   *  gets one labelled QR pair per server instead of just the first node's. */
+  /**
+   * One entry per AmneziaWG node, each with the two PAYLOADS a code is drawn
+   * from: the AmneziaVPN "vpn://" key and the native .conf. Single-tunnel-per-
+   * key, so a user with several AWG servers gets one labelled pair per server
+   * instead of only the first node's.
+   *
+   * The payloads, not pictures of them: the codes are drawn in the browser
+   * (subscription.page-qr.ts), which costs one encoder instead of an SVG per
+   * code, and leaves a reader with JavaScript off holding the config itself
+   * rather than an empty square.
+   */
   awgNodes?: Array<{
     nodeName: string;
-    confQrSvg?: string;
-    vpnQrSvg?: string;
-    /** Raw AmneziaVPN vpn:// key for a copy button (the dense key QR is
-     *  unreliable on screen, so paste-the-key is the robust import path). */
+    /** The wg-quick config this node hands out. */
+    conf?: string;
+    /** Raw AmneziaVPN vpn:// key. Also what the copy button hands over, since
+     *  the dense key QR is unreliable on screen and paste-the-key is the
+     *  robust import path. */
     vpnKey?: string;
   }>;
 }
@@ -888,12 +895,12 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   // Compact import widget: ONE QR shown at a time. A server selector picks the
   // AmneziaWG node (no more one-tower-of-QRs-per-node sprawl), an AmneziaVPN /
   // AmneziaWG toggle swaps the vpn:// key QR vs the .conf QR, and the proxy
-  // subscription QR is just another selectable target. Every QR SVG is embedded
-  // once; the inline script shows/hides by (target, app). All SVG is trusted
-  // (server-generated), so embedded raw, never escaped.
+  // subscription QR is just another selectable target. Each figure carries its
+  // PAYLOAD, not a picture of it, and the browser draws the code; the inline
+  // script shows/hides by (target, app).
   // The subscription QR moved to the transfer window and is NOT drawn here as
-  // well: one QR svg is 25 KB on a page that has to open over a censored link,
-  // and two copies of the same code is the most expensive decoration there is.
+  // well: two copies of the same code is the most expensive decoration there
+  // is, and a second box is a second encode on the reader's phone.
   // What stays is the AmneziaWG widget, which is a different code per node and
   // has nowhere else to live.
   interface ImportTarget {
@@ -911,17 +918,19 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   awgNodes.forEach((n, ni) => {
     // The first node's vpn:// QR is what the widget opens on.
     const vpnOn = ni === 0 ? ' on' : '';
-    if (n.vpnQrSvg) {
-      const copyBtn = n.vpnKey
-        ? `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`
-        : '';
+    if (n.vpnKey) {
+      const copyBtn = `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`;
       figures.push(
-        `<figure class="qrf${vpnOn}" data-target="awg:${esc(n.nodeName)}" data-app="vpn"><div class="qbx">${n.vpnQrSvg}</div><figcaption>AmneziaVPN</figcaption>${copyBtn}</figure>`,
+        `<figure class="qrf${vpnOn}" data-target="awg:${esc(n.nodeName)}" data-app="vpn">` +
+          qrBox({ text: n.vpnKey, fallback: n.vpnKey, note: t.qrNeedsJs, esc }) +
+          `<figcaption>AmneziaVPN</figcaption>${copyBtn}</figure>`,
       );
     }
-    if (n.confQrSvg) {
+    if (n.conf) {
       figures.push(
-        `<figure class="qrf" data-target="awg:${esc(n.nodeName)}" data-app="conf"><div class="qbx">${n.confQrSvg}</div><figcaption>AmneziaWG</figcaption></figure>`,
+        `<figure class="qrf" data-target="awg:${esc(n.nodeName)}" data-app="conf">` +
+          qrBox({ text: n.conf, fallback: n.conf, note: t.qrNeedsJs, esc }) +
+          `<figcaption>AmneziaWG</figcaption></figure>`,
       );
     }
   });
@@ -967,12 +976,12 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   </section>`
       : '';
 
-  // Transfer window. The QR is the one qrSvg() already builds for the
-  // subscription link (subscription.routes.ts), shown in a new place rather
-  // than generated again; without it there is nothing to put in the window.
-  // The transfer window goes too: moving a subscription that does not work
-  // to a second device is not a thing to offer.
-  const transferHtml = !dead && data.subUrlQrSvg
+  // Transfer window: the subscription link as a code, for a second device.
+  // Drawn from the link the page already carries, so the window needs no data
+  // of its own, and the link below it stays readable whether or not the code
+  // gets drawn. On a dead subscription the window goes: moving a subscription
+  // that does not work to a second device is not a thing to offer.
+  const transferHtml = !dead
     ? `<div class="overlay" data-transfer>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
     <span class="modal__handle" aria-hidden="true"></span>
@@ -983,7 +992,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       </div>
       <button class="modal__close" type="button" data-close-transfer aria-label="${esc(t.close)}">${icons.draw('x', { cls: 'ic' })}</button>
     </div>
-    <div class="qr-plate">${data.subUrlQrSvg}</div>
+    <div class="qr-plate">${qrBox({ text: data.subUrl, fallback: data.subUrl, note: t.qrNeedsJs, esc })}</div>
     <div class="link-box">
       <div class="link-box__label">${esc(t.subLink)}</div>
       <div class="link-box__value">${esc(data.subUrl)}</div>
@@ -1127,6 +1136,9 @@ ${SPRITE_SLOT}
   </footer>
 </div>
 ${transferHtml}
+<!-- Two tags, not one: a throw in either script stops only that one, and the
+     page has to survive losing its codes as readily as losing its tabs. -->
+<script>${QR_SCRIPT}</script>
 <script>${pageScript({ subUrl: data.subUrl, noTransfer: NO_TRANSFER, copied: t.copied, hideAll: t.hideAll, showAll: t.showAll })}</script>
 </body>
 </html>`;

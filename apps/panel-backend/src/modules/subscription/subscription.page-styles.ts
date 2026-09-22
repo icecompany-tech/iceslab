@@ -326,6 +326,17 @@ export const PAGE_CSS = String.raw`
   .qbx{background:#fff; border-radius:12px; padding:11px; line-height:0;
     box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
   .qbx svg{display:block; width:240px; height:240px;}
+  /* What stands in the code's place until the browser has drawn it, and
+     forever if it never does. The box keeps its width so the page does not
+     jump when the code lands, and the text is the substance: a link or a whole
+     config, selectable, on the white the code would have used. */
+  .qbx__fallback{display:none;}
+  .qbx[data-qr-pending] .qbx__fallback{display:block; width:240px; max-width:100%;
+    line-height:16px; text-align:left;}
+  .qbx__text{display:block; font-family:var(--mono); font-size:11px; color:#101418;
+    word-break:break-all; white-space:pre-wrap; max-height:200px; overflow:auto;}
+  .qbx__note{display:block; margin-top:8px; font-size:11px; line-height:15px; color:#5A6672;}
+  .qr-plate .qbx[data-qr-pending] .qbx__fallback{width:300px;}
   .qrf figcaption{color:var(--mist); font-size:11px; margin-top:10px; font-family:var(--mono);}
   .copyk{display:inline-block; margin-top:10px; cursor:pointer; font-size:12px; font-weight:500; text-decoration:none;
     border:1px solid var(--hair); background:var(--ground2); color:var(--cyan);

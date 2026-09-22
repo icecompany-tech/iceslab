@@ -64,14 +64,15 @@ describe('buildSubscriptionPage', () => {
       base({
         protocols: ['amneziawg'],
         awgNodes: [
-          { nodeName: 'awg', vpnQrSvg: '<svg id="vpn-nl"></svg>', confQrSvg: '<svg id="conf-nl"></svg>' },
-          { nodeName: 'awg-de', vpnQrSvg: '<svg id="vpn-de"></svg>', confQrSvg: '<svg id="conf-de"></svg>' },
+          { nodeName: 'awg', vpnKey: 'vpn://nl', conf: '[Interface] nl' },
+          { nodeName: 'awg-de', vpnKey: 'vpn://de', conf: '[Interface] de' },
         ],
       }),
     );
-    // every node's QRs are embedded (shown/hidden client-side)...
-    for (const id of ['vpn-nl', 'conf-nl', 'vpn-de', 'conf-de']) {
-      expect(html).toContain(`<svg id="${id}"></svg>`);
+    // every node's payload is on the page (shown/hidden client-side), which is
+    // what the browser draws its code from...
+    for (const text of ['vpn://nl', '[Interface] nl', 'vpn://de', '[Interface] de']) {
+      expect(html).toContain(`data-qr-text="${text}"`);
     }
     // ...behind a per-node server selector, which is the same control as the
     // platform one in "Set up": two selectors behaving differently on one
@@ -295,17 +296,35 @@ describe('buildSubscriptionPage', () => {
   });
 
   it('puts the subscription QR in the transfer window, and only there', () => {
-    // It used to sit in the scan card as well. One QR svg is 25 KB, this page
-    // is opened over a link that may barely work, and the same code twice is
-    // the most expensive decoration available.
-    expect(buildSubscriptionPage(base())).not.toContain('class="overlay" data-transfer');
-    const withQr = buildSubscriptionPage(base({ subUrlQrSvg: '<svg id="sub"></svg>' }));
-    expect(withQr).toContain('class="overlay" data-transfer');
-    // QR SVG markup is embedded raw (trusted, server-generated), not escaped.
-    expect(withQr.split('<svg id="sub"></svg>').length - 1).toBe(1);
+    // It used to sit in the scan card as well. The same code twice is the most
+    // expensive decoration available on a page opened over a link that may
+    // barely work, and now also a second encode on the reader's phone.
+    const html = buildSubscriptionPage(base());
+    expect(html).toContain('class="overlay" data-transfer');
+    // One box for the link, in the plate, and nowhere else.
+    expect(html.split('data-qr-text="https://panel.example.com/sub/abc123"').length - 1).toBe(1);
     // The scan card is now the AmneziaWG widget alone: a proxy-only
     // subscription has nothing to put in it.
-    expect(withQr).not.toContain('class="qrview"');
+    expect(html).not.toContain('class="qrview"');
+  });
+
+  it('leaves a reader with no JavaScript the link itself where the code would be', () => {
+    // The rule this page has always held (checklist 34) and the one the move to
+    // browser-drawn codes could most easily break: a QR is a convenience, the
+    // link is the substance. The container carries the text to encode in a data
+    // attribute, and the same text readable inside it, with a line saying why
+    // the picture is missing.
+    const html = buildSubscriptionPage(base());
+    const box = html.slice(html.indexOf('<div class="qr-plate">'));
+    expect(box).toContain('data-qr-pending');
+    expect(box).toContain('data-qr-text="https://panel.example.com/sub/abc123"');
+    expect(box).toContain('https://panel.example.com/sub/abc123</code>');
+    expect(box).toContain('turn JavaScript on');
+    // And the encoder that turns it into a picture ships with the page: no
+    // external asset, because this page is opened on networks where a CDN is
+    // a blocked hostname.
+    expect(html).toContain('qrcodegen');
+    expect(html).not.toContain('<script src=');
   });
 
   it('offers the transfer button only where a camera could read the code', () => {
@@ -313,16 +332,16 @@ describe('buildSubscriptionPage', () => {
     // way round there anyway: what is needed is getting the link ONTO the
     // device. The button is in the page header, so the platform switch is what
     // takes it away, and the list it switches on is in the page's own script.
-    const html = buildSubscriptionPage(base({ subUrlQrSvg: '<svg id="sub"></svg>' }));
+    const html = buildSubscriptionPage(base());
     expect(html).toContain('data-open-transfer');
     expect(html).toContain('var NO_TRANSFER = ["androidtv","appletv","router"]');
   });
 
   it('single AWG node: no server selector, caption is just the app name', () => {
     const html = buildSubscriptionPage(
-      base({ protocols: ['amneziawg'], awgNodes: [{ nodeName: 'awg', vpnQrSvg: '<svg id="vpn"></svg>' }] }),
+      base({ protocols: ['amneziawg'], awgNodes: [{ nodeName: 'awg', vpnKey: 'vpn://one' }] }),
     );
-    expect(html).toContain('<svg id="vpn"></svg>');
+    expect(html).toContain('data-qr-text="vpn://one"');
     // figure caption is the app name, never a "· awg" node suffix (the node
     // lives in the selector now)
     expect(html).toContain('<figcaption>AmneziaVPN</figcaption>');
@@ -425,8 +444,7 @@ describe('the refusal page', () => {
       const html = buildSubscriptionPage(
         base({
           protocols: ['xray', 'amneziawg'],
-          awgNodes: [{ nodeName: 'awg', confQrSvg: '<svg id="c"/>', vpnQrSvg: '<svg id="v"/>' }],
-          subUrlQrSvg: '<svg id="sub"/>',
+          awgNodes: [{ nodeName: 'awg', conf: '[Interface] dead', vpnKey: 'vpn://dead' }],
           user: {
             username: 'alice',
             status,
@@ -451,6 +469,11 @@ describe('the refusal page', () => {
       // that does not work to a second device is not a thing to offer.
       expect(html).not.toContain('id="scan"');
       expect(html).not.toContain('class="overlay" data-transfer');
+      // And no code payloads either: the codes are drawn from text the page
+      // carries, so a suppressed widget that still shipped the key would hand
+      // over the config it just refused to offer.
+      expect(html).not.toContain('vpn://dead');
+      expect(html).not.toContain('[Interface] dead');
 
       // And the three that stay.
       expect(html).toContain('sub-card');
