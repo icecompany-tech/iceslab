@@ -1,4 +1,8 @@
-import { buildTopologyFragmentsForNode } from './cascade.config.js';
+import {
+  buildTopologyFragmentsForNode,
+  topologyReceivingPorts,
+  LINK_PORT_BASE,
+} from './cascade.config.js';
 import { describe, expect, it } from 'vitest';
 import {
   CascadeValidationError,
@@ -181,6 +185,55 @@ describe('validateCascadeTopology', () => {
     const entryNodes = Array.from({ length: 9 }, (_, i) => N(i + 1));
     const directions = Array.from({ length: 8 }, (_, i) => dir([N(100 + i)]));
     expect(() => validateCascadeTopology([entry(entryNodes)], directions)).toThrow(/72 links/);
+  });
+});
+
+describe('topologyReceivingPorts', () => {
+  /**
+   * The walk that answers "which socket does this cascade need", phase 5.
+   *
+   * It used to answer with numbers alone, which was true while every leg rode
+   * xray over TCP. Two of the four cells are QUIC now, and a number without a
+   * transport is wrong in both directions at once: it refuses a TCP profile
+   * that can legally share 24000 with a tuic leg, and it promises a UDP profile
+   * the very socket that leg holds.
+   */
+  it('gives each leg the transport of its cell', () => {
+    const ports = topologyReceivingPorts(
+      [entry([N(1)])],
+      [
+        { nodeIds: [N(2)], linkProtocol: 'tuic' },
+        { nodeIds: [N(3)] },
+      ],
+    );
+    expect(ports).toEqual([
+      { nodeId: N(2), port: LINK_PORT_BASE, transport: 'udp' },
+      // Names no cell, so it is reached over the entry's, which is TCP.
+      { nodeId: N(3), port: LINK_PORT_BASE, transport: 'tcp' },
+    ]);
+  });
+
+  it('keeps both claims when one number is held on two transports', () => {
+    // Deduplication is by node, port AND transport. Keyed without the
+    // transport, whichever leg was walked first would silence the other, and
+    // the cascade would ask about one of the two sockets it actually needs.
+    const ports = topologyReceivingPorts(
+      [entry([N(1), N(2)])],
+      [{ nodeIds: [N(3)], linkProtocol: 'tuic' }, { nodeIds: [N(3)] }],
+    );
+    expect(ports).toEqual([
+      { nodeId: N(3), port: LINK_PORT_BASE, transport: 'udp' },
+      { nodeId: N(3), port: LINK_PORT_BASE, transport: 'tcp' },
+    ]);
+  });
+
+  it('skips a leg whose cell cannot be read, because validation refuses it by name', () => {
+    // Raw input reaches this walk: a value with no cell is refused elsewhere
+    // with a message naming it, and throwing here would replace that sentence
+    // with an internal error about a walk nobody has heard of.
+    expect(
+      topologyReceivingPorts([entry([N(1)])], [{ nodeIds: [N(2)], linkProtocol: 'hysteria' }]),
+    ).toEqual([]);
   });
 });
 

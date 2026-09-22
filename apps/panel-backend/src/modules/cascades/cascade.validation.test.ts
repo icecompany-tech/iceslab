@@ -97,6 +97,37 @@ describe('foldPositionsIntoHops', () => {
     );
   });
 
+  it('refuses a direction with no node yet, which used to be a 500', () => {
+    // v4 can say "the tag exists, the machine does not"; the hop model cannot,
+    // because a hop IS a node. The fold took nodeIds[0] behind a non-null
+    // assertion, so the hop carried `undefined` and Prisma refused it inside an
+    // `in` array: the operator read "Internal server error" for a shape the
+    // panel offers. Refused as unfoldable, so the cascade stores v4 only.
+    expect(() => foldPositionsIntoHops([entry(N1)], [{ nodeIds: [] }])).toThrow(
+      /no node yet/,
+    );
+  });
+
+  it('refuses a cell only the chain process carries', () => {
+    // Phase 5. The hop storage describes legs the node's own xray draws, and
+    // xray terminates neither hy2 nor tuic. Folding one anyway wrote a hop cred
+    // from the ENTRY's cell (vless, TCP) beside a v4 leg on UDP, so one cascade
+    // held 24000 twice on one node and the port check refused a legal TCP
+    // profile for a listener that existed only in a table.
+    expect(() => foldPositionsIntoHops([entry(N1)], [{ nodeIds: [N2], linkProtocol: 'tuic' }]))
+      .toThrow(/only the chain process carries/);
+    expect(() =>
+      foldPositionsIntoHops(
+        [{ ...entry(N1), linkProtocol: 'hy2' }],
+        [{ nodeIds: [N2] }],
+      ),
+    ).toThrow(/only the chain process carries/);
+    // And the two the transitional fleet has always carried still fold.
+    expect(() =>
+      foldPositionsIntoHops([entry(N1)], [{ nodeIds: [N2], linkProtocol: 'shadowsocks' }]),
+    ).not.toThrow();
+  });
+
   it('refuses transits combined with several directions', () => {
     // The one shape the old model never had a representation for, which is why
     // the rewrite exists at all.

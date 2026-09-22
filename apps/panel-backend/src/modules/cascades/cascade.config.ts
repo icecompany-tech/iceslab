@@ -3,9 +3,11 @@ import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
 import {
   DEFAULT_LINK_CONGESTION,
   LINK_CELLS,
+  LINK_CELL_TRANSPORT,
   LINK_CONGESTIONS,
   type LinkCell,
   type LinkCongestion,
+  type Transport,
 } from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
@@ -432,34 +434,75 @@ export async function generateTopologyLinks(
  * walk would ask the same question N times.
  */
 export function topologyReceivingPorts(
-  positions: { position?: number; nodeIds: string[] }[],
-  directions: { nodeIds: string[] }[],
-): { nodeId: string; port: number }[] {
-  // Sorted here rather than trusting the caller: the port IS the step index, so
-  // an array that arrived in another order would compute ports for the wrong
-  // nodes. generateTopologyLinks runs on the validated topology, which is
-  // already sorted; this one runs on raw input, before validation, because its
-  // answer decides whether the save may happen at all.
+  positions: { position?: number; nodeIds: string[]; linkProtocol?: string | null }[],
+  directions: { nodeIds: string[]; linkProtocol?: string | null }[],
+): { nodeId: string; port: number; transport: Transport }[] {
+  const seen = new Set<string>();
+  const out: { nodeId: string; port: number; transport: Transport }[] = [];
+  for (const leg of walkReceivingLegs(positions, directions)) {
+    const port = LINK_PORT_BASE + leg.step;
+    // ⚠ The transport is the CELL'S, phase 5, and it is why this answer is not
+    // a list of numbers any more. Two of the four cells are QUIC: a tuic leg on
+    // 24000 shares nothing with a profile on 24000/TCP, and refusing that pair
+    // would refuse a legal configuration, which is the same untruth the
+    // binding-against-binding check was fixed of.
+    const transport = LINK_CELL_TRANSPORT[leg.cell];
+    const key = `${leg.nodeId}:${port}:${transport}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ nodeId: leg.nodeId, port, transport });
+  }
+  return out;
+}
+
+/**
+ * The receiving side of every leg: which node, which step, which cell.
+ *
+ * ONE walk behind the two questions asked before a save (which ports, which
+ * cells), because they are the same path read twice and the fallback in the
+ * middle is subtle: the last leg takes the DIRECTION'S cell, and the step
+ * before it when the direction names none. Two copies of that rule is two
+ * chances for a gate to ask about a leg the builder will not build.
+ *
+ * ⚠ A leg whose cell cannot be read is SKIPPED rather than thrown on. This runs
+ * on raw input: validation refuses that value with a message naming it, and an
+ * internal error about a walk would replace a sentence the operator can act on.
+ * Nothing is lost by skipping, because such a save is refused either way.
+ */
+function walkReceivingLegs(
+  positions: { position?: number; nodeIds: string[]; linkProtocol?: string | null }[],
+  directions: { nodeIds: string[]; linkProtocol?: string | null }[],
+): { nodeId: string; step: number; cell: LinkProtocol }[] {
+  // Sorted here rather than trusting the caller: the port IS the step index and
+  // the cell comes from the step BEFORE, so an array that arrived in another
+  // order would answer about the wrong pairs. generateTopologyLinks runs on the
+  // validated topology, which is already sorted; this one runs on raw input,
+  // before validation, because its answer decides whether the save may happen
+  // at all.
   const ordered =
     positions.every((p) => typeof p.position === 'number')
       ? [...positions].sort((a, b) => a.position! - b.position!)
       : positions;
-  const seen = new Set<string>();
-  const out: { nodeId: string; port: number }[] = [];
-  const add = (nodeId: string, port: number): void => {
-    const key = `${nodeId}:${port}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ nodeId, port });
+  const out: { nodeId: string; step: number; cell: LinkProtocol }[] = [];
+  const add = (nodeId: string, step: number, cell: LinkProtocol | null): void => {
+    if (!cell) return;
+    out.push({ nodeId, step, cell });
   };
 
   for (let step = 0; step < ordered.length - 1; step++) {
-    for (const to of ordered[step + 1]!.nodeIds) add(to, LINK_PORT_BASE + step);
+    const cell = linkCellFor(ordered[step]!.linkProtocol);
+    for (const to of ordered[step + 1]!.nodeIds) add(to, step, cell);
   }
-  const last = ordered.length - 1;
-  if (last >= 0) {
+  const lastStep = ordered.length - 1;
+  const last = ordered[lastStep];
+  if (last) {
+    // The one leg a direction may choose, phase 5. Same fallback as
+    // generateTopologyLinks, and it has to stay the same one: these walks
+    // decide whether the leg that walk builds is allowed to exist.
+    const fallback = linkCellFor(last.linkProtocol);
     for (const d of directions) {
-      for (const to of d.nodeIds) add(to, LINK_PORT_BASE + last);
+      const cell = d.linkProtocol ? linkCellFor(d.linkProtocol) : fallback;
+      for (const to of d.nodeIds) add(to, lastStep, cell);
     }
   }
   return out;
@@ -486,38 +529,13 @@ export function topologyReceivingCells(
   positions: { position?: number; nodeIds: string[]; linkProtocol?: string | null }[],
   directions: { nodeIds: string[]; linkProtocol?: string | null }[],
 ): { nodeId: string; cell: LinkProtocol }[] {
-  // Sorted for the same reason as the ports walk: the cell of a leg comes from
-  // the step BEFORE it, so an array in another order would ask about the wrong
-  // pairs. See topologyReceivingPorts.
-  const ordered =
-    positions.every((p) => typeof p.position === 'number')
-      ? [...positions].sort((a, b) => a.position! - b.position!)
-      : positions;
   const seen = new Set<string>();
   const out: { nodeId: string; cell: LinkProtocol }[] = [];
-  const add = (nodeId: string, cell: LinkProtocol | null): void => {
-    if (!cell) return;
-    const key = `${nodeId}:${cell}`;
-    if (seen.has(key)) return;
+  for (const leg of walkReceivingLegs(positions, directions)) {
+    const key = `${leg.nodeId}:${leg.cell}`;
+    if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ nodeId, cell });
-  };
-
-  for (let step = 0; step < ordered.length - 1; step++) {
-    const cell = linkCellFor(ordered[step]!.linkProtocol);
-    for (const to of ordered[step + 1]!.nodeIds) add(to, cell);
-  }
-  const last = ordered[ordered.length - 1];
-  if (last) {
-    // The one leg a direction may choose, phase 5: its own cell, or the cell of
-    // the step before it when it names none. Same fallback as
-    // generateTopologyLinks, and it has to stay the same one: this walk decides
-    // whether the leg that walk builds is allowed to exist.
-    const fallback = linkCellFor(last.linkProtocol);
-    for (const d of directions) {
-      const cell = d.linkProtocol ? linkCellFor(d.linkProtocol) : fallback;
-      for (const to of d.nodeIds) add(to, cell);
-    }
+    out.push({ nodeId: leg.nodeId, cell: leg.cell });
   }
   return out;
 }

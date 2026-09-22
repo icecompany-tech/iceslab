@@ -1,4 +1,4 @@
-import type { ChainStatus, NodeCores, Transport } from '@iceslab/shared';
+import { LINK_CELL_TRANSPORT, type ChainStatus, type LinkCell, type NodeCores, type Transport } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { LINK_PORT_BASE } from '../cascades/cascade.config.js';
 
@@ -28,9 +28,14 @@ import { LINK_PORT_BASE } from '../cascades/cascade.config.js';
 interface PortOwnerBase {
   port: number;
   /**
-   * Cascade links are always tcp: both link cells, vless and SS2022, ride the
-   * node's xray over TCP. A binding says what it is, a core service says what
-   * the agent reported.
+   * A binding says what it is, a core service says what the agent reported, and
+   * a cascade leg says what its CELL is.
+   *
+   * ⚠ That last one used to be the constant `tcp`, which was true while the
+   * only cells were vless and SS2022 inside the node's xray. Phase 5 made two
+   * of the four QUIC, so the constant became a claim that a tuic leg holds
+   * 24000/TCP: it would have refused a TCP profile that can legally take that
+   * port and, worse, promised a UDP one the port the leg actually holds.
    */
   transport: Transport;
 }
@@ -107,7 +112,9 @@ export async function portClaimsOnNode(
     }),
     prisma.cascadeLink.findMany({
       where: { toNodeId: nodeId, port: { in: wanted } },
-      select: { port: true, cascade: { select: { name: true } } },
+      // The cred comes with it since phase 5: the cell inside it is what says
+      // whether this leg holds a TCP or a UDP socket.
+      select: { port: true, config: true, cascade: { select: { name: true } } },
     }),
     legacyHopLinkPorts(nodeId, wanted),
     prisma.node.findUnique({ where: { id: nodeId }, select: { cores: true, chainStatus: true } }),
@@ -123,15 +130,26 @@ export async function portClaimsOnNode(
   // One cascade terminating N directions on one node holds ONE port, and the
   // two cascade sources overlap by design, so both are deduplicated into the
   // same set.
+  //
+  // ⚠ The TRANSPORT is part of the key, not decoration. Since phase 5 two
+  // directions reaching the same node can be reached over different cells, and
+  // a tuic leg and a vless leg on one step share the port NUMBER while holding
+  // two different sockets. Keyed without it, whichever arrived first would
+  // silence the other, and the answer would name one of the two claims on 24000
+  // as though it were the only one.
   const seen = new Set<string>();
   for (const l of [
-    ...links.map((l) => ({ port: l.port, name: l.cascade.name })),
+    ...links.map((l) => ({
+      port: l.port,
+      name: l.cascade.name,
+      transport: legTransport(l.config),
+    })),
     ...legacy,
   ]) {
-    const key = `${l.name}:${l.port}`;
+    const key = `${l.name}:${l.port}:${l.transport}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    owners.push({ kind: 'cascade', name: l.name, port: l.port, transport: 'tcp' });
+    owners.push({ kind: 'cascade', name: l.name, port: l.port, transport: l.transport });
   }
 
   // The third source, and the only one that can be missing. A node that never
@@ -185,6 +203,22 @@ function certaintyOf(inventory: NodeCores | null): PortCertainty {
 }
 
 /**
+ * Which socket a stored leg holds, read from the cred it was saved with.
+ *
+ * ⚠ TCP for anything unreadable, and that is the SAFE side rather than a
+ * guess. This answer is used to refuse, so being wrong towards "taken" costs an
+ * operator one port and being wrong towards "free" costs them a listener that
+ * silently fails to bind on the node. A cred with no readable cell is a row
+ * from before the cells existed, and every one of those was vless or SS2022,
+ * both TCP.
+ */
+function legTransport(config: unknown): Transport {
+  const cell = (config as { protocol?: unknown } | null)?.protocol;
+  if (typeof cell !== 'string') return 'tcp';
+  return LINK_CELL_TRANSPORT[cell as LinkCell] ?? 'tcp';
+}
+
+/**
  * The same claim, read out of the storage that predates `cascade_links`.
  *
  * Reading only the indexed column would be the tidy version and would also be
@@ -205,7 +239,7 @@ function certaintyOf(inventory: NodeCores | null): PortCertainty {
 async function legacyHopLinkPorts(
   nodeId: string,
   ports: number[],
-): Promise<{ port: number; name: string }[]> {
+): Promise<{ port: number; name: string; transport: Transport }[]> {
   // Only cascades that reach this node at all, and only those whose ports can
   // possibly match: every link port is LINK_PORT_BASE + step.
   if (!ports.some((p) => p >= LINK_PORT_BASE)) return [];
@@ -221,14 +255,16 @@ async function legacyHopLinkPorts(
     },
   });
 
-  const out: { port: number; name: string }[] = [];
+  const out: { port: number; name: string; transport: Transport }[] = [];
   for (const c of cascades) {
     for (let i = 0; i < c.hops.length - 1; i++) {
       const receiver = c.hops[i + 1]!;
       if (receiver.nodeId !== nodeId) continue;
       const cred = c.hops[i]!.linkConfig as { port?: unknown } | null;
       const port = cred && typeof cred.port === 'number' ? cred.port : null;
-      if (port !== null && ports.includes(port)) out.push({ port, name: c.name });
+      if (port !== null && ports.includes(port)) {
+        out.push({ port, name: c.name, transport: legTransport(cred) });
+      }
     }
     // The balancer case: the cred sits on the exit that listens on it, so the
     // pairing above (cred on the hop BEFORE) misses it.
@@ -237,7 +273,9 @@ async function legacyHopLinkPorts(
       if (hop.nodeId !== nodeId) continue;
       const cred = hop.linkConfig as { port?: unknown } | null;
       const port = cred && typeof cred.port === 'number' ? cred.port : null;
-      if (port !== null && ports.includes(port)) out.push({ port, name: c.name });
+      if (port !== null && ports.includes(port)) {
+        out.push({ port, name: c.name, transport: legTransport(cred) });
+      }
     }
   }
   return out;

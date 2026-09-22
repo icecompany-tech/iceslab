@@ -1,8 +1,10 @@
-import type {
-  LinkCongestion,
-  NodeChain,
-  NodeCores,
-  XrayCascadeFragments,
+import {
+  LINK_CELL_TRANSPORT,
+  type LinkCongestion,
+  type NodeChain,
+  type NodeCores,
+  type Transport,
+  type XrayCascadeFragments,
 } from '@iceslab/shared';
 import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -116,14 +118,18 @@ export class CascadeNodeMissingError extends Error {
  */
 export class CascadeLinkPortInUseError extends Error {
   constructor(
-    public conflicts: { nodeName: string; port: number; profileName: string }[],
+    public conflicts: { nodeName: string; port: number; transport: Transport; profileName: string }[],
   ) {
     super(
       `The inter-hop link ports this cascade needs are already taken: ` +
         conflicts
           .map(
             (c) =>
-              `node "${c.nodeName}" port ${c.port}/TCP (profile "${c.profileName}")`,
+              // The transport is reported, not assumed: since phase 5 a leg can
+              // be QUIC, and "24000/TCP" about a tuic leg would send the
+              // operator looking at the wrong listener.
+              `node "${c.nodeName}" port ${c.port}/${c.transport.toUpperCase()} ` +
+              `(profile "${c.profileName}")`,
           )
           .join('; ') +
         `. Link ports are assigned automatically from 24000 up; move those profiles to ` +
@@ -143,12 +149,24 @@ export class CascadeLinkPortInUseError extends Error {
  */
 function receivingLinkPorts(
   hops: { nodeId: string }[],
-  creds: { port: number }[],
-): { nodeId: string; port: number }[] {
+  creds: LinkCred[],
+): { nodeId: string; port: number; transport: Transport }[] {
   return hops
     .slice(1)
-    .map((h, i) => (creds[i] ? { nodeId: h.nodeId, port: creds[i]!.port } : null))
-    .filter((x): x is { nodeId: string; port: number } => x !== null);
+    .map((h, i) =>
+      creds[i]
+        ? {
+            nodeId: h.nodeId,
+            port: creds[i]!.port,
+            // From the cred's own cell. The legacy storage only ever holds
+            // vless and SS2022, so this is tcp today and reads it rather than
+            // saying it: the day a QUIC cell folds into hops, a constant here
+            // would be a silent lie about which socket is taken.
+            transport: LINK_CELL_TRANSPORT[creds[i]!.protocol],
+          }
+        : null,
+    )
+    .filter((x): x is { nodeId: string; port: number; transport: Transport } => x !== null);
 }
 
 /**
@@ -163,9 +181,9 @@ function receivingLinkPorts(
  * creds for a save that may be about to be refused.
  */
 async function assertLinkPortsFree(
-  fromHops: { nodeId: string; port: number }[],
-  positions?: { nodeIds: string[] }[],
-  directions?: { nodeIds: string[] }[],
+  fromHops: { nodeId: string; port: number; transport: Transport }[],
+  positions?: { nodeIds: string[]; linkProtocol?: string | null }[],
+  directions?: { nodeIds: string[]; linkProtocol?: string | null }[],
 ): Promise<void> {
   const wanted = [
     ...fromHops,
@@ -173,21 +191,36 @@ async function assertLinkPortsFree(
   ];
   if (wanted.length === 0) return;
 
-  const byNode = new Map<string, Set<number>>();
+  // Keyed by node AND transport since phase 5: a QUIC leg and a TCP leg can
+  // want the same port number on one node and take two different sockets, so
+  // asking once per number would compare a udp leg against a tcp profile.
+  const byNode = new Map<string, Map<Transport, Set<number>>>();
   for (const w of wanted) {
-    const set = byNode.get(w.nodeId) ?? new Set<number>();
+    const perTransport = byNode.get(w.nodeId) ?? new Map<Transport, Set<number>>();
+    const set = perTransport.get(w.transport) ?? new Set<number>();
     set.add(w.port);
-    byNode.set(w.nodeId, set);
+    perTransport.set(w.transport, set);
+    byNode.set(w.nodeId, perTransport);
   }
 
-  const conflicts: { nodeName: string; port: number; profileName: string }[] = [];
-  for (const [nodeId, ports] of byNode) {
+  const conflicts: {
+    nodeName: string;
+    port: number;
+    transport: Transport;
+    profileName: string;
+  }[] = [];
+  for (const [nodeId, perTransport] of byNode) {
+    for (const [transport, ports] of perTransport) {
     const owners = await portOwnersOnNode(nodeId, [...ports]);
     // Profiles only, and deliberately: a core service holding 24000 is not
     // something the operator can move, so refusing their cascade over it would
     // be a dead end. That case belongs to the port check, which says who holds
     // what, rather than to a refusal with no remedy.
-    const taken = owners.filter((o) => o.kind === 'profile' && o.transport === 'tcp');
+    //
+    // The transport is the LEG's, not a constant: a hysteria2 profile on
+    // 24000/UDP and a vless leg on 24000/TCP are two listeners, and this check
+    // used to refuse that pair.
+    const taken = owners.filter((o) => o.kind === 'profile' && o.transport === transport);
     if (taken.length === 0) continue;
     const node = await prisma.node.findUnique({
       where: { id: nodeId },
@@ -200,12 +233,15 @@ async function assertLinkPortsFree(
       conflicts.push({
         nodeName: node?.name ?? nodeId,
         port: t.port,
+        transport,
         profileName: t.name,
       });
+    }
     }
   }
   if (conflicts.length > 0) throw new CascadeLinkPortInUseError(conflicts);
 }
+
 /**
  * A leg of this cascade would land on a node that cannot terminate its cell.
  *

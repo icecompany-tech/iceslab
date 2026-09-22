@@ -11,7 +11,7 @@ import type { CascadeHopInput, CascadePositionInput } from './cascade.schemas.js
 // payload instead is how a check and a write come to disagree.
 import type { ResolvedDirection } from './direction-merge.js';
 import { linkCellFor } from './cascade.config.js';
-import { CHAIN_ENTRY_PROTOCOLS, LINK_CELLS } from '@iceslab/shared';
+import { CHAIN_ENTRY_PROTOCOLS, LINK_CELLS, LINK_CELL_ENGINES } from '@iceslab/shared';
 
 /**
  * A link protocol nothing can carry is refused here, at the save.
@@ -311,6 +311,42 @@ export function foldPositionsIntoHops(
     throw new CascadeValidationError(
       'transits together with several directions cannot be stored yet: pick either one way out with transits, or several ways out straight from the entry.',
     );
+  }
+  /**
+   * ⚠ A QUIC cell cannot fold either, phase 5, and leaving it able to was a
+   * claim on a port nothing would listen on.
+   *
+   * The hop storage describes legs the node's own xray draws, and xray does not
+   * terminate hy2 or tuic: the legacy fragment builder refuses those cells
+   * outright. What actually happened without this check is subtler than an
+   * error, which is why a test found it rather than an operator. The cascade
+   * folded, the hop rows were written with a cred built from the ENTRY's cell
+   * (vless, TCP) while the v4 rows carried the direction's tuic leg on UDP, and
+   * the node ended up with two claims on 24000 from one cascade. The port check
+   * then refused a perfectly legal TCP profile on behalf of a listener that
+   * only exists in a table.
+   *
+   * Read from the engines table rather than from a list of "QUIC cells": the
+   * question is whether xray can carry the cell, and that is exactly what
+   * LINK_CELL_ENGINES answers.
+   */
+  const unfoldable = (p: string | null | undefined): boolean => {
+    const cell = linkCellFor(p);
+    return cell !== null && !LINK_CELL_ENGINES[cell].includes('xray');
+  };
+  for (const p of sorted) {
+    if (unfoldable(p.linkProtocol)) {
+      throw new CascadeValidationError(
+        `position ${p.position} links onwards over ${p.linkProtocol}, which only the chain process carries. That needs the new cascade storage.`,
+      );
+    }
+  }
+  for (const d of directions) {
+    if (unfoldable(d.linkProtocol)) {
+      throw new CascadeValidationError(
+        `a direction is reached over ${d.linkProtocol}, which only the chain process carries. That needs the new cascade storage.`,
+      );
+    }
   }
 
   const mode: 'chain' | 'balancer' = directions.length > 1 ? 'balancer' : 'chain';

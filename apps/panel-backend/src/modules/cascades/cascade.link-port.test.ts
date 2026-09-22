@@ -86,8 +86,12 @@ async function bind(profileId: string, nodeId: string, port: number, expected = 
 }
 
 /** One entry, two directions: the shape that folds to a balancer and draws
- *  legs onto both exit nodes at LINK_PORT_BASE. */
-async function makeCascade(entry: string, exits: string[], expected = 201) {
+ *  legs onto both exit nodes at LINK_PORT_BASE.
+ *
+ *  `cells` names the cell of the leg into each direction, phase 5. Left out,
+ *  every direction is reached over the entry's cell, which is what every
+ *  cascade did before directions could choose. */
+async function makeCascade(entry: string, exits: string[], expected = 201, cells: string[] = []) {
   seq += 1;
   const res = await app.inject({
     method: 'POST',
@@ -105,6 +109,7 @@ async function makeCascade(entry: string, exits: string[], expected = 201) {
         tag: i + 1,
         countryCode: i === 0 ? 'NL' : 'SE',
         nodeIds: [nodeId],
+        ...(cells[i] ? { linkProtocol: cells[i] } : {}),
       })),
     },
   });
@@ -170,7 +175,9 @@ describe('a cascade leg and a profile on one port', () => {
     const refused = await makeCascade(entry, [nl, se], 409);
     expect(refused.error).toBe('LINK_PORT_IN_USE');
     expect(refused.conflicts).toEqual([
-      { nodeName: 'nl-exit', port: LINK_PORT_BASE, profileName: 'reality-nl' },
+      // The transport travels with the conflict since phase 5: the screen has
+      // to say which of the two sockets on 24000 is the taken one.
+      { nodeName: 'nl-exit', port: LINK_PORT_BASE, transport: 'tcp', profileName: 'reality-nl' },
     ]);
     // Nothing half-written: a refused save must not leave a cascade behind.
     expect(await prisma.cascade.count()).toBe(0);
@@ -222,6 +229,91 @@ describe('a cascade leg and a profile on one port', () => {
 
     await bind(await makeProfile('reality-443'), nl, 443);
     await bind(await makeProfile('reality-far'), se, LINK_PORT_BASE + 50);
+  });
+
+  /**
+   * Phase 5: a leg is not always TCP any more.
+   *
+   * Everything above was written when both cells rode the node's xray over TCP,
+   * and the transport was a constant in three places: the port owner, the
+   * refusal message and the filter that compares a leg against a profile. Two
+   * of the four cells are QUIC now, and a constant `tcp` is not a simplification
+   * once that is true, it is a wrong answer in both directions at once. It
+   * refuses a TCP profile that can legally share the number with a tuic leg,
+   * and it promises a UDP profile the very socket that leg holds.
+   */
+  describe('a QUIC leg', () => {
+    it('holds the port on UDP, and says so where an operator reads it', async () => {
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const se = await makeNode('se-exit');
+      await makeCascade(entry, [nl, se], 201, ['tuic', 'tuic']);
+
+      const check = async (transport: string) => {
+        const res = await app.inject({
+          method: 'POST',
+          url: `/api/nodes/${nl}/port-check`,
+          headers: auth(),
+          payload: { port: LINK_PORT_BASE, transport },
+        });
+        expect(res.statusCode, res.body).toBe(200);
+        return JSON.parse(res.body);
+      };
+
+      const udp = await check('udp');
+      expect(udp.ok).toBe(false);
+      expect(udp.conflicts).toHaveLength(1);
+      expect(udp.conflicts[0]).toMatchObject({ kind: 'cascade', transport: 'udp' });
+      // And the same number on TCP is free, which is the half a constant would
+      // have got wrong quietly: the operator would have been refused a port
+      // nothing holds.
+      const tcp = await check('tcp');
+      expect(tcp.ok).toBe(true);
+    });
+
+    it('blocks a UDP profile on that port and leaves the TCP one alone', async () => {
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const se = await makeNode('se-exit');
+      await makeCascade(entry, [nl, se], 201, ['tuic', 'tuic']);
+
+      const hy = await makeProfile('hy2-nl', 'hysteria', {});
+      const refused = await bind(hy, nl, LINK_PORT_BASE, 409);
+      expect(refused.error).toBe('PORT_TAKEN_CASCADE');
+      expect(refused.message).toContain('ru-out');
+
+      // The mirror case, and the one this whole piece exists for: REALITY on
+      // 24000/TCP beside a tuic leg on 24000/UDP is two listeners.
+      await bind(await makeProfile('reality-nl'), nl, LINK_PORT_BASE);
+    });
+
+    it('is refused by a UDP profile that was there first, and not by a TCP one', async () => {
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const se = await makeNode('se-exit');
+
+      await bind(await makeProfile('hy2-nl', 'hysteria', {}), nl, LINK_PORT_BASE);
+      const refused = await makeCascade(entry, [nl, se], 409, ['tuic', 'tuic']);
+      expect(refused.error).toBe('LINK_PORT_IN_USE');
+      expect(refused.conflicts).toEqual([
+        { nodeName: 'nl-exit', port: LINK_PORT_BASE, transport: 'udp', profileName: 'hy2-nl' },
+      ]);
+      // The transport is in the message too: "24000/TCP" about a tuic leg
+      // sends the operator to look at the wrong listener.
+      expect(refused.message).toContain('24000/UDP');
+      expect(await prisma.cascade.count()).toBe(0);
+    });
+
+    it('does not refuse a vless leg over a UDP profile on the same number', async () => {
+      // The same pair with the cell left alone. This one was refused before the
+      // transport was read, and refusing it is refusing a legal configuration.
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const se = await makeNode('se-exit');
+
+      await bind(await makeProfile('hy2-nl', 'hysteria', {}), nl, LINK_PORT_BASE);
+      await makeCascade(entry, [nl, se]);
+    });
   });
 
   it('counts the port the LEGACY storage assigns, which is not always the v4 one', async () => {
