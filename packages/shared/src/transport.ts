@@ -35,6 +35,46 @@ export const PROTOCOL_NAMES = [
 export type ProtocolName = (typeof PROTOCOL_NAMES)[number];
 
 /**
+ * The kinds of operator template, and the format each one frames.
+ *
+ * A template is a frame the operator writes and the panel fills: their
+ * `proxy-groups`, their rules, our nodes. The TYPE is what the operator picked
+ * in the editor; the FORMAT is what `/sub` answers with when that template is
+ * in force, and the two are not the same list (docs/plan/subscription-templates
+ * 4.1).
+ *
+ * ⚠ TWO ROWS MAP ONTO A FORMAT THAT IS NOT THEIR OWN, and it is deliberate.
+ * The table in the plan names a new YAML dialect for `stash` (no xhttp) and a
+ * legacy one for `clash` (no vless). Neither exists as a `?format=` today, and
+ * naming one here would be a promise this build cannot serve: the guard beside
+ * FORMAT_NAMES asks the route for a case per name and would refuse it. Both are
+ * YAML the clash builder already produces, so both frame `clash` until the
+ * dialects ship with the templates phase, and this comment is what moves them.
+ *
+ * `mihomo` is the same story in the opposite direction: the plan renames the
+ * ANSWER, not the format, so it frames `clash` as well.
+ */
+export const TEMPLATE_TYPES = [
+  'mihomo',
+  'stash',
+  'clash',
+  'singbox',
+  'xray-json-array',
+  'xray-json',
+] as const;
+
+export type TemplateType = (typeof TEMPLATE_TYPES)[number];
+
+export const TEMPLATE_FORMATS: Record<TemplateType, SubscriptionFormat> = {
+  mihomo: 'clash',
+  stash: 'clash',
+  clash: 'clash',
+  singbox: 'singbox',
+  'xray-json-array': 'xrayjson-array',
+  'xray-json': 'xrayjson',
+};
+
+/**
  * The cells a LEG between two hops can be made of.
  *
  * ⚠ A DIFFERENT DICTIONARY from ProtocolName, sharing two of its words. A cell
