@@ -144,6 +144,24 @@ export const hosts = {
     securityLayer: 'Security layer',
     formats: 'SUBSCRIPTION FORMATS',
     formatsComputed: 'COMPUTED FROM PROFILE + OVERRIDES',
+    // One label per name in the contract's FORMAT_NAMES. The test in
+    // contours/hosts/lib/formats.test.ts keeps them in step: a new format
+    // would otherwise show up on the screen as a bare identifier.
+    formatName: {
+      plain: 'Links (plain)',
+      json: 'JSON',
+      clash: 'Clash / Mihomo',
+      singbox: 'sing-box',
+      wgconf: 'WireGuard .conf',
+      amneziavpn: 'AmneziaVPN',
+      xrayjson: 'Xray JSON',
+      'xrayjson-array': 'Xray JSON (array)',
+      xkeen: 'XKeen',
+      outline: 'Outline',
+      surge: 'Surge',
+      quantumultx: 'Quantumult X',
+      loon: 'Loon',
+    },
     optional: 'OPTIONAL',
     needName: 'Name it first',
     needProfile: 'Pick a profile',

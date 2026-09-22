@@ -52,6 +52,7 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
+import { HOST_FORMATS, formatLabel } from '@/contours/hosts/lib/formats';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -74,8 +75,6 @@ const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random'];
 const ALPNS = ['h2', 'http/1.1', 'h3'];
-/** What the subscription can emit. Turning one off skips this host there. */
-const FORMATS = ['plain', 'singbox', 'xrayjson', 'xrayjson-array', 'clash'];
 
 const LABEL = {
   fontFamily: MONO,
@@ -993,9 +992,13 @@ export function HostEditPage() {
                 </Box>
                 {/* A format is on unless the operator turned it off. The list is
                     what the subscription can emit, not what this host is good
-                    at: whether a client understands it is the client's problem. */}
+                    at: whether a client understands it is the client's problem.
+
+                    Список берётся из контракта: своя копия здесь держала имя
+                    `xrayjson`, которого схема хостов не знает, и сохранение с
+                    ним падало 400 (issue #41). */}
                 <Box style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                  {FORMATS.map((f) => {
+                  {HOST_FORMATS.map((f) => {
                     const on = !disabledFormats.includes(f);
                     return (
                       <Chip
@@ -1009,7 +1012,7 @@ export function HostEditPage() {
                         }}
                       >
                         {on ? '✓ ' : ''}
-                        {f}
+                        {formatLabel(f, t)}
                       </Chip>
                     );
                   })}
