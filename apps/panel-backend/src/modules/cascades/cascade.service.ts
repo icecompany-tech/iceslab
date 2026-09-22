@@ -1735,6 +1735,10 @@ function chainInputFor(
         clients: incoming.map((l) => ({
           tag: l.directionTag,
           uuid: l.cred.protocol === 'vless' ? l.cred.uuid : undefined,
+          // The short id of THAT leg. The listener takes a list of them beside
+          // the node's one private key, so a leg left out here is a direction
+          // whose dialler is refused at the handshake while both configs load.
+          shortId: l.cred.protocol === 'vless' ? l.cred.reality?.shortId : undefined,
         })),
       }
     : undefined;

@@ -39,13 +39,10 @@ describe('the link credentials', () => {
       const minted = await newLinkCred(cell, 24001);
       const back = parseLinkCred(serializeLinkCred(minted));
       expect(back, `${cell} did not parse back`).not.toBeNull();
-      if (cell === 'vless') {
-        // ⚠ The one that does NOT round trip whole, and it predates this work:
-        // the REALITY block is not serialised, it is regenerated per save.
-        // Asserted so the gap is visible rather than surprising.
-        expect(back).toEqual({ protocol: 'vless', port: 24001, uuid: (minted as { uuid: string }).uuid });
-        continue;
-      }
+      // ⚠ vless used to be the one that did NOT round trip whole: the REALITY
+      // block was dropped on the way to the column and minted again on the next
+      // save, which is why the hardening of 2026-08 never reached a node. Since
+      // 5b it survives like everything else, and this line is what says so.
       expect(back).toEqual(minted);
     }
   });

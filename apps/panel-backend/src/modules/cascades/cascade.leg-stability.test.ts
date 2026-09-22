@@ -182,45 +182,131 @@ describe('a leg across two saves', () => {
 
 describe('the REALITY block of a vless leg', () => {
   /**
-   * ⚠ Half-shipped ON PURPOSE, and this is the half that is safe.
+   * ⚠ Shipped in TWO commits, in this order, and the order is the whole story.
    *
-   * The block is still not stored, so every leg in the field keeps running
-   * plain VLESS exactly as it did. What changed with 5b's first commit is that
-   * both RENDERERS now know the shape: the receiving step renders one
-   * `privateKey` with every arriving short id beside it, and names the VISION
-   * flow whenever the block is there.
+   * First both renderers learned the shape (one keypair per receiving node,
+   * short ids as a list, VISION named by both ends or by neither), which
+   * changed nothing in the field because no credential had a block. Only then
+   * did the block start being stored, which is the release that actually
+   * switches the legs over.
    *
-   * The order is deliberate. Storing the block first would have made the
-   * dialling side ask for REALITY at a listener that could not answer, and the
-   * cascade would have stopped carrying traffic on its next save. Renderer
-   * first is invisible; storage second is the release that switches the legs
-   * over, with both ends already able to speak.
+   * The other order would have broken every v4 cascade on its next save: the
+   * dialling side switches itself on per credential, so a stored block with a
+   * listener that could not answer is a pair that loads cleanly and completes
+   * no handshake.
    *
-   * The first test below therefore still says "plain", because nothing stores
-   * a block yet. The second one puts a block in the column by hand and is the
-   * cross-check that 2026-08 never had: both ends built from the SAME stored
-   * credential, compared with each other.
+   * The tests below check the two ends AGAINST EACH OTHER, built from the same
+   * stored credential. Two green `sing-box check` runs would not have caught
+   * the 2026-08 fault and would not catch a short id the listener does not
+   * list, because each config is perfectly valid on its own.
    */
-  it('is not stored, so the leg still listens in plain', async () => {
+  it('is stored whole, and the listener it belongs to is no longer plain', async () => {
     const entry = await makeNode('ru-entry');
     const nl = await makeNode('nl-exit');
     await create(entry, [nl]);
 
-    expect((await storedCreds())[0]).not.toHaveProperty('reality');
+    const cred = (await storedCreds())[0] as {
+      reality?: { privateKey: string; publicKey: string; shortId: string; serverName: string; dest: string };
+    };
+    expect(cred.reality, 'the block did not reach the column').toBeDefined();
+    for (const key of ['privateKey', 'publicKey', 'shortId', 'serverName', 'dest'] as const) {
+      expect(cred.reality![key], `${key} is missing`).toBeTypeOf('string');
+      expect(cred.reality![key].length).toBeGreaterThan(0);
+    }
 
+    // And the fragments a push carries, built from that column: this is the
+    // assertion that would have caught 2026-08 on the day.
     const fragments = await getCascadeFragmentsForNode(nl);
     expect(fragments).not.toBeNull();
     const inbound = fragments!.inbounds.find((i) =>
       (i as { tag?: string }).tag?.includes('link-in'),
     ) as {
       settings: { clients: { flow?: string }[] };
-      streamSettings: { security?: string };
+      streamSettings: { security?: string; realitySettings?: { shortIds: string[] } };
     };
-    expect(inbound.streamSettings.security).toBe('none');
-    expect(inbound.settings.clients[0]!.flow).toBeUndefined();
+    expect(inbound.streamSettings.security).toBe('reality');
+    expect(inbound.streamSettings.realitySettings!.shortIds).toEqual([cred.reality!.shortId]);
+    expect(inbound.settings.clients[0]!.flow).toBe('xtls-rprx-vision');
   });
 
-  it('makes both ends agree the moment a block is in the column', async () => {
+  it('is given to a leg stored without one exactly once', async () => {
+    /**
+     * The rotation and its bound.
+     *
+     * Every leg stored before 5b has no block. The first save after the deploy
+     * gives it one, which does rotate that leg's handshake once and is counted
+     * in the panel's log. The second save must change nothing at all, or
+     * "rotates once" is only "rotates later".
+     */
+    const entry = await makeNode('ru-entry');
+    const nl = await makeNode('nl-exit');
+    const c = await create(entry, [nl]);
+
+    // The shape a pre-5b row has: the cred with its block taken out.
+    const row = await prisma.cascadeLink.findFirstOrThrow({ select: { id: true, config: true } });
+    const { reality: _gone, ...withoutBlock } = row.config as Record<string, unknown>;
+    await prisma.cascadeLink.update({ where: { id: row.id }, data: { config: withoutBlock } });
+
+    await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+    const rotated = (await storedCreds())[0] as { reality?: { publicKey: string } };
+    expect(rotated.reality, 'the leg was not given a block').toBeDefined();
+
+    await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+    expect(await storedCreds()).toEqual([rotated]);
+  });
+
+  it('gives every leg landing on one node the same key and its own short id', async () => {
+    /**
+     * The shape the engine forces: one listener, one `private_key`, a LIST of
+     * short ids. Two directions reaching one node would otherwise carry two
+     * private keys with nowhere to put the second.
+     *
+     * Two directions on ONE node is refused (each reaches its nodes over its
+     * own leg), so the shape that exercises this is a POOL on the entry: two
+     * entry nodes both dialling the same exit, which is two legs landing on one
+     * listener.
+     */
+    const entryA = await makeNode('ru-entry-a');
+    const entryB = await makeNode('ru-entry-b');
+    const nl = await makeNode('nl-exit');
+
+    seq += 1;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: `ru-out-${seq}`,
+        enabled: true,
+        positions: [
+          { position: 0, nodeIds: [entryA, entryB], entryProtocol: 'xray', linkProtocol: 'vless' },
+        ],
+        directions: [{ countryCode: 'NL', nodeIds: [nl] }],
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+
+    const legs = (await storedCreds()) as {
+      reality: { privateKey: string; publicKey: string; shortId: string };
+    }[];
+    expect(legs).toHaveLength(2);
+    expect(legs[0]!.reality.privateKey).toBe(legs[1]!.reality.privateKey);
+    expect(legs[0]!.reality.publicKey).toBe(legs[1]!.reality.publicKey);
+    // Own short id per leg, or the listener could not tell the two apart.
+    expect(legs[0]!.reality.shortId).not.toBe(legs[1]!.reality.shortId);
+
+    // And the listener lists both, which is what the engine reads.
+    const fragments = await getCascadeFragmentsForNode(nl);
+    const inbound = fragments!.inbounds.find((i) =>
+      (i as { tag?: string }).tag?.includes('link-in'),
+    ) as { streamSettings: { realitySettings?: { shortIds: string[]; privateKey: string } } };
+    expect(inbound.streamSettings.realitySettings!.shortIds.sort()).toEqual(
+      legs.map((l) => l.reality.shortId).sort(),
+    );
+    expect(inbound.streamSettings.realitySettings!.privateKey).toBe(legs[0]!.reality.privateKey);
+  });
+
+  it('makes both ends agree on a block somebody put in the column by hand', async () => {
     // The cross-check, at the level a push actually works at: both ends built
     // from the same STORED credential. Two green `sing-box check` runs would
     // not have caught 2026-08 and would not catch a short id the listener does

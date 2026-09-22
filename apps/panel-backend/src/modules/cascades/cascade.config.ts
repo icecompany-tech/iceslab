@@ -309,9 +309,12 @@ export async function newLinkCred(
 /**
  * REALITY material for one inter-hop leg.
  *
- * A fresh keypair per link, not one shared across the cascade: the two ends of
- * a leg are the only parties that need it, and reuse would let a compromised
- * node impersonate every other hop.
+ * A fresh keypair per RECEIVING NODE, which is as narrow as the engine allows:
+ * that node has one listener for the whole step and takes one `private_key` on
+ * it. Narrower than that (a pair per leg) cannot be rendered at all, and wider
+ * (one pair per cascade) would let a compromised node impersonate every other
+ * hop. `generateTopologyLinks` decides the pair per node and hands it to every
+ * leg landing there; only the short id stays per leg.
  *
  * The camouflage target is a large, always-up site that a datacenter connecting
  * to it looks unremarkable doing. It is fixed rather than configurable for now
@@ -387,24 +390,34 @@ export async function generateTopologyLinks(
    */
   existing?: ReadonlyMap<string, LinkCred>,
 ): Promise<TopologyLink[]> {
-  const links: TopologyLink[] = [];
-  const emit = async (
+  /**
+   * The legs are PLANNED first and given credentials after, which is new in
+   * phase 5b and not tidiness.
+   *
+   * A REALITY keypair belongs to the RECEIVING NODE, because that node has one
+   * listener for the whole step and the engine takes one `private_key` on it.
+   * Deciding it while walking would mint a pair for whichever leg happened to
+   * be emitted first, and any leg emitted before it that kept an older pair
+   * would then be dialling a listener holding a different key: a chain that
+   * loads on both sides and completes no handshake.
+   */
+  const plan: {
+    from: string;
+    to: string;
+    directionTag: number;
+    protocol: LinkProtocol;
+    step: number;
+    congestion?: LinkCongestion;
+  }[] = [];
+  const add = (
     from: string,
     to: string,
     directionTag: number,
     protocol: LinkProtocol,
     step: number,
     congestion?: LinkCongestion,
-  ): Promise<void> => {
-    const port = LINK_PORT_BASE + step;
-    const kept = reuseLinkCred(
-      existing?.get(topologyLinkKey(from, to, directionTag)),
-      protocol,
-      port,
-      congestion,
-    );
-    const cred = kept ?? (await newLinkCred(protocol, port, congestion));
-    links.push({ fromNodeId: from, toNodeId: to, directionTag, protocol, cred });
+  ): void => {
+    plan.push({ from, to, directionTag, protocol, step, congestion });
   };
 
   // Position -> position legs. Every direction rides every leg: a transit must
@@ -417,7 +430,7 @@ export async function generateTopologyLinks(
     const congestion = positions[step]!.linkParams?.congestion;
     for (const from of positions[step]!.nodeIds) {
       for (const to of positions[step + 1]!.nodeIds) {
-        for (const d of directions) await emit(from, to, d.tag, proto, step, congestion);
+        for (const d of directions) add(from, to, d.tag, proto, step, congestion);
       }
     }
   }
@@ -438,10 +451,75 @@ export async function generateTopologyLinks(
       for (const d of directions) {
         const proto = d.linkProtocol ? normalizeLinkProtocol(d.linkProtocol) : fallback;
         for (const to of d.nodeIds) {
-          await emit(from, to, d.tag, proto, step, d.linkParams?.congestion);
+          add(from, to, d.tag, proto, step, d.linkParams?.congestion);
         }
       }
     }
+  }
+
+  /**
+   * One REALITY keypair per receiving node, decided before anything is minted.
+   *
+   * Where it comes from, in order:
+   *   - a leg already stored against that node that HAS a block. Its pair is
+   *     the one the other end is holding, so every leg landing there adopts it
+   *     and nothing rotates;
+   *   - otherwise a fresh pair, once, for the whole node. That is the single
+   *     rotation: the legs stored before 5b have no block, they get one here,
+   *     and every save after this one finds it and keeps it.
+   *
+   * The short id stays per leg (the listener takes a list, the dialler one
+   * string), so a leg that is reused keeps its own and only a new leg draws a
+   * new one.
+   */
+  const keyByNode = new Map<string, NonNullable<VlessLinkCred['reality']>>();
+  const keptFor = (p: (typeof plan)[number]): LinkCred | undefined =>
+    reuseLinkCred(
+      existing?.get(topologyLinkKey(p.from, p.to, p.directionTag)),
+      p.protocol,
+      LINK_PORT_BASE + p.step,
+      p.congestion,
+    );
+  for (const p of plan) {
+    if (p.protocol !== 'vless' || keyByNode.has(p.to)) continue;
+    const stored = plan
+      .filter((q) => q.to === p.to && q.protocol === 'vless')
+      .map((q) => keptFor(q))
+      .find((c): c is Extract<LinkCred, { protocol: 'vless' }> => c?.protocol === 'vless' && !!c.reality);
+    keyByNode.set(p.to, stored?.reality ?? newLinkReality());
+  }
+
+  const links: TopologyLink[] = [];
+  let rotated = 0;
+  for (const p of plan) {
+    const port = LINK_PORT_BASE + p.step;
+    const kept = keptFor(p);
+    let cred = kept ?? (await newLinkCred(p.protocol, port, p.congestion));
+    if (cred.protocol === 'vless') {
+      const nodeKey = keyByNode.get(p.to)!;
+      // The node's pair, this leg's short id. A leg that had no block, or one
+      // whose block predates the node's, is counted: that is a handshake the
+      // operator will see reconnect, once.
+      const shortId = cred.reality?.shortId ?? newLinkReality().shortId;
+      if (cred.reality?.privateKey !== nodeKey.privateKey) rotated += 1;
+      cred = { ...cred, reality: { ...nodeKey, shortId } };
+    }
+    links.push({
+      fromNodeId: p.from,
+      toNodeId: p.to,
+      directionTag: p.directionTag,
+      protocol: p.protocol,
+      cred,
+    });
+  }
+  if (rotated > 0) {
+    // Said out loud and counted, because it happens once per cascade and never
+    // again: an operator whose legs reconnect deserves the reason in the
+    // panel's log rather than in a node's journal.
+    getLogger().info(
+      `[cascade] ${rotated} leg(s) had no REALITY block of this node's and have been given one. ` +
+        `This happens once per cascade: from now on a save keeps the same keys.`,
+    );
   }
   return links;
 }
@@ -642,29 +720,29 @@ export function serializeLinkCred(cred: LinkCred): SerializedLinkCred {
       };
     case 'vless':
       /**
-       * ⚠ The REALITY block is still NOT stored, and storing it alone would
-       * break every v4 cascade. Read this before "fixing" the omission.
+       * ⚠ The REALITY block IS stored, since 5b, and the ORDER that made it
+       * safe is the part worth remembering.
        *
-       * The block is minted per save and dropped here, and every renderer
-       * rebuilds its creds from the column, so it has never reached a node: the
-       * legs run plain VLESS over raw TCP. That much looks like a one-line fix.
+       * It used to be minted per save and dropped right here, while every
+       * renderer rebuilds its creds from the column. So the hardening of
+       * 2026-08 never reached a node: the legs ran plain VLESS over raw TCP on
+       * a high port, and the tests did not see it because they build fragments
+       * from the in-memory cred, where the block is present.
        *
-       * It is not, because the two ends of a leg do not agree about REALITY in
-       * the v4 path. The DIALLING side already uses the block when the cred has
-       * one (`vlessLinkOutbound`: security reality, VISION, no mux). The
-       * RECEIVING side is `multiClientLinkInbound`, which hardcodes
-       * `security: 'none'` and no flow, because since v4 ONE listener holds
-       * every leg that terminates on that step and xray's `realitySettings`
-       * has a single `privateKey`. Per-leg keys have nowhere to go there.
-       *
-       * So persisting the block would make the entry dial REALITY+VISION at an
-       * inbound listening in plain: the handshake fails and the cascade stops
-       * carrying traffic on its next save. What it needs first is one keypair
-       * per RECEIVING STEP (shortId may stay per leg, `shortIds` is an array),
-       * which is a change to what the leg looks like on the wire and is
-       * therefore its own piece.
+       * Writing it alone would have broken the field, because the DIALLING side
+       * switches itself on per credential while the RECEIVING side could not
+       * answer: one listener holds every leg of a step and takes a single
+       * `private_key`. So the renderers learned the shape first (one keypair
+       * per receiving node, short ids as a list, VISION named by both ends),
+       * and only then did the block start being written. Both ends move
+       * together or not at all.
        */
-      return { protocol: 'vless', port: cred.port, uuid: cred.uuid };
+      return {
+        protocol: 'vless',
+        port: cred.port,
+        uuid: cred.uuid,
+        ...(cred.reality ? { reality: { ...cred.reality } } : {}),
+      };
     default: {
       const never: never = cred;
       throw new Error(`cannot serialise link cred ${JSON.stringify(never)}`);
