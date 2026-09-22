@@ -204,6 +204,13 @@ jobs:
       # The debt this step used to carry is zero as of 2026-09-21, so the step
       # can finally fail the build instead of printing a wall nobody reads.
       #
+      # The lint step below hands its exit code to a script, so that script is
+      # the thing that can silently turn a job green over live violations. Six
+      # assertions on its exit code, run before it is trusted, with node's own
+      # test runner and no dependency.
+      - name: Test the lint reporter
+        run: node --test .github/scripts/eslint-annotations.test.mjs
+
       # Violations land as annotations ON THE LINE in the PR. The `unix`
       # formatter every problem-matcher recipe names was removed from core
       # ESLint 9, and a SARIF formatter is a dependency for the same result, so
