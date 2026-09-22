@@ -1,4 +1,4 @@
-import * as shared from '@iceslab/shared';
+import { TEMPLATE_FORMATS, TEMPLATE_TYPES as SHARED_TEMPLATE_TYPES } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 /**
@@ -10,44 +10,24 @@ import { api } from '@/lib/net/client';
  * заглушки на живые данные должна быть одной точкой, а не правкой каждого
  * места, которое умеет спросить.
  */
-export type TemplateType =
-  | 'mihomo'
-  | 'stash'
-  | 'clash'
-  | 'singbox'
-  | 'xray-json-array'
-  | 'xray-json';
+export type { TemplateType } from '@iceslab/shared';
+type TemplateType = (typeof SHARED_TEMPLATE_TYPES)[number];
 
-export const TEMPLATE_TYPES: TemplateType[] = [
-  'mihomo',
-  'stash',
-  'clash',
-  'singbox',
-  'xray-json-array',
-  'xray-json',
-];
+export const TEMPLATE_TYPES: TemplateType[] = [...SHARED_TEMPLATE_TYPES];
 
 /**
- * Какой формат подписки отдаётся шаблоном этого типа (таблица 4.1 плана).
+ * Какой формат подписки отдаётся шаблоном этого типа.
  *
- * ⚠ Временный мост, как в `linkCells.ts`: матрица приедет в `@iceslab/shared`
- * под именем `TEMPLATE_FORMATS`, и в этот день локальная копия ниже перестанет
- * читаться. Каст пространства имён, а не именованный импорт: именованный
- * импорт отсутствующего экспорта не собирается вовсе.
+ * ⚠ Таблица приехала в `@iceslab/shared` 2026-09-22, временный мост снят:
+ * теперь обычный именованный импорт, и расхождение ловит сборка.
+ *
+ * Локальная копия говорила `stash: 'stash'`, и контракт с ней разошёлся:
+ * диалектов без `xhttp` и без `vless` у `/sub` пока нет, поэтому `stash` и
+ * `clash` обрамляют тот же формат `clash`, что и `mihomo`. Ровно то, ради чего
+ * копию и убирали.
  */
-const LOCAL_TEMPLATE_FORMATS: Record<TemplateType, string> = {
-  mihomo: 'clash',
-  stash: 'stash',
-  clash: 'clash',
-  singbox: 'singbox',
-  'xray-json-array': 'xrayjson-array',
-  'xray-json': 'xrayjson',
-};
-
 export function templateFormat(type: TemplateType): string {
-  const fromContract = (shared as unknown as { TEMPLATE_FORMATS?: Record<string, string> })
-    .TEMPLATE_FORMATS;
-  return fromContract?.[type] ?? LOCAL_TEMPLATE_FORMATS[type];
+  return TEMPLATE_FORMATS[type];
 }
 
 /** Тело шаблона это YAML или JSON, и от этого зависит подсветка и разбор. */

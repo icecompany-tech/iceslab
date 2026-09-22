@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { TEMPLATE_FORMATS } from '@iceslab/shared';
 import {
+  TEMPLATE_TYPES,
   isNotImplemented,
   templateBodyLanguage,
   templateFormat,
@@ -59,8 +61,20 @@ describe('тип шаблона', () => {
     expect(templateBodyLanguage('xray-json-array')).toBe('json');
   });
 
-  it('2. формат подписки по таблице 4.1, пока своей копией', () => {
+  it('2. формат подписки берётся из контракта, а не из копии на фронте', () => {
+    expect(TEMPLATE_TYPES.map((x) => templateFormat(x))).toEqual(
+      TEMPLATE_TYPES.map((x) => TEMPLATE_FORMATS[x]),
+    );
+  });
+
+  it('3. stash и clash обрамляют тот же формат clash, что и mihomo', () => {
+    // Локальная копия говорила stash -> 'stash', и контракт с ней разошёлся:
+    // диалектов без xhttp и без vless у /sub пока нет. Копия снята, значение
+    // теперь одно, и вот оно.
     expect(templateFormat('mihomo')).toBe('clash');
+    expect(templateFormat('stash')).toBe('clash');
+    expect(templateFormat('clash')).toBe('clash');
+    expect(templateFormat('singbox')).toBe('singbox');
     expect(templateFormat('xray-json-array')).toBe('xrayjson-array');
     expect(templateFormat('xray-json')).toBe('xrayjson');
   });
