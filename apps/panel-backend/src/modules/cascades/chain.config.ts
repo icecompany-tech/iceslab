@@ -1,6 +1,7 @@
 import type { LinkCell } from '@iceslab/shared';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
 import { chainSocksPort } from './chain.ports.js';
+import { LINK_TLS_SERVER_NAME, pemLines, type LinkTls } from './link-tls.js';
 
 /**
  * The chain as its own process: one sing-box config per node, rendered here.
@@ -141,7 +142,93 @@ export function chainLinkUser(tag: number): string {
  * cell into a vless leg.
  */
 function cellOf(cred: LinkCred): LinkCell {
-  return cred.protocol === 'shadowsocks' ? 'shadowsocks' : 'vless';
+  return cred.protocol;
+}
+
+/**
+ * The TLS block a QUIC leg wears, on either end.
+ *
+ * ⚠ INLINE PEM, no path on the node, and `insecure: false` on the dialling
+ * side with the SAME certificate as a pin. Both halves of that are the point:
+ * a path means the key lives outside the panel, and `insecure: true` means the
+ * next hop is whoever answers on that address first. Asked of sing-box 1.13.14
+ * with `check`: inline `certificate` / `key` are accepted on both sides.
+ *
+ * The name is a constant, not a domain: a leg has no name to verify, so the
+ * trust anchor IS the certificate, and the SNI exists because TLS insists.
+ */
+function legTlsIn(tls: LinkTls): Json {
+  return {
+    enabled: true,
+    server_name: LINK_TLS_SERVER_NAME,
+    certificate: pemLines(tls.certPem),
+    key: pemLines(tls.keyPem),
+  };
+}
+
+function legTlsOut(tls: LinkTls): Json {
+  return {
+    enabled: true,
+    // Never true. See above.
+    insecure: false,
+    server_name: LINK_TLS_SERVER_NAME,
+    certificate: pemLines(tls.certPem),
+  };
+}
+
+function hy2Outbound(tag: number, host: string, cred: Extract<LinkCred, { protocol: 'hy2' }>): Json {
+  return {
+    type: 'hysteria2',
+    tag: outTag(tag),
+    server: host,
+    server_port: cred.port,
+    password: cred.authPassword,
+    // Salamander, so the leg does not look like QUIC-with-a-hat-on. Both ends
+    // carry the same salt or neither end sees the other's packets as valid.
+    obfs: { type: 'salamander', password: cred.obfsPassword },
+    tls: legTlsOut(cred.tls),
+  };
+}
+
+function tuicOutbound(
+  tag: number,
+  host: string,
+  cred: Extract<LinkCred, { protocol: 'tuic' }>,
+): Json {
+  return {
+    type: 'tuic',
+    tag: outTag(tag),
+    server: host,
+    server_port: cred.port,
+    uuid: cred.uuid,
+    password: cred.password,
+    congestion_control: cred.congestion,
+    tls: legTlsOut(cred.tls),
+  };
+}
+
+function hy2Inbound(cred: Extract<LinkCred, { protocol: 'hy2' }>): Json {
+  return {
+    type: 'hysteria2',
+    tag: 'link-in',
+    listen: '0.0.0.0',
+    listen_port: cred.port,
+    users: [{ password: cred.authPassword }],
+    obfs: { type: 'salamander', password: cred.obfsPassword },
+    tls: legTlsIn(cred.tls),
+  };
+}
+
+function tuicInbound(cred: Extract<LinkCred, { protocol: 'tuic' }>): Json {
+  return {
+    type: 'tuic',
+    tag: 'link-in',
+    listen: '0.0.0.0',
+    listen_port: cred.port,
+    users: [{ uuid: cred.uuid, password: cred.password }],
+    congestion_control: cred.congestion,
+    tls: legTlsIn(cred.tls),
+  };
 }
 
 function vlessOutbound(tag: number, host: string, cred: Extract<LinkCred, { protocol: 'vless' }>): Json {
@@ -190,6 +277,10 @@ function linkInbound(leg: ChainLegIn): Json {
   switch (cellOf(leg.cred)) {
     case 'shadowsocks':
       return ssInbound(leg.cred as Extract<LinkCred, { protocol: 'shadowsocks' }>);
+    case 'hy2':
+      return hy2Inbound(leg.cred as Extract<LinkCred, { protocol: 'hy2' }>);
+    case 'tuic':
+      return tuicInbound(leg.cred as Extract<LinkCred, { protocol: 'tuic' }>);
     case 'vless':
       return vlessInbound(leg);
     default: {
@@ -340,6 +431,16 @@ export function renderChainConfig(input: ChainRenderInput): Json {
       case 'shadowsocks':
         return {
           ...ssOutbound(leg.tag, leg.host, leg.cred as Extract<LinkCred, { protocol: 'shadowsocks' }>),
+          tag,
+        };
+      case 'hy2':
+        return {
+          ...hy2Outbound(leg.tag, leg.host, leg.cred as Extract<LinkCred, { protocol: 'hy2' }>),
+          tag,
+        };
+      case 'tuic':
+        return {
+          ...tuicOutbound(leg.tag, leg.host, leg.cred as Extract<LinkCred, { protocol: 'tuic' }>),
           tag,
         };
       case 'vless':

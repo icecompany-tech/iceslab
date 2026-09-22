@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   LINK_CELLS,
   LINK_CELL_ENGINES,
@@ -121,6 +124,40 @@ describe('the link cells', () => {
     expect(warnings[0]).toContain('xray');
     expect(warnings[0]).toContain('one release');
     vi.restoreAllMocks();
+  });
+
+  it('has a branch in the chain renderer for every cell, and no branch for anything else', () => {
+    /**
+     * The composition guard, read off the SOURCE.
+     *
+     * A cell in the table with no branch renders as a thrown error at push
+     * time, on a node, hours after somebody saved the cascade. A branch with no
+     * cell is dead code that looks like support. Neither is visible to the type
+     * checker: `LinkCred.protocol` and `LinkCell` agree today by construction,
+     * and the day they stop agreeing is the day this matters.
+     *
+     * Reads the file rather than exercising the renderer because exercising it
+     * needs a credential per cell, which is the thing that would be missing.
+     */
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'chain.config.ts'),
+      'utf8',
+    );
+    const branches = new Set([...src.matchAll(/case '([a-z0-9-]+)':/g)].map((m) => m[1]!));
+    // Fails rather than passes empty: a pattern that matches nothing would make
+    // every assertion below vacuous.
+    expect(branches.size, 'no case labels found in chain.config.ts').toBeGreaterThan(1);
+    for (const cell of LINK_CELLS) {
+      expect(branches, `the chain renderer has no branch for ${cell}`).toContain(cell);
+    }
+    // And the other way: every label is a cell. The renderer switches on
+    // nothing else, so a stray label means somebody branched on a different
+    // vocabulary again.
+    for (const label of branches) {
+      expect(LINK_CELLS as readonly string[], `${label} is a branch for a non-cell`).toContain(
+        label,
+      );
+    }
   });
 
   it('gives the two new cells UDP and the two old ones TCP', () => {
