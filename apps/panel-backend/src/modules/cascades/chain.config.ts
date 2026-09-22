@@ -1,4 +1,5 @@
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
+import { chainSocksPort } from './chain.ports.js';
 
 /**
  * The chain as its own process: one sing-box config per node, rendered here.
@@ -18,19 +19,9 @@ import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
  * binary, so this comment cannot quietly become false.
  */
 
-/** Where the user's core hands traffic over. One per way out, on loopback. */
-export const CHAIN_SOCKS_BASE = 26000;
-
-/**
- * The socks port for a way out.
- *
- * Derived, never stored: both sides compute it from the direction tag, so
- * they cannot disagree about it. Tag 0 is the "Auto" line, and zero is free by
- * construction, because direction tags are issued from a counter starting at 1.
- */
-export function chainSocksPort(directionTag: number): number {
-  return CHAIN_SOCKS_BASE + directionTag;
-}
+/** The loopback ports the user's core hands traffic over on. Shared with the
+ *  xray side of the handover, which is why they live in their own file. */
+export { CHAIN_SOCKS_BASE, chainSocksPort } from './chain.ports.js';
 
 export type ChainRole = 'entry' | 'transit' | 'exit';
 

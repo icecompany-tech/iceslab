@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
+import { chainSocksPort } from './chain.ports.js';
 
 /**
  * C2/C3b - cascade config generation for the native inter-hop link cells the
@@ -568,6 +569,70 @@ export interface TopologyInput {
    *  choice to a latency balancer spanning every direction. Off unless the
    *  operator turned it on for this cascade. */
   auto?: boolean;
+  /**
+   * Phase 4: the ENTRY stops dialling the next hop itself and hands each
+   * direction to the local chain process over loopback socks instead.
+   *
+   * The password every one of those listeners asks for. Present means handover;
+   * absent means the entry keeps drawing the chain with its own link-outs, which
+   * is what every node in the field is doing today.
+   *
+   * ⚠ The caller decides whether handover is SAFE for a given cascade, and
+   * `chainHandoverBlocker` below is the one place that answers it. A shape this
+   * renderer cannot hand over faithfully must keep the link-outs: quietly
+   * pinning a pool or an Auto line to one node is the failure this whole phase
+   * exists to avoid.
+   */
+  chainSocksPassword?: string;
+}
+
+/**
+ * Why this cascade cannot hand its entry over to the chain process yet, or null
+ * when it can.
+ *
+ * Both answers are about SELECTION, which the entry does today with a leastPing
+ * balancer and an observatory, and which the chain config does not do at all
+ * yet: it renders one leg per direction and nothing that chooses between legs.
+ *
+ *   - a pool on the step after the entry means several legs serve one
+ *     direction. Handing that to the chain as it stands pins the direction to
+ *     whichever leg the renderer found first, so a pool of two silently becomes
+ *     one node;
+ *   - the Auto line is the same thing across directions: its whole meaning is
+ *     "the fastest way out right now", and a chain that cannot compare legs
+ *     turns it into a fixed exit while the subscription still calls it Auto.
+ *
+ * Both are answerable (sing-box has `urltest`), and neither is answerable by
+ * this file. Until the chain renders it, the panel sends these cascades the way
+ * it always has.
+ */
+export function chainHandoverBlocker(input: TopologyInput): string | null {
+  if (input.auto) {
+    return (
+      'the cascade offers the Auto line, which means "the fastest way out right now", and the ' +
+      'chain process has nothing that compares legs yet'
+    );
+  }
+  // Counted per ENTRY NODE, not across the entry step: a pool of two entries is
+  // two separate configs each with one leg per direction, which hands over
+  // perfectly well. What blocks handover is one entry with two legs for one
+  // direction, which is a pool on the step AFTER it.
+  const perDirection = new Map<string, number>();
+  for (const l of input.links) {
+    if (!input.positions[0]?.nodeIds.includes(l.fromNodeId)) continue;
+    const key = `${l.fromNodeId}:${l.directionTag}`;
+    perDirection.set(key, (perDirection.get(key) ?? 0) + 1);
+  }
+  for (const [key, count] of perDirection) {
+    if (count > 1) {
+      const tag = key.split(':')[1];
+      return (
+        `direction ${tag} leaves the entry through a pool of ${count} nodes, and the chain ` +
+        `process has nothing that chooses between them yet`
+      );
+    }
+  }
+  return null;
 }
 
 /**
@@ -604,6 +669,40 @@ export class CascadeTopologyBrokenError extends Error {
     );
     this.name = 'CascadeTopologyBrokenError';
   }
+}
+
+/**
+ * The outbound an entry uses to hand one direction to the local chain process.
+ *
+ * Named for the DIRECTION, like the link-out it replaces, so every routing rule
+ * above it is written the same way whichever of the two is underneath.
+ */
+function chainOutTag(directionTag: number): string {
+  return `${LINK_OUT_TAG}-chain-d${directionTag}`;
+}
+
+/**
+ * Loopback socks towards the chain process.
+ *
+ * 127.0.0.1 and authenticated: the listener on the other side is on loopback
+ * too, and a VPS has other users. The port is DERIVED from the direction tag by
+ * `chainSocksPort`, never stored, so the two processes cannot disagree about
+ * which port carries which way out.
+ */
+function chainSocksOutbound(directionTag: number, password: string): Record<string, unknown> {
+  return {
+    tag: chainOutTag(directionTag),
+    protocol: 'socks',
+    settings: {
+      servers: [
+        {
+          address: '127.0.0.1',
+          port: chainSocksPort(directionTag),
+          users: [{ user: 'chain', pass: password }],
+        },
+      ],
+    },
+  };
 }
 
 /** Per-direction outbound tag. Unlike the old index-based `-0/-1` suffix this
@@ -670,6 +769,13 @@ export function buildTopologyFragmentsForNode(
   }
 
   // ── Outbound side: one outbound per leg, grouped by direction.
+  //
+  // Under chain handover the entry writes ONE socks outbound per direction
+  // instead, and the legs themselves move to the chain process. Everything
+  // below this block reads `byDirection`, so the rules come out identical
+  // either way: that is the whole design, and the golden diff of the entry is
+  // meant to show nothing but the swap.
+  const handover = isEntry && input.chainSocksPassword !== undefined;
   const outbounds: Record<string, unknown>[] = [];
   const byDirection = new Map<number, string[]>();
   const perDirCounter = new Map<number, number>();
@@ -681,6 +787,17 @@ export function buildTopologyFragmentsForNode(
         `direction ${l.directionTag} goes through node ${l.toNodeId}, which has no address ` +
           `(deleted?)`,
       );
+    }
+    if (handover) {
+      // One socks outbound per direction however many legs it has: the host and
+      // the credential belong to the chain process now, and the entry only has
+      // to know which loopback port carries this way out. A direction already
+      // handed over is not written twice.
+      if (byDirection.has(l.directionTag)) continue;
+      const tag = chainOutTag(l.directionTag);
+      outbounds.push(chainSocksOutbound(l.directionTag, input.chainSocksPassword!));
+      byDirection.set(l.directionTag, [tag]);
+      continue;
     }
     const idx = perDirCounter.get(l.directionTag) ?? 0;
     perDirCounter.set(l.directionTag, idx + 1);

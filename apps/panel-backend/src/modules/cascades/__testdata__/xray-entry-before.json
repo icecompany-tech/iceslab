@@ -1,0 +1,106 @@
+{
+  "nodeId": "e1111111-1111-1111-1111-111111111111",
+  "position": 0,
+  "role": "entry",
+  "inbounds": [],
+  "outbounds": [
+    {
+      "tag": "cascade-link-out-d1-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "nl-01.example.com",
+            "port": 24000,
+            "users": [
+              {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "none",
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      },
+      "mux": {
+        "enabled": true,
+        "concurrency": 8
+      }
+    },
+    {
+      "tag": "cascade-link-out-d2-0",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "se-01.example.com",
+            "port": 24000,
+            "users": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "none",
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      },
+      "mux": {
+        "enabled": true,
+        "concurrency": 8
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    }
+  ],
+  "routingRules": [
+    {
+      "type": "field",
+      "network": "udp",
+      "port": 443,
+      "outboundTag": "blocked"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "257,258",
+      "domain": [
+        "geosite:category-ads-all"
+      ],
+      "outboundTag": "blocked"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "257,258",
+      "domain": [
+        "geosite:google"
+      ],
+      "outboundTag": "direct"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "1,257",
+      "outboundTag": "cascade-link-out-d1-0"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "2,258",
+      "outboundTag": "cascade-link-out-d2-0"
+    }
+  ]
+}

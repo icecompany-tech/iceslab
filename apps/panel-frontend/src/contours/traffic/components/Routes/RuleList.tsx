@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
-import { CYAN, DISPLAY, FAINT, HAIRLINE, MIST, MONO, RAISED, SNOW, WELL } from '@/contours/traffic/lib/colors';
+import { CYAN, DISPLAY, FAINT, HAIRLINE, MIST, MONO, ROW, SNOW, WELL } from '@/contours/traffic/lib/colors';
 import { Caption } from '@/contours/traffic/components/Routes/Labels';
 export function ListHead({ label, count }: { label: string; count: number }) {
   return (
@@ -46,7 +46,7 @@ export function ListRow({
         padding: '13px 18px',
         width: '100%',
         textAlign: 'left',
-        backgroundColor: selected ? RAISED : 'transparent',
+        backgroundColor: selected ? ROW : 'transparent',
         borderLeft: `2px solid ${selected ? CYAN : 'transparent'}`,
         borderBottom: `1px solid ${HAIRLINE}`,
       }}

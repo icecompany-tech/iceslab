@@ -1,0 +1,82 @@
+{
+  "nodeId": "e1111111-1111-1111-1111-111111111111",
+  "position": 0,
+  "role": "entry",
+  "inbounds": [],
+  "outbounds": [
+    {
+      "tag": "cascade-link-out-chain-d1",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 26001,
+            "users": [
+              {
+                "user": "chain",
+                "pass": "chain-socks-fixture-password-0000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "cascade-link-out-chain-d2",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 26002,
+            "users": [
+              {
+                "user": "chain",
+                "pass": "chain-socks-fixture-password-0000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    }
+  ],
+  "routingRules": [
+    {
+      "type": "field",
+      "network": "udp",
+      "port": 443,
+      "outboundTag": "blocked"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "257,258",
+      "domain": [
+        "geosite:category-ads-all"
+      ],
+      "outboundTag": "blocked"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "257,258",
+      "domain": [
+        "geosite:google"
+      ],
+      "outboundTag": "direct"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "1,257",
+      "outboundTag": "cascade-link-out-chain-d1"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "2,258",
+      "outboundTag": "cascade-link-out-chain-d2"
+    }
+  ]
+}

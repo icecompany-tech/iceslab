@@ -1,6 +1,6 @@
 import { ActionSelect } from '@/contours/traffic/components/RoutePolicy/ActionSelect';
 import { Box, Text, TextInput, UnstyledButton } from '@mantine/core';
-import { CYAN, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MONO, RAISED, SHADOW_BG, SHADOW_INK, SHADOW_NOTE, SNOW, WELL } from '@/contours/traffic/lib/colors';
+import { CYAN, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MONO, ROW, SHADOW_BG, SHADOW_INK, SHADOW_NOTE, SNOW, WELL } from '@/contours/traffic/lib/colors';
 import { GripIcon, PlusIcon, TrashIcon } from '@/contours/traffic/components/RoutePolicy/icons';
 import { IconAction } from '@/contours/traffic/components/RoutePolicy/IconAction';
 import { splitMatch } from '@/contours/traffic/lib/routeRules';
@@ -46,7 +46,7 @@ export function RulesList({
               paddingBlock: 12,
               paddingInline: 20,
               borderTop: `1px solid ${HAIRLINE}`,
-              backgroundColor: shadowedBy ? SHADOW_BG : dragging === i ? RAISED : 'transparent',
+              backgroundColor: shadowedBy ? SHADOW_BG : dragging === i ? ROW : 'transparent',
             }}
           >
             {/* Only the grip drags. A draggable row swallows clicks and text
