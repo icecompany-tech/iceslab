@@ -179,8 +179,18 @@ export interface CascadePositionInput {
   position: number;
   /** Entry only: the core clients dial. */
   entryProtocol?: CascadeProtocol;
-  /** What this position speaks to the next one. The exit position carries none. */
-  linkProtocol?: CascadeProtocol;
+  /**
+   * ЯЧЕЙКА, которой эта позиция говорит со следующей. У выходной позиции её
+   * нет. Строка, а не `CascadeProtocol`: словари ячеек и протоколов нод разные,
+   * и совпадали они, пока ячеек было две.
+   */
+  linkProtocol?: string;
+  /**
+   * Настройки ноги этой позиции (Ф5.9). Отправляются ТОЛЬКО если оператор их
+   * правил: у сервера отсутствие ключа значит «не трогай», `null` значит
+   * «сбросить». Правило то же, что у направления.
+   */
+  linkParams?: LinkParams | null;
 }
 
 /**

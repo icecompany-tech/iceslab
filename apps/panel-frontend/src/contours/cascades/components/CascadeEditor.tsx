@@ -583,15 +583,22 @@ export function PositionRow({
  */
 export function LegRow({
   facts,
+  params = null,
   onCell,
+  onParams,
   caption,
   gaps = [],
   portTaken = [],
 }: {
   facts: LegFacts;
+  /** Настройки этой ноги сверх ячейки. Поле у позиции появилось с Ф5.9
+   *  (`2cfa08b`): до него нога между шагами молча брала дефолт движка. */
+  params?: LinkParams | null;
   /** Нет обработчика, значит ячейка здесь не выбирается: строка только
    *  рассказывает, что будет дальше. */
   onCell?: (value: string) => void;
+  /** Нет обработчика, значит настройки только показываются. */
+  onParams?: (patch: LinkParams) => void;
   caption?: string;
   /** Ноды, которые эту ячейку не поднимут: предсказание по движкам и отказ
    *  сервера, сведённые в один список. Пусто у подавляющего большинства ног. */
@@ -646,10 +653,9 @@ export function LegRow({
         </Box>
       )}
     </Box>
-    {/* Настройки ячейки словами, без полей: у позиции контракт их не несёт.
-        `CascadePositionSchema` знает только `linkProtocol`, поэтому селектор
-        перегрузки здесь был бы мёртвым, а молчание скрыло бы, что у tuic-ноги
-        алгоритм всё-таки есть, просто не выбирается. */}
+    {/* Настройки ячейки. Те же, что у ноги направления, и фабрика та же: у
+        hy2 настраивать нечем, у tuic один выбор. Селектор появляется только
+        там, где есть чем его сохранить: без `onParams` строка молчит. */}
     {paramFacts.kind === 'minted' && (
       <Box style={{ paddingLeft: 38 }}>
         <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
@@ -657,11 +663,19 @@ export function LegRow({
         </Text>
       </Box>
     )}
-    {paramFacts.kind === 'congestion' && (
-      <Box style={{ paddingLeft: 38 }}>
-        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
-          {t('cascadeCreate.legCongestionFixed', { value: paramFacts.fallback })}
-        </Text>
+    {paramFacts.kind === 'congestion' && onParams && (
+      <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 10, paddingLeft: 38 }}>
+        <Stack gap={4} style={{ width: 180 }}>
+          <FieldLabel>{t('cascadeCreate.legCongestion')}</FieldLabel>
+          <Select
+            size="xs"
+            data={paramFacts.options}
+            value={params?.congestion ?? null}
+            placeholder={t('cascadeCreate.legCongestionDefault', { value: paramFacts.fallback })}
+            allowDeselect={false}
+            onChange={(v) => v && onParams({ congestion: v as LinkCongestion })}
+          />
+        </Stack>
       </Box>
     )}
 

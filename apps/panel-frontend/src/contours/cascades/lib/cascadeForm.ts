@@ -157,7 +157,26 @@ export interface PositionDraft {
   key: number;
   nodeIds: string[];
   entryProtocol: CascadeProtocol;
-  linkProtocol: CascadeProtocol;
+  /**
+   * ЯЧЕЙКА ноги, а не протокол ноды, и это разные словари.
+   *
+   * Тип был `CascadeProtocol`, и совпадал он случайно: пока ячеек было две,
+   * `xray` и `shadowsocks` нашлись и среди протоколов. С четырьмя ячейками
+   * `hy2` и `tuic` в этот тип не лезут, а экраны и так приводили значение
+   * кастом. Здесь строка, потому что колонка в базе строка и может держать
+   * значение, которого панель не знает; что из этого сервер примет, решает
+   * `isRealisedLinkCell` и схема на бэкенде.
+   */
+  linkProtocol: string;
+  /**
+   * Настройки ноги ЭТОЙ позиции. То же поле и то же правило, что у
+   * направления: три значения на чтении, и на записи отсутствие ключа значит
+   * «не трогай».
+   */
+  linkParams?: LinkParams | null;
+  /** Правил ли оператор ногу этой позиции. Без флага сохранение экрана, на
+   *  котором поля никто не трогал, отправило бы `null` и сбросило бы выбор. */
+  linkTouched?: boolean;
 }
 
 export interface DirectionDraft {
@@ -199,12 +218,22 @@ export function poolRoleAt(index: number): HopRole {
   return index === 0 ? 'entry' : 'transit';
 }
 
+/**
+ * ⚠ `linkParams` уходит ТОЛЬКО если оператор его правил.
+ *
+ * То же правило, что у направления, и по той же причине: у сервера отсутствие
+ * ключа значит «не трогай», а `null` значит «сбросить». Экран, который поля не
+ * показывал или показывал, но не трогал, отправив `null`, стёр бы чужой выбор
+ * (инцидент 2026-07-31 со сквадом, и он же в новом месте 2026-09-22, когда
+ * правка ноги одного направления снимала ногу соседнему).
+ */
 export function toPositionInputs(pools: PositionDraft[]) {
   return pools.map((p, i) => ({
     nodeIds: p.nodeIds.filter(Boolean),
     position: i,
     ...(i === 0 ? { entryProtocol: p.entryProtocol } : {}),
     linkProtocol: p.linkProtocol,
+    ...(p.linkTouched ? { linkParams: p.linkParams ?? null } : {}),
   }));
 }
 

@@ -115,9 +115,6 @@ export const cascades = {
     legObfsMinted: 'The Salamander salt is minted by the panel, like every other link credential.',
     legCongestion: 'congestion control',
     legCongestionDefault: 'default {{value}}',
-    // A position's leg: the algorithm exists, the choice does not. A position
-    // carries only its cell, so a control here would be a dead one.
-    legCongestionFixed: 'congestion control {{value}}, not selectable on a position leg',
     legNodeGap: '{{name}} does not carry {{cell}}: it reported {{engines}}.',
     // The transport belongs in the sentence: 24001/udp and 24001/tcp are
     // different sockets, and one being taken says nothing about the other.

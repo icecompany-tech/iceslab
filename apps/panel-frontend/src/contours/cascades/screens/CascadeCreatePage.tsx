@@ -519,7 +519,11 @@ export function CascadeCreatePage() {
                 // Та же таблица движков, что у ноги направления: иначе hy2 и
                 // tuic покраснели бы как чужие ячейки.
                 facts={legFacts(pool.linkProtocol, i, linkCellEngines)}
+                params={pool.linkParams ?? null}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
+                onParams={(p) =>
+                  setPool(i, { linkParams: { ...(pool.linkParams ?? {}), ...p }, linkTouched: true })
+                }
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
                 gaps={legCellNotes(
                   // Ногу принимает СЛЕДУЮЩАЯ позиция: ячейку поднимает

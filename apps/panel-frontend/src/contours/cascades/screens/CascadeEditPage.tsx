@@ -645,7 +645,11 @@ export function CascadeEditPage() {
                 // позиции читались бы как нереализованная ячейка и краснели,
                 // хотя сервер их принимает.
                 facts={legFacts(pool.linkProtocol, i, linkCellEngines)}
+                params={pool.linkParams ?? null}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
+                onParams={(p) =>
+                  setPool(i, { linkParams: { ...(pool.linkParams ?? {}), ...p }, linkTouched: true })
+                }
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
                 gaps={legCellNotes(
                   // Ногу позиции ПРИНИМАЕТ следующая позиция: ячейку поднимает
@@ -1139,6 +1143,9 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
           nodeIds: p.nodeIds.length ? [...p.nodeIds] : [''],
           entryProtocol: (p.entryProtocol ?? 'xray') as CascadeProtocol,
           linkProtocol: (p.linkProtocol ?? 'xray') as CascadeProtocol,
+          // Как и у направления, переносится В ТОМ ЖЕ ВИДЕ: `undefined` это
+          // «сервер поля не отдаёт», `null` это «оператор ничего не выбрал».
+          linkParams: p.linkParams,
         })),
       directions: c.directions.map((d) => ({
         key: key(),

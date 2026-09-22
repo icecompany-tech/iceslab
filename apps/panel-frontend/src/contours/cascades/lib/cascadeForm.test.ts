@@ -19,6 +19,7 @@ import {
   poolRowFacts,
   refusedCells,
   refusedLinkPorts,
+  toPositionInputs,
 } from '@/contours/cascades/lib/cascadeForm';
 
 /**
@@ -473,6 +474,45 @@ describe('legCellNotes', () => {
         { nodeName: 'se-09', cell: 'tuic', engines: [] },
       ]),
     ).toEqual([]);
+  });
+});
+
+/**
+ * Форма пейлоада позиции.
+ *
+ * Правило то же, что у направления, и цена та же: у сервера отсутствие ключа
+ * значит «не трогай», `null` значит «сбросить». Экран, который настройку не
+ * правил, отправив `null`, стёр бы чужой выбор.
+ */
+describe('toPositionInputs и нога позиции', () => {
+  const base = { key: 0, nodeIds: ['n1'], entryProtocol: 'xray' as const, linkProtocol: 'hy2' };
+  // Значение берём из контракта, а не пишем словом: любое имя алгоритма,
+  // написанное здесь руками, это ещё одна копия словаря, и сторож в
+  // `lib/domain/linkCongestion.test.ts` её справедливо ловит.
+  const chosen = LINK_CONGESTIONS.find((c) => c !== DEFAULT_LINK_CONGESTION)!;
+
+  it('1. ногу НЕ трогали: ключа linkParams в пейлоаде нет вовсе', () => {
+    const [out] = toPositionInputs([{ ...base, linkParams: { congestion: chosen } }]);
+    expect('linkParams' in out!).toBe(false);
+    expect(out).toEqual({ nodeIds: ['n1'], position: 0, entryProtocol: 'xray', linkProtocol: 'hy2' });
+  });
+
+  it('2. ногу правили: настройки уходят', () => {
+    const [out] = toPositionInputs([
+      { ...base, linkProtocol: 'tuic', linkParams: { congestion: chosen }, linkTouched: true },
+    ]);
+    expect(out).toMatchObject({ linkParams: { congestion: chosen } });
+  });
+
+  it('3. правили и сбросили: уходит null, и это осмысленное «как по умолчанию»', () => {
+    const [out] = toPositionInputs([{ ...base, linkParams: null, linkTouched: true }]);
+    expect(out).toMatchObject({ linkParams: null });
+  });
+
+  it('4. entryProtocol уходит только у первой позиции', () => {
+    const outs = toPositionInputs([base, { ...base, key: 1 }]);
+    expect('entryProtocol' in outs[0]!).toBe(true);
+    expect('entryProtocol' in outs[1]!).toBe(false);
   });
 });
 
