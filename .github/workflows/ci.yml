@@ -203,9 +203,19 @@ jobs:
 
       # The debt this step used to carry is zero as of 2026-09-21, so the step
       # can finally fail the build instead of printing a wall nobody reads.
+      #
+      # Violations land as annotations ON THE LINE in the PR. The `unix`
+      # formatter every problem-matcher recipe names was removed from core
+      # ESLint 9, and a SARIF formatter is a dependency for the same result, so
+      # the built-in json report is turned into annotations by a script.
+      #
+      # `|| true` because the script decides the outcome: letting eslint fail
+      # the step here would kill the job before a single annotation is printed.
       - name: Lint frontend
         working-directory: apps/panel-frontend
-        run: pnpm exec eslint .
+        run: |
+          pnpm exec eslint . -f json -o eslint-report.json || true
+          node "$GITHUB_WORKSPACE/.github/scripts/eslint-annotations.mjs" eslint-report.json
 
       # Before the build, not after: a broken assertion is cheaper to read on
       # its own than inside a bundle log.
@@ -218,6 +228,45 @@ jobs:
       - name: Build frontend
         working-directory: apps/panel-frontend
         run: pnpm exec vite build
+
+      # Three numbers on the run page, so a regression is seen without opening
+      # the log. The bundle size is the one that pays for itself: a dead modal
+      # carried 29 KB of the Nodes chunk for weeks and nothing said so.
+      #
+      # `if: always()` on purpose: the summary is most useful on the run where
+      # something failed. Each number is guarded, because a step that dies
+      # trying to report a failure hides the failure it was reporting.
+      - name: Summary
+        if: always()
+        working-directory: apps/panel-frontend
+        run: |
+          {
+            echo "### frontend (panel)"
+            if [ -f vitest-report.json ]; then
+              node -e '
+                const r = require("./vitest-report.json");
+                const t = r.numTotalTests ?? 0, p = r.numPassedTests ?? 0, f = r.numFailedTests ?? 0;
+                console.log(`- tests: ${p}/${t} passed` + (f ? `, ${f} failed` : ""));
+              '
+            else
+              echo "- tests: no report (the step did not get that far)"
+            fi
+            if [ -f eslint-report.json ]; then
+              node -e '
+                const r = require("./eslint-report.json");
+                const e = r.reduce((n, f) => n + f.errorCount, 0);
+                const w = r.reduce((n, f) => n + f.warningCount, 0);
+                console.log(`- lint: ${e} errors, ${w} warnings`);
+              '
+            else
+              echo "- lint: no report (the step did not get that far)"
+            fi
+            if [ -d dist ]; then
+              echo "- dist: $(du -sk dist | cut -f1) KB, js $(du -ck dist/assets/*.js 2>/dev/null | tail -1 | cut -f1) KB"
+            else
+              echo "- dist: not built"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   node-agent:
     name: node-agent (Go)
