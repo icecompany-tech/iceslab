@@ -57,8 +57,62 @@ const shadowtlsEp: SubscriptionEndpoint = {
   uri: '',
 };
 
-function parse(out: string): { inbounds: any[]; outbounds: any[]; route: any; log: any } {
-  return JSON.parse(out);
+/**
+ * The sing-box config as these tests READ it.
+ *
+ * Only the fields the assertions touch, named once. They used to be `any`
+ * twenty-six times over, which is the same admission repeated and checked
+ * never: `o.server_prot` would have read as undefined and the expectation would
+ * have failed somewhere else entirely, or passed.
+ *
+ * Deliberately NOT a description of sing-box's schema. It is a description of
+ * what OUR builder emits, which is the thing under test, and every optional
+ * marker below says "this outbound type does not carry that field".
+ */
+interface SbOutbound {
+  type: string;
+  tag: string;
+  server?: string;
+  server_port?: number;
+  password?: string;
+  uuid?: string;
+  method?: string;
+  flow?: string;
+  version?: number;
+  detour?: string;
+  /** Selector only: the tags it offers, and which one it opens on. */
+  outbounds?: string[];
+  default?: string;
+  tls?: {
+    enabled?: boolean;
+    server_name?: string;
+    insecure?: boolean;
+    utls?: { enabled: boolean; fingerprint: string };
+    reality?: { enabled: boolean; public_key: string; short_id: string };
+  };
+  transport?: {
+    type?: string;
+    path?: string;
+    host?: string | string[];
+    service_name?: string;
+    headers?: Record<string, string>;
+  };
+}
+
+interface SbConfig {
+  log?: Record<string, unknown>;
+  inbounds: { type: string; tag?: string }[];
+  outbounds: SbOutbound[];
+  route: {
+    final?: string;
+    auto_detect_interface?: boolean;
+    rules?: Record<string, unknown>[];
+    rule_set?: Record<string, unknown>[];
+  };
+}
+
+function parse(out: string): SbConfig {
+  return JSON.parse(out) as SbConfig;
 }
 
 describe('buildSingboxJson', () => {
@@ -74,13 +128,13 @@ describe('buildSingboxJson', () => {
     expect(cfg.inbounds[0].type).toBe('tun');
     // Never a mixed/socks/http listener: that would open a localhost proxy port.
     expect(
-      cfg.inbounds.some((i: any) => ['mixed', 'socks', 'http'].includes(i.type)),
+      cfg.inbounds.some((i) => ['mixed', 'socks', 'http'].includes(i.type)),
     ).toBe(false);
   });
 
   it('emits a hysteria2 outbound with mandatory fields', () => {
     const cfg = parse(buildSingboxJson([hysteriaEp]));
-    const hy = cfg.outbounds.find((o: any) => o.type === 'hysteria2');
+    const hy = cfg.outbounds.find((o) => o.type === 'hysteria2');
     expect(hy).toBeDefined();
     expect(hy.tag).toBe('eu-1-hysteria');
     expect(hy.server).toBe('n1.example.com');
@@ -90,7 +144,7 @@ describe('buildSingboxJson', () => {
 
   it('emits a vless+REALITY outbound nested under tls', () => {
     const cfg = parse(buildSingboxJson([xrayEp]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v).toBeDefined();
     expect(v.uuid).toBe('11111111-2222-3333-4444-555555555555');
     expect(v.flow).toBe('xtls-rprx-vision');
@@ -104,7 +158,7 @@ describe('buildSingboxJson', () => {
 
   it('appends an Auto selector listing every proxy plus direct', () => {
     const cfg = parse(buildSingboxJson([hysteriaEp, xrayEp]));
-    const sel = cfg.outbounds.find((o: any) => o.type === 'selector');
+    const sel = cfg.outbounds.find((o) => o.type === 'selector');
     expect(sel.tag).toBe('Auto');
     expect(sel.outbounds).toEqual(['eu-1-hysteria', 'eu-1-xray', 'direct']);
     expect(sel.default).toBe('eu-1-hysteria');
@@ -112,7 +166,7 @@ describe('buildSingboxJson', () => {
 
   it('always includes a direct outbound', () => {
     const cfg = parse(buildSingboxJson([hysteriaEp]));
-    expect(cfg.outbounds.find((o: any) => o.type === 'direct' && o.tag === 'direct')).toBeDefined();
+    expect(cfg.outbounds.find((o) => o.type === 'direct' && o.tag === 'direct')).toBeDefined();
   });
 
   it('routes everything through Auto via route.final', () => {
@@ -125,7 +179,7 @@ describe('buildSingboxJson', () => {
     const cfg = parse(buildSingboxJson([]));
     expect(cfg.route.final).toBe('direct');
     // No selector when empty.
-    expect(cfg.outbounds.find((o: any) => o.type === 'selector')).toBeUndefined();
+    expect(cfg.outbounds.find((o) => o.type === 'selector')).toBeUndefined();
     // Just the direct outbound.
     expect(cfg.outbounds).toHaveLength(1);
   });
@@ -140,15 +194,15 @@ describe('buildSingboxJson', () => {
     const cfg = parse(buildSingboxJson([shadowtlsEp]));
     // The selectable proxy is a shadowsocks outbound reached only via detour.
     const ss = cfg.outbounds.find(
-      (o: any) => o.type === 'shadowsocks' && o.tag === 'eu-1-shadowtls',
-    );
+      (o) => o.type === 'shadowsocks' && o.tag === 'eu-1-shadowtls',
+    )!;
     expect(ss).toBeDefined();
     expect(ss.method).toBe('2022-blake3-aes-128-gcm');
     expect(ss.password).toBe('inner-ss-key');
     expect(ss.detour).toBe('eu-1-shadowtls-stls');
     expect(ss.server).toBeUndefined(); // reached via detour, not directly
     // Its dialer is a shadowtls v3 outbound fronting the real handshake host.
-    const stls = cfg.outbounds.find((o: any) => o.type === 'shadowtls');
+    const stls = cfg.outbounds.find((o) => o.type === 'shadowtls');
     expect(stls).toBeDefined();
     expect(stls.tag).toBe('eu-1-shadowtls-stls');
     expect(stls.server).toBe('n1.example.com');
@@ -163,7 +217,7 @@ describe('buildSingboxJson', () => {
 
   it('emits a trojan outbound when subprotocol=trojan; UUID becomes password', () => {
     const cfg = parse(buildSingboxJson([trojanEp]));
-    const t = cfg.outbounds.find((o: any) => o.type === 'trojan');
+    const t = cfg.outbounds.find((o) => o.type === 'trojan');
     expect(t).toBeDefined();
     expect(t.tag).toBe('eu-1-xray'); // tag is by protocol field, not subprotocol
     expect(t.password).toBe('11111111-2222-3333-4444-555555555555');
@@ -173,7 +227,7 @@ describe('buildSingboxJson', () => {
 
   it('Trojan still nests REALITY tls.reality block', () => {
     const cfg = parse(buildSingboxJson([trojanEp]));
-    const t = cfg.outbounds.find((o: any) => o.type === 'trojan');
+    const t = cfg.outbounds.find((o) => o.type === 'trojan');
     expect(t.tls.reality.enabled).toBe(true);
     expect(t.tls.reality.public_key).toBe('pubkey-base64url');
   });
@@ -186,7 +240,7 @@ describe('buildSingboxJson', () => {
         { ...xrayEp, subprotocol: 'vmess', securityLayer: 'none', network: 'ws', flow: undefined },
       ]),
     );
-    const v = cfg.outbounds.find((o: any) => o.type === 'vmess');
+    const v = cfg.outbounds.find((o) => o.type === 'vmess');
     expect(v).toBeDefined();
     expect(v.uuid).toBe('11111111-2222-3333-4444-555555555555');
     expect(v.security).toBe('auto');
@@ -196,13 +250,13 @@ describe('buildSingboxJson', () => {
 
   it('security none omits the tls block', () => {
     const cfg = parse(buildSingboxJson([{ ...xrayEp, securityLayer: 'none' }]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.tls).toBeUndefined();
   });
 
   it('security tls emits a tls block without reality', () => {
     const cfg = parse(buildSingboxJson([{ ...xrayEp, securityLayer: 'tls' }]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.tls.enabled).toBe(true);
     expect(v.tls.server_name).toBe('www.cloudflare.com');
     expect(v.tls.reality).toBeUndefined();
@@ -212,7 +266,7 @@ describe('buildSingboxJson', () => {
 
   it('emits a shadowsocks outbound with method+password and no TLS', () => {
     const cfg = parse(buildSingboxJson([ssEp]));
-    const ss = cfg.outbounds.find((o: any) => o.type === 'shadowsocks');
+    const ss = cfg.outbounds.find((o) => o.type === 'shadowsocks');
     expect(ss).toBeDefined();
     expect(ss.tag).toBe('eu-1-shadowsocks');
     expect(ss.server).toBe('n1.example.com');
@@ -225,7 +279,7 @@ describe('buildSingboxJson', () => {
 
   it('mixed subscription emits all proxy types in the Auto selector', () => {
     const cfg = parse(buildSingboxJson([hysteriaEp, xrayEp, trojanEp, ssEp]));
-    const sel = cfg.outbounds.find((o: any) => o.type === 'selector');
+    const sel = cfg.outbounds.find((o) => o.type === 'selector');
     // Note: xrayEp and trojanEp share tag 'eu-1-xray' since both have
     // protocol='xray', only the subprotocol differs. In real subscriptions
     // they'd be on different ports/inbounds with unique nodeNames so tags
@@ -241,7 +295,7 @@ describe('buildSingboxJson', () => {
   it('emits ws transport block with path + Host header', () => {
     const wsEp = { ...xrayEp, network: 'ws' as const, path: '/api', hostHeader: 'cdn.example.com' };
     const cfg = parse(buildSingboxJson([wsEp]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.transport.type).toBe('ws');
     expect(v.transport.path).toBe('/api');
     expect(v.transport.headers.Host).toBe('cdn.example.com');
@@ -250,7 +304,7 @@ describe('buildSingboxJson', () => {
   it('emits httpupgrade transport block', () => {
     const huEp = { ...xrayEp, network: 'httpupgrade' as const, path: '/u', hostHeader: 'cdn.example.com' };
     const cfg = parse(buildSingboxJson([huEp]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.transport.type).toBe('httpupgrade');
     expect(v.transport.path).toBe('/u');
     expect(v.transport.host).toBe('cdn.example.com');
@@ -259,14 +313,14 @@ describe('buildSingboxJson', () => {
   it('emits grpc transport block with service_name', () => {
     const grpcEp = { ...xrayEp, network: 'grpc' as const, serviceName: 'GunSvc' };
     const cfg = parse(buildSingboxJson([grpcEp]));
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.transport.type).toBe('grpc');
     expect(v.transport.service_name).toBe('GunSvc');
   });
 
   it('omits transport block on raw (REALITY canonical)', () => {
     const cfg = parse(buildSingboxJson([xrayEp])); // network: 'raw'
-    const v = cfg.outbounds.find((o: any) => o.type === 'vless');
+    const v = cfg.outbounds.find((o) => o.type === 'vless');
     expect(v.transport).toBeUndefined();
   });
 
@@ -285,7 +339,7 @@ describe('buildSingboxJson', () => {
     it('ru-split emits four remote binary rule-sets without download_detour', () => {
       const cfg = parse(buildSingboxJson([xrayEp], { routingPreset: 'ru-split' }));
       const sets = cfg.route.rule_set;
-      expect(sets.map((s: any) => s.tag)).toEqual([
+      expect(sets.map((s) => s.tag)).toEqual([
         'geosite-category-ads-all',
         'geosite-category-ru',
         'geosite-category-gov-ru',
@@ -342,7 +396,7 @@ describe('buildSingboxJson', () => {
     it('emits three remote binary rule-sets (ads + geosite-cn + geoip-cn)', () => {
       const cfg = parse(buildSingboxJson([xrayEp], { routingPreset: 'cn-split' }));
       const sets = cfg.route.rule_set;
-      expect(sets.map((s: any) => s.tag)).toEqual([
+      expect(sets.map((s) => s.tag)).toEqual([
         'geosite-category-ads-all',
         'geosite-cn',
         'geoip-cn',
@@ -381,7 +435,9 @@ describe('buildSingboxJson', () => {
     it('emits NO dns block (parity with ru-split) and no RU rule-sets', () => {
       const out = buildSingboxJson([xrayEp], { routingPreset: 'cn-split' });
       const cfg = parse(out);
-      expect((cfg as any).dns).toBeUndefined();
+      // Asked of the object rather than of the type: `dns` is precisely the key
+      // the config must NOT carry, so the shape above does not name it.
+      expect(Object.keys(cfg)).not.toContain('dns');
       expect(out).not.toContain('geosite-category-ru');
       expect(out).not.toContain('geoip-ru');
     });

@@ -61,8 +61,77 @@ const hysteriaEp: SubscriptionEndpoint = {
   uri: 'hysteria2://...',
 };
 
-function parse(out: string) {
-  return JSON.parse(out);
+/**
+ * The xray config as these tests READ it.
+ *
+ * Only what the assertions touch, named once instead of `any` forty-four times.
+ * The repetition was the problem: each `as any` is an admission that nothing is
+ * checked, and forty-four of them meant a renamed key (`vnexr`, `realitySetings`)
+ * read as undefined and failed somewhere unrelated, or quietly passed a
+ * `toBeUndefined`.
+ *
+ * NOT a description of xray's schema, which is enormous: a description of what
+ * OUR builder emits. Every `?` below says "this outbound does not carry that".
+ */
+interface XrayUser {
+  id?: string;
+  encryption?: string;
+  flow?: string;
+  security?: string;
+  alterId?: number;
+}
+
+interface XrayOutbound {
+  tag?: string;
+  protocol?: string;
+  settings?: {
+    vnext?: { address: string; port: number; users: XrayUser[] }[];
+    servers?: Record<string, unknown>[];
+    fragment?: Record<string, unknown>;
+  };
+  streamSettings?: {
+    network?: string;
+    security?: string;
+    realitySettings?: Record<string, unknown>;
+    tlsSettings?: Record<string, unknown>;
+    xhttpSettings?: Record<string, unknown>;
+    hysteriaSettings?: Record<string, unknown>;
+    sockopt?: Record<string, unknown>;
+  };
+  proxySettings?: Record<string, unknown>;
+  mux?: Record<string, unknown>;
+}
+
+interface XrayConfig {
+  log?: Record<string, unknown>;
+  inbounds: {
+    protocol: string;
+    port: number;
+    listen: string;
+    settings: { udp?: boolean };
+  }[];
+  outbounds: XrayOutbound[];
+  routing: {
+    domainStrategy?: string;
+    rules: Record<string, unknown>[];
+    balancers?: Record<string, unknown>[];
+  };
+  observatory?: Record<string, unknown>;
+}
+
+function parse(out: string): XrayConfig {
+  return JSON.parse(out) as XrayConfig;
+}
+
+/** The array format: the same config per server, each carrying the label the
+ *  client shows in its list. Its own helper because the single format has no
+ *  `remarks` and reading one off it should not compile. */
+interface XrayConfigEntry extends XrayConfig {
+  remarks?: string;
+}
+
+function parseArray(out: string): XrayConfigEntry[] {
+  return JSON.parse(out) as XrayConfigEntry[];
 }
 
 describe('buildXrayJson', () => {
@@ -83,7 +152,7 @@ describe('buildXrayJson', () => {
 
   it('emits a vless+REALITY outbound with v24.9.30 raw network', () => {
     const cfg = parse(buildXrayJson([xrayEp]));
-    const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+    const v = cfg.outbounds.find((o) => o.protocol === 'vless');
     expect(v.tag).toBe(endpointTag(xrayEp));
     const user = v.settings.vnext[0].users[0];
     expect(user.id).toBe('11111111-2222-3333-4444-555555555555');
@@ -103,7 +172,7 @@ describe('buildXrayJson', () => {
         { ...xrayEp, subprotocol: 'vmess', securityLayer: 'none', network: 'ws', flow: undefined },
       ]),
     );
-    const v = cfg.outbounds.find((o: any) => o.protocol === 'vmess');
+    const v = cfg.outbounds.find((o) => o.protocol === 'vmess');
     expect(v).toBeDefined();
     const user = v.settings.vnext[0].users[0];
     expect(user.id).toBe('11111111-2222-3333-4444-555555555555');
@@ -115,15 +184,15 @@ describe('buildXrayJson', () => {
 
   it('emits a trojan outbound (servers/password), not a vless one', () => {
     const cfg = parse(buildXrayJson([{ ...xrayEp, subprotocol: 'trojan' }]));
-    const t = cfg.outbounds.find((o: any) => o.protocol === 'trojan');
+    const t = cfg.outbounds.find((o) => o.protocol === 'trojan');
     expect(t).toBeDefined();
     expect(t.settings.servers[0].password).toBe('11111111-2222-3333-4444-555555555555');
-    expect(cfg.outbounds.find((o: any) => o.protocol === 'vless')).toBeUndefined();
+    expect(cfg.outbounds.find((o) => o.protocol === 'vless')).toBeUndefined();
   });
 
   it('security tls emits tlsSettings, not realitySettings', () => {
     const cfg = parse(buildXrayJson([{ ...xrayEp, securityLayer: 'tls' }]));
-    const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+    const v = cfg.outbounds.find((o) => o.protocol === 'vless');
     expect(v.streamSettings.security).toBe('tls');
     expect(v.streamSettings.tlsSettings.serverName).toBe('www.cloudflare.com');
     expect(v.streamSettings.realitySettings).toBeUndefined();
@@ -131,8 +200,8 @@ describe('buildXrayJson', () => {
 
   it('always includes freedom (direct) and blackhole (block) outbounds', () => {
     const cfg = parse(buildXrayJson([xrayEp]));
-    expect(cfg.outbounds.find((o: any) => o.protocol === 'freedom')).toBeDefined();
-    expect(cfg.outbounds.find((o: any) => o.protocol === 'blackhole')).toBeDefined();
+    expect(cfg.outbounds.find((o) => o.protocol === 'freedom')).toBeDefined();
+    expect(cfg.outbounds.find((o) => o.protocol === 'blackhole')).toBeDefined();
   });
 
   it('sets a catch-all route to the first proxy when xray endpoints exist', () => {
@@ -146,7 +215,7 @@ describe('buildXrayJson', () => {
     const cfg = parse(buildXrayJson([hysteriaEp]));
     expect(cfg.routing.rules[0].outboundTag).toBe('direct');
     // No vless outbound emitted.
-    expect(cfg.outbounds.find((o: any) => o.protocol === 'vless')).toBeUndefined();
+    expect(cfg.outbounds.find((o) => o.protocol === 'vless')).toBeUndefined();
   });
 
   it('skips non-xray endpoints silently', () => {
@@ -292,14 +361,14 @@ describe('buildXrayJson', () => {
       );
       const cfg = parse(buildXrayJson([xrayEp]));
       // No fragment outbound, no dialerProxy on the proxy outbound.
-      expect(cfg.outbounds.find((o: any) => o.tag === 'fragment')).toBeUndefined();
-      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      expect(cfg.outbounds.find((o) => o.tag === 'fragment')).toBeUndefined();
+      const v = cfg.outbounds.find((o) => o.protocol === 'vless');
       expect(v.streamSettings.sockopt).toBeUndefined();
     });
 
     it('ON emits a freedom outbound tagged "fragment" with the fragment object', () => {
       const cfg = parse(buildXrayJson([xrayEp], { tlsFragment: true }));
-      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      const frag = cfg.outbounds.find((o) => o.tag === 'fragment');
       expect(frag).toBeDefined();
       expect(frag.protocol).toBe('freedom');
       expect(frag.settings.fragment).toEqual({
@@ -311,20 +380,20 @@ describe('buildXrayJson', () => {
 
     it('ON sets sockopt.dialerProxy="fragment" on the proxy outbound (existing stream fields preserved)', () => {
       const cfg = parse(buildXrayJson([xrayEp], { tlsFragment: true }));
-      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      const v = cfg.outbounds.find((o) => o.protocol === 'vless');
       expect(v.streamSettings.sockopt.dialerProxy).toBe('fragment');
       // The REALITY stream settings are untouched.
       expect(v.streamSettings.security).toBe('reality');
       expect(v.streamSettings.realitySettings.serverName).toBe('www.cloudflare.com');
       // The fragment outbound itself carries no dialerProxy (it IS the dialer).
-      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      const frag = cfg.outbounds.find((o) => o.tag === 'fragment');
       expect(frag.streamSettings).toBeUndefined();
     });
 
     it('ON does NOT touch the direct/block outbounds', () => {
       const cfg = parse(buildXrayJson([xrayEp], { tlsFragment: true }));
-      const direct = cfg.outbounds.find((o: any) => o.tag === 'direct');
-      const block = cfg.outbounds.find((o: any) => o.tag === 'block');
+      const direct = cfg.outbounds.find((o) => o.tag === 'direct');
+      const block = cfg.outbounds.find((o) => o.tag === 'block');
       expect(direct.streamSettings).toBeUndefined();
       expect(block.streamSettings).toBeUndefined();
     });
@@ -332,21 +401,21 @@ describe('buildXrayJson', () => {
     it('a node named "fragment" does not collide: the proxy tag is not a name at all', () => {
       const named: SubscriptionEndpoint = { ...xrayEp, nodeName: 'fragment' };
       const cfg = parse(buildXrayJson([named], { tlsFragment: true }));
-      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      const v = cfg.outbounds.find((o) => o.protocol === 'vless');
       expect(v.tag).toBe(endpointTag(named));
       // No proxy tag equals "fragment", so the dialer keeps the canonical tag.
       expect(v.streamSettings.sockopt.dialerProxy).toBe('fragment');
-      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      const frag = cfg.outbounds.find((o) => o.tag === 'fragment');
       expect(frag).toBeDefined();
       expect(frag.protocol).toBe('freedom');
       // Every outbound tag stays unique.
-      const tags = cfg.outbounds.map((o: any) => o.tag);
+      const tags = cfg.outbounds.map((o) => o.tag);
       expect(new Set(tags).size).toBe(tags.length);
     });
 
     it('no xray endpoints: nothing fragment-related is emitted', () => {
       const cfg = parse(buildXrayJson([hysteriaEp], { tlsFragment: true }));
-      expect(cfg.outbounds.find((o: any) => o.tag === 'fragment')).toBeUndefined();
+      expect(cfg.outbounds.find((o) => o.tag === 'fragment')).toBeUndefined();
     });
 
     it('composes with the ru-split routing preset (fragment outbound + split rules, unique tags)', () => {
@@ -354,16 +423,16 @@ describe('buildXrayJson', () => {
         buildXrayJson([xrayEp], { tlsFragment: true, routingPreset: 'ru-split' }),
       );
       // Fragment outbound present + proxy dials through it.
-      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      const frag = cfg.outbounds.find((o) => o.tag === 'fragment');
       expect(frag).toBeDefined();
-      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      const v = cfg.outbounds.find((o) => o.protocol === 'vless');
       expect(v.streamSettings.sockopt.dialerProxy).toBe('fragment');
       // ru-split rules + split DNS still present.
       expect(cfg.routing.domainStrategy).toBe('IPIfNonMatch');
       expect(cfg.routing.rules[0].outboundTag).toBe('block');
       expect(cfg.dns.servers).toHaveLength(2);
       // Every outbound tag is unique.
-      const tags = cfg.outbounds.map((o: any) => o.tag);
+      const tags = cfg.outbounds.map((o) => o.tag);
       expect(new Set(tags).size).toBe(tags.length);
     });
   });
@@ -375,9 +444,9 @@ describe('buildXrayJson', () => {
       expect(cfg.log).toBeUndefined();
       expect(cfg.inbounds).toBeUndefined();
       // proxy + freedom + blackhole still present for routing rules to reference.
-      expect(cfg.outbounds.find((o: any) => o.protocol === 'vless')).toBeDefined();
-      expect(cfg.outbounds.find((o: any) => o.protocol === 'freedom')).toBeDefined();
-      expect(cfg.outbounds.find((o: any) => o.protocol === 'blackhole')).toBeDefined();
+      expect(cfg.outbounds.find((o) => o.protocol === 'vless')).toBeDefined();
+      expect(cfg.outbounds.find((o) => o.protocol === 'freedom')).toBeDefined();
+      expect(cfg.outbounds.find((o) => o.protocol === 'blackhole')).toBeDefined();
       expect(cfg.routing.rules[0].outboundTag).toBe(endpointTag(xrayEp));
     });
 
@@ -514,24 +583,24 @@ describe('buildXrayJsonArray (T1)', () => {
   });
 
   it('emits one standalone config per xray endpoint', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2]));
+    const arr = parseArray(buildXrayJsonArray([xrayEp, xrayEp2]));
     expect(arr).toHaveLength(2);
     expect(arr[0].remarks).toBe('eu-1');
     expect(arr[1].remarks).toBe('us-2');
   });
 
   it('each element is a full config: own socks inbound + proxy/direct/block outbounds', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp]));
+    const arr = parseArray(buildXrayJsonArray([xrayEp]));
     const cfg = arr[0];
     expect(cfg.inbounds).toHaveLength(1);
     expect(cfg.inbounds[0].protocol).toBe('socks');
     expect(cfg.inbounds[0].port).toBe(10808);
-    const tags = cfg.outbounds.map((o: any) => o.tag);
+    const tags = cfg.outbounds.map((o) => o.tag);
     expect(tags).toEqual([endpointTag(xrayEp), 'direct', 'block']);
   });
 
   it('per-config routing: bittorrent -> direct, catch-all -> that proxy', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2]));
+    const arr = parseArray(buildXrayJsonArray([xrayEp, xrayEp2]));
     // config[1] routes to ITS OWN proxy, not the first one.
     const rules = arr[1].routing.rules;
     expect(rules[0]).toEqual({ type: 'field', protocol: ['bittorrent'], outboundTag: 'direct' });
@@ -539,16 +608,16 @@ describe('buildXrayJsonArray (T1)', () => {
   });
 
   it('reuses buildProxyOutbound: the proxy carries REALITY + the endpoint uuid', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp]));
-    const v = arr[0].outbounds.find((o: any) => o.protocol === 'vless');
+    const arr = parseArray(buildXrayJsonArray([xrayEp]));
+    const v = arr[0].outbounds.find((o) => o.protocol === 'vless');
     expect(v.streamSettings.security).toBe('reality');
     expect(v.streamSettings.realitySettings.serverName).toBe('www.cloudflare.com');
     expect(v.settings.vnext[0].users[0].id).toBe('11111111-2222-3333-4444-555555555555');
   });
 
   it('skips protocols the array does not emit (not xray, not hysteria)', () => {
-    expect(parse(buildXrayJsonArray([naiveEp]))).toEqual([]);
-    expect(parse(buildXrayJsonArray([naiveEp, xrayEp]))).toHaveLength(1);
+    expect(parseArray(buildXrayJsonArray([naiveEp]))).toEqual([]);
+    expect(parseArray(buildXrayJsonArray([naiveEp, xrayEp]))).toHaveLength(1);
   });
 });
 
@@ -582,15 +651,15 @@ describe('buildXrayJsonArray A4 profile expansion', () => {
   };
 
   it('expands one entry endpoint into one config per profile, labelled by profile', () => {
-    const arr = parse(buildXrayJsonArray([entryEp]));
+    const arr = parseArray(buildXrayJsonArray([entryEp]));
     expect(arr).toHaveLength(2);
-    expect(arr.map((c: any) => c.remarks)).toEqual(['de-exit', 'nl-exit']);
+    expect(arr.map((c) => c.remarks)).toEqual(['de-exit', 'nl-exit']);
   });
 
   it('encodes the profile tag into UUID bytes 7-8 so the node vlessRoute rule pins it', () => {
-    const arr = parse(buildXrayJsonArray([entryEp]));
-    const uuidOf = (c: any) =>
-      c.outbounds.find((o: any) => o.protocol === 'vless').settings.vnext[0].users[0].id;
+    const arr = parseArray(buildXrayJsonArray([entryEp]));
+    const uuidOf = (c) =>
+      c.outbounds.find((o) => o.protocol === 'vless').settings.vnext[0].users[0].id;
     expect(uuidOf(arr[0])).toBe('11111111-2222-0001-4444-555555555555');
     expect(uuidOf(arr[1])).toBe('11111111-2222-0002-4444-555555555555');
   });
@@ -602,14 +671,14 @@ describe('buildXrayJsonArray A4 profile expansion', () => {
     );
     expect(arr).toHaveLength(1);
     expect(arr[0].remarks).toBe('de-exit В· Р‘РµР· СЂРµРєР»Р°РјС‹');
-    expect(arr[0].outbounds.find((o: any) => o.protocol === 'vless').settings.vnext[0].users[0].id)
+    expect(arr[0].outbounds.find((o) => o.protocol === 'vless').settings.vnext[0].users[0].id)
       .toBe('11111111-2222-0101-4444-555555555555');
   });
 
   it('all profile configs still dial the same entry host', () => {
-    const arr = parse(buildXrayJsonArray([entryEp]));
-    const hostOf = (c: any) =>
-      c.outbounds.find((o: any) => o.protocol === 'vless').settings.vnext[0].address;
+    const arr = parseArray(buildXrayJsonArray([entryEp]));
+    const hostOf = (c) =>
+      c.outbounds.find((o) => o.protocol === 'vless').settings.vnext[0].address;
     expect(hostOf(arr[0])).toBe('n1.example.com');
     expect(hostOf(arr[1])).toBe('n1.example.com');
   });
@@ -622,22 +691,22 @@ describe('buildXrayJsonArray A4 profile expansion', () => {
     // still decorated them would double the suffix.
     for (const hostRemark of ['Default', 'test 2']) {
       expect(
-        parse(buildXrayJsonArray([{ ...entryEp, hostRemark }])).map((c: any) => c.remarks),
+        parseArray(buildXrayJsonArray([{ ...entryEp, hostRemark }])).map((c) => c.remarks),
       ).toEqual(['de-exit', 'nl-exit']);
     }
   });
 
   it('an xray endpoint with no profiles stays a single unmodified config', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp]));
+    const arr = parseArray(buildXrayJsonArray([xrayEp]));
     expect(arr).toHaveLength(1);
     expect(arr[0].remarks).toBe('eu-1');
-    const uuid = arr[0].outbounds.find((o: any) => o.protocol === 'vless').settings.vnext[0]
+    const uuid = arr[0].outbounds.find((o) => o.protocol === 'vless').settings.vnext[0]
       .users[0].id;
     expect(uuid).toBe('11111111-2222-3333-4444-555555555555');
   });
 
   it('an empty exit list falls back to a single config', () => {
-    const arr = parse(buildXrayJsonArray([{ ...xrayEp, cascadeExits: [] }]));
+    const arr = parseArray(buildXrayJsonArray([{ ...xrayEp, cascadeExits: [] }]));
     expect(arr).toHaveLength(1);
     expect(arr[0].remarks).toBe('eu-1');
   });
@@ -648,9 +717,9 @@ describe('buildXrayJsonArray A4 profile expansion', () => {
 // and a live hy2 node before sign-off.
 describe('buildXrayJsonArray hysteria (hy2)', () => {
   it('emits a hysteria config in xray-core outbound shape', () => {
-    const cfg = parse(buildXrayJsonArray([hy2Ep]))[0];
+    const cfg = parseArray(buildXrayJsonArray([hy2Ep]))[0];
     expect(cfg.remarks).toBe('hy-de');
-    const out = cfg.outbounds.find((o: any) => o.protocol === 'hysteria');
+    const out = cfg.outbounds.find((o) => o.protocol === 'hysteria');
     expect(out.tag).toBe(endpointTag(hy2Ep));
     expect(out.settings).toEqual({ version: 2, address: 'hy.example.com', port: 443 });
     expect(out.streamSettings.network).toBe('hysteria');
@@ -659,8 +728,8 @@ describe('buildXrayJsonArray hysteria (hy2)', () => {
   });
 
   it('maps Brutal bandwidth to unit-suffixed up/down', () => {
-    const out = parse(buildXrayJsonArray([hy2Ep]))[0].outbounds.find(
-      (o: any) => o.protocol === 'hysteria',
+    const out = parseArray(buildXrayJsonArray([hy2Ep]))[0].outbounds.find(
+      (o) => o.protocol === 'hysteria',
     );
     expect(out.streamSettings.hysteriaSettings.up).toBe('100mbps');
     expect(out.streamSettings.hysteriaSettings.down).toBe('300mbps');
@@ -674,7 +743,7 @@ describe('buildXrayJsonArray hysteria (hy2)', () => {
   });
 
   it('catch-all routes to the hy2 tag', () => {
-    const rules = parse(buildXrayJsonArray([hy2Ep]))[0].routing.rules;
+    const rules = parseArray(buildXrayJsonArray([hy2Ep]))[0].routing.rules;
     expect(rules[rules.length - 1]).toEqual({
       type: 'field',
       network: 'tcp,udp',
@@ -683,10 +752,10 @@ describe('buildXrayJsonArray hysteria (hy2)', () => {
   });
 
   it('mixed xray + hy2 keeps endpoint order, one config each', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp, hy2Ep]));
-    expect(arr.map((c: any) => c.remarks)).toEqual(['eu-1', 'hy-de']);
-    expect(arr[0].outbounds.find((o: any) => o.protocol === 'vless')).toBeDefined();
-    expect(arr[1].outbounds.find((o: any) => o.protocol === 'hysteria')).toBeDefined();
+    const arr = parseArray(buildXrayJsonArray([xrayEp, hy2Ep]));
+    expect(arr.map((c) => c.remarks)).toEqual(['eu-1', 'hy-de']);
+    expect(arr[0].outbounds.find((o) => o.protocol === 'vless')).toBeDefined();
+    expect(arr[1].outbounds.find((o) => o.protocol === 'hysteria')).toBeDefined();
   });
 });
 
@@ -694,7 +763,7 @@ describe('buildXrayJsonArray hysteria (hy2)', () => {
 // but every proxy target is THIS config's own proxy.
 describe('buildXrayJsonArray routing (T2)', () => {
   it('applies the ru-split preset per config: split rules, split DNS, IPIfNonMatch', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2], { routingPreset: 'ru-split' }));
+    const arr = parseArray(buildXrayJsonArray([xrayEp, xrayEp2], { routingPreset: 'ru-split' }));
     for (const [i, cfg] of arr.entries()) {
       const ownTag = i === 0 ? endpointTag(xrayEp) : endpointTag(xrayEp2);
       expect(cfg.routing.domainStrategy).toBe('IPIfNonMatch');
@@ -711,7 +780,7 @@ describe('buildXrayJsonArray routing (T2)', () => {
   });
 
   it('proxy-all: no split DNS, AsIs, just bittorrent + catch-all', () => {
-    const cfg = parse(buildXrayJsonArray([xrayEp]))[0];
+    const cfg = parseArray(buildXrayJsonArray([xrayEp]))[0];
     expect(cfg.dns).toBeUndefined();
     expect(cfg.routing.domainStrategy).toBe('AsIs');
     expect(cfg.routing.rules).toHaveLength(2);
@@ -724,27 +793,27 @@ describe('buildXrayJsonArray routing (T2)', () => {
       }),
     );
     // config[1]'s proxy rule points at us-2-xray, not eu-1-xray.
-    const proxyRule = arr[1].routing.rules.find((r: any) => r.domain?.includes('youtube.com'));
+    const proxyRule = arr[1].routing.rules.find((r) => r.domain?.includes('youtube.com'));
     expect(proxyRule.outboundTag).toBe(endpointTag(xrayEp2));
   });
 
   it('prepends raw customRules ahead of everything per config', () => {
     const custom = [{ type: 'field', domain: ['my.corp'], outboundTag: 'direct' }];
-    const cfg = parse(buildXrayJsonArray([xrayEp], { customRules: custom }))[0];
+    const cfg = parseArray(buildXrayJsonArray([xrayEp], { customRules: custom }))[0];
     expect(cfg.routing.rules[0]).toEqual(custom[0]);
   });
 
   it('tlsFragment: each config gets its own fragment outbound + proxy dials through it', () => {
-    const arr = parse(buildXrayJsonArray([xrayEp, xrayEp2], { tlsFragment: true }));
+    const arr = parseArray(buildXrayJsonArray([xrayEp, xrayEp2], { tlsFragment: true }));
     for (const cfg of arr) {
-      const frag = cfg.outbounds.find((o: any) => o.tag === 'fragment');
+      const frag = cfg.outbounds.find((o) => o.tag === 'fragment');
       expect(frag).toBeDefined();
       expect(frag.settings.fragment).toEqual({
         packets: 'tlshello',
         length: '100-200',
         interval: '10-20',
       });
-      const v = cfg.outbounds.find((o: any) => o.protocol === 'vless');
+      const v = cfg.outbounds.find((o) => o.protocol === 'vless');
       expect(v.streamSettings.sockopt.dialerProxy).toBe('fragment');
     }
   });
@@ -756,8 +825,8 @@ describe('buildXrayJsonArray routing (T2)', () => {
       path: '/dl',
       hostHeader: 'cdn.example.com',
     };
-    const v = parse(buildXrayJsonArray([xhttpEp]))[0].outbounds.find(
-      (o: any) => o.protocol === 'vless',
+    const v = parseArray(buildXrayJsonArray([xhttpEp]))[0].outbounds.find(
+      (o) => o.protocol === 'vless',
     );
     expect(v.streamSettings.network).toBe('xhttp');
     expect(v.streamSettings.xhttpSettings.path).toBe('/dl');

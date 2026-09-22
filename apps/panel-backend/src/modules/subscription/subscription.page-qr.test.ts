@@ -20,7 +20,19 @@ import { qrBox, QR_SCRIPT } from './subscription.page-qr.js';
 function nayukiGrid(text: string): boolean[][] {
   const sandbox: Record<string, unknown> = {};
   runInNewContext(`${QRCODEGEN_MIN}\nglobalThis.__qr = qrcodegen;`, sandbox);
-  const gen = (sandbox as { __qr: any }).__qr;
+  // The vendored encoder's surface, as this test uses it. Named rather than
+  // `any`, so a refresh from upstream that renames one of these three is a
+  // compile error here instead of a crash in the middle of a comparison.
+  interface Qrcodegen {
+    QrCode: {
+      encodeText: (
+        text: string,
+        ecc: unknown,
+      ) => { size: number; getModule: (x: number, y: number) => boolean };
+      Ecc: { MEDIUM: unknown };
+    };
+  }
+  const gen = (sandbox as { __qr: Qrcodegen }).__qr;
   const qr = gen.QrCode.encodeText(text, gen.QrCode.Ecc.MEDIUM);
   const grid: boolean[][] = [];
   for (let y = 0; y < qr.size; y++) {
