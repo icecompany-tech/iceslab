@@ -318,6 +318,13 @@ apps/node/*.payload
 # Local TLS material from keygen dev runs
 apps/panel-backend/.ca/
 apps/panel-backend/dev-certs/
+# ...and the ONE exception to the `*.pem` rule above: the certificate pair the
+# chain-leg test reads at module load. It is minted for the test, its CN says so
+# (`iceslab-fixture-not-a-secret`), it signs nothing and reaches no host. Without
+# this line `git add` refuses the pair without adding it, and the test opens a
+# file that is not in the repository. That is exactly how CI went red on fa3c1ee.
+!apps/panel-backend/src/modules/cascades/__testdata__/link-fixture-cert.pem
+!apps/panel-backend/src/modules/cascades/__testdata__/link-fixture-key.pem
 # Panel-side caches
 apps/panel-backend/.cache/
 apps/panel-frontend/.cache/
