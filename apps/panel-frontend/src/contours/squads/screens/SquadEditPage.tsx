@@ -37,6 +37,7 @@ import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
+import { AMBER, CARD, CYAN, CYAN_HI, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, ROW, SNOW, VIOLET, WELL } from '@/contours/squads/lib/colors';
 
 /**
  * Squad editor as a page, not a modal: it is the screen where an operator
@@ -50,23 +51,9 @@ import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
  * Wiring them up means moving the ACL from profiles to hosts.
  */
 
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const ROW = '#152233';
 // Тот же фон страницы, что везде. Раньше стоял под именем SUNK, а тем же
 // словом в других файлах назывался ДРУГОЙ фон (#0B1420): имя убито при
 // сведении палитры 2026-09-22.
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const CYAN_HI = '#67E8F9';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

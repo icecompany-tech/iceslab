@@ -35,6 +35,7 @@ import { listCascades } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { SquadFormModal } from '@/contours/squads/components/SquadFormModal';
+import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, SNOW, VIOLET, WELL } from '@/contours/squads/lib/colors';
 
 /**
  * Squads: who gets what. Each card answers three questions at a glance, in the
@@ -46,18 +47,6 @@ import { SquadFormModal } from '@/contours/squads/components/SquadFormModal';
  * amber and its button says "grant" instead of "edit": the card tells you what
  * to do about it rather than just reporting a zero.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
