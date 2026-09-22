@@ -1,0 +1,124 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "link-in",
+      "listen": "0.0.0.0",
+      "listen_port": 24000,
+      "users": [
+        {
+          "uuid": "00000000-0000-4000-8000-000000000002",
+          "name": "lnk-d1"
+        },
+        {
+          "uuid": "00000000-0000-4000-8000-000000000003",
+          "name": "lnk-d2"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.microsoft.com",
+            "server_port": 443
+          },
+          "private_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "short_id": [
+            "0123abcd"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "out-d1",
+      "server": "nl-2.example.com",
+      "server_port": 24001,
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
+          "short_id": "0123abcd"
+        }
+      }
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "out-d2",
+      "server": "se-2.example.com",
+      "server_port": 24001,
+      "method": "2022-blake3-aes-256-gcm",
+      "password": "1GPU7kQeM6IuQXEDMSlfBdFSrLP4nJFgIQO2TAuMrXk="
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "ads.example"
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain_suffix": [
+          "gosuslugi.ru"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "user": [
+          "lnk-d1"
+        ],
+        "action": "route",
+        "outbound": "out-d1"
+      },
+      {
+        "user": [
+          "lnk-d2"
+        ],
+        "action": "route",
+        "outbound": "out-d2"
+      }
+    ]
+  }
+}
