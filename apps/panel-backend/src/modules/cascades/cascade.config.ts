@@ -1425,21 +1425,56 @@ function multiClientLinkInbound(links: TopologyLinkRow[]): Record<string, unknow
       },
     };
   }
+  /**
+   * The REALITY block of the STEP, phase 5b.
+   *
+   * One listener, one `privateKey`: xray takes a single key and a LIST of short
+   * ids, the same shape sing-box takes, so the keypair belongs to the receiving
+   * NODE and the short ids to the legs. Read from the first leg that has a
+   * block, and the short ids from every leg, because a save gives every leg
+   * landing here the node's keypair and its own short id.
+   *
+   * Absent on every leg stored before 5b, and then the listener stays plain,
+   * which is what it has always been: the dialling side switches itself on per
+   * credential, so the two ends move together or not at all.
+   */
+  const vless = links.filter((l) => l.cred.protocol === 'vless');
+  const reality = (vless.find((l) => (l.cred as VlessLinkCred).reality)?.cred as VlessLinkCred)
+    ?.reality;
+  const shortIds = [
+    ...new Set(
+      vless
+        .map((l) => (l.cred as VlessLinkCred).reality?.shortId)
+        .filter((s): s is string => typeof s === 'string' && s.length > 0),
+    ),
+  ];
   return {
     tag: LINK_IN_TAG,
     port: first.port,
     listen: '0.0.0.0',
     protocol: 'vless',
     settings: {
-      clients: links
-        .filter((l) => l.cred.protocol === 'vless')
-        .map((l) => ({
-          id: (l.cred as VlessLinkCred).uuid,
-          email: linkClientEmail(l.directionTag, l.fromNodeId),
-        })),
+      clients: vless.map((l) => ({
+        id: (l.cred as VlessLinkCred).uuid,
+        email: linkClientEmail(l.directionTag, l.fromNodeId),
+        // VISION is negotiated per user and the dialling side names it whenever
+        // the cred has a block, so this has to name it in the same breath.
+        ...(reality ? { flow: 'xtls-rprx-vision' } : {}),
+      })),
       decryption: 'none',
     },
-    streamSettings: { network: 'raw', security: 'none' },
+    streamSettings: reality
+      ? {
+          network: 'raw',
+          security: 'reality',
+          realitySettings: {
+            dest: reality.dest,
+            serverNames: [reality.serverName],
+            privateKey: reality.privateKey,
+            shortIds,
+          },
+        }
+      : { network: 'raw', security: 'none' },
   };
 }
 

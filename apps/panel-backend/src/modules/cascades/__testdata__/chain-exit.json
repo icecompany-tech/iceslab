@@ -11,7 +11,8 @@
       "users": [
         {
           "uuid": "00000000-0000-4000-8000-000000000004",
-          "name": "lnk-d1"
+          "name": "lnk-d1",
+          "flow": "xtls-rprx-vision"
         }
       ],
       "tls": {

@@ -182,25 +182,26 @@ describe('a leg across two saves', () => {
 
 describe('the REALITY block of a vless leg', () => {
   /**
-   * ⚠ THE TRAP, pinned here so the next reader does not spring it.
+   * ⚠ Half-shipped ON PURPOSE, and this is the half that is safe.
    *
-   * The block is minted on every save and dropped by `serializeLinkCred`, and
-   * every renderer rebuilds its creds from the column. So the hardening of
-   * 2026-08 has never reached a node and the legs run plain VLESS. That reads
-   * like a one-line fix, and the one-line fix BREAKS THE FIELD.
+   * The block is still not stored, so every leg in the field keeps running
+   * plain VLESS exactly as it did. What changed with 5b's first commit is that
+   * both RENDERERS now know the shape: the receiving step renders one
+   * `privateKey` with every arriving short id beside it, and names the VISION
+   * flow whenever the block is there.
    *
-   * The two ends do not agree about REALITY in the v4 path: the dialling side
-   * uses the block whenever the cred has one, and the receiving side cannot,
-   * because since v4 one listener holds every leg terminating on that step
-   * while xray's realitySettings has a single privateKey. Persist the block and
-   * the entry dials REALITY+VISION at an inbound listening in plain: the
-   * handshake fails and the cascade stops carrying traffic on its next save.
+   * The order is deliberate. Storing the block first would have made the
+   * dialling side ask for REALITY at a listener that could not answer, and the
+   * cascade would have stopped carrying traffic on its next save. Renderer
+   * first is invisible; storage second is the release that switches the legs
+   * over, with both ends already able to speak.
    *
-   * These two tests assert the ASYMMETRY rather than the feature. They go red
-   * the day somebody stores the block without giving the receiving step one
-   * keypair of its own, which is the shape that actually fixes this.
+   * The first test below therefore still says "plain", because nothing stores
+   * a block yet. The second one puts a block in the column by hand and is the
+   * cross-check that 2026-08 never had: both ends built from the SAME stored
+   * credential, compared with each other.
    */
-  it('is not stored, and the leg therefore listens in plain', async () => {
+  it('is not stored, so the leg still listens in plain', async () => {
     const entry = await makeNode('ru-entry');
     const nl = await makeNode('nl-exit');
     await create(entry, [nl]);
@@ -219,10 +220,11 @@ describe('the REALITY block of a vless leg', () => {
     expect(inbound.settings.clients[0]!.flow).toBeUndefined();
   });
 
-  it('would be dialled by the other end the moment it existed', async () => {
-    // The other half of the asymmetry, and the reason the first test is not
-    // simply "REALITY is off". The entry reads the same column and switches
-    // itself on per cred, so the two sides are one edit away from disagreeing.
+  it('makes both ends agree the moment a block is in the column', async () => {
+    // The cross-check, at the level a push actually works at: both ends built
+    // from the same STORED credential. Two green `sing-box check` runs would
+    // not have caught 2026-08 and would not catch a short id the listener does
+    // not list, because each config is valid on its own.
     const entry = await makeNode('ru-entry');
     const nl = await makeNode('nl-exit');
     const c = await create(entry, [nl]);
@@ -245,17 +247,42 @@ describe('the REALITY block of a vless leg', () => {
     });
 
     const fragments = await getCascadeFragmentsForNode(entry);
-    const outbound = fragments!.outbounds.find((o) =>
-      (o as { protocol?: string }).protocol === 'vless',
-    ) as { streamSettings: { security?: string } } | undefined;
-    expect(outbound?.streamSettings.security).toBe('reality');
-    // And the receiving side of that very leg still listens in plain, which is
-    // the pair that cannot complete a handshake.
+    const outbound = fragments!.outbounds.find(
+      (o) => (o as { protocol?: string }).protocol === 'vless',
+    ) as {
+      settings: { vnext: { users: { flow?: string }[] }[] };
+      streamSettings: {
+        security?: string;
+        realitySettings?: { publicKey: string; shortId: string; serverName: string; fingerprint: string };
+      };
+    };
     const exitFragments = await getCascadeFragmentsForNode(nl);
     const inbound = exitFragments!.inbounds.find((i) =>
       (i as { tag?: string }).tag?.includes('link-in'),
-    ) as { streamSettings: { security?: string } };
-    expect(inbound.streamSettings.security).toBe('none');
+    ) as {
+      settings: { clients: { flow?: string }[] };
+      streamSettings: {
+        security?: string;
+        realitySettings?: { privateKey: string; shortIds: string[]; serverNames: string[]; dest: string };
+      };
+    };
+
+    expect(outbound.streamSettings.security).toBe('reality');
+    expect(inbound.streamSettings.security).toBe('reality');
+    // The dialler's short id is one the listener lists, the camouflage name is
+    // the same on both, and the two halves of the keypair come from the one
+    // stored block. Any of the three drifting is a leg that loads and refuses
+    // every packet.
+    expect(inbound.streamSettings.realitySettings!.shortIds).toContain(
+      outbound.streamSettings.realitySettings!.shortId,
+    );
+    expect(inbound.streamSettings.realitySettings!.serverNames).toContain(
+      outbound.streamSettings.realitySettings!.serverName,
+    );
+    expect(inbound.streamSettings.realitySettings!.privateKey).toBe('k'.repeat(43));
+    expect(outbound.streamSettings.realitySettings!.publicKey).toBe('p'.repeat(43));
+    // VISION is per user and is named by both or by neither.
+    expect(inbound.settings.clients[0]!.flow).toBe('xtls-rprx-vision');
     expect(c.id).toBeTruthy();
   });
 });

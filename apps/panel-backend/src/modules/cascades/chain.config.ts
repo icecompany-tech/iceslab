@@ -58,8 +58,16 @@ export interface ChainLegOut {
 /** The leg this node RECEIVES on, with one credential per direction. */
 export interface ChainLegIn {
   cred: LinkCred;
-  /** Which direction each arriving credential belongs to. */
-  clients: { tag: number; uuid?: string }[];
+  /**
+   * Which direction each arriving credential belongs to.
+   *
+   * `shortId` is the REALITY short id of THAT leg. The keypair belongs to this
+   * node (one listener, one `private_key`, which is all the engine takes), and
+   * the short ids are per leg and travel as a list: measured against sing-box
+   * 1.13.14, `short_id` on an inbound is a list and on an outbound a single
+   * string, which is exactly this shape.
+   */
+  clients: { tag: number; uuid?: string; shortId?: string }[];
 }
 
 export interface ChainRenderInput {
@@ -238,13 +246,23 @@ function vlessOutbound(tag: number, host: string, cred: Extract<LinkCred, { prot
     server: host,
     server_port: cred.port,
     uuid: cred.uuid,
-    flow: 'xtls-rprx-vision',
+    // Named only when the other end names it, see the listener. Asking for a
+    // flow the server does not offer is refused at the handshake, and `check`
+    // accepts the mismatch on both sides, so nothing but this rule prevents it.
+    ...(cred.reality ? { flow: 'xtls-rprx-vision' } : {}),
   };
   if (cred.reality) {
     out.tls = {
       enabled: true,
       server_name: cred.reality.serverName,
-      utls: { enabled: true, fingerprint: 'chrome' },
+      // ⚠ MEASURED, and not optional: sing-box 1.13.14 refuses a reality client
+      // without it, "uTLS is required by reality client". `firefox` rather than
+      // `chrome` so this renderer and the legacy xray one present the same
+      // fingerprint: two engines drawing one leg should not be distinguishable
+      // from each other by the thing whose whole job is to look ordinary.
+      utls: { enabled: true, fingerprint: 'firefox' },
+      // A single string here, a LIST on the listener. Measured: an array is
+      // refused, "cannot unmarshal array into ... short_id of type string".
       reality: { enabled: true, public_key: cred.reality.publicKey, short_id: cred.reality.shortId },
     };
   }
@@ -310,30 +328,81 @@ function ssInbound(cred: Extract<LinkCred, { protocol: 'shadowsocks' }>): Json {
 }
 
 function vlessInbound(leg: ChainLegIn): Json {
+  const cred = leg.cred as Extract<LinkCred, { protocol: 'vless' }>;
+  const reality = cred.reality;
   const inbound: Json = {
     type: 'vless',
     tag: 'link-in',
     listen: '0.0.0.0',
-    listen_port: leg.cred.port,
+    listen_port: cred.port,
     users: leg.clients.map((c) => ({
-      uuid: c.uuid ?? (leg.cred as Extract<LinkCred, { protocol: 'vless' }>).uuid,
+      uuid: c.uuid ?? cred.uuid,
       name: chainLinkUser(c.tag),
+      // ⚠ VISION is per USER and both ends must name it. The dialling side of
+      // this very file used to set it unconditionally while the listener set it
+      // for nobody, which is a pair that completes no handshake: the server
+      // rejects a client that asks for a flow it does not offer. Tied to the
+      // block on both sides now, so the two cannot drift apart again.
+      ...(reality ? { flow: 'xtls-rprx-vision' } : {}),
     })),
   };
-  const reality = (leg.cred as Extract<LinkCred, { protocol: 'vless' }>).reality;
   if (reality) {
+    const [handshakeServer, handshakePort] = splitDest(reality.dest, reality.serverName);
     inbound.tls = {
       enabled: true,
       server_name: reality.serverName,
       reality: {
         enabled: true,
-        handshake: { server: reality.serverName, server_port: 443 },
+        // From the STORED dest, not rebuilt from the server name. The two are
+        // the same today and `check` accepts an inbound with no handshake block
+        // at all, so nothing but this would notice them drifting apart.
+        handshake: { server: handshakeServer, server_port: handshakePort },
         private_key: reality.privateKey,
-        short_id: [reality.shortId],
+        /**
+         * Every short id that arrives on this listener, not just the first.
+         *
+         * One node, one listener, one `private_key`: that is all the engine
+         * takes, so the keypair belongs to the RECEIVING node and the short ids
+         * are per leg. Rendering only `[cred.shortId]` was right while a leg
+         * had a listener of its own and silently drops every other direction's
+         * leg the moment a step carries more than one.
+         */
+        short_id: shortIdsOf(leg),
       },
     };
   }
   return inbound;
+}
+
+/**
+ * The short ids arriving on one listener, deduplicated and in a stable order.
+ *
+ * The cred's own is included because a leg that carries a single direction has
+ * its short id there and nowhere else. An empty result is impossible while the
+ * block exists, and would be refused by the engine if it were.
+ */
+function shortIdsOf(leg: ChainLegIn): string[] {
+  const cred = leg.cred as Extract<LinkCred, { protocol: 'vless' }>;
+  const ids = [
+    ...leg.clients.map((c) => c.shortId),
+    ...(cred.reality ? [cred.reality.shortId] : []),
+  ].filter((s): s is string => typeof s === 'string' && s.length > 0);
+  return [...new Set(ids)];
+}
+
+/**
+ * `host:port` as the credential stores it, with the server name as the fallback.
+ *
+ * ⚠ MEASURED: sing-box 1.13.14 accepts a reality inbound with NO handshake
+ * block at all, so a missing or malformed target is not a config error, it is a
+ * leg that comes up and fails every handshake. The fallback is therefore the
+ * camouflage name rather than nothing.
+ */
+function splitDest(dest: string, serverName: string): [string, number] {
+  const at = dest.lastIndexOf(':');
+  if (at <= 0) return [serverName, 443];
+  const port = Number.parseInt(dest.slice(at + 1), 10);
+  return [dest.slice(0, at), Number.isFinite(port) && port > 0 ? port : 443];
 }
 
 /**

@@ -11,11 +11,13 @@
       "users": [
         {
           "uuid": "00000000-0000-4000-8000-000000000002",
-          "name": "lnk-d1"
+          "name": "lnk-d1",
+          "flow": "xtls-rprx-vision"
         },
         {
           "uuid": "00000000-0000-4000-8000-000000000003",
-          "name": "lnk-d2"
+          "name": "lnk-d2",
+          "flow": "xtls-rprx-vision"
         }
       ],
       "tls": {
@@ -48,7 +50,7 @@
         "server_name": "www.microsoft.com",
         "utls": {
           "enabled": true,
-          "fingerprint": "chrome"
+          "fingerprint": "firefox"
         },
         "reality": {
           "enabled": true,
