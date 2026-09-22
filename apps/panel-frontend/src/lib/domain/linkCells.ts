@@ -1,44 +1,43 @@
-import * as shared from '@iceslab/shared';
+import { LINK_CELL_ENGINES } from '@iceslab/shared';
 import type { EngineName } from '@iceslab/shared';
 import type { LinkCell } from '@/lib/domain/cascades';
 
 /**
  * Какая ячейка ноги каким движком поднимается, по словам контракта.
  *
- * ⚠ Таблица приходит из `@iceslab/shared` и до фазы 5 её там НЕТ. Пока её нет,
- * все функции ниже отвечают `undefined`, и это третий ответ, а не «нет»:
- * сказать «нода не несёт hy2», не зная, каким движком hy2 вообще поднимается,
- * значит отказать по вычисленной величине. Ровно на этом 2026-09-11 отказали
- * 23 рабочим парам.
+ * ⚠ Ответ «не знаю» остаётся третьим и после прихода таблицы: нода, которая ни
+ * разу не отчиталась о ядрах, ничего про свои умения не сказала, и отказывать
+ * ей нельзя. Ровно на таком выводе 2026-09-11 отказали 23 рабочим парам.
  *
- * Читается через `as`-каст пространства имён, а не именованным импортом,
- * потому что именованный импорт отсутствующего экспорта не собирается вовсе.
- * В тот день, когда контракт приедет, этот файл начнёт отвечать сам, без
- * правок здесь.
+ * Таблица приехала в `@iceslab/shared` 2026-09-22 (словарь ячеек), и временный
+ * мост через каст пространства имён снят: теперь это обычный именованный
+ * импорт, и расхождение состава поймает сборка, а не экран.
  */
-type CellTable = Partial<Record<LinkCell, EngineName[]>>;
+type CellTable = Partial<Record<LinkCell, readonly EngineName[]>>;
 
-const table = (shared as unknown as { LINK_CELL_ENGINES?: CellTable }).LINK_CELL_ENGINES;
+const table: CellTable = LINK_CELL_ENGINES;
 
-/** Знает ли панель таблицу вообще. `false` = фаза 5 ещё не доехала. */
+/**
+ * Знает ли панель таблицу вообще.
+ *
+ * Аргумент остаётся: тесты подставляют свою таблицу, а `undefined` это всё ещё
+ * законный вход, если однажды состав придёт не из контракта, а от сервера.
+ */
 export function cellTableKnown(source: CellTable | undefined = table): boolean {
   return source !== undefined;
 }
 
 /**
- * Движки, которыми поднимается эта ячейка, и `undefined`, когда таблицы нет.
+ * Движки, которыми поднимается эта ячейка, и `undefined`, когда ячейка чужая.
  *
- * Две ячейки, `vless` и `shadowsocks`, панель умела собирать и до таблицы: они
- * строятся в конфиге xray (см. `cascade.config.ts` на бэкенде). Поэтому при
- * отсутствующей таблице они отвечают `['xray']`, а `hy2` и `tuic` молчат.
+ * Имя, которого в таблице нет, это не «ни один движок», а «панель про него не
+ * знает»: молчание и отказ тут снова разные ответы.
  */
 export function linkCellEngines(
   cell: string,
   source: CellTable | undefined = table,
-): EngineName[] | undefined {
-  if (source) return source[cell as LinkCell];
-  if (cell === 'vless' || cell === 'shadowsocks') return ['xray'];
-  return undefined;
+): readonly EngineName[] | undefined {
+  return source?.[cell as LinkCell];
 }
 
 /**

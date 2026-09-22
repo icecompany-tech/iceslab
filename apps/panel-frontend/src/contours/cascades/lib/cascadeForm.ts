@@ -353,9 +353,9 @@ export interface LegFacts {
 export function legFacts(
   linkProtocol: string | null | undefined,
   step: number,
-  /** Движки ячейки по таблице контракта; `undefined` = таблицы нет. Приходит
+  /** Движки ячейки по таблице контракта; `undefined` = ячейка чужая. Приходит
    *  снаружи, чтобы функция осталась чистой и проверяемой. */
-  enginesOf?: (cell: string) => EngineName[] | undefined,
+  enginesOf?: (cell: string) => readonly EngineName[] | undefined,
 ): LegFacts {
   const port = LEG_PORT_BASE + step;
   const cell = linkProtocol && linkProtocol.trim() !== '' ? linkProtocol : null;
@@ -369,7 +369,7 @@ export function legFacts(
   // контракта называет движки. До этого прежнее поведение: показываем, что
   // записано, и не выдаём это за рабочую ногу.
   const engines = enginesOf?.(cell);
-  if (engines && engines.length > 0) return { state: 'known', cell, pair: null, port, engines };
+  if (engines && engines.length > 0) return { state: 'known', cell, pair: null, port, engines: [...engines] };
   return { state: 'unrealised', cell, pair: null, port };
 }
 
