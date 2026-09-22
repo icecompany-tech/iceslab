@@ -373,6 +373,13 @@ export async function generateTopologyLinks(
     linkProtocol?: string | null;
     linkParams?: { congestion?: LinkCongestion } | null;
   }[],
+  /**
+   * What this cascade's legs are ALREADY configured with, by
+   * `topologyLinkKey`. A leg found here keeps its secrets; anything not found,
+   * or found in another shape, is minted fresh. Omitted on a path with nothing
+   * stored yet, which is what a create is.
+   */
+  existing?: ReadonlyMap<string, LinkCred>,
 ): Promise<TopologyLink[]> {
   const links: TopologyLink[] = [];
   const emit = async (
@@ -383,7 +390,14 @@ export async function generateTopologyLinks(
     step: number,
     congestion?: LinkCongestion,
   ): Promise<void> => {
-    const cred = await newLinkCred(protocol, LINK_PORT_BASE + step, congestion);
+    const port = LINK_PORT_BASE + step;
+    const kept = reuseLinkCred(
+      existing?.get(topologyLinkKey(from, to, directionTag)),
+      protocol,
+      port,
+      congestion,
+    );
+    const cred = kept ?? (await newLinkCred(protocol, port, congestion));
     links.push({ fromNodeId: from, toNodeId: to, directionTag, protocol, cred });
   };
 
@@ -420,6 +434,50 @@ export async function generateTopologyLinks(
     }
   }
   return links;
+}
+
+/**
+ * The identity of a leg across saves: who dials whom, for which direction.
+ *
+ * Not the cell and not the port, on purpose. Those are what the operator
+ * EDITS, and a leg that changes cell is still the same leg; whether its
+ * secrets survive that is decided in `reuseLinkCred`, where the rule can be
+ * read, rather than hidden in the shape of a key.
+ */
+export function topologyLinkKey(fromNodeId: string, toNodeId: string, directionTag: number): string {
+  return `${fromNodeId}|${toNodeId}|${directionTag}`;
+}
+
+/**
+ * The stored credential of this leg, if it still fits, or undefined to mint.
+ *
+ * ⚠ Why reuse at all: until phase 5 every save re-minted every secret of every
+ * leg. The push that follows re-renders both ends, so it worked, and it meant
+ * that renaming a direction rotated the keys of a leg carrying live traffic.
+ * The two ends are pushed one after another, so between them the chain is a
+ * pair that no longer agrees, and the operator sees a cascade that drops
+ * traffic for a moment on every unrelated edit.
+ *
+ * The rule for keeping them: same CELL and same PORT. A leg whose cell changed
+ * is a different protocol with different credentials, and a leg whose port
+ * moved is a different listener; in both cases the stored secret describes
+ * something that no longer exists.
+ *
+ * A KNOB is not a secret and follows the request: an operator switching a tuic
+ * leg to `cubic` expects that to take effect, not to be told the leg is now a
+ * different leg.
+ */
+function reuseLinkCred(
+  stored: LinkCred | undefined,
+  cell: LinkProtocol,
+  port: number,
+  congestion: LinkCongestion | undefined,
+): LinkCred | undefined {
+  if (!stored || stored.protocol !== cell || stored.port !== port) return undefined;
+  if (stored.protocol === 'tuic' && congestion && stored.congestion !== congestion) {
+    return { ...stored, congestion };
+  }
+  return stored;
 }
 
 /**
@@ -573,9 +631,29 @@ export function serializeLinkCred(cred: LinkCred): SerializedLinkCred {
         tls: { certPem: cred.tls.certPem, keyPem: cred.tls.keyPem },
       };
     case 'vless':
-      // ⚠ The REALITY block is NOT serialised here and never has been: it is
-      // regenerated per save. Noted rather than fixed in this commit, because
-      // changing it would rotate every existing leg's keys.
+      /**
+       * ⚠ The REALITY block is still NOT stored, and storing it alone would
+       * break every v4 cascade. Read this before "fixing" the omission.
+       *
+       * The block is minted per save and dropped here, and every renderer
+       * rebuilds its creds from the column, so it has never reached a node: the
+       * legs run plain VLESS over raw TCP. That much looks like a one-line fix.
+       *
+       * It is not, because the two ends of a leg do not agree about REALITY in
+       * the v4 path. The DIALLING side already uses the block when the cred has
+       * one (`vlessLinkOutbound`: security reality, VISION, no mux). The
+       * RECEIVING side is `multiClientLinkInbound`, which hardcodes
+       * `security: 'none'` and no flow, because since v4 ONE listener holds
+       * every leg that terminates on that step and xray's `realitySettings`
+       * has a single `privateKey`. Per-leg keys have nowhere to go there.
+       *
+       * So persisting the block would make the entry dial REALITY+VISION at an
+       * inbound listening in plain: the handshake fails and the cascade stops
+       * carrying traffic on its next save. What it needs first is one keypair
+       * per RECEIVING STEP (shortId may stay per leg, `shortIds` is an array),
+       * which is a change to what the leg looks like on the wire and is
+       * therefore its own piece.
+       */
       return { protocol: 'vless', port: cred.port, uuid: cred.uuid };
     default: {
       const never: never = cred;

@@ -29,6 +29,7 @@ import {
   parseLinkCred,
   routeTag,
   serializeLinkCred,
+  topologyLinkKey,
   topologyReceivingCells,
   topologyReceivingPorts,
   type CascadeConfigHopInput,
@@ -1055,6 +1056,28 @@ async function writeTopologyV4(
     return { ...d, tag: nextTag++, keepId: undefined as string | undefined };
   });
 
+  /**
+   * What the legs are configured with TODAY, read before they are dropped.
+   *
+   * The rows are replaced wholesale on every save (a leg has no identity of its
+   * own in the table), so without this read every save would mint every secret
+   * again. That is what it used to do: renaming a direction rotated the keys of
+   * a leg carrying live traffic, and since the two ends are pushed one after
+   * the other, the chain spent the gap as a pair that no longer agreed.
+   *
+   * A malformed row reads as absent and the leg is minted fresh, which is the
+   * only safe answer: a cred nobody can parse cannot be the one the other end
+   * is holding either.
+   */
+  const storedLinks = new Map<string, LinkCred>();
+  for (const l of await tx.cascadeLink.findMany({
+    where: { cascadeId },
+    select: { fromNodeId: true, toNodeId: true, directionTag: true, config: true },
+  })) {
+    const cred = parseLinkCred(l.config);
+    if (cred) storedLinks.set(topologyLinkKey(l.fromNodeId, l.toNodeId, l.directionTag), cred);
+  }
+
   await tx.cascadeLink.deleteMany({ where: { cascadeId } });
   await tx.cascadePosition.deleteMany({ where: { cascadeId } });
   // Only the directions that actually WENT AWAY. This used to drop every row
@@ -1147,7 +1170,7 @@ async function writeTopologyV4(
     });
   }
 
-  const links = await generateTopologyLinks(positions, resolved);
+  const links = await generateTopologyLinks(positions, resolved, storedLinks);
   if (links.length > 0) {
     await tx.cascadeLink.createMany({
       data: links.map((l) => ({
