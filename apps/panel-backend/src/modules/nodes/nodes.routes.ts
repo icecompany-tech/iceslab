@@ -15,6 +15,7 @@ import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import { getNodeSyncStatus } from './nodes.sync-status.js';
 import { portClaimsOnNode } from './node-ports.js';
+import { readChainSecret } from './chain-secret.js';
 import { PolicyDoesNotFitNodeError } from '../node-policies/node-policies.service.js';
 import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
@@ -157,6 +158,33 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
           node.singboxEngine,
         ),
       });
+    } catch (err) {
+      if (err instanceof nodesService.NodeNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  /**
+   * The chain process's socks password, for acceptance on a stand.
+   *
+   * ⚠ THE ONLY WAY THIS SECRET LEAVES THE PANEL other than the chain block
+   * itself, and the reason it exists at all is that the field test has to check
+   * that the password the node's core presents is the one its chain expects.
+   * The alternative is reading a config file over ssh, which is exactly the
+   * manual step this panel is meant to remove.
+   *
+   * Behind the same admin auth as the bootstrap token, which is the access
+   * class it belongs to: both hand over something that lets a holder talk to a
+   * node as if they were us. It never mints, so asking about a node with no
+   * chain answers `null` rather than quietly creating a credential.
+   */
+  app.get('/api/nodes/:id/chain-secret', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    try {
+      await nodesService.getNodeById(params.id);
+      return reply.send({ secret: await readChainSecret(params.id) });
     } catch (err) {
       if (err instanceof nodesService.NodeNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });

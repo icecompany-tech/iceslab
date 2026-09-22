@@ -1,0 +1,23 @@
+-- The chain process's socks password, one per node.
+--
+-- Hand-written, like the migrations since 2026-09-22. `prisma migrate dev
+-- --create-only` no longer produces a draft at all here: it stops on "Drift
+-- detected" before generating, because the migration history and the schema
+-- have diverged (raw-SQL early migrations). Reconciling that drift is its own
+-- piece of work with its own rollback, and doing it in passing, inside a
+-- migration that adds one column, is how somebody's DROP DEFAULT on a uuid key
+-- ships by accident.
+--
+-- So this file contains ONLY the column. Nothing was discarded from a draft,
+-- because there was no draft.
+--
+-- NULLABLE with no default and no backfill, and that is the decision rather
+-- than a shortcut: the secret is minted on the first chain render for that
+-- node. Every node predating phase 4 has none, a node that never joins a
+-- cascade never needs one, and generating a credential for machines that will
+-- never present it is a credential to look after for nothing.
+--
+-- Rollback: ALTER TABLE "nodes" DROP COLUMN "chain_secret";
+-- Proven by hand before this was applied: dropped, re-applied, and the column
+-- list compared against the untouched test database.
+ALTER TABLE "nodes" ADD COLUMN "chain_secret" BYTEA;

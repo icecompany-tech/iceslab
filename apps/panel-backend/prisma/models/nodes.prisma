@@ -151,6 +151,24 @@ model Node {
   // secret in the migration so they keep working post-rollout.
   heartbeatSecret Bytes @map("heartbeat_secret")
 
+  // Phase 4: the password every socks listener of this node's chain process
+  // asks for, and the one the node's user core presents when it hands traffic
+  // over. 32 random bytes, same shape as the heartbeat secret above.
+  //
+  // PER NODE, not per cascade, and that follows from the process: there is one
+  // chain process on a machine whatever cascades run through it, so a node in
+  // two cascades has one password and two sets of socks ports.
+  //
+  // NULLABLE, and generated on the FIRST chain render rather than at node
+  // creation. Every node predating phase 4 has none, and a node that never
+  // joins a cascade never needs one; filling the column for the whole fleet
+  // would mean minting a credential for machines that will never use it.
+  //
+  // ⚠ NEVER leaves the panel except in the chain block that goes to this node,
+  // and never appears in a node DTO. It is read back only by the admin-only
+  // acceptance endpoint, the same access class as the bootstrap token.
+  chainSecret Bytes? @map("chain_secret")
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
