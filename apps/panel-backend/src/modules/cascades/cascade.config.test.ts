@@ -12,6 +12,35 @@ import {
   type LinkCred,
 } from './cascade.config.js';
 
+/**
+ * What these tests READ out of a rendered fragment.
+ *
+ * The builder returns `Record<string, unknown>`, because its output is the
+ * engine's own JSON and nothing here pretends to describe all of it. The tests
+ * used `as any` at each read, which is the same admission written eleven times
+ * and checked zero: `out.settings.vnexr[0]` would have passed happily.
+ *
+ * These two types name only the fields the assertions touch. A typo in a path
+ * is now a compile error, and a field the builder renames is caught here rather
+ * than by a green test about the wrong key.
+ */
+interface LinkOutboundShape {
+  protocol: string;
+  settings: {
+    vnext?: { address: string; port: number; users: { id: string }[] }[];
+    servers?: { address: string; port: number; method: string; password: string }[];
+  };
+}
+
+interface LinkInboundShape {
+  protocol: string;
+  port: number;
+  settings: { clients?: { id: string }[]; method?: string; password?: string; network?: string };
+}
+
+const asOutbound = (o: Record<string, unknown> | undefined) => o as unknown as LinkOutboundShape;
+const asInbound = (i: Record<string, unknown> | undefined) => i as unknown as LinkInboundShape;
+
 // Regression cover for the prod defect found 2026-07-29: ad-split policies
 // reached balancer entries only, so on a chain an operator could define a
 // policy, grant it, see the panel report success, and get no rules on the node.
@@ -332,7 +361,7 @@ describe('buildCascadeConfigs (vless->vless)', () => {
     const cfg = buildCascadeConfigs(hops, creds)[0]!;
     expect(cfg.role).toBe('entry');
     expect(cfg.inbounds).toEqual([]); // user inbound deployed via profile, not here
-    const out = cfg.outbounds.find((o) => o.tag === 'cascade-link-out') as any;
+    const out = asOutbound(cfg.outbounds.find((o) => o.tag === 'cascade-link-out'));
     expect(out.settings.vnext[0].address).toBe('transit.example.com');
     expect(out.settings.vnext[0].port).toBe(24000);
     expect(out.settings.vnext[0].users[0].id).toBe('uuid-0');
@@ -345,10 +374,10 @@ describe('buildCascadeConfigs (vless->vless)', () => {
   it('transit has link-in (from prev) + link-out (to next), routed through', () => {
     const cfg = buildCascadeConfigs(hops, creds)[1]!;
     expect(cfg.role).toBe('transit');
-    const inb = cfg.inbounds[0] as any;
+    const inb = asInbound(cfg.inbounds[0]);
     expect(inb.port).toBe(24000); // listens on the link FROM the entry
     expect(inb.settings.clients[0].id).toBe('uuid-0');
-    const out = cfg.outbounds.find((o) => o.tag === 'cascade-link-out') as any;
+    const out = asOutbound(cfg.outbounds.find((o) => o.tag === 'cascade-link-out'));
     expect(out.settings.vnext[0].address).toBe('eu.example.com');
     expect(out.settings.vnext[0].port).toBe(24001);
     expect(out.settings.vnext[0].users[0].id).toBe('uuid-1');
@@ -358,7 +387,7 @@ describe('buildCascadeConfigs (vless->vless)', () => {
   it('exit has link-in + freedom only, routes link-in -> direct', () => {
     const cfg = buildCascadeConfigs(hops, creds)[2]!;
     expect(cfg.role).toBe('exit');
-    const inb = cfg.inbounds[0] as any;
+    const inb = asInbound(cfg.inbounds[0]);
     expect(inb.port).toBe(24001); // listens on the link FROM the transit
     expect(inb.settings.clients[0].id).toBe('uuid-1');
     expect(cfg.outbounds.every((o) => o.tag !== 'cascade-link-out')).toBe(true);
@@ -369,7 +398,7 @@ describe('buildCascadeConfigs (vless->vless)', () => {
   it('a 2-hop cascade is entry -> exit with one link', () => {
     const two = buildCascadeConfigs(hops.slice(0, 2), creds.slice(0, 1));
     expect(two.map((h) => h.role)).toEqual(['entry', 'exit']);
-    expect((two[1]!.inbounds[0] as any).port).toBe(24000);
+    expect(asInbound(two[1]!.inbounds[0]).port).toBe(24000);
   });
 
   it('exposes the link-in port + previous-hop address for the agent firewall', () => {
@@ -397,7 +426,7 @@ describe('buildCascadeConfigs (shadowsocks link cell, C3b)', () => {
 
   it('entry dials an SS outbound; exit listens on a single-PSK SS inbound', () => {
     const [entry, exit] = buildCascadeConfigs(hops, ssCreds);
-    const out = entry!.outbounds.find((o) => o.tag === 'cascade-link-out') as any;
+    const out = asOutbound(entry!.outbounds.find((o) => o.tag === 'cascade-link-out'));
     expect(out.protocol).toBe('shadowsocks');
     expect(out.settings.servers[0]).toMatchObject({
       address: 'eu.example.com',
@@ -405,7 +434,7 @@ describe('buildCascadeConfigs (shadowsocks link cell, C3b)', () => {
       method: '2022-blake3-aes-256-gcm',
       password: 'cHNrLTA=',
     });
-    const inb = exit!.inbounds[0] as any;
+    const inb = asInbound(exit!.inbounds[0]);
     expect(inb.protocol).toBe('shadowsocks');
     expect(inb.port).toBe(24000);
     expect(inb.settings).toMatchObject({
@@ -431,10 +460,10 @@ describe('buildCascadeConfigs (shadowsocks link cell, C3b)', () => {
     ];
     const [entry, transit, exit] = buildCascadeConfigs(threeHops, mixed);
     // entry -> transit link is vless
-    expect((entry!.outbounds.find((o) => o.tag === 'cascade-link-out') as any).protocol).toBe('vless');
-    expect((transit!.inbounds[0] as any).protocol).toBe('vless');
+    expect(asOutbound(entry!.outbounds.find((o) => o.tag === 'cascade-link-out')).protocol).toBe('vless');
+    expect(asInbound(transit!.inbounds[0]).protocol).toBe('vless');
     // transit -> exit link is shadowsocks
-    expect((transit!.outbounds.find((o) => o.tag === 'cascade-link-out') as any).protocol).toBe('shadowsocks');
-    expect((exit!.inbounds[0] as any).protocol).toBe('shadowsocks');
+    expect(asOutbound(transit!.outbounds.find((o) => o.tag === 'cascade-link-out')).protocol).toBe('shadowsocks');
+    expect(asInbound(exit!.inbounds[0]).protocol).toBe('shadowsocks');
   });
 });

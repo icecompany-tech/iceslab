@@ -88,7 +88,10 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   const free = freemem();
   const usedMem = total - free;
 
-  let disk: SystemMetrics['disk'] = null;
+  // Declared without a value: the `null` it used to be initialised with was
+  // overwritten on every path, including the catch, so it said "the default is
+  // no disk" while nothing could ever read that default.
+  let disk: SystemMetrics['disk'];
   try {
     const path = process.cwd();
     const s = await statfs(path);

@@ -222,7 +222,7 @@ describe('the entry handing its directions to the chain process', () => {
     const file = join(dir, 'config.json');
     writeFileSync(file, config);
     let ok = true;
-    let output = '';
+    let output: string;
     try {
       output = execFileSync(XRAY_BIN, ['-test', '-c', file], { encoding: 'utf8' });
     } catch (err) {
