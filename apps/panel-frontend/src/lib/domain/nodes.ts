@@ -145,6 +145,14 @@ export interface Node {
   chainStatus?: { running: boolean; version?: string; error?: string } | null;
   /** Когда панель последний раз послала этой ноде блок цепи. */
   chainSentAt?: string | null;
+  /**
+   * Версия гео-набора, которая лежит НА ЭТОЙ МАШИНЕ, фаза 9.
+   *
+   * ⚠ Те же три значения: поля нет = сервер его не отдаёт и карточка молчит;
+   * `null` = отдаёт, а нода не сообщала, и это уже факт про ноду. См.
+   * `geoVersionFacts`.
+   */
+  geoVersion?: string | null;
   createdAt: string;
   updatedAt: string;
 }

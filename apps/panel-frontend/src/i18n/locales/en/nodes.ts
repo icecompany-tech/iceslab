@@ -356,6 +356,10 @@
     loadLabel: 'Load',
     coreVersion: 'xray core version (exit selection needs >= 25.9.5)',
     coreNoData: 'no core data',
+    // The geo set on the machine. No line at all until the server sends the
+    // field: see geoVersionFacts, "no data" is already a fact about the node.
+    geoVersion: 'geo set {{version}}',
+    geoUnknown: 'geo set: no data',
     coreNoDataTip:
       'This node has never reported its core: an older agent, or it has not checked in. That is not the same as "no restarts" - the panel simply does not know how many there were.',
     coreNoRss: 'no memory sample',

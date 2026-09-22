@@ -32,9 +32,10 @@ import { relativeTime } from '@/lib/ui/relativeTime';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import type { SyncRefusal } from '@/lib/domain/syncRefusal';
 import type { ChainFacts } from '@/lib/domain/chainStatus';
+import type { GeoVersionFacts } from '@/lib/domain/geoSets';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
-import { AMBER, CARD, CYAN, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/nodes/lib/colors';
+import { AMBER, CARD, CYAN, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/nodes/lib/colors';
 
 type DashboardNode = DashboardOverview['nodes'][number];
 
@@ -83,6 +84,8 @@ interface CardNode {
   /** Состояние процесса цепи, `null` = блок цепи этой ноде не посылали, и
    *  говорить не о чем. См. `lib/domain/chainStatus.ts`. */
   chain?: ChainFacts | null;
+  /** Гео-набор на этой машине. `null` = сервер поля не отдаёт, карточка молчит. */
+  geo?: GeoVersionFacts;
 }
 
 interface Props {
@@ -270,6 +273,34 @@ export function NodeCard({
             штатно, а цепь на этой машине при этом не подняться, и по статусу
             ноды это тоже не видно. Молчит, пока блок цепи сюда не посылали. */}
         {node.chain && <ChainStatusLine facts={node.chain} compact />}
+
+        {/* Гео-набор одной строкой: версия, которую несёт эта машина. Молчит,
+            пока сервер поля не отдаёт, и говорит «нет данных», когда отдаёт, а
+            нода не сообщала. */}
+        {node.geo && (
+          <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Box
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: 999,
+                backgroundColor: node.geo.state === 'known' ? MIST : DIM,
+                flexShrink: 0,
+              }}
+            />
+            <Text
+              size="xs"
+              style={{
+                color: node.geo.state === 'known' ? MIST : DIM,
+                fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
+              }}
+            >
+              {node.geo.state === 'known'
+                ? t('nodeCard.geoVersion', { version: node.geo.version })
+                : t('nodeCard.geoUnknown')}
+            </Text>
+          </Box>
+        )}
 
         {/* Бейдж политики ТОЛЬКО когда она назначена и не работает либо про
             неё ничего не известно. В «применяется» карточка молчит: зелёная

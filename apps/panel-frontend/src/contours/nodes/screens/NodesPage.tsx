@@ -37,6 +37,7 @@ import { createBinding } from '@/lib/domain/profiles';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
+import { geoVersionFacts } from '@/lib/domain/geoSets';
 import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
   createNode,
@@ -1023,6 +1024,9 @@ export function NodesPage() {
                   // Цепь читается парой полей ноды, и эта же пара молчит у
                   // всех, кому блок цепи не посылали.
                   chain: chainFacts(n),
+                  // Гео-набор: та же тройка значений, что у цепи. Поля нет -
+                  // карточка молчит, а не пишет «нет данных» всему парку.
+                  geo: geoVersionFacts(n),
                   // `null` значит «карточке сказать нечего», и решает это одна
                   // функция: «политики нет» и «политика не работает» слишком
                   // легко спутать, чтобы разбирать их в разметке.

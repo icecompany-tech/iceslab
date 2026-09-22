@@ -109,6 +109,26 @@ export function geoSetRefusal(err: unknown): GeoSetRefusal | null {
   return { code, message: res?.data?.message, policies: res?.data?.policies };
 }
 
+/**
+ * Что за гео-набор лежит на ЭТОЙ ноде, для её карточки.
+ *
+ * ⚠ Три значения, и первые два разные. `undefined` это «сервер поля ещё не
+ * отдаёт» (фаза 9 не доехала): карточка молчит, потому что сказать нечего и
+ * ничего не сломано. `null` это «сервер поле отдаёт, а нода про свой набор не
+ * сообщала»: это уже факт про ноду, и он стоит строки «нет данных». Строка это
+ * версия, которую нода несёт.
+ *
+ * Разница дорогая: «нет данных» на каждой ноде парка в день, когда поле
+ * завели, выглядит как поломка раскладки, хотя поломки нет.
+ */
+export type GeoVersionFacts = { state: 'known'; version: string } | { state: 'unknown' } | null;
+
+export function geoVersionFacts(node: { geoVersion?: string | null }): GeoVersionFacts {
+  if (node.geoVersion === undefined) return null;
+  if (node.geoVersion === null || node.geoVersion.trim() === '') return { state: 'unknown' };
+  return { state: 'known', version: node.geoVersion };
+}
+
 /** Ответил ли сервер «такого маршрута нет», то есть фаза 9 не доехала. */
 export function isNotImplemented(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
