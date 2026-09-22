@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text } from '@mantine/core';
 import type { HostFreshness } from '@/lib/domain/hosts';
+import { CARD, CURRENT, FAINT, HAIRLINE, MIST, RED, SNOW, TRACK, WELL } from '@/contours/hosts/lib/colors';
 
 /**
  * Who is still on the previous link.
@@ -14,15 +15,6 @@ import type { HostFreshness } from '@/lib/domain/hosts';
  * the question is how many humans are affected, not how many configs exist.
  */
 
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const HAIRLINE = '#1C2A3D';
-const TRACK = '#16202E';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const CURRENT = '#4E8FB8';
-const STALE = '#E07A5F';
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 export function HostFreshnessCard({ data }: { data: HostFreshness | undefined }) {
@@ -103,12 +95,12 @@ export function HostFreshnessCard({ data }: { data: HostFreshness | undefined })
             }}
           >
             <Box style={{ height: 6, width: `${pct}%`, backgroundColor: CURRENT }} />
-            <Box style={{ height: 6, width: `${100 - pct}%`, backgroundColor: STALE }} />
+            <Box style={{ height: 6, width: `${100 - pct}%`, backgroundColor: RED }} />
           </Box>
 
           <Box style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: STALE, flexShrink: 0 }} />
-            <Text style={{ fontSize: 13, lineHeight: '17px', color: STALE, flexShrink: 0 }}>
+            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: RED, flexShrink: 0 }} />
+            <Text style={{ fontSize: 13, lineHeight: '17px', color: RED, flexShrink: 0 }}>
               {t('hostEdit.freshStale', { count: stale })}
             </Text>
             <Text style={{ fontSize: 12, lineHeight: '16px', color: FAINT, flex: 1, minWidth: 0 }}>

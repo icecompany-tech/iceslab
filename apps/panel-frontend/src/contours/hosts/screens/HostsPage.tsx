@@ -36,6 +36,7 @@ import { profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
+import { AMBER, CARD, CYAN, CYAN_HI, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, SNOW, VIOLET, WELL } from '@/contours/hosts/lib/colors';
 
 /**
  * Hosts, first-class. A host is the one line a user reads in their client, so
@@ -46,20 +47,6 @@ import { COUNTRIES } from '@/lib/domain/countries';
  * A host with no nodes serves nobody, which is the one broken state here, so it
  * gets the amber edge and says so instead of showing an empty row.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const BORDER_INPUT = '#2C3A4E';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const CYAN_HI = '#67E8F9';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -438,7 +425,7 @@ function HostCard({
               padding: '5px 10px',
               borderRadius: 6,
               backgroundColor: WELL,
-              border: `1px solid ${BORDER_INPUT}`,
+              border: `1px solid ${EDGE}`,
             }}
           >
             <Box style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: VIOLET }} />

@@ -56,6 +56,7 @@ import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
+import { AMBER, CARD, CYAN, CYAN_HI, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, ROW, SNOW, VIOLET, WELL } from '@/contours/hosts/lib/colors';
 
 /**
  * One host, as a page. The order follows the question an operator is actually
@@ -67,21 +68,6 @@ import { COUNTRIES } from '@/lib/domain/countries';
  * list below therefore lets you move a host between nodes rather than fan it
  * out across several; multi-node hosts need the host-centric model.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const ROW = '#152233';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const CYAN_HI = '#67E8F9';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
