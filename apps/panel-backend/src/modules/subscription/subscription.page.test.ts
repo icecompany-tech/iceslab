@@ -406,3 +406,70 @@ describe('buildSubscriptionPage', () => {
     });
   });
 });
+
+describe('the refusal page', () => {
+  /**
+   * Three things and nothing else: the state card, the link with its copy
+   * button, and support when there is one.
+   *
+   * Everything else on this page answers "how do I connect", and for this
+   * reader there is one honest answer. Install steps and eight app panels are
+   * then a person following instructions into a wall, and the config button is
+   * worse than decoration: every format goes through the same generator that
+   * refused, so pressing it returns a 403.
+   */
+  const DEAD = ['expired', 'limited', 'disabled'] as const;
+
+  for (const status of DEAD) {
+    it(`offers no apps and no configs when the subscription is ${status}`, () => {
+      const html = buildSubscriptionPage(
+        base({
+          protocols: ['xray', 'amneziawg'],
+          awgNodes: [{ nodeName: 'awg', confQrSvg: '<svg id="c"/>', vpnQrSvg: '<svg id="v"/>' }],
+          subUrlQrSvg: '<svg id="sub"/>',
+          user: {
+            username: 'alice',
+            status,
+            expireAt: '2026-01-01T00:00:00.000Z',
+            trafficLimitBytes: 1024,
+            trafficUsedBytes: 2048,
+          },
+        }),
+      );
+
+      // No install block, no app cards, no one-tap import.
+      expect(html).not.toContain('class="card install"');
+      expect(html).not.toContain('happ://add/');
+      expect(html).not.toContain('v2raytun://import/');
+      // No downloads card and no config buttons.
+      expect(html).not.toContain('id="downloads"');
+      // The attribute, not the bare word: the inline script names it in a
+      // selector and a comment, and matching those would test the wrong file.
+      expect(html).not.toContain('data-copy-config="');
+      expect(html).not.toContain('format=wgconf');
+      // No AmneziaWG QR widget and no transfer window: moving a subscription
+      // that does not work to a second device is not a thing to offer.
+      expect(html).not.toContain('id="scan"');
+      expect(html).not.toContain('class="overlay" data-transfer');
+
+      // And the three that stay.
+      expect(html).toContain('sub-card');
+      expect(html).toContain('https://panel.example.com/sub/abc123');
+      expect(html).toContain('id="copy-inline"');
+      // The line that answers the question this page always raises.
+      expect(html).toContain('The link does not change');
+    });
+  }
+
+  it('keeps the whole directory for a LIVE subscription with no servers yet', () => {
+    // The other rule, and the one this must not break: an empty protocol list
+    // on a working subscription means the fleet is unreachable, not that the
+    // person cannot install anything. The page used to go blank there.
+    const html = buildSubscriptionPage(base({ protocols: [] }));
+    expect(html).toContain('class="card install"');
+    expect(html).toContain('id="downloads"');
+    // Apps from protocols nobody has yet: the directory, not the subscription.
+    expect(html).toContain('Happ');
+    expect(html).not.toContain('The link does not change');
+  });
+});

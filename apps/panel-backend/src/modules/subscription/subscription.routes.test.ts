@@ -618,10 +618,17 @@ describe('a subscription that is not in force', () => {
     expect(res.body).not.toContain('>active<');
   });
 
-  it('offers no config it cannot deliver, and says why', async () => {
-    // The downloads block stays on the page (somebody who has just renewed
-    // must not find it gone) but hands out nothing: every one of those
-    // addresses answers with the same refusal.
+  it('offers nothing it cannot deliver', async () => {
+    /**
+     * The live question the previous version of this test recorded is now
+     * settled, and the other way round: the refusal page carries the state
+     * card, the link with its copy button, and support. Nothing else.
+     *
+     * The downloads block used to stay with an amber plate, and the install
+     * block appeared through the branch built for a WORKING subscription whose
+     * fleet is unreachable. On a refused one that branch offered apps whose
+     * one-tap import leads straight back to the 403 that produced the page.
+     */
     const user = await createUser('lapsed-3');
     await createNode('lapsed-n3', '10.0.0.34:8443');
     await prisma.user.update({ where: { id: user.id }, data: { status: 'limited' } });
@@ -631,19 +638,17 @@ describe('a subscription that is not in force', () => {
       url: `/sub/${user.subscriptionToken}`,
       headers: browser,
     });
-    expect(res.body).toContain('id="downloads"');
-    expect(res.body).toContain('is-dead');
-    expect(res.body).toContain('no config is issued');
+    expect(res.statusCode).toBe(403);
+    // Nothing that would lead the reader into the same refusal.
+    expect(res.body).not.toContain('id="downloads"');
+    expect(res.body).not.toContain('data-platform=');
     expect(res.body).not.toContain('format=plain');
-    // ⚠ The install block DOES still appear here, and that is a live
-    // question rather than a settled rule. It shows the whole app catalogue
-    // whenever the protocol list is empty, which was built for a different
-    // case: a working subscription whose fleet is temporarily unreachable,
-    // where an empty page would be a lie about the product. On a REFUSED
-    // subscription the same branch offers apps whose one-tap import leads to
-    // the 403 that produced this page. Asserted as it behaves today, not as
-    // it should; see the handoff note.
-    expect(res.body).toContain('data-platform=');
+    expect(res.body).not.toContain('data-copy-config="');
+    // The three that remain, end to end through the real route.
+    expect(res.body).toContain('sub-card');
+    expect(res.body).toContain(user.subscriptionToken);
+    expect(res.body).toContain('id="copy-inline"');
+    expect(res.body).toContain('The link does not change');
   });
 });
 

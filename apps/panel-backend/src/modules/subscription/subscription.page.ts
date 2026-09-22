@@ -822,6 +822,22 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   // показываем весь справочник. Выдача при этом не подделывается: конфиги и
   // ссылки по-прежнему идут от настоящих данных, а полоса выше говорит, что
   // серверов пока нет.
+  /**
+   * A subscription that is not in force gets THREE things and nothing else:
+   * the state card, the link with a copy button, and support if there is one.
+   *
+   * Everything else on this page answers "how do I connect", and for this
+   * reader that question has one honest answer, which is "you cannot yet".
+   * Install steps, eight app panels and a config button are then not help,
+   * they are a person following instructions that end at a wall, and the
+   * config button is worse than useless: every format goes through the same
+   * generator that refused, so it hands out a 403.
+   *
+   * The link stays, and stays copyable, because it does not change: keeping it
+   * is exactly what the person should do, and the line under it says so.
+   */
+  const dead = u.status !== 'active';
+
   const noServers = data.protocols.length === 0;
   const appData = noServers ? { ...data, protocols: [...PROTOCOL_NAMES] as ProtocolName[] } : data;
 
@@ -864,7 +880,8 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   // limited is refused before this page is built (see statusView). Written as
   // the condition rather than as a constant so it starts working the day the
   // route learns to answer HTML for a refusal.
-  const downloadsHtml = renderDownloads(data, hasAwg, u.status !== 'active', t, icons);
+  // Nothing on a page that cannot connect anybody: see dead above.
+  const downloadsHtml = dead ? '' : renderDownloads(data, hasAwg, false, t, icons);
 
   const protocolChips = data.protocols.map((p) => `<span class="proto">${esc(p)}</span>`).join('');
 
@@ -938,7 +955,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     </div>`
     : '';
   const scanSection =
-    figures.length > 0
+    !dead && figures.length > 0
       ? `<section class="card scan" id="scan">
     <div class="install__head">
       <h2 class="install__title">${esc(t.scanTitle)}</h2>
@@ -953,7 +970,9 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   // Transfer window. The QR is the one qrSvg() already builds for the
   // subscription link (subscription.routes.ts), shown in a new place rather
   // than generated again; without it there is nothing to put in the window.
-  const transferHtml = data.subUrlQrSvg
+  // The transfer window goes too: moving a subscription that does not work
+  // to a second device is not a thing to offer.
+  const transferHtml = !dead && data.subUrlQrSvg
     ? `<div class="overlay" data-transfer>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
     <span class="modal__handle" aria-hidden="true"></span>
@@ -977,6 +996,18 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 
   const supportRow = data.supportUrl
     ? `<a class="support" href="${esc(data.supportUrl)}">${esc(t.support)} -&gt;</a>`
+    : '';
+
+  /**
+   * One line under the link, only when the subscription is not in force.
+   *
+   * The link card itself is already on the page and stays exactly as it is:
+   * this page has one way of showing a link and does not grow a second. What
+   * the refusal page adds is the answer to the question it always raises, "am
+   * I going to be given a new address", asked where the address is.
+   */
+  const deadLinkNote = dead
+    ? `<div class="dead-note">${esc(t.deadLinkNote)}</div>`
     : '';
 
   const doc = `<!DOCTYPE html>
@@ -1051,6 +1082,7 @@ ${SPRITE_SLOT}
       <input class="link" id="url" value="${esc(data.subUrl)}" readonly onclick="this.select()">
       <button class="copy" id="copy-inline">${esc(t.copy)}</button>
     </div>
+    ${deadLinkNote}
   </section>
 
   ${
@@ -1062,7 +1094,7 @@ ${SPRITE_SLOT}
        справочником: исчезала она раньше, и страница из-за этого читалась как
        сломанная, хотя сломаны были данные. Полоса сверху говорит правду, а
        инструкция остаётся: ставить приложение можно и до выдачи доступа. */
-    platforms.length > 0
+    !dead && platforms.length > 0
       ? `<section class="card install">
     <div class="install__head">
       <h1 class="install__title">${esc(t.setup)}</h1>

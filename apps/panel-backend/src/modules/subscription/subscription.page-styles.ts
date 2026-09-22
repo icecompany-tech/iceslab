@@ -427,7 +427,11 @@ export const PAGE_CSS = String.raw`
   .qr-plate{display:flex; align-items:center; justify-content:center; padding:28px;
     border-radius:16px; background:#E9EEF4;}
   .qr-plate svg{width:300px; height:300px; max-width:100%; display:block;}
-  .link-box{display:flex; flex-direction:column; gap:5px; padding:11px 14px; border-radius:12px;
+  /* The one line the refusal page adds under the link: it answers "will I get
+   a new address" where the address is. Muted, because it is a reassurance
+   and not an instruction. */
+.dead-note{margin-top:10px; font-size:12px; line-height:17px; color:var(--faint);}
+.link-box{display:flex; flex-direction:column; gap:5px; padding:11px 14px; border-radius:12px;
     background:var(--card2); border:1px solid var(--hair);}
   .link-box__label{font-family:var(--mono); font-size:10px; line-height:12px;
     letter-spacing:.09em; color:var(--mist);}

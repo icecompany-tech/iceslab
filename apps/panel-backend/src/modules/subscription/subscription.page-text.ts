@@ -79,6 +79,15 @@ export interface Labels {
   unlimited: string;
   protocols: string;
   subLink: string;
+  /**
+   * Said on the refusal page, under the link.
+   *
+   * That page has one thing a person can still act on, and it raises one
+   * question every time: will I be given a new link. Answering it where the
+   * link is shown is cheaper than answering it in support, and it stops people
+   * throwing away a link that is about to work again.
+   */
+  deadLinkNote: string;
   copy: string;
   copied: string;
   copyKey: string;
@@ -241,6 +250,8 @@ export const L: Record<'ru' | 'en', Labels> = {
     unlimited: 'unlimited',
     protocols: 'Protocols',
     subLink: 'Subscription link',
+    deadLinkNote:
+      'The link does not change. Keep it: it starts working again as soon as the subscription does.',
     copy: 'Copy',
     copied: 'Copied',
     copyKey: 'Copy key',
@@ -407,6 +418,8 @@ export const L: Record<'ru' | 'en', Labels> = {
     unlimited: 'безлимит',
     protocols: 'Протоколы',
     subLink: 'Ссылка подписки',
+    deadLinkNote:
+      'Ссылка не меняется. Сохраните её: она заработает снова, как только заработает подписка.',
     copy: 'Копировать',
     copied: 'Скопировано',
     copyKey: 'Скопировать ключ',
