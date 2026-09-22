@@ -16,6 +16,7 @@ import {
   type SubscriptionFormat,
   type SubscriptionLinkShape,
 } from '@/lib/domain/settings';
+import { AMBER, CARD, CYAN, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/subscription/lib/colors';
 
 /**
  * Что получает человек, открывший ссылку подписки, и в каком виде.
@@ -28,18 +29,6 @@ import {
  * счётчик подписок он ПОКАЗЫВАЕТ, но не шлёт: предлагать серверу принять то,
  * чего человек не менял, это способ однажды стереть чужое значение.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

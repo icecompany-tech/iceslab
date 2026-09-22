@@ -11,6 +11,7 @@ import { deleteSrrRule, listSrrRules, updateSrrRule, type SrrRule } from '@/lib/
 import { SRR_FORMATS, formatTone } from '@/contours/subscription/lib/srrFormats';
 import { isCatchAll, matchingRules } from '@/contours/subscription/lib/srrMatch';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, ROW, SNOW, WELL } from '@/contours/subscription/lib/colors';
 
 /**
  * Delivery rules: which config FORMAT each client app gets. One regex over the
@@ -20,20 +21,6 @@ import { usePageMeta } from '@/lib/ui/usePageMeta';
  * tester underneath answers the only question an operator ever has about a rule
  * set this shape: given this client, which rule catches it.
  */
-
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const RAISED = '#152233';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -205,7 +192,7 @@ export function SrrPage() {
                   style={{
                     paddingBlock: 12,
                     paddingInline: 18,
-                    backgroundColor: highlight ? RAISED : 'transparent',
+                    backgroundColor: highlight ? ROW : 'transparent',
                     borderBottom: i === rules.length - 1 ? undefined : `1px solid ${HAIRLINE}`,
                   }}
                 >
@@ -500,7 +487,6 @@ export function SrrPage() {
     </Stack>
   );
 }
-
 
 /* ───── Pieces ──────────────────────────────────────────────────────────── */
 

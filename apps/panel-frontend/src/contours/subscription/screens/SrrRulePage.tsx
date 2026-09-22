@@ -32,6 +32,7 @@ import {
   TickIcon,
   WarnIcon,
 } from '@/contours/subscription/screens/SrrPage';
+import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/subscription/lib/colors';
 
 /**
  * One delivery rule: a regex over the User-Agent, a priority, and the format it
@@ -41,18 +42,6 @@ import {
  * exactly like a rule that works, so the draft is tested against a sample
  * User-Agent live, and any earlier rule that would beat it is named.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

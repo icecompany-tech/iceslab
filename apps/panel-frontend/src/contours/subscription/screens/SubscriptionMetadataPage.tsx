@@ -19,6 +19,7 @@ import { SettingsTabs } from '@/contours/subscription/components/SettingsTabs';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getSettings, updateSettings, type AdminSettings } from '@/lib/domain/settings';
+import { CARD, CYAN, CYAN_HI, DIM, EDGE, FAINT, GROUND, HAIRLINE, MIST, MOSS, SNOW, WELL } from '@/contours/subscription/lib/colors';
 
 /**
  * Everything `/sub/:token` says about itself, on one page: the headers a client
@@ -29,19 +30,6 @@ import { getSettings, updateSettings, type AdminSettings } from '@/lib/domain/se
  * save-on-change controls, which meant an operator could leave with half of an
  * edit applied and no way to tell which half.
  */
-
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const CYAN2 = '#67E8F9';
-const MOSS = '#A7D8B9';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -385,7 +373,7 @@ export function SubscriptionMetadataPage() {
             style={{ padding: 20, borderRadius: 10, backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-              <ScissorsIcon size={15} color={CYAN2} />
+              <ScissorsIcon size={15} color={CYAN_HI} />
               <CardCaption>{t('metadata.fragmentTitle')}</CardCaption>
               <Box style={{ flex: 1, minWidth: 0 }} />
               <Switch
@@ -522,7 +510,6 @@ function formatBytes(n: number): string {
 }
 
 /* ───── Pieces ──────────────────────────────────────────────────────────── */
-
 
 function PresetTile({
   selected,
@@ -712,7 +699,6 @@ function BroadcastIcon({ size, color }: { size: number; color: string }) {
     </svg>
   );
 }
-
 
 function EyeIcon({ size, color }: { size: number; color: string }) {
   return (

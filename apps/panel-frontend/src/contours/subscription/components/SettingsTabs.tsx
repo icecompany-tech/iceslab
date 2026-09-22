@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Text, UnstyledButton } from '@mantine/core';
+import { AMBER, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/subscription/lib/colors';
 
 /**
  * Две вкладки одних «Настроек подписки»: заголовки ответа на первой, формат,
@@ -12,13 +13,6 @@ import { Box, Text, UnstyledButton } from '@mantine/core';
  * при этом теряется, поэтому вкладка с несохранёнными правками не уводит
  * молча, а сперва говорит, что именно пропадёт.
  */
-
-const HAIRLINE = '#1C2A3D';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
-const AMBER = '#F5B14C';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
