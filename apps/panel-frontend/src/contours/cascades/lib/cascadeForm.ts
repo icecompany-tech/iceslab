@@ -1,6 +1,7 @@
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
-import { linkCellPair, type EnginePair } from '@/lib/domain/engines';
+import { linkCellPair, type EnginePair, type EngineName } from '@/lib/domain/engines';
+import type { LinkCell, LinkParams } from '@/lib/domain/cascades';
 import { AMBER, CYAN, DIM, MIST, MOSS, RED, VIOLET } from '@/contours/cascades/lib/colors';
 
 /**
@@ -171,6 +172,24 @@ export interface DirectionDraft {
   id: string | null;
   /** Issued by the backend on first save, and never reused. Null while drafting. */
   tag: number | null;
+  /**
+   * Нога направления, фаза 5. Три значения, как в контракте: `undefined` это
+   * «сервер поля не отдаёт», `null` это «ячейка не выбрана, идём ячейкой
+   * входа».
+   */
+  linkProtocol?: LinkCell | null;
+  linkParams?: LinkParams | null;
+  /** Только для показа: назначает сервер, обратно не уходит никогда. */
+  linkPort?: number | null;
+  /**
+   * Правил ли оператор ногу этого направления.
+   *
+   * Отдельный флаг, а не сравнение значений: PUT шлёт ногу ТОЛЬКО когда её
+   * трогали. Без флага сохранение экрана, который поля даже не показывал,
+   * отправило бы `null` и стёрло бы ячейку на сервере, ровно как сохранение
+   * сквада стёрло profileIds 2026-07-31.
+   */
+  linkTouched?: boolean;
 }
 
 /** Pools are the entry and whatever transits follow it; the exit is the
@@ -204,6 +223,12 @@ export function toDirectionInputs(directions: DirectionDraft[]) {
     ...(d.id ? { id: d.id } : {}),
     countryCode: d.countryCode,
     nodeIds: d.nodeIds.filter(Boolean),
+    // Нога уходит ТОЛЬКО если её правили. До фазы 5 полей нет вовсе, и
+    // отправленный `null` означал бы «сбрось ячейку», а не «я про неё ничего
+    // не знаю». `linkPort` не отправляется никогда: его назначает сервер.
+    ...(d.linkTouched
+      ? { linkProtocol: d.linkProtocol ?? null, linkParams: d.linkParams ?? null }
+      : {}),
   }));
 }
 
@@ -316,17 +341,71 @@ export interface LegFacts {
   state: LegState;
   /** Что записано в колонке. `null` только у `unknown`. */
   cell: string | null;
-  /** Протокол и движок ячейки. Есть только у `known`. */
+  /** Протокол и движок ячейки. Есть только у двух встроенных ячеек. */
   pair: EnginePair | null;
   /** Порт на принимающей стороне: 24000 + номер шага. */
   port: number;
+  /** Движки ячейки по таблице контракта. Есть у `known`, которую опознала
+   *  таблица, а не встроенный список. */
+  engines?: EngineName[];
 }
 
-export function legFacts(linkProtocol: string | null | undefined, step: number): LegFacts {
+export function legFacts(
+  linkProtocol: string | null | undefined,
+  step: number,
+  /** Движки ячейки по таблице контракта; `undefined` = таблицы нет. Приходит
+   *  снаружи, чтобы функция осталась чистой и проверяемой. */
+  enginesOf?: (cell: string) => EngineName[] | undefined,
+): LegFacts {
   const port = LEG_PORT_BASE + step;
   const cell = linkProtocol && linkProtocol.trim() !== '' ? linkProtocol : null;
   if (!cell) return { state: 'unknown', cell: null, pair: null, port };
+
+  // Две ячейки панель собирала всегда, и их пару она знает точно.
   const pair = linkCellPair(cell);
-  return pair ? { state: 'known', cell, pair, port } : { state: 'unrealised', cell, pair: null, port };
+  if (pair) return { state: 'known', cell, pair, port };
+
+  // Остальные (hy2, tuic) становятся рабочими РОВНО тогда, когда таблица
+  // контракта называет движки. До этого прежнее поведение: показываем, что
+  // записано, и не выдаём это за рабочую ногу.
+  const engines = enginesOf?.(cell);
+  if (engines && engines.length > 0) return { state: 'known', cell, pair: null, port, engines };
+  return { state: 'unrealised', cell, pair: null, port };
+}
+
+/**
+ * Ноды направления, которые ТОЧНО не несут выбранную ячейку.
+ *
+ * Возвращается только доказанное «нет»: нода отчиталась о своих движках, и
+ * среди них нет ни одного, кем ячейка поднимается. Молчащая нода и ячейка, про
+ * которую таблицы нет, сюда не попадают вовсе: это незнание, а красная строка
+ * про незнание врёт. То же правило, что стоило 23 отказов рабочим парам
+ * 2026-09-11.
+ *
+ * `engines` в ответе это то, что нода сообщила о себе: без этого списка
+ * оператору некуда идти, кроме как гадать.
+ */
+export interface CellGap {
+  nodeId: string;
+  name: string;
+  engines: EngineName[];
+}
+
+export function cellGaps(
+  nodeIds: string[],
+  cell: string | null | undefined,
+  nodeById: Map<string, { name: string; engines?: EngineName[] }>,
+  carries: (node: { engines?: EngineName[] } | undefined, cell: string) => boolean | undefined,
+): CellGap[] {
+  if (!cell) return [];
+  const gaps: CellGap[] = [];
+  for (const id of nodeIds) {
+    if (!id) continue;
+    const node = nodeById.get(id);
+    if (!node) continue;
+    if (carries(node, cell) !== false) continue;
+    gaps.push({ nodeId: id, name: node.name, engines: node.engines ?? [] });
+  }
+  return gaps;
 }
 

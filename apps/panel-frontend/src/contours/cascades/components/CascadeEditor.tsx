@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
+import { Box, Select, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/core';
 import type { CascadeProtocol } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
 import { COUNTRIES, countryFlag } from '@/lib/domain/countries';
@@ -28,9 +28,11 @@ import {
   poolRowFacts,
   protocolOptions,
   statusTone,
+  type CellGap,
   type HopRole,
   type LegFacts,
 } from '@/contours/cascades/lib/cascadeForm';
+import type { LinkCell, LinkParams } from '@/lib/domain/cascades';
 import {
   engineListWords,
   isRealisedLinkCell,
@@ -628,6 +630,137 @@ export function LegRow({
       )}
     </Box>
   );
+}
+
+/**
+ * Нога ДО ВЫХОДА, своя у каждого направления (фаза 5).
+ *
+ * До фазы 5 полей на сервере нет вовсе, и это видно по `undefined`: строка
+ * тогда показывает ячейку входа, а селектор заблокирован с подписью про фазу.
+ * `null` это другое: поле есть, ячейка не выбрана, направление идёт ячейкой
+ * входа сознательно. Разница между «нельзя» и «не выбрано» тут и есть весь
+ * смысл строки.
+ *
+ * Порт не редактируется никогда: его назначает сервер. Пока каскад не
+ * сохранён, вместо числа стоит слово, а не выдуманное число.
+ */
+export function DirectionLegRow({
+  facts,
+  cell,
+  params,
+  port,
+  available,
+  gaps,
+  onCell,
+  onParams,
+}: {
+  facts: LegFacts;
+  cell: LinkCell | null;
+  params: LinkParams | null;
+  port: number | null | undefined;
+  /** Отдаёт ли сервер поля ноги направления. `false` = фаза 5 не доехала. */
+  available: boolean;
+  /** Ноды направления, которые ТОЧНО не несут выбранную ячейку. */
+  gaps: CellGap[];
+  onCell: (value: LinkCell) => void;
+  onParams: (patch: LinkParams) => void;
+}) {
+  const { t } = useTranslation();
+  const words =
+    facts.state === 'known'
+      ? facts.pair
+        ? pairLabel(facts.pair, t)
+        : t('cascadeCreate.legCellEngines', { cell: facts.cell, engines: facts.engines?.join(', ') })
+      : facts.state === 'unrealised'
+        ? t('engine.cellUnrealised', { name: facts.cell })
+        : t('cascadeCreate.legFromEntry');
+  const tone = facts.state === 'unrealised' ? RED : facts.state === 'known' ? SNOW : FAINT;
+
+  return (
+    <Stack gap={8} style={{ width: '100%', paddingLeft: 14 }}>
+      <Box className="cascade-leg" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+        <LegIcon />
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: tone }}>{words}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: DIM }}>
+          {port === null || port === undefined
+            ? t('cascadeCreate.legPortServer')
+            : t('cascadeCreate.legPort', { port })}
+        </Text>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          {!available && (
+            <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+              {t('cascadeCreate.legPhase5')}
+            </Text>
+          )}
+        </Box>
+        <Box style={{ width: 210, flexShrink: 0 }}>
+          <Select
+            size="xs"
+            data={directionCellOptions(t)}
+            value={cell}
+            disabled={!available}
+            placeholder={t('cascadeCreate.legFromEntry')}
+            allowDeselect={false}
+            error={facts.state === 'unrealised'}
+            onChange={(v) => v && onCell(v as LinkCell)}
+          />
+        </Box>
+      </Box>
+
+      {/* Параметры принадлежат ячейке: obfs только у hy2, congestion у hy2 и
+          tuic. Поле чужой ячейки это не «пустая настройка», а обещание, что
+          она работает. */}
+      {available && (cell === 'hy2' || cell === 'tuic') && (
+        <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 10, paddingLeft: 24 }}>
+          {cell === 'hy2' && (
+            <Stack gap={4} style={{ width: 240 }}>
+              <FieldLabel>{t('cascadeCreate.legObfs')}</FieldLabel>
+              <TextInput
+                size="xs"
+                value={params?.obfsPassword ?? ''}
+                placeholder={t('cascadeCreate.legObfsPlaceholder')}
+                onChange={(e) => onParams({ obfsPassword: e.currentTarget.value })}
+              />
+            </Stack>
+          )}
+          <Stack gap={4} style={{ width: 180 }}>
+            <FieldLabel>{t('cascadeCreate.legCongestion')}</FieldLabel>
+            <Select
+              size="xs"
+              data={['bbr', 'brutal', 'cubic']}
+              value={params?.congestion ?? null}
+              placeholder={t('cascadeCreate.legCongestionDefault')}
+              allowDeselect={false}
+              onChange={(v) => v && onParams({ congestion: v as NonNullable<LinkParams['congestion']> })}
+            />
+          </Stack>
+        </Box>
+      )}
+
+      {/* Только доказанное «нет»: нода отчиталась о движках, и ни один из них
+          эту ячейку не поднимает. Молчащая нода сюда не попадает. */}
+      {gaps.map((g) => (
+        <Note key={g.nodeId} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t('cascadeCreate.legNodeGap', {
+            name: g.name,
+            cell,
+            engines: g.engines.length ? g.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+          })}
+        </Note>
+      ))}
+    </Stack>
+  );
+}
+
+/** Четыре ячейки контракта. Подпись у встроенных пар своя, у новых имя как
+ *  есть: выдумывать им название до фазы 5 не на чем. */
+function directionCellOptions(t: (k: string, o?: Record<string, unknown>) => string) {
+  return [
+    { value: 'vless', label: pairLabel({ protocol: 'vless', engine: 'xray' }, t) },
+    { value: 'shadowsocks', label: pairLabel({ protocol: 'shadowsocks', engine: 'xray' }, t) },
+    { value: 'hy2', label: 'hy2' },
+    { value: 'tuic', label: 'tuic' },
+  ];
 }
 
 /** Скоба между двумя карточками: линия вниз, потом вправо. */

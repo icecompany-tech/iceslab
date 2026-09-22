@@ -1,9 +1,12 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
+import type { EngineName } from '@iceslab/shared';
 import {
   CHAIN_ENTRY_PROTOCOLS,
   LINK_PROTOCOL_VALUES,
+  cellGaps,
   entryChainFacts,
+  toDirectionInputs,
   lastAttemptFacts,
   legFacts,
   poolRowFacts,
@@ -180,6 +183,120 @@ describe('legFacts', () => {
     expect(legFacts('xray', 3).port).toBe(24003);
     expect(legFacts('tuic', 4).port).toBe(24004);
     expect(legFacts(null, 4).port).toBe(24004);
+  });
+});
+
+/**
+ * Нога направления: ячейка, движки и ноды, которые её не несут.
+ *
+ * Три случая из задания фазы 5, и разница между ними это разница между
+ * незнанием и фактом. Сервер молчит про таблицу ячеек: hy2 остаётся
+ * «нереализованной», и красного нет. Сервер таблицу прислал: ячейка рабочая.
+ * Сервер прислал таблицу, а нода направления её не несёт: красное, с именем
+ * ноды и списком движков, которые она сообщила о себе.
+ */
+
+const TABLE: Record<string, EngineName[]> = {
+  vless: ['xray'],
+  shadowsocks: ['xray'],
+  hy2: ['singbox', 'hysteria'],
+  tuic: ['singbox'],
+};
+const enginesOf = (cell: string) => TABLE[cell];
+
+/** Тот же ответ, что даёт `nodeCarriesCell`, но на подставленной таблице. */
+const carriesWith =
+  (table: Record<string, EngineName[]> | undefined) =>
+  (node: { engines?: EngineName[] } | undefined, cell: string): boolean | undefined => {
+    const engines = node?.engines;
+    if (!engines) return undefined;
+    const carriers = table?.[cell];
+    if (!carriers) return undefined;
+    return carriers.some((e) => engines.includes(e));
+  };
+
+describe('legFacts под ногу направления', () => {
+  it('1. сервер молчит про таблицу: hy2 и tuic остаются нереализованными', () => {
+    expect(legFacts('hy2', 1).state).toBe('unrealised');
+    expect(legFacts('tuic', 1).state).toBe('unrealised');
+    // И встроенные две при этом работают как работали.
+    expect(legFacts('vless', 1).state).toBe('known');
+  });
+
+  it('2. таблица пришла: ячейка становится рабочей и несёт свои движки', () => {
+    const f = legFacts('hy2', 2, enginesOf);
+    expect(f.state).toBe('known');
+    expect(f.engines).toEqual(['singbox', 'hysteria']);
+    expect(f.pair).toBeNull();
+    expect(f.port).toBe(24002);
+  });
+
+  it('3. таблица есть, но этой ячейки в ней нет: по-прежнему нереализована', () => {
+    expect(legFacts('naive', 0, enginesOf).state).toBe('unrealised');
+  });
+});
+
+describe('cellGaps', () => {
+  const nodes = new Map<string, { name: string; engines?: EngineName[] }>([
+    ['n-xray', { name: 'de-01', engines: ['xray'] }],
+    ['n-box', { name: 'nl-02', engines: ['singbox'] }],
+    ['n-silent', { name: 'ru-03' }],
+    ['n-empty', { name: 'se-04', engines: [] }],
+  ]);
+
+  it('1. нода не несёт ячейку: попадает в список с именем и своими движками', () => {
+    const gaps = cellGaps(['n-xray'], 'hy2', nodes, carriesWith(TABLE));
+    expect(gaps).toEqual([{ nodeId: 'n-xray', name: 'de-01', engines: ['xray'] }]);
+  });
+
+  it('2. нода несёт ячейку: в список не попадает', () => {
+    expect(cellGaps(['n-box'], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
+  });
+
+  it('3. нода МОЛЧИТ о ядрах: это незнание, красной строки нет', () => {
+    expect(cellGaps(['n-silent'], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
+  });
+
+  it('4. таблицы нет: молчим про все ноды, даже про отчитавшиеся', () => {
+    expect(cellGaps(['n-xray', 'n-box'], 'hy2', nodes, carriesWith(undefined))).toEqual([]);
+  });
+
+  it('5. нода отчиталась ПУСТЫМ списком: это факт «ничего не несёт», красное', () => {
+    const gaps = cellGaps(['n-empty'], 'hy2', nodes, carriesWith(TABLE));
+    expect(gaps).toEqual([{ nodeId: 'n-empty', name: 'se-04', engines: [] }]);
+  });
+
+  it('6. ячейка не выбрана или строка пустая: считать нечего', () => {
+    expect(cellGaps(['n-xray'], null, nodes, carriesWith(TABLE))).toEqual([]);
+    expect(cellGaps([''], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
+    // Нода, которой нет в списке, это пропажа, и о ячейке она ничего не говорит.
+    expect(cellGaps(['n-gone'], 'hy2', nodes, carriesWith(TABLE))).toEqual([]);
+  });
+});
+
+describe('toDirectionInputs и нога', () => {
+  const base = { key: 0, id: 'd1', countryCode: 'DE', nodeIds: ['n1'], tag: 1 };
+
+  it('1. ногу НЕ трогали: полей ноги в пейлоаде нет вовсе', () => {
+    const [out] = toDirectionInputs([{ ...base, linkProtocol: 'hy2', linkParams: { congestion: 'bbr' } }]);
+    expect(out).toEqual({ id: 'd1', countryCode: 'DE', nodeIds: ['n1'] });
+    expect('linkProtocol' in out!).toBe(false);
+  });
+
+  it('2. ногу правили: уходят ячейка и параметры, порт НИКОГДА', () => {
+    const [out] = toDirectionInputs([
+      { ...base, linkProtocol: 'hy2', linkParams: { obfsPassword: 'p' }, linkPort: 24001, linkTouched: true },
+    ]);
+    expect(out).toEqual({
+      id: 'd1', countryCode: 'DE', nodeIds: ['n1'],
+      linkProtocol: 'hy2', linkParams: { obfsPassword: 'p' },
+    });
+    expect('linkPort' in out!).toBe(false);
+  });
+
+  it('3. ячейку сбросили руками: уходит null, и это осмысленное «как у входа»', () => {
+    const [out] = toDirectionInputs([{ ...base, linkProtocol: null, linkTouched: true }]);
+    expect(out).toMatchObject({ linkProtocol: null, linkParams: null });
   });
 });
 

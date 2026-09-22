@@ -6,6 +6,28 @@ export type CascadeProtocol =
 /** 'chain' (sequential) or 'balancer' (one entry, N latency-balanced exits). */
 export type CascadeMode = 'chain' | 'balancer';
 
+/**
+ * Ячейка ноги: чем один шаг пути говорит со следующим.
+ *
+ * Фаза 5 расширяет список с двух до четырёх. `hy2` и `tuic` объявлены здесь
+ * ЗАРАНЕЕ, но панель не считает их рабочими, пока сервер не пришлёт таблицу
+ * «ячейка -> движки»: имя в союзе это то, что мы умеем разобрать, а не то, что
+ * нода умеет поднять. См. `lib/domain/linkCells.ts`.
+ */
+export type LinkCell = 'vless' | 'shadowsocks' | 'hy2' | 'tuic';
+
+/**
+ * Настройки ноги сверх выбора ячейки.
+ *
+ * Каждое поле принадлежит своей ячейке, и лишнее поле у чужой ячейки это не
+ * «пустая настройка», а ложь про то, что она работает: `obfsPassword` есть
+ * только у hy2 (Salamander), `congestion` у hy2 и tuic.
+ */
+export interface LinkParams {
+  obfsPassword?: string;
+  congestion?: 'bbr' | 'brutal' | 'cubic';
+}
+
 export interface CascadeHop {
   id: string;
   nodeId: string;
@@ -24,6 +46,9 @@ export interface CascadePosition {
   nodeIds: string[];
   entryProtocol: string | null;
   linkProtocol: string | null;
+  /** Настройки ноги этой позиции, фаза 5. Те же три значения, что у
+   *  направления: `undefined` это «сервер не отдаёт», `null` это «пусто». */
+  linkParams?: LinkParams | null;
 }
 
 /**
@@ -42,6 +67,26 @@ export interface CascadeDirection {
   /** May legitimately be empty: the tag exists, no node stands behind it yet,
    *  and the direction is simply not handed to clients. */
   nodeIds: string[];
+  /**
+   * Нога до этого выхода, фаза 5.
+   *
+   * ⚠ ТРИ значения, и первые два разные. `undefined` это «сервер поля ещё не
+   * отдаёт», то есть фаза 5 не доехала: экран показывает ногу заблокированной с
+   * подписью про фазу 5 и ничего не шлёт. `null` это «поле есть, ячейка не
+   * выбрана», и тогда направление идёт ячейкой входа. Прочитать одно как
+   * другое значит либо запереть рабочую настройку, либо обещать настройку,
+   * которой на сервере нет.
+   */
+  linkProtocol?: LinkCell | null;
+  linkParams?: LinkParams | null;
+  /**
+   * Порт ноги на ПРИНИМАЮЩЕЙ ноде направления.
+   *
+   * ⚠ Только чтение: его назначает сервер (24000 + номер последнего шага), и
+   * обратно он не отправляется НИКОГДА. `null` пока каскад не сохранён,
+   * `undefined` пока сервер поля не отдаёт.
+   */
+  linkPort?: number | null;
 }
 
 export interface Cascade {
@@ -130,6 +175,18 @@ export interface CascadeDirectionInput {
   id?: string;
   countryCode: string;
   nodeIds: string[];
+  /**
+   * Нога направления. Отправляются ТОЛЬКО если оператор их правил.
+   *
+   * Правило то же, что стоило подписки в инциденте 2026-07-31: экран не шлёт
+   * список или настройку, которую не редактировал. Здесь это особенно дёшево
+   * сломать, потому что до фазы 5 полей нет вовсе, и отправленный `null`
+   * означал бы «сбросить ячейку», а не «я про неё ничего не знаю».
+   *
+   * `linkPort` здесь отсутствует намеренно: его назначает сервер.
+   */
+  linkProtocol?: LinkCell | null;
+  linkParams?: LinkParams | null;
 }
 
 export interface CreateCascadeV4Input {

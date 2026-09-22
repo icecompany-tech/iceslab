@@ -18,6 +18,7 @@ import {
 import { listNodes, type Node } from '@/lib/domain/nodes';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
+import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
@@ -34,6 +35,7 @@ import {
   ClockIcon,
   Counter,
   DashedAdd,
+  DirectionLegRow,
   DirectionRow,
   EyeIcon,
   FieldLabel,
@@ -77,6 +79,7 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   isKnownProtocol,
+  cellGaps,
   entryChainFacts,
   lastAttemptFacts,
   legFacts,
@@ -652,8 +655,8 @@ export function CascadeEditPage() {
               </Box>
 
               {directions.map((dir, i) => (
+                <Fragment key={dir.key}>
                 <DirectionRow
-                  key={dir.key}
                   tag={dir.tag}
                   prospectiveTag={nextFreeTag(directions, i, draft.nextTag)}
                   countryCode={dir.countryCode}
@@ -671,6 +674,22 @@ export function CascadeEditPage() {
                   onDown={() => moveDirection(i, 1)}
                   onDelete={() => patch({ directions: directions.filter((_, j) => j !== i) })}
                 />
+                {/* Нога ДО ЭТОГО выхода. До фазы 5 сервер полей не отдаёт, и
+                    строка это показывает: ячейка входа, порт назначит сервер,
+                    селектор заблокирован. */}
+                <DirectionLegRow
+                  facts={legFacts(dir.linkProtocol, pools.length, linkCellEngines)}
+                  cell={dir.linkProtocol ?? null}
+                  params={dir.linkParams ?? null}
+                  port={dir.linkPort}
+                  available={dir.linkProtocol !== undefined}
+                  gaps={cellGaps(dir.nodeIds, dir.linkProtocol, nodeById, nodeCarriesCell)}
+                  onCell={(v) => setDirection(i, { linkProtocol: v, linkTouched: true })}
+                  onParams={(p) =>
+                    setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), ...p }, linkTouched: true })
+                  }
+                />
+                </Fragment>
               ))}
 
               <DashedAdd
@@ -1076,6 +1095,13 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
         // the tag exists and waits for a node to stand behind it.
         nodeIds: d.nodeIds.length ? [...d.nodeIds] : [''],
         tag: d.tag,
+        // Три значения контракта переносятся В ТОМ ЖЕ ВИДЕ: `undefined` это
+        // «сервер поля не отдаёт» (фаза 5 не доехала), `null` это «ячейка не
+        // выбрана». Приведение одного к другому здесь стоило бы либо
+        // запертого поля, либо обещания настройки, которой на сервере нет.
+        linkProtocol: d.linkProtocol,
+        linkParams: d.linkParams,
+        linkPort: d.linkPort,
       })),
       nextTag: c.nextDirectionTag,
     };

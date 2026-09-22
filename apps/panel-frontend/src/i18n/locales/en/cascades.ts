@@ -104,6 +104,18 @@ export const cascades = {
     legPort: 'port {{port}}',
     legUnknown: 'no link cell picked',
     legToDirections: 'the leg to the exit is set on the direction, from phase 5',
+    // The direction's own leg. "Not picked yet" and "cannot be picked" are
+    // different things, and they get different words.
+    legFromEntry: "the entry's cell",
+    legPortServer: 'the server assigns the port',
+    legPhase5: 'the leg fields arrive with phase 5',
+    legCellEngines: '{{cell}} · {{engines}}',
+    legObfs: 'obfs password',
+    legObfsPlaceholder: 'Salamander, empty = no obfuscation',
+    legCongestion: 'congestion control',
+    legCongestionDefault: 'default',
+    legNodeGap: '{{name}} does not carry {{cell}}: it reported {{engines}}.',
+    legNodeNoEngines: 'an empty core list',
     needEntry: 'Pick at least one entry node to enable Create.',
     needDirection: 'Give every direction a country to enable Create.',
     tooManyLinks: '{{n}} links, the ceiling is {{max}}. Drop an entry or a direction.',
