@@ -3,6 +3,7 @@ import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
 import type { LinkCell } from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
+import { generateLinkTls, type LinkTls } from './link-tls.js';
 
 /**
  * C2/C3b - cascade config generation for the native inter-hop link cells the
@@ -103,6 +104,9 @@ interface Hy2LinkCred {
   /** Salamander obfuscation salt. Absent means no obfuscation, which a leg
    *  between two datacenters could live with; we always set it. */
   obfsPassword: string;
+  /** The pair this leg's receiving end presents and its dialling end pins.
+   *  Minted by the panel; see link-tls.ts. */
+  tls: LinkTls;
   /**
    * ⚠ NO `congestion` HERE, and that is measured, not an omission.
    *
@@ -130,6 +134,8 @@ interface TuicLinkCred {
   uuid: string;
   password: string;
   congestion: LinkCongestion;
+  /** See Hy2LinkCred.tls. */
+  tls: LinkTls;
 }
 
 /**
@@ -225,11 +231,13 @@ export function normalizeLinkProtocol(p: string | null | undefined): LinkProtoco
 /** Pre-generate link creds for the N-1 inter-hop links of an N-hop cascade,
  *  one per link in order. `linkProtocols[i]` is the protocol of the link from
  *  hop[i] to hop[i+1] (the originating hop's linkProtocol). */
-export function generateLinkCreds(
+export async function generateLinkCreds(
   linkProtocols: LinkProtocol[],
   congestion: LinkCongestion = DEFAULT_LINK_CONGESTION,
-): LinkCred[] {
-  return linkProtocols.map((proto, i) => newLinkCred(proto, LINK_PORT_BASE + i, congestion));
+): Promise<LinkCred[]> {
+  return Promise.all(
+    linkProtocols.map((proto, i) => newLinkCred(proto, LINK_PORT_BASE + i, congestion)),
+  );
 }
 
 /**
@@ -244,11 +252,11 @@ export function generateLinkCreds(
  * LINK_CELLS without credentials is a compile error instead of a leg generated
  * as vless behind the operator's back.
  */
-export function newLinkCred(
+export async function newLinkCred(
   cell: LinkProtocol,
   port: number,
   congestion: LinkCongestion = DEFAULT_LINK_CONGESTION,
-): LinkCred {
+): Promise<LinkCred> {
   switch (cell) {
     case 'shadowsocks':
       return {
@@ -257,12 +265,17 @@ export function newLinkCred(
         psk: randomBytes(32).toString('base64'),
         method: SS_LINK_METHOD,
       };
+    // The two QUIC cells carry a TLS pair because QUIC IS TLS: neither can be
+    // configured without a certificate on the receiving end. Minted here with
+    // the rest, so the key never exists outside the panel and rotates with the
+    // leg. See link-tls.ts for why not a file on the node.
     case 'hy2':
       return {
         protocol: 'hy2',
         port,
         authPassword: randomBytes(24).toString('base64url'),
         obfsPassword: randomBytes(16).toString('base64url'),
+        tls: await generateLinkTls(),
       };
     case 'tuic':
       return {
@@ -271,6 +284,7 @@ export function newLinkCred(
         uuid: randomUUID(),
         password: randomBytes(24).toString('base64url'),
         congestion,
+        tls: await generateLinkTls(),
       };
     case 'vless':
       return { protocol: 'vless', port, uuid: randomUUID(), reality: newLinkReality() };
@@ -433,9 +447,18 @@ export function topologyReceivingPorts(
   return out;
 }
 
+/**
+ * The JSON shape a stored cred takes.
+ *
+ * Spelled out rather than `Record<string, unknown>` because Prisma's Json
+ * input will not take `unknown`: a value it cannot prove is JSON is a value it
+ * refuses to write. The nested object is the TLS pair of a QUIC leg.
+ */
+export type SerializedLinkCred = Record<string, string | number | Record<string, string>>;
+
 /** Serialise a link cred to the plain JSON persisted in CascadeHop.linkConfig
  *  (a typed LinkCred lacks the index signature Prisma's Json input needs). */
-export function serializeLinkCred(cred: LinkCred): Record<string, string | number> {
+export function serializeLinkCred(cred: LinkCred): SerializedLinkCred {
   switch (cred.protocol) {
     case 'shadowsocks':
       return { protocol: 'shadowsocks', port: cred.port, psk: cred.psk, method: cred.method };
@@ -445,6 +468,7 @@ export function serializeLinkCred(cred: LinkCred): Record<string, string | numbe
         port: cred.port,
         authPassword: cred.authPassword,
         obfsPassword: cred.obfsPassword,
+        tls: { certPem: cred.tls.certPem, keyPem: cred.tls.keyPem },
       };
     case 'tuic':
       return {
@@ -453,6 +477,7 @@ export function serializeLinkCred(cred: LinkCred): Record<string, string | numbe
         uuid: cred.uuid,
         password: cred.password,
         congestion: cred.congestion,
+        tls: { certPem: cred.tls.certPem, keyPem: cred.tls.keyPem },
       };
     case 'vless':
       // ⚠ The REALITY block is NOT serialised here and never has been: it is
@@ -482,22 +507,28 @@ export function parseLinkCred(raw: unknown): LinkCred | null {
   // leg that comes up refusing every packet is harder to read than one that
   // was never rendered.
   if (o.protocol === 'hy2') {
-    if (typeof o.authPassword !== 'string' || typeof o.obfsPassword !== 'string') return null;
+    const tls = parseLinkTls(o.tls);
+    if (typeof o.authPassword !== 'string' || typeof o.obfsPassword !== 'string' || !tls) {
+      return null;
+    }
     return {
       protocol: 'hy2',
       port: o.port,
       authPassword: o.authPassword,
       obfsPassword: o.obfsPassword,
+      tls,
     };
   }
   if (o.protocol === 'tuic') {
-    if (typeof o.uuid !== 'string' || typeof o.password !== 'string') return null;
+    const tls = parseLinkTls(o.tls);
+    if (typeof o.uuid !== 'string' || typeof o.password !== 'string' || !tls) return null;
     return {
       protocol: 'tuic',
       port: o.port,
       uuid: o.uuid,
       password: o.password,
       congestion: parseCongestion(o.congestion),
+      tls,
     };
   }
   if (typeof o.uuid !== 'string') return null;
@@ -523,6 +554,22 @@ export function parseLinkCred(raw: unknown): LinkCred | null {
     };
   }
   return cred;
+}
+
+/**
+ * The stored TLS pair of a QUIC leg, or null when it is not whole.
+ *
+ * Both halves or neither: a leg whose certificate parsed and whose key did not
+ * would render an inbound that cannot complete a handshake, and the leg would
+ * come up refusing every packet rather than not coming up at all. The second is
+ * far easier to read from the panel.
+ */
+function parseLinkTls(raw: unknown): LinkTls | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  if (typeof t.certPem !== 'string' || typeof t.keyPem !== 'string') return null;
+  if (!t.certPem.includes('BEGIN CERTIFICATE') || !t.keyPem.includes('PRIVATE KEY')) return null;
+  return { certPem: t.certPem, keyPem: t.keyPem };
 }
 
 /** A stored congestion value, or the default when the row predates the field

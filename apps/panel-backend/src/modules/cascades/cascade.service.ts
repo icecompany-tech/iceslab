@@ -1030,7 +1030,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   //   chain:    one cred per link, stored on each non-exit (originating) hop.
   //   balancer: one cred per exit link (entry->exit), stored on each EXIT hop;
   //             every link uses the entry hop's linkProtocol (uniform DC-to-DC).
-  const creds = generateLinkCreds(
+  const creds = await generateLinkCreds(
     isBalancer
       ? hops.slice(1).map(() => normalizeLinkProtocol(hops[0]!.linkProtocol))
       : hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),
@@ -1198,7 +1198,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
     if (entryNodeId) await assertBalancerEntrySupportsVlessRoute(entryNodeId);
   }
   const creds = hops
-    ? generateLinkCreds(
+    ? await generateLinkCreds(
         isBalancer
           ? hops.slice(1).map(() => normalizeLinkProtocol(hops[0]!.linkProtocol))
           : hops.slice(0, hops.length - 1).map((h) => normalizeLinkProtocol(h.linkProtocol)),

@@ -256,8 +256,8 @@ describe('buildBalancerCascadeConfigs (auto node)', () => {
 });
 
 describe('generateLinkCreds', () => {
-  it('makes one cred per link, sequential ports, vless by default', () => {
-    const creds = generateLinkCreds(['vless', 'vless']);
+  it('makes one cred per link, sequential ports, vless by default', async () => {
+    const creds = await generateLinkCreds(['vless', 'vless']);
     expect(creds).toHaveLength(2);
     expect(creds[0]!.port).toBe(LINK_PORT_BASE);
     expect(creds[1]!.port).toBe(LINK_PORT_BASE + 1);
@@ -266,12 +266,12 @@ describe('generateLinkCreds', () => {
       expect(creds[0]!.uuid).not.toBe(creds[1]!.uuid);
     }
   });
-  it('a single link yields one cred, an empty list yields none', () => {
-    expect(generateLinkCreds(['vless'])).toHaveLength(1);
-    expect(generateLinkCreds([])).toHaveLength(0);
+  it('a single link yields one cred, an empty list yields none', async () => {
+    expect(await generateLinkCreds(['vless'])).toHaveLength(1);
+    expect(await generateLinkCreds([])).toHaveLength(0);
   });
-  it('a shadowsocks link gets a 32-byte base64 PSK + SS2022 method, no uuid', () => {
-    const [cred] = generateLinkCreds(['shadowsocks']);
+  it('a shadowsocks link gets a 32-byte base64 PSK + SS2022 method, no uuid', async () => {
+    const [cred] = await generateLinkCreds(['shadowsocks']);
     expect(cred!.protocol).toBe('shadowsocks');
     if (cred!.protocol === 'shadowsocks') {
       expect(cred!.method).toBe('2022-blake3-aes-256-gcm');
