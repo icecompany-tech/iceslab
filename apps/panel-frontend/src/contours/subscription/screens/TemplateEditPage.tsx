@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Box, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -28,6 +28,7 @@ import {
   dryRunForBody,
   templateActions,
   templateEditorFacts,
+  type ImportFacts,
 } from '@/contours/subscription/lib/templateFacts';
 import { CodeArea } from '@/contours/subscription/components/CodeArea';
 import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW } from '@/contours/subscription/lib/colors';
@@ -61,9 +62,18 @@ export function TemplateEditPage() {
   });
   const template = query.data?.templates.find((x) => x.id === id) ?? null;
 
-  const [type, setType] = useState<TemplateType>('mihomo');
-  const [name, setName] = useState('');
-  const [body, setBody] = useState('');
+  /**
+   * Черновик, приехавший из импорта файла.
+   *
+   * Он ЗДЕСЬ, а не сохранён на сервере: импорт это начало правки. До первого
+   * сохранения шаблона не существует, поэтому и сухой прогон обязателен, и
+   * число переписанных ключей показывается один раз, пока черновик жив.
+   */
+  const imported = (useLocation().state as { imported?: ImportFacts } | null)?.imported ?? null;
+
+  const [type, setType] = useState<TemplateType>(imported?.type ?? 'mihomo');
+  const [name, setName] = useState(imported?.name ?? '');
+  const [body, setBody] = useState(imported?.body ?? '');
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   /** Строка, на которую указал сервер в TEMPLATE_INVALID. */
   const [errorLine, setErrorLine] = useState<number | null>(null);
@@ -300,12 +310,54 @@ export function TemplateEditPage() {
           {dryRun.isPending ? t('templates.dryRunning') : t('templates.dryRun')}
         </BarButton>
         <PrimaryButton
-          disabled={!facts.canSave || save.isPending || dry?.canSave === false}
+          disabled={
+            !facts.canSave ||
+            save.isPending ||
+            dry?.canSave === false ||
+            // Импортированный черновик сохраняется только после прогона: файл
+            // писали не здесь и не мы, и «загрузится ли это вообще» пока не
+            // спросили ни у кого.
+            (imported !== null && dry === null)
+          }
           onClick={attemptSave}
         >
           {save.isPending ? t('templates.saving') : t('common.save')}
         </PrimaryButton>
       </Box>
+
+      {/* Полоса импорта: почему тело отличается от файла и что ещё требуется.
+          Живёт, пока черновик не сохранён. */}
+      {imported && (
+        <Stack
+          gap={5}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 10,
+            backgroundColor: `${CYAN}0D`,
+            border: `1px solid ${CYAN}33`,
+          }}
+        >
+          <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: CYAN }}>
+            {t('templates.importedKeys', { n: imported.rewrittenKeys })}
+          </Text>
+          <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: MIST }}>
+            {dry === null ? t('templates.importNeedsDryRun') : t('templates.importReady')}
+          </Text>
+          {imported.needsType && (
+            <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: AMBER }}>
+              {t('templates.importNeedsType')}
+            </Text>
+          )}
+          {/* Проверка ЗА сервером: после импорта чужого ключа остаться не
+              должно. Если остался, шаблон уедет в подписку с ключом, которого
+              наш сборщик не понимает, и молчать об этом нельзя. */}
+          {imported.foreignKeysLeft.length > 0 && (
+            <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: RED }}>
+              {t('templates.importForeignLeft', { keys: imported.foreignKeysLeft.join(', ') })}
+            </Text>
+          )}
+        </Stack>
+      )}
 
       <Box style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}>
         <Stack gap={5} style={{ width: 220 }}>

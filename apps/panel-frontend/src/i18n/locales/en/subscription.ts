@@ -191,7 +191,16 @@ export const subscription = {
     body: 'Body',
     bodyHint:
       'A whole client config. The panel fills the slots of its type with servers; everything else stays as written.',
-    // Default: never deleted or renamed, but it can be restored.
+    // Importing someone else's template from a file.
+    import: 'Import a file',
+    importing: 'Parsing...',
+    importFailed: 'The import did not happen',
+    importUnavailable: 'Import arrives with phase 11, together with the template store.',
+    importedKeys: 'Foreign keys rewritten: {{n}}',
+    importNeedsDryRun: 'A dry run is required before saving: the file was not written here, and nobody has asked yet what comes out of it.',
+    importReady: 'The dry run is done, it can be saved.',
+    importNeedsType: 'The server could not tell the type, pick it yourself.',
+    importForeignLeft: 'Foreign keys are still in the body: {{keys}}. Our builder does not understand them.',    // Default: never deleted or renamed, but it can be restored.
     restoreAction: 'Restore Default',
     restoring: 'Restoring...',
     restored: 'Default restored',

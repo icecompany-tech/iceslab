@@ -1,18 +1,26 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Box, Stack, Text } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { notifications } from '@mantine/notifications';
+import { apiErrorMessage } from '@/lib/net/client';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import { PrimaryButton } from '@/ui/PrimaryButton';
 import {
+  importTemplate,
   isNotImplemented,
   listTemplates,
   templateFormat,
   type SubscriptionTemplate,
   type TemplateType,
 } from '@/lib/domain/subscriptionTemplates';
-import { templateActions, templatesScreenFacts } from '@/contours/subscription/lib/templateFacts';
+import {
+  importFacts,
+  templateActions,
+  templatesScreenFacts,
+} from '@/contours/subscription/lib/templateFacts';
 import {
   CARD,
   CYAN,
@@ -60,6 +68,28 @@ export function TemplatesPage() {
     notImplemented: isNotImplemented(query.error),
   });
 
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const importing = useMutation({
+    mutationFn: ({ body }: { body: string; name: string }) => importTemplate({ body }),
+    onSuccess: (result, vars) => {
+      const imported = importFacts(result);
+      if (!imported) return;
+      // Черновик едет в редактор, а не сохраняется молча: импорт это начало
+      // правки, а не готовый шаблон. Имя берём из файла, если сервер своего не
+      // предложил: оно хотя бы напоминает, откуда шаблон взялся.
+      navigate('/subscription/templates/new', {
+        state: { imported: { ...imported, name: imported.name || vars.name } },
+      });
+    },
+    onError: (err) =>
+      notifications.show({
+        color: isNotImplemented(err) ? 'yellow' : 'red',
+        title: t('templates.importFailed'),
+        message: isNotImplemented(err) ? t('templates.importUnavailable') : apiErrorMessage(err),
+      }),
+  });
+
   return (
     <Stack gap={20}>
       <Box
@@ -82,6 +112,28 @@ export function TemplatesPage() {
         <Box style={{ flex: 1 }} />
         {/* Кнопки живут и на заглушке, но выключены: прятать их значило бы
             скрыть, что экран вообще про это. */}
+        {/* Файл читается ЗДЕСЬ, на клиенте, и уходит телом: сервер отвечает
+            разобранным шаблоном и числом переписанных чужих ключей, а экран
+            открывает его как черновик, который ещё надо прогнать и сохранить. */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".yaml,.yml,.json,.txt"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.currentTarget.files?.[0];
+            e.currentTarget.value = '';
+            if (!file) return;
+            const body = await file.text();
+            importing.mutate({ body, name: file.name.replace(/\.[^.]+$/, '') });
+          }}
+        />
+        <GhostButton
+          disabled={facts.state === 'unavailable' || importing.isPending}
+          onClick={() => fileRef.current?.click()}
+        >
+          {importing.isPending ? t('templates.importing') : t('templates.import')}
+        </GhostButton>
         <PrimaryButton
           disabled={facts.state === 'unavailable'}
           onClick={() => navigate('/subscription/templates/new')}
@@ -95,6 +147,41 @@ export function TemplatesPage() {
       {facts.state === 'list' &&
         facts.groups.map((g) => <TypeGroup key={g.type} type={g.type} templates={g.templates} />)}
     </Stack>
+  );
+}
+
+/** Тихая кнопка рядом с основной. Своя, а не из чужого контура. */
+function GhostButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <UnstyledButton
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        height: 36,
+        paddingInline: 16,
+        borderRadius: 8,
+        border: `1px solid ${HAIRLINE}`,
+        backgroundColor: WELL,
+        color: disabled ? DIM : SNOW,
+        fontFamily: MONO,
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        cursor: disabled ? 'default' : 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </UnstyledButton>
   );
 }
 

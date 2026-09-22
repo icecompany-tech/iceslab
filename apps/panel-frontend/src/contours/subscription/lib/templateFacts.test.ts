@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dryRunFacts,
   dryRunForBody,
+  importFacts,
   templateActions,
   templateEditorFacts,
   templatesScreenFacts,
@@ -119,6 +120,53 @@ describe('templateEditorFacts', () => {
     const f = templateEditorFacts(base);
     expect(f.canSave).toBe(true);
     expect(f.blocker).toBeNull();
+  });
+});
+
+describe('importFacts', () => {
+  const ok = {
+    template: { id: 'x', type: 'mihomo' as const, name: 'ru-split', body: 'iceslab: {}', isDefault: false, updatedAt: '' },
+    rewrittenKeys: 3,
+  };
+
+  it('1. ответа нет или он без шаблона: показывать нечего', () => {
+    expect(importFacts(null)).toBeNull();
+    expect(importFacts(undefined)).toBeNull();
+    expect(importFacts({ rewrittenKeys: 3 })).toBeNull();
+  });
+
+  it('2. сервер разобрал файл: тело, тип, имя и число переписанных ключей', () => {
+    const f = importFacts(ok)!;
+    expect(f.type).toBe('mihomo');
+    expect(f.name).toBe('ru-split');
+    expect(f.rewrittenKeys).toBe(3);
+    expect(f.needsType).toBe(false);
+  });
+
+  it('3. тип не определён или незнакомый: спрашиваем оператора', () => {
+    expect(importFacts({ template: { body: 'x' } })!.needsType).toBe(true);
+    expect(importFacts({ template: { type: 'v2rayN' as never, body: 'x' } })!.needsType).toBe(true);
+  });
+
+  it('4. числа ключей нет: это ноль, а не «неизвестно»', () => {
+    // Сервер не прислал поле, значит переписывать было нечего: строка «ключей
+    // переписано: 0» честнее пустого места, из которого ничего не следует.
+    expect(importFacts({ template: { type: 'clash', body: 'x' } })!.rewrittenKeys).toBe(0);
+    expect(importFacts({ template: { type: 'clash', body: 'x' }, rewrittenKeys: NaN })!.rewrittenKeys).toBe(0);
+  });
+
+  it('5. ЧУЖОЙ КЛЮЧ ОСТАЛСЯ В ТЕЛЕ: это видно, а не проходит молча', () => {
+    // Проверка за сервером. Такого быть не должно, но если случилось, шаблон
+    // уедет в подписку с ключом, которого наш сборщик не понимает.
+    const f = importFacts({
+      template: { type: 'mihomo', body: 'remnawave:\n  label: x' },
+      rewrittenKeys: 0,
+    })!;
+    expect(f.foreignKeysLeft).toEqual(['remnawave:']);
+  });
+
+  it('6. чистое тело: чужих ключей нет', () => {
+    expect(importFacts(ok)!.foreignKeysLeft).toEqual([]);
   });
 });
 
