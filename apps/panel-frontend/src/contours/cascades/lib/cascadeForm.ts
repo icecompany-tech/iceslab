@@ -169,3 +169,33 @@ export function toDirectionInputs(directions: DirectionDraft[]) {
     nodeIds: d.nodeIds.filter(Boolean),
   }));
 }
+
+/**
+ * Что показать в строке пула на месте выбора ноды.
+ *
+ * Три случая, и третий выглядел как первый. Строка держит `nodeId`, а ноды с
+ * таким id в списке нет: её удалили после того, как каскад сохранили. Селектор
+ * не находит значение среди опций и рисуется ПУСТЫМ, то есть говорит «оператор
+ * не выбрал ноду». Это ложь о причине, и она дорогая: человек идёт выбирать
+ * ноду заново вместо того, чтобы понять, что направление осталось без машины.
+ *
+ * `missing` несёт сам id: он единственная зацепка, по которой пропажу можно
+ * найти в логах и в чужих каскадах.
+ */
+export type PoolRowState = 'empty' | 'known' | 'missing';
+
+export interface PoolRowFacts {
+  state: PoolRowState;
+  /** Есть у `known` и `missing`. */
+  nodeId?: string;
+  /** Первые восемь знаков id, чтобы строка не расползалась. Только у `missing`:
+   *  у известной ноды показывается имя, а не идентификатор. */
+  shortId?: string;
+}
+
+export function poolRowFacts(nodeId: string, nodes: { id: string }[]): PoolRowFacts {
+  // Пустая строка это «оператор ещё не выбрал», и селектор тут прав.
+  if (!nodeId) return { state: 'empty' };
+  if (nodes.some((n) => n.id === nodeId)) return { state: 'known', nodeId };
+  return { state: 'missing', nodeId, shortId: nodeId.slice(0, 8) };
+}

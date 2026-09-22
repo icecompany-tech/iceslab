@@ -103,6 +103,10 @@ export const cascades = {
   // holding its config, and a delete.
   cascadeEdit: {
     gone: 'This cascade no longer exists.',
+    // The node was deleted after the cascade had been saved. An empty picker
+    // in its place read as "the operator did not choose one", which is a lie
+    // about the cause.
+    nodeGone: 'node deleted',
     save: 'Save and push',
     saving: 'Saving...',
     unsaved: 'Unsaved changes',

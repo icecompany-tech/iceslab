@@ -25,6 +25,7 @@ import {
 import {
   ROLE_TONE,
   isKnownProtocol,
+  poolRowFacts,
   protocolOptions,
   statusTone,
   type HopRole,
@@ -410,27 +411,40 @@ export function PoolField({
   const rows = nodeIds.length ? nodeIds : [''];
   return (
     <Stack gap={8} style={{ width: '100%' }}>
-      {rows.map((id, i) => (
-        <Box key={`${i}-${id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <NodeSelect
-              value={id || null}
-              nodes={nodes}
-              claimedBy={claimedBy}
-              // Every other slot of this cascade, plus the pool's own other rows.
-              usedElsewhere={[...usedElsewhere, ...rows.filter((_, j) => j !== i)]}
-              meta={meta}
-              needsLink={needsLink}
-              onChange={(v) => onChange(rows.map((r, j) => (j === i ? v : r)))}
-            />
+      {rows.map((id, i) => {
+        const facts = poolRowFacts(id, nodes);
+        return (
+          <Box key={`${i}-${id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              {/* Нода, которой больше нет, говорит об этом словами. Селектор
+                  на её месте рисовался пустым, то есть утверждал, что оператор
+                  не выбрал ноду, и отправлял чинить не то. */}
+              {facts.state === 'missing' ? (
+                <MissingNodeField shortId={facts.shortId ?? ''} />
+              ) : (
+                <NodeSelect
+                  value={id || null}
+                  nodes={nodes}
+                  claimedBy={claimedBy}
+                  // Every other slot of this cascade, plus the pool's own other rows.
+                  usedElsewhere={[...usedElsewhere, ...rows.filter((_, j) => j !== i)]}
+                  meta={meta}
+                  needsLink={needsLink}
+                  onChange={(v) => onChange(rows.map((r, j) => (j === i ? v : r)))}
+                />
+              )}
+            </Box>
+            {/* У пропавшей ноды корзина есть ВСЕГДА, даже когда строка одна:
+                убрать её это единственное, что здесь можно сделать, и
+                прятать эту возможность значило бы запереть направление. */}
+            {(rows.length > 1 || facts.state === 'missing') && (
+              <IconButton onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+                <TrashIcon size={14} color={RED} />
+              </IconButton>
+            )}
           </Box>
-          {rows.length > 1 && (
-            <IconButton onClick={() => onChange(rows.filter((_, j) => j !== i))}>
-              <TrashIcon size={14} color={RED} />
-            </IconButton>
-          )}
-        </Box>
-      ))}
+        );
+      })}
       <DashedAdd label={addLabel} onClick={() => onChange([...rows, ''])} />
     </Stack>
   );
@@ -1755,5 +1769,39 @@ export function ChevronIcon({ size, color }: { size: number; color: string }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/**
+ * Место ноды, которой больше нет.
+ *
+ * Красным и словами, а не пустым селектором: пустое поле читается как «выбери
+ * ноду», то есть как забывчивость оператора, тогда как машину удалили уже
+ * после сохранения каскада. Id показан коротким, потому что это единственная
+ * зацепка, чтобы найти пропажу в логах.
+ */
+function MissingNodeField({ shortId }: { shortId: string }) {
+  const { t } = useTranslation();
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 9,
+        height: 38,
+        paddingInline: 12,
+        borderRadius: 8,
+        backgroundColor: `${RED}12`,
+        border: `1px solid ${RED}44`,
+      }}
+    >
+      <Box style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: RED, flexShrink: 0 }} />
+      <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '17px', color: RED }}>
+        {t('cascadeEdit.nodeGone')}
+      </Text>
+      <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: RED, opacity: 0.75 }}>
+        {shortId}
+      </Text>
+    </Box>
   );
 }
