@@ -13,6 +13,7 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
+import { nodeCarriesCell } from '@/lib/domain/linkCells';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -65,10 +66,13 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   entryChainFacts,
+  legCellNotes,
   legFacts,
   poolRoleAt,
+  refusedCells,
   toDirectionInputs,
   toPositionInputs,
+  type CellRefusal,
   type DirectionDraft,
   type PositionDraft,
 } from '@/contours/cascades/lib/cascadeForm';
@@ -99,6 +103,8 @@ export function CascadeCreatePage() {
   const [enabled, setEnabled] = useState(true);
   const [hideHops, setHideHops] = useState(true);
   const [startShape, setStartShape] = useState<StartShape>('one');
+  /** Ноги, которые сервер отказался записать (409 `CELL_NOT_CARRIED`). */
+  const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
 
   const nextKey = useRef(2);
   // Pools are the entry and any transits after it. The exit is not a pool: it
@@ -271,6 +277,13 @@ export function CascadeCreatePage() {
       else notifications.show({ color: 'green', message: t('cascades.saved') });
     },
     onError: (err) => {
+      // Отказ по ноге называет ноды, и место у него своё: строка под той ногой,
+      // о которой сервер говорит. Тост тут увёл бы список имён с экрана.
+      const cells = refusedCells(err);
+      if (cells) {
+        setCellRefusals(cells);
+        return;
+      }
       // The form blocks both unstorable shapes, so a 400 here means the API saw
       // something this page did not. Its sentence is the useful one, not ours.
       const shape = cascadeShapeError(err);
@@ -490,11 +503,20 @@ export function CascadeCreatePage() {
                   ))}
               </PositionRow>
               {/* Та же нога, что и на правке: связь между шагами живёт между
-                  карточками. Подпись у последней про фазу 5. */}
+                  карточками, и подпись у последней говорит, где она задаётся. */}
               <LegRow
                 facts={legFacts(pool.linkProtocol, i)}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
+                gaps={legCellNotes(
+                  // Ногу принимает СЛЕДУЮЩАЯ позиция: ячейку поднимает
+                  // принимающая сторона, о ней и говорит отказ.
+                  pools[i + 1]?.nodeIds ?? [],
+                  pool.linkProtocol,
+                  nodeById,
+                  nodeCarriesCell,
+                  cellRefusals,
+                )}
               />
               </Fragment>
             ))}

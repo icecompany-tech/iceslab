@@ -446,3 +446,82 @@ export function cellGaps(
   return gaps;
 }
 
+/**
+ * Отказ сервера записать ногу: 409 `CELL_NOT_CARRIED`.
+ *
+ * Второй источник тех же фактов, что и `cellGaps`. Первый предсказывает по
+ * тому, что нода рассказала о себе, второй приходит от сервера в момент
+ * сохранения, и перечисляет ВСЕ заблокированные ноги, а не первую. Слова у
+ * них одни: «<нода> не несёт <ячейку>: сообщила <движки>». Источники разные,
+ * повод для оператора один, и две разные формулировки читались бы как две
+ * разные беды.
+ *
+ * ⚠ Первым делом проверяется ВХОД. У react-query `error` это `null`, когда
+ * ошибки нет, и разбор, читающий `err.response` без проверки, роняет экран
+ * белым на первом же открытии: `unknown` после каста разрешает читать что
+ * угодно, и ни сборка, ни линт этого не видят (поймано 22.09 на шаблонах).
+ *
+ * `null` в ответе это «отказ не этот»: вызывающий идёт своей прежней дорогой.
+ * Пустой массив был бы «отказ этот, но конфликтов нет», а такого ответа
+ * сервер не шлёт.
+ */
+export interface CellRefusal {
+  nodeName: string;
+  cell: string;
+  engines: EngineName[];
+}
+
+export function refusedCells(err: unknown): CellRefusal[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'CELL_NOT_CARRIED') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: CellRefusal[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as { nodeName?: unknown; cell?: unknown; engines?: unknown };
+    if (typeof c.nodeName !== 'string' || typeof c.cell !== 'string') continue;
+    out.push({
+      nodeName: c.nodeName,
+      cell: c.cell,
+      // Молчащий список движков это не «движков нет»: строка скажет об этом
+      // своими словами, а выдумывать их здесь нечем.
+      engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [],
+    });
+  }
+  return out;
+}
+
+/**
+ * Что показать под одной ногой: предсказание и отказ сервера, сведённые.
+ *
+ * Одна нода попадает в строку один раз, даже когда про неё сказали оба
+ * источника: слова у них одинаковые, и вторая такая же строка выглядела бы как
+ * вторая проблема. Предсказание идёт первым, потому что оно уже на экране к
+ * моменту, когда приходит отказ.
+ */
+export function legCellNotes(
+  nodeIds: string[],
+  cell: string | null | undefined,
+  nodeById: Map<string, { name: string; engines?: EngineName[] }>,
+  carries: (node: { engines?: EngineName[] } | undefined, cell: string) => boolean | undefined,
+  refusals: CellRefusal[],
+): CellGap[] {
+  const notes = cellGaps(nodeIds, cell, nodeById, carries);
+  if (!cell || refusals.length === 0) return notes;
+  const seen = new Set(notes.map((n) => n.name));
+  const names = new Set(
+    nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)),
+  );
+  for (const r of refusals) {
+    if (r.cell !== cell || !names.has(r.nodeName) || seen.has(r.nodeName)) continue;
+    seen.add(r.nodeName);
+    // Сервер называет ноду ИМЕНЕМ, id в отказе нет. Ключ строки это имя: в
+    // одном каскаде нода встречается один раз, по имени она и опознаётся.
+    notes.push({ nodeId: r.nodeName, name: r.nodeName, engines: r.engines });
+  }
+  return notes;
+}
+

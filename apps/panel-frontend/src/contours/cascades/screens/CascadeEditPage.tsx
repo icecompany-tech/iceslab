@@ -79,14 +79,16 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   isKnownProtocol,
-  cellGaps,
   entryChainFacts,
   lastAttemptFacts,
+  legCellNotes,
   legFacts,
   poolRoleAt,
+  refusedCells,
   statusTone,
   toDirectionInputs,
   toPositionInputs,
+  type CellRefusal,
   type DirectionDraft,
   type PositionDraft,
 } from '@/contours/cascades/lib/cascadeForm';
@@ -138,6 +140,9 @@ export function CascadeEditPage() {
   /** Слова сервера, которыми он отказался сохранить эту форму. Показываются у
    *  строк, о которых он говорит, а не тостом. */
   const [saveRefusal, setSaveRefusal] = useState<string | null>(null);
+  /** Ноги, которые сервер отказался записать (409 `CELL_NOT_CARRIED`). Рисуются
+   *  у своих рядов теми же словами, что и предсказание по движкам ноды. */
+  const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
@@ -187,6 +192,13 @@ export function CascadeEditPage() {
       // Оно остаётся НА ЭКРАНЕ, а не уезжает тостом: сервер называет место
       // («direction "DE"»), и читать это надо рядом со строками направлений, а
       // не вдогонку исчезающему уведомлению. Так же сделано с занятым портом.
+      // Отказ по ноге называет НОДЫ, а не форму целиком, и место у него своё:
+      // строка под той ногой, о которой сервер говорит.
+      const cells = refusedCells(err);
+      if (cells) {
+        setCellRefusals(cells);
+        return;
+      }
       const shape = cascadeShapeError(err);
       if (shape) {
         setSaveRefusal(shape);
@@ -227,6 +239,7 @@ export function CascadeEditPage() {
     // Отказ был про прошлую форму: любая правка делает его неверным быстрее,
     // чем человек успеет её сохранить.
     setSaveRefusal(null);
+    setCellRefusals([]);
     setDraft((d) => (d ? { ...d, ...p } : d));
   };
   const positionCount = pools.length + 1;
@@ -610,6 +623,15 @@ export function CascadeEditPage() {
                 facts={legFacts(pool.linkProtocol, i)}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
+                gaps={legCellNotes(
+                  // Ногу позиции ПРИНИМАЕТ следующая позиция: ячейку поднимает
+                  // принимающая сторона, о ней и говорит отказ.
+                  pools[i + 1]?.nodeIds ?? [],
+                  pool.linkProtocol,
+                  nodeById,
+                  nodeCarriesCell,
+                  cellRefusals,
+                )}
               />
               </Fragment>
             ))}
@@ -683,7 +705,7 @@ export function CascadeEditPage() {
                   params={dir.linkParams ?? null}
                   port={dir.linkPort}
                   available={dir.linkProtocol !== undefined}
-                  gaps={cellGaps(dir.nodeIds, dir.linkProtocol, nodeById, nodeCarriesCell)}
+                  gaps={legCellNotes(dir.nodeIds, dir.linkProtocol, nodeById, nodeCarriesCell, cellRefusals)}
                   onCell={(v) => setDirection(i, { linkProtocol: v, linkTouched: true })}
                   onParams={(p) =>
                     setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), ...p }, linkTouched: true })

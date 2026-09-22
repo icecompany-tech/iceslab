@@ -584,12 +584,16 @@ export function LegRow({
   facts,
   onCell,
   caption,
+  gaps = [],
 }: {
   facts: LegFacts;
   /** Нет обработчика, значит ячейка здесь не выбирается: строка только
    *  рассказывает, что будет дальше. */
   onCell?: (value: string) => void;
   caption?: string;
+  /** Ноды, которые эту ячейку не поднимут: предсказание по движкам и отказ
+   *  сервера, сведённые в один список. Пусто у подавляющего большинства ног. */
+  gaps?: CellGap[];
 }) {
   const { t } = useTranslation();
   const words =
@@ -601,6 +605,7 @@ export function LegRow({
   const tone = facts.state === 'known' ? SNOW : facts.state === 'unrealised' ? RED : FAINT;
 
   return (
+    <Stack gap={8} style={{ width: '100%' }}>
     <Box
       className="cascade-leg"
       style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', paddingLeft: 14 }}
@@ -630,6 +635,20 @@ export function LegRow({
         </Box>
       )}
     </Box>
+    {/* Те же слова, что у ноги направления: источник факта разный
+        (предсказание по движкам и отказ сервера), повод для оператора один. */}
+    {gaps.map((g) => (
+      <Box key={g.nodeId} style={{ paddingLeft: 14 }}>
+        <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t('cascadeCreate.legNodeGap', {
+            name: g.name,
+            cell: facts.cell,
+            engines: g.engines.length ? g.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+          })}
+        </Note>
+      </Box>
+    ))}
+    </Stack>
   );
 }
 

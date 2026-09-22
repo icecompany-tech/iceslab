@@ -12,9 +12,11 @@ import {
   entryChainFacts,
   toDirectionInputs,
   lastAttemptFacts,
+  legCellNotes,
   legFacts,
   legParamFacts,
   poolRowFacts,
+  refusedCells,
 } from '@/contours/cascades/lib/cascadeForm';
 
 /**
@@ -315,6 +317,103 @@ describe('legParamFacts', () => {
 
   it('5. чужая ячейка не получает настроек по догадке', () => {
     expect(legParamFacts('hysteria2').kind).toBe('none');
+  });
+});
+
+/**
+ * Отказ сервера записать ногу: 409 `CELL_NOT_CARRIED`.
+ *
+ * Первый тест здесь про `null`, и он не формальность: у react-query `error`
+ * это `null`, когда ошибки нет, а разбор, читающий `err.response` без
+ * проверки, роняет экран белым. Ровно это случилось 22.09 на шаблонах, и
+ * ворота молчали: после каста к `unknown` tsc разрешает читать что угодно.
+ */
+describe('refusedCells', () => {
+  const ok = {
+    response: {
+      status: 409,
+      data: {
+        error: 'CELL_NOT_CARRIED',
+        conflicts: [
+          { nodeName: 'de-01', cell: 'hy2', engines: ['xray'] },
+          { nodeName: 'nl-02', cell: 'tuic', engines: [] },
+        ],
+      },
+    },
+  };
+
+  it('1. ошибки нет или она не объект: спокойный null, а не падение', () => {
+    for (const x of [null, undefined, 'строка', 42]) expect(refusedCells(x)).toBeNull();
+  });
+
+  it('2. чужой отказ не выдаётся за свой', () => {
+    expect(refusedCells({ response: { status: 409, data: { error: 'PORT_TAKEN_PROFILE' } } })).toBeNull();
+    expect(refusedCells({ response: { status: 400, data: { error: 'CELL_NOT_CARRIED' } } })).toBeNull();
+    // Код тот, а списка нет: разбирать нечего, и пустой список соврал бы, что
+    // конфликтов не нашлось.
+    expect(refusedCells({ response: { status: 409, data: { error: 'CELL_NOT_CARRIED' } } })).toBeNull();
+  });
+
+  it('3. перечисляются ВСЕ ноги, а не первая', () => {
+    expect(refusedCells(ok)).toEqual([
+      { nodeName: 'de-01', cell: 'hy2', engines: ['xray'] },
+      { nodeName: 'nl-02', cell: 'tuic', engines: [] },
+    ]);
+  });
+
+  it('4. мусор в списке пропускается, соседи остаются', () => {
+    const parsed = refusedCells({
+      response: {
+        status: 409,
+        data: {
+          error: 'CELL_NOT_CARRIED',
+          conflicts: [null, { cell: 'hy2' }, { nodeName: 'de-01', cell: 'hy2' }],
+        },
+      },
+    });
+    // У записи без движков список пустой, а не выдуманный: строка скажет про
+    // это своими словами.
+    expect(parsed).toEqual([{ nodeName: 'de-01', cell: 'hy2', engines: [] }]);
+  });
+});
+
+describe('legCellNotes', () => {
+  const byId = new Map([
+    ['n1', { name: 'de-01', engines: ['xray'] as EngineName[] }],
+    ['n2', { name: 'nl-02', engines: ['singbox'] as EngineName[] }],
+  ]);
+  const carries = (node: { engines?: EngineName[] } | undefined, cell: string) =>
+    cell === 'hy2' ? (node?.engines ?? []).includes('singbox') : undefined;
+
+  it('1. отказа нет: строки те же, что предсказала таблица движков', () => {
+    expect(legCellNotes(['n1', 'n2'], 'hy2', byId, carries, [])).toEqual([
+      { nodeId: 'n1', name: 'de-01', engines: ['xray'] },
+    ]);
+  });
+
+  it('2. одна нода, два источника: строка ОДНА', () => {
+    const notes = legCellNotes(['n1'], 'hy2', byId, carries, [
+      { nodeName: 'de-01', cell: 'hy2', engines: ['xray'] },
+    ]);
+    expect(notes).toHaveLength(1);
+  });
+
+  it('3. сервер назвал ноду, которую предсказание не поймало: строка появляется', () => {
+    // `carries` про tuic отвечает undefined, то есть предсказать нечем, и
+    // именно в этом случае отказ сервера единственный источник.
+    const notes = legCellNotes(['n2'], 'tuic', byId, carries, [
+      { nodeName: 'nl-02', cell: 'tuic', engines: ['singbox'] },
+    ]);
+    expect(notes).toEqual([{ nodeId: 'nl-02', name: 'nl-02', engines: ['singbox'] }]);
+  });
+
+  it('4. отказ про ДРУГУЮ ячейку или другую ноду сюда не попадает', () => {
+    expect(
+      legCellNotes(['n2'], 'tuic', byId, carries, [
+        { nodeName: 'nl-02', cell: 'hy2', engines: [] },
+        { nodeName: 'se-09', cell: 'tuic', engines: [] },
+      ]),
+    ).toEqual([]);
   });
 });
 
