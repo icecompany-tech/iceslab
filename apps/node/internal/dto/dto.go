@@ -443,9 +443,33 @@ type CoreStatus struct {
 	ReservedPorts *[]ReservedPortDto `json:"reservedPorts,omitempty"`
 }
 
+// ChainStatusDto mirrors ChainStatus in shared/transport.ts: the chain process
+// this node runs, when it runs one.
+//
+// Not an entry in Cores, and the difference is not cosmetic: CoreStatus.Name is
+// a ProtocolName, the chain is not a protocol, and the test that keeps that
+// enumeration honest against this agent would be right to refuse it. One
+// process per node, one question, its own field.
+type ChainStatusDto struct {
+	Running bool `json:"running"`
+	// Engine version ("1.13.14"), empty when the binary cannot say.
+	Version string `json:"version,omitempty"`
+	// Why it is not running, in the engine's own words: a refused config, a
+	// failed start. Empty while it runs.
+	Error string `json:"error,omitempty"`
+}
+
 type HealthcheckResponse struct {
 	Status string       `json:"status"`
 	Cores  []CoreStatus `json:"cores"`
+	// The chain process, absent when this node has none. A pointer so absence
+	// is a state: nil means "no chain here", which is every node until the
+	// panel starts sending the chain block, and stays true afterwards for
+	// every node outside a cascade.
+	//
+	// ⚠ A panel must never read absence as "chain down". Doing so would turn
+	// the whole fleet red on the day this field shipped.
+	Chain *ChainStatusDto `json:"chain,omitempty"`
 }
 
 // ───── GET /metrics ─────

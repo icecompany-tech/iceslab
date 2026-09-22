@@ -69,6 +69,27 @@ model Node {
   // Written in the failure branch, cleared in the success branch beside the
   // stamp above, so the pair reads as one state and never as two half-truths.
   lastInboundSyncError  Json?     @map("last_inbound_sync_error")
+  // What the agent reported about this node's CHAIN process (phase 4).
+  //
+  // Shape (ChainStatus in packages/shared): { running, version?, error? }.
+  // NULL = the node reported no chain, which is every node until the panel
+  // starts sending the block, and stays true for every node outside a cascade.
+  //
+  // Kept apart from `cores` on purpose: a core is a protocol, the chain is one
+  // process per node, and the guard that keeps ProtocolName honest against the
+  // agent would be right to refuse it a seat in that list.
+  chainStatus           Json?     @map("chain_status")
+  // When the panel last SENT this node a chain block.
+  //
+  // A second fact from the other party, and it needs its own column rather
+  // than a field inside the blob above: that one is what the node said, this
+  // is what we did, and mixing the two makes it impossible to tell "it says
+  // nothing" from "we asked for nothing".
+  //
+  // It is what lets a missing chain be read correctly. Without it, the day the
+  // field ships every node on the fleet reports no chain and the panel would
+  // have to guess whether that is normal (it is) or a dead process.
+  chainSentAt           DateTime? @map("chain_sent_at") @db.Timestamptz(6)
   consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
 
   // Slice 27.5: region grouping + capacity hint. Both NULL by default

@@ -1,4 +1,4 @@
-import type { HostMetricsResponse } from '@iceslab/shared';
+import type { ChainStatus, HostMetricsResponse } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { redis } from '../../lib/infra/redis.js';
 import { NodeTransport, NodeRequestError } from './nodes.transport.js';
@@ -55,6 +55,8 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       coreVersion: true,
       coreRestarts: true,
       cores: true,
+      chainStatus: true,
+      chainSentAt: true,
     },
   });
 
@@ -96,7 +98,21 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       const storedCores = (node.cores as NodeCores | null) ?? null;
       const coresChanged =
         result.cores !== undefined && coresWorthWriting(storedCores, result.cores, Date.now());
-      if (statusChanged || messageChanged || versionChanged || restartsChanged || coresChanged) {
+      // The chain process, same rule again: undefined = the node was
+      // unreachable, keep what is stored. `null` is different and does get
+      // written: it means the node answered and has no chain, which is what
+      // every node says until the panel starts sending the block.
+      const chainChanged =
+        result.chain !== undefined &&
+        JSON.stringify(result.chain) !== JSON.stringify(node.chainStatus ?? null);
+      if (
+        statusChanged ||
+        messageChanged ||
+        versionChanged ||
+        restartsChanged ||
+        coresChanged ||
+        chainChanged
+      ) {
         await prisma.node.update({
           where: { id: node.id },
           data: {
@@ -111,6 +127,14 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
               ? { coreRestarts: result.coreRestarts as unknown as Prisma.InputJsonValue }
               : {}),
             ...(coresChanged ? { cores: result.cores as unknown as Prisma.InputJsonValue } : {}),
+            ...(chainChanged
+              ? {
+                  chainStatus:
+                    result.chain === null
+                      ? Prisma.DbNull
+                      : (result.chain as unknown as Prisma.InputJsonValue),
+                }
+              : {}),
           },
         });
       }
@@ -197,6 +221,16 @@ interface PollResult {
   // 2026-08-04: restart tally from the same /healthz. Undefined follows the
   // same rule as coreVersion - unreachable node or pre-2026-08 agent.
   coreRestarts?: NodeCoreRestarts;
+  /**
+   * The chain process from the same /healthz.
+   *
+   * THREE values, and the middle one carries the day this shipped:
+   *   undefined - the node was unreachable, keep whatever is stored;
+   *   null      - it answered and runs no chain, which is every node until
+   *               the panel starts sending the block;
+   *   object    - it runs one, and this is what it said.
+   */
+  chain?: ChainStatus | null;
   // The core inventory from the same /healthz, including which cores render the
   // node-level policy and resolver. Undefined = the node was unreachable, keep
   // what is stored.
@@ -356,6 +390,9 @@ async function checkOne(node: {
   id: string;
   name: string;
   address: string;
+  /** Whether the panel has ever sent this node a chain block. See
+   *  statusFromHealth: it decides whether a missing chain is a fault. */
+  chainSentAt?: Date | null;
 }): Promise<PollResult> {
   try {
     const transport = new NodeTransport(node);
@@ -395,12 +432,16 @@ async function checkOne(node: {
           observedAt: new Date().toISOString(),
         }
       : undefined;
-    const verdict = statusFromHealth(res);
+    const verdict = statusFromHealth(res, { chainExpected: node.chainSentAt != null });
     return {
       ...verdict,
       coreVersion,
       coreRestarts,
       cores: observedCores(res.cores, new Date().toISOString()),
+      // `null` and `undefined` are different answers here: null is "the node
+      // answered and has no chain", undefined never reaches this line because
+      // an unreachable node returns from the catch below.
+      chain: res.chain ?? null,
     };
   } catch (err) {
     if (err instanceof NodeRequestError) {
@@ -417,10 +458,37 @@ async function checkOne(node: {
  * What a reachable node's answer means. Pure, so the rule can be read and
  * tested without a transport.
  */
-export function statusFromHealth(res: {
-  status: string;
-  cores: { name: string; running: boolean; provisioned?: boolean }[];
-}): { status: 'online' | 'degraded'; message: string | null } {
+export function statusFromHealth(
+  res: {
+    status: string;
+    cores: { name: string; running: boolean; provisioned?: boolean }[];
+    chain?: { running: boolean; error?: string } | null;
+  },
+  opts: { chainExpected?: boolean } = {},
+): { status: 'online' | 'degraded'; message: string | null } {
+  /**
+   * The chain process, and the one condition that keeps this honest.
+   *
+   * Only a node the panel has actually SENT a chain block can be degraded for
+   * not running one. Without that condition the day this field ships is the
+   * day every node on the fleet turns red: nothing sends the block yet, so
+   * every agent reports no chain, and "no chain" would read as "chain down".
+   *
+   * Checked BEFORE the `ok` shortcut on purpose. The agent's own verdict is
+   * about its cores; it knows nothing about a block the panel sent, so a node
+   * whose cores are fine and whose chain is dead answers `ok` and would be
+   * called online while its cascade carries nobody.
+   */
+  if (opts.chainExpected && res.chain && !res.chain.running) {
+    return {
+      status: 'degraded',
+      // The reason is a KEY the screen can switch on, and the engine's own
+      // words follow it when there are any: the panel is bilingual and writes
+      // the sentence, but "why" comes from the process that failed.
+      message: `chain-process: ${res.chain.error || 'not running'}`.slice(0, 200),
+    };
+  }
+
   if (res.status === 'ok') {
     return { status: 'online', message: null };
   }

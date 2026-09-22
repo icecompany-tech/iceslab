@@ -505,7 +505,22 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
         // state. A stale error next to a fresh stamp would say the node is
         // both current and broken, and an operator has no way to tell which
         // half is the old one.
-        data: { lastInboundSyncAt: new Date(), lastInboundSyncError: Prisma.DbNull },
+        data: {
+          lastInboundSyncAt: new Date(),
+          lastInboundSyncError: Prisma.DbNull,
+          /**
+           * Whether this node was sent a chain block, recorded by the side
+           * that sent it.
+           *
+           * It is what lets a missing chain mean something. The agent reports
+           * no chain on every node until phase 4 starts sending one, and the
+           * status rule may only call that a fault where the panel actually
+           * asked for a chain. Stamped on the acknowledged push, not on the
+           * attempt: a block that never arrived is not something to hold the
+           * node to.
+           */
+          chainSentAt: req.chain ? new Date() : null,
+        },
       })
       .catch(() => null);
   } catch (err) {

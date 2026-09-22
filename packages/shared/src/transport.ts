@@ -929,9 +929,40 @@ export interface CoreStatus {
   reservedPorts?: ReservedPort[];
 }
 
+/**
+ * The chain process, when this node runs one (phase 4).
+ *
+ * NOT a core in `cores[]`, and the difference is not cosmetic: `CoreStatus.name`
+ * is a `ProtocolName`, the chain is not a protocol, and the guard that keeps
+ * that enumeration honest against the agent would be right to refuse it. It is
+ * one process per node with one question to answer, so it answers here.
+ *
+ * Absent means this node has no chain process, which is every node until the
+ * panel starts sending the `chain` block, and stays true afterwards for every
+ * node that is not part of a cascade.
+ */
+export interface ChainStatus {
+  running: boolean;
+  /** Engine version, e.g. "1.13.14". Empty when the binary cannot say. */
+  version?: string;
+  /**
+   * Why it is not running, in the engine's own words, when the agent has them:
+   * a refused config, a failed start. Absent while it runs.
+   */
+  error?: string;
+}
+
 export interface HealthcheckResponse {
   status: 'ok' | 'degraded';
   cores: CoreStatus[];
+  /**
+   * See ChainStatus. Absent = no chain process on this node.
+   *
+   * ⚠ Absence must never make a node degraded. Until phase 4 ships nobody has
+   * a chain, and a panel that read "no chain" as "chain down" would turn the
+   * whole fleet red on the day the field was added.
+   */
+  chain?: ChainStatus;
 }
 
 /**

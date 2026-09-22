@@ -1,0 +1,39 @@
+-- The chain process: what the node said, and whether we asked for one.
+--
+-- Phase 4 moves the chain into its own process. The panel has to be able to
+-- show that it is up, and to say "down" only about a node that was actually
+-- sent a chain: on the day this ships every node reports nothing, because
+-- nothing sends the block yet, and reading that as a dead process would turn
+-- the whole fleet red at once.
+--
+-- TWO columns, and they are two facts from two parties:
+--   chain_status   what the AGENT reported ({ running, version?, error? }),
+--                  NULL when it reported no chain at all;
+--   chain_sent_at  when the PANEL last sent this node a chain block, NULL
+--                  when it never has.
+-- Folded into one blob they would be indistinguishable, and "it says nothing"
+-- would read the same as "we asked for nothing", which is the whole
+-- distinction the degraded state depends on.
+--
+-- Nullable, no defaults, no backfill: every existing node has honestly never
+-- been sent a chain and has honestly never reported one.
+--
+-- WRITTEN BY HAND, and this time the generator would not even draft it:
+-- `migrate dev --create-only` now exits on "Drift detected" before producing
+-- anything, because the dev database and the migration history disagree about
+-- the DROP DEFAULTs that every generated draft has been trying to attach for
+-- weeks (see CLAUDE.local.md, and the header of
+-- 20260921101500_cascade_link_port). Reconciling that drift is its own job
+-- with its own rollback; it is not this change.
+--
+-- `migrate status` was clean on both databases before this was written, which
+-- is the check that matters: nothing pending, so nothing of somebody else's
+-- can ride along with it.
+--
+-- ROLLBACK (run by hand before this was committed, then the forward migration
+-- run again):
+--   ALTER TABLE "nodes" DROP COLUMN "chain_status";
+--   ALTER TABLE "nodes" DROP COLUMN "chain_sent_at";
+
+ALTER TABLE "nodes" ADD COLUMN "chain_status" JSONB;
+ALTER TABLE "nodes" ADD COLUMN "chain_sent_at" TIMESTAMPTZ(6);

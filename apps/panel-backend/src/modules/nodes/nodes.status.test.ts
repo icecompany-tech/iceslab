@@ -85,3 +85,106 @@ describe('statusFromHealth', () => {
     expect(v.message).toContain('degraded:');
   });
 });
+
+/**
+ * The chain process, and the one condition that keeps the rule honest.
+ *
+ * Phase 4 gives a node a second process. A node whose cores are fine and whose
+ * chain is dead answers `ok` from the agent, because the agent's verdict is
+ * about its cores and it knows nothing about a block the panel sent. Left at
+ * that, a cascade entry carrying nobody would read as online.
+ *
+ * The trap on the other side is bigger, and it is why the flag exists: nothing
+ * sends the chain block yet, so every agent on the fleet reports no chain. A
+ * rule that read "no chain" as "chain down" would turn every node red on the
+ * day the field shipped.
+ */
+describe('statusFromHealth and the chain process', () => {
+  it('degrades a node whose chain was sent and is not running', () => {
+    const v = statusFromHealth(
+      { status: 'ok', cores: [{ name: 'xray', running: true }], chain: { running: false } },
+      { chainExpected: true },
+    );
+    expect(v.status).toBe('degraded');
+    // A key the screen can switch on, not a sentence it has to parse.
+    expect(v.message).toContain('chain-process');
+  });
+
+  it('carries the engine words when the agent has them', () => {
+    const v = statusFromHealth(
+      {
+        status: 'ok',
+        cores: [{ name: 'xray', running: true }],
+        chain: { running: false, error: 'sing-box: unknown field inbounds[0].sniff' },
+      },
+      { chainExpected: true },
+    );
+    expect(v.message).toContain('chain-process');
+    expect(v.message).toContain('unknown field');
+  });
+
+  it('says nothing about a node that was never sent a chain', () => {
+    // Every node on the fleet, on the day this shipped. The agent reports no
+    // chain because it has none, and that is not a fault.
+    const v = statusFromHealth(
+      { status: 'ok', cores: [{ name: 'xray', running: true }] },
+      { chainExpected: false },
+    );
+    expect(v).toEqual({ status: 'online', message: null });
+  });
+
+  it('says nothing about a chain the panel never asked for, even when it is down', () => {
+    /**
+     * The case the flag actually guards, and the one the other test cannot
+     * reach: the node REPORTS a chain and reports it dead, and the panel never
+     * sent it one.
+     *
+     * That happens on the way back, not on the way in: the panel is rolled
+     * back, or the cascade is taken off this node, and a chain process is left
+     * on the machine. It is not carrying anybody's traffic and nobody asked it
+     * to, so calling the node degraded would be reporting our own leftover as
+     * the operator's fault.
+     */
+    const v = statusFromHealth(
+      {
+        status: 'ok',
+        cores: [{ name: 'xray', running: true }],
+        chain: { running: false, error: 'stopped' },
+      },
+      { chainExpected: false },
+    );
+    expect(v).toEqual({ status: 'online', message: null });
+  });
+
+  it('does not degrade a node that was sent a chain and reports it running', () => {
+    const v = statusFromHealth(
+      {
+        status: 'ok',
+        cores: [{ name: 'xray', running: true }],
+        chain: { running: true },
+      },
+      { chainExpected: true },
+    );
+    expect(v).toEqual({ status: 'online', message: null });
+  });
+
+  it('does not degrade an OLD AGENT that cannot speak about a chain at all', () => {
+    // Separate from the case above, and not the same thing: there the node
+    // answered "no chain", here the field does not exist in its answer. Both
+    // must stay online, and they reach that through different branches.
+    const v = statusFromHealth(
+      { status: 'ok', cores: [{ name: 'xray', running: true }] },
+      { chainExpected: true },
+    );
+    expect(v).toEqual({ status: 'online', message: null });
+  });
+
+  it('leaves the core verdict alone when there is no chain question', () => {
+    const v = statusFromHealth({
+      status: 'degraded',
+      cores: [{ name: 'xray', running: false }],
+    });
+    expect(v.status).toBe('degraded');
+    expect(v.message).toContain('xray');
+  });
+});

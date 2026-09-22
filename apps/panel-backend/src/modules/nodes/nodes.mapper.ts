@@ -20,6 +20,7 @@ export interface HardeningDto {
 // ⚠ `null` on the node DTO means "no reporting agent has checked in", NOT
 // "zero restarts". Older agents never send this.
 export type { NodeCoreRestarts } from '@iceslab/shared';
+import type { ChainStatus } from '@iceslab/shared';
 
 export interface PublicNodeDto {
   id: string;
@@ -62,6 +63,23 @@ export interface PublicNodeDto {
    * output and not ours.
    */
   lastInboundSyncError: { at: string; message: string } | null;
+  /**
+   * The chain process this node reported, or null when it reported none.
+   *
+   * null is the ordinary state, not a fault: it is what every node says until
+   * the panel starts sending a chain block, and what a node outside every
+   * cascade says forever. Read it with `chainSentAt` below, which is the only
+   * thing that makes a missing chain mean anything.
+   */
+  chainStatus: ChainStatus | null;
+  /**
+   * When the panel last sent this node a chain block, or null if never.
+   *
+   * The other half of the pair: what WE did, beside what the NODE said. A node
+   * with no chain and no `chainSentAt` is normal; the same node with a
+   * `chainSentAt` and no chain is a process that should be running and is not.
+   */
+  chainSentAt: string | null;
   consumptionMultiplier: string;
   // Slice 27.5: region grouping + capacity hint.
   regionId: string | null;
@@ -128,6 +146,8 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     lastInboundSyncAt: node.lastInboundSyncAt?.toISOString() ?? null,
     lastInboundSyncError:
       (node.lastInboundSyncError as { at: string; message: string } | null) ?? null,
+    chainStatus: (node.chainStatus as ChainStatus | null) ?? null,
+    chainSentAt: node.chainSentAt?.toISOString() ?? null,
     consumptionMultiplier: node.consumptionMultiplier.toString(),
     regionId: node.regionId,
     maxUsers: node.maxUsers,

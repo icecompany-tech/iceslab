@@ -286,3 +286,22 @@ func TestAnEmptyReservationTravelsAsAListAndSilenceAsNothing(t *testing.T) {
 		t.Errorf("an adapter that cannot speak must send no key at all: %s", body)
 	}
 }
+
+// The chain field is absent until something runs a chain, and absence is what
+// every node on the fleet says on the day this ships. A panel that read it as
+// "chain down" would turn all of them red at once, so the wire has to make the
+// difference visible: no key at all, not `"chain":{"running":false}`.
+func TestHealthzSaysNothingAboutAChainThatDoesNotExist(t *testing.T) {
+	body := healthBody(t, &fakeCore{name: "xray", engine: "xray", running: true})
+	if strings.Contains(body, "chain") {
+		t.Errorf("a node with no chain process must send no chain key: %s", body)
+	}
+
+	var out dto.HealthcheckResponse
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Chain != nil {
+		t.Errorf("Chain = %+v, want nil", out.Chain)
+	}
+}
