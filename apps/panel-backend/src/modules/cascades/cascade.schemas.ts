@@ -95,6 +95,28 @@ export const CascadePositionSchema = z.object({
   linkProtocol: LinkCellValue.optional(),
 });
 
+/**
+ * ⚠ THE RULE FOR EVERY FIELD BELOW: an ABSENT key is not a value, it is the
+ * absence of an edit.
+ *
+ * A direction is read with three states and written with two, which is where
+ * this goes wrong. `linkProtocol: null` is a value with a meaning of its own
+ * ("the entry's cell"), so a server that reads a missing key as null has no way
+ * left to say "do not touch this", and every PUT that mentions one direction
+ * silently rewrites the others.
+ *
+ * Measured by FRONT on 2026-09-22 against a live panel: with DE reached over
+ * the entry's cell and NL over hy2, a PUT carrying a leg for DE came back as
+ * DE tuic / NL null. NL had lost its leg, and its clients would have left the
+ * country over a different transport, under people, with nothing in any log.
+ *
+ * This is the incident of 2026-07-31 in a new place: a squad save sent a list
+ * the screen did not edit and wiped `profileIds`, and a subscription went dark.
+ * The rule learned there is the rule here, one field narrower: what the client
+ * did not mention, the server does not touch. `resolveDirections` in the
+ * service is where that is applied, and it is applied BEFORE validation and
+ * before the gates, so what is checked is what will be stored.
+ */
 export const CascadeDirectionSchema = z.object({
   /** Identifies a direction that ALREADY EXISTS, so it keeps its tag across an
    *  edit. Absent = a new direction, which gets the next tag from the cascade's
@@ -107,10 +129,18 @@ export const CascadeDirectionSchema = z.object({
    *  payload without stripping fields. */
   tag: z.number().int().optional(),
   countryCode: z.string().length(2).nullish(),
-  /** May be EMPTY: v4 can express "the tag exists, the node behind it does
-   *  not yet". Serving skips such a direction until it has a node. The old
-   *  model could not express this, because a direction WAS a node. */
-  nodeIds: z.array(z.uuid()).default([]),
+  /**
+   * May be EMPTY: v4 can express "the tag exists, the node behind it does not
+   * yet". Serving skips such a direction until it has a node. The old model
+   * could not express this, because a direction WAS a node.
+   *
+   * ⚠ And it may be ABSENT, which is a different thing: see the rule below.
+   * `.default([])` used to stand here, and a default is exactly what destroys
+   * the distinction, because zod fills it in before the service can tell that
+   * the client said nothing. A payload that did not mention the pool would
+   * arrive as an empty one and the direction would stop serving.
+   */
+  nodeIds: z.array(z.uuid()).optional(),
   /**
    * The cell of the LAST leg, the one that reaches this direction (phase 5).
    *

@@ -1,3 +1,5 @@
+import { storedLinkParams } from './direction-merge.js';
+
 export interface CascadeHopDto {
   id: string;
   nodeId: string;
@@ -124,23 +126,15 @@ interface CascadeRow {
 }
 
 /**
- * The leg knobs of a direction, as far as they can be believed.
+ * The leg knobs of a direction, read by the one reader of that column.
  *
- * jsonb is not a type: the column can hold an array, a number, a string, a
- * `congestion` that is an object, or DbNull, and Prisma types it as
- * `JsonValue`. Returning it unchecked would put any of those on the wire under
- * a key the screen reads as a word, so anything that is not an object with a
- * string `congestion` reads as "no knobs" rather than travelling as itself.
- *
- * This is a reader, not a validator: what the leg is actually configured with
- * is decided in `parseLinkCred`, which answers the same way (an unreadable
- * controller falls back to the default rather than refusing the leg).
+ * It had its own copy here, which differed in one way that matters: it accepted
+ * ANY string as a controller, while the merge that writes the value back
+ * accepts only the three the engine takes. So a hand-edited row travelled to
+ * the screen, the screen sent it back, and the save dropped it: a control that
+ * changed by itself between two saves nobody made.
  */
-function legParams(raw: unknown): { congestion?: string } | null {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-  const congestion = (raw as { congestion?: unknown }).congestion;
-  return typeof congestion === 'string' ? { congestion } : null;
-}
+const legParams = storedLinkParams;
 
 export function mapCascade(c: CascadeRow): CascadeDto {
   return {

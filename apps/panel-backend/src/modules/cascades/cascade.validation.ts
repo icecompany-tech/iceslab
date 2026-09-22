@@ -4,11 +4,12 @@ import {
   MAX_CASCADE_PATH,
   MAX_CASCADE_POSITIONS,
 } from './cascade.schemas.js';
-import type {
-  CascadeDirectionInput,
-  CascadeHopInput,
-  CascadePositionInput,
-} from './cascade.schemas.js';
+import type { CascadeHopInput, CascadePositionInput } from './cascade.schemas.js';
+// The RESOLVED shape and not the payload's: these rules run after the merge
+// that fills in what a client did not mention, so a direction here always has
+// a pool and always has the cell it will actually be saved with. Validating the
+// payload instead is how a check and a write come to disagree.
+import type { ResolvedDirection } from './direction-merge.js';
 import { linkCellFor } from './cascade.config.js';
 import { CHAIN_ENTRY_PROTOCOLS, LINK_CELLS } from '@iceslab/shared';
 
@@ -83,7 +84,7 @@ export class CascadeValidationError extends Error {
 
 export interface ValidatedTopology {
   positions: CascadePositionInput[];
-  directions: CascadeDirectionInput[];
+  directions: ResolvedDirection[];
   /** Number of node-to-node links this topology implies. */
   linkCount: number;
 }
@@ -112,7 +113,7 @@ export interface ValidatedTopology {
  */
 export function validateCascadeTopology(
   positions: CascadePositionInput[],
-  directions: CascadeDirectionInput[],
+  directions: ResolvedDirection[],
 ): ValidatedTopology {
   if (positions.length < 1) {
     throw new CascadeValidationError('a cascade needs an entry position');
@@ -235,7 +236,7 @@ export function validateCascadeTopology(
  */
 export function countLinks(
   positions: CascadePositionInput[],
-  directions: CascadeDirectionInput[],
+  directions: ResolvedDirection[],
 ): number {
   let total = 0;
   for (let i = 0; i < positions.length - 1; i++) {
@@ -267,7 +268,7 @@ export function countLinks(
  */
 export function foldPositionsIntoHops(
   positions: CascadePositionInput[],
-  directions: CascadeDirectionInput[],
+  directions: ResolvedDirection[],
 ): { hops: CascadeHopInput[]; mode: 'chain' | 'balancer' } {
   const sorted = [...positions].sort((a, b) => a.position - b.position);
 
@@ -282,6 +283,27 @@ export function foldPositionsIntoHops(
     if (d.nodeIds.length > 1) {
       throw new CascadeValidationError(
         `a direction lists ${d.nodeIds.length} nodes. A pool behind a direction needs the new cascade storage; today a direction is one node.`,
+      );
+    }
+    /**
+     * ⚠ An EMPTY pool cannot fold either, and this was a 500 until now.
+     *
+     * v4 says on purpose that a direction may exist with its tag reserved and
+     * no machine behind it. The hop model has no way to say that: a hop IS a
+     * node. The fold took `nodeIds[0]` with a non-null assertion, so such a
+     * direction became a hop whose `nodeId` was `undefined`, the assertion
+     * silenced the type checker, and the value travelled to Prisma, which
+     * refused an `undefined` inside an `in` array. The operator got "Internal
+     * server error" for a shape the panel offers.
+     *
+     * Refused here like every other unfoldable shape, which means the caller
+     * catches it and stores v4 only. Nothing is lost: the legacy rows are a
+     * rollback path, and there is nothing to roll back to for a direction the
+     * old model could never have held.
+     */
+    if (d.nodeIds.length === 0) {
+      throw new CascadeValidationError(
+        'a direction with no node yet cannot be stored as hops: the old model had no way to say "the tag exists, the machine does not".',
       );
     }
   }
