@@ -313,17 +313,30 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
      */
     admin.get('/api/settings/subscription/preview-url', async (req, reply) => {
       const q = z
-        .object({ state: z.enum(['active', 'expiring', 'expired', 'limited', 'disabled']).optional() })
+        .object({
+          state: z.enum(['active', 'expiring', 'expired', 'limited', 'disabled']).optional(),
+          // Same parameter the real page takes, and for a sharper reason here:
+          // the operator writes the dead-state texts in TWO languages on this
+          // screen and could only ever see one of them, whichever the panel
+          // default happened to be. A preview that cannot show the other half
+          // of the form is not a preview of it.
+          lang: z.enum(['ru', 'en']).optional(),
+        })
         .parse(req.query);
       const token = randomUUID();
       await redis.set(
         `sub:preview:${token}`,
-        JSON.stringify({ state: q.state ?? 'active' }),
+        JSON.stringify({ state: q.state ?? 'active', lang: q.lang }),
         'EX',
         900,
       );
+      const url = `${config.PUBLIC_URL.replace(/\/$/, '')}/api/settings/subscription/preview/${token}`;
       return reply.send({
-        url: `${config.PUBLIC_URL.replace(/\/$/, '')}/api/settings/subscription/preview/${token}`,
+        // The language rides in the token AND in the query, so the iframe can
+        // switch it without asking for a new token: the in-page RU/EN links on
+        // the real page work by query, and the preview must behave the same or
+        // it is previewing something else.
+        url: q.lang ? `${url}?lang=${q.lang}` : url,
         expiresInSeconds: 900,
       });
     });
@@ -339,11 +352,15 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/api/settings/subscription/preview/:token', async (req, reply) => {
     const { token } = z.object({ token: z.string().uuid() }).parse(req.params);
+    const q = z.object({ lang: z.enum(['ru', 'en']).optional() }).parse(req.query);
     const raw = await redis.get(`sub:preview:${token}`);
     if (!raw) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Preview link expired' });
     }
-    const { state } = JSON.parse(raw) as { state: string };
+    const { state, lang: tokenLang } = JSON.parse(raw) as {
+      state: string;
+      lang?: 'ru' | 'en';
+    };
     const settings = await getSubscriptionSettings();
     const day = 86_400_000;
     const gib = 1024 ** 3;
@@ -351,7 +368,16 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     // documentation domain. Nothing here reads the database.
     const html = buildSubscriptionPage({
       brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
-      lang: settings.defaultLocale ?? 'ru',
+      // Same order the real page uses: the ?lang= in front of the visitor,
+      // then what the token was minted with, then the panel default. The page
+      // footer's RU/EN links are plain `?lang=` hrefs, so this is what makes
+      // them work inside the preview as well.
+      lang: q.lang ?? tokenLang ?? settings.defaultLocale ?? 'ru',
+      // The operator's OWN wording for the dead states, which is the single
+      // thing this preview exists to show them and was not being passed at
+      // all: they could switch the state, see our built-in sentence, and never
+      // find out what their own looked like on the page.
+      deadTexts: settings.deadTexts,
       subUrl: `${subscriptionOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/preview-token`,
       supportUrl: settings.supportUrl,
       user: {
