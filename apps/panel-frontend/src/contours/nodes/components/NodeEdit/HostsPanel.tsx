@@ -7,7 +7,7 @@ import { engineWord, profilePairLabel, type EngineName } from '@/lib/domain/engi
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN2, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
-import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
+import { refusalOf } from '@/lib/domain/syncRefusal';
 import { useTranslation } from 'react-i18next';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
 

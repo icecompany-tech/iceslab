@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -35,7 +35,8 @@ import { useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '@/lib/net/client';
 import { createBinding } from '@/lib/domain/profiles';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
-import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
+import { refusalOf } from '@/lib/domain/syncRefusal';
+import { chainFacts } from '@/lib/domain/chainStatus';
 import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
   createNode,
@@ -1033,6 +1034,9 @@ export function NodesPage() {
                   // на обзоре его нет, и вывести его из статуса нельзя, потому
                   // что нода с отвергнутым конфигом остаётся online.
                   syncRefusal: refusalOf(n),
+                  // Цепь читается парой полей ноды, и эта же пара молчит у
+                  // всех, кому блок цепи не посылали.
+                  chain: chainFacts(n),
                   // `null` значит «карточке сказать нечего», и решает это одна
                   // функция: «политики нет» и «политика не работает» слишком
                   // легко спутать, чтобы разбирать их в разметке.

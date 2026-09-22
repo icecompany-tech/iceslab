@@ -1,8 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
-import { DISPLAY, MIST, MONO, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
-import type { SyncRefusal } from '@/contours/nodes/lib/syncRefusal';
+import type { SyncRefusal } from '@/lib/domain/syncRefusal';
+
+// Те же краски, что у контура нод (`contours/nodes/lib/colors.ts`). Держим
+// копию, как это делает `PortCheckHint`: `ui/` про контуры не знает, а сведение
+// палитры на всю панель это отдельная работа по токенам.
+const SNOW = '#C8D4E3';
+const MIST = '#7A8BA3';
+const RED = '#E07A5F';
+const WELL = '#0B1420';
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /**
  * «Нода отвергла конфиг», словами самого ядра.
@@ -18,9 +27,19 @@ import type { SyncRefusal } from '@/contours/nodes/lib/syncRefusal';
 export function SyncRefusalStrip({
   refusal,
   compact = false,
+  tag,
+  title,
+  note,
 }: {
   refusal: SyncRefusal;
   compact?: boolean;
+  /** Чем подписан отказ. По умолчанию это отказ ядра принять конфиг; процесс
+   *  цепи ломается по-своему и называет себя сам. */
+  tag?: string;
+  title?: string;
+  /** Подпись внизу. `null` убирает её: у процесса цепи состояние снимается по
+   *  другому событию, и чужая формулировка врала бы про причину. */
+  note?: string | null;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -49,7 +68,7 @@ export function SyncRefusalStrip({
             color: RED,
           }}
         >
-          {t('syncRefusal.tag')}
+          {tag ?? t('syncRefusal.tag')}
         </Text>
         <Box style={{ flex: 1, minWidth: 0 }} />
         <Text
@@ -68,7 +87,7 @@ export function SyncRefusalStrip({
       <Stack gap={compact ? 4 : 6}>
         {!compact && (
           <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '19px', color: SNOW }}>
-            {t('syncRefusal.title')}
+            {title ?? t('syncRefusal.title')}
           </Text>
         )}
         {/* Причина моноширинным: это дословный текст чужой программы, и в нём
@@ -144,9 +163,9 @@ export function SyncRefusalStrip({
           </Box>
         )}
 
-        {!compact && (
+        {!compact && note !== null && (
           <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: MIST }}>
-            {t('syncRefusal.selfClears')}
+            {note ?? t('syncRefusal.selfClears')}
           </Text>
         )}
       </Stack>

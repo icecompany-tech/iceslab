@@ -9,14 +9,16 @@ import { NodeParamsForm } from '@/contours/nodes/components/NodeEdit/NodeParamsF
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { ResolvedRoutes } from '@/contours/nodes/components/NodeEdit/ResolvedRoutes';
 import { Sep } from '@/contours/nodes/components/NodeEdit/Separators';
-import { SyncRefusalStrip } from '@/contours/nodes/components/SyncRefusalStrip';
+import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { SyncStatusStrip } from '@/contours/nodes/components/NodeEdit/SyncStatusStrip';
 import { SystemPanel } from '@/contours/nodes/components/NodeEdit/SystemPanel';
 import { TabButton } from '@/contours/nodes/components/NodeEdit/TabButton';
 import { useNodeEditForm } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
 import { CoresPanel } from '@/contours/nodes/components/NodeEdit/CoresPanel';
 import { AMBER, CARD, DISPLAY, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
-import { refusalOf } from '@/contours/nodes/lib/syncRefusal';
+import { refusalOf } from '@/lib/domain/syncRefusal';
+import { chainFacts } from '@/lib/domain/chainStatus';
+import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { ServerIcon } from '@/contours/nodes/components/NodeCreate/icons';
 import { useTranslation } from 'react-i18next';
 import { modals } from '@mantine/modals';
@@ -70,6 +72,7 @@ export function NodeEditPage() {
   // После guard, а не до него: до него `node` это `Node | undefined`, и
   // считать отказ там значит тащить неопределённость через всю страницу.
   const refusal = refusalOf(node);
+  const chain = chainFacts(node);
 
   return (
     <Stack gap={20}>
@@ -229,6 +232,10 @@ export function NodeEditPage() {
           и то же событие, только с причиной, и две полосы подряд про один пуш
           читаются как две разные беды. */}
       {refusal ? <SyncRefusalStrip refusal={refusal} /> : <SyncStatusStrip status={syncQuery.data} />}
+
+      {/* Рядом с отказом ядра, но отдельной сущностью: конфиг и процесс цепи
+          ломаются независимо, и объединять их значит прятать одно за другим. */}
+      {chain && <ChainStatusLine facts={chain} />}
 
       {tab === 'params' && (
         <>

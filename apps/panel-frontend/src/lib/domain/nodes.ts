@@ -136,6 +136,15 @@ export interface Node {
    * ⚠ Само по себе это не «когда пробовали»: отвергнутый пуш его не двигает.
    */
   lastInboundSyncAt?: string | null;
+  /**
+   * Что сказала нода про процесс цепи, и `null`, если не говорила ничего.
+   *
+   * ⚠ Читается только в паре с `chainSentAt`: см. `lib/domain/chainStatus.ts`.
+   * `null` это обычное состояние ноды вне каскадов, а не поломка.
+   */
+  chainStatus?: { running: boolean; version?: string; error?: string } | null;
+  /** Когда панель последний раз послала этой ноде блок цепи. */
+  chainSentAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

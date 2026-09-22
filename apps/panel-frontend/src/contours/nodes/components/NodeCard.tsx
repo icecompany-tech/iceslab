@@ -29,8 +29,10 @@ import type { CoreRestarts } from '@/lib/domain/nodes';
 import type { DashboardOverview } from '@/lib/domain/dashboard';
 import { countryFlag } from '@/lib/domain/countries';
 import { relativeTime } from '@/lib/ui/relativeTime';
-import { SyncRefusalStrip } from '@/contours/nodes/components/SyncRefusalStrip';
-import type { SyncRefusal } from '@/contours/nodes/lib/syncRefusal';
+import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
+import type { SyncRefusal } from '@/lib/domain/syncRefusal';
+import type { ChainFacts } from '@/lib/domain/chainStatus';
+import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
 
 const HAIRLINE = '#1C2A3D';
@@ -89,6 +91,9 @@ interface CardNode {
    * назначали, значит выдумать беду на ровном месте.
    */
   policyReach?: PolicyReachFacts | null;
+  /** Состояние процесса цепи, `null` = блок цепи этой ноде не посылали, и
+   *  говорить не о чем. См. `lib/domain/chainStatus.ts`. */
+  chain?: ChainFacts | null;
 }
 
 interface Props {
@@ -271,6 +276,11 @@ export function NodeCard({
             отвергнутым конфигом отвечает и числится online, и без этой строки
             карточка выглядит здоровой. */}
         {node.syncRefusal && <SyncRefusalStrip refusal={node.syncRefusal} compact />}
+
+        {/* Процесс цепи отдельной строкой от отказа ядра: конфиг может лечь
+            штатно, а цепь на этой машине при этом не подняться, и по статусу
+            ноды это тоже не видно. Молчит, пока блок цепи сюда не посылали. */}
+        {node.chain && <ChainStatusLine facts={node.chain} compact />}
 
         {/* Бейдж политики ТОЛЬКО когда она назначена и не работает либо про
             неё ничего не известно. В «применяется» карточка молчит: зелёная

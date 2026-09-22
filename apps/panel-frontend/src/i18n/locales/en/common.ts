@@ -312,4 +312,20 @@ export const common = {
     fragmentHint:
       'Dials each server through a fragment outbound that chops the ClientHello into pieces, so SNI-based DPI cannot cleanly match it. Xray JSON format only.',
   },
+  // The chain process on a node. Read as a pair of fields, see
+  // lib/domain/chainStatus.ts: a silent node means no data, not a fault.
+  chain: {
+    tag: 'CHAIN DOWN',
+    downTitle: 'The chain process is not running on this node',
+    downNote: 'The line clears itself as soon as the node reports the process running.',
+    downNoReason: 'The chain process is not running, the node gave no reason',
+    noData: 'Chain sent, the node has not reported on it yet',
+    up: 'Chain running',
+    upVersion: 'Chain running · {{version}}',
+    // The position row names the node: it holds several, and without the name
+    // the line does not say which one.
+    noteDown: '{{name}}: the chain process is not running. {{reason}}',
+    noteDownNoReason: '{{name}}: the chain process is not running, the node gave no reason.',
+    noteNoData: '{{name}}: chain sent, the node has not reported on it yet.',
+  },
 } as const;

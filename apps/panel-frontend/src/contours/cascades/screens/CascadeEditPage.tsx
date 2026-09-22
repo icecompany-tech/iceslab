@@ -16,6 +16,10 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes, type Node } from '@/lib/domain/nodes';
+import { refusalOf } from '@/lib/domain/syncRefusal';
+import { chainFacts } from '@/lib/domain/chainStatus';
+import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
+import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { useOverview } from '@/lib/domain/dashboard';
@@ -558,6 +562,26 @@ export function CascadeEditPage() {
                       })}
                     </Note>
                   ))}
+                {/* Состояние цепи по каждой машине пула. Зелёное здесь не
+                    рисуем: работающая цепь на каждой ноде это шум, из-за
+                    которого перестают замечать две другие строки. Причина
+                    берётся как есть, словами ноды, и не режется: строка позиции
+                    это единственное место, где её видно рядом с выбором. */}
+                {pool.nodeIds.map((nid) => {
+                  const n = nodeById.get(nid);
+                  const f = chainFacts(n);
+                  if (!n || !f || f.state === 'up') return null;
+                  const tone = f.state === 'down' ? RED : MIST;
+                  return (
+                    <Note key={`chain-${n.id}`} tone={tone} icon={<WarnIcon size={13} color={tone} />}>
+                      {f.state === 'unknown'
+                        ? t('chain.noteNoData', { name: n.name })
+                        : f.error
+                          ? t('chain.noteDown', { name: n.name, reason: f.error })
+                          : t('chain.noteDownNoReason', { name: n.name })}
+                    </Note>
+                  );
+                })}
               </PositionRow>
             ))}
 
@@ -889,9 +913,19 @@ export function CascadeEditPage() {
                     })}
             </Text>
 
-            {(statusQuery.data?.hops ?? []).map((hop) => (
+            {(statusQuery.data?.hops ?? []).map((hop) => {
+              // Три разные вещи про один хоп, и ни одна не выводится из
+              // остальных: принял ли он ПОСЛЕДНИЙ конфиг (`applied`), не
+              // отверг ли ядро предыдущий (`refusalOf`) и работает ли на нём
+              // процесс цепи (`chainFacts`). Нода с упавшей цепью отвечает и
+              // числится online, поэтому строка «применил» про неё правдива и
+              // при этом каскад не работает.
+              const hopNode = nodeById.get(hop.nodeId);
+              const hopRefusal = hopNode ? refusalOf(hopNode) : null;
+              const hopChain = chainFacts(hopNode);
+              return (
+                <Stack key={hop.nodeId} gap={6} style={{ width: '100%' }}>
               <Box
-                key={hop.nodeId}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}
               >
                 {hop.applied ? (
@@ -929,7 +963,11 @@ export function CascadeEditPage() {
                       : t('cascadeEdit.hopOffline')}
                 </Text>
               </Box>
-            ))}
+                  {hopRefusal && <SyncRefusalStrip refusal={hopRefusal} compact />}
+                  {hopChain && <ChainStatusLine facts={hopChain} compact />}
+                </Stack>
+              );
+            })}
 
             <Note tone={AMBER} icon={<WarnIcon size={13} color={AMBER} />}>
               {t('cascadeEdit.pushNote', { n: allIds.length })}

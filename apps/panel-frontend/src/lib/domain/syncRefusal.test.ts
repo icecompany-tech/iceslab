@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coreReason, refusalOf } from '@/contours/nodes/lib/syncRefusal';
+import { coreReason, refusalOf } from '@/lib/domain/syncRefusal';
 
 /**
  * Причина, по которой ядро не взяло конфиг, вытащенная из его же вывода.
