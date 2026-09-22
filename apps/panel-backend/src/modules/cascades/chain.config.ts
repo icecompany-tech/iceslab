@@ -1,3 +1,4 @@
+import type { LinkCell } from '@iceslab/shared';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
 import { chainSocksPort } from './chain.ports.js';
 
@@ -125,6 +126,24 @@ export function chainLinkUser(tag: number): string {
   return `lnk-d${tag}`;
 }
 
+/**
+ * Which CELL a stored credential is, as the renderer branches on it.
+ *
+ * ⚠ A cell is not the same dictionary as a protocol, and this function is the
+ * one place the two meet: `LinkCred.protocol` is what the panel stored when the
+ * leg was generated, `LinkCell` is what this file renders. Today they coincide
+ * on the two cells that exist; phase 5 adds `hy2` and `tuic`, which have no
+ * `LinkCred` variants yet, and this is where they will be recognised.
+ *
+ * Written as a function rather than read inline so the switches below branch on
+ * ONE vocabulary. They used to ask `cred.protocol === 'shadowsocks'` and treat
+ * everything else as vless, which is the shape that silently turns an unknown
+ * cell into a vless leg.
+ */
+function cellOf(cred: LinkCred): LinkCell {
+  return cred.protocol === 'shadowsocks' ? 'shadowsocks' : 'vless';
+}
+
 function vlessOutbound(tag: number, host: string, cred: Extract<LinkCred, { protocol: 'vless' }>): Json {
   const out: Json = {
     type: 'vless',
@@ -160,20 +179,46 @@ function ssOutbound(
   };
 }
 
+/**
+ * The listener this node receives a leg on, one branch per CELL.
+ *
+ * A switch and not an if, so that adding a cell to LINK_CELLS without a branch
+ * here is a compile error rather than a leg quietly rendered as vless. The
+ * guard beside this file reads these branch labels.
+ */
 function linkInbound(leg: ChainLegIn): Json {
-  if (leg.cred.protocol === 'shadowsocks') {
-    // SS2022 carries one key per listener, so a shadowsocks leg cannot tell
-    // directions apart by credential. It is the cell the operator chose, and
-    // the routing below falls back to the default way out for it.
-    return {
-      type: 'shadowsocks',
-      tag: 'link-in',
-      listen: '0.0.0.0',
-      listen_port: leg.cred.port,
-      method: leg.cred.method,
-      password: leg.cred.psk,
-    };
+  switch (cellOf(leg.cred)) {
+    case 'shadowsocks':
+      return ssInbound(leg.cred as Extract<LinkCred, { protocol: 'shadowsocks' }>);
+    case 'vless':
+      return vlessInbound(leg);
+    default: {
+      // Unreachable while LINK_CELLS and the branches above agree, which is
+      // what the composition guard exists to keep true. If it ever is reached,
+      // rendering nothing beats rendering the wrong cell: a leg that does not
+      // come up is visible, a leg that comes up as the wrong protocol is a
+      // chain that silently carries traffic the operator did not choose.
+      const cell: never = cellOf(leg.cred) as never;
+      throw new Error(`chain: no inbound renderer for link cell ${String(cell)}`);
+    }
   }
+}
+
+/** SS2022 carries one key per listener, so a shadowsocks leg cannot tell
+ *  directions apart by credential. It is the cell the operator chose, and the
+ *  routing falls back to the default way out for it. */
+function ssInbound(cred: Extract<LinkCred, { protocol: 'shadowsocks' }>): Json {
+  return {
+    type: 'shadowsocks',
+    tag: 'link-in',
+    listen: '0.0.0.0',
+    listen_port: cred.port,
+    method: cred.method,
+    password: cred.psk,
+  };
+}
+
+function vlessInbound(leg: ChainLegIn): Json {
   const inbound: Json = {
     type: 'vless',
     tag: 'link-in',
@@ -288,10 +333,26 @@ export function renderChainConfig(input: ChainRenderInput): Json {
     list.push(leg);
     legsByDirection.set(leg.tag, list);
   }
-  const renderLeg = (tag: string, leg: ChainLegOut): Json =>
-    leg.cred.protocol === 'shadowsocks'
-      ? { ...ssOutbound(leg.tag, leg.host, leg.cred), tag }
-      : { ...vlessOutbound(leg.tag, leg.host, leg.cred), tag };
+  /** One leg out, one branch per CELL. Same switch as the inbound side, for the
+   *  same reason: a new cell must not fall through into vless. */
+  const renderLeg = (tag: string, leg: ChainLegOut): Json => {
+    switch (cellOf(leg.cred)) {
+      case 'shadowsocks':
+        return {
+          ...ssOutbound(leg.tag, leg.host, leg.cred as Extract<LinkCred, { protocol: 'shadowsocks' }>),
+          tag,
+        };
+      case 'vless':
+        return {
+          ...vlessOutbound(leg.tag, leg.host, leg.cred as Extract<LinkCred, { protocol: 'vless' }>),
+          tag,
+        };
+      default: {
+        const cell: never = cellOf(leg.cred) as never;
+        throw new Error(`chain: no outbound renderer for link cell ${String(cell)}`);
+      }
+    }
+  };
 
   const directionsWithLegs: number[] = [];
   for (const [tag, legs] of [...legsByDirection.entries()].sort((a, b) => a[0] - b[0])) {
