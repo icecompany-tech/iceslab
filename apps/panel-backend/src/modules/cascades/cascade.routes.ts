@@ -6,9 +6,15 @@ import {
   CascadeIdParamSchema,
 } from './cascade.schemas.js';
 import * as svc from './cascade.service.js';
-import { CascadeValidationError } from './cascade.validation.js';
+import { CascadeEntryNotChainableError, CascadeValidationError } from './cascade.validation.js';
 
 function handleError(err: unknown, reply: FastifyReply): FastifyReply {
+  // Before the generic one, and with a CODE of its own: the screen matches on
+  // it to say "not yet" rather than "you cannot", and the difference decides
+  // whether an operator files a bug or waits for phase 6.
+  if (err instanceof CascadeEntryNotChainableError) {
+    return reply.code(400).send({ error: err.code, message: err.message });
+  }
   if (err instanceof CascadeValidationError) {
     return reply.code(400).send({ error: 'INVALID', message: err.message });
   }

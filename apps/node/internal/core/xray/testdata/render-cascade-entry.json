@@ -58,7 +58,7 @@
     }
   ],
   "log": {
-    "loglevel": "info"
+    "loglevel": "warning"
   },
   "observatory": {
     "subjectSelector": [

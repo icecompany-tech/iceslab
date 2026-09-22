@@ -10,6 +10,7 @@ import type {
   CascadePositionInput,
 } from './cascade.schemas.js';
 import { linkCellFor } from './cascade.config.js';
+import { CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 
 /**
  * A link protocol nothing can carry is refused here, at the save.
@@ -27,6 +28,47 @@ function assertLinkCellExists(protocol: string | null | undefined, where: string
       `carry. Available: vless (also stored as "xray") and shadowsocks. A hop link is not the ` +
       `same thing as the protocol the entry serves users with.`,
   );
+}
+
+/**
+ * The protocol the entry serves USERS with, against what the chain can carry.
+ *
+ * Until now the value was stored and shown and nothing else: the render never
+ * read it. So a cascade saved with a hysteria2 or AmneziaWG entry looked
+ * finished on the screen and did one of two things, both silent. If that node
+ * also had an xray inbound, the chain was drawn there and the operator's hy2
+ * users went out of the entry node directly, past every exit and every
+ * protection, while the panel showed them a cascade. If it had none, the
+ * fragments were dropped with one INFO line in the panel's log and the cascade
+ * did nothing at all.
+ *
+ * Refused at SAVE rather than at render, because at render there is nobody to
+ * tell: the operator is long gone and the only trace is a log line. The list is
+ * shared with the frontend (CHAIN_ENTRY_PROTOCOLS) so the screen offers exactly
+ * what this accepts instead of keeping a second copy that drifts.
+ */
+function assertEntryIsChainable(protocol: string): void {
+  if ((CHAIN_ENTRY_PROTOCOLS as readonly string[]).includes(protocol)) return;
+  throw new CascadeEntryNotChainableError(protocol);
+}
+
+/**
+ * A distinct error, because this refusal has a CODE the screen matches on.
+ *
+ * The operator's choice is not wrong, it is early: hysteria2 entries arrive in
+ * phase 6 and AmneziaWG in phase 7. A generic validation message would read as
+ * "you cannot do this", and the difference between that and "not yet" is the
+ * difference between an operator filing a bug and an operator waiting.
+ */
+export class CascadeEntryNotChainableError extends Error {
+  readonly code = 'ENTRY_NOT_CHAINABLE';
+  constructor(public protocol: string) {
+    super(
+      `entry protocol ${protocol} is not carried by the chain yet: xray only until phase 6 ` +
+        `(hysteria2) and 7 (amneziawg)`,
+    );
+    this.name = 'CascadeEntryNotChainableError';
+  }
 }
 
 export class CascadeValidationError extends Error {
@@ -104,6 +146,7 @@ export function validateCascadeTopology(
     if (isEntry && !p.entryProtocol) {
       throw new CascadeValidationError('the entry position needs an entryProtocol');
     }
+    if (isEntry && p.entryProtocol) assertEntryIsChainable(p.entryProtocol);
     if (!isEntry && p.entryProtocol) {
       throw new CascadeValidationError(
         `entryProtocol is only valid on the entry, not position ${p.position}`,
@@ -299,6 +342,9 @@ export function validateCascadeHops(
     if (isEntry && !h.entryProtocol) {
       throw new CascadeValidationError('the entry hop (position 0) needs an entryProtocol');
     }
+    // The legacy shape saves through here, so the gate lives in both or an
+    // operator who reaches this path keeps the silent entry.
+    if (isEntry && h.entryProtocol) assertEntryIsChainable(h.entryProtocol);
     if (!isEntry && h.entryProtocol) {
       throw new CascadeValidationError(
         `entryProtocol is only valid on the entry hop, not position ${h.position}`,

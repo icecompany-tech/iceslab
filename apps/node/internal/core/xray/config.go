@@ -763,8 +763,18 @@ func renderMultiConfig(
 	dnsSection := renderDnsSection(dns)
 
 	doc := map[string]any{
+		// ⚠ `warning`, not `info`, and this is a disk-space decision rather than
+		// a taste in verbosity. At info xray writes a line PER CONNECTION;
+		// journald mirrors it into syslog, and our journald limits in the
+		// installer do not cap syslog at all. Reported from an operator's own
+		// exit node (PR #43, 2026-08-17): 3 GB of logs, the disk full, and
+		// nothing in them anybody had ever read.
+		//
+		// What is lost is the per-connection trace, which is not how anything
+		// here is diagnosed: a refused config, a failed start and a dead leg all
+		// print at warning or above.
 		"log": map[string]any{
-			"loglevel": "info",
+			"loglevel": "warning",
 		},
 		"stats": map[string]any{},
 		"api": map[string]any{

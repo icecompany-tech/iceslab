@@ -525,11 +525,40 @@ func (a *Adapter) AddUser(user core.User) error {
 		return nil
 	}
 	a.users[user.UserID] = desired
+	dormant := a.dormantLocked()
 	a.mu.Unlock()
+	// Nothing to render onto yet: the user is cached and the first ApplyInbound
+	// flushes them. See dormantLocked.
+	if dormant {
+		return nil
+	}
 	if a.liveUpdateUser(context.Background(), liveAdd, desired) {
 		return nil
 	}
 	return a.regenerateAndRestart(context.Background())
+}
+
+/*
+Is there anything for a user to be added TO?
+
+A node that the panel has pushed no inbound to, and that was installed without
+a REALITY key of its own, has no door for anyone to come through. Rendering for
+it produces the management inbound and nothing else, so every AddUser spent a
+config render, a `xray -test` and a restart to arrive at a config serving
+nobody, and printed a warning doing it. On a node between install and first push
+the panel re-sends its whole roster on every poll, so that is a warning per user
+per poll, forever, about a state that is not an error.
+
+⚠ THE CONDITION IS NOT "the install-time key is empty". That is the NORMAL
+state of every panel-provisioned node: it is installed bare and gets its
+inbounds pushed, and skipping the render there would mean users never reach the
+config at all. What makes a node dormant is having neither source: no pushed
+inbound AND no usable install-time one.
+
+Caller must hold a.mu.
+*/
+func (a *Adapter) dormantLocked() bool {
+	return len(a.inbounds) == 0 && a.cfg.Inbound.RealityPrivateKey == ""
 }
 
 // RemoveUser drops the user. N1: tries a live remove (`xray api rmu`) first,
@@ -542,7 +571,13 @@ func (a *Adapter) RemoveUser(userID string) error {
 		return nil
 	}
 	delete(a.users, userID)
+	dormant := a.dormantLocked()
 	a.mu.Unlock()
+	// Same as AddUser: with no inbound to serve, the removal is already done by
+	// dropping them from the cache.
+	if dormant {
+		return nil
+	}
 	if a.liveUpdateUser(context.Background(), liveRemove, removed) {
 		return nil
 	}
