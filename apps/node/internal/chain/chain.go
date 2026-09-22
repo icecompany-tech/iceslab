@@ -212,7 +212,13 @@ func (m *Manager) Apply(ctx context.Context, block *dto.NodeChain) error {
 		return m.fail(fmt.Errorf("chain block carries no config"))
 	}
 	if m.cfg.BinaryPath == "" {
-		return m.fail(fmt.Errorf("no %s binary on this node, so the chain cannot be drawn", Engine))
+		// The sentence an operator reads on the node's card, so it says what to
+		// DO rather than what is missing. Without the command they get a fact
+		// and a trip to the docs, and the node stays out of the cascade in the
+		// meantime.
+		return m.fail(fmt.Errorf(
+			"no %s binary on this node, so the chain cannot be drawn: run "+
+				"bootstrap-singbox.sh on it and restart iceslab-node", Engine))
 	}
 	if err := m.check(ctx, block.Config); err != nil {
 		// The running chain is untouched. That is the whole point of checking

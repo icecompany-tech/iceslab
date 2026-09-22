@@ -144,7 +144,12 @@ func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
 	cfg := inbound.withDefaults()
 
 	doc := map[string]any{
-		"log":   map[string]any{"loglevel": "info"},
+		// `warning`, for the same reason the vless side of this binary logs at
+		// warning: at info xray writes a line per CONNECTION, journald mirrors
+		// it into syslog, and the journald limits in our installer do not cap
+		// syslog. This is a second xray process on the same box, so it was
+		// filling the same disk from the other end.
+		"log":   map[string]any{"loglevel": "warning"},
 		"stats": map[string]any{},
 		"api": map[string]any{
 			"tag":      "api",
