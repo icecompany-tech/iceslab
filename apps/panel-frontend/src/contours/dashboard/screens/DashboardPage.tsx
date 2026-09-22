@@ -37,17 +37,7 @@ import {
   IconWifi,
 } from '@tabler/icons-react';
 import { type DashboardOverview } from '@/lib/domain/dashboard';
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
+import { AMBER, CARD, CYAN, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/lib/ui/tokens';
 
 const MONO_LABEL = {
   fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace",
@@ -188,7 +178,6 @@ function formatDelta(
   const sign = delta >= 0 ? '+' : '−';
   return { text: `${sign}${formatBytes(Math.abs(delta))}`, positive: delta >= 0, noData: false };
 }
-
 
 function thresholdColor(p: number, warn = 60, crit = 85): string {
   if (p > crit) return RED;

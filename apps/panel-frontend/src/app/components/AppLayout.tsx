@@ -40,31 +40,18 @@ import { useOverview } from '@/lib/domain/dashboard';
 import { PageMetaProvider } from '@/lib/ui/PageMetaProvider';
 import { usePageMetaFacts } from '@/lib/ui/usePageMeta';
 import { DISCORD_URL, GITHUB_URL, SUPPORT_URL, TELEGRAM_URL } from '@/lib/domain/community';
+import { AMBER, CARD, CYAN, CYAN_HI, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, ROSE, SNOW, VIOLET, WELL } from '@/lib/ui/tokens';
 
-const HAIRLINE = '#1C2A3D';
-const GROUND = '#08101A';
-const CARD = '#0F1A28';
 // The nav is its own panel sitting on the ground, a shade above it so the card
 // reads as a surface rather than a column ruled off by a border.
 const SIDEBAR_CARD = '#0B1622';
-const HOVER = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
 // Sub-rows sit half a step under their parent: light enough to read, quiet
 // enough that the top level still leads.
 const SUBLABEL = '#8A9BB2';
-const FAINT = '#5A6B82';
 // One step under FAINT, for the rows that name a screen which does not exist
 // yet: readable, and visibly not the same kind of row as a live one.
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const CYAN2 = '#67E8F9';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
 // Warm rose, used by nothing else in the panel: the donate chip is the one
 // place we ask for something back, so it gets its own accent.
-const ROSE = '#E08AA8';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
@@ -110,7 +97,7 @@ function navRowStyle(isActive: boolean): React.CSSProperties {
     fontFamily: DISPLAY,
     fontSize: 13,
     fontWeight: isActive ? 500 : 400,
-    backgroundColor: isActive ? HOVER : 'transparent',
+    backgroundColor: isActive ? WELL : 'transparent',
     borderLeft: `2px solid ${isActive ? CYAN : 'transparent'}`,
     transition: 'background-color 120ms, color 120ms',
     position: 'relative',
@@ -119,7 +106,7 @@ function navRowStyle(isActive: boolean): React.CSSProperties {
 
 function hoverOn(e: React.MouseEvent, isActive: boolean) {
   if (isActive) return;
-  (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+  (e.currentTarget as HTMLElement).style.backgroundColor = WELL;
   (e.currentTarget as HTMLElement).style.color = SNOW;
 }
 
@@ -301,7 +288,7 @@ function SubNavItem({
         fontFamily: DISPLAY,
         fontSize: 12,
         lineHeight: '16px',
-        backgroundColor: isActive ? HOVER : 'transparent',
+        backgroundColor: isActive ? WELL : 'transparent',
         transition: 'background-color 120ms, color 120ms',
         ...(interactive ? null : PLACEHOLDER_ROW),
       }}
@@ -309,7 +296,7 @@ function SubNavItem({
         interactive
           ? (e) => {
               if (isActive) return;
-              (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+              (e.currentTarget as HTMLElement).style.backgroundColor = WELL;
               (e.currentTarget as HTMLElement).style.color = SNOW;
             }
           : undefined
@@ -600,7 +587,7 @@ function AppLayoutInner() {
                 style={{
                   width: 17,
                   height: 17,
-                  background: `linear-gradient(135deg, ${CYAN}, ${CYAN2})`,
+                  background: `linear-gradient(135deg, ${CYAN}, ${CYAN_HI})`,
                   transform: 'rotate(45deg)',
                   borderRadius: 4,
                   boxShadow: `0 0 14px ${CYAN}66`,
@@ -640,8 +627,8 @@ function AppLayoutInner() {
                     width: 6,
                     height: 6,
                     borderRadius: '50%',
-                    backgroundColor: CYAN2,
-                    boxShadow: `0 0 6px ${CYAN2}`,
+                    backgroundColor: CYAN_HI,
+                    boxShadow: `0 0 6px ${CYAN_HI}`,
                   }}
                 />
                 <Text
@@ -650,7 +637,7 @@ function AppLayoutInner() {
                     fontSize: 11,
                     fontWeight: 500,
                     letterSpacing: '0.04em',
-                    color: CYAN2,
+                    color: CYAN_HI,
                   }}
                 >
                   v{__APP_VERSION__}

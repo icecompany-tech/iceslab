@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Box, Loader, Stack, Text, UnstyledButton } from '@mantine/core';
 import { getInsights, type Insights } from '@/lib/domain/dashboard';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, SNOW, VIOLET, WELL } from '@/lib/ui/tokens';
 
 /**
  * Two questions the panel can answer from data it already stores: who is
@@ -13,19 +14,6 @@ import { getInsights, type Insights } from '@/lib/domain/dashboard';
  * Nothing here is a live poll. The endpoint aggregates on demand, which is why
  * the window picker sits in the bar rather than a refresh button.
  */
-
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

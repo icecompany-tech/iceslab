@@ -20,18 +20,12 @@ import { api } from '@/lib/net/client';
 import { useAuth } from '@/lib/auth/session';
 import { useBrandName } from '@/lib/ui/useBrandName';
 import { LanguageSwitcher } from '@/ui/LanguageSwitcher';
+import { CARD, CYAN, DIM, EDGE, GROUND, HAIRLINE, MIST, MOSS, SNOW, WELL } from '@/lib/ui/tokens';
 
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const GROUND = '#08101A';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5D585';
+// ⚠ Своё имя, а не AMBER: краска ДРУГАЯ, светлее общей (#F5B14C), и пока имя
+// совпадало, любая замена по имени тихо перекрасила бы вход. Сведение
+// палитры 2026-09-22.
+const LAMP_AMBER = '#F5D585';
 const RUST = '#E89B8B';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -91,7 +85,7 @@ export function LoginPage() {
     healthQuery.data?.status === 'ok' ? 'normal' : 'degraded';
   const statusColor =
     backendStatus === 'normal' ? MOSS :
-    backendStatus === 'degraded' ? AMBER : RUST;
+    backendStatus === 'degraded' ? LAMP_AMBER : RUST;
   const statusLabel = t(
     backendStatus === 'normal' ? 'loginPage.topbarStatusNormal' :
     backendStatus === 'degraded' ? 'loginPage.topbarStatusDegraded' :

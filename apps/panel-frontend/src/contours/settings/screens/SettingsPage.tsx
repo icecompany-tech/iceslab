@@ -44,6 +44,7 @@ import {
   deleteRecipeSource,
 } from '@/lib/domain/recipes';
 import type { RecipeSource } from '@iceslab/shared';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET, WELL } from '@/lib/ui/tokens';
 
 /**
  * Everything that configures the panel itself rather than what it serves:
@@ -53,20 +54,6 @@ import type { RecipeSource } from '@iceslab/shared';
  * Each card owns its own query. React-query dedupes the shared keys, so the
  * bar can count the same things the cards list without threading props.
  */
-
-const HAIRLINE = '#1C2A3D';
-const EDGE = '#2C3A4E';
-const CARD = '#0F1A28';
-const WELL = '#0B1420';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const FAINT = '#5A6B82';
-const DIM = '#3A4A60';
-const CYAN = '#7DD3FC';
-const MOSS = '#A7D8B9';
-const AMBER = '#F5B14C';
-const RED = '#E07A5F';
-const VIOLET = '#A78BFA';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
