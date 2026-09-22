@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LINK_CELLS } from '@iceslab/shared';
 
 // Max hops in a single cascade. Each hop adds latency + an inter-hop link
 // (UFW port LINK_PORT_BASE+i), so the chain is capped. Enforced at the schema
@@ -42,14 +43,28 @@ export const CascadeProtocol = z.enum([
   'mieru',
 ]);
 
+/**
+ * What a LEG may be made of, on the wire.
+ *
+ * ⚠ A different dictionary from `CascadeProtocol` above, which is what a node
+ * serves USERS with. They meet on two words and diverge on the rest: `vless`
+ * is a cell and not a protocol at all, `tuic` is both, and `hy2` is the cell
+ * whose protocol is spelled `hysteria`. One column used to take either, and
+ * phase 5 makes that undecidable, so the schema now takes only cells.
+ *
+ * `xray` is accepted for ONE release as the old engine name for the vless
+ * cell: the panel's screens moved with the migration, somebody's script did
+ * not. It is translated and logged in `linkCellFor`.
+ */
+const LinkCellValue = z.enum([...LINK_CELLS, 'xray']);
 export const CascadeHopSchema = z.object({
   nodeId: z.uuid(),
   /** 0 = entry, highest = exit. Must be contiguous 0..N-1 across the cascade. */
   position: z.number().int().min(0).max(MAX_CASCADE_HOPS - 1),
   /** Client-facing protocol; only valid on the entry hop. */
   entryProtocol: CascadeProtocol.optional(),
-  /** Protocol to the NEXT hop; omitted on the exit hop. */
-  linkProtocol: CascadeProtocol.optional(),
+  /** CELL to the NEXT hop; omitted on the exit hop. See LinkCellValue. */
+  linkProtocol: LinkCellValue.optional(),
 });
 
 /** 'chain' = sequential entry->...->exit (default/legacy). 'balancer' = one
@@ -77,7 +92,7 @@ export const CascadePositionSchema = z.object({
   nodeIds: z.array(z.uuid()).min(1),
   position: z.number().int().min(0).max(MAX_CASCADE_HOPS - 1),
   entryProtocol: CascadeProtocol.optional(),
-  linkProtocol: CascadeProtocol.optional(),
+  linkProtocol: LinkCellValue.optional(),
 });
 
 export const CascadeDirectionSchema = z.object({

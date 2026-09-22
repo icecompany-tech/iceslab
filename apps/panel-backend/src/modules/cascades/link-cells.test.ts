@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   LINK_CELLS,
   LINK_CELL_ENGINES,
@@ -7,6 +7,8 @@ import {
   TRANSPORTS,
   ENGINE_NAMES,
 } from '@iceslab/shared';
+import { linkCellFor } from './cascade.config.js';
+import { getLogger } from '../../lib/infra/logger.js';
 
 /**
  * The two dictionaries that meet in one stored column.
@@ -89,6 +91,36 @@ describe('the link cells', () => {
     expect(PROTOCOL_NAMES as readonly string[]).not.toContain('hy2');
     // And the cell nobody can name as a protocol.
     expect(PROTOCOL_NAMES as readonly string[]).not.toContain('vless');
+  });
+
+  it('reads a stored value as a cell, and refuses a protocol that never was one', () => {
+    // The column holds cells since the migration. A protocol name that is not
+    // also a cell described a leg that never existed, so it answers null and
+    // the save refuses it.
+    expect(linkCellFor('vless')).toBe('vless');
+    expect(linkCellFor('shadowsocks')).toBe('shadowsocks');
+    expect(linkCellFor(null)).toBe('vless'); // "the entry's own cell"
+    for (const protocolOnly of ['hysteria', 'mieru', 'naive', 'amneziawg', 'anytls']) {
+      expect(linkCellFor(protocolOnly), `${protocolOnly} is not a cell`).toBeNull();
+    }
+    // ⚠ `tuic` above all: it is a legal PROTOCOL and, from phase 5, a legal
+    // CELL. A row holding it predates the cell, so it described nothing, and
+    // reading it as a working tuic leg is exactly the confusion the migration
+    // removed.
+    expect(linkCellFor('tuic')).toBeNull();
+  });
+
+  it('still takes the old engine name for one release, and says so', () => {
+    const warnings: string[] = [];
+    vi.spyOn(getLogger(), 'warn').mockImplementation((msg: unknown) => {
+      warnings.push(String(msg));
+    });
+    expect(linkCellFor('xray')).toBe('vless');
+    // Translated AND logged: a shim nobody can see is a shim nobody removes.
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('xray');
+    expect(warnings[0]).toContain('one release');
+    vi.restoreAllMocks();
   });
 
   it('gives the two new cells UDP and the two old ones TCP', () => {

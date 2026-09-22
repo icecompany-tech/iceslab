@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { generateRealityKeyPair } from '../../lib/auth/credentials.js';
+import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
 
 /**
@@ -101,22 +102,42 @@ export type LinkCred = VlessLinkCred | Ss2022LinkCred;
  * Splitting this dictionary from the engine enum is a migration, and it is
  * deliberately not this change.
  */
-const LINK_CELLS: Record<string, LinkProtocol> = {
-  // What the field actually stores today. The engine name, meaning the vless
-  // cell, which is exactly what the code has always built for it.
-  xray: 'vless',
-  // The cell named directly.
-  vless: 'vless',
-  // The only other realised cell.
-  shadowsocks: 'shadowsocks',
-};
+/**
+ * The compatibility shim, and the only entry left in it.
+ *
+ * Since the migration of 2026-09-22 the column holds CELLS. `xray` is not a
+ * cell, it is the engine name the field used to carry, and old API clients
+ * still send it: the panel's own screens were updated with the migration, a
+ * script somebody wrote in August was not.
+ *
+ * It is accepted for ONE release, translated, and logged. Then it goes, and
+ * `xray` in this field becomes what it has always been in truth: a value from
+ * the other dictionary.
+ */
+const LEGACY_CELL_ALIASES: Record<string, LinkProtocol> = { xray: 'vless' };
 
-/** The cell this stored value names, or null when nothing realises it. Nothing
- *  named is NOT a wrong name: a balancer exit carries no link protocol, and
- *  vless is the cell every cascade has used by default since C3. */
+/**
+ * The cell this stored value names, or null when nothing realises it.
+ *
+ * Nothing named is NOT a wrong name: a balancer exit carries no link protocol,
+ * and vless is the cell every cascade has used by default since C3.
+ *
+ * ⚠ Only CELLS are recognised here now. A protocol name that is not also a cell
+ * (`hysteria`, `mieru`, and as of phase 5 the dangerous one, `tuic`) answers
+ * null and is refused at save, because it never described a leg that existed.
+ */
 export function linkCellFor(p: string | null | undefined): LinkProtocol | null {
   if (p === null || p === undefined || p === '') return 'vless';
-  return LINK_CELLS[p] ?? null;
+  if (p === 'vless' || p === 'shadowsocks') return p;
+  const legacy = LEGACY_CELL_ALIASES[p];
+  if (legacy) {
+    getLogger().warn(
+      `[cascade] link cell ${JSON.stringify(p)} is the old engine name for the ${legacy} cell; ` +
+        `it is accepted for one release and then refused. Send ${JSON.stringify(legacy)}.`,
+    );
+    return legacy;
+  }
+  return null;
 }
 
 /** The cell for a value the validators have already accepted. Throwing here is
