@@ -1,5 +1,9 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
+import {
+  CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS,
+  DEFAULT_LINK_CONGESTION,
+  LINK_CONGESTIONS,
+} from '@iceslab/shared';
 import type { EngineName } from '@iceslab/shared';
 import {
   CHAIN_ENTRY_PROTOCOLS,
@@ -288,16 +292,18 @@ describe('legParamFacts', () => {
     expect(legParamFacts('hy2')).toEqual({ kind: 'minted', options: [], fallback: null });
   });
 
-  it('2. tuic: три значения движка и дефолт bbr', () => {
+  it('2. tuic: список и дефолт КОНТРАКТА, а не переписанные здесь', () => {
+    // Сверяемся с контрактом, а не с тройкой значений: своя тройка в тесте это
+    // пятая копия словаря, и расходиться она будет молча, как расходились
+    // четыре предыдущие. Состав списка сторожит бэкенд, спрашивая движок.
     expect(legParamFacts('tuic')).toEqual({
       kind: 'congestion',
-      options: ['bbr', 'cubic', 'new_reno'],
-      fallback: 'bbr',
+      options: [...LINK_CONGESTIONS],
+      fallback: DEFAULT_LINK_CONGESTION,
     });
   });
 
-  it('3. new_reno пишется с подчёркиванием: строка уходит на сервер как есть', () => {
-    expect(legParamFacts('tuic').options).toContain('new_reno');
+  it('3. brutal движок на tuic не знает, и предлагать его нельзя', () => {
     expect(legParamFacts('tuic').options).not.toContain('brutal');
   });
 

@@ -103,12 +103,12 @@ export const cascades = {
       'An entry over {{protocol}} does not reach the chain yet: a cascade only carries xray traffic. Phase 6 brings hy2, phase 7 AWG.',
     legPort: 'port {{port}}',
     legUnknown: 'no link cell picked',
-    legToDirections: 'the leg to the exit is set on the direction, from phase 5',
-    // The direction's own leg. "Not picked yet" and "cannot be picked" are
+    legToDirections: 'the leg to the exit is set on the direction',
+    // The direction's own leg. "Not picked" and "the server said nothing" are
     // different things, and they get different words.
     legFromEntry: "the entry's cell",
     legPortServer: 'the server assigns the port',
-    legPhase5: 'the leg fields arrive with phase 5',
+    legNotReported: 'the server did not report this leg',
     legCellEngines: '{{cell}} · {{engines}}',
     // Nothing to set on hy2: the salt is minted by the panel, and its rate
     // control is a bandwidth pair nobody has decided how to ask for yet.

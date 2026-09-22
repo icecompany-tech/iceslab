@@ -1,3 +1,4 @@
+import { DEFAULT_LINK_CONGESTION, LINK_CONGESTIONS, type LinkCongestion } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 export type CascadeProtocol =
@@ -17,19 +18,23 @@ export type CascadeMode = 'chain' | 'balancer';
 export type LinkCell = 'vless' | 'shadowsocks' | 'hy2' | 'tuic';
 
 /**
- * Управление перегрузкой у tuic-ноги.
+ * Управление перегрузкой у tuic-ноги: список и дефолт КОНТРАКТА, не свои.
  *
- * ⚠ Список ДВИЖКА, спрошенный у него, а не вычитанный со страницы:
- * sing-box 1.13.14 отвечает «unknown congestion control algorithm: brutal» на
- * tuic и принимает ровно эти три. Проверено бэкендом 2026-09-22, см.
- * `cascade.config.ts`, `LinkCongestion`.
+ * Список спрошен у движка, а не вычитан со страницы: sing-box 1.13.14 отвечает
+ * «unknown congestion control algorithm: brutal» и принимает ровно эти три.
+ * Своей копии здесь больше нет: копия расходится молча, потому что СОСТАВ
+ * перечисления TypeScript не сторожит по построению. Дефолт приехал оттуда же,
+ * и по той же причине: экран печатает им обещание СЕРВЕРА, а обещание,
+ * написанное дважды, ещё неделю говорит `bbr` после того, как сервер начал
+ * выдавать другое.
+ *
+ * Имён у этих значений два, и это два СЛОЯ, а не два имени одного:
+ * `linkParams.congestion` это наш API оператору, `congestionControl` у
+ * пользовательского tuic-инбаунда это зеркало ключа движка. Экран знает только
+ * первое. См. шапку `LINK_CONGESTIONS` в `packages/shared/src/transport.ts`.
  */
-export type LinkCongestion = 'bbr' | 'cubic' | 'new_reno';
-
-export const LINK_CONGESTIONS: LinkCongestion[] = ['bbr', 'cubic', 'new_reno'];
-
-/** Что получает нога, если оператор ничего не выбрал. */
-export const DEFAULT_LINK_CONGESTION: LinkCongestion = 'bbr';
+export { DEFAULT_LINK_CONGESTION, LINK_CONGESTIONS };
+export type { LinkCongestion };
 
 /**
  * Настройки ноги сверх выбора ячейки.

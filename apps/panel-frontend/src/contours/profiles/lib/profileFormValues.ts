@@ -1,3 +1,4 @@
+import type { LinkCongestion } from '@iceslab/shared';
 import type { ProtocolName } from '@/lib/domain/protocols';
 
 export type Mode = 'create' | 'edit';
@@ -93,9 +94,10 @@ export interface FormValues {
   // Mieru
   mieruMtu: number | '';
 
-  // TUIC (sing-box)
+  // TUIC (sing-box). Список значений это контракт, а не литерал здесь: тот же
+  // движок отвечает и ноге каскада, и этому инбаунду.
   tuicServerName: string;
-  tuicCongestion: 'bbr' | 'cubic' | 'new_reno';
+  tuicCongestion: LinkCongestion;
 
   // AnyTLS (sing-box)
   anytlsServerName: string;

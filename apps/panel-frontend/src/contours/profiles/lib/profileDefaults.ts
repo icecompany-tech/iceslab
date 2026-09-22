@@ -1,3 +1,4 @@
+import { DEFAULT_LINK_CONGESTION } from '@iceslab/shared';
 import type { Profile } from '@/lib/domain/profiles';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
@@ -77,7 +78,10 @@ export function defaults(profile: Profile | null): FormValues {
     mieruMtu: 1400,
 
     tuicServerName: 'www.bing.com',
-    tuicCongestion: 'bbr',
+    // Дефолт контракта, не свой: он же стоит у ноги каскада, и менять его надо
+    // в одном месте, иначе форма неделю предлагает то, чего сервер уже не
+    // выдаёт.
+    tuicCongestion: DEFAULT_LINK_CONGESTION,
 
     anytlsServerName: 'www.bing.com',
 
