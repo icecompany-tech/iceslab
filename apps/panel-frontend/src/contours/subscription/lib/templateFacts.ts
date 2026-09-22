@@ -98,6 +98,40 @@ export interface DryRunFacts {
   needsConfirm: boolean;
 }
 
+/**
+ * Что можно делать в редакторе шаблона прямо сейчас.
+ *
+ * Тип фиксируется при создании и дальше не меняется: он решает каркас, слот
+ * вставки и формат ответа, то есть смена типа это не правка шаблона, а другой
+ * шаблон. Имя `Default` не редактируется вовсе, а сохранять пустое тело
+ * бессмысленно: подписка отдаст пустой конфиг всем, кто попал на это правило.
+ */
+export interface TemplateEditorFacts {
+  /** Новый шаблон: тип ещё выбирается. */
+  isNew: boolean;
+  canPickType: boolean;
+  canRename: boolean;
+  /** Кнопка сохранения живая. */
+  canSave: boolean;
+  /** Почему сохранение недоступно; `null`, когда доступно. */
+  blocker: 'name' | 'body' | 'clean' | null;
+}
+
+export function templateEditorFacts(input: {
+  isNew: boolean;
+  isDefault: boolean;
+  name: string;
+  body: string;
+  dirty: boolean;
+}): TemplateEditorFacts {
+  const base = { isNew: input.isNew, canPickType: input.isNew, canRename: input.isNew || !input.isDefault };
+  // Порядок важен: человеку называют ПЕРВОЕ недостающее, а не все сразу, иначе
+  // подсказка читается как список претензий, а не как следующий шаг.
+  const blocker: TemplateEditorFacts['blocker'] =
+    input.name.trim() === '' ? 'name' : input.body.trim() === '' ? 'body' : !input.dirty ? 'clean' : null;
+  return { ...base, canSave: blocker === null, blocker };
+}
+
 export function dryRunFacts(run: TemplateDryRun | null | undefined): DryRunFacts | null {
   if (!run) return null;
   const warnings = run.warnings ?? [];

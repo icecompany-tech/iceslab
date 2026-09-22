@@ -177,6 +177,29 @@ export const subscription = {
     soonTitle: 'Arrives with phase 11',
     soonBody:
       'A template is a whole client config that the panel drops your servers into: your groups, your rules, your profile name. The screen is here, the template store on the server is not, so an empty list is not because you created nothing.',
+    // The editor for one template.
+    newTitle: 'New template',
+    gone: 'This template no longer exists.',
+    saving: 'Saving...',
+    type: 'Type',
+    typeHintNew: 'Decides the frame, the insertion slot and the format served. Fixed once created.',
+    typeHintFixed: 'The type was set at creation: a body does not carry from one type to another.',
+    name: 'Name',
+    nameHint: 'This is how a delivery rule picks the template.',
+    nameDefaultLocked: 'The name Default is reserved: it is how the template is found and restored.',
+    nameTaken: 'A template of this type already carries that name.',
+    body: 'Body',
+    bodyHint:
+      'A whole client config. The panel fills the slots of its type with servers; everything else stays as written.',
+    invalid: 'The server refused the template:',
+    invalidAtLine: 'Line {{line}}:',
+    invalidNoMessage: 'no explanation given',
+    // The first thing missing, not a list of complaints.
+    blocker: {
+      name: 'name it',
+      body: 'the body is empty',
+      clean: 'nothing changed',
+    },
     emptyTitle: 'No templates yet',
     emptyBody:
       'Without a template the subscription serves the default config. Create one to decide everything else for the client: groups, rules, profile name. A template from elsewhere can be imported as a file, and its keys are rewritten to ours.',

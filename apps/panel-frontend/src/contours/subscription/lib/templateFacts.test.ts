@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dryRunFacts,
   templateActions,
+  templateEditorFacts,
   templatesScreenFacts,
 } from '@/contours/subscription/lib/templateFacts';
 import type { SubscriptionTemplate } from '@/lib/domain/subscriptionTemplates';
@@ -81,6 +82,42 @@ describe('templateActions', () => {
     expect(templateActions({ isDefault: false })).toEqual({
       canRename: true, canDelete: true, canRestore: false, protectedReason: null,
     });
+  });
+});
+
+describe('templateEditorFacts', () => {
+  const base = { isNew: false, isDefault: false, name: 'ru-split', body: 'proxies: []', dirty: true };
+
+  it('1. новый шаблон: тип выбирается, имя своё', () => {
+    const f = templateEditorFacts({ ...base, isNew: true });
+    expect(f.canPickType).toBe(true);
+    expect(f.canRename).toBe(true);
+  });
+
+  it('2. существующий: тип уже не меняется, это был бы другой шаблон', () => {
+    expect(templateEditorFacts(base).canPickType).toBe(false);
+  });
+
+  it('3. Default: имя не редактируется, оно зарезервировано контрактом', () => {
+    expect(templateEditorFacts({ ...base, isDefault: true }).canRename).toBe(false);
+    // Но тело у Default править можно, и сохранять тоже.
+    expect(templateEditorFacts({ ...base, isDefault: true }).canSave).toBe(true);
+  });
+
+  it('4. называется ПЕРВОЕ недостающее, а не все претензии сразу', () => {
+    expect(templateEditorFacts({ ...base, name: '  ', body: '' }).blocker).toBe('name');
+    expect(templateEditorFacts({ ...base, body: '   ' }).blocker).toBe('body');
+    expect(templateEditorFacts({ ...base, dirty: false }).blocker).toBe('clean');
+  });
+
+  it('5. пустое тело не сохраняется: это пустая подписка всем на этом правиле', () => {
+    expect(templateEditorFacts({ ...base, body: '' }).canSave).toBe(false);
+  });
+
+  it('6. всё на месте и есть правки: сохранять можно', () => {
+    const f = templateEditorFacts(base);
+    expect(f.canSave).toBe(true);
+    expect(f.blocker).toBeNull();
   });
 });
 

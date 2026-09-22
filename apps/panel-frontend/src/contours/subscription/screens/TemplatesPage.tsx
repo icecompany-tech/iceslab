@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -44,6 +45,7 @@ const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 export function TemplatesPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   usePageMeta([]);
 
   const query = useQuery({
@@ -80,7 +82,12 @@ export function TemplatesPage() {
         <Box style={{ flex: 1 }} />
         {/* Кнопки живут и на заглушке, но выключены: прятать их значило бы
             скрыть, что экран вообще про это. */}
-        <PrimaryButton disabled={facts.state === 'unavailable'}>{t('templates.create')}</PrimaryButton>
+        <PrimaryButton
+          disabled={facts.state === 'unavailable'}
+          onClick={() => navigate('/subscription/templates/new')}
+        >
+          {t('templates.create')}
+        </PrimaryButton>
       </Box>
 
       {facts.state === 'unavailable' && <Unavailable />}
@@ -171,10 +178,13 @@ function TypeGroup({ type, templates }: { type: TemplateType; templates: Subscri
 
 function TemplateRow({ template }: { template: SubscriptionTemplate }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const actions = templateActions(template);
   return (
     <Box
+      onClick={() => navigate(`/subscription/templates/${template.id}`)}
       style={{
+        cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
         gap: 12,
