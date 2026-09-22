@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dryRunFacts,
+  dryRunForBody,
   templateActions,
   templateEditorFacts,
   templatesScreenFacts,
@@ -118,6 +119,29 @@ describe('templateEditorFacts', () => {
     const f = templateEditorFacts(base);
     expect(f.canSave).toBe(true);
     expect(f.blocker).toBeNull();
+  });
+});
+
+describe('dryRunForBody', () => {
+  const run = { ok: true, rendered: 'x', check: { ok: true }, warnings: [] };
+
+  it('1. прогона не было: показывать нечего', () => {
+    expect(dryRunForBody(null, null, 'body')).toBeNull();
+    expect(dryRunForBody(run, null, 'body')).toBeNull();
+  });
+
+  it('2. тело то же: прогон показывается', () => {
+    expect(dryRunForBody(run, 'body', 'body')).toBe(run);
+  });
+
+  it('3. тело ПРАВИЛИ: прогон исчезает, а не помечается устаревшим', () => {
+    // Зелёная плашка над изменённым конфигом читается как зелёная, сколько её
+    // ни помечай. Единственный честный вариант это не показывать её вовсе.
+    expect(dryRunForBody(run, 'body', 'body + правка')).toBeNull();
+  });
+
+  it('4. вернули тело обратно посимвольно: прогон снова годится', () => {
+    expect(dryRunForBody(run, 'proxies: []', 'proxies: []')).toBe(run);
   });
 });
 

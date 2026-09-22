@@ -132,6 +132,24 @@ export function templateEditorFacts(input: {
   return { ...base, canSave: blocker === null, blocker };
 }
 
+/**
+ * Годится ли показанный прогон для ТЕКУЩЕГО тела.
+ *
+ * Прогон делается по телу, каким оно было в момент нажатия. Стоит оператору
+ * поправить строку, и зелёная плашка над изменённым конфигом начинает врать:
+ * она говорит про то, чего на экране уже нет. Поэтому прогон, снятый с другого
+ * тела, не показывается вовсе, а не помечается «устарел»: устаревшую зелёную
+ * плашку читают как зелёную.
+ */
+export function dryRunForBody(
+  run: TemplateDryRun | null | undefined,
+  ranForBody: string | null,
+  body: string,
+): TemplateDryRun | null {
+  if (!run || ranForBody === null) return null;
+  return ranForBody === body ? run : null;
+}
+
 export function dryRunFacts(run: TemplateDryRun | null | undefined): DryRunFacts | null {
   if (!run) return null;
   const warnings = run.warnings ?? [];

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Box, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/lib/net/client';
@@ -10,17 +11,23 @@ import { PrimaryButton } from '@/ui/PrimaryButton';
 import {
   TEMPLATE_TYPES,
   createTemplate,
+  dryRunTemplate,
   isNotImplemented,
   listTemplates,
   templateBodyLanguage,
   templateFormat,
   templateRefusal,
   updateTemplate,
+  type TemplateDryRun,
   type TemplateType,
 } from '@/lib/domain/subscriptionTemplates';
-import { templateEditorFacts } from '@/contours/subscription/lib/templateFacts';
+import {
+  dryRunFacts,
+  dryRunForBody,
+  templateEditorFacts,
+} from '@/contours/subscription/lib/templateFacts';
 import { CodeArea } from '@/contours/subscription/components/CodeArea';
-import { CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, RED, SNOW } from '@/contours/subscription/lib/colors';
+import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW } from '@/contours/subscription/lib/colors';
 
 /**
  * Один шаблон: тип, имя и тело.
@@ -85,6 +92,27 @@ export function TemplateEditPage() {
     dirty,
   });
 
+  /** Тело, по которому сделан показанный прогон. `null` = прогона не было. */
+  const [ranForBody, setRanForBody] = useState<string | null>(null);
+  const [run, setRun] = useState<TemplateDryRun | null>(null);
+  const dry = dryRunFacts(dryRunForBody(run, ranForBody, body));
+
+  const dryRun = useMutation({
+    mutationFn: () => dryRunTemplate({ type, body }),
+    onSuccess: (result) => {
+      setRun(result);
+      setRanForBody(body);
+    },
+    onError: (err) => {
+      // 404 это «фаза 11 не доехала», и звать чинить нечего: говорим словами.
+      notifications.show({
+        color: isNotImplemented(err) ? 'yellow' : 'red',
+        title: t('templates.dryRunFailed'),
+        message: isNotImplemented(err) ? t('templates.dryRunUnavailable') : apiErrorMessage(err),
+      });
+    },
+  });
+
   const save = useMutation({
     mutationFn: () =>
       isNew
@@ -114,6 +142,38 @@ export function TemplateEditPage() {
       notifications.show({ color: 'red', title: t('common.saveError'), message: apiErrorMessage(err) });
     },
   });
+
+  /**
+   * Сохранение с оглядкой на прогон.
+   *
+   * Отказ ядра сохранять не даёт вовсе (кнопка выключена). Жалобы панели
+   * сохранять не запрещают, но спрашивают: шаблон без слота это пустая
+   * подписка у всех, кто попал на это правило, и узнать об этом от клиентов
+   * дороже, чем ответить на один вопрос.
+   */
+  function attemptSave() {
+    if (dry?.needsConfirm) {
+      modals.openConfirmModal({
+        title: t('templates.confirmTitle'),
+        children: (
+          <Stack gap={6}>
+            {dry.warnings.map((w) => (
+              <Text key={w} style={{ fontFamily: DISPLAY, fontSize: 13, color: SNOW }}>
+                {w}
+              </Text>
+            ))}
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: MIST }}>
+              {t('templates.confirmBody')}
+            </Text>
+          </Stack>
+        ),
+        labels: { confirm: t('common.save'), cancel: t('common.cancel') },
+        onConfirm: () => save.mutate(),
+      });
+      return;
+    }
+    save.mutate();
+  }
 
   if (!isNew && query.isSuccess && !template) {
     return <Text style={{ fontFamily: DISPLAY, fontSize: 13, color: MIST }}>{t('templates.gone')}</Text>;
@@ -145,7 +205,13 @@ export function TemplateEditPage() {
             {t(`templates.blocker.${facts.blocker}`)}
           </Text>
         )}
-        <PrimaryButton disabled={!facts.canSave || save.isPending} onClick={() => save.mutate()}>
+        <BarButton disabled={body.trim() === '' || dryRun.isPending} onClick={() => dryRun.mutate()}>
+          {dryRun.isPending ? t('templates.dryRunning') : t('templates.dryRun')}
+        </BarButton>
+        <PrimaryButton
+          disabled={!facts.canSave || save.isPending || dry?.canSave === false}
+          onClick={attemptSave}
+        >
           {save.isPending ? t('templates.saving') : t('common.save')}
         </PrimaryButton>
       </Box>
@@ -222,7 +288,131 @@ export function TemplateEditPage() {
           {t('templates.bodyHint')}
         </Text>
       </Stack>
+
+      {/* Порядок сверху вниз: ответ ЯДРА, жалобы ПАНЕЛИ, потом то, что вышло.
+          Первое решает, можно ли сохранять, второе спрашивает, третье это
+          просто результат, и читать его без первых двух незачем. */}
+      {dry && (
+        <Stack gap={10}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 14px',
+              borderRadius: 10,
+              backgroundColor: dry.check.ok ? `${MOSS}0F` : `${RED}0F`,
+              border: `1px solid ${dry.check.ok ? MOSS : RED}33`,
+            }}
+          >
+            <Box
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                backgroundColor: dry.check.ok ? MOSS : RED,
+                flexShrink: 0,
+              }}
+            />
+            <Text
+              style={{
+                fontFamily: MONO,
+                fontSize: 11,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: dry.check.ok ? MOSS : RED,
+              }}
+            >
+              {dry.check.ok ? t('templates.checkOk') : t('templates.checkFailed')}
+            </Text>
+            {/* Слова ядра, не наши: они и есть то, ради чего прогон делается. */}
+            {dry.check.message && (
+              <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: SNOW, flex: 1 }}>
+                {dry.check.message}
+              </Text>
+            )}
+          </Box>
+
+          {dry.warnings.length > 0 && (
+            <Stack
+              gap={5}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 10,
+                backgroundColor: `${AMBER}0D`,
+                border: `1px solid ${AMBER}33`,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: AMBER,
+                }}
+              >
+                {t('templates.warnings')}
+              </Text>
+              {dry.warnings.map((w) => (
+                <Text key={w} style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: SNOW }}>
+                  {w}
+                </Text>
+              ))}
+              <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: MIST }}>
+                {t('templates.warningsNote')}
+              </Text>
+            </Stack>
+          )}
+
+          <Stack gap={6}>
+            <Label>{t('templates.rendered')}</Label>
+            {/* Тот же инструмент, что слева: те же номера строк, тот же шрифт,
+                та же прокрутка. Разный вид у исходника и результата заставлял бы
+                сличать их глазами дважды. */}
+            <CodeArea value={dry.rendered} onChange={() => {}} readOnly minRows={12} />
+            <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: DIM }}>
+              {t('templates.renderedHint')}
+            </Text>
+          </Stack>
+        </Stack>
+      )}
     </Stack>
+  );
+}
+
+/** Тихая кнопка рядом с основной: своя, а не из соседнего контура. */
+function BarButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <UnstyledButton
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        height: 36,
+        paddingInline: 16,
+        borderRadius: 8,
+        border: `1px solid ${HAIRLINE}`,
+        backgroundColor: CARD,
+        color: disabled ? DIM : SNOW,
+        fontFamily: MONO,
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        cursor: disabled ? 'default' : 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </UnstyledButton>
   );
 }
 

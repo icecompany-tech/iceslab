@@ -191,6 +191,21 @@ export const subscription = {
     body: 'Body',
     bodyHint:
       'A whole client config. The panel fills the slots of its type with servers; everything else stays as written.',
+    // The dry run: the template is built over three synthetic nodes and the
+    // core says whether such a config would load at all.
+    dryRun: 'Dry run',
+    dryRunning: 'Building...',
+    dryRunFailed: 'The dry run did not happen',
+    dryRunUnavailable: 'The dry run arrives with phase 11, together with the template store.',
+    checkOk: 'the core accepted the config',
+    checkFailed: 'the core refused the config',
+    warnings: 'The panel noticed',
+    warningsNote:
+      'This is not a refusal from the core: such a config loads. But if a slot stayed empty, everyone caught by this rule gets an empty subscription.',
+    rendered: 'What the client gets',
+    renderedHint: 'Built over three synthetic nodes. Your servers take their place.',
+    confirmTitle: 'Save with these notes?',
+    confirmBody: 'The core accepts the config. The notes above stay, and they are visible only here.',
     invalid: 'The server refused the template:',
     invalidAtLine: 'Line {{line}}:',
     invalidNoMessage: 'no explanation given',
