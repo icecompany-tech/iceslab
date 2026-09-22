@@ -17,11 +17,19 @@ version: 2
 # routine drift, and drift does not need a major version bump: those are a
 # deliberate decision (a typescript or i18n major changes how we write code),
 # taken when we choose to, not when a bot notices.
+#
+# ⚠ EVERY ecosystem targets `develop`, and leaving it out is not a small
+# difference: dependabot opens against the default branch, which is `main`, the
+# branch installers pull from. A dependency bump would then arrive straight at
+# the release branch, be merged there on green, and sit ahead of develop until
+# somebody noticed the two had diverged. Work lands on develop here and reaches
+# main as a release, bots included.
 updates:
   # The workflow actions themselves. Cheapest to keep current and the most
   # likely to break loudly, since a removed runtime fails every job at once.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: monthly
     groups:
@@ -35,6 +43,7 @@ updates:
   # to merge on green CI. Majors are ignored on purpose, see the header.
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: monthly
     groups:
@@ -51,6 +60,7 @@ updates:
   # quiet - which is exactly why it would otherwise be forgotten.
   - package-ecosystem: gomod
     directory: /apps/node
+    target-branch: develop
     schedule:
       interval: monthly
     groups:
