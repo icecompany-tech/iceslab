@@ -30,6 +30,20 @@ export default defineConfig({
     // Integration tests share a single test Postgres, serialize across files
     // to avoid collisions on cleanDatabase() / unique constraints.
     fileParallelism: false,
+    // ⚠ FORKS, NOT THREADS, and this is why the full suite finishes.
+    //
+    // Under the default `threads` pool the run on Windows printed its result
+    // and never exited: two full runs sat past twenty-five minutes with no
+    // report, while every module on its own finished in seconds (measured
+    // 2026-09-22, 23 directories, 1-103s each). Under `forks` the same 129
+    // files complete in 696s and the process exits 0.
+    //
+    // The open handles were never fixed: ioredis, the BullMQ queues and Prisma
+    // are still held past the last test. Changing the pool makes that stop
+    // mattering, because a forked child dies with its handles, and a worker
+    // thread waits for them. If the handles are ever closed properly this line
+    // can go; until then removing it brings the hang back.
+    pool: 'forks',
     // First beforeEach in each file pays the buildApp() cold-start (~5-12s on
     // WSL: dotenv + Prisma client warmup + Fastify plugins). 30s gives slack.
     hookTimeout: 30_000,
