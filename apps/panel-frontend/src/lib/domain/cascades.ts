@@ -17,15 +17,35 @@ export type CascadeMode = 'chain' | 'balancer';
 export type LinkCell = 'vless' | 'shadowsocks' | 'hy2' | 'tuic';
 
 /**
+ * Управление перегрузкой у tuic-ноги.
+ *
+ * ⚠ Список ДВИЖКА, спрошенный у него, а не вычитанный со страницы:
+ * sing-box 1.13.14 отвечает «unknown congestion control algorithm: brutal» на
+ * tuic и принимает ровно эти три. Проверено бэкендом 2026-09-22, см.
+ * `cascade.config.ts`, `LinkCongestion`.
+ */
+export type LinkCongestion = 'bbr' | 'cubic' | 'new_reno';
+
+export const LINK_CONGESTIONS: LinkCongestion[] = ['bbr', 'cubic', 'new_reno'];
+
+/** Что получает нога, если оператор ничего не выбрал. */
+export const DEFAULT_LINK_CONGESTION: LinkCongestion = 'bbr';
+
+/**
  * Настройки ноги сверх выбора ячейки.
  *
- * Каждое поле принадлежит своей ячейке, и лишнее поле у чужой ячейки это не
- * «пустая настройка», а ложь про то, что она работает: `obfsPassword` есть
- * только у hy2 (Salamander), `congestion` у hy2 и tuic.
+ * ⚠ `congestion` есть ТОЛЬКО у tuic. sing-box 1.13.14 отвергает
+ * `congestion_control` на hysteria2 при разборе конфига, то есть поле там не
+ * игнорируется, а роняет ногу; скорость у hy2 это Brutal, и он задаётся парой
+ * чисел про полосу, а не именем алгоритма. Показывать оператору селектор,
+ * который положит конфиг на ноде, пока панель пишет «сохранено», нельзя.
+ *
+ * `obfsPassword` здесь НЕТ намеренно: соль Salamander рождает панель, как и
+ * остальные креды линка. Оператор, печатающий её руками, напечатает слабую, и
+ * согласовывать её ему не с чем.
  */
 export interface LinkParams {
-  obfsPassword?: string;
-  congestion?: 'bbr' | 'brutal' | 'cubic';
+  congestion?: LinkCongestion;
 }
 
 export interface CascadeHop {

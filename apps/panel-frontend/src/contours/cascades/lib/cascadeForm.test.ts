@@ -285,11 +285,11 @@ describe('toDirectionInputs и нога', () => {
 
   it('2. ногу правили: уходят ячейка и параметры, порт НИКОГДА', () => {
     const [out] = toDirectionInputs([
-      { ...base, linkProtocol: 'hy2', linkParams: { obfsPassword: 'p' }, linkPort: 24001, linkTouched: true },
+      { ...base, linkProtocol: 'tuic', linkParams: { congestion: 'cubic' }, linkPort: 24001, linkTouched: true },
     ]);
     expect(out).toEqual({
       id: 'd1', countryCode: 'DE', nodeIds: ['n1'],
-      linkProtocol: 'hy2', linkParams: { obfsPassword: 'p' },
+      linkProtocol: 'tuic', linkParams: { congestion: 'cubic' },
     });
     expect('linkPort' in out!).toBe(false);
   });

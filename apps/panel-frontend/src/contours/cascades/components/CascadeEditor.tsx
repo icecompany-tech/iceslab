@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Select, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { Box, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
 import type { CascadeProtocol } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
 import { COUNTRIES, countryFlag } from '@/lib/domain/countries';
@@ -32,7 +32,13 @@ import {
   type HopRole,
   type LegFacts,
 } from '@/contours/cascades/lib/cascadeForm';
-import type { LinkCell, LinkParams } from '@/lib/domain/cascades';
+import {
+  DEFAULT_LINK_CONGESTION,
+  LINK_CONGESTIONS,
+  type LinkCell,
+  type LinkCongestion,
+  type LinkParams,
+} from '@/lib/domain/cascades';
 import {
   engineListWords,
   isRealisedLinkCell,
@@ -707,31 +713,30 @@ export function DirectionLegRow({
         </Box>
       </Box>
 
-      {/* Параметры принадлежат ячейке: obfs только у hy2, congestion у hy2 и
-          tuic. Поле чужой ячейки это не «пустая настройка», а обещание, что
-          она работает. */}
-      {available && (cell === 'hy2' || cell === 'tuic') && (
+      {/* Параметры принадлежат ячейке, и «пустых настроек» тут нет.
+          У hy2 показывать нечего: соль Salamander рождает панель, а скорость
+          там задаётся парой чисел про полосу, и такого решения ещё нет.
+          У tuic ровно один выбор, и список у него ДВИЖКА: sing-box отвергает
+          `brutal` на tuic, так что предложить его значило бы положить конфиг
+          на ноде, пока панель пишет «сохранено». */}
+      {available && cell === 'hy2' && (
+        <Box style={{ paddingLeft: 24 }}>
+          <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
+            {t('cascadeCreate.legObfsMinted')}
+          </Text>
+        </Box>
+      )}
+      {available && cell === 'tuic' && (
         <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 10, paddingLeft: 24 }}>
-          {cell === 'hy2' && (
-            <Stack gap={4} style={{ width: 240 }}>
-              <FieldLabel>{t('cascadeCreate.legObfs')}</FieldLabel>
-              <TextInput
-                size="xs"
-                value={params?.obfsPassword ?? ''}
-                placeholder={t('cascadeCreate.legObfsPlaceholder')}
-                onChange={(e) => onParams({ obfsPassword: e.currentTarget.value })}
-              />
-            </Stack>
-          )}
           <Stack gap={4} style={{ width: 180 }}>
             <FieldLabel>{t('cascadeCreate.legCongestion')}</FieldLabel>
             <Select
               size="xs"
-              data={['bbr', 'brutal', 'cubic']}
+              data={[...LINK_CONGESTIONS]}
               value={params?.congestion ?? null}
-              placeholder={t('cascadeCreate.legCongestionDefault')}
+              placeholder={t('cascadeCreate.legCongestionDefault', { value: DEFAULT_LINK_CONGESTION })}
               allowDeselect={false}
-              onChange={(v) => v && onParams({ congestion: v as NonNullable<LinkParams['congestion']> })}
+              onChange={(v) => v && onParams({ congestion: v as LinkCongestion })}
             />
           </Stack>
         </Box>

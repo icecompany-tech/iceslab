@@ -110,10 +110,11 @@ export const cascades = {
     legPortServer: 'the server assigns the port',
     legPhase5: 'the leg fields arrive with phase 5',
     legCellEngines: '{{cell}} · {{engines}}',
-    legObfs: 'obfs password',
-    legObfsPlaceholder: 'Salamander, empty = no obfuscation',
+    // Nothing to set on hy2: the salt is minted by the panel, and its rate
+    // control is a bandwidth pair nobody has decided how to ask for yet.
+    legObfsMinted: 'The Salamander salt is minted by the panel, like every other link credential.',
     legCongestion: 'congestion control',
-    legCongestionDefault: 'default',
+    legCongestionDefault: 'default {{value}}',
     legNodeGap: '{{name}} does not carry {{cell}}: it reported {{engines}}.',
     legNodeNoEngines: 'an empty core list',
     needEntry: 'Pick at least one entry node to enable Create.',

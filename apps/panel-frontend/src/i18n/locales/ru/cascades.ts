@@ -111,10 +111,11 @@ export const cascades = {
     legPortServer: 'порт назначит сервер',
     legPhase5: 'поля ноги появятся с фазой 5',
     legCellEngines: '{{cell}} · {{engines}}',
-    legObfs: 'obfs-пароль',
-    legObfsPlaceholder: 'Salamander, пусто = без обфускации',
+    // У hy2 настраивать нечем: соль рождает панель, а скорость там задаётся
+    // парой чисел про полосу, и решения по ней ещё нет.
+    legObfsMinted: 'Соль обфускации Salamander панель генерирует сама, как и остальные креды линка.',
     legCongestion: 'контроль перегрузки',
-    legCongestionDefault: 'по умолчанию',
+    legCongestionDefault: 'по умолчанию {{value}}',
     legNodeGap: '{{name}} не несёт {{cell}}: сообщила {{engines}}.',
     legNodeNoEngines: 'пустой список ядер',
     needEntry: 'Выбери хотя бы одну входную ноду, чтобы включить «Создать».',
