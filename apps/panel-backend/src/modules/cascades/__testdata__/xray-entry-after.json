@@ -56,7 +56,7 @@
       "type": "field",
       "vlessRoute": "257,258",
       "domain": [
-        "geosite:category-ads-all"
+        "tracker.example"
       ],
       "outboundTag": "blocked"
     },
@@ -64,7 +64,7 @@
       "type": "field",
       "vlessRoute": "257,258",
       "domain": [
-        "geosite:google"
+        "ads.example"
       ],
       "outboundTag": "direct"
     },

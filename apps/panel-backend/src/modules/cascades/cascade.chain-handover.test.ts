@@ -60,7 +60,13 @@ const STAND: TopologyInput = {
   ],
   links: [leg(RU1, NL, 1), leg(RU1, SE, 2), leg(RU2, NL, 1), leg(RU2, SE, 2)],
   hosts: HOSTS,
-  policies: [{ ordinal: 1, directDomains: ['geosite:google'], blockDomains: ['geosite:category-ads-all'] }],
+  // ⚠ PLAIN DOMAINS, never `geosite:*`, in any fixture that goes to `xray
+  // -test`. CI installs the xray BINARY out of the release zip and nothing
+  // else, so geosite.dat is not on the runner: xray then refuses the whole
+  // config with "failed to open file: geosite.dat" and the failure reads like a
+  // broken routing rule. Caught on 2026-09-22, green on a laptop whose xray
+  // directory happened to carry the geodata.
+  policies: [{ ordinal: 1, directDomains: ['ads.example'], blockDomains: ['tracker.example'] }],
 };
 
 const handedOver: TopologyInput = { ...STAND, chainSocksPassword: CHAIN_PASSWORD };
