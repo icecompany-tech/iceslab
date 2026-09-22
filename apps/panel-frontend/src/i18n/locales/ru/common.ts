@@ -187,6 +187,7 @@ export const common = {
     subscriptionDeliverySetup: '/ ПОДПИСКА · ФОРМАТ И АДРЕС',
     subscriptionRoutes: '/ ПОДПИСКА · МАРШРУТЫ',
     subscriptionDelivery: '/ ПОДПИСКА · ВЫДАЧА',
+    subscriptionTemplates: '/ ПОДПИСКА · ШАБЛОНЫ',
     insights: '/ СИСТЕМА · АНАЛИТИКА',
     settings: '/ НАСТРОЙКИ',
   },

@@ -19,6 +19,7 @@ export const app = {
     // назывались маршрутизацией, любой разговор о маршрутах приводил не туда.
     subscriptionRoutes: 'Маршруты',
     subscriptionDelivery: 'Выдача',
+    subscriptionTemplates: 'Шаблоны',
     subscriptionTemplate: 'Шаблон',
     subscribePage: 'Страница подписки',
     infraBilling: 'Инфра-биллинг',

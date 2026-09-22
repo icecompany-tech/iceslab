@@ -20,6 +20,7 @@ export const app = {
     // conversation land on the wrong page.
     subscriptionRoutes: 'Routes',
     subscriptionDelivery: 'Delivery',
+    subscriptionTemplates: 'Templates',
     subscriptionTemplate: 'Template',
     subscribePage: 'Subscribe page',
     infraBilling: 'Infra billing',

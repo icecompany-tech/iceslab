@@ -164,4 +164,21 @@ export const subscription = {
     scopeNote:
       'A rule decides the SHAPE of the config only. Where the traffic goes is decided by the routing preset and the routes, on their own pages.',
   },
+  // Delivery templates, phase 11. "The server cannot do this yet" and "you have
+  // no templates" are different screens and different words: the first is about
+  // the panel, the second about the operator's work.
+  templates: {
+    title: 'Delivery templates',
+    count: '{{n}} templates',
+    create: 'Create',
+    serves: 'served as {{format}}',
+    defaultTag: 'default',
+    edited: 'edited {{when}}',
+    soonTitle: 'Arrives with phase 11',
+    soonBody:
+      'A template is a whole client config that the panel drops your servers into: your groups, your rules, your profile name. The screen is here, the template store on the server is not, so an empty list is not because you created nothing.',
+    emptyTitle: 'No templates yet',
+    emptyBody:
+      'Without a template the subscription serves the default config. Create one to decide everything else for the client: groups, rules, profile name. A template from elsewhere can be imported as a file, and its keys are rewritten to ours.',
+  },
 } as const;

@@ -162,6 +162,7 @@ export const common = {
     subscriptionDeliverySetup: '/ SUBSCRIPTION · FORMAT AND ADDRESS',
     subscriptionRoutes: '/ SUBSCRIPTION · ROUTES',
     subscriptionDelivery: '/ SUBSCRIPTION · DELIVERY',
+    subscriptionTemplates: '/ SUBSCRIPTION · TEMPLATES',
     insights: '/ SYSTEM · INSIGHTS',
     settings: '/ SETTINGS',
   },

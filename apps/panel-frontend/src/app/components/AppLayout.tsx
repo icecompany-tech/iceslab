@@ -439,6 +439,7 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   '/subscription/metadata/delivery': 'breadcrumb.subscriptionDeliverySetup',
   '/subscription/routes': 'breadcrumb.subscriptionRoutes',
   '/subscription/delivery': 'breadcrumb.subscriptionDelivery',
+  '/subscription/templates': 'breadcrumb.subscriptionTemplates',
   '/insights': 'breadcrumb.insights',
   '/settings': 'breadcrumb.settings',
 };
@@ -887,10 +888,9 @@ function AppLayoutInner() {
                 icon={<NavDeliveryIcon />}
               />
               <NavItem
+                to="/subscription/templates"
                 label={t('sidebar.subscriptionTemplate')}
                 icon={<NavTemplateIcon />}
-                placeholder
-                placeholderTitle={notWired}
               />
               <NavItem
                 label={t('sidebar.subscribePage')}

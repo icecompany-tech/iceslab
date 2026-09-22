@@ -57,6 +57,9 @@ const SubscriptionMetadataPage = lazy(() =>
 const SubscriptionDeliveryPage = lazy(() =>
   import('@/contours/subscription/screens/SubscriptionDeliveryPage').then((m) => ({ default: m.SubscriptionDeliveryPage })),
 );
+const TemplatesPage = lazy(() =>
+  import('@/contours/subscription/screens/TemplatesPage').then((m) => ({ default: m.TemplatesPage })),
+);
 
 export default function App() {
   return (
@@ -109,6 +112,9 @@ export default function App() {
               its User-Agent, it never decides where traffic goes. It held the
               name "Routing" while nothing else claimed it, which made every
               conversation about routes land on the wrong page. */}
+          {/* Шаблоны выдачи, фаза 11. Экран живёт до бэкенда: он различает
+              «сервер ещё не умеет» и «шаблонов нет», см. TemplatesPage. */}
+          <Route path="/subscription/templates" element={<TemplatesPage />} />
           <Route path="/subscription/delivery" element={<SrrPage />} />
           {/* A delivery rule is a regex plus the format it hands back; both
               want testing against a real User-Agent before they are saved, so
