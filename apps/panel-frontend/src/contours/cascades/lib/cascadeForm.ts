@@ -49,6 +49,41 @@ export function protocolOptions(current: string | null): { value: string; label:
   return [...LINK_PROTOCOLS, { value: current, label: current }];
 }
 
+/**
+ * Через какие протоколы вход каскада действительно пускает трафик В ЦЕПЬ.
+ *
+ * Сегодня цепь несёт только то, что зашло через xray: вход на hy2 это фаза 6,
+ * вход на AmneziaWG это фаза 7, и обе не сделаны. Селектор протокола входа при
+ * этом показывает весь список нод, поэтому экран обещал то, чего нет: оператор
+ * выбирал hysteria2, видел рядом «VLESS · ядро xray» и сохранял каскад,
+ * который не повезёт ни одного клиента.
+ *
+ * Константа здесь временная по построению: с фазой 6 список приедет полем от
+ * сервера. Поэтому фабрика фактов принимает его АРГУМЕНТОМ, а не читает эту
+ * строку: подмена источника не должна переписывать проверку.
+ */
+export const CHAIN_ENTRY_PROTOCOLS: string[] = ['xray'];
+
+/**
+ * Пускает ли цепь трафик, зашедший этим протоколом.
+ *
+ * `null` это «сказать нечего»: протокол не выбран. Иначе ответ всегда есть, и
+ * он про ФАКТ, а не про вкус: список умений приходит снаружи.
+ */
+export interface EntryChainFacts {
+  protocol: string;
+  carried: boolean;
+}
+
+export function entryChainFacts(
+  entryProtocol: string | null | undefined,
+  supported: string[] = CHAIN_ENTRY_PROTOCOLS,
+): EntryChainFacts | null {
+  const p = entryProtocol && entryProtocol.trim() !== '' ? entryProtocol : null;
+  if (!p) return null;
+  return { protocol: p, carried: supported.includes(p) };
+}
+
 export type HopRole = 'entry' | 'transit' | 'exit';
 
 export const ROLE_TONE: Record<HopRole, string> = {

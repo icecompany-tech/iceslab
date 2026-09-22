@@ -1,5 +1,11 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { lastAttemptFacts, legFacts, poolRowFacts } from '@/contours/cascades/lib/cascadeForm';
+import {
+  CHAIN_ENTRY_PROTOCOLS,
+  entryChainFacts,
+  lastAttemptFacts,
+  legFacts,
+  poolRowFacts,
+} from '@/contours/cascades/lib/cascadeForm';
 
 /**
  * Что стоит в строке пула на месте выбора ноды.
@@ -172,5 +178,48 @@ describe('legFacts', () => {
     expect(legFacts('xray', 3).port).toBe(24003);
     expect(legFacts('tuic', 4).port).toBe(24004);
     expect(legFacts(null, 4).port).toBe(24004);
+  });
+});
+
+/**
+ * Пускает ли цепь трафик, зашедший этим протоколом.
+ *
+ * Поймано на кадрах владельца 22.09: селектор протокола входа давал выбрать
+ * hysteria2 и amneziawg, рядом стояло «VLESS · ядро xray», и каскад
+ * сохранялся. Цепь при этом несёт только то, что зашло через xray: hy2-вход
+ * это фаза 6, AWG-вход это фаза 7. Экран обещал то, чего нет.
+ *
+ * Список умений приходит АРГУМЕНТОМ: сегодня это константа, с фазой 6 поле от
+ * сервера, и подмена источника не должна переписывать проверку.
+ */
+describe('entryChainFacts', () => {
+  it('1. xray: цепь такой трафик несёт', () => {
+    expect(entryChainFacts('xray')).toEqual({ protocol: 'xray', carried: true });
+  });
+
+  it('2. hysteria2: не несёт, и это факт, а не запрет выбора', () => {
+    expect(entryChainFacts('hysteria')).toEqual({ protocol: 'hysteria', carried: false });
+  });
+
+  it('3. amneziawg: не несёт', () => {
+    expect(entryChainFacts('amneziawg')).toEqual({ protocol: 'amneziawg', carried: false });
+  });
+
+  it('4. протокол не выбран: сказать нечего', () => {
+    expect(entryChainFacts(null)).toBeNull();
+    expect(entryChainFacts(undefined)).toBeNull();
+    expect(entryChainFacts('   ')).toBeNull();
+  });
+
+  it('5. список приходит снаружи: с фазой 6 ответ меняется без правки функции', () => {
+    expect(entryChainFacts('hysteria', ['xray', 'hysteria'])).toEqual({
+      protocol: 'hysteria', carried: true,
+    });
+    // И наоборот: пустой список это «пока ничего», а не «всё подходит».
+    expect(entryChainFacts('xray', [])).toEqual({ protocol: 'xray', carried: false });
+  });
+
+  it('6. сегодняшний список ровно один протокол', () => {
+    expect(CHAIN_ENTRY_PROTOCOLS).toEqual(['xray']);
   });
 });

@@ -464,6 +464,7 @@ export function PositionRow({
   onNodes,
   entryProtocol,
   onEntryProtocol,
+  entryNote,
   canUp,
   canDown,
   canDelete,
@@ -482,6 +483,10 @@ export function PositionRow({
   onNodes: (ids: string[]) => void;
   entryProtocol: CascadeProtocol | null;
   onEntryProtocol: (v: CascadeProtocol) => void;
+  /** Строка под селектором протокола входа: сюда идёт предупреждение, что цепь
+   *  трафик этого протокола пока не несёт. Варианты из списка при этом НЕ
+   *  прячутся: оператор должен видеть, что это планируется. */
+  entryNote?: ReactNode;
   canUp: boolean;
   canDown: boolean;
   canDelete: boolean;
@@ -522,6 +527,10 @@ export function PositionRow({
           onChange={onNodes}
         />
         {children}
+        {/* Предупреждение про протокол входа стоит в ШИРОКОЙ колонке, а не под
+            своим селектором: колонка протокола это 170px, и фраза про фазы 6 и
+            7 разворачивалась там в пятистрочную ленту выше самого поля. */}
+        {entryNote}
       </Stack>
 
       <Stack gap={6} className="cascade-hop-field">

@@ -97,6 +97,10 @@ export const cascades = {
     // The leg row between positions. The port is read-only: the panel assigns
     // it from the step number, and it is shown because it is what gets opened
     // in the firewall.
+    // A non-xray entry. The option stays in the list: it is planned, and
+    // hiding it would lie about the plan the way silence lies about today.
+    entryNotCarried:
+      'An entry over {{protocol}} does not reach the chain yet: a cascade only carries xray traffic. Phase 6 brings hy2, phase 7 AWG.',
     legPort: 'port {{port}}',
     legUnknown: 'no link cell picked',
     legToDirections: 'the leg to the exit is set on the direction, from phase 5',

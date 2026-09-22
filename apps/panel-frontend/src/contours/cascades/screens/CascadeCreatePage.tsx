@@ -54,6 +54,7 @@ import {
   MIST,
   MONO,
   MOSS,
+  RED,
   SNOW,
   VIOLET,
   WELL,
@@ -63,6 +64,7 @@ import {
   MAX_LINKS,
   MAX_POSITIONS,
   ROLE_TONE,
+  entryChainFacts,
   legFacts,
   poolRoleAt,
   toDirectionInputs,
@@ -228,8 +230,17 @@ export function CascadeCreatePage() {
   const links = Math.max(entryIds.length, 1) * directions.filter((d) => d.nodeIds.some(Boolean)).length;
   const overLinks = links > MAX_LINKS;
 
+  // Та же первая стена, что на правке: цепь несёт только трафик xray, и
+  // создавать каскад, который не повезёт ни одного клиента, незачем.
+  const entryChain = entryChainFacts(pools[0]?.entryProtocol);
+
   const valid =
-    trimmedName.length > 0 && poolsFilled && directionsFilled && !duplicate && !overLinks;
+    trimmedName.length > 0 &&
+    poolsFilled &&
+    directionsFilled &&
+    !duplicate &&
+    !overLinks &&
+    (entryChain?.carried ?? true);
 
   // T7: below this the entry rejects the per-direction UUID at auth, so a
   // direction the client picks would fail silently. Any entry node can be the
@@ -283,7 +294,9 @@ export function CascadeCreatePage() {
           ? t('cascadeCreate.needDirection')
           : overLinks
             ? t('cascadeCreate.tooManyLinks', { n: links, max: MAX_LINKS })
-            : null;
+            : entryChain && !entryChain.carried
+              ? t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol })
+              : null;
 
   return (
     <Stack gap={20}>
@@ -451,6 +464,13 @@ export function CascadeCreatePage() {
                 onNodes={(ids) => setPoolNodes(i, ids)}
                 entryProtocol={i === 0 ? pool.entryProtocol : null}
                 onEntryProtocol={(v) => setPool(i, { entryProtocol: v })}
+                entryNote={
+                  i === 0 && entryChain && !entryChain.carried ? (
+                    <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                      {t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol })}
+                    </Note>
+                  ) : undefined
+                }
                 canUp={i > 1}
                 canDown={i > 0 && i < pools.length - 1}
                 canDelete={i > 0}
