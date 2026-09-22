@@ -32,6 +32,7 @@ import {
   type CellGap,
   type HopRole,
   type LegFacts,
+  type LinkPortConflict,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
 import {
@@ -585,6 +586,7 @@ export function LegRow({
   onCell,
   caption,
   gaps = [],
+  portTaken = [],
 }: {
   facts: LegFacts;
   /** Нет обработчика, значит ячейка здесь не выбирается: строка только
@@ -594,15 +596,24 @@ export function LegRow({
   /** Ноды, которые эту ячейку не поднимут: предсказание по движкам и отказ
    *  сервера, сведённые в один список. Пусто у подавляющего большинства ног. */
   gaps?: CellGap[];
+  /** Порт ноги занят чужим профилем на принимающей ноде (409). */
+  portTaken?: LinkPortConflict[];
 }) {
   const { t } = useTranslation();
+  // Пара есть не у каждой рабочей ячейки: hy2 и tuic поднимает sing-box, и
+  // протокола в наших именах у них нет, только имя ячейки и список движков.
+  // Пока ячеек было две, тут стоял `facts.pair!`, и первая же нога hy2 на
+  // позиции роняла страницу целиком (поймано кадром 22.09).
   const words =
     facts.state === 'known'
-      ? pairLabel(facts.pair!, t)
+      ? facts.pair
+        ? pairLabel(facts.pair, t)
+        : t('cascadeCreate.legCellEngines', { cell: facts.cell, engines: facts.engines?.join(', ') })
       : facts.state === 'unrealised'
         ? t('engine.cellUnrealised', { name: facts.cell })
         : t('cascadeCreate.legUnknown');
   const tone = facts.state === 'known' ? SNOW : facts.state === 'unrealised' ? RED : FAINT;
+  const paramFacts = legParamFacts(facts.cell);
 
   return (
     <Stack gap={8} style={{ width: '100%' }}>
@@ -635,6 +646,25 @@ export function LegRow({
         </Box>
       )}
     </Box>
+    {/* Настройки ячейки словами, без полей: у позиции контракт их не несёт.
+        `CascadePositionSchema` знает только `linkProtocol`, поэтому селектор
+        перегрузки здесь был бы мёртвым, а молчание скрыло бы, что у tuic-ноги
+        алгоритм всё-таки есть, просто не выбирается. */}
+    {paramFacts.kind === 'minted' && (
+      <Box style={{ paddingLeft: 38 }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
+          {t('cascadeCreate.legObfsMinted')}
+        </Text>
+      </Box>
+    )}
+    {paramFacts.kind === 'congestion' && (
+      <Box style={{ paddingLeft: 38 }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
+          {t('cascadeCreate.legCongestionFixed', { value: paramFacts.fallback })}
+        </Text>
+      </Box>
+    )}
+
     {/* Те же слова, что у ноги направления: источник факта разный
         (предсказание по движкам и отказ сервера), повод для оператора один. */}
     {gaps.map((g) => (
@@ -644,6 +674,18 @@ export function LegRow({
             name: g.name,
             cell: facts.cell,
             engines: g.engines.length ? g.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+          })}
+        </Note>
+      </Box>
+    ))}
+    {portTaken.map((c) => (
+      <Box key={`${c.nodeName}-${c.port}`} style={{ paddingLeft: 14 }}>
+        <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t(c.profileName ? 'cascadeCreate.legPortTaken' : 'cascadeCreate.legPortTakenUnnamed', {
+            port: c.port,
+            transport: c.transport,
+            name: c.nodeName,
+            profile: c.profileName,
           })}
         </Note>
       </Box>
@@ -677,6 +719,7 @@ export function DirectionLegRow({
   port,
   available,
   gaps,
+  portTaken = [],
   onCell,
   onParams,
 }: {
@@ -689,6 +732,8 @@ export function DirectionLegRow({
   available: boolean;
   /** Ноды направления, которые ТОЧНО не несут выбранную ячейку. */
   gaps: CellGap[];
+  /** Порт этой ноги занят чужим профилем на ноде направления (409). */
+  portTaken?: LinkPortConflict[];
   onCell: (value: LinkCell) => void;
   onParams: (patch: LinkParams) => void;
 }) {
@@ -724,7 +769,7 @@ export function DirectionLegRow({
         <Box style={{ width: 210, flexShrink: 0 }}>
           <Select
             size="xs"
-            data={directionCellOptions(t)}
+            data={linkCellOptions(cell, t)}
             value={cell}
             disabled={!available}
             placeholder={t('cascadeCreate.legFromEntry')}
@@ -772,19 +817,20 @@ export function DirectionLegRow({
           })}
         </Note>
       ))}
+      {/* Порт ноги оператор не выбирает, но занять его может чужой профиль на
+          той же ноде. Транспорт в строке обязателен: сокеты разные. */}
+      {portTaken.map((c) => (
+        <Note key={`${c.nodeName}-${c.port}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t(c.profileName ? 'cascadeCreate.legPortTaken' : 'cascadeCreate.legPortTakenUnnamed', {
+            port: c.port,
+            transport: c.transport,
+            name: c.nodeName,
+            profile: c.profileName,
+          })}
+        </Note>
+      ))}
     </Stack>
   );
-}
-
-/** Четыре ячейки контракта. Подпись у встроенных пар своя, у новых имя как
- *  есть: выдумывать им название до фазы 5 не на чем. */
-function directionCellOptions(t: (k: string, o?: Record<string, unknown>) => string) {
-  return [
-    { value: 'vless', label: pairLabel({ protocol: 'vless', engine: 'xray' }, t) },
-    { value: 'shadowsocks', label: pairLabel({ protocol: 'shadowsocks', engine: 'xray' }, t) },
-    { value: 'hy2', label: 'hy2' },
-    { value: 'tuic', label: 'tuic' },
-  ];
 }
 
 /** Скоба между двумя карточками: линия вниз, потом вправо. */

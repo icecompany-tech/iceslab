@@ -19,6 +19,7 @@ import { listNodes, type Node } from '@/lib/domain/nodes';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
+import { isRealisedLinkCell } from '@/lib/domain/engines';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
@@ -78,17 +79,21 @@ import {
   MAX_LINKS,
   MAX_POSITIONS,
   ROLE_TONE,
+  LEG_PORT_BASE,
   isKnownProtocol,
   entryChainFacts,
   lastAttemptFacts,
   legCellNotes,
   legFacts,
+  legPortNotes,
   poolRoleAt,
   refusedCells,
+  refusedLinkPorts,
   statusTone,
   toDirectionInputs,
   toPositionInputs,
   type CellRefusal,
+  type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
 } from '@/contours/cascades/lib/cascadeForm';
@@ -143,6 +148,9 @@ export function CascadeEditPage() {
   /** Ноги, которые сервер отказался записать (409 `CELL_NOT_CARRIED`). Рисуются
    *  у своих рядов теми же словами, что и предсказание по движкам ноды. */
   const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
+  /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). Рисуются у
+   *  своих ног: порт назначает сервер, и искать его в общем тексте негде. */
+  const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
@@ -199,6 +207,13 @@ export function CascadeEditPage() {
         setCellRefusals(cells);
         return;
       }
+      // Порт ноги назначает сервер, и занять его может чужой профиль на той же
+      // ноде. Строка нужна у своей ноги: в общем тексте её негде искать.
+      const ports = refusedLinkPorts(err);
+      if (ports) {
+        setPortConflicts(ports);
+        return;
+      }
       const shape = cascadeShapeError(err);
       if (shape) {
         setSaveRefusal(shape);
@@ -240,6 +255,7 @@ export function CascadeEditPage() {
     // чем человек успеет её сохранить.
     setSaveRefusal(null);
     setCellRefusals([]);
+    setPortConflicts([]);
     setDraft((d) => (d ? { ...d, ...p } : d));
   };
   const positionCount = pools.length + 1;
@@ -317,7 +333,12 @@ export function CascadeEditPage() {
     .map((p, i) => {
       const bad: string[] = [];
       if (i === 0 && !isKnownProtocol(p.entryProtocol)) bad.push(p.entryProtocol);
-      if (!isKnownProtocol(p.linkProtocol)) bad.push(p.linkProtocol);
+      // Колонка ноги это ЯЧЕЙКА, а не протокол ноды, и списки у них разные.
+      // Пока ячеек было две, обе (`xray`, `shadowsocks`) случайно совпадали с
+      // именами протоколов, и проверка работала по совпадению. С открытием
+      // четырёх ячеек `hy2` и `tuic` объявлялись «устаревшим значением», и
+      // сохранение блокировалось на живом каскаде (поймано кадром 22.09).
+      if (!isRealisedLinkCell(p.linkProtocol)) bad.push(p.linkProtocol);
       const first = p.nodeIds.find(Boolean);
       return bad.length > 0 ? { node: first ? nodeById.get(first)?.name ?? '?' : '?', bad } : null;
     })
@@ -620,7 +641,10 @@ export function CascadeEditPage() {
                   своя. Селектор при этом остаётся: сегодня это единственное
                   место, где последняя нога вообще задаётся. */}
               <LegRow
-                facts={legFacts(pool.linkProtocol, i)}
+                // Таблица движков нужна и здесь: без неё hy2 и tuic на ноге
+                // позиции читались бы как нереализованная ячейка и краснели,
+                // хотя сервер их принимает.
+                facts={legFacts(pool.linkProtocol, i, linkCellEngines)}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
                 gaps={legCellNotes(
@@ -631,6 +655,12 @@ export function CascadeEditPage() {
                   nodeById,
                   nodeCarriesCell,
                   cellRefusals,
+                )}
+                portTaken={legPortNotes(
+                  pools[i + 1]?.nodeIds ?? [],
+                  LEG_PORT_BASE + i,
+                  nodeById,
+                  portConflicts,
                 )}
               />
               </Fragment>
@@ -706,6 +736,7 @@ export function CascadeEditPage() {
                   port={dir.linkPort}
                   available={dir.linkProtocol !== undefined}
                   gaps={legCellNotes(dir.nodeIds, dir.linkProtocol, nodeById, nodeCarriesCell, cellRefusals)}
+                  portTaken={legPortNotes(dir.nodeIds, dir.linkPort, nodeById, portConflicts)}
                   onCell={(v) => setDirection(i, { linkProtocol: v, linkTouched: true })}
                   onParams={(p) =>
                     setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), ...p }, linkTouched: true })

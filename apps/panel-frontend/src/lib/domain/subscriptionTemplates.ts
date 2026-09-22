@@ -1,4 +1,5 @@
-import { TEMPLATE_FORMATS, TEMPLATE_TYPES as SHARED_TEMPLATE_TYPES } from '@iceslab/shared';
+import { TEMPLATE_FORMATS, TEMPLATE_TYPES } from '@iceslab/shared';
+import type { TemplateType } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 /**
@@ -11,9 +12,11 @@ import { api } from '@/lib/net/client';
  * места, которое умеет спросить.
  */
 export type { TemplateType } from '@iceslab/shared';
-type TemplateType = (typeof SHARED_TEMPLATE_TYPES)[number];
 
-export const TEMPLATE_TYPES: TemplateType[] = [...SHARED_TEMPLATE_TYPES];
+/** Реэкспорт, а не копия: список типов один и живёт в контракте. Массив
+ *  приходит `readonly`, и место, которому нужен изменяемый (данные селектора),
+ *  копирует его у себя. */
+export { TEMPLATE_TYPES };
 
 /**
  * Какой формат подписки отдаётся шаблоном этого типа.

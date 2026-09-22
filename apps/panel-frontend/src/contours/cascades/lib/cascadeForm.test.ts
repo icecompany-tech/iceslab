@@ -15,8 +15,10 @@ import {
   legCellNotes,
   legFacts,
   legParamFacts,
+  legPortNotes,
   poolRowFacts,
   refusedCells,
+  refusedLinkPorts,
 } from '@/contours/cascades/lib/cascadeForm';
 
 /**
@@ -374,6 +376,63 @@ describe('refusedCells', () => {
     // У записи без движков список пустой, а не выдуманный: строка скажет про
     // это своими словами.
     expect(parsed).toEqual([{ nodeName: 'de-01', cell: 'hy2', engines: [] }]);
+  });
+});
+
+/**
+ * Второй отказ той же формы: 409 `LINK_PORT_IN_USE`.
+ *
+ * Транспорт в ответе появился 22.09 и в строку попадает обязательно:
+ * `24001/udp` и `24001/tcp` это разные сокеты, и занятость одного ничего не
+ * говорит о другом. Строка без транспорта была бы наполовину неверной.
+ */
+describe('refusedLinkPorts', () => {
+  it('1. не тот отказ или не объект: спокойный null', () => {
+    for (const x of [null, undefined, 'строка']) expect(refusedLinkPorts(x)).toBeNull();
+    expect(refusedLinkPorts({ response: { status: 409, data: { error: 'CELL_NOT_CARRIED' } } })).toBeNull();
+  });
+
+  it('2. конфликты разбираются с транспортом и именем профиля', () => {
+    expect(
+      refusedLinkPorts({
+        response: {
+          status: 409,
+          data: {
+            error: 'LINK_PORT_IN_USE',
+            conflicts: [{ nodeName: 'nl-01', port: 24001, transport: 'udp', profileName: 'hy2-main' }],
+          },
+        },
+      }),
+    ).toEqual([{ nodeName: 'nl-01', port: 24001, transport: 'udp', profileName: 'hy2-main' }]);
+  });
+
+  it('3. профиль без имени это пустая строка, а не выдумка', () => {
+    const parsed = refusedLinkPorts({
+      response: {
+        status: 409,
+        data: { error: 'LINK_PORT_IN_USE', conflicts: [{ nodeName: 'ru-01', port: 24000 }, { port: 1 }] },
+      },
+    });
+    expect(parsed).toEqual([{ nodeName: 'ru-01', port: 24000, transport: '', profileName: '' }]);
+  });
+});
+
+describe('legPortNotes', () => {
+  const byId = new Map([['n1', { name: 'nl-01' }], ['n2', { name: 'ru-01' }]]);
+  const conflicts = [
+    { nodeName: 'nl-01', port: 24001, transport: 'udp', profileName: 'hy2-main' },
+    { nodeName: 'ru-01', port: 24000, transport: 'tcp', profileName: 'vless' },
+  ];
+
+  it('1. к ноге относится тот конфликт, где совпали И нода, И номер', () => {
+    expect(legPortNotes(['n1'], 24001, byId, conflicts)).toEqual([conflicts[0]]);
+    expect(legPortNotes(['n1'], 24000, byId, conflicts)).toEqual([]);
+    expect(legPortNotes(['n2'], 24001, byId, conflicts)).toEqual([]);
+  });
+
+  it('2. порт неизвестен (каскад ещё не сохранён): показывать нечего', () => {
+    expect(legPortNotes(['n1'], null, byId, conflicts)).toEqual([]);
+    expect(legPortNotes(['n1'], undefined, byId, conflicts)).toEqual([]);
   });
 });
 

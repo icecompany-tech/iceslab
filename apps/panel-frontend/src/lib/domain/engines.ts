@@ -1,3 +1,4 @@
+import { LINK_CELLS } from '@iceslab/shared';
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
@@ -205,54 +206,70 @@ export function nodeCarriesCascadeLink(node: Pick<Node, 'engines'>): boolean | u
 }
 
 /**
- * The link cells a cascade can actually be built from, mirroring LINK_CELLS in
- * cascade.config.ts. Stored `xray` means the vless cell: the column holds an
- * engine name for historical reasons, which is exactly the confusion this
- * module exists to end, so the panel prints the pair and keeps sending the
- * value the backend stores.
+ * Пары «протокол + движок» у тех ячеек, за которыми стоит ровно одна пара.
  *
- * Deliberately short. Everything else the picker used to offer is refused at
- * save since aacaa0c, and an option that cannot be saved is a dead control.
+ * Список ячеек СВОЙ здесь больше не объявляется: он в контракте (`LINK_CELLS`
+ * в `packages/shared/src/transport.ts`), и копия из двух значений держала ногу
+ * позиции на двух ячейках, пока сервер уже принимал четыре. Разрез 5 фазы 5
+ * (цепь `xray-вход -> hy2 -> tuic -> ss -> выход`) в панели из-за этого не
+ * собирался вовсе.
+ *
+ * Пара есть не у каждой ячейки, и это не пробел. `hy2` и `tuic` поднимает
+ * sing-box, и назвать их парой «протокол+ядро» значило бы выдумать протокол,
+ * которого в наших именах нет: у них имя ячейки и есть имя протокола. Кто их
+ * несёт, говорит таблица движков контракта, а не эта.
  */
-export const LINK_CELLS: { value: string; pair: EnginePair }[] = [
-  { value: 'xray', pair: { protocol: 'vless', engine: 'xray' } },
-  { value: 'shadowsocks', pair: { protocol: 'shadowsocks', engine: 'xray' } },
-];
+const CELL_PAIRS: Record<string, EnginePair> = {
+  vless: { protocol: 'vless', engine: 'xray' },
+  // Хранимое `xray` это та же ячейка vless: колонка держит имя ДВИЖКА по
+  // историческим причинам, и это ровно та путаница, которую модуль закрывает.
+  xray: { protocol: 'vless', engine: 'xray' },
+  shadowsocks: { protocol: 'shadowsocks', engine: 'xray' },
+};
 
-const LINK_CELL_VALUES = new Set(LINK_CELLS.map((c) => c.value));
+const LINK_CELL_VALUES = new Set<string>(LINK_CELLS);
 
 /**
- * Пара протокол+движок за хранимым именем ячейки, и `null`, когда такой ячейки
- * панель не знает.
- *
- * `vless` это то же, что хранимый `xray`: колонка держит имя движка по
- * историческим причинам, и обе записи означают одну ячейку.
+ * Пара протокол+движок за хранимым именем ячейки, и `null`, когда пары нет:
+ * либо ячейка чужая, либо она из тех, у кого пары не бывает.
  */
 export function linkCellPair(value: string | null | undefined): EnginePair | null {
   if (!value) return null;
-  if (value === 'vless') return { protocol: 'vless', engine: 'xray' };
-  return LINK_CELLS.find((c) => c.value === value)?.pair ?? null;
+  return CELL_PAIRS[value] ?? null;
 }
 
-/** A stored value the backend would accept today. `vless` is the cell named
- *  directly and is legal too, so it is not offered twice but is not called
- *  wrong either. */
+/** Значение, которое сервер примет сегодня. Хранимое `xray` это та же ячейка
+ *  vless, поэтому оно законно, хотя в контрактном списке его нет. */
 export function isRealisedLinkCell(value: string | null | undefined): boolean {
-  return value === 'vless' || (Boolean(value) && LINK_CELL_VALUES.has(value as string));
+  return value === 'xray' || (Boolean(value) && LINK_CELL_VALUES.has(value as string));
 }
 
 /**
- * Options for a link-cell field. A value already stored that no cell realises
- * stays in the list so the operator can see what the row holds: dropping it
- * would show an empty select over data that exists, which reads as loss.
+ * Список для селектора ячейки, ОДИН на ногу позиции и ногу направления.
+ *
+ * Ячейки берутся из контракта целиком: их четыре, и все четыре сервер
+ * принимает и у позиции, и у направления (`CascadePositionSchema` и
+ * `CascadeDirectionUpdate` в `cascade.schemas.ts` ссылаются на один
+ * `LinkCellValue`). Пока список был свой и короткий, нога позиции предлагала
+ * две ячейки из четырёх.
+ *
+ * Подпись у ячейки с парой это пара («VLESS · ядро xray»), у остальных имя
+ * ячейки как есть: выдумывать им протокол не на чем, а движки пишет рядом сама
+ * строка ноги.
+ *
+ * Уже сохранённое значение, которого в списке нет, остаётся в нём: пустой
+ * селектор над существующими данными читается как потеря.
  */
 export function linkCellOptions(
   current: string | null,
   t: T,
 ): { value: string; label: string }[] {
-  const options = LINK_CELLS.map((c) => ({ value: c.value, label: pairLabel(c.pair, t) }));
-  if (current === 'vless') {
-    options.push({ value: 'vless', label: pairLabel({ protocol: 'vless', engine: 'xray' }, t) });
+  const options = LINK_CELLS.map((cell) => {
+    const pair = CELL_PAIRS[cell];
+    return { value: cell as string, label: pair ? pairLabel(pair, t) : cell };
+  });
+  if (current === 'xray') {
+    options.push({ value: 'xray', label: pairLabel(CELL_PAIRS.xray, t) });
   } else if (current && !LINK_CELL_VALUES.has(current)) {
     options.push({ value: current, label: t('engine.cellUnrealised', { name: current }) });
   }

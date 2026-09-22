@@ -1,0 +1,57 @@
+import { describe, expect, it } from 'vitest';
+import { LINK_CELLS, LINK_CONGESTIONS, TEMPLATE_TYPES } from '@iceslab/shared';
+
+/**
+ * Перечисления контракта объявляются в контракте, и больше нигде.
+ *
+ * Шестая копия за два дня нашлась именно так: `lib/domain/engines.ts` объявлял
+ * свой `LINK_CELLS` из двух ячеек, ИМЯ совпадало с контрактным из четырёх, и
+ * половина ячеек просто не доезжала до селектора ноги позиции. Ни сборка, ни
+ * линт этого не видят: тень с тем же именем это законный код, а СОСТАВ
+ * перечисления TypeScript не проверяет по построению.
+ *
+ * Поэтому проверка не про значения, а про ОБЪЯВЛЕНИЕ: во фронте этих имён
+ * заводить нельзя, их можно только импортировать. Реэкспорт (`export { X }`)
+ * объявлением не считается: он ровно про то, чтобы копии не было.
+ *
+ * Список имён ниже растёт вместе с контрактом. Сегодня в нём те, которыми уже
+ * успели разойтись.
+ */
+const GUARDED = ['LINK_CELLS', 'LINK_CONGESTIONS', 'DEFAULT_LINK_CONGESTION', 'TEMPLATE_TYPES', 'FORMAT_NAMES'];
+
+const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+const SELF = '/src/lib/domain/contractCopies.test.ts';
+
+describe('копии перечислений контракта', () => {
+  it('1. ни одно охраняемое имя не объявляется во фронте', () => {
+    const guilty: string[] = [];
+    for (const [path, code] of Object.entries(FILES)) {
+      if (path === SELF) continue;
+      for (const name of GUARDED) {
+        // `const X =`, `let X =`, `var X =`, с `export` или без. Импорт и
+        // реэкспорт под эту форму не попадают.
+        if (new RegExp(`(^|\\n)\\s*(export\\s+)?(const|let|var)\\s+${name}\\b`).test(code)) {
+          guilty.push(`${path}: ${name}`);
+        }
+      }
+    }
+    expect(guilty).toEqual([]);
+  });
+
+  it('2. глоб читает исходники, а не пустоту', () => {
+    expect(Object.keys(FILES).length).toBeGreaterThan(100);
+    expect(FILES['/src/lib/domain/engines.ts']).toContain('LINK_CELLS');
+  });
+
+  it('3. охраняемые имена действительно есть в контракте', () => {
+    // Иначе сторож переживёт переименование в контракте и замолчит навсегда.
+    expect(LINK_CELLS.length).toBeGreaterThan(0);
+    expect(LINK_CONGESTIONS.length).toBeGreaterThan(0);
+    expect(TEMPLATE_TYPES.length).toBeGreaterThan(0);
+  });
+});

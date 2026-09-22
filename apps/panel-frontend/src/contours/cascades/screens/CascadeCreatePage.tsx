@@ -13,7 +13,7 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
-import { nodeCarriesCell } from '@/lib/domain/linkCells';
+import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -65,14 +65,18 @@ import {
   MAX_LINKS,
   MAX_POSITIONS,
   ROLE_TONE,
+  LEG_PORT_BASE,
   entryChainFacts,
   legCellNotes,
   legFacts,
+  legPortNotes,
   poolRoleAt,
   refusedCells,
+  refusedLinkPorts,
   toDirectionInputs,
   toPositionInputs,
   type CellRefusal,
+  type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
 } from '@/contours/cascades/lib/cascadeForm';
@@ -105,6 +109,8 @@ export function CascadeCreatePage() {
   const [startShape, setStartShape] = useState<StartShape>('one');
   /** Ноги, которые сервер отказался записать (409 `CELL_NOT_CARRIED`). */
   const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
+  /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). */
+  const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
 
   const nextKey = useRef(2);
   // Pools are the entry and any transits after it. The exit is not a pool: it
@@ -282,6 +288,11 @@ export function CascadeCreatePage() {
       const cells = refusedCells(err);
       if (cells) {
         setCellRefusals(cells);
+        return;
+      }
+      const ports = refusedLinkPorts(err);
+      if (ports) {
+        setPortConflicts(ports);
         return;
       }
       // The form blocks both unstorable shapes, so a 400 here means the API saw
@@ -505,7 +516,9 @@ export function CascadeCreatePage() {
               {/* Та же нога, что и на правке: связь между шагами живёт между
                   карточками, и подпись у последней говорит, где она задаётся. */}
               <LegRow
-                facts={legFacts(pool.linkProtocol, i)}
+                // Та же таблица движков, что у ноги направления: иначе hy2 и
+                // tuic покраснели бы как чужие ячейки.
+                facts={legFacts(pool.linkProtocol, i, linkCellEngines)}
                 onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
                 caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
                 gaps={legCellNotes(
@@ -516,6 +529,12 @@ export function CascadeCreatePage() {
                   nodeById,
                   nodeCarriesCell,
                   cellRefusals,
+                )}
+                portTaken={legPortNotes(
+                  pools[i + 1]?.nodeIds ?? [],
+                  LEG_PORT_BASE + i,
+                  nodeById,
+                  portConflicts,
                 )}
               />
               </Fragment>

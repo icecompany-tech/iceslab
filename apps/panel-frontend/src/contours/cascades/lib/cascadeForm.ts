@@ -495,6 +495,63 @@ export function refusedCells(err: unknown): CellRefusal[] | null {
 }
 
 /**
+ * Второй отказ той же формы: 409 `LINK_PORT_IN_USE`.
+ *
+ * Порт ноги назначает сервер (24000 + шаг), и оператор его не выбирает, но
+ * занять его может чужой профиль на той же ноде. Отказ называет ноду, номер,
+ * ТРАНСПОРТ и профиль: без транспорта строка врала бы половину времени, потому
+ * что `24001/udp` и `24001/tcp` это разные сокеты, и занятость одного ничего не
+ * говорит о другом.
+ *
+ * Разбор и правила те же, что у `refusedCells`: вход проверяется первым, `null`
+ * значит «отказ не этот», запись без обязательных полей пропускается.
+ */
+export interface LinkPortConflict {
+  nodeName: string;
+  port: number;
+  transport: string;
+  profileName: string;
+}
+
+export function refusedLinkPorts(err: unknown): LinkPortConflict[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'LINK_PORT_IN_USE') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: LinkPortConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.port !== 'number') continue;
+    out.push({
+      nodeName: c.nodeName,
+      port: c.port,
+      // Транспорт и имя профиля идут в текст строки. Пустая строка лучше
+      // выдуманной: подпись сама скажет «профиль не назван».
+      transport: typeof c.transport === 'string' ? c.transport : '',
+      profileName: typeof c.profileName === 'string' ? c.profileName : '',
+    });
+  }
+  return out;
+}
+
+/** Занятые порты, относящиеся к ЭТОЙ ноге: та же нода и тот же номер. */
+export function legPortNotes(
+  nodeIds: string[],
+  port: number | null | undefined,
+  nodeById: Map<string, { name: string }>,
+  conflicts: LinkPortConflict[],
+): LinkPortConflict[] {
+  if (port === null || port === undefined || conflicts.length === 0) return [];
+  const names = new Set(
+    nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)),
+  );
+  return conflicts.filter((c) => c.port === port && names.has(c.nodeName));
+}
+
+/**
  * Что показать под одной ногой: предсказание и отказ сервера, сведённые.
  *
  * Одна нода попадает в строку один раз, даже когда про неё сказали оба
