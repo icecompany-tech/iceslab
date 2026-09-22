@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/icecompany-tech/iceslab/apps/node/internal/chain"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/amneziawg"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/hysteria"
@@ -34,6 +35,7 @@ const (
 	defaultXrayRealityDest     = "www.cloudflare.com:443"
 	defaultXrayRealitySNI      = "www.cloudflare.com"
 	defaultInboundsStorePath   = "/etc/iceslab-node/inbounds.json"
+	defaultChainConfigPath     = "/etc/iceslab-node/chain/config.json"
 	adapterStopShutdownTimeout = 10 * time.Second
 	// defaultXrayMemLimitPercent: share of host RAM above which the agent
 	// restarts xray instead of waiting for the kernel OOM killer. See
@@ -71,6 +73,19 @@ func main() {
 		}
 	}
 
+	// The chain as its own process (phase 4). Registered whenever a sing-box
+	// binary is around, which is the only thing it needs: unlike a core adapter
+	// it serves no protocol, holds no users and is not chosen per inbound. A
+	// node with no chain pushed to it simply never starts the process.
+	//
+	// Same binary the sing-box cores use. One install, two jobs, and the
+	// version is pinned in bootstrap-singbox.sh for both.
+	chainMgr := chain.New(chain.Config{
+		BinaryPath: os.Getenv("SINGBOX_BINARY"),
+		ConfigPath: getenv("CHAIN_CONFIG", defaultChainConfigPath),
+		Logger:     logger,
+	})
+
 	srv, err := server.New(server.Config{
 		Host:              getenv("NODE_HOST", defaultHost),
 		Port:              getenv("NODE_PORT", defaultPort),
@@ -78,6 +93,7 @@ func main() {
 		Logger:            logger,
 		Adapters:          adapters,
 		InboundsStorePath: getenv("NODE_INBOUNDS_STORE", defaultInboundsStorePath),
+		Chain:             chainMgr,
 	})
 	if err != nil {
 		logger.Error("build server", "err", err)

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/chain"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
@@ -62,6 +63,11 @@ type Config struct {
 	// `/etc/iceslab-node/inbounds.json`. Empty means in-memory only
 	// (used in tests).
 	InboundsStorePath string
+	// Chain runs the cascade as its own process (phase 4). Nil means this
+	// build cannot draw a chain that way, and a pushed chain block is then
+	// refused out loud rather than dropped: the panel would otherwise believe
+	// a chain is up that nothing is running.
+	Chain *chain.Manager
 }
 
 type Server struct {
@@ -343,11 +349,57 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	// The chain process, when this node holds one. Its own field rather than an
+	// entry in `cores`: CoreStatus.Name is a ProtocolName and the chain is not
+	// a protocol.
+	var chainStatus *dto.ChainStatusDto
+	if s.cfg.Chain != nil {
+		chainStatus = s.cfg.Chain.Status()
+		// The loopback ports it holds ride along with the core that runs the
+		// same engine, because that is where the panel already looks for
+		// reserved ports. Appended to what the core reports rather than
+		// replacing it: both are real sockets on this machine.
+		if held := s.cfg.Chain.ReservedPorts(); len(held) > 0 {
+			// The core running the same engine if there is one, otherwise the
+			// first core that speaks about ports at all. A node whose users are
+			// served by xray alone still runs a sing-box chain, and its
+			// loopback ports are just as taken.
+			target := -1
+			for i := range cores {
+				if cores[i].ReservedPorts == nil {
+					continue
+				}
+				if cores[i].Engine == chain.Engine {
+					target = i
+					break
+				}
+				if target < 0 {
+					target = i
+				}
+			}
+			if target >= 0 {
+				merged := append(*cores[target].ReservedPorts, held...)
+				cores[target].ReservedPorts = &merged
+			}
+		}
+	}
+
 	status := "ok"
 	if !allHealthy {
 		status = "degraded"
 	}
-	writeJSON(w, http.StatusOK, dto.HealthcheckResponse{Status: status, Cores: cores})
+	// A chain this node was TOLD to run and is not running degrades it, for the
+	// same reason a configured core does: something the panel asked for is not
+	// happening. A node with no chain says nothing, and a panel must never read
+	// that silence as a failure.
+	if chainStatus != nil && !chainStatus.Running {
+		status = "degraded"
+	}
+	writeJSON(w, http.StatusOK, dto.HealthcheckResponse{
+		Status: status,
+		Cores:  cores,
+		Chain:  chainStatus,
+	})
 }
 
 // handleUfwPorts (G4 probe-exposure) reports the ufw-allowed inbound ports so
@@ -557,9 +609,38 @@ func (s *Server) applyPush(
 	// it is what says "this push carried no node-level cascade", which is how an
 	// adapter knows to keep reading the transitional copy on the inbound, and
 	// how it stops ignoring that copy after the panel is rolled back.
+	// The chain as its own process, BEFORE the cascade fragments, because
+	// whether it took is what decides who draws the chain on this node.
+	//
+	// ⚠ For one transitional release the panel sends BOTH blocks, so that an
+	// agent too old to know this field keeps working off `cascade`. An agent
+	// that knows it must therefore IGNORE the fragments: two processes drawing
+	// one chain fight over the link port, and the loser's users go nowhere.
+	chainInForce := false
+	if s.cfg.Chain != nil {
+		if err := s.cfg.Chain.Apply(ctx, req.Chain); err != nil {
+			// Not fatal to the push: the inbounds below are what keeps users
+			// connected, and a chain that will not start is a reason to report,
+			// not a reason to take the node dark. It travels back as a failure
+			// reason and stands in the healthcheck as chain.error.
+			s.logger.Error("chain block failed to apply", "err", err)
+			failed++
+			reasons = append(reasons, fmt.Sprintf("chain: %s", err.Error()))
+		}
+		chainInForce = s.cfg.Chain.Active()
+	} else if req.Chain != nil {
+		// Loud, and counted: the panel believes this node draws a chain in its
+		// own process, and nothing here does.
+		s.logger.Error("applyInbounds: a chain block arrived but this agent runs no chain manager")
+		failed++
+		reasons = append(reasons, "chain: this agent cannot run a chain process")
+	}
+
 	var cascadeFragments json.RawMessage
 	router := ""
-	if req.Cascade != nil {
+	if req.Cascade != nil && chainInForce {
+		s.cfg.Chain.NoteCascadeIgnored()
+	} else if req.Cascade != nil {
 		cascadeFragments = req.Cascade.Fragments
 		router = string(req.Cascade.Engine)
 	}
@@ -581,7 +662,10 @@ func (s *Server) applyPush(
 	// Loud, because the quiet version of this is the worst outcome the cascade
 	// has: a chain nobody drew is a user egressing from the ENTRY country while
 	// their client shows the exit. Same fail-closed rule as a router that dies.
-	if req.Cascade != nil && !deliveredCascade {
+	// Not when the chain process holds it: there the cores are MEANT to receive
+	// nil, that is what stops the old drawing, and shouting about it would
+	// teach an operator to ignore the one line that matters.
+	if req.Cascade != nil && !deliveredCascade && !chainInForce {
 		s.logger.Error("applyInbounds: no core on this node draws the cascade, the chain is NOT applied",
 			"engine", router)
 	}
