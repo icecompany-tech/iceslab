@@ -136,6 +136,53 @@ func TestRestoreIsQuietOnAFreshNode(t *testing.T) {
 	}
 }
 
+/*
+The store is readable by root and nobody else.
+
+It always held REALITY private keys, and since it started holding the whole
+push it also carries the cascade's link credentials and whatever a node-level
+block brings next. A VPS has other users: this file being world-readable is a
+copy of the operator's key material handed to anyone with a shell.
+
+atomicfile.Write chmods the temp file BEFORE the rename, so the visible file
+never exists with a looser mode even for an instant. That is the property this
+test pins, together with the one case that could quietly undo it: replacing a
+file somebody (an older build, an operator's editor) left at 0644.
+*/
+func TestTheStoreIsNotReadableByOtherUsers(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "inbounds.json")
+	var req dto.ApplyInboundsRequest
+	if err := json.Unmarshal([]byte(storedPush), &req); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writePushStore(store, req); err != nil {
+		t.Fatalf("writePushStore: %v", err)
+	}
+	st, err := os.Stat(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode: got %o, want 0600 (the file holds REALITY private keys and link creds)", got)
+	}
+
+	// And a file left open by something else does not stay open.
+	if err := os.Chmod(store, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePushStore(store, req); err != nil {
+		t.Fatalf("writePushStore over a loose file: %v", err)
+	}
+	st, err = os.Stat(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode after overwriting a 0644 file: got %o, want 0600", got)
+	}
+}
+
 // The store is what the restore reads, so what a push writes has to be the
 // whole push and not only its inbounds.
 func TestAPushPersistsItsNodeLevelBlocksToo(t *testing.T) {
