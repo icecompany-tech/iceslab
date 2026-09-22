@@ -1,5 +1,5 @@
 import { IconCheck } from '@tabler/icons-react';
-import { BORDER_INPUT, CYAN, WELL } from '@/contours/users/lib/colors';
+import { EDGE, CYAN, WELL } from '@/contours/users/lib/colors';
 import { UnstyledButton } from '@mantine/core';
 
 /** The tick in the row gutter. Square, 15px, the size the artboard draws. */
@@ -18,7 +18,7 @@ export function SelectBox({ checked, onChange }: { checked: boolean; onChange: (
         justifyContent: 'center',
         flexShrink: 0,
         backgroundColor: checked ? `${CYAN}24` : WELL,
-        border: `1px solid ${checked ? CYAN : BORDER_INPUT}`,
+        border: `1px solid ${checked ? CYAN : EDGE}`,
       }}
     >
       {checked && <IconCheck size={10} stroke={3} color={CYAN} />}

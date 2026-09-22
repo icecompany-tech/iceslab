@@ -1,6 +1,6 @@
 import { IconCopy, IconList } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN, DIM_TEXT, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
+import { CARD, CYAN, FAINT, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { copyToClipboard } from '@/lib/ui/clipboard';
 import { protocolLabel } from '@/lib/domain/protocols';
@@ -64,13 +64,13 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
         <IconList size={13} stroke={1.7} color={CYAN} />
         <Text style={{ ...LABEL, letterSpacing: '0.14em' }}>{t('userDrawer.dialTitle')}</Text>
         <Box style={{ flex: 1 }} />
-        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: DIM_TEXT }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
           {endpoints.length} {t('userDrawer.configs', { count: endpoints.length })}
         </Text>
       </Box>
 
       {empty && (
-        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
           {empty}
         </Text>
       )}
@@ -163,7 +163,7 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
       ))}
 
       {endpoints.length > 0 && (
-        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
           {t('userDrawer.dialHint', {
             configs: endpoints.length,
             nodes: new Set(endpoints.map((e) => e.nodeId)).size,

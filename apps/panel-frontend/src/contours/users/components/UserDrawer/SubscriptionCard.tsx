@@ -1,6 +1,6 @@
 import { IconExternalLink, IconLink, IconRefresh } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN, DIM_TEXT, DISPLAY, FIELD_EDGE, GROUND, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
+import { CARD, CYAN, FAINT, DISPLAY, FIELD_EDGE, GROUND, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { copyToClipboard } from '@/lib/ui/clipboard';
 import { relativeTime } from '@/lib/ui/relativeTime';
@@ -52,7 +52,7 @@ export function SubscriptionCard({
         <IconLink size={13} stroke={1.7} color={CYAN} />
         <Text style={{ ...LABEL, letterSpacing: '0.14em' }}>{t('userDrawer.subscription')}</Text>
         <Box style={{ flex: 1 }} />
-        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: DIM_TEXT }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
           {t('userDrawer.subUpdated', { when: relativeTime(user.updatedAt, t).text })}
         </Text>
       </Box>
@@ -118,7 +118,7 @@ export function SubscriptionCard({
         />
       </Box>
 
-      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
         {t('userDrawer.revokeHint')}
       </Text>
     </Box>

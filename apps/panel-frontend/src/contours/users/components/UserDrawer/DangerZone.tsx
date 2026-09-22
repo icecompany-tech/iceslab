@@ -1,6 +1,6 @@
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { AMBER, CARD, DIM_TEXT, DISPLAY, HAIRLINE, RED, SNOW } from '@/contours/users/lib/colors';
+import { AMBER, CARD, FAINT, DISPLAY, HAIRLINE, RED, SNOW } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@/lib/domain/users';
@@ -100,7 +100,7 @@ function Row({
         <Text style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, lineHeight: '16px', color: SNOW }}>
           {title}
         </Text>
-        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM_TEXT }}>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
           {body}
         </Text>
       </Box>

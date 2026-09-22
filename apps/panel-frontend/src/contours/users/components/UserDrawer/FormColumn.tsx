@@ -1,5 +1,5 @@
 import { IconCheck, IconDice5, IconPlus } from '@tabler/icons-react';
-import { BORDER_INPUT, CARD, CYAN, DIM, DISPLAY, GROUND, HAIRLINE, MIST, MONO, MOSS, RED, SNOW } from '@/contours/users/lib/colors';
+import { EDGE, CARD, CYAN, DIM, DISPLAY, GROUND, HAIRLINE, MIST, MONO, MOSS, RED, SNOW } from '@/contours/users/lib/colors';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { PlanRow } from '@/contours/users/components/UserDrawer/PlanRow';
 import { Section } from '@/contours/users/components/UserDrawer/Section';
@@ -85,7 +85,7 @@ export function FormColumn({
                 width: 44,
                 borderRadius: 10,
                 backgroundColor: CARD,
-                border: `1px dashed ${BORDER_INPUT}`,
+                border: `1px dashed ${EDGE}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -112,7 +112,7 @@ export function FormColumn({
               padding: '0 12px',
               borderRadius: 10,
               backgroundColor: GROUND,
-              border: `1px solid ${form.errors.username ? RED : BORDER_INPUT}`,
+              border: `1px solid ${form.errors.username ? RED : EDGE}`,
             }}
           >
             <input

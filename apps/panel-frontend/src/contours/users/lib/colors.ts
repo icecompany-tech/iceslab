@@ -1,36 +1,39 @@
-export const HAIRLINE = '#1C2A3D';
-export const CARD = '#0F1A28';
-export const WELL = '#0B1420';
-export const BORDER_INPUT = '#2C3A4E';
-export const SNOW = '#C8D4E3';
-export const MIST = '#7A8BA3';
-export const DIM = '#3A4A60';
-export const CYAN = '#7DD3FC';
-export const MOSS = '#A7D8B9';
-export const RED = '#E07A5F';
-export const VIOLET = '#A78BFA';
-export const VIOLET_HI = '#C0AAF6';
+/**
+ * Палитра контура юзеров.
+ *
+ * Краски больше не объявляются здесь: они приходят из `lib/ui/tokens.ts`, где
+ * одно имя значит один цвет на всю панель. Файл остаётся точкой импорта, чтобы
+ * тридцать пять мест этого контура не переписывались ради переезда, и держит
+ * то, что действительно только здесь.
+ */
+export {
+  HAIRLINE,
+  CARD,
+  WELL,
+  GROUND,
+  ROW,
+  EDGE,
+  SNOW,
+  MIST,
+  FAINT,
+  DIM,
+  CYAN,
+  MOSS,
+  RED,
+  AMBER,
+  VIOLET,
+} from '@/lib/ui/tokens';
 
 export const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 export const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 
 /**
- * Three tones the artboard uses that the palette above did not carry.
+ * Две краски, которые есть только на этом экране.
  *
- * They are not decoration: the plan controls are deliberately quieter than the
- * username field above them (WELL on FIELD_EDGE against GROUND on
- * BORDER_INPUT), and reusing the louder pair made the two rows compete.
+ * Они не украшение: элементы плана нарочно тише поля имени над ними (WELL на
+ * FIELD_EDGE против GROUND на EDGE), и повтор громкой пары заставлял два ряда
+ * спорить друг с другом. В общие токены не идут: одно место на имя, сводить
+ * нечего.
  */
 export const FIELD_EDGE = '#16243F';
-export const BADGE = '#152233';
-export const DIM_TEXT = '#5A6B82';
-
-export const AMBER = '#F5B14C';
-/**
- * Фон страницы, и в этом файле он же стоял под вторым именем `SUNK`.
- *
- * Имя убито при сведении палитры 2026-09-22: тем же словом в других файлах
- * назывался ДРУГОЙ фон (`#0B1420`), и пока оба имени жили рядом, любая замена
- * по имени перекрашивала экран молча. Осталось одно имя на одну краску.
- */
-export const GROUND = '#08101A';
+export const VIOLET_HI = '#C0AAF6';

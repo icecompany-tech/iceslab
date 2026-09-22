@@ -1,7 +1,7 @@
 import { EXPIRY_SPANS, expiryDate, formatExpiryDate, spanOfDays } from '@/contours/users/lib/userExpiry';
 import { IconChevronDown } from '@tabler/icons-react';
 import { Box, Menu, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN, DIM_TEXT, DISPLAY, FIELD_EDGE, HAIRLINE, MIST, MONO, SNOW, WELL } from '@/contours/users/lib/colors';
+import { CARD, CYAN, FAINT, DISPLAY, FIELD_EDGE, HAIRLINE, MIST, MONO, SNOW, WELL } from '@/contours/users/lib/colors';
 import { STRATEGY_VALUES } from '@/contours/users/lib/userForm';
 import { expireRelative } from '@/contours/users/lib/userFormat';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +12,7 @@ import type { UserForm } from '@/contours/users/components/UserDrawer/useUserFor
  * The one control shape both halves of the row wear.
  *
  * Quieter than the username field above it: that one is GROUND inside
- * BORDER_INPUT, this one a shade lighter inside a much darker edge. Reusing
+ * EDGE, this one a shade lighter inside a much darker edge. Reusing
  * the louder pair here, which is what the first cut did, made the plan row
  * compete with the one field that is actually required.
  */
@@ -34,7 +34,7 @@ const PLAN_LABEL = {
   lineHeight: '12px',
   letterSpacing: '0.14em',
   textTransform: 'uppercase' as const,
-  color: DIM_TEXT,
+  color: FAINT,
 };
 
 const DROPDOWN = {
@@ -129,7 +129,7 @@ export function PlanRow({
                   <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '14px', color: MIST }}>
                     {t(`users.strategyShort.${form.values.trafficLimitStrategy}`)}
                   </Text>
-                  <IconChevronDown size={12} stroke={2} color={DIM_TEXT} />
+                  <IconChevronDown size={12} stroke={2} color={FAINT} />
                 </UnstyledButton>
               </Menu.Target>
               <Menu.Dropdown>
@@ -174,7 +174,7 @@ export function PlanRow({
                       fontFamily: DISPLAY,
                       fontSize: 11,
                       lineHeight: '14px',
-                      color: DIM_TEXT,
+                      color: FAINT,
                       flexShrink: 0,
                     }}
                   >

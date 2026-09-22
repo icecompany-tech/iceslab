@@ -1,5 +1,5 @@
 import { Box, Text } from '@mantine/core';
-import { AMBER, DIM_TEXT, DISPLAY, HAIRLINE, MONO, SNOW } from '@/contours/users/lib/colors';
+import { AMBER, FAINT, DISPLAY, HAIRLINE, MONO, SNOW } from '@/contours/users/lib/colors';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -63,7 +63,7 @@ export function RoutingPrecedence({
                 fontFamily: MONO,
                 fontSize: 11,
                 lineHeight: '15px',
-                color: hot ? AMBER : DIM_TEXT,
+                color: hot ? AMBER : FAINT,
                 width: 96,
                 flexShrink: 0,
               }}
@@ -77,7 +77,7 @@ export function RoutingPrecedence({
                 fontFamily: DISPLAY,
                 fontSize: 11,
                 lineHeight: '15px',
-                color: hot ? AMBER : won ? SNOW : DIM_TEXT,
+                color: hot ? AMBER : won ? SNOW : FAINT,
               }}
             >
               {r.value}

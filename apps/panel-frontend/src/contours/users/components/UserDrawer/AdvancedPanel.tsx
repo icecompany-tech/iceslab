@@ -1,7 +1,7 @@
 import { ROUTING_PRESET_IDS } from '@/lib/domain/routingPresets';
 import { IconChevronDown, IconChevronRight, IconDeviceDesktop, IconMail, IconNote, IconRoute, IconTag } from '@tabler/icons-react';
 import { AdvancedGroup } from '@/contours/users/components/UserDrawer/AdvancedGroup';
-import { BADGE, CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW } from '@/contours/users/lib/colors';
+import { ROW, CARD, DISPLAY, HAIRLINE, MIST, MONO, SNOW } from '@/contours/users/lib/colors';
 import { Box, NumberInput, Select, Stack, Text, TextInput, Textarea, UnstyledButton } from '@mantine/core';
 import { Hint } from '@/contours/users/components/UserDrawer/Hint';
 import { RoutingPrecedence } from '@/contours/users/components/UserDrawer/RoutingPrecedence';
@@ -92,7 +92,7 @@ export function AdvancedPanel({
               height: 20,
               paddingInline: 6,
               borderRadius: 999,
-              backgroundColor: BADGE,
+              backgroundColor: ROW,
               flexShrink: 0,
             }}
           >
