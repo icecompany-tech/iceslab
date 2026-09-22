@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Отчёты, которые пишет CI, чтобы посчитать тесты и правила линта. Локально
+# появляются, если прогнать с GITHUB_ACTIONS=1, и в дерево им не надо.
+eslint-report.json
+vitest-report.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
