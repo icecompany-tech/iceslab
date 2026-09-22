@@ -71,4 +71,14 @@ regexes = [
   # bytes. A real key pasted into the same file is still caught.
   '''chain-socks-fixture-password-0000''',
   '''aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA''',
+  # The two values those replaced, as 21bcd89 committed them and 0923c4e took
+  # them out. The scan reads the whole HISTORY (ci.yml passes fetch-depth 0,
+  # because a secret committed and removed three commits later is still there),
+  # so replacing a fixture does not retire its old value: both spellings have to
+  # be allowed, or every future run trips over a commit nobody will touch again.
+  #
+  # Rewriting develop to erase a fixture password is the expensive way to fix
+  # two lines of allowlist, and neither value ever guarded anything.
+  '''chain-secret-0123456789''',
+  '''1GPU7kQeM6IuQXEDMSlfBdFSrLP4nJFgIQO2TAuMrXk''',
 ]
