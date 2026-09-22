@@ -1,13 +1,12 @@
 import { Menu, UnstyledButton, Text } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { updateSettings } from '@/lib/domain/settings';
+import { MIST } from '@/lib/ui/tokens';
 
 const LANGS = [
   { code: 'ru', label: 'Русский', flag: '🇷🇺' },
   { code: 'en', label: 'English', flag: '🇬🇧' },
 ] as const;
-
-const MIST = '#7A8BA3';
 
 /**
  * Compact language picker for the topbar - a hairline pill holding the

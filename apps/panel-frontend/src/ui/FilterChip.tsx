@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Badge } from '@mantine/core';
+import { CYAN, HAIRLINE, MIST, SNOW } from '@/lib/ui/tokens';
 
 // Canonical selectable filter / toggle / view-switch chip for the dark theme.
 //
@@ -13,11 +14,6 @@ import { Badge } from '@mantine/core';
 //
 // `accent` is the color used for the active border + tint (defaults to cyan).
 // Pass a different accent to color-code a family (e.g. violet for cascade).
-
-const HAIRLINE = '#1C2A3D';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
 
 export interface FilterChipProps {
   active: boolean;

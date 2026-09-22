@@ -1,5 +1,6 @@
 import { Box, Loader, TextInput, UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
+import { CARD, CYAN, HAIRLINE, MIST, SNOW } from '@/lib/ui/tokens';
 
 /**
  * The one row every list page carries above its table: search on the left,
@@ -10,12 +11,6 @@ import type { ReactNode } from 'react';
  * and its counts live in the topbar line now, and the vertical space goes to
  * rows the operator actually came to read.
  */
-
-const HAIRLINE = '#1C2A3D';
-const CARD = '#0F1A28';
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
 
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 

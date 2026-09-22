@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Box, Text } from '@mantine/core';
 import type { PortCheckResult, PortOwner, PortTakenCode } from '@/lib/domain/portCheck';
 import { conflictSentence, holderWord, refusalSentence } from '@/lib/domain/portWords';
+import { MIST, MOSS, RED } from '@/lib/ui/tokens';
 
 /**
  * Что панель знает про этот порт на этой ноде, одной строкой.
@@ -16,9 +17,6 @@ import { conflictSentence, holderWord, refusalSentence } from '@/lib/domain/port
  * `PortRefusalLine` ниже.
  */
 
-const MOSS = '#A7D8B9';
-const MIST = '#7A8BA3';
-const RED = '#E07A5F';
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 export function PortCheckHint({

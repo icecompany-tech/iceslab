@@ -1,3 +1,4 @@
+import { AMBER, ROSE, SNOW } from '@/lib/ui/tokens';
 /**
  * Brand marks for the topbar, taken verbatim from the Paper artboard rather
  * than from an icon set: Telegram, Discord and GitHub each have an official
@@ -11,9 +12,6 @@
 
 const TELEGRAM_BLUE = 'rgb(42, 171, 238)';
 const DISCORD_BLURPLE = 'rgb(88, 101, 242)';
-const SNOW = '#C8D4E3';
-const AMBER = '#F5B14C';
-const ROSE = '#E08AA8';
 
 export function TelegramIcon({ size = 17 }: { size?: number }) {
   return (

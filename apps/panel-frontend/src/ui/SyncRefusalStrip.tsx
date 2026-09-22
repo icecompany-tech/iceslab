@@ -2,14 +2,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import type { SyncRefusal } from '@/lib/domain/syncRefusal';
+import { MIST, RED, SNOW, WELL } from '@/lib/ui/tokens';
 
-// Те же краски, что у контура нод (`contours/nodes/lib/colors.ts`). Держим
-// копию, как это делает `PortCheckHint`: `ui/` про контуры не знает, а сведение
-// палитры на всю панель это отдельная работа по токенам.
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const RED = '#E07A5F';
-const WELL = '#0B1420';
+// Краски из общих токенов, локальной копии больше нет: `lib/ui/tokens.ts` это
+// законный источник и для `ui/`, и для контуров (сведение 2026-09-22).
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
 

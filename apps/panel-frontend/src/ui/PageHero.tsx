@@ -1,9 +1,6 @@
 import { Box, Text } from '@mantine/core';
 import type { ReactNode } from 'react';
-
-const SNOW = '#C8D4E3';
-const MIST = '#7A8BA3';
-const CYAN = '#7DD3FC';
+import { CYAN, MIST, SNOW } from '@/lib/ui/tokens';
 
 interface PageHeroProps {
   /** Mono uppercase eyebrow above headline; rendered with a leading cyan dot. */

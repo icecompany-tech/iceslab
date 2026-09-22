@@ -3,11 +3,10 @@ import { Box, Text } from '@mantine/core';
 import type { ChainFacts } from '@/lib/domain/chainStatus';
 import { coreReason } from '@/lib/domain/syncRefusal';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
+import { MIST, MOSS, RED } from '@/lib/ui/tokens';
 
-// Те же краски, что у контуров; см. пояснение в `SyncRefusalStrip`.
-const MOSS = '#A7D8B9';
-const MIST = '#7A8BA3';
-const RED = '#E07A5F';
+// Краски из общих токенов; шрифт остаётся строкой на месте, строки шрифтов в
+// палитру не кладутся.
 const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /**
