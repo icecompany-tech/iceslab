@@ -29,6 +29,7 @@ export const app = {
     // совпадал с экраном ни одним словом.
     policies: 'Правила',
     torrentBlocker: 'Torrent Blocker',
+    geoSets: 'Гео-наборы',
     ruleSets: 'Наборы правил',
     egress: 'Точки выхода',
     dns: 'DNS',

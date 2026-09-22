@@ -186,6 +186,7 @@ export const common = {
     // крошку раздела и называлась бы «Метаданные», которых на ней нет.
     subscriptionDeliverySetup: '/ ПОДПИСКА · ФОРМАТ И АДРЕС',
     subscriptionRoutes: '/ ПОДПИСКА · МАРШРУТЫ',
+    geoSets: '/ ТРАФИК · ГЕО-НАБОРЫ',
     subscriptionDelivery: '/ ПОДПИСКА · ВЫДАЧА',
     subscriptionTemplates: '/ ПОДПИСКА · ШАБЛОНЫ',
     insights: '/ СИСТЕМА · АНАЛИТИКА',

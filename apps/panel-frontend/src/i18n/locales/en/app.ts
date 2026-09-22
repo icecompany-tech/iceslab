@@ -29,6 +29,7 @@ export const app = {
     // user rules, device rules. «Policies» shared no word with the screen.
     policies: 'Rules',
     torrentBlocker: 'Torrent Blocker',
+    geoSets: 'Geo sets',
     ruleSets: 'Rule sets',
     egress: 'Egress',
     dns: 'DNS',

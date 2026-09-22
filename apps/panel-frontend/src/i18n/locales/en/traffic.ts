@@ -189,4 +189,25 @@ export const traffic = {
     rulesInvalidJson: 'invalid JSON',
     rulesNotArray: 'not an array of rules',
   },
+
+  // Geo sets, phase 9. One row answers three questions at once: what it is,
+  // which version the panel holds, and how many nodes actually carry it.
+  geoSets: {
+    title: 'Geo sets',
+    count: '{{n}} sets',
+    fetched: 'fetched {{when}}',
+    onNodes: 'on {{same}} of {{total}} nodes',
+    diverged: 'ahead: {{n}}',
+    rolloutUnknown: 'rollout unknown',
+    sourceBuiltin: 'built in · {{tag}}',
+    sourceUrl: 'from a URL · {{url}}',
+    sourceUpload: 'uploaded · {{filename}}',
+    invalidNoMessage: 'the core refused the file, with no explanation',
+    soonTitle: 'Arrives with phase 9',
+    soonBody:
+      'A geo set is a list of domains or addresses that rules use to decide whether traffic goes direct, through the tunnel, or nowhere. The screen is here, the set store on the server is not, so an empty list is not because you created nothing.',
+    emptyTitle: 'No sets yet',
+    emptyBody:
+      'Without a set of your own the rules run on the lists built into the core. Your own set is for when those are not enough: your domains, your subnets, your refresh cadence.',
+  },
 } as const;

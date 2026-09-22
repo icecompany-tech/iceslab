@@ -161,6 +161,7 @@ export const common = {
     // inherit the section crumb and claim to be metadata, which it is not.
     subscriptionDeliverySetup: '/ SUBSCRIPTION · FORMAT AND ADDRESS',
     subscriptionRoutes: '/ SUBSCRIPTION · ROUTES',
+    geoSets: '/ TRAFFIC · GEO SETS',
     subscriptionDelivery: '/ SUBSCRIPTION · DELIVERY',
     subscriptionTemplates: '/ SUBSCRIPTION · TEMPLATES',
     insights: '/ SYSTEM · INSIGHTS',

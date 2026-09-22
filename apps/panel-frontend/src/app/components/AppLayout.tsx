@@ -438,6 +438,7 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   // префикса вниз, поэтому у вкладки собственная крошка, а не унаследованная.
   '/subscription/metadata/delivery': 'breadcrumb.subscriptionDeliverySetup',
   '/subscription/routes': 'breadcrumb.subscriptionRoutes',
+  '/traffic/geo-sets': 'breadcrumb.geoSets',
   '/subscription/delivery': 'breadcrumb.subscriptionDelivery',
   '/subscription/templates': 'breadcrumb.subscriptionTemplates',
   '/insights': 'breadcrumb.insights',
@@ -915,6 +916,11 @@ function AppLayoutInner() {
                 icon={<NavBlockIcon />}
                 placeholder
                 placeholderTitle={notWired}
+              />
+              <NavItem
+                to="/traffic/geo-sets"
+                label={t('sidebar.geoSets')}
+                icon={<NavRuleSetsIcon />}
               />
               <NavItem
                 label={t('sidebar.ruleSets')}
