@@ -1,3 +1,4 @@
+import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
 import { linkCellPair, type EnginePair } from '@/lib/domain/engines';
 import { AMBER, CYAN, DIM, MIST, MOSS, RED, VIOLET } from '@/contours/cascades/lib/colors';
@@ -52,17 +53,17 @@ export function protocolOptions(current: string | null): { value: string; label:
 /**
  * Через какие протоколы вход каскада действительно пускает трафик В ЦЕПЬ.
  *
- * Сегодня цепь несёт только то, что зашло через xray: вход на hy2 это фаза 6,
- * вход на AmneziaWG это фаза 7, и обе не сделаны. Селектор протокола входа при
- * этом показывает весь список нод, поэтому экран обещал то, чего нет: оператор
- * выбирал hysteria2, видел рядом «VLESS · ядро xray» и сохранял каскад,
- * который не повезёт ни одного клиента.
+ * ⚠ Список ОДИН и лежит в контракте (`packages/shared/src/transport.ts`): его
+ * читает и отказ сохранения на сервере (`ENTRY_NOT_CHAINABLE`), и этот экран.
+ * Своей копии здесь нет и быть не должно: вторая копия это ровно тот способ,
+ * которым форма начинает предлагать вариант, отвергаемый сервером.
  *
- * Константа здесь временная по построению: с фазой 6 список приедет полем от
- * сервера. Поэтому фабрика фактов принимает его АРГУМЕНТОМ, а не читает эту
- * строку: подмена источника не должна переписывать проверку.
+ * Сегодня в нём один xray: вход на hy2 приедет с фазой 6, на AmneziaWG с
+ * фазой 7. До этой правки экран обещал их обе: оператор выбирал hysteria2,
+ * видел рядом «VLESS · ядро xray» и сохранял каскад, который не повезёт ни
+ * одного клиента.
  */
-export const CHAIN_ENTRY_PROTOCOLS: string[] = ['xray'];
+export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS];
 
 /**
  * Пускает ли цепь трафик, зашедший этим протоколом.

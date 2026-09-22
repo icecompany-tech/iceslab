@@ -1,6 +1,8 @@
 ﻿import { describe, expect, it } from 'vitest';
+import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import {
   CHAIN_ENTRY_PROTOCOLS,
+  LINK_PROTOCOL_VALUES,
   entryChainFacts,
   lastAttemptFacts,
   legFacts,
@@ -219,7 +221,19 @@ describe('entryChainFacts', () => {
     expect(entryChainFacts('xray', [])).toEqual({ protocol: 'xray', carried: false });
   });
 
-  it('6. сегодняшний список ровно один протокол', () => {
-    expect(CHAIN_ENTRY_PROTOCOLS).toEqual(['xray']);
+  it('6. список приходит из контракта, а не из копии на фронте', () => {
+    // Сверяется с тем же массивом, который читает отказ сервера
+    // (ENTRY_NOT_CHAINABLE). Разойтись им теперь негде.
+    expect(CHAIN_ENTRY_PROTOCOLS).toEqual([...SHARED_CHAIN_ENTRY_PROTOCOLS]);
+  });
+
+  it('7. имена протоколов те же, что на проводе: hysteria, не hysteria2', () => {
+    // «hysteria2» это ПОДПИСЬ в селекторе, значение там всегда `hysteria`.
+    // Note подставляет значение, поэтому оператор видит имя, которое реально
+    // уедет на сервер и вернётся в отказе.
+    const f = entryChainFacts('hysteria');
+    expect(f?.protocol).toBe('hysteria');
+    expect(LINK_PROTOCOL_VALUES).toContain('hysteria');
+    expect(LINK_PROTOCOL_VALUES).not.toContain('hysteria2');
   });
 });
