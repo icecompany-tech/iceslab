@@ -577,63 +577,16 @@ export interface TopologyInput {
    * absent means the entry keeps drawing the chain with its own link-outs, which
    * is what every node in the field is doing today.
    *
-   * ⚠ The caller decides whether handover is SAFE for a given cascade, and
-   * `chainHandoverBlocker` below is the one place that answers it. A shape this
-   * renderer cannot hand over faithfully must keep the link-outs: quietly
-   * pinning a pool or an Auto line to one node is the failure this whole phase
-   * exists to avoid.
+   * Every shape hands over, including the two that briefly did not: a pool on
+   * the next step and the Auto line both mean "the fastest of several", and the
+   * chain renders that as a `urltest` group since 2026-09-22. There was a
+   * `chainHandoverBlocker` here for one day, naming those two; it is gone
+   * rather than kept as an empty list, because a gate that can no longer say no
+   * reads like a gate that never refuses anything.
    */
   chainSocksPassword?: string;
 }
 
-/**
- * Why this cascade cannot hand its entry over to the chain process yet, or null
- * when it can.
- *
- * Both answers are about SELECTION, which the entry does today with a leastPing
- * balancer and an observatory, and which the chain config does not do at all
- * yet: it renders one leg per direction and nothing that chooses between legs.
- *
- *   - a pool on the step after the entry means several legs serve one
- *     direction. Handing that to the chain as it stands pins the direction to
- *     whichever leg the renderer found first, so a pool of two silently becomes
- *     one node;
- *   - the Auto line is the same thing across directions: its whole meaning is
- *     "the fastest way out right now", and a chain that cannot compare legs
- *     turns it into a fixed exit while the subscription still calls it Auto.
- *
- * Both are answerable (sing-box has `urltest`), and neither is answerable by
- * this file. Until the chain renders it, the panel sends these cascades the way
- * it always has.
- */
-export function chainHandoverBlocker(input: TopologyInput): string | null {
-  if (input.auto) {
-    return (
-      'the cascade offers the Auto line, which means "the fastest way out right now", and the ' +
-      'chain process has nothing that compares legs yet'
-    );
-  }
-  // Counted per ENTRY NODE, not across the entry step: a pool of two entries is
-  // two separate configs each with one leg per direction, which hands over
-  // perfectly well. What blocks handover is one entry with two legs for one
-  // direction, which is a pool on the step AFTER it.
-  const perDirection = new Map<string, number>();
-  for (const l of input.links) {
-    if (!input.positions[0]?.nodeIds.includes(l.fromNodeId)) continue;
-    const key = `${l.fromNodeId}:${l.directionTag}`;
-    perDirection.set(key, (perDirection.get(key) ?? 0) + 1);
-  }
-  for (const [key, count] of perDirection) {
-    if (count > 1) {
-      const tag = key.split(':')[1];
-      return (
-        `direction ${tag} leaves the entry through a pool of ${count} nodes, and the chain ` +
-        `process has nothing that chooses between them yet`
-      );
-    }
-  }
-  return null;
-}
 
 /**
  * A cascade that points at a node we can no longer reach for its address.
@@ -677,6 +630,11 @@ export class CascadeTopologyBrokenError extends Error {
  * Named for the DIRECTION, like the link-out it replaces, so every routing rule
  * above it is written the same way whichever of the two is underneath.
  */
+/** The Auto line's direction tag on the chain side. Zero by construction:
+ *  direction tags are issued from a counter starting at 1, so the chain can
+ *  give Auto a port of its own without anything else claiming it. */
+const CHAIN_AUTO_TAG = 0;
+
 function chainOutTag(directionTag: number): string {
   return `${LINK_OUT_TAG}-chain-d${directionTag}`;
 }
@@ -946,22 +904,27 @@ export function buildTopologyFragmentsForNode(
    * exactly what the first one does.
    */
   if (isEntry && input.auto && byDirection.size > 1) {
-    balancers.push({
-      tag: AUTO_BALANCER_TAG,
-      selector: [LINK_OUT_TAG],
-      strategy: { type: 'leastPing' },
-    });
-    needsObservatory = true;
     const autoTags = [autoRouteTag(0)];
     for (const p of input.policies ?? []) autoTags.push(autoRouteTag(p.ordinal));
     // Same STRING form as the per-direction rule above: an array here fails the
     // whole config and the core refuses to start.
-    routingRules.push({
-      type: 'field',
-      vlessRoute: autoTags.join(','),
-      network: 'tcp,udp',
-      balancerTag: AUTO_BALANCER_TAG,
-    });
+    const gate = { type: 'field', vlessRoute: autoTags.join(','), network: 'tcp,udp' };
+    if (handover) {
+      // Under handover the measuring moved to the chain process, which offers
+      // Auto on its own loopback port like any other way out. So the entry has
+      // nothing left to choose between: no balancer, no observatory, one more
+      // socks outbound.
+      outbounds.push(chainSocksOutbound(CHAIN_AUTO_TAG, input.chainSocksPassword!));
+      routingRules.push({ ...gate, outboundTag: chainOutTag(CHAIN_AUTO_TAG) });
+    } else {
+      balancers.push({
+        tag: AUTO_BALANCER_TAG,
+        selector: [LINK_OUT_TAG],
+        strategy: { type: 'leastPing' },
+      });
+      needsObservatory = true;
+      routingRules.push({ ...gate, balancerTag: AUTO_BALANCER_TAG });
+    }
   }
 
   return {

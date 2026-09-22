@@ -43,28 +43,7 @@
   "outbounds": [
     {
       "type": "vless",
-      "tag": "out-d0",
-      "server": "nl-1.example.com",
-      "server_port": 24000,
-      "uuid": "00000000-0000-4000-8000-000000000001",
-      "flow": "xtls-rprx-vision",
-      "tls": {
-        "enabled": true,
-        "server_name": "www.microsoft.com",
-        "utls": {
-          "enabled": true,
-          "fingerprint": "chrome"
-        },
-        "reality": {
-          "enabled": true,
-          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
-          "short_id": "0123abcd"
-        }
-      }
-    },
-    {
-      "type": "vless",
-      "tag": "out-d1",
+      "tag": "out-d1-0",
       "server": "nl-1.example.com",
       "server_port": 24000,
       "uuid": "00000000-0000-4000-8000-000000000002",
@@ -82,6 +61,38 @@
           "short_id": "0123abcd"
         }
       }
+    },
+    {
+      "type": "vless",
+      "tag": "out-d1-1",
+      "server": "nl-2.example.com",
+      "server_port": 24000,
+      "uuid": "00000000-0000-4000-8000-000000000005",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
+          "short_id": "0123abcd"
+        }
+      }
+    },
+    {
+      "type": "urltest",
+      "tag": "out-d1",
+      "outbounds": [
+        "out-d1-0",
+        "out-d1-1"
+      ],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "tolerance": 50
     },
     {
       "type": "vless",
@@ -103,6 +114,17 @@
           "short_id": "0123abcd"
         }
       }
+    },
+    {
+      "type": "urltest",
+      "tag": "out-d0",
+      "outbounds": [
+        "out-d1",
+        "out-d2"
+      ],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "tolerance": 50
     },
     {
       "type": "direct",

@@ -75,15 +75,20 @@ export const entryInput: ChainRenderInput = {
   socksPassword: FIXTURE_SOCKS_PASSWORD,
   directionTags: [0, 1, 2],
   out: [
-    {
-      tag: 0,
-      host: 'nl-1.example.com',
-      cred: { protocol: 'vless', port: LINK_PORT_BASE, uuid: uuidFor(1), reality: REALITY },
-    },
+    // Direction 1 is a POOL of two interchangeable nodes, so the renderer has
+    // to be exercised on the group form as well as the plain leg. Tag 0 has no
+    // leg at all: the Auto line is a choice across the other directions, and
+    // giving it a leg of its own is how it used to become a fixed exit while
+    // still calling itself Auto.
     {
       tag: 1,
       host: 'nl-1.example.com',
       cred: { protocol: 'vless', port: LINK_PORT_BASE, uuid: uuidFor(2), reality: REALITY },
+    },
+    {
+      tag: 1,
+      host: 'nl-2.example.com',
+      cred: { protocol: 'vless', port: LINK_PORT_BASE, uuid: uuidFor(5), reality: REALITY },
     },
     {
       tag: 2,
@@ -272,6 +277,61 @@ describe('the chain config', () => {
     );
   });
 
+  it('lets the chain pick, where the entry used to', () => {
+    // The two forms, and they are not the same thing said twice: inside a
+    // direction the group answers "which of these interchangeable nodes is
+    // fastest", across directions it IS the Auto line. Both replace what the
+    // xray entry did with an observatory and leastPing, so the probe numbers
+    // are carried over rather than left to sing-box defaults.
+    const cfg = renderChainConfig(entryInput) as { outbounds: Record<string, unknown>[] };
+    const groups = cfg.outbounds.filter((o) => o.type === 'urltest');
+    expect(groups.map((g) => g.tag)).toEqual(['out-d1', 'out-d0']);
+    // The pool: over its own legs, never over another direction's.
+    expect(groups.find((g) => g.tag === 'out-d1')!.outbounds).toEqual(['out-d1-0', 'out-d1-1']);
+    // Auto: over the WAYS OUT, so a pooled direction is entered through its own
+    // group and the choice stays "fastest way out" rather than "fastest single
+    // node anywhere", which would let Auto land inside a pool it was not asked
+    // to pick from.
+    expect(groups.find((g) => g.tag === 'out-d0')!.outbounds).toEqual(['out-d1', 'out-d2']);
+    for (const g of groups) {
+      expect(g.url).toBe('https://www.gstatic.com/generate_204');
+      expect(g.interval).toBe('1m');
+      expect(g.tolerance).toBe(50);
+    }
+  });
+
+  it('leaves a direction with one way on exactly as it was', () => {
+    // The rule that keeps this change from touching configs it has no business
+    // touching: one leg means the leg itself carries the direction's tag, with
+    // no group wrapped around it.
+    const cfg = renderChainConfig(entryInput) as { outbounds: Record<string, unknown>[] };
+    const single = cfg.outbounds.find((o) => o.tag === 'out-d2')!;
+    expect(single.type).toBe('vless');
+    expect(single.server).toBe('se-1.example.com');
+  });
+
+  it('reaches every node through the chain that the xray fragments reach', () => {
+    // The semantic equivalence, stated over NODES rather than tags: whichever
+    // way out a subscriber picks, including Auto, the set of machines their
+    // traffic can leave through must be the same set the entry could dial
+    // itself. A group that quietly covers one leg is the failure this guards.
+    const cfg = renderChainConfig(entryInput) as { outbounds: Record<string, unknown>[] };
+    const servers = cfg.outbounds
+      .filter((o) => typeof o.server === 'string')
+      .map((o) => o.server as string)
+      .sort();
+    expect(servers).toEqual(['nl-1.example.com', 'nl-2.example.com', 'se-1.example.com']);
+    // And Auto can reach all three: it spans both directions, and direction 1
+    // spans both of its legs.
+    const by = new Map(cfg.outbounds.map((o) => [o.tag as string, o]));
+    const reach = (tag: string): string[] => {
+      const o = by.get(tag)!;
+      if (typeof o.server === 'string') return [o.server];
+      return (o.outbounds as string[]).flatMap(reach);
+    };
+    expect(reach('out-d0').sort()).toEqual(servers);
+  });
+
   it('keeps the same ways out as the cascade it renders', () => {
     // The semantic half of the golden: bytes change for reasons that do not
     // matter, the SET of ways out is what a subscriber notices. Entry offers
@@ -281,7 +341,11 @@ describe('the chain config', () => {
       outbounds: { tag: string }[];
     };
     expect(cfg.inbounds.map((i) => i.tag)).toEqual(['in-d0', 'in-d1', 'in-d2']);
-    expect(cfg.outbounds.map((o) => o.tag)).toEqual(['out-d0', 'out-d1', 'out-d2', 'direct']);
+    // One way out per tag offered, whatever it is made of underneath: the pool
+    // legs are plumbing, `out-d<tag>` is the promise.
+    const waysOut = cfg.outbounds.map((o) => o.tag).filter((t) => /^out-d\d+$/.test(t));
+    expect(waysOut.sort()).toEqual(['out-d0', 'out-d1', 'out-d2']);
+    expect(cfg.outbounds.at(-1)!.tag).toBe('direct');
   });
 });
 

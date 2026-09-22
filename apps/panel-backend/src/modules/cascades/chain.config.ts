@@ -25,6 +25,25 @@ export { CHAIN_SOCKS_BASE, chainSocksPort } from './chain.ports.js';
 
 export type ChainRole = 'entry' | 'transit' | 'exit';
 
+/**
+ * How the chain chooses between several ways of getting somewhere.
+ *
+ * The numbers are NOT sing-box defaults: they are the ones the xray entry has
+ * been measuring with, moved across unchanged, so the handover does not quietly
+ * change how fast a dead hop is noticed. `interval` IS the failure-detection
+ * window (a leg that fails its probe drops out of the group), and it was
+ * shortened to a minute on 2026-08-15 after a stopped Dutch exit kept receiving
+ * traffic from one entry while the other had already moved on.
+ *
+ * `tolerance` has no counterpart on the xray side, where `leastPing` simply
+ * takes the lowest number. 50ms of hysteresis keeps two legs that measure the
+ * same within noise from swapping on every probe, which costs a reconnect each
+ * time for no gain.
+ */
+export const CHAIN_PROBE_URL = 'https://www.gstatic.com/generate_204';
+export const CHAIN_PROBE_INTERVAL = '1m';
+export const CHAIN_PROBE_TOLERANCE_MS = 50;
+
 /** A leg out of this node, towards the next hop, carrying one direction. */
 export interface ChainLegOut {
   /** Direction this leg serves. 0 = the Auto line. */
@@ -66,6 +85,37 @@ function outTag(tag: number): string {
 /** Inbound tag for the socks listener of a direction. */
 function socksTag(tag: number): string {
   return `in-d${tag}`;
+}
+
+/** One leg INSIDE a pooled direction. Only used when a direction has more than
+ *  one, so a direction with a single way on keeps `out-d<tag>` on the leg
+ *  itself and its config does not change shape for a feature it does not use. */
+function poolLegTag(tag: number, idx: number): string {
+  return `${outTag(tag)}-${idx}`;
+}
+
+/** The Auto line's direction tag. Zero by construction: direction tags are
+ *  issued from a counter starting at 1, so nothing else can claim it. */
+const AUTO_TAG = 0;
+
+/**
+ * A group that picks the fastest of what it is given.
+ *
+ * This is what the xray entry's `observatory` + `leastPing` pair becomes once
+ * the choosing moves into the chain process. Two shapes use it and they mean
+ * different things: across the legs of ONE direction it answers "which of these
+ * interchangeable nodes is fastest", and across directions it is the Auto line,
+ * "fastest way out of here at all".
+ */
+function urltestOutbound(tag: string, over: string[]): Json {
+  return {
+    type: 'urltest',
+    tag,
+    outbounds: over,
+    url: CHAIN_PROBE_URL,
+    interval: CHAIN_PROBE_INTERVAL,
+    tolerance: CHAIN_PROBE_TOLERANCE_MS,
+  };
 }
 
 /** The name a link credential carries, which is how a TRANSIT tells directions
@@ -221,12 +271,49 @@ export function renderChainConfig(input: ChainRenderInput): Json {
     inbounds.push(linkInbound(input.in));
   }
 
+  /**
+   * The ways out, one entry per DIRECTION whatever it takes to get there.
+   *
+   * Three shapes, and the rules above them cannot tell which they got:
+   *   - one leg: the leg carries `out-d<tag>` itself, exactly as before, so a
+   *     plain direction's config does not change for a feature it does not use;
+   *   - several legs (a pool on the next step): each leg gets its own tag and
+   *     `out-d<tag>` becomes the group that picks the fastest of them;
+   *   - the Auto line: no leg of its own, `out-d0` is the group over every
+   *     other direction's way out.
+   */
+  const legsByDirection = new Map<number, ChainLegOut[]>();
   for (const leg of input.out ?? []) {
-    outbounds.push(
-      leg.cred.protocol === 'shadowsocks'
-        ? ssOutbound(leg.tag, leg.host, leg.cred)
-        : vlessOutbound(leg.tag, leg.host, leg.cred),
-    );
+    const list = legsByDirection.get(leg.tag) ?? [];
+    list.push(leg);
+    legsByDirection.set(leg.tag, list);
+  }
+  const renderLeg = (tag: string, leg: ChainLegOut): Json =>
+    leg.cred.protocol === 'shadowsocks'
+      ? { ...ssOutbound(leg.tag, leg.host, leg.cred), tag }
+      : { ...vlessOutbound(leg.tag, leg.host, leg.cred), tag };
+
+  const directionsWithLegs: number[] = [];
+  for (const [tag, legs] of [...legsByDirection.entries()].sort((a, b) => a[0] - b[0])) {
+    directionsWithLegs.push(tag);
+    if (legs.length === 1) {
+      outbounds.push(renderLeg(outTag(tag), legs[0]!));
+      continue;
+    }
+    const legTags = legs.map((_, i) => poolLegTag(tag, i));
+    legs.forEach((leg, i) => outbounds.push(renderLeg(legTags[i]!, leg)));
+    outbounds.push(urltestOutbound(outTag(tag), legTags));
+  }
+
+  // The Auto line, when the entry offers one. It spans the ways out rather than
+  // the raw legs, so a pooled direction is entered through its own group and
+  // the choice stays "fastest way out", not "fastest single node anywhere".
+  const wantsAuto =
+    input.role === 'entry' &&
+    (input.directionTags ?? []).includes(AUTO_TAG) &&
+    !legsByDirection.has(AUTO_TAG);
+  if (wantsAuto && directionsWithLegs.length > 0) {
+    outbounds.push(urltestOutbound(outTag(AUTO_TAG), directionsWithLegs.map(outTag)));
   }
   // The way out of the last hop, and the target of the policy's direct rules
   // everywhere else. No `block` and no `dns` outbound anywhere: those are the
@@ -236,8 +323,11 @@ export function renderChainConfig(input: ChainRenderInput): Json {
 
   if (input.role === 'entry') {
     for (const tag of input.directionTags ?? []) {
-      const leg = (input.out ?? []).find((l) => l.tag === tag);
-      if (!leg) continue;
+      // Asked of the OUTBOUNDS, not of the legs: the Auto line has no leg of
+      // its own and still has a way out, and a rule pointing at a tag nothing
+      // defines is a config sing-box refuses to load.
+      const hasWayOut = outbounds.some((o) => o.tag === outTag(tag));
+      if (!hasWayOut) continue;
       rules.push({ inbound: [socksTag(tag)], action: 'route', outbound: outTag(tag) });
     }
   } else if (input.role === 'transit' && input.in?.cred.protocol === 'vless') {

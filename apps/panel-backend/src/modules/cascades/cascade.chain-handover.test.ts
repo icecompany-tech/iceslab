@@ -4,11 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import {
-  buildTopologyFragmentsForNode,
-  chainHandoverBlocker,
-  type TopologyInput,
-} from './cascade.config.js';
+import { buildTopologyFragmentsForNode, type TopologyInput } from './cascade.config.js';
 import { chainSocksPort } from './chain.ports.js';
 
 /**
@@ -165,27 +161,37 @@ describe('the entry handing its directions to the chain process', () => {
     expect(addresses(RU2)).toEqual(addresses(RU1));
   });
 
-  it('refuses the handover where the chain process could not do the choosing', () => {
-    // A pool on the step AFTER the entry, and the Auto line, both mean "pick
-    // the fastest of several". The chain renders one leg per direction and
-    // nothing that compares them, so handing these over would pin a pool to one
-    // node while the panel still calls it a pool.
-    expect(chainHandoverBlocker(STAND)).toBeNull();
-    expect(chainHandoverBlocker({ ...STAND, auto: true })).toMatch(/Auto/);
-    const pooledNextStep: TopologyInput = {
-      ...STAND,
-      directions: [{ tag: 1, nodeIds: [NL, SE] }],
-      links: [leg(RU1, NL, 1), leg(RU1, SE, 1), leg(RU2, NL, 1), leg(RU2, SE, 1)],
-    };
-    expect(chainHandoverBlocker(pooledNextStep)).toMatch(/pool of 2/);
-    // And a pool on the ENTRY step is not a blocker: it is two configs with one
-    // leg each, which is exactly what hands over cleanly. Guarding it, because
-    // counting the entry step's own pool as "several legs" is the easy mistake.
-    expect(chainHandoverBlocker(STAND)).toBeNull();
+  it('hands the Auto line over as one more way out, and stops measuring', () => {
+    // Auto is "the fastest way out right now", and under handover the measuring
+    // belongs to the chain process, which offers it on its own loopback port
+    // like any other direction. So the entry keeps the RULE and loses the
+    // machinery: no balancer to pick with, no observatory to pick by.
+    const before = buildTopologyFragmentsForNode(RU1, { ...STAND, auto: true })!;
+    const after = buildTopologyFragmentsForNode(RU1, { ...handedOver, auto: true })!;
+    expect(before.balancers).toBeDefined();
+    expect(before.observatory).toBeDefined();
+    expect(after.balancers).toBeUndefined();
+    expect(after.observatory).toBeUndefined();
+
+    const autoOf = (rules: Record<string, unknown>[]) =>
+      rules.find((r) => r.network === 'tcp,udp' && typeof r.vlessRoute === 'string')!;
+    // The gate is untouched: same choices accepted, same place in the order.
+    expect(autoOf(after.routingRules).vlessRoute).toBe(autoOf(before.routingRules).vlessRoute);
+    expect(after.routingRules.length).toBe(before.routingRules.length);
+    // Tag 0 is Auto's port, and it is a port of its own rather than a reuse of
+    // some direction's: reusing one would send every Auto subscriber down the
+    // same fixed way out.
+    const auto = after.outbounds.find((o) => o.tag === 'cascade-link-out-chain-d0')!;
+    expect((auto.settings as { servers: { port: number }[] }).servers[0]!.port).toBe(
+      chainSocksPort(0),
+    );
   });
 
-  it.skipIf(!XRAY_BIN)('is a config xray will load', () => {
-    const fragment = buildTopologyFragmentsForNode(RU1, handedOver)!;
+  it.skipIf(!XRAY_BIN).each([
+    ['without the Auto line', handedOver],
+    ['with the Auto line', { ...handedOver, auto: true }],
+  ])('is a config xray will load, %s', (_what, input) => {
+    const fragment = buildTopologyFragmentsForNode(RU1, input as TopologyInput)!;
     const config = JSON.stringify({
       log: { loglevel: 'warning' },
       inbounds: [
