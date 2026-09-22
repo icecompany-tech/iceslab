@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -27,6 +27,7 @@ import {
   FieldLabel,
   Hint,
   InfoIcon,
+  LegRow,
   ModeTile,
   Note,
   PositionRow,
@@ -62,6 +63,7 @@ import {
   MAX_LINKS,
   MAX_POSITIONS,
   ROLE_TONE,
+  legFacts,
   poolRoleAt,
   toDirectionInputs,
   toPositionInputs,
@@ -437,8 +439,8 @@ export function CascadeCreatePage() {
             </Box>
 
             {pools.map((pool, i) => (
+              <Fragment key={pool.key}>
               <PositionRow
-                key={pool.key}
                 role={poolRoleAt(i)}
                 poolLabel={i === 0 ? t('cascadeCreate.poolEntry') : t('cascadeCreate.poolTransit')}
                 nodeIds={pool.nodeIds}
@@ -449,9 +451,6 @@ export function CascadeCreatePage() {
                 onNodes={(ids) => setPoolNodes(i, ids)}
                 entryProtocol={i === 0 ? pool.entryProtocol : null}
                 onEntryProtocol={(v) => setPool(i, { entryProtocol: v })}
-                linkProtocol={pool.linkProtocol}
-                linkLabel={t('cascadeCreate.linkProtocol')}
-                onLinkProtocol={(v) => setPool(i, { linkProtocol: v })}
                 canUp={i > 1}
                 canDown={i > 0 && i < pools.length - 1}
                 canDelete={i > 0}
@@ -470,6 +469,14 @@ export function CascadeCreatePage() {
                     </Note>
                   ))}
               </PositionRow>
+              {/* Та же нога, что и на правке: связь между шагами живёт между
+                  карточками. Подпись у последней про фазу 5. */}
+              <LegRow
+                facts={legFacts(pool.linkProtocol, i)}
+                onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
+                caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
+              />
+              </Fragment>
             ))}
 
             {/* The exit position. It holds directions rather than a pool, so it

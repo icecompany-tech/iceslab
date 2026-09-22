@@ -94,6 +94,12 @@ export const cascades = {
     directionNoNodes: 'no nodes yet',
     chainPendingDirection: 'no direction picked yet',
     chainPendingDirectionN: 'direction {{n}} not picked yet',
+    // The leg row between positions. The port is read-only: the panel assigns
+    // it from the step number, and it is shown because it is what gets opened
+    // in the firewall.
+    legPort: 'port {{port}}',
+    legUnknown: 'no link cell picked',
+    legToDirections: 'the leg to the exit is set on the direction, from phase 5',
     needEntry: 'Pick at least one entry node to enable Create.',
     needDirection: 'Give every direction a country to enable Create.',
     tooManyLinks: '{{n}} links, the ceiling is {{max}}. Drop an entry or a direction.',

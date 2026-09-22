@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { lastAttemptFacts, poolRowFacts } from '@/contours/cascades/lib/cascadeForm';
+import { lastAttemptFacts, legFacts, poolRowFacts } from '@/contours/cascades/lib/cascadeForm';
 
 /**
  * Что стоит в строке пула на месте выбора ноды.
@@ -121,5 +121,56 @@ describe('lastAttemptFacts', () => {
 
   it('7. хопов нет: считать нечего', () => {
     expect(lastAttemptFacts([], fleet([['a', { lastInboundSyncAt: '2026-09-22T09:00:00.000Z' }]]))).toBeNull();
+  });
+});
+
+/**
+ * Нога между позициями: ячейка, движок и порт.
+ *
+ * Сторожит две подмены. Первая: сохранённое имя, которого панель не знает, это
+ * НЕ рабочая нога, и пары протокол+движок у него нет, её нельзя выдумать.
+ * Вторая: порт назначает панель по номеру шага, и строка обязана показывать
+ * именно тот порт, который оператор пойдёт открывать в фаерволе.
+ */
+
+describe('legFacts', () => {
+  it('1. пусто: ячейка не выбрана, это «неизвестно», а не ошибка', () => {
+    expect(legFacts(null, 0)).toEqual({ state: 'unknown', cell: null, pair: null, port: 24000 });
+    expect(legFacts('', 1)).toEqual({ state: 'unknown', cell: null, pair: null, port: 24001 });
+    expect(legFacts('   ', 2).state).toBe('unknown');
+  });
+
+  it('2. хранимый xray это ячейка vless: колонка держит имя движка по истории', () => {
+    expect(legFacts('xray', 0)).toEqual({
+      state: 'known', cell: 'xray', pair: { protocol: 'vless', engine: 'xray' }, port: 24000,
+    });
+  });
+
+  it('3. vless записан прямо: та же ячейка, тот же ответ', () => {
+    expect(legFacts('vless', 0).pair).toEqual({ protocol: 'vless', engine: 'xray' });
+  });
+
+  it('4. shadowsocks: вторая реализованная ячейка, движок тот же xray', () => {
+    expect(legFacts('shadowsocks', 1)).toEqual({
+      state: 'known', cell: 'shadowsocks', pair: { protocol: 'shadowsocks', engine: 'xray' }, port: 24001,
+    });
+  });
+
+  it('5. ячейка, которой панель не умеет: показываем что записано, пару НЕ выдумываем', () => {
+    // hy2 и tuic станут ногами в фазе 5; до неё сохранённое имя это просто
+    // строка, и говорить «ходит по hy2 через sing-box» панель права не имеет.
+    for (const cell of ['hysteria', 'tuic', 'mieru']) {
+      const f = legFacts(cell, 0);
+      expect(f.state).toBe('unrealised');
+      expect(f.cell).toBe(cell);
+      expect(f.pair).toBeNull();
+    }
+  });
+
+  it('6. порт это 24000 плюс номер шага, и он же у нереализованной ячейки', () => {
+    expect(legFacts('xray', 0).port).toBe(24000);
+    expect(legFacts('xray', 3).port).toBe(24003);
+    expect(legFacts('tuic', 4).port).toBe(24004);
+    expect(legFacts(null, 4).port).toBe(24004);
   });
 });

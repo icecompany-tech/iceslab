@@ -1,4 +1,5 @@
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
+import { linkCellPair, type EnginePair } from '@/lib/domain/engines';
 import { AMBER, CYAN, DIM, MIST, MOSS, RED, VIOLET } from '@/contours/cascades/lib/colors';
 
 /**
@@ -249,3 +250,47 @@ export function lastAttemptFacts(
 
   return at ? { at, refused, answered } : null;
 }
+
+/**
+ * Порт ноги назначает ПАНЕЛЬ, а не оператор: линк с позиции i слушает на
+ * ПРИНИМАЮЩЕЙ ноде порт `LINK_PORT_BASE + i`.
+ *
+ * Зеркало `LINK_PORT_BASE` из `cascade.config.ts:28` бэкенда. Число здесь
+ * только показывается: менять его отсюда нечем и не нужно, но и прятать нельзя,
+ * потому что именно его оператор открывает в фаерволе, когда линк не встаёт.
+ */
+export const LEG_PORT_BASE = 24000;
+
+/**
+ * Одна нога пути: чем позиция N говорит с тем, что за ней.
+ *
+ * Три состояния, и «неизвестно» тут не то же, что «не выбрано»: в колонке
+ * лежит свободная строка, и сохранённое значение может не совпадать ни с одной
+ * ячейкой, которую панель умеет собрать (список ячеек короткий сознательно, см.
+ * `LINK_CELLS`). Тогда показывается то, что записано, и это НЕ выдаётся за
+ * рабочую ногу.
+ *
+ * `pair` заполнен только у реализованной ячейки: пару протокол+движок нельзя
+ * вывести из имени, которого панель не знает, а угадать её значило бы сказать
+ * оператору, чем ходит трафик, не имея на это оснований.
+ */
+export type LegState = 'known' | 'unrealised' | 'unknown';
+
+export interface LegFacts {
+  state: LegState;
+  /** Что записано в колонке. `null` только у `unknown`. */
+  cell: string | null;
+  /** Протокол и движок ячейки. Есть только у `known`. */
+  pair: EnginePair | null;
+  /** Порт на принимающей стороне: 24000 + номер шага. */
+  port: number;
+}
+
+export function legFacts(linkProtocol: string | null | undefined, step: number): LegFacts {
+  const port = LEG_PORT_BASE + step;
+  const cell = linkProtocol && linkProtocol.trim() !== '' ? linkProtocol : null;
+  if (!cell) return { state: 'unknown', cell: null, pair: null, port };
+  const pair = linkCellPair(cell);
+  return pair ? { state: 'known', cell, pair, port } : { state: 'unrealised', cell, pair: null, port };
+}
+

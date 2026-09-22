@@ -221,6 +221,19 @@ export const LINK_CELLS: { value: string; pair: EnginePair }[] = [
 
 const LINK_CELL_VALUES = new Set(LINK_CELLS.map((c) => c.value));
 
+/**
+ * Пара протокол+движок за хранимым именем ячейки, и `null`, когда такой ячейки
+ * панель не знает.
+ *
+ * `vless` это то же, что хранимый `xray`: колонка держит имя движка по
+ * историческим причинам, и обе записи означают одну ячейку.
+ */
+export function linkCellPair(value: string | null | undefined): EnginePair | null {
+  if (!value) return null;
+  if (value === 'vless') return { protocol: 'vless', engine: 'xray' };
+  return LINK_CELLS.find((c) => c.value === value)?.pair ?? null;
+}
+
 /** A stored value the backend would accept today. `vless` is the cell named
  *  directly and is legal too, so it is not offered twice but is not called
  *  wrong either. */

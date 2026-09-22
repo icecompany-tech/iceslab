@@ -29,6 +29,7 @@ import {
   protocolOptions,
   statusTone,
   type HopRole,
+  type LegFacts,
 } from '@/contours/cascades/lib/cascadeForm';
 import {
   engineListWords,
@@ -36,6 +37,7 @@ import {
   linkCellOptions,
   nodeCarriesCascadeLink,
   pairCaveats,
+  pairLabel,
 } from '@/lib/domain/engines';
 
 /**
@@ -462,9 +464,6 @@ export function PositionRow({
   onNodes,
   entryProtocol,
   onEntryProtocol,
-  linkProtocol,
-  linkLabel,
-  onLinkProtocol,
   canUp,
   canDown,
   canDelete,
@@ -483,9 +482,6 @@ export function PositionRow({
   onNodes: (ids: string[]) => void;
   entryProtocol: CascadeProtocol | null;
   onEntryProtocol: (v: CascadeProtocol) => void;
-  linkProtocol: CascadeProtocol;
-  linkLabel: string;
-  onLinkProtocol: (v: CascadeProtocol) => void;
   canUp: boolean;
   canDown: boolean;
   canDelete: boolean;
@@ -543,17 +539,9 @@ export function PositionRow({
         )}
       </Stack>
 
-      <Stack gap={6} className="cascade-hop-field">
-        <FieldLabel>{linkLabel}</FieldLabel>
-        {/* Same two cells as the older row above, and the same reason. */}
-        <Select
-          data={linkCellOptions(linkProtocol, t)}
-          value={linkProtocol}
-          allowDeselect={false}
-          error={!isRealisedLinkCell(linkProtocol)}
-          onChange={(v) => v && onLinkProtocol(v as CascadeProtocol)}
-        />
-      </Stack>
+      {/* Ячейка линка переехала в ряд-ногу между карточками: она описывает не
+          позицию, а связь между двумя, и внутри карточки эта связь читалась
+          как свойство верхней из них. */}
 
       <RowActions
         canUp={canUp}
@@ -564,6 +552,82 @@ export function PositionRow({
         onDelete={onDelete}
       />
     </Box>
+  );
+}
+
+/**
+ * Нога между двумя позициями: чем шаг говорит со следующим.
+ *
+ * Стоит МЕЖДУ карточками, а не внутри верхней. Раньше выбор линка жил в
+ * карточке позиции, и пока ячейка была одна на весь каскад, разницы не было.
+ * Как только ноги у шагов разные, читать путь приходится, ныряя внутрь каждой
+ * карточки, а между ними при этом пусто, хотя именно там живёт связь.
+ *
+ * Порт показан рядом с ячейкой и не редактируется: его назначает панель по
+ * номеру шага, и это то самое число, которое открывают в фаерволе, когда линк
+ * не встаёт. Параметры ноги (obfs, congestion) тут не рисуются: контракта под
+ * них ещё нет, а пустые поля обещали бы настройку, которой некуда лечь.
+ */
+export function LegRow({
+  facts,
+  onCell,
+  caption,
+}: {
+  facts: LegFacts;
+  /** Нет обработчика, значит ячейка здесь не выбирается: строка только
+   *  рассказывает, что будет дальше. */
+  onCell?: (value: string) => void;
+  caption?: string;
+}) {
+  const { t } = useTranslation();
+  const words =
+    facts.state === 'known'
+      ? pairLabel(facts.pair!, t)
+      : facts.state === 'unrealised'
+        ? t('engine.cellUnrealised', { name: facts.cell })
+        : t('cascadeCreate.legUnknown');
+  const tone = facts.state === 'known' ? SNOW : facts.state === 'unrealised' ? RED : FAINT;
+
+  return (
+    <Box
+      className="cascade-leg"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', paddingLeft: 14 }}
+    >
+      <LegIcon />
+      <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: tone }}>{words}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: DIM }}>
+        {t('cascadeCreate.legPort', { port: facts.port })}
+      </Text>
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        {caption && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+            {caption}
+          </Text>
+        )}
+      </Box>
+      {onCell && (
+        <Box style={{ width: 210, flexShrink: 0 }}>
+          <Select
+            size="xs"
+            data={linkCellOptions(facts.cell, t)}
+            value={facts.cell}
+            allowDeselect={false}
+            error={facts.state === 'unrealised'}
+            onChange={(v) => v && onCell(v)}
+          />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/** Скоба между двумя карточками: линия вниз, потом вправо. */
+function LegIcon() {
+  return (
+    <svg width="14" height="18" viewBox="0 0 14 18" style={{ flexShrink: 0 }}>
+      <path d="M3 0 L3 12 Q3 15 6 15 L13 15" fill="none" stroke={EDGE} strokeWidth="1.5" />
+      <circle cx="13" cy="15" r="1.8" fill={EDGE} />
+    </svg>
   );
 }
 

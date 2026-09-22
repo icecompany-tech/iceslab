@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
@@ -38,6 +38,7 @@ import {
   EyeIcon,
   FieldLabel,
   Hint,
+  LegRow,
   Note,
   PositionRow,
   PreviewDirection,
@@ -77,6 +78,7 @@ import {
   ROLE_TONE,
   isKnownProtocol,
   lastAttemptFacts,
+  legFacts,
   poolRoleAt,
   statusTone,
   toDirectionInputs,
@@ -530,8 +532,8 @@ export function CascadeEditPage() {
             </Box>
 
             {pools.map((pool, i) => (
+              <Fragment key={pool.key}>
               <PositionRow
-                key={pool.key}
                 role={poolRoleAt(i)}
                 poolLabel={i === 0 ? t('cascadeCreate.poolEntry') : t('cascadeCreate.poolTransit')}
                 nodeIds={pool.nodeIds}
@@ -542,9 +544,6 @@ export function CascadeEditPage() {
                 onNodes={(ids) => setPoolNodes(i, ids)}
                 entryProtocol={i === 0 ? pool.entryProtocol : null}
                 onEntryProtocol={(v) => setPool(i, { entryProtocol: v })}
-                linkProtocol={pool.linkProtocol}
-                linkLabel={t('cascadeCreate.linkProtocol')}
-                onLinkProtocol={(v) => setPool(i, { linkProtocol: v })}
                 canUp={i > 1}
                 canDown={i > 0 && i < pools.length - 1}
                 canDelete={i > 0}
@@ -583,6 +582,17 @@ export function CascadeEditPage() {
                   );
                 })}
               </PositionRow>
+              {/* Нога идёт ПОСЛЕ карточки: она про то, что будет дальше. У
+                  последней позиции дальше направления, и подпись говорит, где
+                  эта нога будет настраиваться, когда у направления появится
+                  своя. Селектор при этом остаётся: сегодня это единственное
+                  место, где последняя нога вообще задаётся. */}
+              <LegRow
+                facts={legFacts(pool.linkProtocol, i)}
+                onCell={(v) => setPool(i, { linkProtocol: v as CascadeProtocol })}
+                caption={i === pools.length - 1 ? t('cascadeCreate.legToDirections') : undefined}
+              />
+              </Fragment>
             ))}
 
             {/* The exit position. It holds directions rather than a pool. */}
