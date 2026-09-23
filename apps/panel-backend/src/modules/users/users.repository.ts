@@ -153,14 +153,18 @@ export async function create(
   });
 }
 
+/** `before` as in `create`: run first, in the same transaction. */
 export async function updateById(
   id: string,
   data: Prisma.UserUpdateInput,
+  before?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<UserWithTraffic> {
-  return prisma.user.update({
-    where: { id },
-    data,
-    include: USER_INCLUDE,
+  if (!before) {
+    return prisma.user.update({ where: { id }, data, include: USER_INCLUDE });
+  }
+  return prisma.$transaction(async (tx) => {
+    await before(tx);
+    return tx.user.update({ where: { id }, data, include: USER_INCLUDE });
   });
 }
 

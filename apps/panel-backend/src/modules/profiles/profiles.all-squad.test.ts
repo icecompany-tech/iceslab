@@ -66,6 +66,31 @@ describe('a profile saved on a database that lost the All squad', () => {
     expect(all?.members.map((m) => m.userId)).toEqual([JSON.parse(res.body).id]);
   });
 
+  it('moves a user back to the All squad it brings back when their squads are cleared', async () => {
+    // Created into an explicit squad, which needs no repair; then the edit
+    // with no squads falls back to "All", on a database that lost it.
+    const squad = await prisma.group.create({ data: { name: 'explicit' } });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { username: 'squad-user', groupIds: [squad.id] },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+    expect(await prisma.group.findUnique({ where: { id: ALL_SQUAD_ID } })).toBeNull();
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/users/${id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupIds: [] },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const members = await prisma.groupMember.findMany({ where: { userId: id } });
+    expect(members.map((m) => m.groupId)).toEqual([ALL_SQUAD_ID]);
+  });
+
   it('names the system row apart when a squad called All already exists', async () => {
     await prisma.group.create({ data: { name: 'All' } });
     const res = await create('hy-2');

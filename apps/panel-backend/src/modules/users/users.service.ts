@@ -249,7 +249,10 @@ export async function updateUser(
     changedFields.push('enabledProtocols');
   }
 
-  const updated = await repo.updateById(id, data);
+  // The same repair as on create: falling back to "All" on a database that
+  // lost the row would fail on the foreign key.
+  const intoAll = input.groupIds !== undefined && input.groupIds.length === 0;
+  const updated = await repo.updateById(id, data, intoAll ? ensureAllSquad : undefined);
 
   if (changedFields.length > 0) {
     eventBus.emit('user.updated', {
