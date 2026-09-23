@@ -23,9 +23,9 @@ import {
   deleteBinding,
   getNextFreePort,
   listBindings,
-  type Binding,
   type Profile,
 } from '@/lib/domain/profiles';
+import { deployDiff } from '@/contours/profiles/lib/deployDiff';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
 import {
   engineCoreWord,
@@ -78,6 +78,9 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   }, [bindingsQuery.data]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Что было отмечено, когда окно открылось. Снимать разрешено только то, что
+   *  оператор снял сам, см. `deployDiff`. */
+  const [seeded, setSeeded] = useState<Set<string>>(new Set());
 
   const defaultPort = useMemo(() => {
     const cfg = profile?.config as { port?: number } | undefined;
@@ -108,6 +111,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   if (seedKey !== null && seedKey !== seededFor) {
     setSeededFor(seedKey);
     setSelected(new Set(initialSelected));
+    setSeeded(new Set(initialSelected));
     setPort(defaultPort);
     setPortTouched(false);
   }
@@ -119,9 +123,9 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   // node; a port free there may still collide on another node in a multi-select,
   // but the human-readable 409 (F-P1) covers that edge.
   const firstNewNodeId = useMemo(() => {
-    for (const id of selected) if (!initialSelected.has(id)) return id;
+    for (const id of selected) if (!seeded.has(id)) return id;
     return null;
-  }, [selected, initialSelected]);
+  }, [selected, seeded]);
   useEffect(() => {
     if (!opened || portTouched || firstNewNodeId === null) return;
     let cancelled = false;
@@ -137,8 +141,16 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     };
   }, [opened, portTouched, firstNewNodeId]);
 
-  /** Что панель знает про этот порт на выбранных нодах. */
-  const [portCheck, setPortCheck] = useState<PortCheckResult | null>(null);
+  /**
+   * Что панель знает про этот порт на КАЖДОЙ новой ноде, отдельно.
+   *
+   * Порт один на все отмеченные ноды, но занят он может быть на одной и свободен
+   * на другой, и сводная строка «про первую занятую» прятала остальные. Проверка
+   * идёт с транспортом профиля: подсказка свободного порта с сервера
+   * (next-free-port) транспорт не учитывает, и без этой строки udp-порт, занятый
+   * по tcp, выглядел бы свободным, а tcp-порт, занятый по udp, занятым.
+   */
+  const [portChecks, setPortChecks] = useState<Map<string, PortCheckResult>>(new Map());
   const [portChecking, setPortChecking] = useState(false);
   /** Отказ сохранения по порту: код плюс держатели, в машинной форме. */
   const [portRefusal, setPortRefusal] = useState<{
@@ -156,52 +168,49 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     [profile],
   );
 
+  // Ноды, которые ДОБАВЛЯЮТСЯ: у уже развёрнутых порт свой и этим полем не
+  // меняется, а «занято вами же» это не ответ.
+  // Ключ строкой, а массив из него: так массив меняется только когда меняется
+  // состав, и проверка не уходит по кругу на каждый рендер.
+  const targetsKey = [...selected].filter((id) => !seeded.has(id)).sort().join(',');
+  const newTargets = useMemo(() => (targetsKey ? targetsKey.split(',') : []), [targetsKey]);
+
   const runPortCheck = useCallback(async () => {
-    // Спрашиваем ровно про те ноды, которые ДОБАВЛЯЮТСЯ: у уже развёрнутых
-    // порт свой и этим полем не меняется, а «занято вами же» это не ответ.
-    const targets = [...selected].filter((id) => !initialSelected.has(id));
-    if (targets.length === 0) {
-      setPortCheck(null);
+    if (newTargets.length === 0) {
+      setPortChecks(new Map());
       return;
     }
     setPortChecking(true);
     try {
       const all = await Promise.all(
-        targets.map((id) => checkNodePort(id, { port, transport: portCheckTransport })),
+        newTargets.map(async (id) => [id, await checkNodePort(id, { port, transport: portCheckTransport })] as const),
       );
-      // Первый отказ важнее общей картины: человеку менять порт, и достаточно
-      // одной ноды, где он занят. Если отказов нет, но хоть одна нода молчала,
-      // сводный ответ не может быть увереннее самого слабого из них.
-      const busy = all.find((r) => !r.ok);
-      if (busy) {
-        setPortCheck(busy);
-      } else {
-        const partial = all.find((r) => r.certainty === 'partial');
-        setPortCheck(partial ?? all[0] ?? null);
-      }
+      setPortChecks(new Map(all));
     } catch {
-      setPortCheck(null);
+      setPortChecks(new Map());
     } finally {
       setPortChecking(false);
     }
-  }, [selected, initialSelected, port, portCheckTransport]);
+  }, [newTargets, port, portCheckTransport]);
+
+  // Проверка сама, а не по уходу фокуса с поля: порт меняет и подсказка сервера,
+  // и галка у новой ноды, а в обоих случаях фокус на поле не бывал.
+  useEffect(() => {
+    if (!opened) return;
+    const timer = window.setTimeout(() => void runPortCheck(), 350);
+    return () => window.clearTimeout(timer);
+  }, [opened, runPortCheck]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!profile) return;
-      const bindings = bindingsQuery.data?.bindings ?? [];
-      const byNodeId = new Map<string, Binding>();
-      for (const b of bindings) byNodeId.set(b.nodeId, b);
-
-      const toCreate: string[] = [];
-      const toDelete: string[] = [];
-
-      for (const nodeId of selected) {
-        if (!byNodeId.has(nodeId)) toCreate.push(nodeId);
-      }
-      for (const b of bindings) {
-        if (!selected.has(b.nodeId)) toDelete.push(b.id);
-      }
+      // Поштучно: POST на новую галку, DELETE на снятую. Снимается только то,
+      // что оператор снял сам (`deployDiff`).
+      const { create: toCreate, remove: toDelete } = deployDiff(
+        seeded,
+        selected,
+        bindingsQuery.data?.bindings ?? [],
+      );
 
       await Promise.all([
         ...toCreate.map((nodeId) =>
@@ -243,7 +252,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
         setPortRefusal(refusal);
         // Подсказка отвечала «свободен» до сохранения, а сервер ответил
         // обратное: держать обе строки значит спорить с самим собой.
-        setPortCheck(null);
+        setPortChecks(new Map());
         return;
       }
       notifications.show({
@@ -264,11 +273,13 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   }
 
   const nodes = nodesQuery.data?.nodes ?? [];
+  // Против того, что было при открытии, а не против живого ответа сервера:
+  // привязка, появившаяся где-то ещё, правкой оператора не считается.
   const dirty = useMemo(() => {
-    if (selected.size !== initialSelected.size) return true;
-    for (const id of selected) if (!initialSelected.has(id)) return true;
+    if (selected.size !== seeded.size) return true;
+    for (const id of selected) if (!seeded.has(id)) return true;
     return false;
-  }, [selected, initialSelected]);
+  }, [selected, seeded]);
 
   const loading = nodesQuery.isLoading || bindingsQuery.isLoading;
 
@@ -310,23 +321,29 @@ export function DeployProfileModal({ profile, onClose }: Props) {
             setPort(typeof v === 'number' ? v : Number(v) || defaultPort);
             // Старый ответ относится к старому числу, держать его на экране
             // значит отвечать не про тот порт. Отказ сервера тем более.
-            setPortCheck(null);
+            setPortChecks(new Map());
             setPortRefusal(null);
           }}
-          onBlur={() => void runPortCheck()}
         />
         {/* Отказ сервера выше подсказки: он про то же поле, но он уже
             случился, а подсказка только предполагала. */}
         {portRefusal && <PortRefusalLine code={portRefusal.code} conflicts={portRefusal.conflicts} />}
-        {/* Порт здесь один на все выбранные ноды, поэтому и ответ сводный:
-            строка говорит про первую ноду, где порт занят, а не про каждую по
-            очереди. Запрета нет, отказ по факту даёт сохранение. */}
-        <PortCheckHint
-          result={portCheck}
-          checking={portChecking}
-          port={port}
-          transport={portCheckTransport}
-        />
+        {/* Ответ по КАЖДОЙ новой ноде отдельно: порт один, а занят он может быть
+            на одной и свободен на другой. Запрета нет, отказ по факту даёт
+            сохранение. */}
+        {newTargets.map((nodeId) => (
+          <Stack key={nodeId} gap={2}>
+            <Text size="xs" c="dimmed" ff="monospace">
+              {nodes.find((n) => n.id === nodeId)?.name ?? nodeId}
+            </Text>
+            <PortCheckHint
+              result={portChecks.get(nodeId) ?? null}
+              checking={portChecking}
+              port={port}
+              transport={portCheckTransport}
+            />
+          </Stack>
+        ))}
 
         {loading ? (
           <Group justify="center" py="xl">

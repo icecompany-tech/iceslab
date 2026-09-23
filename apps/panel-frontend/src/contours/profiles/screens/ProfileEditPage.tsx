@@ -15,6 +15,7 @@ import {
 } from '@/lib/domain/profiles';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
+import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
@@ -62,6 +63,8 @@ export function ProfileEditPage() {
   const handlePreviewChange = useCallback((v: boolean) => setPreviewing(v), []);
   // Профиль, для которого открыта проверка подключения; `null` = окно закрыто.
   const [testing, setTesting] = useState<Profile | null>(null);
+  // Профиль, для которого открыто окно «Развернуть»; `null` = закрыто.
+  const [deploying, setDeploying] = useState<Profile | null>(null);
 
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const profile = isNew ? null : (profilesQuery.data?.profiles.find((p) => p.id === id) ?? null);
@@ -165,6 +168,12 @@ export function ProfileEditPage() {
         {!isNew && profile && (
           <PageButton onClick={() => setTesting(profile)}>{t('profileEdit.testConnect')}</PageButton>
         )}
+        {/* Развернуть на нескольких нодах разом, снять привязку галкой и
+            получить подсказку свободного порта: этого у /hosts/new нет, поэтому
+            окно живёт здесь, а не заменено формой хоста. */}
+        {!isNew && profile && (
+          <PageButton onClick={() => setDeploying(profile)}>{t('profileEdit.deploy')}</PageButton>
+        )}
         <PageButton onClick={() => navigate('/profiles')}>{t('common.cancel')}</PageButton>
         {/* Submits the form below by id: the artboard puts the primary action
             in the bar, where it stays reachable without scrolling to the end
@@ -219,6 +228,7 @@ export function ProfileEditPage() {
       />
 
       <TestConnectModal profile={testing} onClose={() => setTesting(null)} />
+      <DeployProfileModal profile={deploying} onClose={() => setDeploying(null)} />
     </Stack>
   );
 }

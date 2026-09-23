@@ -41,7 +41,6 @@ import {
 import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
-import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { profilePairLabel } from '@/lib/domain/engines';
 import { AMBER, CARD, CYAN, CYAN_HI, HAIRLINE, MIST, MOSS, PINK, PURPLE, SNOW, VIOLET } from '@/contours/profiles/lib/colors';
 
@@ -69,9 +68,8 @@ export function ProfilesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Create and edit live on /profiles/:id (creation is /profiles/new), and the
-  // connection test moved there too.
-  const [deploying, setDeploying] = useState<Profile | null>(null);
+  // Create and edit live on /profiles/:id (creation is /profiles/new), and so
+  // do the connection test and the multi-node deploy window: one door each.
   const [search, setSearch] = useState('');
   const [protocolFilter, setProtocolFilter] = useState<ProtocolName | 'all'>('all');
 
@@ -354,16 +352,6 @@ export function ProfilesPage() {
         </SimpleGrid>
       )}
 
-      {/* ⚠ Не открывается: `deploying` никто не ставит с тех пор, как
-          «Развернуть» ведёт на /hosts/new?profileId=... Оставлен сознательно:
-          у /hosts/new нет трёх вещей, которые умеет это окно (развернуть на
-          несколько нод разом, снять привязку снятой галкой, подсказать
-          свободный порт через /api/bindings/next-free-port). Решение о нём
-          за ARCH, 23.09. */}
-      <DeployProfileModal
-        profile={deploying}
-        onClose={() => setDeploying(null)}
-      />
     </Stack>
   );
 }

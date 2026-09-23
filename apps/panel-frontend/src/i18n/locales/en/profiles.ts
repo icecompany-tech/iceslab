@@ -253,6 +253,9 @@ export const profiles = {
     // The door to POST /api/profiles/:id/test-connect (slice 31): the panel
     // probes every binding of the profile itself, no ssh to the node.
     testConnect: 'Test connection',
+    // The multi-node deploy window: only it can remove a binding by unticking
+    // and suggest a free port.
+    deploy: 'Deploy to nodes',
     notFound: 'This profile no longer exists.',
     backToList: 'Back to profiles',
     create: 'Create profile',
