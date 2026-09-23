@@ -343,37 +343,25 @@ func TestNameMatchesProtocol(t *testing.T) {
 	}
 }
 
-// T7: parseXrayVersion pulls the semver from `xray version`'s first line.
-func TestParseXrayVersion(t *testing.T) {
-	cases := map[string]string{
-		"Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1)\nA unified platform.": "26.3.27",
-		"Xray 25.9.5 (Xray) abc": "25.9.5",
-		"xray 1.8.4 (foo)":       "1.8.4",
-		"":                       "",
-		"garbage output here":    "",
-		"NotXray 26.0.0":         "",
-	}
-	for in, want := range cases {
-		if got := parseXrayVersion([]byte(in)); got != want {
-			t.Errorf("parseXrayVersion(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-// T7: CoreVersion queries `xray version` once, caches the result, and reports
-// empty in config-only mode without forking.
+// T7: CoreVersion asks `xray version` through the shared core.VersionProbe:
+// once while the binary on disk stays the same, and empty in config-only mode
+// without forking. The probe's own test covers asking again after an upgrade.
 func TestCoreVersionCachesAndParses(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	bin := filepath.Join(t.TempDir(), "xray")
+	if err := os.WriteFile(bin, []byte("stand-in"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	calls := 0
 	a := New(Config{
-		BinaryPath: "/usr/bin/xray",
+		BinaryPath: bin,
 		Inbound:    validInbound(),
 		RunCmd: func(_ context.Context, _ string, args ...string) ([]byte, error) {
 			calls++
 			if len(args) != 1 || args[0] != "version" {
 				t.Errorf("expected `xray version`, got args %v", args)
 			}
-			return []byte("Xray 26.3.27 (Xray) hash\n"), nil
+			return []byte("Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1)\nA unified platform.\n"), nil
 		},
 	}, logger)
 	if got := a.CoreVersion(); got != "26.3.27" {

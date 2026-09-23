@@ -17,6 +17,7 @@ import (
 //
 // Measured against the real outputs (2026-09-23):
 //
+//	Xray 26.3.27 (Xray, Penetrates ...)      -> 26.3.27
 //	sing-box version 1.13.14                 -> 1.13.14
 //	Version:	v2.12.3                         -> 2.12.3   (hysteria)
 //	2.2.8 (go1.26.1: 2026-04-07T16:10:41Z ...) -> 2.2.8    (mtg --version)
@@ -46,7 +47,7 @@ func execOutput(ctx context.Context, name string, args ...string) ([]byte, error
 // VersionProbe asks a core binary for its version and remembers the answer
 // until the FILE changes.
 //
-// Not "once per process" like the first Versioner (xray): a node's core is
+// Not "once per process", as xray's first Versioner was: a node's core is
 // replaced by its bootstrap script while the agent keeps running, and an answer
 // cached for the life of the agent keeps reporting the old version after the
 // upgrade, which is the one moment somebody reads it. The key is the binary's
