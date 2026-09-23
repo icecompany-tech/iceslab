@@ -272,10 +272,9 @@ const XRAY_DOORS = { vless: YES, vmess: YES, trojan: YES, socks: YES, http: YES 
  * or a builder emitting a door marked not carried, fails the test beside the
  * builders. The page and GET /api/profiles/:id/formats read the same table.
  *
- * The REASONS for a gap are this panel's knowledge of the clients as of
- * 2026-09-23 and are what the delivery-by-client recon (docs/plan/
- * delivery-by-client.md) refines; `not-yet` is used only where the client is
- * known to speak the door.
+ * The REASONS for a gap were checked against each client's own documentation
+ * on 2026-09-23 (links beside the cells; docs/plan/delivery-by-client.md,
+ * section 5); `not-yet` only where the docs show the client speaks the door.
  *
  * `json` is this panel's own dump and carries every door by construction.
  */
@@ -301,7 +300,8 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     anytls: YES,
     shadowtls: YES,
     mieru: YES,
-    // mihomo's wireguard proxy takes the AmneziaWG parameters.
+    // mihomo's wireguard proxy takes `amnezia-wg-option` (jc, jmin, jmax, s1,
+    // s2, h1-h4 for 1.x): wiki.metacubex.one/en/config/proxies/wg/. No naive.
     amneziawg: NOT_YET,
   }),
   singbox: formatTable({
@@ -311,6 +311,9 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     tuic: YES,
     anytls: YES,
     shadowtls: YES,
+    // Outbound `naive` since sing-box 1.13.0, not on every platform build:
+    // sing-box.sagernet.org/configuration/outbound/naive/
+    naive: NOT_YET,
   }),
   wgconf: formatTable({ amneziawg: YES }),
   amneziavpn: formatTable({ amneziawg: YES }),
@@ -327,13 +330,19 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     trojan: YES_NO_REALITY,
     hysteria: YES,
     shadowsocks: YES,
-    // Surge takes socks5 and http proxies, TUIC v5 and ShadowTLS; left out of
-    // the builder (the Telegram doors by decision of 23.09).
+    // Checked against manual.nssurge.com/policies/ on 2026-09-23: `socks5` and
+    // `http` with a login, `tuic-v5`, `anytls` (iOS 5.17.0+, Mac 6.4.3+),
+    // ShadowTLS v3 as `shadow-tls-*` parameters on a proxy line. No vless, so
+    // no REALITY. Left out of the builder (the Telegram doors by decision of
+    // 23.09).
     socks: NOT_YET,
     http: NOT_YET,
     tuic: NOT_YET,
     shadowtls: NOT_YET,
+    anytls: NOT_YET,
   }),
+  // github.com/crossutility/Quantumult-X sample.conf, 2026-09-23: `socks5` and
+  // `http` with username/password, `anytls`; no hysteria2, tuic or wireguard.
   quantumultx: formatTable({
     vless: YES,
     vmess: YES,
@@ -341,7 +350,10 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     shadowsocks: YES,
     socks: NOT_YET,
     http: NOT_YET,
+    anytls: NOT_YET,
   }),
+  // nsloon.app/en/docs/Node/, 2026-09-23: `socks5` and `http` with a login,
+  // `anytls`, ShadowTLS v3 on Shadowsocks; no TUIC.
   loon: formatTable({
     vless: YES,
     vmess: YES,
@@ -350,6 +362,8 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     shadowsocks: YES,
     socks: NOT_YET,
     http: NOT_YET,
+    anytls: NOT_YET,
+    shadowtls: NOT_YET,
   }),
 };
 

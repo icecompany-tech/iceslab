@@ -196,6 +196,29 @@ describe('the table itself', () => {
     expect(formatCarries('quantumultx', 'trojan', 'default')).toEqual({ carried: true, why: 'native' });
   });
 
+  it('says not-yet where the client docs show the door (checked 2026-09-23)', () => {
+    // Each of these was `client-lacks-protocol` until the clients' own docs
+    // were read: the difference is between "impossible" and "our work".
+    const notYet: [SubscriptionFormat, (typeof DOORS)[number]][] = [
+      ['surge', 'anytls'],
+      ['surge', 'tuic'],
+      ['surge', 'shadowtls'],
+      ['quantumultx', 'anytls'],
+      ['loon', 'anytls'],
+      ['loon', 'shadowtls'],
+      ['singbox', 'naive'],
+      ['clash', 'amneziawg'],
+    ];
+    for (const [format, door] of notYet) {
+      expect(formatCarries(format, door).why, `${format}/${door}`).toBe('not-yet');
+    }
+    // And the ones the docs rule out stay ruled out.
+    expect(formatCarries('loon', 'tuic').why).toBe('client-lacks-protocol');
+    expect(formatCarries('quantumultx', 'hysteria').why).toBe('client-lacks-protocol');
+    expect(formatCarries('clash', 'naive').why).toBe('client-lacks-protocol');
+    expect(formatCarries('surge', 'vless').why).toBe('client-lacks-protocol');
+  });
+
   it('no longer claims plain carries what has no link', () => {
     expect(formatCarries('plain', 'amneziawg').why).toBe('no-uri-standard');
     expect(formatCarries('plain', 'shadowtls').why).toBe('no-uri-standard');
