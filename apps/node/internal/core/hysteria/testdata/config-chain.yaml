@@ -1,0 +1,40 @@
+listen: :8443
+
+acme:
+  domains:
+    - hy2.example.com
+  email: admin@example.com
+
+auth:
+  type: http
+  http:
+    url: http://127.0.0.1:9000/auth/fixture-path-not-a-secret
+
+obfs:
+  type: salamander
+  salamander:
+    password: fixture-salt-not-a-secret
+
+masquerade:
+  type: proxy
+  proxy:
+    url: https://www.bing.com
+    rewriteHost: true
+
+bandwidth:
+  up: 100 mbps
+  down: 200 mbps
+
+ignoreClientBandwidth: true
+
+trafficStats:
+  listen: 127.0.0.1:9999
+  secret: fixture-stats-secret-not-a-secret
+
+outbounds:
+  - name: chain
+    type: socks5
+    socks5:
+      addr: 127.0.0.1:26000
+      username: chain
+      password: chain-socks-fixture-password-0000

@@ -615,6 +615,12 @@ func (s *Server) applyPush(
 
 	var cascadeFragments json.RawMessage
 	router := ""
+	// Set when the userCore block is malformed. Then NO adapter is told about a
+	// cascade in this push, not even "nil": nil means "you are no longer an
+	// entry", and a hysteria entry told that renders with no outbounds, which
+	// sends its users straight out of the entry country. Refusing leaves every
+	// core on whatever it last applied, and the refusal travels back as a reason.
+	userCoreRefused := false
 	if chainInForce {
 		// The chain block brings its own drawing for the user's core: the same
 		// fragments with a loopback socks outbound where each leg used to be.
@@ -625,8 +631,21 @@ func (s *Server) applyPush(
 			s.cfg.Chain.NoteCascadeIgnored()
 		}
 		if req.Chain != nil && req.Chain.UserCore != nil {
-			cascadeFragments = req.Chain.UserCore.Fragments
-			router = string(req.Chain.UserCore.Engine)
+			// One shape per engine since phase 6: xray gets its fragments, a
+			// hysteria entry gets the socks hand-off. A block whose halves do not
+			// match its engine is refused OUT LOUD and delivered to nobody: handed
+			// on as "nothing", a hysteria entry would render with no outbounds and
+			// send every user out of the entry country with a working connection.
+			payload, err := req.Chain.UserCore.Payload()
+			if err != nil {
+				s.logger.Error("applyInbounds: chain userCore refused, every core keeps what it had", "err", err)
+				failed++
+				reasons = append(reasons, err.Error())
+				userCoreRefused = true
+			} else {
+				cascadeFragments = payload
+				router = string(req.Chain.UserCore.Engine)
+			}
 		}
 	} else if req.Cascade != nil {
 		cascadeFragments = req.Cascade.Fragments
@@ -634,6 +653,9 @@ func (s *Server) applyPush(
 	}
 	deliveredCascade := false
 	for _, adapter := range s.cfg.Adapters {
+		if userCoreRefused {
+			break
+		}
 		cr, ok := adapter.(core.CascadeReceiver)
 		if !ok {
 			continue

@@ -199,6 +199,92 @@ func TestATransitGetsNoDrawingAndNoAlarm(t *testing.T) {
 	}
 }
 
+// A hysteria entry, phase 6: the user core is told where to hand its users to,
+// and only the hysteria core is told it.
+func hysteriaEntryBlock() *dto.NodeChain {
+	block := chainBlock()
+	block.UserCore = &dto.ChainUserCore{
+		Engine: "hysteria",
+		Socks:  &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "chain-socks-fixture-password-0000"},
+	}
+	return block
+}
+
+func TestAHysteriaEntryHandsTheSocksToHysteriaAndNobodyElse(t *testing.T) {
+	// A node can run xray AND hysteria. The cascade's entry names ONE engine,
+	// and the other core must be told "not you" (nil) rather than handed a
+	// payload meant for someone else: a standalone profile on the same node is
+	// not part of the cascade and must not be pulled into it.
+	xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
+	hy := &cascadeCore{fakeCore: fakeCore{name: "hysteria", engine: "hysteria", running: true}}
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, xray, hy)
+
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: hysteriaEntryBlock()})
+
+	if len(hy.got) != 1 || len(xray.got) != 1 {
+		t.Fatalf("each receiver is called once per push: hysteria %d, xray %d", len(hy.got), len(xray.got))
+	}
+	var got dto.ChainUserCoreSocks
+	if err := json.Unmarshal(hy.got[0], &got); err != nil {
+		t.Fatalf("hysteria was not handed the socks hand-off: %s (%v)", hy.got[0], err)
+	}
+	if got.Port != 26000 || got.Username != "chain" || got.Password == "" {
+		t.Fatalf("hysteria got the wrong hand-off: %+v", got)
+	}
+	if xray.got[0] != nil {
+		t.Fatalf("xray was handed a payload meant for hysteria: %s", xray.got[0])
+	}
+	if strings.Contains(logs.String(), "the chain is NOT applied") {
+		t.Fatalf("the alarm fired on a hand-off that was delivered:\n%s", logs.String())
+	}
+}
+
+func TestAUserCoreThatDoesNotMatchItsEngineReachesNobody(t *testing.T) {
+	/*
+		The dangerous half of the union. A hysteria block with no socks, handed on
+		as "nothing", would make the hysteria core drop its hand-off and render no
+		outbounds: every user of that entry would leave from the ENTRY country, with
+		a working connection and nothing in any log but this one. So a mismatched
+		block reaches no core at all, not even as nil, and every core stays on what
+		it last applied.
+	*/
+	cases := map[string]*dto.ChainUserCore{
+		"hysteria without socks": {Engine: "hysteria"},
+		"hysteria with fragments": {
+			Engine:    "hysteria",
+			Socks:     &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "pw"},
+			Fragments: json.RawMessage(handoverFragments),
+		},
+		"xray without fragments": {Engine: "xray"},
+		"xray with socks": {
+			Engine:    "xray",
+			Fragments: json.RawMessage(handoverFragments),
+			Socks:     &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "pw"},
+		},
+		"an engine that draws no user core": {Engine: "singbox", Fragments: json.RawMessage(handoverFragments)},
+	}
+	for name, uc := range cases {
+		t.Run(name, func(t *testing.T) {
+			xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
+			hy := &cascadeCore{fakeCore: fakeCore{name: "hysteria", engine: "hysteria", running: true}}
+			var logs strings.Builder
+			s, _ := serverWithChain(t, &logs, xray, hy)
+
+			block := chainBlock()
+			block.UserCore = uc
+			s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: block})
+
+			if len(hy.got) != 0 || len(xray.got) != 0 {
+				t.Fatalf("a refused block still reached a core: hysteria %v, xray %v", hy.got, xray.got)
+			}
+			if !strings.Contains(logs.String(), "chain userCore refused") {
+				t.Fatalf("the refusal was silent:\n%s", logs.String())
+			}
+		})
+	}
+}
+
 func TestADrawingNobodyTakesIsStillLoud(t *testing.T) {
 	// The other side of the same condition: the chain handed over a drawing for
 	// a core this node does not run. That is the case the alarm exists for, and

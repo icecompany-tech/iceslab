@@ -2,7 +2,10 @@
 // Field names match the TypeScript DTOs in `packages/shared/src/transport.ts`.
 package dto
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // ProtocolName mirrors the union in shared/transport.ts.
 type ProtocolName string
@@ -261,10 +264,59 @@ type NodeChain struct {
 	UserCore *ChainUserCore `json:"userCore,omitempty"`
 }
 
-// ChainUserCore mirrors NodeChain.userCore in shared/transport.ts.
+// ChainUserCore mirrors NodeChain.userCore in shared/transport.ts, which is a
+// union by engine: xray carries Fragments, hysteria carries Socks (phase 6).
+//
+// Go has no sum types, so the union is two optional halves here and the rule is
+// enforced by Payload: the half that belongs to the named engine must be there,
+// and the other one must not. The adapter the payload is handed to never has to
+// guess which half it was given.
 type ChainUserCore struct {
-	Engine    EngineName      `json:"engine"`
-	Fragments json.RawMessage `json:"fragments"`
+	Engine    EngineName          `json:"engine"`
+	Fragments json.RawMessage     `json:"fragments,omitempty"`
+	Socks     *ChainUserCoreSocks `json:"socks,omitempty"`
+}
+
+// ChainUserCoreSocks mirrors ChainUserCoreSocks in shared/transport.ts: where a
+// hysteria entry hands every user to the chain. A PORT and not an address: the
+// hysteria adapter writes 127.0.0.1 itself, so a push cannot point it anywhere
+// but another port on this machine.
+type ChainUserCoreSocks struct {
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// Payload is what the adapter of the named engine receives, or an error for a
+// block whose halves do not match its engine.
+//
+// ⚠ Refusing is the safe answer, and it has to be loud. A hysteria block with
+// no socks, delivered as "nothing", would render hysteria with no outbounds at
+// all: every user of that entry would leave from the ENTRY country with a
+// working connection, which is the leak past the cascade this phase exists to
+// prevent. An xray block with no fragments has the same shape of failure.
+func (u *ChainUserCore) Payload() (json.RawMessage, error) {
+	hasFragments := len(u.Fragments) > 0 && string(u.Fragments) != "null"
+	switch u.Engine {
+	case EngineHysteria:
+		if u.Socks == nil {
+			return nil, fmt.Errorf("chain userCore: engine hysteria carries no socks hand-off")
+		}
+		if hasFragments {
+			return nil, fmt.Errorf("chain userCore: engine hysteria carries xray fragments")
+		}
+		return json.Marshal(u.Socks)
+	case EngineXray:
+		if !hasFragments {
+			return nil, fmt.Errorf("chain userCore: engine xray carries no fragments")
+		}
+		if u.Socks != nil {
+			return nil, fmt.Errorf("chain userCore: engine xray carries a socks hand-off")
+		}
+		return u.Fragments, nil
+	default:
+		return nil, fmt.Errorf("chain userCore: engine %q draws no user core", u.Engine)
+	}
 }
 
 type ChainSocks struct {

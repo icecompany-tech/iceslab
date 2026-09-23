@@ -120,6 +120,11 @@ type Adapter struct {
 	users   map[string]userEntry // key: HysteriaPassword
 	inbound InboundConfig        // last applied panel config; zero value = none
 
+	// The node-level hand-off to the chain, phase 6. nil = this node is not a
+	// hysteria entry of a cascade, and the config carries no outbounds at all,
+	// which is what every hysteria node rendered before the phase.
+	chain *ChainHandoff
+
 	callbackSrv *http.Server
 	proc        *subprocess.Subprocess // hysteria subprocess; nil when BinaryPath is empty
 
@@ -520,34 +525,96 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		return nil
 	}
 
-	blob, err := renderConfig(a.cfg, newInbound)
-	if err != nil {
-		return fmt.Errorf("hysteria ApplyInbound: render: %w", err)
+	if err := a.rewriteLocked(newInbound, a.chain, "ApplyInbound"); err != nil {
+		return err
 	}
-	if err := writeConfig(a.cfg.ConfigPath, blob); err != nil {
-		return fmt.Errorf("hysteria ApplyInbound: write %s: %w", a.cfg.ConfigPath, err)
-	}
-
 	a.inbound = newInbound
 	a.logger.Info("hysteria ApplyInbound: config rewritten",
 		"path", a.cfg.ConfigPath,
 		"obfs", newInbound.ObfsPassword != "",
 		"masquerade", newInbound.MasqueradeURL != "",
-		"bandwidth", newInbound.BrutalUpMbps > 0 || newInbound.BrutalDownMbps > 0)
+		"bandwidth", newInbound.BrutalUpMbps > 0 || newInbound.BrutalDownMbps > 0,
+		"chain", a.chain != nil)
+	return a.restartLocked("ApplyInbound")
+}
 
+// ApplyCascade implements core.CascadeReceiver: the node-level hand-off to the
+// chain, phase 6.
+//
+// nil means this push did not make this node a hysteria entry: either no
+// cascade at all, or a cascade whose entry is another core. Unlike the xray
+// adapter there is no transitional copy on the inbound to fall back to, so nil
+// simply means "no outbounds", which is the config every hysteria node had
+// before the phase.
+//
+// A hand-off that changed re-renders at once, with the inbound this adapter
+// already holds. If no inbound has arrived yet it is only remembered: this is
+// called BEFORE the inbounds of the same push are dispatched, and the render
+// that follows in ApplyInbound picks it up. One consequence worth knowing: a
+// push that changes both the inbound and the hand-off restarts the core twice.
+//
+// Compared by value, like everything else here: a push that repeats the same
+// hand-off must be a no-op, or every applyInbounds would restart the core and
+// drop every live connection on the node.
+func (a *Adapter) ApplyCascade(raw json.RawMessage) error {
+	var handoff *ChainHandoff
+	if len(raw) > 0 && string(raw) != "null" {
+		var wire chainHandoffWire
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			return fmt.Errorf("hysteria ApplyCascade: %w", err)
+		}
+		handoff = &ChainHandoff{Port: wire.Port, Username: wire.Username, Password: wire.Password}
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if handoffEqual(a.chain, handoff) {
+		return nil
+	}
+	// No inbound yet, or nothing to write to: remember it for the render that
+	// comes. Nothing is on disk to fix, so nothing is restarted.
+	if a.inbound == (InboundConfig{}) || a.cfg.ConfigPath == "" {
+		a.chain = handoff
+		return nil
+	}
+	// Rendered BEFORE it is stored: a hand-off the renderer refuses must not
+	// become the state the next ApplyInbound silently renders against.
+	if err := a.rewriteLocked(a.inbound, handoff, "ApplyCascade"); err != nil {
+		return err
+	}
+	a.chain = handoff
+	a.logger.Info("hysteria ApplyCascade: hand-off to the chain changed",
+		"chain", handoff != nil, "path", a.cfg.ConfigPath)
+	return a.restartLocked("ApplyCascade")
+}
+
+// rewriteLocked renders and writes the config. Caller holds mu.
+func (a *Adapter) rewriteLocked(inbound InboundConfig, handoff *ChainHandoff, who string) error {
+	blob, err := renderConfig(a.cfg, inbound, handoff)
+	if err != nil {
+		return fmt.Errorf("hysteria %s: render: %w", who, err)
+	}
+	if err := writeConfig(a.cfg.ConfigPath, blob); err != nil {
+		return fmt.Errorf("hysteria %s: write %s: %w", who, a.cfg.ConfigPath, err)
+	}
+	return nil
+}
+
+// restartLocked asks systemd to pick up the rewritten config. Caller holds mu.
+func (a *Adapter) restartLocked(who string) error {
 	if a.cfg.ServiceUnit == "" {
-		a.logger.Info("hysteria ApplyInbound: ServiceUnit not set, skipping restart",
+		a.logger.Info("hysteria "+who+": ServiceUnit not set, skipping restart",
 			"hint", "set HYSTERIA_SERVICE_UNIT to enable auto-restart")
 		return nil
 	}
-
 	// Background context: the inbound HTTP request that triggered this call
 	// may have a short deadline, but we want hysteria to come back up even
 	// if the caller times out (matches the xray adapter's pattern).
 	if err := a.cfg.RunCmd(context.Background(), "systemctl", "restart", a.cfg.ServiceUnit); err != nil {
-		return fmt.Errorf("hysteria ApplyInbound: restart %s: %w", a.cfg.ServiceUnit, err)
+		return fmt.Errorf("hysteria %s: restart %s: %w", who, a.cfg.ServiceUnit, err)
 	}
-	a.logger.Info("hysteria ApplyInbound: service restarted", "unit", a.cfg.ServiceUnit)
+	a.logger.Info("hysteria "+who+": service restarted", "unit", a.cfg.ServiceUnit)
 	return nil
 }
 

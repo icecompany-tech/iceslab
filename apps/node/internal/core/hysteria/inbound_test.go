@@ -13,7 +13,7 @@ func TestRenderConfig_MinimalValid(t *testing.T) {
 		AuthCallbackPort: 9000,
 		ListenPort:       443,
 	}
-	blob, err := renderConfig(cfg, InboundConfig{})
+	blob, err := renderConfig(cfg, InboundConfig{}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestRenderConfig_WithObfsAndMasquerade(t *testing.T) {
 		ObfsPassword:  "salt-pw",
 		MasqueradeURL: "https://www.bing.com",
 	}
-	blob, err := renderConfig(cfg, inbound)
+	blob, err := renderConfig(cfg, inbound, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRenderConfig_WithBrutalBandwidth(t *testing.T) {
 	blob, err := renderConfig(cfg, InboundConfig{
 		BrutalUpMbps:   100,
 		BrutalDownMbps: 200,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -81,14 +81,14 @@ func TestRenderConfig_WithBrutalBandwidth(t *testing.T) {
 }
 
 func TestRenderConfig_RequiresHostname(t *testing.T) {
-	_, err := renderConfig(Config{ACMEEmail: "x@y"}, InboundConfig{})
+	_, err := renderConfig(Config{ACMEEmail: "x@y"}, InboundConfig{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "Hostname is required") {
 		t.Fatalf("expected Hostname-required error, got %v", err)
 	}
 }
 
 func TestRenderConfig_RequiresACMEEmail(t *testing.T) {
-	_, err := renderConfig(Config{Hostname: "h"}, InboundConfig{})
+	_, err := renderConfig(Config{Hostname: "h"}, InboundConfig{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "ACMEEmail is required") {
 		t.Fatalf("expected ACMEEmail-required error, got %v", err)
 	}
@@ -115,7 +115,7 @@ func TestRenderConfig_RejectsInjectedObfsAndMasquerade(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := renderConfig(baseCfg, InboundConfig{ObfsPassword: tc.obfs, MasqueradeURL: tc.masq})
+			_, err := renderConfig(baseCfg, InboundConfig{ObfsPassword: tc.obfs, MasqueradeURL: tc.masq}, nil)
 			if err == nil {
 				t.Errorf("expected validation error for malicious %s", tc.wantSub)
 				return
@@ -130,7 +130,7 @@ func TestRenderConfig_RejectsInjectedObfsAndMasquerade(t *testing.T) {
 func TestRenderConfig_DefaultPortAndAuth(t *testing.T) {
 	// ListenPort=0, AuthCallbackHost="", AuthCallbackPort=0 → defaults applied
 	cfg := Config{Hostname: "h", ACMEEmail: "e@x"}
-	blob, err := renderConfig(cfg, InboundConfig{})
+	blob, err := renderConfig(cfg, InboundConfig{}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestInboundCfgWireUnmarshal(t *testing.T) {
 func TestRenderConfig_PushedHostnameOverridesInstallTime(t *testing.T) {
 	cfg := Config{Hostname: "install.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
 
-	blob, err := renderConfig(cfg, InboundConfig{Hostname: "moved.example.com"})
+	blob, err := renderConfig(cfg, InboundConfig{Hostname: "moved.example.com"}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestRenderConfig_FallsBackToInstallTimeHostname(t *testing.T) {
 	// issue for. Either way the node keeps the certificate it already has.
 	cfg := Config{Hostname: "install.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
 
-	blob, err := renderConfig(cfg, InboundConfig{})
+	blob, err := renderConfig(cfg, InboundConfig{}, nil)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestRenderConfig_RejectsInjectedHostname(t *testing.T) {
 	// append arbitrary top-level keys to the config.
 	cfg := Config{Hostname: "hy2.example.com", ACMEEmail: "a@b.io", ListenPort: 443}
 
-	if _, err := renderConfig(cfg, InboundConfig{Hostname: "evil.example.com\nlisten: :1"}); err == nil {
+	if _, err := renderConfig(cfg, InboundConfig{Hostname: "evil.example.com\nlisten: :1"}, nil); err == nil {
 		t.Fatal("expected an error for a newline in the pushed hostname")
 	}
 }

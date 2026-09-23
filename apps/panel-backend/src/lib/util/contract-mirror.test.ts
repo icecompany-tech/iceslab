@@ -158,8 +158,21 @@ describe('the chain block against the agent that will decode it', () => {
     expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword', 'userCore']);
   });
 
-  it('carries both user-core keys on both sides', () => {
-    expect(jsonKeysOf('ChainUserCore')).toEqual(['engine', 'fragments']);
+  it('carries every user-core key on both sides', () => {
+    // A union by engine since phase 6: xray carries `fragments`, a hysteria
+    // entry carries `socks`. Go has no sum type, so the agent holds both halves
+    // as optional fields and refuses a block whose halves do not match its
+    // engine. A key renamed on one side would decode into an empty half, and an
+    // empty half on a hysteria entry is a core with no hand-off: every user out
+    // of the entry country with a working connection.
+    expect(jsonKeysOf('ChainUserCore')).toEqual(['engine', 'fragments', 'socks']);
+  });
+
+  it('carries the three hand-off keys on both sides', () => {
+    // A PORT, not an address: the agent writes 127.0.0.1 itself. If this ever
+    // grows an `addr`, that is a panel able to point hysteria's users at any
+    // machine it likes, and it should be a decision, not a drift.
+    expect(jsonKeysOf('ChainUserCoreSocks')).toEqual(['port', 'username', 'password']);
   });
 
   it('carries both socks keys on both sides', () => {

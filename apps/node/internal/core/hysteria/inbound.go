@@ -100,6 +100,37 @@ func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 	}
 }
 
+// ChainHandoff tells this core to give EVERY user to the chain process, phase 6.
+//
+// It arrives in the node-level `chain.userCore` block, never on an inbound: it
+// is a statement about this node's place in a cascade, not about one profile.
+// The panel names the engine, and only the adapter whose engine matches gets
+// it, so a standalone hysteria profile on a node whose cascade entry is xray is
+// never pulled into the chain by accident.
+//
+// ⚠ A PORT, not an address. The hand-off always goes to loopback and this
+// adapter writes `127.0.0.1` itself: a panel that is broken or compromised can
+// point it at a different port on this machine, and at nothing else.
+type ChainHandoff struct {
+	Port     int
+	Username string
+	Password string
+}
+
+// chainHandoffWire mirrors NodeChain.userCore.socks in shared/transport.ts.
+type chainHandoffWire struct {
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func handoffEqual(a, b *ChainHandoff) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
 func inboundEqual(a, b InboundConfig) bool {
 	return a.Port == b.Port &&
 		a.Hostname == b.Hostname &&
@@ -118,7 +149,7 @@ func inboundEqual(a, b InboundConfig) bool {
 // We hand-roll YAML rather than pulling in gopkg.in/yaml.v3 because the
 // surface is tiny and the layout is fixed; a 60-line writer is cheaper than
 // a transitive dep.
-func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
+func renderConfig(adapterCfg Config, inbound InboundConfig, handoff *ChainHandoff) ([]byte, error) {
 	// Hostname selection mirrors the port priority below: what the panel pushed
 	// wins, the install-time value is the fallback for a panel too old to send
 	// one. A newline or YAML metacharacter in a pushed hostname would break out
@@ -239,7 +270,64 @@ func renderConfig(adapterCfg Config, inbound InboundConfig) ([]byte, error) {
 		fmt.Fprintf(&b, "  secret: %s\n", adapterCfg.TrafficStatsSecret)
 	}
 
+	if handoff != nil {
+		if err := writeChainOutbound(&b, handoff); err != nil {
+			return nil, err
+		}
+	}
+
 	return b.Bytes(), nil
+}
+
+// writeChainOutbound appends the hand-off to the chain: ONE socks5 outbound,
+// and nothing beside it.
+//
+// ⚠ MEASURED against hysteria 2.12.3 on 2026-09-23, with a real client and
+// real traffic, because the log cannot say where traffic goes:
+//
+//   - with no `acl`, every user goes out through the FIRST outbound in the
+//     array (chain first: the request reached the chain; direct first: the
+//     request went straight out);
+//   - a second outbound is never used until a rule names it.
+//
+// So the shape is exactly one outbound and no acl, and the absence of both is
+// the point rather than an omission:
+//
+//   - no `direct` at all, because a `direct` placed first would carry every
+//     user straight out of the ENTRY country with no error anywhere and a
+//     working connection on the client. A leak past the cascade that looks like
+//     everything working is the one outcome this phase exists to prevent;
+//   - no `acl`, because the policy is drawn by the chain. Two places deciding
+//     where one packet goes is how they come to disagree.
+//
+// And it stays when the chain process is down: the users of this core then
+// have no connection, which is loud, instead of leaving through the entry,
+// which is silent. The same fail-closed rule as the xray entry (К4).
+func writeChainOutbound(b *bytes.Buffer, h *ChainHandoff) error {
+	if h.Port < 1 || h.Port > 65535 {
+		return fmt.Errorf("hysteria chain hand-off: port %d is not a port", h.Port)
+	}
+	if h.Username == "" || h.Password == "" {
+		// The chain's socks listeners are authenticated even on loopback (a VPS
+		// has other users, and an open proxy on 127.0.0.1 is an open relay for
+		// anyone with a shell), so a hand-off without credentials would be
+		// refused by the listener on every connection.
+		return fmt.Errorf("hysteria chain hand-off: username and password are required")
+	}
+	if err := validateInboundYAMLSafe("chain username", h.Username); err != nil {
+		return err
+	}
+	if err := validateInboundYAMLSafe("chain password", h.Password); err != nil {
+		return err
+	}
+	b.WriteString("\noutbounds:\n")
+	b.WriteString("  - name: chain\n")
+	b.WriteString("    type: socks5\n")
+	b.WriteString("    socks5:\n")
+	fmt.Fprintf(b, "      addr: 127.0.0.1:%d\n", h.Port)
+	fmt.Fprintf(b, "      username: %s\n", h.Username)
+	fmt.Fprintf(b, "      password: %s\n", h.Password)
+	return nil
 }
 
 // writeConfig atomically writes the rendered YAML via the shared

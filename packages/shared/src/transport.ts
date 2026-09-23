@@ -964,14 +964,62 @@ export interface NodeChain {
    * one outcome this whole phase is arranged to prevent.
    *
    * Absent on a transit or an exit, which have no user core to hand over from.
+   *
+   * ⚠ ONE per entry, by decision (phase 6): a cascade has one entry protocol,
+   * because xray users and hysteria users are two sets of clients with
+   * different guarantees (an xray user picks the way out, a hysteria user gets
+   * Auto and the policy). Switching the entry moves the cascade from one set to
+   * the other, and the panel says so before it happens.
    */
-  userCore?: {
-    /** The core that renders it. Named for the same reason `NodeCascade.engine`
-     *  is: the agent must be able to refuse a name it does not know rather than
-     *  guess at the JSON. */
-    engine: EngineName;
-    fragments: XrayCascadeFragments;
-  };
+  userCore?: ChainUserCore;
+}
+
+/**
+ * What the entry's user core is told, one shape per engine.
+ *
+ * A union and not one object with optional halves, so a payload that names
+ * `hysteria` and carries xray fragments does not type-check here and is
+ * refused by the agent there: the agent hands this to the ONE adapter whose
+ * engine it names, and that adapter must never be left to guess.
+ */
+export type ChainUserCore = ChainUserCoreXray | ChainUserCoreHysteria;
+
+export interface ChainUserCoreXray {
+  /** Named for the same reason `NodeCascade.engine` is: the agent must be able
+   *  to refuse a name it does not know rather than guess at the JSON. */
+  engine: 'xray';
+  fragments: XrayCascadeFragments;
+}
+
+/**
+ * A hysteria entry, phase 6: every user goes to the chain through ONE socks5
+ * outbound, and the agent draws it.
+ *
+ * Not fragments, because there is nothing to route inside hysteria: it has no
+ * per-user way out (a user is a password, there is no vlessRoute), so the chain
+ * does all the routing, from its "Auto" listener.
+ */
+export interface ChainUserCoreHysteria {
+  engine: 'hysteria';
+  socks: ChainUserCoreSocks;
+}
+
+/**
+ * Where the hand-off goes.
+ *
+ * ⚠ A PORT and not an address, and that is a security property rather than a
+ * shorthand: the agent writes `127.0.0.1` itself, so a panel that is broken or
+ * compromised can point hysteria's users at another port on the same machine
+ * and at nothing else.
+ */
+export interface ChainUserCoreSocks {
+  /** The chain's "Auto" listener, CHAIN_SOCKS_BASE + 0. Always rendered for a
+   *  hysteria entry, whatever `autoProfile` says. */
+  port: number;
+  /** The chain's socks user. Authenticated even on loopback. */
+  username: string;
+  /** The node's chain secret, the same value as `socksPassword` above. */
+  password: string;
 }
 
 export interface ChainSocks {
