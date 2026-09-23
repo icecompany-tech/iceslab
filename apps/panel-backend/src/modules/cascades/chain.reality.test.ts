@@ -189,9 +189,29 @@ describe('a REALITY leg of the chain, both ends', () => {
     for (const out of plainOut) expect(out.flow).toBeUndefined();
   });
 
-  it('carries the uTLS the engine demands of a reality client', () => {
+  it('carries the uTLS the engine demands of a reality client, and it stays FIREFOX', () => {
     // MEASURED: without it sing-box refuses the outbound outright. One of the
     // four traps that `check` does catch, and the only one.
+    //
+    // ⚠ And the fingerprint is pinned here on purpose, recorded 2026-09-23 from
+    // primary sources (docs/plan/recon-2026-09-23.md):
+    //
+    //   - XTLS/REALITY 8cdf7bf (8 September, in xray 26.9.8 and later) makes
+    //     the SERVER refuse a ClientHello that does not offer X25519MLKEM768
+    //     ahead of X25519, and the client silently falls back;
+    //   - sing-box dials with metacubex/utls, whose HelloChrome_Auto does not
+    //     send MLKEM (v1.8.7, SagerNet/sing-box #4520, no fix as of 19.09):
+    //     sing-box 1.12.25, 1.14.1 and 1.15.0-alpha.6 all fail "reality
+    //     verification failed" against such a server;
+    //   - firefox is NOT proven to pass either (RPRX in Xray #6482: "needs
+    //     testing"). So `chrome` is known to break, and `firefox` is the one
+    //     that has not been shown to.
+    //
+    // A leg of ours is a sing-box dialler into an xray listener on the
+    // transitional fleet, which is exactly that pair. The real protection is
+    // the xray pin staying at or below 26.7.28 until the pair is measured
+    // (installer_pin_test.go holds that ceiling); this assertion keeps the
+    // dialling half from being "tidied" to chrome in the meantime.
     for (const out of diallers) {
       expect(out.tls.utls).toEqual({ enabled: true, fingerprint: 'firefox' });
     }
