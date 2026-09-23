@@ -1,78 +1,112 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutlineJson } from './outline.js';
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildOutlineJson, outlineAccessKey } from './outline.js';
+import { endpointsForFormat, type SubscriptionEndpoint } from '../subscription.formats.js';
 
-const ssEp: SubscriptionEndpoint = {
+const GOLDEN_DIR = join(dirname(fileURLToPath(import.meta.url)), '__testdata__');
+
+/**
+ * The body the Outline app reads behind an ssconf:// key, whole.
+ *
+ *   outline-object  one Shadowsocks server as the legacy object, the four keys
+ *                   the app reads and nothing else: an unknown key fails the
+ *                   whole key (outline-apps configregistry/config_shadowsocks_test.go:141);
+ *   outline-empty   no Shadowsocks endpoint: an empty body, as wgconf answers.
+ */
+function golden(name: string, got: string): void {
+  const path = join(GOLDEN_DIR, `${name}.json`);
+  if (process.env.UPDATE_GOLDEN) {
+    writeFileSync(path, got);
+    return;
+  }
+  // CRLF folded: `*.json` is `text` in .gitattributes, so a Windows checkout
+  // hands this file back with CRLF, which is not a change to the body.
+  expect(got, `golden ${name} is out of date; retake with UPDATE_GOLDEN=1 and read the diff`).toBe(
+    readFileSync(path, 'utf8').replace(/\r\n/g, '\n'),
+  );
+}
+
+const ss = (nodeName: string, host: string, port: number): SubscriptionEndpoint => ({
   protocol: 'shadowsocks',
-  nodeName: 'eu-1',
-  host: 'n1.example.com',
-  port: 8388,
-  method: '2022-blake3-aes-128-gcm',
-  password: 'ss-pass',
-  uri: 'ss://...',
-};
+  nodeName,
+  host,
+  port,
+  method: 'chacha20-ietf-poly1305',
+  password: `pw-${nodeName}`,
+  uri: `ss://x@${host}:${port}`,
+});
 
-const hyEp: SubscriptionEndpoint = {
+const hy: SubscriptionEndpoint = {
   protocol: 'hysteria',
-  nodeName: 'eu-1',
-  host: 'n1.example.com',
+  nodeName: 'de-1',
+  host: 'de.example.com',
   port: 443,
   password: 'hy',
-  uri: 'hysteria2://...',
+  uri: 'hysteria2://hy@de.example.com:443',
 };
 
-describe('buildOutlineJson (SIP008)', () => {
-  it('emits SIP008 v1 with one server per shadowsocks endpoint', () => {
-    const cfg = JSON.parse(buildOutlineJson([ssEp]));
-    expect(cfg.version).toBe(1);
-    expect(cfg.servers).toHaveLength(1);
-    expect(cfg.servers[0]).toMatchObject({
-      remarks: 'eu-1',
-      server: 'n1.example.com',
-      server_port: 8388,
-      password: 'ss-pass',
-      method: '2022-blake3-aes-128-gcm',
+const DE = ss('de-1', 'de.example.com', 8388);
+const NL = ss('nl-1', 'nl.example.com', 8389);
+
+describe('buildOutlineJson: an Outline dynamic key', () => {
+  it('outline-object: one server, the legacy object', () => {
+    golden('outline-object', buildOutlineJson([hy, DE, NL]));
+  });
+
+  it('outline-empty: no Shadowsocks endpoint, empty body', () => {
+    golden('outline-empty', buildOutlineJson([hy]));
+    expect(buildOutlineJson([])).toBe('');
+  });
+
+  it('carries exactly the four keys the app reads', () => {
+    expect(Object.keys(JSON.parse(buildOutlineJson([DE])))).toEqual([
+      'server',
+      'server_port',
+      'method',
+      'password',
+    ]);
+  });
+
+  it('&node= picks the server, and without it the first', () => {
+    expect(JSON.parse(buildOutlineJson([DE, NL], 'nl-1'))).toMatchObject({
+      server: 'nl.example.com',
+      server_port: 8389,
+      password: 'pw-nl-1',
     });
-    expect(cfg.servers[0].id).toBeTruthy();
+    expect(JSON.parse(buildOutlineJson([DE, NL]))).toMatchObject({ server: 'de.example.com' });
   });
 
-  it('skips non-shadowsocks endpoints', () => {
-    const cfg = JSON.parse(buildOutlineJson([hyEp, ssEp]));
-    expect(cfg.servers).toHaveLength(1);
-    expect(cfg.servers[0].server).toBe('n1.example.com');
+  it('&node= naming no Shadowsocks node answers empty, not another server', () => {
+    // Handing out a different server than the link names would be a silent
+    // substitution: the person pasted a key labelled with that node.
+    expect(buildOutlineJson([DE, NL], 'fr-1')).toBe('');
+    expect(buildOutlineJson([hy, DE], 'de-1')).toContain('de.example.com');
   });
 
-  it('returns an empty servers array when there is no SS endpoint', () => {
-    const cfg = JSON.parse(buildOutlineJson([hyEp]));
-    expect(cfg.servers).toEqual([]);
+  it('never reaches a 2022-blake3 server: the gate drops it before the builder', () => {
+    const ss2022 = { ...NL, method: '2022-blake3-aes-128-gcm' } as SubscriptionEndpoint;
+    const served = endpointsForFormat('outline', [ss2022, DE]);
+    expect(served).toEqual([DE]);
+    expect(buildOutlineJson(served, 'nl-1')).toBe('');
   });
+});
 
-  it('gives a server the same id after its node is renamed', () => {
-    // SIP008 clients match a polled server against the one they already hold by
-    // this id. Deriving it from the display name meant renaming a node dropped
-    // the old server and added a stranger.
-    const before = JSON.parse(buildOutlineJson([{ ...ssEp, hostId: 'host-123' }]));
-    const after = JSON.parse(
-      buildOutlineJson([{ ...ssEp, hostId: 'host-123', nodeName: '🇩🇪 Frankfurt' }]),
+describe('outlineAccessKey', () => {
+  it('turns the https subscription address into ssconf://, node in query and name', () => {
+    expect(outlineAccessKey('https://panel.example.com/sub/abc123', 'de-1')).toBe(
+      'ssconf://panel.example.com/sub/abc123?format=outline&node=de-1#de-1',
     );
-    expect(before.servers[0].id).toBe('host-123');
-    expect(after.servers[0].id).toBe('host-123');
   });
 
-  it('falls back to the endpoint identity, not to the name and a list index', () => {
-    const cfg = JSON.parse(
-      buildOutlineJson([
-        { ...ssEp, key: 'host-a' },
-        { ...ssEp, key: 'host-b', port: 8389 },
-      ]),
+  it('encodes a node name that is not URL-safe', () => {
+    expect(outlineAccessKey('https://p.example/sub/t', 'Франкфурт 1')).toBe(
+      'ssconf://p.example/sub/t?format=outline&node=%D0%A4%D1%80%D0%B0%D0%BD%D0%BA%D1%84%D1%83%D1%80%D1%82%201#%D0%A4%D1%80%D0%B0%D0%BD%D0%BA%D1%84%D1%83%D1%80%D1%82%201',
     );
-    expect(cfg.servers[0].id).not.toBe(cfg.servers[1].id);
-    expect(cfg.servers[0].id).not.toContain('eu-1');
   });
 
-  it('is valid JSON with a trailing newline', () => {
-    const out = buildOutlineJson([ssEp]);
-    expect(out.endsWith('\n')).toBe(true);
-    expect(() => JSON.parse(out)).not.toThrow();
+  it('has no key for a panel on plain http: the app fetches ssconf over https only', () => {
+    expect(outlineAccessKey('http://panel.example.com/sub/abc123', 'de-1')).toBeUndefined();
   });
 });

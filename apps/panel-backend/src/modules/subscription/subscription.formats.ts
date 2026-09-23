@@ -289,7 +289,8 @@ export function endpointsForFormat(
 ): SubscriptionEndpoint[] {
   return endpoints.filter((e) => {
     const security = e.protocol === 'xray' && !isPlainXray(e) ? e.securityLayer : undefined;
-    return formatCarries(format, endpointDoor(e), security).carried;
+    const ssMethod = e.protocol === 'shadowsocks' ? e.method : undefined;
+    return formatCarries(format, endpointDoor(e), security, ssMethod).carried;
   });
 }
 

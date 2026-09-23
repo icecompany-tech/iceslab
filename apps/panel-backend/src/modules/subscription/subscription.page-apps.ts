@@ -93,6 +93,7 @@ export type AppAction =
   | { kind: 'awg-vpn' } // scan the AmneziaVPN vpn:// QR below
   | { kind: 'awg-conf' } // scan the AmneziaWG .conf QR below
   | { kind: 'download' } // grab the per-node .conf below
+  | { kind: 'outline' } // the per-node ssconf:// key below
   | { kind: 'manual' }; // paste the subscription link
 
 export interface AppDef {
@@ -297,6 +298,16 @@ export const APPS: AppDef[] = [
     ...fromCatalog('xkeen'),
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'manual' },
+  },
+  {
+    // Shadowsocks only, and one server per key: the app takes an ssconf://
+    // dynamic key, not a subscription (outline-apps
+    // client/web/app/outline_server_repository/config.ts:117-127), so the way
+    // in is the per-node key in the downloads card. Shown only when a node has
+    // a cipher Outline reads: no 2022-blake3 in its SDK.
+    ...fromCatalog('outline'),
+    protocols: ['shadowsocks'],
+    action: { kind: 'outline' },
   },
 ];
 

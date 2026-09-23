@@ -68,8 +68,12 @@ export function profileFormats(
   const sub = (config as { subprotocol?: XraySubprotocol } | null)?.subprotocol;
   const door = doorOf({ protocol, subprotocol: protocol === 'xray' ? sub : undefined });
   const security = protocol === 'xray' ? clientSecurityLayer(config, hostOverride) : undefined;
+  // The cipher decides Outline (no 2022-blake3 there); absent, formatCarries
+  // answers as carried.
+  const ssMethod =
+    protocol === 'shadowsocks' ? (config as { method?: string } | null)?.method : undefined;
   return {
     door,
-    formats: FORMAT_NAMES.map((format) => ({ format, ...formatCarries(format, door, security) })),
+    formats: FORMAT_NAMES.map((format) => ({ format, ...formatCarries(format, door, security, ssMethod) })),
   };
 }

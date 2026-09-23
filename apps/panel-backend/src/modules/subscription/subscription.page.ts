@@ -124,6 +124,14 @@ export interface SubscriptionPageData {
     username: string;
     password: string;
   }>;
+  /**
+   * One Outline access key per Shadowsocks node Outline can read, already
+   * built: `ssconf://<host>/sub/<token>?format=outline&node=<name>#<name>`.
+   * An Outline key carries one server, so a key per node, as the AmneziaWG
+   * pairs. Empty when no node has a cipher Outline knows (2022-blake3 it
+   * does not) or the panel is not on https.
+   */
+  outlineNodes?: Array<{ nodeName: string; key: string }>;
 }
 
 function esc(s: string): string {
@@ -207,14 +215,25 @@ function platformLabel(p: PlatformId, t: Labels): string {
   return p === 'router' ? t.routerLabel : PLATFORM_LABEL[p];
 }
 
-/** Every app this platform can offer THIS subscription, registry order. */
-function appsFor(platform: PlatformId, userProtocols: ProtocolName[], hasAwg: boolean): AppDef[] {
+/** Every app this platform can offer THIS subscription, registry order.
+ *  An app whose way in is a per-node handout shows only when there is one:
+ *  the AmneziaWG files, the Outline keys. */
+function appsFor(
+  platform: PlatformId,
+  userProtocols: ProtocolName[],
+  hasAwg: boolean,
+  hasOutline: boolean,
+): AppDef[] {
   const protoSet = new Set(userProtocols);
   return APPS.filter(
     (a) =>
       a.platforms.includes(platform) &&
       a.protocols.some((p) => protoSet.has(p)) &&
-      (a.action.kind === 'deeplink' || a.action.kind === 'manual' ? true : hasAwg),
+      (a.action.kind === 'deeplink' || a.action.kind === 'manual'
+        ? true
+        : a.action.kind === 'outline'
+          ? hasOutline
+          : hasAwg),
   );
 }
 
@@ -286,6 +305,11 @@ function renderAppCard(a: AppDef, subUrl: string, icons: GlyphSheet, on = false)
     case 'download':
       href = '#downloads';
       glyphKey = 'DownloadIcon';
+      break;
+    case 'outline':
+      // The keys are per node and live in the downloads card, one row each.
+      href = '#downloads';
+      glyphKey = 'ExternalLink';
       break;
     default:
       href = '#sublink';
@@ -532,8 +556,9 @@ function renderPanel(
   hasAwg: boolean,
   t: Labels,
   icons: GlyphSheet,
+  hasOutline = false,
 ): string {
-  const apps = appsFor(platform, data.protocols, hasAwg);
+  const apps = appsFor(platform, data.protocols, hasAwg, hasOutline);
   if (apps.length === 0) return '';
   const { row, rest } = splitApps(apps);
   return (
@@ -563,8 +588,8 @@ function renderPanel(
  *     down about the AmneziaVPN key.
  *
  * A format that would come back empty for this subscription is left out: the
- * Shadowsocks-only list without Shadowsocks, the AmneziaWG files without an
- * AmneziaWG node.
+ * Outline keys without a Shadowsocks node Outline can read, the AmneziaWG
+ * files without an AmneziaWG node.
  */
 /**
  * Каким платформам подходит формат.
@@ -583,6 +608,7 @@ const DL_FITS: Record<string, PlatformId[]> = {
   surge: ['ios', 'macos'],
   quantumultx: ['ios'],
   loon: ['ios'],
+  outline: ['ios', 'android', 'windows', 'macos', 'linux'],
   xkeen: ['router'],
   wgconf: ['router'],
 };
@@ -633,7 +659,6 @@ function renderDownloads(
       'singbox',
       'xrayjson',
       'xrayjson-array',
-      'outline',
       'surge',
       'quantumultx',
       'loon',
@@ -736,6 +761,31 @@ function renderDownloads(
     })
     .join('');
 
+  /**
+   * Outline, one row per Shadowsocks node, with the ssconf:// key itself.
+   *
+   * Not a download: the app imports a key, not a file, and fetches the server
+   * from the key on every connect. So the key on the copy button, for pasting
+   * into "Add server", and the same key on the open button, which the app has
+   * registered as a link scheme.
+   */
+  const outline = (data.outlineNodes ?? [])
+    .map((n) => {
+      const name = `${t.formatNames['outline'] ?? 'Outline'} · ${n.nodeName}`;
+      return (
+        `<div class="dl-row" data-dl-fits="${DL_FITS['outline']!.join(' ')}">` +
+        `<div class="dl-row__col">` +
+        `<div class="dl-row__name"><span class="dl-row__dot" aria-hidden="true"></span>${esc(name)}</div>` +
+        `<div class="dl-row__note dl-row__note--warn">${esc(t.formats['outline'] ?? '')}</div>` +
+        `</div>` +
+        `<div class="dl-row__actions">` +
+        `<button class="dl-btn dl-btn--ghost" type="button" data-copy-text="${esc(n.key)}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(t.dlCopyKey)}</span></button>` +
+        `<a class="dl-btn" href="${esc(n.key)}">${icons.draw('ExternalLink', { cls: 'ic' })}<span>${esc(t.outlineOpen)}</span></a>` +
+        `</div></div>`
+      );
+    })
+    .join('');
+
   const row = (r: Row) => {
     const href = `${sub}?format=${r.fmt}${r.q ?? ''}`;
     // Имя это то, ЧЕМ строка является для читателя, а не ключ формата.
@@ -789,14 +839,15 @@ function renderDownloads(
       // they are: one node, one link, not the subscription. INSIDE that group,
       // under its one title: they used to open a group of their own with the
       // same title, and the page printed "for another device" twice in a row.
-      (telegram || telegramProxies || other.length > 0
+      (telegram || telegramProxies || outline || other.length > 0
         ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>` +
-          `${telegram}${telegramProxies}${other.map(row).join('')}</div>`
+          `${outline}${telegram}${telegramProxies}${other.map(row).join('')}</div>`
         : '');
   const count =
     clients.length +
     router.length +
     other.length +
+    (data.outlineNodes?.length ?? 0) +
     (data.mtprotoNodes?.length ?? 0) +
     (data.telegramProxies?.length ?? 0);
   // Нечего предложить и подписка в силе: карточки нет. Нечего предложить
@@ -1004,7 +1055,11 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
   // the page needs, and throwing away output that had a side effect is the
   // kind of thing that comes back as a mark in the sprite nobody references.
   const rendered = PLATFORM_ORDER.map(
-    (p) => [p, renderPanel(p, appData, hasAwg || noServers, t, icons)] as const,
+    (p) =>
+      [
+        p,
+        renderPanel(p, appData, hasAwg || noServers, t, icons, (data.outlineNodes?.length ?? 0) > 0 || noServers),
+      ] as const,
   ).filter(([, html]) => html !== '');
   const platforms = rendered.map(([p]) => p);
   const first = platforms[0];

@@ -91,6 +91,17 @@ const SAMPLES: SubscriptionEndpoint[] = [
     method: '2022-blake3-aes-128-gcm',
     password: 'p',
   },
+  // The same door on a legacy AEAD cipher: Outline carries this one and not
+  // the one above, so without it the outline column would prove nothing.
+  {
+    ...base,
+    protocol: 'shadowsocks',
+    nodeName: 'ss-aead',
+    host: host('shadowsocks', '-aead'),
+    uri: `ss://x@${host('shadowsocks', '-aead')}`,
+    method: 'chacha20-ietf-poly1305',
+    password: 'p',
+  },
   {
     ...base,
     protocol: 'tuic',
@@ -169,7 +180,8 @@ describe('every door of every format: in the file exactly when the table says', 
   const cases = FORMAT_NAMES.flatMap((format) => SAMPLES.map((e) => [format, e] as const));
   it.each(cases)('%s: %o', (format, e) => {
     const security = 'securityLayer' in e ? e.securityLayer : undefined;
-    const { carried } = formatCarries(format, endpointDoor(e), security);
+    const ssMethod = e.protocol === 'shadowsocks' ? e.method : undefined;
+    const { carried } = formatCarries(format, endpointDoor(e), security, ssMethod);
     const file = BUILD[format](endpointsForFormat(format, [e]));
     if (carried) {
       expect(file, `${format} is marked as carrying ${endpointDoor(e)} and its file lost it`).toContain(e.host);
@@ -217,6 +229,22 @@ describe('the table itself', () => {
     expect(formatCarries('quantumultx', 'hysteria').why).toBe('client-lacks-protocol');
     expect(formatCarries('clash', 'naive').why).toBe('client-lacks-protocol');
     expect(formatCarries('surge', 'vless').why).toBe('client-lacks-protocol');
+  });
+
+  it('keeps 2022-blake3 out of Outline and nothing else', () => {
+    // The Outline SDK has chacha20-ietf-poly1305 and aes-*-gcm only.
+    expect(formatCarries('outline', 'shadowsocks', undefined, '2022-blake3-aes-128-gcm')).toEqual({
+      carried: false,
+      why: 'client-lacks-protocol',
+    });
+    expect(formatCarries('outline', 'shadowsocks', undefined, 'aes-256-gcm').carried).toBe(true);
+    // A cipher nobody told us is not a fact to refuse on.
+    expect(formatCarries('outline', 'shadowsocks').carried).toBe(true);
+    for (const format of FORMAT_NAMES.filter((f) => f !== 'outline')) {
+      expect(formatCarries(format, 'shadowsocks', undefined, '2022-blake3-aes-128-gcm'), format).toEqual(
+        formatCarries(format, 'shadowsocks'),
+      );
+    }
   });
 
   it('names the part of a carried door the builder does not write yet', () => {

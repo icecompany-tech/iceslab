@@ -244,12 +244,14 @@ export type FormatWhy = 'native' | FormatGap;
 /**
  * One cell of the table: carried, or not with the reason. `exceptReality`
  * marks a door the format carries only over plain TLS or none: the clients
- * have no REALITY (Surge).
+ * have no REALITY (Surge). `exceptSs2022` marks a Shadowsocks door carried only
+ * with the legacy AEAD ciphers: the clients have no 2022-blake3 (Outline).
  */
 export type FormatDoor =
   | {
       carried: true;
       exceptReality?: true;
+      exceptSs2022?: true;
       /** A part of the door the format could carry and our builder does not
        *  write yet, with the doc that shows it. The door itself is carried. */
       notYet?: string;
@@ -330,7 +332,12 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
   xrayjson: formatTable({ ...XRAY_DOORS, hysteria: NOT_YET, shadowsocks: NOT_YET }),
   'xrayjson-array': formatTable({ ...XRAY_DOORS, hysteria: YES, shadowsocks: NOT_YET }),
   xkeen: formatTable({ ...XRAY_DOORS, hysteria: NOT_YET, shadowsocks: NOT_YET }),
-  outline: formatTable({ shadowsocks: YES }),
+  // One Shadowsocks server as an Outline dynamic key, picked with `&node=`.
+  // No 2022-blake3: the Outline SDK knows chacha20-ietf-poly1305 and
+  // aes-128/192/256-gcm and nothing else (outline-sdk
+  // transport/shadowsocks/cipher.go, cipherByName), and the app fails the key
+  // with "invalid cipher" (outline-apps configregistry/config_shadowsocks.go:209-211).
+  outline: formatTable({ shadowsocks: { carried: true, exceptSs2022: true } }),
   surge: formatTable({
     vmess: YES_NO_REALITY,
     trojan: YES_NO_REALITY,
@@ -377,15 +384,21 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
 };
 
 /** What a format answers about one door over one security layer. The
- *  securityLayer is the xray one: 'default' is REALITY. */
+ *  securityLayer is the xray one: 'default' is REALITY. `ssMethod` is the
+ *  Shadowsocks cipher; unknown, the door is answered as carried, because a
+ *  gate refuses only on a fact. */
 export function formatCarries(
   format: SubscriptionFormat,
   door: Door,
   securityLayer?: 'default' | 'tls' | 'none' | null,
+  ssMethod?: string | null,
 ): { carried: boolean; why: FormatWhy } {
   const cell = FORMAT_DOORS[format][door];
   if (!cell.carried) return { carried: false, why: cell.why };
   if (cell.exceptReality && (securityLayer ?? 'default') === 'default') {
+    return { carried: false, why: 'client-lacks-protocol' };
+  }
+  if (cell.exceptSs2022 && ssMethod?.startsWith('2022-')) {
     return { carried: false, why: 'client-lacks-protocol' };
   }
   return { carried: true, why: 'native' };

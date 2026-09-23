@@ -222,13 +222,34 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('plain text');
   });
 
-  it('leaves out a format that would come back empty', () => {
-    // Outline is Shadowsocks-only; offering it to a subscription without any
-    // is the same defect as naming an app that does not exist on the platform.
-    expect(buildSubscriptionPage(base({ protocols: ['xray'] }))).not.toContain('format=outline');
-    expect(buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks'] }))).toContain(
-      'format=outline',
+  it('gives Outline one ssconf:// key per node, and no card without one', () => {
+    // An Outline key carries one server, so a key per node, as the AmneziaWG
+    // pairs. Without a key (no node on a cipher Outline reads) there is no
+    // Outline card at all: an app card that leads nowhere is the defect.
+    const key = (n: string) =>
+      `ssconf://panel.example.com/sub/abc123?format=outline&node=${n}#${n}`;
+    const none = buildSubscriptionPage(base({ protocols: ['xray', 'shadowsocks'] }));
+    expect(none).not.toContain('data-app="Outline"');
+    expect(none).not.toContain('format=outline');
+
+    const two = buildSubscriptionPage(
+      base({
+        protocols: ['xray', 'shadowsocks'],
+        outlineNodes: [
+          { nodeName: 'de-1', key: key('de-1') },
+          { nodeName: 'nl-1', key: key('nl-1') },
+        ],
+      }),
     );
+    expect(two).toContain('data-app="Outline"');
+    for (const n of ['de-1', 'nl-1']) {
+      const k = key(n).replace(/&/g, '&amp;');
+      expect(two).toContain(`data-copy-text="${k}"`);
+      expect(two).toContain(`href="${k}"`);
+      expect(two).toContain(`Outline · ${n}`);
+    }
+    // Never as a file to download: the app imports the key, not a file.
+    expect(two).not.toContain('format=outline&amp;dl=1');
   });
 
   it('warns before the traffic runs out, and says what actually happens then', () => {

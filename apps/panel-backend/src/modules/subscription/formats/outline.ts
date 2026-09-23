@@ -1,43 +1,50 @@
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
-import { endpointId } from '../endpoint-identity.js';
 
 /**
- * Outline / SIP008 "online config" formatter (`?format=outline`).
+ * Outline dynamic access key (`?format=outline`): ONE Shadowsocks server.
  *
- * SIP008 is the standard Shadowsocks online-configuration JSON: a `servers`
- * array that the Outline client and shadowsocks-android / shadowsocks-rust
- * clients poll and import. Only `shadowsocks` endpoints map (these clients
- * speak Shadowsocks and nothing else); every other protocol is skipped, the
- * same way the xrayjson formatter skips non-xray endpoints.
+ * The page hands it out as `ssconf://<host>/sub/<token>?format=outline&node=<name>#<label>`.
+ * The Outline app turns `ssconf://` into `https://`, keeps the query, takes the
+ * fragment as the server's name (outline-apps
+ * client/web/app/outline_server_repository/config.ts:117-127), fetches the
+ * address and parses the body as a tunnel config (client/go/outline/parse.go:78-131).
+ * The body it reads is an ss:// string, the legacy Shadowsocks object, or the
+ * YAML tunnel config. It is NOT a SIP008 list: this format used to answer
+ * `{ version, servers: [...] }`, which the app never read, so the Outline card
+ * led nowhere.
  *
- * Shape (SIP008 v1):
- *   {
- *     "version": 1,
- *     "servers": [
- *       { "id", "remarks", "server", "server_port", "password", "method" }
- *     ]
- *   }
+ * The legacy object it is:
+ *   { "server", "server_port", "method", "password" }
+ * and nothing else, because an unknown key fails the whole key
+ * (configregistry/config_shadowsocks_test.go:141). `prefix` is one the app
+ * reads; it is left out until a profile has a field for it.
+ *
+ * One server per key, so a user with several Shadowsocks nodes gets one link
+ * per node, picked with `&node=` as the AmneziaWG files are. Without it, the
+ * first. With no Shadowsocks endpoint, an empty body, as wgconf answers.
+ *
+ * The endpoints come through endpointsForFormat, which drops the 2022-blake3
+ * ciphers the Outline SDK does not have (FORMAT_DOORS.outline).
  */
-export function buildOutlineJson(endpoints: SubscriptionEndpoint[]): string {
-  const servers = endpoints
-    .filter((e) => e.protocol === 'shadowsocks')
-    .map((e) => {
-      if (e.protocol !== 'shadowsocks') throw new Error('unreachable'); // narrowing
-      return {
-        // SIP008 `id` is what a client matches a server against across polls, so
-        // it has to be the endpoint's identity and not its position in the list
-        // or a name an operator can edit. The host id keeps that literal form it
-        // has always had - changing it would make every client drop its servers
-        // and re-add them once - and the fallback, which used to paste the label
-        // together with a list index, becomes the same identity everything else
-        // is now keyed by.
-        id: e.hostId ?? endpointId(e),
-        remarks: e.nodeName,
-        server: e.host,
-        server_port: e.port,
-        password: e.password,
-        method: e.method,
-      };
-    });
-  return JSON.stringify({ version: 1, servers }, null, 2) + '\n';
+/**
+ * The access key the page hands to Outline for one node:
+ * `ssconf://<host>/sub/<token>?format=outline&node=<name>#<name>`.
+ *
+ * Only from an https subscription address: the app fetches every ssconf:// key
+ * over https (config.ts:124-126) and refuses an http:// one outright
+ * (config.ts:133), so a panel served over plain http has no key to give.
+ */
+export function outlineAccessKey(subUrl: string, nodeName: string): string | undefined {
+  if (!subUrl.startsWith('https://')) return undefined;
+  const node = encodeURIComponent(nodeName);
+  return `ssconf://${subUrl.slice('https://'.length)}?format=outline&node=${node}#${node}`;
+}
+
+export function buildOutlineJson(endpoints: SubscriptionEndpoint[], nodeName?: string): string {
+  const ss = endpoints.filter((e) => e.protocol === 'shadowsocks');
+  const e = nodeName ? ss.find((x) => x.nodeName === nodeName) : ss[0];
+  if (!e || e.protocol !== 'shadowsocks') return '';
+  return (
+    JSON.stringify({ server: e.host, server_port: e.port, method: e.method, password: e.password }, null, 2) + '\n'
+  );
 }

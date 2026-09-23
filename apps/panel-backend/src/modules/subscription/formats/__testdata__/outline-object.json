@@ -1,0 +1,6 @@
+{
+  "server": "de.example.com",
+  "server_port": 8388,
+  "method": "chacha20-ietf-poly1305",
+  "password": "pw-de-1"
+}

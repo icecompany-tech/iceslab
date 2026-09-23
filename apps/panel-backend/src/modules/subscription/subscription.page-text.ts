@@ -62,6 +62,9 @@ export interface Labels {
   /** Поля HTTP-прокси, которые человек вводит в Telegram Desktop руками, и
    *  кнопка копирования пароля (UUID руками не набирают). */
   tgHttpFields: { server: string; port: string; login: string; password: string; copyPassword: string };
+  /** Кнопки строки Outline: ключ ssconf:// копируется и открывается в приложении. */
+  outlineOpen: string;
+  dlCopyKey: string;
   dlCopy: string;
   dlDead: string;
   /** Подписи кнопок, что ведут за выбранным приложением и в него. */
@@ -214,6 +217,8 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlGet: 'Download',
     tgOpen: 'Open in Telegram',
     tgHttpFields: { server: 'Server', port: 'Port', login: 'Login', password: 'Password', copyPassword: 'Password' },
+    outlineOpen: 'Open in Outline',
+    dlCopyKey: 'Key',
     dlCopy: 'Config',
     stepGet: 'Get',
     stepAdd: 'Add to',
@@ -245,7 +250,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       singbox: 'sing-box, Karing, Hiddify. The whole subscription in one file',
       xrayjson: 'v2rayN, Throne, Happ. The whole subscription in one file',
       'xrayjson-array': 'The same servers as separate configs, which is how Happ and v2RayTun read them',
-      outline: 'Shadowsocks only, SIP008: Outline and the shadowsocks clients',
+      outline: 'An Outline access key: paste it into Add server, or open it. Shadowsocks, this server only',
       surge: 'iOS and macOS. Paid app',
       quantumultx: 'iOS. Paid app',
       loon: 'iOS. Paid app',
@@ -391,6 +396,8 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlGet: 'Скачать',
     tgOpen: 'Открыть в Telegram',
     tgHttpFields: { server: 'Сервер', port: 'Порт', login: 'Логин', password: 'Пароль', copyPassword: 'Пароль' },
+    outlineOpen: 'Открыть в Outline',
+    dlCopyKey: 'Ключ',
     dlCopy: 'Конфиг',
     stepGet: 'Скачать',
     stepAdd: 'Добавить в',
@@ -422,7 +429,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       singbox: 'sing-box, Karing, Hiddify. Вся подписка одним файлом',
       xrayjson: 'v2rayN, Throne, Happ. Вся подписка одним файлом',
       'xrayjson-array': 'Те же серверы отдельными конфигами, именно так их читают Happ и v2RayTun',
-      outline: 'Только Shadowsocks, SIP008: Outline и клиенты shadowsocks',
+      outline: 'Ключ доступа Outline: вставить в «Добавить сервер» или открыть. Shadowsocks, только этот сервер',
       surge: 'iOS и macOS. Приложение платное',
       quantumultx: 'iOS. Приложение платное',
       loon: 'iOS. Приложение платное',

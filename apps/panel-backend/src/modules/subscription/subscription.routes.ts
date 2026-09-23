@@ -7,7 +7,7 @@ import { buildSingboxJson } from './formats/singbox.js';
 import { buildWgQuickConf } from './formats/wgconf.js';
 import { buildAwgVpnLink } from './formats/amneziavpn.js';
 import { buildXrayJson, buildXrayJsonArray } from './formats/xrayjson.js';
-import { buildOutlineJson } from './formats/outline.js';
+import { buildOutlineJson, outlineAccessKey } from './formats/outline.js';
 import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
@@ -63,10 +63,11 @@ const QuerySchema = z.object({
   // it on, `0` forces it off. Only meaningful for the xrayjson format - the
   // fragment outbound + dialerProxy is an Xray-native technique.
   fragment: z.enum(['0', '1']).optional(),
-  // Node selector for single-node formats (wgconf). wg-quick holds one tunnel
-  // per file, so a user with several AmneziaWG nodes gets one link per node,
-  // each pinned with `?node=<node name>`. Matched against the endpoint's
-  // nodeName (unique among active nodes). Omitted = first AWG endpoint.
+  // Node selector for single-node formats (wgconf, amneziavpn, outline).
+  // wg-quick holds one tunnel per file and an Outline key one server, so a user
+  // with several such nodes gets one link per node, each pinned with
+  // `?node=<node name>`. Matched against the endpoint's nodeName (unique among
+  // active nodes). Omitted = the first one.
   node: z.string().min(1).max(64).optional(),
   // Human landing-page language override. The page renders an in-page RU/EN
   // selector that links here; it wins over the panel default and the
@@ -577,6 +578,19 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           username: e.username,
           password: e.password,
         }));
+        // One Outline key per Shadowsocks node, as the AmneziaWG pairs: a key
+        // carries one server. Through the same gate as the file itself, so a
+        // node on a 2022-blake3 cipher, which Outline cannot read, gets no key.
+        const ssSeen = new Set<string>();
+        const outlineNodes = endpointsForFormat(
+          'outline',
+          result.endpoints.filter((e) => !(e.disableForFormats ?? []).includes('outline')),
+        )
+          .filter((e) => !ssSeen.has(e.nodeName) && !!ssSeen.add(e.nodeName))
+          .flatMap((e) => {
+            const key = outlineAccessKey(subUrl, e.nodeName);
+            return key ? [{ nodeName: e.nodeName, key }] : [];
+          });
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
@@ -604,6 +618,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             awgNodes,
             mtprotoNodes,
             telegramProxies,
+            outlineNodes,
             deadTexts: settings.deadTexts,
           }),
         );
@@ -740,11 +755,12 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             .send(buildXrayJson(served, { bundle: xkBundle, routingPreset, forRouter: true, customRules: customRoutingRules, customDomainLists }));
         }
         case 'outline':
-          // SIP008 Shadowsocks online-config (Outline / shadowsocks-* clients).
-          // SS-only; non-SS endpoints are skipped inside the builder.
+          // Outline dynamic key: one Shadowsocks server, `?node=` picks which,
+          // absent = first. Empty body = no Shadowsocks endpoint Outline can
+          // read (same contract as wgconf). The page links it as ssconf://.
           return reply
             .type('application/json')
-            .send(buildOutlineJson(served));
+            .send(buildOutlineJson(served, query.node));
         case 'surge':
           // Surge [Proxy] lines. ss/vmess/trojan/hy2; no vless/REALITY.
           return reply.type('text/plain; charset=utf-8').send(buildSurgeConf(served));

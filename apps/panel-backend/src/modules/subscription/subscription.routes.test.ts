@@ -369,6 +369,37 @@ describe('GET /sub/:token - multi-format (slice 21)', () => {
     expect(res.body).toBe('');
   });
 
+  it('?format=outline answers one Shadowsocks server, &node= picks which', async () => {
+    const user = await createUser('alice');
+    const eu1 = await createNode('eu-1', '10.0.0.1:8443');
+    const eu2 = await createNode('eu-2', '10.0.0.2:8443');
+    const eu3 = await createNode('eu-3', '10.0.0.3:8443');
+    const aead = await createProfile('shadowsocks', { method: 'chacha20-ietf-poly1305' }, 'aead');
+    await createBinding(aead, eu1, 8388);
+    await createBinding(aead, eu2, 8388);
+    // Outline has no 2022-blake3: this node must never come back as a key body.
+    const ss2022 = await createProfile('shadowsocks', { method: '2022-blake3-aes-128-gcm' }, 's22');
+    await createBinding(ss2022, eu3, 8389);
+
+    const get = (q: string) =>
+      app.inject({ method: 'GET', url: `/sub/${user.subscriptionToken}?format=outline${q}` });
+    // `node` is the endpoint's label, the name the page puts in the key.
+    const node = (n: string) => `&node=${encodeURIComponent(`${n} · Shadowsocks`)}`;
+
+    const picked = await get(node('eu-2'));
+    expect(picked.statusCode).toBe(200);
+    expect(picked.headers['content-type']).toContain('application/json');
+    const body = JSON.parse(picked.body);
+    expect(Object.keys(body)).toEqual(['server', 'server_port', 'method', 'password']);
+    expect(body).toMatchObject({ server: '10.0.0.2', server_port: 8388, method: 'chacha20-ietf-poly1305' });
+
+    const first = JSON.parse((await get('')).body);
+    expect(first).toMatchObject({ server: '10.0.0.1', method: 'chacha20-ietf-poly1305' });
+
+    expect((await get(node('eu-3'))).body).toBe('');
+    expect((await get('&node=nowhere')).body).toBe('');
+  });
+
   it('rejects unknown ?format value with 400', async () => {
     const user = await createUser('alice');
     const res = await app.inject({
