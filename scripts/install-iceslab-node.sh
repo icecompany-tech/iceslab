@@ -244,7 +244,19 @@ ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.0}
 # upstream releases.
 HYSTERIA_INSTALLER_REF=${HYSTERIA_INSTALLER_REF:-app/v2.9.1}
 HYSTERIA_INSTALLER_SHA=${HYSTERIA_INSTALLER_SHA:-}
-HYSTERIA_VERSION=${HYSTERIA_VERSION:-}   # passed as --version to the script; empty = installer default
+# The installer SCRIPT is pinned above; the BINARY it installs was not, until
+# phase 6. This line used to default to empty, which upstream's install_server.sh
+# reads as "latest", so hysteria was the last engine a node took from whatever
+# GitHub answered on the day it was built (xray and sing-box were pinned first).
+#
+# v2.12.3 is not a guess: it is the release the phase-6 hand-off was MEASURED
+# against on 2026-09-23 (a socks5 outbound with no acl carries every user to the
+# chain, because the first outbound in the array is the default). The same value
+# is pinned in apps/node/scripts/bootstrap-hysteria.sh, the path used when a core
+# is added to a node later, and one Go test holds both files to one constant, so
+# they cannot drift apart. Moving it is a change in the repository with that
+# measurement run again.
+HYSTERIA_VERSION=${HYSTERIA_VERSION:-v2.12.3}   # passed as --version to upstream's script
 
 # Xray-install: XTLS/Xray-install publishes no tags/releases, only a
 # `main` branch. We pin to a specific commit SHA so a hostile commit to
@@ -262,9 +274,10 @@ XRAY_INSTALLER_SHA=${XRAY_INSTALLER_SHA:-}
 #
 # v26.3.27 is what the four stand nodes run, confirmed 2026-09-11, so this
 # default changes nothing about the fleet and stops it drifting further.
-# Unlike HYSTERIA_VERSION, this is not empty-by-default: an empty value here
-# means "latest", which is exactly what is being closed. Moving to a newer
-# core is its own decision, made by bumping this line deliberately.
+# Not empty-by-default, and never to be: an empty value here means "latest",
+# which is exactly what is being closed (HYSTERIA_VERSION above used to be the
+# empty one, and was the last engine to be pinned). Moving to a newer core is
+# its own decision, made by bumping this line deliberately.
 XRAY_VERSION=${XRAY_VERSION:-v26.3.27}
 
 # pinned_fetch <url> <out-path> [<expected-sha256>]

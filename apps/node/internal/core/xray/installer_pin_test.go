@@ -44,8 +44,9 @@ func TestInstallerPinsXrayVersion(t *testing.T) {
 	}
 
 	// An empty default would mean "latest", which is the thing being closed.
-	// It is a real risk and not a theoretical one: HYSTERIA_VERSION next door
-	// is deliberately empty, and copying that shape here would undo this.
+	// It was a real risk and not a theoretical one: HYSTERIA_VERSION next door
+	// sat empty until phase 6 pinned it too, and copying that shape here would
+	// undo this.
 	if regexp.MustCompile(`XRAY_VERSION=\$\{XRAY_VERSION:-\}`).MatchString(script) {
 		t.Error("XRAY_VERSION defaults to empty, which the installer reads as latest")
 	}
