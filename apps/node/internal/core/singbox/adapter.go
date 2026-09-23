@@ -434,6 +434,10 @@ func (w xrayFamilyWire) toInboundConfig(port int) (InboundConfig, error) {
 	// REALITY (steal-others) only. tls/none security needs operator-cert handling
 	// (deferred); self-steal needs the local TLS fallback the xray adapter runs;
 	// non-raw transports and cascade aren't mapped to sing-box yet.
+	// The panel refuses the same three at save (security, realityMode, network:
+	// singboxRefusesXrayField in apps/panel-backend/src/modules/profiles/
+	// profiles.schemas.ts), so this is the second line, not the only one. A
+	// change here is a change there.
 	if w.Security != "" && w.Security != "reality" {
 		return InboundConfig{}, fmt.Errorf("security %q not supported via sing-box engine (use the xray engine)", w.Security)
 	}

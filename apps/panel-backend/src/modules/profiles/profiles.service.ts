@@ -11,7 +11,13 @@ import { ensureDefaultHost } from '../hosts/hosts.service.js';
 import {
   generateSsServerPsk,
 } from './ss-helpers.js';
-import { engineServesSubprotocol, engineValidForProtocol } from './profiles.schemas.js';
+import {
+  engineServesSubprotocol,
+  engineValidForProtocol,
+  SINGBOX_XRAY_FAMILY_MESSAGE,
+  singboxRefusesXrayField,
+  type SingboxXrayField,
+} from './profiles.schemas.js';
 import {
   effectiveEngineOf,
   nodeRendersProfile,
@@ -63,6 +69,17 @@ export class ProfileEngineNotForSubprotocolError extends Error {
   constructor() {
     super('socks and http are served by the xray engine only');
     this.name = 'ProfileEngineNotForSubprotocolError';
+  }
+}
+/** An xray-family profile on sing-box with a field sing-box cannot serve
+ *  (singboxRefusesXrayField). `path` names the field, as a schema issue would. */
+export class ProfileEngineNotForTransportError extends Error {
+  readonly code = 'INVALID';
+  readonly path: [string, SingboxXrayField];
+  constructor(field: SingboxXrayField, where: 'config' | 'overrides' = 'config') {
+    super(SINGBOX_XRAY_FAMILY_MESSAGE);
+    this.name = 'ProfileEngineNotForTransportError';
+    this.path = [where, field];
   }
 }
 /**
@@ -442,6 +459,22 @@ export async function updateProfile(
   if (!engineServesSubprotocol(existing.protocol, nextEngine, nextConfig)) {
     throw new ProfileEngineNotForSubprotocolError();
   }
+  // Same pair, same reading: a TLS profile moved to sing-box, or a sing-box
+  // profile edited to TLS, is refused here rather than by the node's push.
+  const refused = singboxRefusesXrayField(existing.protocol, nextEngine, nextConfig);
+  if (refused) throw new ProfileEngineNotForTransportError(refused);
+  // What the node is pushed is the profile merged with each binding's
+  // overrides, and an override may pin a network of its own.
+  if (existing.protocol === 'xray' && nextEngine === 'singbox') {
+    const deployed = await prisma.profileNodeBinding.findMany({
+      where: { profileId: id },
+      select: { overrides: true },
+    });
+    for (const b of deployed) {
+      const f = singboxRefusesXrayField('xray', 'singbox', resolveBindingConfig(nextConfig, b.overrides));
+      if (f) throw new ProfileEngineNotForTransportError(f, 'overrides');
+    }
+  }
 
   /**
    * A config edit can move every deployed binding onto another socket.
@@ -647,6 +680,25 @@ export async function assertPortFreeOfOthers(
   }
 }
 
+/**
+ * A binding's overrides must not pin what sing-box cannot serve: the node is
+ * pushed the profile merged with them (resolveBindingConfig). The path points
+ * at the override when it is the override that carries the field.
+ */
+function assertSingboxServesBinding(
+  profile: { protocol: string; engine: string | null; config: unknown },
+  overrides: unknown,
+): void {
+  const f = singboxRefusesXrayField(
+    profile.protocol,
+    profile.engine,
+    resolveBindingConfig(profile.config, overrides),
+  );
+  if (!f) return;
+  const own = overrides && typeof overrides === 'object' && f in (overrides as object);
+  throw new ProfileEngineNotForTransportError(f, own ? 'overrides' : 'config');
+}
+
 export async function createBinding(input: CreateBindingInput): Promise<PublicBindingDto> {
   const profile = await prisma.profile.findUnique({ where: { id: input.profileId } });
   if (!profile) throw new ProfileNotFoundError(input.profileId);
@@ -678,6 +730,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   });
   if (dupBinding) throw new NodeAlreadyBoundError(input.profileId, input.nodeId);
   assertNodeRendersProfile(node, profile);
+  assertSingboxServesBinding(profile, input.overrides);
 
   const created = await prisma.profileNodeBinding.create({
     data: {
@@ -740,7 +793,7 @@ export async function updateBinding(
 ): Promise<PublicBindingDto> {
   const existing = await prisma.profileNodeBinding.findUnique({
     where: { id },
-    include: { profile: { select: { protocol: true, config: true } } },
+    include: { profile: { select: { protocol: true, config: true, engine: true } } },
   });
   if (!existing) throw new BindingNotFoundError(id);
 
@@ -748,6 +801,7 @@ export async function updateBinding(
   // socket it takes, so the transport is recomputed from what the row will be
   // after this edit rather than from what it was.
   const nextOverrides = input.overrides !== undefined ? input.overrides : existing.overrides;
+  assertSingboxServesBinding(existing.profile, nextOverrides);
   const transport = transportForBinding(existing.profile, nextOverrides);
   const nextPort = input.port ?? existing.port;
 

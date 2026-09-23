@@ -92,6 +92,46 @@ export function engineServesSubprotocol(
   return !(XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(sub);
 }
 
+export const SINGBOX_XRAY_FAMILY_MESSAGE =
+  'sing-box serves the xray family only as REALITY over raw; use the xray engine for TLS, none, self-steal and other transports';
+
+export type SingboxXrayField = 'security' | 'realityMode' | 'network';
+
+/**
+ * The field that keeps an xray-family profile (vless, vmess, trojan) off the
+ * sing-box engine, or null when sing-box can serve it.
+ *
+ * The rule is the agent's, mirrored here so the save says it instead of a
+ * failed push: apps/node/internal/core/singbox/adapter.go, toInboundConfig
+ * (lines 441-449 on 2026-09-24) refuses security other than reality (tls/none
+ * need operator certificates on sing-box, deferred), REALITY self-steal (the
+ * local TLS fallback lives in the xray adapter) and any network but raw. A
+ * change there is a change here; the agent's comment names this function.
+ *
+ * Read on the config as it will be stored or pushed, the schema defaults
+ * filled in (reality, steal-others, raw). An absent or empty value passes, as
+ * on the agent. socks and http answer engineServesSubprotocol, not this.
+ */
+export function singboxRefusesXrayField(
+  protocol: string,
+  engine: string | null | undefined,
+  config: unknown,
+): SingboxXrayField | null {
+  if (protocol !== 'xray' || engine !== 'singbox') return null;
+  const c = (config ?? {}) as {
+    subprotocol?: unknown;
+    security?: unknown;
+    realityMode?: unknown;
+    network?: unknown;
+  };
+  if ((XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(c.subprotocol)) return null;
+  const set = (v: unknown) => v !== undefined && v !== null && v !== '';
+  if (set(c.security) && c.security !== 'reality') return 'security';
+  if (c.realityMode === 'self-steal') return 'realityMode';
+  if (set(c.network) && c.network !== 'raw') return 'network';
+  return null;
+}
+
 // Discriminated union, same shape as the old InboundConfigByProtocol but
 // without the per-node `nodeId/port/publicHost` fields. Profile holds the
 // shared template only.
@@ -132,6 +172,10 @@ export const CreateProfileSchema = z
         message: 'socks and http are served by the xray engine only',
         path: ['engine'],
       });
+    }
+    const field = singboxRefusesXrayField(val.protocol, val.engine ?? null, val.config);
+    if (field) {
+      ctx.addIssue({ code: 'custom', message: SINGBOX_XRAY_FAMILY_MESSAGE, path: ['config', field] });
     }
   });
 export type CreateProfileInput = z.infer<typeof CreateProfileSchema>;

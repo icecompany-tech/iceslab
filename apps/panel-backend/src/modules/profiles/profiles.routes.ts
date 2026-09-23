@@ -136,6 +136,11 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileEngineNotForSubprotocolError) {
         return reply.code(400).send({ error: err.code, message: err.message });
       }
+      // The field sing-box cannot serve on an xray-family profile, with its
+      // path, as the create path's schema issue carries it.
+      if (err instanceof svc.ProfileEngineNotForTransportError) {
+        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+      }
       // Switching the engine would leave this profile deployed on a node whose
       // cores cannot serve it. Named separately from CONFLICT so the screen can
       // point at the node instead of at the field.
@@ -208,6 +213,9 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.NodeAlreadyBoundError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      if (err instanceof svc.ProfileEngineNotForTransportError) {
+        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+      }
       // No core on this node renders this profile, so the inbound would never
       // come up: the agent answers such a push 200 with `skipped`, and the
       // subscription would keep handing out an endpoint nobody listens on.
@@ -272,6 +280,9 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(409)
           .send({ error: err.code, message: err.message, conflicts: err.conflicts });
+      }
+      if (err instanceof svc.ProfileEngineNotForTransportError) {
+        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
       }
       throw err;
     }
