@@ -1,5 +1,6 @@
 import {
   LINK_CELL_TRANSPORT,
+  type ChainUserCore,
   type LinkCongestion,
   type NodeChain,
   type NodeCores,
@@ -48,7 +49,7 @@ import type {
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
-import { chainSocksPort } from './chain.ports.js';
+import { CHAIN_SOCKS_USER, chainSocksPort } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
 import { carriesCellAtSave } from './cell-carriage.js';
 import {
@@ -1673,22 +1674,50 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
   // any: a transit and an exit receive on a link and hand nothing over.
   const socks = (input.directionTags ?? []).map((tag) => ({ tag, port: chainSocksPort(tag) }));
 
-  // ⚠ ONLY AN ENTRY HANDS ANYTHING OVER. A transit and an exit have their whole
-  // side of the chain inside the process: their link-in listens on the link
-  // port, and giving their user core the old fragments as well would put xray
-  // on that same port, where one of the two loses the bind and the leg into
-  // this node goes dark.
-  const handover =
-    role === 'entry'
-      ? buildTopologyFragmentsForNode(nodeId, { ...topology, chainSocksPassword: secret })
-      : null;
   return {
     engine: 'singbox',
     config: config as Record<string, unknown>,
     socks,
     socksPassword: secret,
-    ...(handover ? { userCore: { engine: 'xray' as const, fragments: toWireFragments(handover) } } : {}),
+    ...userCoreFor(nodeId, topology, role, secret),
   };
+}
+
+/**
+ * What the entry's user core is told, one shape per entry protocol.
+ *
+ * ⚠ ONLY AN ENTRY HANDS ANYTHING OVER. A transit and an exit have their whole
+ * side of the chain inside the process: their link-in listens on the link port,
+ * and giving their user core the old fragments as well would put xray on that
+ * same port, where one of the two loses the bind and the leg into this node
+ * goes dark.
+ *
+ * And the engine is NAMED, which is the phase-6 part. The agent hands the
+ * payload to the one core whose engine this says, and tells every other core
+ * "not you". A hysteria entry that went out as xray fragments would leave its
+ * hysteria users with no hand-off at all: out of the entry country, with a
+ * working connection, while the panel shows a cascade.
+ */
+function userCoreFor(
+  nodeId: string,
+  topology: TopologyInput,
+  role: ChainRole,
+  secret: string,
+): { userCore?: ChainUserCore } {
+  if (role !== 'entry') return {};
+  if (topology.entryProtocol === 'hysteria') {
+    // One listener for the whole entry: Auto's, which chainInputFor always
+    // renders for a hysteria entry. A port and not an address; the agent
+    // writes 127.0.0.1 itself.
+    return {
+      userCore: {
+        engine: 'hysteria',
+        socks: { port: chainSocksPort(0), username: CHAIN_SOCKS_USER, password: secret },
+      },
+    };
+  }
+  const handover = buildTopologyFragmentsForNode(nodeId, { ...topology, chainSocksPassword: secret });
+  return handover ? { userCore: { engine: 'xray', fragments: toWireFragments(handover) } } : {};
 }
 
 /** Which end of the chain this node is. Null when it is in the topology but
@@ -1748,7 +1777,25 @@ function chainInputFor(
     // it. Auto has no leg of its own: the chain renders it as a group over the
     // other ways out.
     const tags = [...new Set(out.map((l) => l.tag))].sort((a, b) => a - b);
-    const directionTags = t.auto && tags.length > 1 ? [0, ...tags] : tags;
+    /**
+     * ⚠ A hysteria entry gets Auto ALWAYS, phase 6.
+     *
+     * Its users cannot pick a way out (a hysteria user is a password, there is
+     * no vlessRoute to carry a choice), so the whole entry hands to ONE socks
+     * listener, and that listener is Auto's. Deriving it from `autoProfile`
+     * the way the xray entry does would leave a cascade with one direction, or
+     * with Auto switched off, with no listener on 26000 at all: every hysteria
+     * user of the entry dialling a dead port. `autoProfile` stays what it is,
+     * the switch for the Auto LINE in xray users' subscriptions.
+     *
+     * One direction becomes a group of one, which the engine accepts.
+     */
+    const directionTags =
+      t.entryProtocol === 'hysteria'
+        ? [0, ...tags]
+        : t.auto && tags.length > 1
+          ? [0, ...tags]
+          : tags;
     return { role, socksPassword, directionTags, out, policy: null };
   }
   if (!inLeg) return null;
@@ -1917,7 +1964,10 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     prisma.cascadePosition.findMany({
       where: { cascadeId: link.cascadeId },
       orderBy: { position: 'asc' },
-      select: { position: true, nodes: { select: { nodeId: true } } },
+      // entryProtocol since phase 6: it decides WHICH core of the entry is told
+      // to hand its users to the chain, and the two answers are different
+      // payloads (xray fragments, or one socks hand-off for hysteria).
+      select: { position: true, entryProtocol: true, nodes: { select: { nodeId: true } } },
     }),
     prisma.cascadeDirection.findMany({
       where: { cascadeId: link.cascadeId },
@@ -1984,6 +2034,7 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     // profile whose rule is missing at the entry egresses from the entry
     // country instead of failing, which is the one outcome worth preventing.
     auto: cascadeRow?.autoProfile ?? false,
+    entryProtocol: positions.find((p) => p.position === 0)?.entryProtocol ?? undefined,
   };
 }
 

@@ -1,6 +1,6 @@
 import type { LinkCell } from '@iceslab/shared';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
-import { chainSocksPort } from './chain.ports.js';
+import { CHAIN_SOCKS_USER, chainSocksPort } from './chain.ports.js';
 import { LINK_TLS_SERVER_NAME, pemLines, type LinkTls } from './link-tls.js';
 
 /**
@@ -469,7 +469,7 @@ export function renderChainConfig(input: ChainRenderInput): Json {
         listen_port: chainSocksPort(tag),
         // Authenticated even on loopback: a VPS has other users, and an open
         // proxy on 127.0.0.1 is an open relay for anyone with a shell.
-        users: [{ username: 'chain', password: input.socksPassword }],
+        users: [{ username: CHAIN_SOCKS_USER, password: input.socksPassword }],
       });
     }
   } else if (input.in) {

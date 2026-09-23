@@ -13,6 +13,17 @@
 export const CHAIN_SOCKS_BASE = 26000;
 
 /**
+ * The user every chain socks listener asks for, beside the node's chain secret.
+ *
+ * Here for the same reason as the port formula: two sides must agree on it and
+ * neither should import the other. The listeners are rendered in
+ * `chain.config.ts`; since phase 6 the hand-off a hysteria entry is told to make
+ * is built in the service. A second spelling of this word would be a hand-off
+ * the listener refuses on every connection, with both configs loading cleanly.
+ */
+export const CHAIN_SOCKS_USER = 'chain';
+
+/**
  * The socks port for a way out.
  *
  * Derived, never stored: both sides compute it from the direction tag, so they

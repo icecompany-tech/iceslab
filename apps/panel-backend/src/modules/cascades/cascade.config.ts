@@ -1108,8 +1108,16 @@ export interface TopologyInput {
    * reads like a gate that never refuses anything.
    */
   chainSocksPassword?: string;
+  /**
+   * What the ENTRY serves users with, phase 6. One per cascade, by decision:
+   * xray users pick their way out, hysteria users get Auto and the policy, and
+   * mixing the two in one entry would hide that difference.
+   *
+   * It decides the shape of the hand-off, not whether there is one. Absent reads
+   * as xray, which is what every cascade stored before phase 6 has.
+   */
+  entryProtocol?: string;
 }
-
 
 /**
  * A cascade that points at a node we can no longer reach for its address.
