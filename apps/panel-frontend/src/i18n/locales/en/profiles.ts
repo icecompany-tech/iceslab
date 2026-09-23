@@ -67,6 +67,7 @@ export const profiles = {
     },
     allProtocols: 'All protocols',
     configButton: '{{core}} config',
+    plainOnXray: 'xray core',
     engine: {
       native: 'Native daemon',
       xray: 'Xray core',

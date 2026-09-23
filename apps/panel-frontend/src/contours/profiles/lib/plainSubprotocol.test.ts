@@ -4,6 +4,7 @@ import {
   engineRefused,
   isPlainSubprotocol,
   plainDefaultPort,
+  plainSubprotocolOf,
   plainXrayConfig,
 } from '@/contours/profiles/lib/plainSubprotocol';
 
@@ -50,6 +51,16 @@ describe('engineRefused', () => {
     expect(engineRefused({ response: { status: 400, data: { issues: [issue(['config', 'security'])] } } })).toBe(false);
     expect(engineRefused({ response: { status: 409, data: { issues: [issue(['engine'])] } } })).toBe(false);
     expect(engineRefused({ response: { status: 400, data: { issues: [null, 'x'] } } })).toBe(false);
+  });
+});
+
+describe('plainSubprotocolOf', () => {
+  it('names socks and http on xray, and nothing else', () => {
+    expect(plainSubprotocolOf({ protocol: 'xray', config: { subprotocol: 'socks', flow: 'xtls-rprx-vision' } })).toBe('socks');
+    expect(plainSubprotocolOf({ protocol: 'xray', config: { subprotocol: 'http' } })).toBe('http');
+    expect(plainSubprotocolOf({ protocol: 'xray', config: { subprotocol: 'vless' } })).toBeNull();
+    expect(plainSubprotocolOf({ protocol: 'mtproto', config: { subprotocol: 'socks' } })).toBeNull();
+    expect(plainSubprotocolOf(null)).toBeNull();
   });
 });
 

@@ -42,6 +42,11 @@ import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { profilePairLabel } from '@/lib/domain/engines';
+import {
+  PLAIN_LABEL,
+  plainSubprotocolOf,
+  type PlainSubprotocol,
+} from '@/contours/profiles/lib/plainSubprotocol';
 import { AMBER, CARD, CYAN, CYAN_HI, HAIRLINE, MIST, MOSS, PINK, PURPLE, SNOW, VIOLET } from '@/contours/profiles/lib/colors';
 
 const PROTOCOL_ACCENT: Record<string, string> = {
@@ -53,6 +58,9 @@ const PROTOCOL_ACCENT: Record<string, string> = {
   mtproto: CYAN_HI,
   mieru: PURPLE,
 };
+
+/** The Telegram shelf's own colours, the ones its tiles wear. */
+const PLAIN_ACCENT: Record<PlainSubprotocol, string> = { socks: CYAN_HI, http: AMBER };
 
 const PROTOCOL_LABELS: Record<string, string> = {
   hysteria: 'Hysteria 2',
@@ -394,6 +402,18 @@ function protocolFacts(profile: Profile): { label: string; value: string }[] {
     return null;
   };
 
+  // SOCKS5 / HTTP: the server fills the xray defaults (fingerprint, Vision
+  // flow) into their config too, and none of them applies. What tells one
+  // apart is that there is nothing to tell: login per user, no TLS, no
+  // obfuscation.
+  if (plainSubprotocolOf(profile)) {
+    return [
+      { label: 'auth', value: 'per user' },
+      { label: 'security', value: 'none' },
+      { label: 'transport', value: 'tcp' },
+    ];
+  }
+
   switch (profile.protocol) {
     case 'xray':
       return [
@@ -437,7 +457,8 @@ function ProfileCard({
   onDeploy: () => void;
 }) {
   const { t } = useTranslation();
-  const accent = PROTOCOL_ACCENT[profile.protocol] ?? MIST;
+  const plain = plainSubprotocolOf(profile);
+  const accent = plain ? PLAIN_ACCENT[plain] : (PROTOCOL_ACCENT[profile.protocol] ?? MIST);
   return (
     <Card
       withBorder
@@ -518,7 +539,9 @@ function ProfileCard({
         >
           {/* The pair: two profiles of one protocol can be served by different
               cores, and on this card the protocol alone made them twins. */}
-          {profilePairLabel(profile, t)}
+          {plain
+            ? `${PLAIN_LABEL[plain]} · ${t('profiles.plainOnXray')}`
+            : profilePairLabel(profile, t)}
         </Badge>
         {/* The count of nodes serving this profile, and the second door.
             «0» here is the sentence an operator reads at the exact moment they
@@ -656,7 +679,9 @@ function ProfileCard({
               color: accent,
             }}
           >
-            {t('profiles.configButton', { core: PROTOCOL_LABELS[profile.protocol] ?? profile.protocol })}
+            {t('profiles.configButton', {
+              core: plain ? PLAIN_LABEL[plain] : (PROTOCOL_LABELS[profile.protocol] ?? profile.protocol),
+            })}
           </Text>
         </UnstyledButton>
       </Group>

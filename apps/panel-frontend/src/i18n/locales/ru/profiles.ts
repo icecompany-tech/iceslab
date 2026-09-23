@@ -71,6 +71,7 @@ export const profiles = {
     },
     allProtocols: 'Все протоколы',
     configButton: 'Настройки {{core}}',
+    plainOnXray: 'ядро xray',
     engine: {
       native: 'Нативный демон',
       xray: 'Ядро Xray',

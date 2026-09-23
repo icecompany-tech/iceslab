@@ -53,7 +53,18 @@ export function engineRefused(err: unknown): boolean {
 export function plainDefaultPort(
   profile: { protocol: string; config?: unknown } | null | undefined,
 ): number | null {
+  const sub = plainSubprotocolOf(profile);
+  return sub ? PLAIN_DEFAULT_PORT[sub] : null;
+}
+
+/** Which of the two a saved profile is, or `null` for every other profile. */
+export function plainSubprotocolOf(
+  profile: { protocol: string; config?: unknown } | null | undefined,
+): PlainSubprotocol | null {
   if (!profile || profile.protocol !== 'xray') return null;
   const sub = (profile.config as { subprotocol?: unknown } | null | undefined)?.subprotocol;
-  return isPlainSubprotocol(sub) ? PLAIN_DEFAULT_PORT[sub] : null;
+  return isPlainSubprotocol(sub) ? sub : null;
 }
+
+/** The name a person knows it by: nobody calls a SOCKS5 proxy "xray". */
+export const PLAIN_LABEL: Record<PlainSubprotocol, string> = { socks: 'SOCKS5', http: 'HTTP' };
