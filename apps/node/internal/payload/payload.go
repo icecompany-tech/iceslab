@@ -30,6 +30,11 @@ type Payload struct {
 	// CA-signed. Pre-S6 payloads omit the field; agent falls back to
 	// CA-only verification.
 	PanelClientFingerprint string `json:"panelClientFingerprint,omitempty"`
+	// Which release of every core the installer should put here, resolved by
+	// the panel from the node's intent (Node.coreVersions) and the version
+	// manifest. Read by the installer through `iceslab-node core-env`, not by
+	// the running agent. Absent from a panel older than the field.
+	CoreVersions map[string]CoreRelease `json:"coreVersions,omitempty"`
 }
 
 // Decode parses a base64url-encoded JSON Payload. The panel uses

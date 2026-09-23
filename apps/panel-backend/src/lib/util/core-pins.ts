@@ -1,4 +1,4 @@
-import { CORE_ARCHES, CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
+import { CORE_ARCHES, CORE_ENV_PREFIX, CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
 
 /**
  * The pins the node installers carry, written FROM the version manifest
@@ -10,21 +10,6 @@ import { CORE_ARCHES, CORE_VERSIONS, type CoreComponent } from '@iceslab/shared'
  * pin: change the manifest, then run that test once with UPDATE_CORE_PINS=1.
  */
 
-/**
- * The env prefix each component's variables go under in the scripts. Kept as
- * the scripts already named them: an operator who exported MIERU_VERSION last
- * month must not find it silently ignored.
- */
-export const PIN_PREFIX: Record<CoreComponent, string> = {
-  xray: 'XRAY',
-  singbox: 'SINGBOX',
-  hysteria: 'HYSTERIA',
-  'amneziawg-module': 'AWG_MODULE',
-  'amneziawg-tools': 'AWG_TOOLS',
-  mtg: 'MTG',
-  mita: 'MIERU',
-  'caddy-naive': 'CADDY_NAIVE',
-};
 
 /** Which script carries which components' blocks, paths from the repo root. */
 export const PIN_SITES: { file: string; components: CoreComponent[] }[] = [
@@ -48,7 +33,7 @@ export function renderPinBlock(component: CoreComponent): string {
   const entry = CORE_VERSIONS[component];
   if (entry.pinned === null) throw new Error(`${component} has no pin to write`);
   const release = entry.releases.find((r) => r.version === entry.pinned)!;
-  const p = PIN_PREFIX[component];
+  const p = CORE_ENV_PREFIX[component];
   const lines = [
     blockStart(component),
     '# Generated from packages/shared/src/core-versions.ts, do not edit by hand:',

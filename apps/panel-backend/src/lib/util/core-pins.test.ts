@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CORE_COMPONENTS, CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
 import {
-  PIN_PREFIX,
+  CORE_COMPONENTS,
+  CORE_ENV_PREFIX as PIN_PREFIX,
+  CORE_VERSIONS,
+  coreEnvPair,
+  type CoreComponent,
+} from '@iceslab/shared';
+import {
   PIN_SITES,
   blockEnd,
   blockStart,
@@ -80,6 +85,34 @@ describe('no hand-written copy of a pin is left beside its block', () => {
       expect(rest, `${c}: the pinned version is assigned outside the block`).not.toMatch(
         new RegExp(`^\\s*${PIN_PREFIX[c]}_PINNED_`, 'm'),
       );
+    }
+  });
+});
+
+describe('the payload road names the same variables as the scripts', () => {
+  // The panel's choice reaches a script as <P>_VERSION/<P>_SHA256 (or
+  // <P>_TAG/<P>_SHA for a commit-built core): the agent's `core-env` writes the
+  // pair, the installer accepts it, the script reads it. Three places, one
+  // table; a prefix spelt differently in one of them is a choice that silently
+  // never arrives.
+  const pinned = CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].pinned !== null);
+
+  it('the agent maps every pinned component to the prefix its script reads', () => {
+    const go = read('apps/node/internal/payload/coreenv.go');
+    const block = /var componentEnv = map\[string\]string\{([\s\S]*?)\n\}/.exec(go);
+    expect(block, 'componentEnv not found in coreenv.go').not.toBeNull();
+    const table = Object.fromEntries(
+      [...block![1]!.matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]),
+    );
+    expect(table).toEqual(Object.fromEntries(pinned.map((c) => [c, PIN_PREFIX[c]])));
+  });
+
+  it('the installer accepts exactly those pairs from the agent', () => {
+    const installer = read('scripts/install-iceslab-node.sh');
+    for (const c of pinned) {
+      const [a, b] = coreEnvPair(c)!;
+      expect(installer, `${c}: ${a}`).toMatch(new RegExp(`\\b${a}\\|`));
+      expect(installer, `${c}: ${b}`).toMatch(new RegExp(`\\b${b}[|)]`));
     }
   });
 });

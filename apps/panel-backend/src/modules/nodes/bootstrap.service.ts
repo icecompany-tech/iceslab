@@ -7,16 +7,19 @@ import {
 } from '../keygen/keygen.service.js';
 import { config } from '../../config.js';
 import { signHeartbeatToken } from './heartbeat-token.js';
+import { resolveCoreVersions, type BootstrapCoreVersions } from '@iceslab/shared';
+import { readCoreVersions } from './node-core-versions.js';
 
 const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const TOKEN_PREFIX = 'bs_';
 
 export class BootstrapTokenError extends Error {
   constructor(
-    public reason: 'NOT_FOUND' | 'EXPIRED' | 'CONSUMED',
+    public reason: 'NOT_FOUND' | 'EXPIRED' | 'CONSUMED' | 'CORE_VERSION_NOT_LISTED',
     public httpStatus: number,
+    detail?: string,
   ) {
-    super(`Bootstrap token ${reason.toLowerCase()}`);
+    super(detail ?? `Bootstrap token ${reason.toLowerCase()}`);
     this.name = 'BootstrapTokenError';
   }
 }
@@ -61,6 +64,21 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
   if (row.expiresAt.getTime() < Date.now()) throw new BootstrapTokenError('EXPIRED', 410);
   if (row.node.deletedAt) throw new BootstrapTokenError('NOT_FOUND', 404);
 
+  // Which core versions this node gets, resolved BEFORE the token is spent: an
+  // intent that stopped being valid (its release was taken off the manifest)
+  // fails the install loudly and leaves the token redeemable once the operator
+  // puts that core back on the pin, instead of burning it on a refusal.
+  let coreVersions: BootstrapCoreVersions;
+  try {
+    coreVersions = resolveCoreVersions(readCoreVersions(row.node.coreVersions));
+  } catch (err) {
+    throw new BootstrapTokenError(
+      'CORE_VERSION_NOT_LISTED',
+      409,
+      `${(err as Error).message}. Put that core back on the pin on the node's page and run the install again.`,
+    );
+  }
+
   // Mark consumed FIRST: race-safe single-use. Even a concurrent second
   // redeem hits this same row's `consumedAt` and the unique-on-(id+null)
   // pattern below stops it.
@@ -90,6 +108,9 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
     nodeId: row.node.id,
     heartbeatToken: signHeartbeatToken(row.node.id, secretBuf),
     panelClientFingerprint,
+    // The installer's defaults for the bootstrap scripts (explicit env wins),
+    // read through `iceslab-node core-env`.
+    coreVersions,
   });
 }
 

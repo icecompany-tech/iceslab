@@ -272,8 +272,9 @@ declare -A HYSTERIA_PINNED_SHA256=(
 if [[ -n "${HYSTERIA_VERSION:-}" && -z "${HYSTERIA_SHA256:-}" ]] || [[ -z "${HYSTERIA_VERSION:-}" && -n "${HYSTERIA_SHA256:-}" ]]; then
   fail "HYSTERIA_VERSION and HYSTERIA_SHA256 go together: a version without its checksum is not installed"
 fi
-HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"
-HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
+# The default (the pin) is filled in at download time, not here: the panel's
+# choice for this node arrives with the payload later on, and an operator's
+# own pair has to stay distinguishable from both until then.
 
 # fetch_hysteria <out-path>
 # Downloads the wanted hysteria for this machine and refuses it unless it
@@ -283,6 +284,8 @@ HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
 # trustworthy, not the route it took.
 fetch_hysteria() {
   local out="$1" arch file tag sha url got
+  HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"
+  HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
   case "$(uname -m)" in
     x86_64|amd64)  arch=amd64 ;;
     aarch64|arm64) arch=arm64 ;;
@@ -304,6 +307,55 @@ fetch_hysteria() {
     fail "sha256 mismatch for $file (expected $sha, got $got)"
   fi
   log "sha256 verified for $file"
+}
+
+# apply_core_versions_from_payload <agent binary>
+# The panel resolves the node's intent (Node.coreVersions) into the payload's
+# coreVersions block: the release of every core, with its files and sha256s.
+# The freshly built agent turns that into env pairs for THIS machine's arch
+# (`iceslab-node core-env`), and each pair becomes the default for the
+# bootstrap script that reads it. Three sources, in order of strength:
+#   an explicit pair in the operator's env    wins, left exactly as it is;
+#   the payload's pair                        otherwise;
+#   the script's own generated pin block      when neither says anything.
+# A pair is taken whole or not at all, because a script takes no version
+# without its checksum.
+#
+# Nothing here fails the install. A checkout older than the panel may build an
+# agent that knows no `core-env`, or not the component the panel sent: that is
+# a warning, and the script installs its own pin.
+apply_core_versions_from_payload() {
+  local bin="$1" out key value prefix a b
+  [[ -n "${PAYLOAD:-}" ]] || return 0
+  if ! out=$(printf '%s' "$PAYLOAD" | env -u NODE_PAYLOAD "$bin" core-env); then
+    warn "this agent cannot read the panel's core versions (checkout older than the panel?); every core gets its script's own pin"
+    return 0
+  fi
+  declare -A from_payload=()
+  while IFS='=' read -r key value; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      XRAY_VERSION|XRAY_SHA256|SINGBOX_VERSION|SINGBOX_SHA256|HYSTERIA_VERSION|HYSTERIA_SHA256|\
+      MTG_VERSION|MTG_SHA256|MIERU_VERSION|MIERU_SHA256|\
+      AWG_MODULE_TAG|AWG_MODULE_SHA|AWG_TOOLS_TAG|AWG_TOOLS_SHA)
+        from_payload[$key]="$value" ;;
+      *) warn "the panel names $key, which this installer does not know; that core keeps its script's own pin" ;;
+    esac
+  done <<<"$out"
+
+  for prefix in XRAY SINGBOX HYSTERIA MTG MIERU AWG_MODULE AWG_TOOLS; do
+    case "$prefix" in
+      AWG_*) a="${prefix}_TAG"; b="${prefix}_SHA" ;;
+      *)     a="${prefix}_VERSION"; b="${prefix}_SHA256" ;;
+    esac
+    [[ -n "${from_payload[$a]:-}" && -n "${from_payload[$b]:-}" ]] || continue
+    if [[ -n "${!a:-}" || -n "${!b:-}" ]]; then
+      log "core versions: $a/$b set in the environment, the panel's choice is not used"
+      continue
+    fi
+    export "$a=${from_payload[$a]}" "$b=${from_payload[$b]}"
+    log "core versions: ${a}=${from_payload[$a]} from the panel"
+  done
 }
 
 # xray is installed by apps/node/scripts/bootstrap-xray.sh, for the xray and the
@@ -586,6 +638,7 @@ if [[ -n "$BOOTSTRAP_TOKEN" && -n "$PANEL_URL" ]]; then
     200) PAYLOAD=$(tr -d '\n\r \t' < "$TMP_PAYLOAD"); rm -f "$TMP_PAYLOAD" ;;
     404) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token not found at $PANEL_URL: typo or expired+purged" ;;
     410) rm -f "$TMP_PAYLOAD"; fail "Bootstrap token already consumed or expired: issue a fresh one in the panel UI" ;;
+    409) fail "The panel refused this node's core versions: $(cat "$TMP_PAYLOAD"; rm -f "$TMP_PAYLOAD"). The token is still valid." ;;
     000) rm -f "$TMP_PAYLOAD"; fail "Cannot reach panel at $PANEL_URL: check the URL, TLS cert, firewall" ;;
     *)   rm -f "$TMP_PAYLOAD"; fail "Unexpected HTTP $HTTP_CODE from panel: see panel logs" ;;
   esac
@@ -874,6 +927,10 @@ cd "$ICESLAB_NODE_DIR/apps/node"
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/iceslab-node .
 chmod +x /usr/local/bin/iceslab-node
 ok "built /usr/local/bin/iceslab-node ($(stat -c %s /usr/local/bin/iceslab-node) bytes)"
+
+# The core versions the panel chose for this node, as defaults for the
+# bootstrap scripts below; an explicit env pair still wins.
+apply_core_versions_from_payload /usr/local/bin/iceslab-node
 
 step "Protocol bootstrap (${PROTOCOL})"
 case "$PROTOCOL" in

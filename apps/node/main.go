@@ -44,6 +44,12 @@ const (
 )
 
 func main() {
+	// `iceslab-node core-env`: the installer's question, answered before the
+	// agent runs as a service. See runCoreEnv.
+	if len(os.Args) > 1 && os.Args[1] == "core-env" {
+		os.Exit(runCoreEnv(os.Stdin, os.Stdout, os.Stderr))
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	payloadEnv := os.Getenv("NODE_PAYLOAD")
