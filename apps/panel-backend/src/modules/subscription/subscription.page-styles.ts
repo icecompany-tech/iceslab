@@ -324,8 +324,13 @@ export const PAGE_CSS = String.raw`
   .nojs .qrf{display:flex;}
   .nojs .qrview{flex-wrap:wrap; gap:18px;}
   .qbx{background:#fff; border-radius:12px; padding:11px; line-height:0;
+    max-width:100%; box-sizing:border-box;
     box-shadow:0 1px 0 rgba(255,255,255,.05), 0 10px 28px rgba(0,0,0,.4);}
-  .qbx svg{display:block; width:240px; height:240px;}
+  /* The width comes from the drawer as an attribute, by module count (at least
+     3 px a module, 240 to 520 px, see qrSidePx). A fixed 240 here put a
+     129-module AmneziaVPN key under 2 px a module and no phone read it. The
+     container's width is the ceiling on a narrow screen. */
+  .qbx svg{display:block; max-width:100%; height:auto;}
   /* What stands in the code's place until the browser has drawn it, and
      forever if it never does. The box keeps its width so the page does not
      jump when the code lands, and the text is the substance: a link or a whole

@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { runInNewContext } from 'node:vm';
 import QRCode from 'qrcode-svg';
 import { QRCODEGEN_MIN } from './subscription.page-qrcodegen.js';
-import { qrBox, QR_SCRIPT } from './subscription.page-qr.js';
+import {
+  qrBox,
+  qrSidePx,
+  QR_MAX_PX,
+  QR_MIN_PX,
+  QR_PX_PER_MODULE,
+  QR_SCRIPT,
+} from './subscription.page-qr.js';
 
 /**
  * The vendored encoder against the one it replaces.
@@ -95,6 +102,50 @@ describe('the inline QR encoder', () => {
     expect(QRCODEGEN_MIN).toContain('qrcodegen');
     expect(QR_SCRIPT).toContain('data-qr-text');
     expect(QR_SCRIPT).toContain('Ecc.MEDIUM');
+  });
+
+  /**
+   * The size of the code follows its module count. Stand, 2026-09-23: a
+   * 934-byte vpn:// key is 129 modules, and at the old fixed 240 px that is
+   * under 2 px a module, which no phone read off the screen.
+   */
+  const payloadOf = (bytes: number) => `vpn://${'A'.repeat(bytes - 'vpn://'.length)}`;
+  const drawnSide = (text: string) => nayukiGrid(text).length + 2;
+  const px = (text: string) => qrSidePx(drawnSide(text), QR_PX_PER_MODULE, QR_MIN_PX, QR_MAX_PX);
+
+  it('draws a 934-byte key at three pixels a module, well past the old 240', () => {
+    const key = payloadOf(934);
+    expect(key.length).toBe(934);
+    // What THIS encoder makes of it (MEDIUM, ECC boost on, byte mode as every
+    // vpn:// key is): version 25, 117 modules, 119 with the quiet zone drawn.
+    // Not the 129 of the brief: that figure would ask 387 px, the rule asks 357.
+    expect(nayukiGrid(key).length).toBe(117);
+    expect(px(key)).toBe(357);
+    expect(px(key) / drawnSide(key)).toBeGreaterThanOrEqual(QR_PX_PER_MODULE);
+  });
+
+  it('leaves a 100-byte payload at no more than the old 240 px', () => {
+    expect(px(payloadOf(100))).toBeLessThanOrEqual(240);
+  });
+
+  it('never goes past the ceiling, whatever the payload', () => {
+    expect(qrSidePx(177 + 2, QR_PX_PER_MODULE, QR_MIN_PX, QR_MAX_PX)).toBe(QR_MAX_PX);
+  });
+
+  it('draws in the browser at the size the rule gives, not at a copy of it', () => {
+    // The drawer runs qrSidePx's own source; this runs the drawer against a
+    // stand-in document and reads the width it wrote.
+    const key = payloadOf(934);
+    let html = '';
+    const box = {
+      getAttribute: () => key,
+      removeAttribute: () => undefined,
+      set innerHTML(v: string) {
+        html = v;
+      },
+    };
+    runInNewContext(QR_SCRIPT, { document: { querySelectorAll: () => [box] } });
+    expect(html).toContain(`width="${px(key)}" height="${px(key)}"`);
   });
 
   it('leaves a readable answer in the box for a reader with no JavaScript', () => {
