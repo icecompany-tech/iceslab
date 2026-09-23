@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Box, Menu, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +21,6 @@ import {
 } from '@tabler/icons-react';
 import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/routePolicies';
 import {
-  createSquad,
   deleteSquad,
   listSquads,
   updateSquad,
@@ -58,9 +56,8 @@ export function SquadsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Creation moved to its own page; the modal now only serves edit-in-place
-  // paths that have not been migrated yet.
-  const [createOpen, { close: closeCreate }] = useDisclosure(false);
+  // Creation moved to its own page (/squads/new); the modal below serves only
+  // edit-in-place paths.
   const [editing, setEditing] = useState<Squad | null>(null);
   const [search, setSearch] = useState('');
 
@@ -72,20 +69,6 @@ export function SquadsPage() {
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
   // A4 ad-split - route-policies the squad can grant.
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
-
-  const createMutation = useMutation({
-    mutationFn: createSquad,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['squads'] });
-      notifications.show({ color: 'green', message: t('squads.notify.created') });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.createError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateSquadInput }) => updateSquad(id, input),
@@ -114,10 +97,6 @@ export function SquadsPage() {
         message: err instanceof Error ? err.message : String(err),
       }),
   });
-
-  function handleCreate(input: CreateSquadInput | UpdateSquadInput): Promise<void> {
-    return createMutation.mutateAsync(input as CreateSquadInput).then(() => undefined);
-  }
 
   function handleUpdate(input: CreateSquadInput | UpdateSquadInput): Promise<void> {
     if (!editing) return Promise.resolve();
@@ -334,18 +313,6 @@ export function SquadsPage() {
           ))}
         </SimpleGrid>
       )}
-
-      <SquadFormModal
-        opened={createOpen}
-        onClose={closeCreate}
-        squad={null}
-        profiles={profiles}
-        bindingsByProfile={bindingsByProfile}
-        cascades={cascades}
-        routePolicies={routePolicies}
-        onSubmit={handleCreate}
-        loading={createMutation.isPending}
-      />
 
       <SquadFormModal
         opened={editing !== null}

@@ -16,7 +16,6 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,12 +33,10 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import {
-  createProfile,
   deleteProfile,
   listBindings,
   listProfiles,
   updateProfile,
-  type CreateProfileInput,
   type Profile,
   type UpdateProfileInput,
 } from '@/lib/domain/profiles';
@@ -76,9 +73,7 @@ export function ProfilesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Create and edit moved to /profiles/:id; the modal stays mounted only for
-  // flows that still open it in place.
-  const [createOpen, { close: closeCreate }] = useDisclosure(false);
+  // Create and edit moved to /profiles/:id (creation is /profiles/new).
   const [editing, setEditing] = useState<Profile | null>(null);
   const [deploying, setDeploying] = useState<Profile | null>(null);
   const [testing, setTesting] = useState<Profile | null>(null);
@@ -109,25 +104,6 @@ export function ProfilesPage() {
       ).size,
     }),
   ]);
-
-  const createMutation = useMutation({
-    mutationFn: createProfile,
-    onSuccess: (created) => {
-      qc.invalidateQueries({ queryKey: ['profiles'] });
-      qc.invalidateQueries({ queryKey: ['bindings'] });
-      notifications.show({
-        color: 'green',
-        message: t('profiles.notify.createdOpenDeploy'),
-      });
-      setDeploying(created);
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.createError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateProfileInput }) =>
@@ -397,16 +373,6 @@ export function ProfilesPage() {
         </SimpleGrid>
       )}
 
-      <ProfileFormModal
-        opened={createOpen}
-        onClose={closeCreate}
-        profile={null}
-        loading={createMutation.isPending}
-        onSubmit={async (input) => {
-          await createMutation.mutateAsync(input as CreateProfileInput);
-          closeCreate();
-        }}
-      />
       <ProfileFormModal
         opened={editing !== null}
         onClose={() => setEditing(null)}
