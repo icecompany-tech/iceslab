@@ -369,6 +369,13 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
            * without the engine prints half the answer.
            */
           engine: e.engine,
+          /**
+           * Which door of the xray process: 'vless' | 'vmess' | 'trojan', or
+           * 'socks' | 'http' for the Telegram entries. One node serves several
+           * of them, and the card sorts them onto different tabs by this.
+           * Absent on every other protocol.
+           */
+          ...(e.protocol === 'xray' ? { subprotocol: e.subprotocol ?? 'vless' } : {}),
           // `label` is the string the client shows. It was called `nodeName`
           // until 2026-07-31 while never holding a node name: one node emits
           // several of these (a cascade entry produces one per direction and

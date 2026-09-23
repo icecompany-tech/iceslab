@@ -96,6 +96,37 @@ describe('the endpoints a user card copies', () => {
     expect(inFormat.map((e) => e.uri)).toEqual(['', '']);
   });
 
+  it('tells two xray doors of one node apart by subprotocol', async () => {
+    const user = await post('/api/users', { username: 'two-doors' });
+    const node = await post('/api/nodes', { name: 'xr-de', address: '10.0.0.31:8443', protocol: 'xray' });
+    const vless = await post('/api/profiles', {
+      name: 'vless-x',
+      protocol: 'xray',
+      config: {
+        security: 'reality',
+        realityDest: 'www.microsoft.com:443',
+        realityServerNames: ['www.microsoft.com'],
+        realityPrivateKey: 'k'.repeat(43),
+        realityPublicKey: 'p'.repeat(43),
+        realityShortIds: ['0123abcd'],
+        network: 'raw',
+      },
+    });
+    const socks = await post('/api/profiles', {
+      name: 'socks-x',
+      protocol: 'xray',
+      config: { subprotocol: 'socks', security: 'none', network: 'raw' },
+    });
+    await post('/api/bindings', { profileId: vless.id, nodeId: node.id, port: 443 });
+    await post('/api/bindings', { profileId: socks.id, nodeId: node.id, port: 1080 });
+
+    const res = await app.inject({ method: 'GET', url: `/api/users/${user.id}/endpoints`, headers: auth() });
+    const rows = (JSON.parse(res.body).endpoints as { protocol: string; nodeId: string; subprotocol?: string; uri: string }[])
+      .filter((e) => e.nodeId === node.id);
+    expect(rows.map((r) => r.subprotocol).sort()).toEqual(['socks', 'vless']);
+    expect(rows.find((r) => r.subprotocol === 'socks')?.uri).toMatch(/^socks:\/\//);
+  });
+
   it('keeps every other protocol on the URI the formats already give it', async () => {
     const user = await post('/api/users', { username: 'hy-copy' });
     const node = await post('/api/nodes', { name: 'hy-de', address: '10.0.0.21:8443' });
