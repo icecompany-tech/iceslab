@@ -59,6 +59,11 @@ export interface Host {
  * `null` это «сказать нечего»: ключа нет (старый бэкенд) или хост не скрыт.
  * Имя ноды приходит снаружи: у хоста его нет, а строка без имени ноды не
  * объясняет, какая машина стоит в каскаде не входом.
+ *
+ * Два источника. Факт хоста главный, если хост его несёт: `null` у хоста это
+ * тоже факт («не скрыт»), и нода его не перебивает. Факт ноды нужен там, где
+ * хоста ещё нет: окно «Развернуть на нодах» до развёртывания, когда говорить
+ * о скрытии как раз дешевле всего.
  */
 export interface HostHiddenFacts {
   nodeName: string;
@@ -66,11 +71,15 @@ export interface HostHiddenFacts {
   cascadeName: string;
 }
 
+type HiddenBy = { cascadeId: string; cascadeName: string };
+
 export function hostHiddenFacts(
-  host: { hiddenByCascade?: { cascadeId: string; cascadeName: string } | null } | null | undefined,
+  host: { hiddenByCascade?: HiddenBy | null } | null | undefined,
   nodeName: string,
+  node?: { hiddenByCascade?: HiddenBy | null } | null,
 ): HostHiddenFacts | null {
-  const h = host?.hiddenByCascade;
+  const h =
+    host && host.hiddenByCascade !== undefined ? host.hiddenByCascade : node?.hiddenByCascade;
   if (!h) return null;
   return { nodeName, cascadeId: h.cascadeId, cascadeName: h.cascadeName };
 }

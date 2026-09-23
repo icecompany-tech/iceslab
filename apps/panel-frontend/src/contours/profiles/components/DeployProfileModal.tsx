@@ -27,7 +27,7 @@ import {
 } from '@/lib/domain/profiles';
 import { deployDiff } from '@/contours/profiles/lib/deployDiff';
 import { plainDefaultPort } from '@/contours/profiles/lib/plainSubprotocol';
-import { hostHiddenFacts, listHosts } from '@/lib/domain/hosts';
+import { hostHiddenFacts, listHosts, type Host } from '@/lib/domain/hosts';
 import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
 import {
@@ -73,18 +73,19 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   });
 
   // Хосты профиля: только ради того, чтобы сказать под нодой, что её хост ни
-  // одна подписка не выдаст (нода в каскаде не вход). Факт сервера на хосте.
+  // одна подписка не выдаст (нода в каскаде не вход). Факт хоста главный, если
+  // хост есть; у ноды без хоста говорит факт самой ноды (см. hostHiddenFacts).
   const hostsQuery = useQuery({
     queryKey: ['hosts', { profileId: profile?.id }],
     queryFn: () => listHosts({ profileId: profile!.id }),
     enabled: opened && profile !== null,
   });
-  const hiddenByNode = useMemo(() => {
+  const hostOfNode = useMemo(() => {
     const nodeOfBinding = new Map((bindingsQuery.data?.bindings ?? []).map((b) => [b.id, b.nodeId] as const));
-    const m = new Map<string, { cascadeId: string; cascadeName: string }>();
+    const m = new Map<string, Pick<Host, 'hiddenByCascade'>>();
     for (const h of hostsQuery.data?.hosts ?? []) {
       const nodeId = nodeOfBinding.get(h.bindingId);
-      if (nodeId && h.hiddenByCascade) m.set(nodeId, h.hiddenByCascade);
+      if (nodeId) m.set(nodeId, h);
     }
     return m;
   }, [bindingsQuery.data, hostsQuery.data]);
@@ -389,10 +390,11 @@ export function DeployProfileModal({ profile, onClose }: Props) {
                   checked={selected.has(node.id)}
                   onToggle={() => toggle(node.id)}
                 />
-                {/* Хост профиля на этой ноде есть, а подписка его не отдаёт:
-                    нода в каскаде не вход. Под именем ноды, как решено. */}
+                {/* Нода в каскаде не вход: хост профиля на ней подписка не
+                    отдаст. Под именем ноды, и у ноды без хоста тоже: до
+                    развёртывания это дешевле всего узнать. */}
                 <HostHiddenLine
-                  facts={hostHiddenFacts({ hiddenByCascade: hiddenByNode.get(node.id) ?? null }, node.name)}
+                  facts={hostHiddenFacts(hostOfNode.get(node.id), node.name, node)}
                   compact
                 />
               </Stack>

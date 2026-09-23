@@ -86,7 +86,7 @@ export function HostsPage() {
           nodeName: node?.name ?? null,
           // Нода в каскаде не вход: подписка этот хост не выдаёт. Факт сервера,
           // здесь только имя ноды к нему.
-          hidden: hostHiddenFacts(h, node?.name ?? '?'),
+          hidden: hostHiddenFacts(h, node?.name ?? '?', node),
           port: h.portOverride ?? binding?.publicPort ?? binding?.port ?? null,
           address: h.addressOverride ?? binding?.publicHost ?? null,
           countryCode: node?.countryCode ? node.countryCode.toUpperCase() : null,

@@ -595,7 +595,7 @@ export function HostEditPage() {
       {/* Хост есть, а подписка его не отдаёт: нода в каскаде не вход. Над
           формой, потому что правка полей ниже этого не изменит: решается это
           на странице каскада, куда и ведёт ссылка. */}
-      {!isNew && <HostHiddenLine facts={hostHiddenFacts(host, currentNode?.name ?? '?')} />}
+      {!isNew && <HostHiddenLine facts={hostHiddenFacts(host, currentNode?.name ?? '?', currentNode)} />}
 
       {/* Who is still holding the previous link. Above the form, because the
           fields below are what will make that number grow. */}

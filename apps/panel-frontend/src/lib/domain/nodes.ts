@@ -166,6 +166,13 @@ export interface Node {
    * `geoVersionFacts`.
    */
   geoVersion?: string | null;
+  /**
+   * Нода стоит в каскаде не входом: хост на ней подписка не выдаёт, пока каскад
+   * включён. Те же три значения, что у хоста: ключа нет (бэкенд старше поля или
+   * ответ не из GET /api/nodes и /api/nodes/:id), `null` не скрыта, объект
+   * скрыта этим каскадом. См. `hostHiddenFacts`.
+   */
+  hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
   createdAt: string;
   updatedAt: string;
 }
