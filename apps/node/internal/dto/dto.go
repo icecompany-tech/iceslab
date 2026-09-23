@@ -506,6 +506,11 @@ type CoreStatus struct {
 	// (exit selection needs xray >= 25.9.5). Optional/omitempty so pre-T7
 	// agents and non-versioned cores stay wire-compatible.
 	Version string `json:"version,omitempty"`
+	// ToolsVersion is the version of the core's userspace tools when they are
+	// versioned apart from Version. Only AmneziaWG today: Version is the kernel
+	// module, this is `awg --version`, from a different upstream tag. Empty on
+	// every other core.
+	ToolsVersion string `json:"toolsVersion,omitempty"`
 	// Provisioned tells "this core has a config and should be running" apart
 	// from "nobody has configured this core yet". The installer registers an
 	// adapter for every protocol the operator might switch on later, so an

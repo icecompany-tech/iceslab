@@ -1322,6 +1322,15 @@ export interface CoreStatus {
    *  needing a minimum core version (cascade exit selection needs xray
    *  >= 25.9.5). */
   version?: string;
+  /**
+   * The version of the core's userspace tools, when they are versioned apart
+   * from `version`. Today only AmneziaWG: `version` is the kernel module
+   * (/sys/module/amneziawg/version), this is `awg --version`, and the two come
+   * from different upstream tags (component `amneziawg-tools` in
+   * core-versions.ts). Absent from every other core and from an agent older
+   * than the field.
+   */
+  toolsVersion?: string;
   /** Whether this core is CONFIGURED, i.e. has an inbound and is expected to
    *  run. The installer registers an adapter for every protocol the operator
    *  might switch on later, and an unconfigured one sits idle by design.
@@ -1448,6 +1457,8 @@ export interface NodeCoreInfo {
   name: ProtocolName;
   engine?: EngineName;
   version?: string;
+  /** See CoreStatus.toolsVersion. */
+  toolsVersion?: string;
   provisioned?: boolean;
   installed?: boolean;
   rendersPolicy?: boolean;
