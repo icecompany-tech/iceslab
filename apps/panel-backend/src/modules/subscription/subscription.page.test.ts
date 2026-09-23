@@ -146,6 +146,17 @@ describe('buildSubscriptionPage', () => {
     expect(html).toContain('se-01');
   });
 
+  it('puts the Telegram rows under the one "another device" title, not a second copy of it', () => {
+    const html = buildSubscriptionPage(
+      base({
+        protocols: ['mtproto'],
+        mtprotoNodes: [{ nodeName: 'se-01', uri: 'tg://proxy?x', tmeUri: 'https://t.me/proxy?x' }],
+      }),
+    );
+    expect(html.match(/data-dl-group="other"/g)?.length).toBe(1);
+    expect(html.split('FOR ANOTHER DEVICE').length - 1).toBe(1);
+  });
+
   it('says nothing about Telegram when no node serves it', () => {
     const html = buildSubscriptionPage(base({ protocols: ['xray'] }));
     expect(html).not.toContain('data-copy-text=');

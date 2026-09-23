@@ -769,11 +769,13 @@ function renderDownloads(
     : group(t.dlGroupClients, 'clients', clients) +
       group(t.dlGroupRouter, 'router', router) +
       // The Telegram rows sit with the other per-server handouts, which is what
-      // they are: one node, one link, not the subscription.
-      (telegram || telegramProxies
-        ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>${telegram}${telegramProxies}</div>`
-        : '') +
-      group(t.dlGroupOther, 'other', other);
+      // they are: one node, one link, not the subscription. INSIDE that group,
+      // under its one title: they used to open a group of their own with the
+      // same title, and the page printed "for another device" twice in a row.
+      (telegram || telegramProxies || other.length > 0
+        ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>` +
+          `${telegram}${telegramProxies}${other.map(row).join('')}</div>`
+        : '');
   const count =
     clients.length +
     router.length +
