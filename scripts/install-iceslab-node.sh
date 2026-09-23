@@ -278,6 +278,21 @@ XRAY_INSTALLER_SHA=${XRAY_INSTALLER_SHA:-}
 # which is exactly what is being closed (HYSTERIA_VERSION above used to be the
 # empty one, and was the last engine to be pinned). Moving to a newer core is
 # its own decision, made by bumping this line deliberately.
+#
+# ⚠ HARD CEILING: NOT ABOVE v26.7.28. Established 2026-09-23 from source, not
+# from a changelog (docs/plan/recon-2026-09-23.md, section 8):
+#   - XTLS/REALITY 8cdf7bf, shipped in xray 26.9.8, makes the SERVER refuse a
+#     ClientHello that does not offer X25519MLKEM768 ahead of X25519;
+#   - our inter-hop legs dial from sing-box, which pins metacubex/utls v1.8.7,
+#     and there HelloFirefox_Auto is HelloFirefox_120 with only X25519 and
+#     CurveP256 in its key shares (u_parrots.go). HelloChrome_Auto sends no
+#     MLKEM either. No fix upstream: SagerNet/sing-box #4520.
+# So a node on xray 26.9.8 or newer refuses every leg a sing-box chain dials
+# into it, with every config loading cleanly. This is not "until measured": the
+# dialler provably cannot pass. The marker below is what a bump past the ceiling
+# must flip, and only with the measurement that justifies it written beside it;
+# apps/node/internal/core/xray/installer_pin_test.go reads both.
+# reality-mlkem-verified: no
 XRAY_VERSION=${XRAY_VERSION:-v26.3.27}
 
 # pinned_fetch <url> <out-path> [<expected-sha256>]

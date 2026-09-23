@@ -203,15 +203,17 @@ describe('a REALITY leg of the chain, both ends', () => {
     //     send MLKEM (v1.8.7, SagerNet/sing-box #4520, no fix as of 19.09):
     //     sing-box 1.12.25, 1.14.1 and 1.15.0-alpha.6 all fail "reality
     //     verification failed" against such a server;
-    //   - firefox is NOT proven to pass either (RPRX in Xray #6482: "needs
-    //     testing"). So `chrome` is known to break, and `firefox` is the one
-    //     that has not been shown to.
+    //   - and firefox does not pass either, read from source in a second pass
+    //     the same day: in utls v1.8.7 HelloFirefox_Auto is HelloFirefox_120,
+    //     whose key shares are X25519 and CurveP256 only (u_parrots.go). Xray
+    //     #6482 had it as "needs testing"; the source answers it.
     //
-    // A leg of ours is a sing-box dialler into an xray listener on the
-    // transitional fleet, which is exactly that pair. The real protection is
-    // the xray pin staying at or below 26.7.28 until the pair is measured
-    // (installer_pin_test.go holds that ceiling); this assertion keeps the
-    // dialling half from being "tidied" to chrome in the meantime.
+    // So NEITHER fingerprint of this dialler passes a server on xray 26.9.8+.
+    // The protection is the xray pin: a HARD ceiling at 26.7.28, held by
+    // installer_pin_test.go, that only an explicit "mlkem verified" marker in
+    // the installer can lift. This assertion is the other half: it keeps the
+    // dialler on the fingerprint the ceiling was reasoned about, so a
+    // "tidy-up" to chrome does not change the premise under a fixed pin.
     for (const out of diallers) {
       expect(out.tls.utls).toEqual({ enabled: true, fingerprint: 'firefox' });
     }

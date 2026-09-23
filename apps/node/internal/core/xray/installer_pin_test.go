@@ -52,31 +52,62 @@ func TestInstallerPinsXrayVersion(t *testing.T) {
 	}
 }
 
-// xrayCeiling is the highest xray the fleet may run until one pair is MEASURED.
+// xrayCeiling is the highest xray the fleet may run, and it is a HARD line.
 //
-// Recorded 2026-09-23 from primary sources (docs/plan/recon-2026-09-23.md):
-// XTLS/REALITY 8cdf7bf, shipped in xray 26.9.8, makes the server refuse a
-// ClientHello without X25519MLKEM768 ahead of X25519. Our inter-hop legs are a
-// sing-box dialler into an xray listener on the transitional fleet, and
-// sing-box's uTLS does not send MLKEM for chrome (SagerNet/sing-box #4520, no
-// fix as of 19.09) while firefox is untested (Xray #6482). A pin above this
-// line is a fleet whose legs may fail the handshake with every config loading
-// cleanly, so it is refused here until the pair has been asked.
-const xrayCeiling = "v26.7.28"
+// Established 2026-09-23 from source (docs/plan/recon-2026-09-23.md, section
+// 8): XTLS/REALITY 8cdf7bf, shipped in xray 26.9.8 (xrayMLKEMRelease), makes
+// the server refuse a ClientHello without X25519MLKEM768 ahead of X25519. Our
+// inter-hop legs dial from sing-box, which pins metacubex/utls v1.8.7, where
+// HelloFirefox_Auto is HelloFirefox_120 with only X25519 and CurveP256 in its
+// key shares, and HelloChrome_Auto sends no MLKEM either (SagerNet/sing-box
+// #4520). This is not "untested": the dialler provably cannot pass.
+const (
+	xrayCeiling      = "v26.7.28"
+	xrayMLKEMRelease = "v26.9.8"
+	// The marker a bump past the ceiling has to flip, beside the pin in the
+	// installer, with the measurement that justifies it written next to it.
+	mlkemVerifiedMarker = "# reality-mlkem-verified: yes"
+)
 
-// TestXrayPinStaysBelowTheRealityMLKEMChange guards the ceiling above.
+// TestXrayPinStaysBelowTheRealityMLKEMChange refuses a pin above the ceiling
+// unless the installer says, in so many words, that MLKEM has been verified.
 //
 // Separate from the exact pin on purpose: a bump of the exact pin is caught
-// anyway, but this is the test that says WHY the next bump must not cross it,
-// in the place the next person bumping it will be looking.
+// anyway, but this is the test that says WHY the next bump must not cross the
+// line, in the place the next person bumping it will be looking.
 func TestXrayPinStaysBelowTheRealityMLKEMChange(t *testing.T) {
-	if compareVersions(pinnedXrayVersion, xrayCeiling) > 0 {
-		t.Fatalf("xray is pinned to %s, above %s.\n"+
-			"XTLS/REALITY 8cdf7bf (xray 26.9.8+) refuses a ClientHello without\n"+
-			"X25519MLKEM768; our legs dial from sing-box, whose uTLS does not send it\n"+
-			"for chrome (sing-box #4520) and is untested for firefox (Xray #6482).\n"+
-			"Measure a sing-box -> xray leg on the new version first, then move\n"+
-			"xrayCeiling with the result written beside it.", pinnedXrayVersion, xrayCeiling)
+	if compareVersions(pinnedXrayVersion, xrayCeiling) <= 0 {
+		return
+	}
+	if strings.Contains(readInstaller(t), mlkemVerifiedMarker) {
+		return
+	}
+	t.Fatalf("xray is pinned to %s, above the hard ceiling %s.\n"+
+		"XTLS/REALITY 8cdf7bf (xray %s and later) refuses a ClientHello without\n"+
+		"X25519MLKEM768, and our legs dial from sing-box, whose utls (metacubex\n"+
+		"v1.8.7) sends none for firefox or chrome: sing-box #4520. Every leg into\n"+
+		"such a node fails with every config loading. Moving past the ceiling needs\n"+
+		"the dialler fixed and MEASURED, then %q beside the pin in\n"+
+		"install-iceslab-node.sh with that measurement written next to it.",
+		pinnedXrayVersion, xrayCeiling, xrayMLKEMRelease, mlkemVerifiedMarker)
+}
+
+// TestTheMLKEMMarkerIsHonest keeps the marker honest in the other direction.
+// It must exist, so a bump has something to flip, and it may say yes only when
+// the pin actually crosses the ceiling: a "yes" under the ceiling verifies
+// nothing, and left there by copy-paste it would open the line for the next
+// bump without anyone having measured it.
+func TestTheMLKEMMarkerIsHonest(t *testing.T) {
+	script := readInstaller(t)
+	yes := strings.Contains(script, mlkemVerifiedMarker)
+	no := strings.Contains(script, "# reality-mlkem-verified: no")
+	if yes == no {
+		t.Fatal("beside the xray pin there must be exactly one marker, " +
+			"`# reality-mlkem-verified: no` or `: yes`")
+	}
+	if yes && compareVersions(pinnedXrayVersion, xrayCeiling) <= 0 {
+		t.Errorf("the installer says MLKEM is verified while xray is pinned to %s, "+
+			"below the ceiling: nothing was verified, set it back to no", pinnedXrayVersion)
 	}
 }
 
