@@ -46,8 +46,6 @@ const AWG_CONTAINER = 'amnezia-awg';
 export interface AmneziaVpnLinkOpts extends AmneziawgClientConfigOpts {
   /** Optional preshared key. Empty when the inbound uses none (our default). */
   pskKey?: string;
-  /** Client MTU written into the structured block. Default 1280. */
-  mtu?: number;
   /** Display name shown in the AmneziaVPN app. */
   description?: string;
 }
@@ -72,13 +70,14 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   const allowed = opts.clientAllowedIps?.length ? opts.clientAllowedIps : ['0.0.0.0/0', '::/0'];
 
   // Obfuscation params as strings (the app serializes them as JSON strings),
-  // present both at the awg-server level and inside last_config. CRITICAL: on
-  // connect the AmneziaVPN daemon REBUILDS the [Interface] from these structured
-  // keys (it ignores the embedded .conf text), and it treats an empty string as
-  // "present" - so emitting I1="".."I5="" injects blank `I1 = ` lines that break
-  // the AmneziaWG handshake. THIS is why the key imported but would not connect
-  // while the raw .conf (which omits empty I-fields) did. Mirror buildWgQuickConf:
-  // emit I-fields ONLY when non-empty, and S3/S4 only when non-zero (below).
+  // inside last_config only. CRITICAL: on connect every AmneziaVPN client
+  // builds the tunnel from these structured keys and ignores the embedded .conf
+  // text (docs/plan/amnezia-key-recon.md, section 3), and releases before the
+  // current one treated an empty string as "present" - so emitting I1="".."I5=""
+  // injected blank `I1 = ` lines that broke the AmneziaWG handshake. THIS is why
+  // the key imported but would not connect while the raw .conf (which omits
+  // empty I-fields) did. Mirror buildWgQuickConf: emit I-fields ONLY when
+  // non-empty, and S3/S4 only when non-zero (below).
   const obf: Record<string, string> = {
     Jc: String(opts.jc),
     Jmin: String(opts.jmin),
@@ -102,20 +101,26 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
     if (v && v.length > 0) obf[`I${idx + 1}`] = v;
   });
 
-  // Inner client config. `config` (the .conf text) is required; an empty one is
-  // the schema half of "error 900". last_config is DOUBLE-encoded (a stringified
-  // JSON), per the app's AwgProtocolConfig::toJson.
+  // Inner client config, DOUBLE-encoded (a stringified JSON), per the app's
+  // AwgProtocolConfig::toJson. Only what a client reads (amnezia-client 94b51df,
+  // docs/plan/amnezia-key-recon.md):
+  //   - the connection fields every platform builds the tunnel from; Android
+  //     requires client_ip, allowed_ips (array), hostName, port (number),
+  //     client_priv_key, server_pub_key;
+  //   - `config`, the .conf text: the tunnel does not use it, but the app's
+  //     client-settings page for the protocol opens only when it is non-empty,
+  //     and that page is where a person reads their Jc/S/H while working out why
+  //     a tunnel does not come up.
+  // Left out on purpose: `mtu` (the import overwrites it with the app's own
+  // default, importController.cpp:775-776), `isThirdPartyConfig` (read at the awg
+  // level only), and the empty `clientId` / `client_pub_key`.
   const lastConfig: Record<string, unknown> = {
     ...obf,
     allowed_ips: allowed,
-    clientId: '',
     client_ip: opts.allowedIp,
     client_priv_key: opts.privateKey,
-    client_pub_key: '',
     config: conf,
     hostName: opts.host,
-    isThirdPartyConfig: true,
-    mtu: String(opts.mtu ?? 1280),
     persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
     port: opts.port,
     server_pub_key: opts.serverPublicKey,
@@ -125,11 +130,14 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // the [Interface], which the iOS parser rejects.
   if (opts.pskKey) lastConfig.psk_key = opts.pskKey;
 
+  // The awg (server) level carries no copy of the obfuscation params: the
+  // connection reads last_config only, and the app uses the server copy just to
+  // label the protocol version, which is empty for 1.x either way
+  // (serverDescription.cpp:67-71).
   const awg = {
-    ...obf,
-    // Suppresses the "AmneziaWG Legacy" label/nag (see AWG_CONTAINER note). Set
-    // at both the awg-container level (where serverDescription reads it) and
-    // inside last_config, since the app parses isThirdPartyConfig from both.
+    // Suppresses the "AmneziaWG Legacy" label/nag (see AWG_CONTAINER note). Read
+    // at this level only (AwgServerConfig, awgProtocolConfig.cpp:203); the client
+    // part of the key does not parse it.
     isThirdPartyConfig: true,
     last_config: JSON.stringify(lastConfig),
     port: String(opts.port),

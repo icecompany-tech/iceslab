@@ -64,16 +64,24 @@ describe('buildAmneziaVpnLink', () => {
     const awg = containers[0]!.awg as Record<string, unknown>;
     expect(awg.port).toBe('51820'); // server-level port is a STRING
     expect(awg.transport_proto).toBe('udp');
-    // obfuscation params at the awg level, as strings
-    expect(awg.Jc).toBe('4');
-    // S3/S4 are omitted at 0. The AmneziaVPN iOS network extension cannot parse
-    // those keys at all, even when zero, and aborts with ParseError 9.
-    expect('S3' in awg).toBe(false);
-    expect('S4' in awg).toBe(false);
+    expect(awg.isThirdPartyConfig).toBe(true);
+    // No server-level copy of the obfuscation params: the connection reads
+    // last_config only (docs/plan/amnezia-key-recon.md, section 3).
+    expect(Object.keys(awg).sort()).toEqual(['isThirdPartyConfig', 'last_config', 'port', 'transport_proto']);
 
     // last_config is a STRINGIFIED inner JSON (double-encoded), not an object.
     expect(typeof awg.last_config).toBe('string');
     const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
+    // obfuscation params live here, as strings
+    expect(inner.Jc).toBe('4');
+    // S3/S4 are omitted at 0. The AmneziaVPN iOS network extension cannot parse
+    // those keys at all, even when zero, and aborts with ParseError 9.
+    expect('S3' in inner).toBe(false);
+    expect('S4' in inner).toBe(false);
+    // Dead weight the app never reads, or overwrites on import.
+    for (const dead of ['mtu', 'isThirdPartyConfig', 'clientId', 'client_pub_key']) {
+      expect(dead in inner, dead).toBe(false);
+    }
 
     // The .conf text is required and non-empty; this is the other half of 900.
     const conf = inner.config as string;
@@ -96,17 +104,16 @@ describe('buildAmneziaVpnLink', () => {
     const withI = buildAmneziaVpnLink({ ...baseOpts, i1: 'aabb', i3: 'ccdd' });
     const env = decodeVpnKey(withI) as { containers: Array<{ awg: Record<string, unknown> }> };
     const awg = env.containers[0]!.awg;
-    expect(awg.I1).toBe('aabb');
-    expect(awg.I3).toBe('ccdd');
-    // Unset slots are ABSENT, not ''. On connect the AmneziaVPN daemon rebuilds
-    // the [Interface] from these structured keys and treats '' as a present
-    // (blank) value, injecting `I2 = ` lines that break the AmneziaWG handshake.
-    expect('I2' in awg).toBe(false);
-    expect('I4' in awg).toBe(false);
-    expect('I5' in awg).toBe(false);
     const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
     expect(inner.I1).toBe('aabb');
+    expect(inner.I3).toBe('ccdd');
+    // Unset slots are ABSENT, not ''. On connect the AmneziaVPN daemon builds
+    // the tunnel from these structured keys, and releases before the current one
+    // took '' as a present (blank) value, injecting `I2 = ` lines that broke the
+    // AmneziaWG handshake.
     expect('I2' in inner).toBe(false);
+    expect('I4' in inner).toBe(false);
+    expect('I5' in inner).toBe(false);
     // the inline .conf likewise carries only the non-empty I-lines
     expect(inner.config as string).toContain('I1 = aabb');
     expect(inner.config as string).not.toContain('I2 =');
@@ -117,9 +124,9 @@ describe('buildAmneziaVpnLink', () => {
     const key = buildAmneziaVpnLink({ ...baseOpts, s3: 12, s4: 34, pskKey: 'pskBase64' });
     const env = decodeVpnKey(key) as { containers: Array<{ awg: Record<string, unknown> }> };
     const awg = env.containers[0]!.awg;
-    expect(awg.S3).toBe('12');
-    expect(awg.S4).toBe('34');
     const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
+    expect(inner.S3).toBe('12');
+    expect(inner.S4).toBe('34');
     expect(inner.psk_key).toBe('pskBase64');
     // the inline .conf carries the same non-zero S3/S4
     expect(inner.config as string).toContain('S3 = 12');
@@ -144,8 +151,8 @@ describe('buildAmneziaVpnLink', () => {
  *                   ParseError 9, the tunnel never starts; desktop and Android
  *                   accept the absence. The .conf builder follows the same rule
  *                   (wgconf.ts), so the key and the file never disagree.
- *   awg2-s3s4-set   non-zero S3/S4 (a 2.0-shaped profile): both appear, at the
- *                   awg level, in last_config and in the embedded .conf.
+ *   awg2-s3s4-set   non-zero S3/S4 (a 2.0-shaped profile): both appear, in
+ *                   last_config and in the embedded .conf.
  *
  * `keyLength` is pinned beside the JSON: it decides the QR version, and the QR
  * is where the length is felt.
@@ -162,8 +169,10 @@ describe('the AmneziaVPN key, whole', () => {
       writeFileSync(path, got);
       return;
     }
+    // CRLF folded: `*.json` is `text` in .gitattributes, so a Windows checkout
+    // hands this file back with CRLF, which is not a change to the key.
     expect(got, `golden ${name} is out of date; retake with UPDATE_GOLDEN=1 and read the diff`).toBe(
-      readFileSync(path, 'utf8'),
+      readFileSync(path, 'utf8').replace(/\r\n/g, '\n'),
     );
   }
 
