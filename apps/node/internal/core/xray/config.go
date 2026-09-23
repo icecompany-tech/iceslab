@@ -320,7 +320,37 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 	return out
 }
 
+// Subprotocols of the user-facing inbound, as the panel's schema names them.
+// socks and http are in the contract (Telegram entries, 2026-09-23) and not yet
+// rendered here; see validateSubprotocol.
+const (
+	subprotocolSocks = "socks"
+	subprotocolHTTP  = "http"
+)
+
+// validateSubprotocol refuses a subprotocol this agent does not render.
+//
+// ⚠ Refusing is the whole point. userInboundProtocol falls through to vless for
+// anything it does not know, so a `socks` inbound pushed to an agent without a
+// socks render would come up as a VLESS inbound on that port: a door of the
+// wrong kind that loads cleanly, while the operator's Telegram users get
+// nothing. It is called before the inbound is stored, so a refused one never
+// reaches the render of the others.
+func (c *InboundConfig) validateSubprotocol() error {
+	switch c.Subprotocol {
+	case "", "vless", "trojan", "vmess":
+		return nil
+	case subprotocolSocks, subprotocolHTTP:
+		return fmt.Errorf("subprotocol %q is in the contract and this agent does not render it yet", c.Subprotocol)
+	default:
+		return fmt.Errorf("unknown xray subprotocol %q", c.Subprotocol)
+	}
+}
+
 func (c *InboundConfig) validate() error {
+	if err := c.validateSubprotocol(); err != nil {
+		return err
+	}
 	// WARP egress is orthogonal to inbound security, so validate it first.
 	if c.Warp != nil {
 		if c.Warp.SecretKey == "" {

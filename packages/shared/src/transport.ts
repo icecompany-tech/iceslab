@@ -275,6 +275,21 @@ export function formatCarriesAny(
 
 export type ChainEntryProtocol = (typeof CHAIN_ENTRY_PROTOCOLS)[number];
 
+/**
+ * What the one xray process can serve on a user-facing inbound.
+ *
+ * ONE LIST, read by the panel's profile schema and by the screen. `socks` and
+ * `http` are the Telegram entries (docs/plan/telegram-ways-in.md, section 9):
+ * only security 'none', only network 'raw'; XRAY_PLAIN_SUBPROTOCOLS names them
+ * so both sides refuse the same combinations.
+ */
+export const XRAY_SUBPROTOCOLS = ['vless', 'trojan', 'vmess', 'socks', 'http'] as const;
+export type XraySubprotocol = (typeof XRAY_SUBPROTOCOLS)[number];
+
+/** Subprotocols with no TLS and no transport of their own: Telegram's clients
+ *  dial them as plain SOCKS5 / HTTP CONNECT over TCP. */
+export const XRAY_PLAIN_SUBPROTOCOLS = ['socks', 'http'] as const satisfies readonly XraySubprotocol[];
+
 /** What a listener occupies on the wire. A port is only taken for one of these. */
 export const TRANSPORTS = ['tcp', 'udp'] as const;
 export type Transport = (typeof TRANSPORTS)[number];
@@ -508,8 +523,15 @@ export interface XrayInboundCfg {
   /** Subprotocol carried by the xray inbound. `vless` (default) → per-user
    *  UUID with optional Vision flow; `trojan` → per-user password (we reuse
    *  user.xrayUuid); `vmess` → per-user UUID, AEAD (no flow). VMess pairs with
-   *  security 'none'/'tls' only (its share link cannot carry REALITY). */
-  subprotocol?: 'vless' | 'trojan' | 'vmess';
+   *  security 'none'/'tls' only (its share link cannot carry REALITY).
+   *
+   *  `socks` and `http` (2026-09-23, the Telegram entries): SOCKS5 and HTTP
+   *  CONNECT with a login per user, login = User.username, password =
+   *  User.xrayUuid. Security 'none' and network 'raw' ONLY: Telegram's clients
+   *  speak neither TLS nor a transport to them. The same xray process as the
+   *  rest, no adapter of their own. An agent that does not render them refuses
+   *  the inbound rather than falling back to vless on that port. */
+  subprotocol?: XraySubprotocol;
   /**
    * C3 cascade chaining fragments for THIS node's hop.
    *

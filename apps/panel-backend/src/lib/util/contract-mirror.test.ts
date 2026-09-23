@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_NAMES, PROTOCOL_NAMES } from '@iceslab/shared';
+import { ENGINE_NAMES, PROTOCOL_NAMES, XRAY_SUBPROTOCOLS } from '@iceslab/shared';
 
 /**
  * The hand-written mirror between `packages/shared/src/transport.ts` and the
@@ -208,5 +208,46 @@ describe('the chain block against the agent that will decode it', () => {
     const req = /type ApplyInboundsRequest struct \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
     expect(req).toContain('`json:"chain,omitempty"`');
     expect(req).toContain('`json:"cascade,omitempty"`');
+  });
+});
+
+/**
+ * The xray subprotocols, against the agent's own list of what it knows.
+ *
+ * The inbound config travels as raw JSON, so no Go struct carries the enum and
+ * the key checks above cannot see it. What the agent knows is the switch in
+ * validateSubprotocol, and it matters in both directions: a name the panel
+ * saves and the agent has never heard of is refused on the node (loud, and
+ * wrong), and a name the agent knows and the panel does not is dead code. The
+ * dangerous version, an unknown name rendered as vless, is what that function
+ * exists to stop.
+ */
+describe('the xray subprotocols against the agent', () => {
+  const XRAY_CONFIG_GO = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../../../apps/node/internal/core/xray/config.go',
+  );
+
+  it('names every subprotocol on both sides', () => {
+    const src = readFileSync(XRAY_CONFIG_GO, 'utf8');
+    const body = /func \(c \*InboundConfig\) validateSubprotocol\(\) error \{([\s\S]*?)\n\}/.exec(src)?.[1];
+    expect(
+      body,
+      'validateSubprotocol was not found in config.go, so this test is checking nothing. ' +
+        'Fix the pattern, do not delete the test.',
+    ).toBeDefined();
+    // Case literals, plus the named constants the socks/http case uses.
+    const consts = new Map(
+      [...src.matchAll(/^\s*(subprotocol\w+)\s*=\s*"([a-z]+)"/gm)].map((m) => [m[1]!, m[2]!]),
+    );
+    const known = new Set<string>();
+    for (const m of body!.matchAll(/case ([^:]+):/g)) {
+      for (const part of m[1]!.split(',').map((s) => s.trim())) {
+        const lit = /^"([a-z]*)"$/.exec(part)?.[1];
+        const value = lit ?? consts.get(part);
+        if (value) known.add(value);
+      }
+    }
+    expect([...known].sort()).toEqual([...XRAY_SUBPROTOCOLS].sort());
   });
 });

@@ -1070,6 +1070,12 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		GrpcMultiMode:                           wire.GrpcMultiMode,
 		Warp:                                    wire.Warp,
 	}
+	// Before it is stored: an inbound the render would refuse must not sit in
+	// the map, or every later render of this core fails on it and the inbounds
+	// that are fine go down with it.
+	if err := newInbound.validateSubprotocol(); err != nil {
+		return err
+	}
 
 	// Multi-inbound: an identified inbound lives in the map under its own id, so
 	// a second one ADDS rather than replaces. Its tag has to be unique inside

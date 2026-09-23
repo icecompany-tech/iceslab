@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { XRAY_PLAIN_SUBPROTOCOLS, XRAY_SUBPROTOCOLS } from '@iceslab/shared';
 
 const NameSchema = z
   .string()
@@ -200,9 +201,37 @@ export const XrayConfigSchema = z.object({
    * Shadowsocks (SS2022) is deferred to a follow-up, multi-user model
    * differs (per-user keys + cipher selection) and benefits from its own
    * commit.
+   *
+   *   - `socks` / `http` (2026-09-23): the Telegram entries. Login per user
+   *                 (username / xrayUuid), security 'none', network 'raw'
+   *                 only, see the refinement below.
    */
-  subprotocol: z.enum(['vless', 'trojan', 'vmess']).default('vless'),
-});
+  subprotocol: z.enum(XRAY_SUBPROTOCOLS).default('vless'),
+})
+  // Refining this nested object is safe for the same reason as the AmneziaWG
+  // one below: the discriminated unions key off the top-level `protocol`.
+  //
+  // socks and http carry no TLS and no transport: Telegram's clients dial
+  // plain SOCKS5 / HTTP CONNECT over TCP. Saving one with REALITY or ws would
+  // be a profile no client can use, so it is refused here rather than
+  // rendered.
+  .superRefine((cfg, ctx) => {
+    if (!(XRAY_PLAIN_SUBPROTOCOLS as readonly string[]).includes(cfg.subprotocol)) return;
+    if (cfg.security !== 'none') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['security'],
+        message: `subprotocol ${cfg.subprotocol} takes security "none" only (got "${cfg.security}")`,
+      });
+    }
+    if (cfg.network !== 'raw') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['network'],
+        message: `subprotocol ${cfg.subprotocol} takes network "raw" only (got "${cfg.network}")`,
+      });
+    }
+  });
 
 // Bounds and defaults match upstream amnezia-vpn AmneziaWG v2.0 spec
 // (docs.amnezia.org/documentation/amnezia-wg). Old TSPU presets from
