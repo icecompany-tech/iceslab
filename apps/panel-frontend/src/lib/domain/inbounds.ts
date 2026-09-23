@@ -1,4 +1,5 @@
 import { api } from '@/lib/net/client';
+import type { XraySubprotocol } from '@iceslab/shared';
 import type { ProtocolName } from '@/lib/domain/protocols';
 
 export type ShadowsocksMethod =
@@ -42,9 +43,9 @@ export interface XrayInboundConfig {
   path?: string;
   host?: string;
   serviceName?: string;
-  /** Slice 24c part 3, `vless` (default) or `trojan` over the same REALITY
-   *  stack. Empty/undefined → server falls back to vless. */
-  subprotocol?: 'vless' | 'trojan';
+  /** What the xray inbound speaks; the list is the contract's, never a copy.
+   *  Empty/undefined → server falls back to vless. */
+  subprotocol?: XraySubprotocol;
   /** B3 advanced knobs. All optional, Zod-defaulted server-side. REALITY
    *  pair applies when security=reality, tlsRejectUnknownSni when
    *  security=tls, xhttp* when network=xhttp, grpcMultiMode when network=grpc. */

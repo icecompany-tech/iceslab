@@ -1,4 +1,4 @@
-import { DEFAULT_LINK_CONGESTION } from '@iceslab/shared';
+import { DEFAULT_LINK_CONGESTION, type XraySubprotocol } from '@iceslab/shared';
 import type { Profile } from '@/lib/domain/profiles';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
@@ -118,7 +118,7 @@ export function defaults(profile: Profile | null): FormValues {
         xrayPath: (cfg.path as string) ?? '',
         xrayHostHeader: (cfg.host as string) ?? '',
         xrayServiceName: (cfg.serviceName as string) ?? '',
-        xraySubprotocol: ((cfg.subprotocol as 'vless' | 'trojan' | 'vmess') ?? 'vless'),
+        xraySubprotocol: ((cfg.subprotocol as XraySubprotocol) ?? 'vless'),
         xraySecurity: ((cfg.security as 'reality' | 'none' | 'tls') ?? 'reality'),
         xrayTlsServerName: (cfg.tlsServerName as string) ?? base.xrayTlsServerName,
         xrayTlsCert: (cfg.tlsCert as string) ?? base.xrayTlsCert,

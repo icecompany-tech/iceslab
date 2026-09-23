@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { LINK_CELLS, LINK_CONGESTIONS, TEMPLATE_TYPES } from '@iceslab/shared';
+import {
+  LINK_CELLS,
+  LINK_CONGESTIONS,
+  TEMPLATE_TYPES,
+  XRAY_PLAIN_SUBPROTOCOLS,
+  XRAY_SUBPROTOCOLS,
+} from '@iceslab/shared';
 
 /**
  * Перечисления контракта объявляются в контракте, и больше нигде.
@@ -17,7 +23,15 @@ import { LINK_CELLS, LINK_CONGESTIONS, TEMPLATE_TYPES } from '@iceslab/shared';
  * Список имён ниже растёт вместе с контрактом. Сегодня в нём те, которыми уже
  * успели разойтись.
  */
-const GUARDED = ['LINK_CELLS', 'LINK_CONGESTIONS', 'DEFAULT_LINK_CONGESTION', 'TEMPLATE_TYPES', 'FORMAT_NAMES'];
+const GUARDED = [
+  'LINK_CELLS',
+  'LINK_CONGESTIONS',
+  'DEFAULT_LINK_CONGESTION',
+  'TEMPLATE_TYPES',
+  'FORMAT_NAMES',
+  'XRAY_SUBPROTOCOLS',
+  'XRAY_PLAIN_SUBPROTOCOLS',
+];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
   query: '?raw',
@@ -53,5 +67,22 @@ describe('копии перечислений контракта', () => {
     expect(LINK_CELLS.length).toBeGreaterThan(0);
     expect(LINK_CONGESTIONS.length).toBeGreaterThan(0);
     expect(TEMPLATE_TYPES.length).toBeGreaterThan(0);
+    expect(XRAY_SUBPROTOCOLS.length).toBeGreaterThan(0);
+    expect(XRAY_PLAIN_SUBPROTOCOLS.length).toBeGreaterThan(0);
+  });
+
+  it('4. подпротоколы xray не переписываются типом-перечнем', () => {
+    // Копия здесь была без имени: `'vless' | 'trojan'` в трёх файлах, уже
+    // отставшая от контракта на vmess, socks и http. Ловится сама форма:
+    // два подпротокола через `|` в кавычках.
+    const pair = new RegExp(
+      `'(${XRAY_SUBPROTOCOLS.join('|')})'\\s*\\|\\s*'(${XRAY_SUBPROTOCOLS.join('|')})'`,
+    );
+    const guilty: string[] = [];
+    for (const [path, code] of Object.entries(FILES)) {
+      if (path === SELF) continue;
+      if (/(^|\n)\s*(export\s+)?type\s+XraySubprotocol\b/.test(code) || pair.test(code)) guilty.push(path);
+    }
+    expect(guilty).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import type { LinkCongestion } from '@iceslab/shared';
+import type { LinkCongestion, XraySubprotocol } from '@iceslab/shared';
 import type { ProtocolName } from '@/lib/domain/protocols';
 
 export type Mode = 'create' | 'edit';
@@ -33,7 +33,7 @@ export interface FormValues {
   xrayPath: string;
   xrayHostHeader: string;
   xrayServiceName: string;
-  xraySubprotocol: 'vless' | 'trojan' | 'vmess';
+  xraySubprotocol: XraySubprotocol;
   xraySecurity: 'reality' | 'none' | 'tls';
   xrayTlsServerName: string;
   xrayTlsCert: string;
