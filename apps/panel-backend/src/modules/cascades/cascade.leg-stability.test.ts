@@ -229,6 +229,50 @@ describe('the REALITY block of a vless leg', () => {
     expect(inbound.settings.clients[0]!.flow).toBe('xtls-rprx-vision');
   });
 
+  it('announces a rotation only where one happened, and says how many', async () => {
+    /**
+     * The log line the stand check reads: "N leg(s) had no REALITY block ...
+     * given one", where N must equal the legs that really rotated.
+     *
+     * It fired on every brand-new cascade until this test: a leg minted in the
+     * same save arrives with a throwaway pair that is replaced by the node's,
+     * and that was being counted. Found by a mutation run of the phase-6 push
+     * test, whose output carried the line for a cascade that had just been
+     * created. A number an operator is told to compare, which is wrong on day
+     * one, is worse than no number.
+     */
+    const { getLogger } = await import('../../lib/infra/logger.js');
+    const logger = getLogger();
+    const original = logger.info.bind(logger);
+    const lines: string[] = [];
+    (logger as { info: (m: unknown) => void }).info = (m: unknown) => {
+      lines.push(String(m));
+    };
+    try {
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const c = await create(entry, [nl]);
+      // A brand-new cascade: nothing rotated, nothing said.
+      expect(lines.filter((l) => l.includes('had no REALITY block'))).toEqual([]);
+
+      // The pre-5b shape: a stored leg without its block. Now it IS a rotation.
+      const row = await prisma.cascadeLink.findFirstOrThrow({ select: { id: true, config: true } });
+      const { reality: _gone, ...withoutBlock } = row.config as Record<string, unknown>;
+      await prisma.cascadeLink.update({ where: { id: row.id }, data: { config: withoutBlock } });
+      await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+      const said = lines.filter((l) => l.includes('had no REALITY block'));
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain('1 leg(s)');
+
+      // And the save after it says nothing again.
+      lines.length = 0;
+      await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+      expect(lines.filter((l) => l.includes('had no REALITY block'))).toEqual([]);
+    } finally {
+      (logger as { info: typeof original }).info = original;
+    }
+  });
+
   it('is given to a leg stored without one exactly once', async () => {
     /**
      * The rotation and its bound.

@@ -501,7 +501,13 @@ export async function generateTopologyLinks(
       // whose block predates the node's, is counted: that is a handshake the
       // operator will see reconnect, once.
       const shortId = cred.reality?.shortId ?? newLinkReality().shortId;
-      if (cred.reality?.privateKey !== nodeKey.privateKey) rotated += 1;
+      // ⚠ Only a STORED leg can rotate. A leg minted just above arrives with a
+      // throwaway pair of its own that is replaced here by the node's, and
+      // counting that made every brand-new cascade announce a rotation it never
+      // had. The stand check reads this line ("N equals the legs of the
+      // cascade, the second save says nothing"), so a false N there is a false
+      // alarm on the one line meant to be trusted.
+      if (kept && cred.reality?.privateKey !== nodeKey.privateKey) rotated += 1;
       cred = { ...cred, reality: { ...nodeKey, shortId } };
     }
     links.push({
