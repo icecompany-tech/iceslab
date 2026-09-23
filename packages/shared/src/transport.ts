@@ -247,7 +247,13 @@ export type FormatWhy = 'native' | FormatGap;
  * have no REALITY (Surge).
  */
 export type FormatDoor =
-  | { carried: true; exceptReality?: true }
+  | {
+      carried: true;
+      exceptReality?: true;
+      /** A part of the door the format could carry and our builder does not
+       *  write yet, with the doc that shows it. The door itself is carried. */
+      notYet?: string;
+    }
   | { carried: false; why: FormatGap };
 
 const YES: FormatDoor = { carried: true };
@@ -358,7 +364,10 @@ export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> 
     vless: YES,
     vmess: YES,
     trojan: YES,
-    hysteria: YES,
+    hysteria: {
+      carried: true,
+      notYet: 'port hopping: Loon takes server-ports and hop-interval (nsloon.app/en/docs/Node/), loon.ts does not write them',
+    },
     shadowsocks: YES,
     socks: NOT_YET,
     http: NOT_YET,

@@ -219,6 +219,13 @@ describe('the table itself', () => {
     expect(formatCarries('surge', 'vless').why).toBe('client-lacks-protocol');
   });
 
+  it('names the part of a carried door the builder does not write yet', () => {
+    const cell = FORMAT_DOORS.loon.hysteria;
+    expect(cell.carried && cell.notYet).toMatch(/port hopping/);
+    // Carried all the same: the gap is a feature, not the door.
+    expect(formatCarries('loon', 'hysteria')).toEqual({ carried: true, why: 'native' });
+  });
+
   it('no longer claims plain carries what has no link', () => {
     expect(formatCarries('plain', 'amneziawg').why).toBe('no-uri-standard');
     expect(formatCarries('plain', 'shadowtls').why).toBe('no-uri-standard');
