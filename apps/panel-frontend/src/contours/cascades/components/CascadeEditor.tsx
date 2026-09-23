@@ -41,7 +41,9 @@ import {
 } from '@/contours/cascades/lib/cascadeForm';
 import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
 import {
+  engineCoreWord,
   engineListWords,
+  engineVersionWords,
   isRealisedLinkCell,
   linkCellOptions,
   nodeCarriesCascadeLink,
@@ -259,10 +261,11 @@ export function NodeSelect({
           // The core version only, and the cores beside it once the node has
           // reported them. Never the protocol label: naming an engine this
           // machine may not be running is the mistake this row just stopped
-          // making.
+          // making. Each engine carries its own version: coreVersion is xray's,
+          // and after «…, движок sing-box» it read as sing-box's.
           text: selected.engines
-            ? `${engineListWords(selected, t)} · ${selected.coreVersion}`
-            : selected.coreVersion,
+            ? engineVersionWords(selected, t)
+            : `${engineCoreWord('xray', t)} ${selected.coreVersion}`,
           tone: FAINT,
         }
       : selected

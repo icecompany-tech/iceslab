@@ -5,6 +5,7 @@ import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
+import { coreVersionOf } from '@/lib/domain/coreVersion';
 import {
   AMBER,
   CARD,
@@ -151,6 +152,7 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
   const state: CoreState =
     core.installed === false ? 'absent' : core.provisioned === false ? 'idle' : 'configured';
   const tone = state === 'configured' ? MOSS : state === 'absent' ? AMBER : FAINT;
+  const version = coreVersionOf(core);
 
   const script = BOOTSTRAP[core.name];
   const command = script ? `sudo ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
@@ -172,8 +174,9 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
           </Text>
         )}
 
-        {core.version && (
-          <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>{core.version}</Text>
+        {/* Своя версия ядра, никогда не node.coreVersion: та версия xray. */}
+        {version && (
+          <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>{version}</Text>
         )}
 
         {/* Одно слово, и только при ответе ДА. Политику уровня ноды сегодня

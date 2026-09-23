@@ -3,6 +3,7 @@ import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
 import { PLAIN_LABEL, plainSubprotocolOf } from '@/lib/domain/xraySubprotocol';
+import { coreVersionOf } from '@/lib/domain/coreVersion';
 
 /**
  * The pair (protocol, engine), which is what the dispatcher on a node actually
@@ -181,6 +182,36 @@ export function engineListWords(node: Pick<Node, 'engines'>, t: T): string {
   if (!engines) return t('engine.coresUnknown');
   if (engines.length === 0) return t('engine.coresNone');
   return engines.map((e) => engineCoreWord(e, t)).join(', ');
+}
+
+/**
+ * The node's cores in words, each with ITS OWN version where it reported one:
+ * «ядро xray 26.3.27, движок sing-box 1.13.14».
+ *
+ * The version comes from the core that engine runs as (`cores[].version`).
+ * `node.coreVersion` is xray's and nobody else's (T7), so it may only stand
+ * beside xray, and only when the cores list did not give xray a version.
+ * Printing it after a list that ends in sing-box read as sing-box's version.
+ */
+export function engineVersionWords(
+  node: Pick<Node, 'engines' | 'cores' | 'coreVersion'>,
+  t: T,
+): string {
+  const engines = node.engines;
+  if (!engines) return t('engine.coresUnknown');
+  if (engines.length === 0) return t('engine.coresNone');
+  const cores = node.cores?.cores ?? [];
+  return engines
+    .map((e) => {
+      const own = cores
+        .filter((c) => (c.engine ?? c.name) === e)
+        .map(coreVersionOf)
+        .find((v): v is string => v !== null);
+      const version = own ?? (e === 'xray' ? (node.coreVersion ?? null) : null);
+      const word = engineCoreWord(e, t);
+      return version ? `${word} ${version}` : word;
+    })
+    .join(', ');
 }
 
 /**

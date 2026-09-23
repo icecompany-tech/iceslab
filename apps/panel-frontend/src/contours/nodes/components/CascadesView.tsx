@@ -2,7 +2,7 @@
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { getCascadeStatus, type Cascade } from '@/lib/domain/cascades';
-import { engineListWords } from '@/lib/domain/engines';
+import { engineCoreWord, engineVersionWords } from '@/lib/domain/engines';
 import { countryFlag } from '@/lib/domain/countries';
 import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/cascadeRows';
 import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
@@ -382,11 +382,13 @@ function HopTile({ hop, role }: { hop: HopView; role: 'entry' | 'transit' | 'exi
             Never `protocol`: that is the label of the primary adapter, and
             printing it next to a version reads as «this is the core running
             here», which the panel does not know until the node says so. */}
+        {/* Each engine with its own version: coreVersion is xray's, and after a
+            list ending in sing-box it used to read as sing-box's. */}
         {role === 'entry' && hop.node?.coreVersion && (
           <Chip tone={VIOLET} small>
             {hop.node.engines
-              ? `${engineListWords(hop.node, t)} ${hop.node.coreVersion}`
-              : hop.node.coreVersion}
+              ? engineVersionWords(hop.node, t)
+              : `${engineCoreWord('xray', t)} ${hop.node.coreVersion}`}
           </Chip>
         )}
         <Box style={{ flex: 1 }} />
