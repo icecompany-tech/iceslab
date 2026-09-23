@@ -1,4 +1,5 @@
 import {
+  FOREIGN_TEMPLATE_KEY,
   TEMPLATE_TYPES,
   type SubscriptionTemplate,
   type TemplateDryRun,
@@ -135,7 +136,7 @@ export function templateEditorFacts(input: {
 /**
  * Что панель получила из импортированного файла.
  *
- * Сервер переписывает чужой служебный ключ (`remnawave:`) в наш (`iceslab:`) и
+ * Сервер переписывает чужой служебный ключ (`FOREIGN_TEMPLATE_KEY`) в наш (`iceslab:`) и
  * говорит, сколько раз это понадобилось. Число показывается не ради статистики:
  * оно объясняет, почему тело на экране отличается от файла, который человек
  * только что выбрал.
@@ -156,7 +157,7 @@ export interface ImportFacts {
   foreignKeysLeft: string[];
 }
 
-const FOREIGN_KEYS = ['remnawave:'];
+const FOREIGN_KEYS = [FOREIGN_TEMPLATE_KEY];
 
 export function importFacts(result: {
   template?: Partial<SubscriptionTemplate> | null;

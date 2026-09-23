@@ -7,7 +7,7 @@ import {
   templateEditorFacts,
   templatesScreenFacts,
 } from '@/contours/subscription/lib/templateFacts';
-import type { SubscriptionTemplate } from '@/lib/domain/subscriptionTemplates';
+import { FOREIGN_TEMPLATE_KEY, type SubscriptionTemplate } from '@/lib/domain/subscriptionTemplates';
 
 /**
  * Экран шаблонов выдачи, фаза 11.
@@ -159,10 +159,10 @@ describe('importFacts', () => {
     // Проверка за сервером. Такого быть не должно, но если случилось, шаблон
     // уедет в подписку с ключом, которого наш сборщик не понимает.
     const f = importFacts({
-      template: { type: 'mihomo', body: 'remnawave:\n  label: x' },
+      template: { type: 'mihomo', body: `${FOREIGN_TEMPLATE_KEY}\n  label: x` },
       rewrittenKeys: 0,
     })!;
-    expect(f.foreignKeysLeft).toEqual(['remnawave:']);
+    expect(f.foreignKeysLeft).toEqual([FOREIGN_TEMPLATE_KEY]);
   });
 
   it('6. чистое тело: чужих ключей нет', () => {

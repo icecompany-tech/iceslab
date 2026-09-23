@@ -62,9 +62,20 @@ export interface TemplateDryRun {
   warnings: string[];
 }
 
+/**
+ * Ключ чужого формата импорта, переписывается сервером в наш `iceslab:`.
+ *
+ * Это идентификатор формата на проводе, а не упоминание: распознать чужой
+ * служебный ключ в импортированном шаблоне, не назвав его, нельзя. Правило «не
+ * называть чужие панели» про прозу, шапки, коммиты и тексты экрана; исключение
+ * то же, что у репо iceslab-migrate (решение ARCH 23.09). Поэтому литерал
+ * живёт ровно здесь, а все места, которым он нужен, читают эту константу.
+ */
+export const FOREIGN_TEMPLATE_KEY = 'remnawave:';
+
 export interface TemplateImportResult {
   template: SubscriptionTemplate;
-  /** Сколько чужих ключей `remnawave:` переписано в наши `iceslab:`. */
+  /** Сколько чужих ключей (`FOREIGN_TEMPLATE_KEY`) переписано в наши `iceslab:`. */
   rewrittenKeys: number;
 }
 
