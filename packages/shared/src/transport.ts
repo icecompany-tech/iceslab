@@ -990,7 +990,7 @@ export interface NodeChain {
  * refused by the agent there: the agent hands this to the ONE adapter whose
  * engine it names, and that adapter must never be left to guess.
  */
-export type ChainUserCore = ChainUserCoreXray | ChainUserCoreHysteria;
+export type ChainUserCore = ChainUserCoreXray | ChainUserCoreHysteria | ChainUserCoreAmneziawg;
 
 export interface ChainUserCoreXray {
   /** Named for the same reason `NodeCascade.engine` is: the agent must be able
@@ -1010,6 +1010,57 @@ export interface ChainUserCoreXray {
 export interface ChainUserCoreHysteria {
   engine: 'hysteria';
   socks: ChainUserCoreSocks;
+}
+
+/**
+ * An AmneziaWG entry, phase 7: the kernel steers every packet off the awg
+ * interface into the chain by TPROXY, and the agent draws the rules.
+ *
+ * Not socks and not fragments: AmneziaWG is a tunnel, not a proxy, so there is
+ * no outbound inside it to point anywhere. The hand-off happens below it, in
+ * the routing of the host. Like hysteria, a user cannot pick a way out (a user
+ * is a key, there is no vlessRoute), so the chain routes from its tproxy
+ * listener with the policy.
+ *
+ * ⚠ Shipped ahead of the door: `amneziawg` joins CHAIN_ENTRY_PROTOCOLS only in
+ * the commit that also makes the agent draw the rules and the chain listen.
+ * Before that, a save with this entry is refused (ENTRY_NOT_CHAINABLE), because
+ * a 200 over a node that changes nothing is a silence, not a refusal.
+ */
+export interface ChainUserCoreAmneziawg {
+  engine: 'amneziawg';
+  tproxy: ChainUserCoreTProxy;
+}
+
+/**
+ * The TPROXY hand-off of one awg interface.
+ *
+ * ⚠ ONE NUMBER, `mark`, is both the firewall mark and the routing table. The
+ * agent writes `ip rule add fwmark <mark> lookup <mark>` and the local route
+ * into table `<mark>`; a second number would be a second place to check for
+ * collisions, and the collisions are what take a host down. So the range is
+ * chosen for the table's sake:
+ *
+ *   - CHAIN_TPROXY_MARK_BASE + the interface's UDP listen port, so it is per
+ *     INTERFACE and not per node. Two awg interfaces on one node (protocol 1
+ *     beside protocol 3) must not share it: PostDown of one, or the sweep
+ *     before its bring-up, would take the other's ip rule, and that
+ *     interface's users would leave the chain without a word;
+ *   - above 65536, so a table number is never 0 (unspecified) nor 253-255
+ *     (default, main, local: a local default route there takes the whole host
+ *     off the network), and below 2^31;
+ *   - apart from any mark sing-box sets on its own traffic. The chain sets no
+ *     `routing_mark` and no `default_mark` today (checked 2026-09-23 across
+ *     apps/ and packages/); if it ever does, it must come from outside this
+ *     range, or its own outbound packets would be steered back into it.
+ *
+ * A port and not an address, as for socks: the agent writes 127.0.0.1 itself.
+ */
+export interface ChainUserCoreTProxy {
+  /** The chain's tproxy listener on loopback, CHAIN_TPROXY_PORT. */
+  port: number;
+  /** Firewall mark and routing table of this interface, see above. */
+  mark: number;
 }
 
 /**

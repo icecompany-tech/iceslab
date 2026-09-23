@@ -10,8 +10,8 @@ import { CascadeEntryNotChainableError, CascadeValidationError } from './cascade
 
 function handleError(err: unknown, reply: FastifyReply): FastifyReply {
   // Before the generic one, and with a CODE of its own: the screen matches on
-  // it to say "not yet" rather than "you cannot", and the difference decides
-  // whether an operator files a bug or waits for phase 6.
+  // it to name the entries the chain takes, which is what the operator needs to
+  // pick another one instead of filing a bug.
   if (err instanceof CascadeEntryNotChainableError) {
     return reply.code(400).send({ error: err.code, message: err.message });
   }

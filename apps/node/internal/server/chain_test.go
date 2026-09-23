@@ -263,6 +263,27 @@ func TestAUserCoreThatDoesNotMatchItsEngineReachesNobody(t *testing.T) {
 			Socks:     &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "pw"},
 		},
 		"an engine that draws no user core": {Engine: "singbox", Fragments: json.RawMessage(handoverFragments)},
+		"hysteria with tproxy": {
+			Engine: "hysteria",
+			Socks:  &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "pw"},
+			TProxy: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+		},
+		"xray with tproxy": {
+			Engine:    "xray",
+			Fragments: json.RawMessage(handoverFragments),
+			TProxy:    &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+		},
+		"amneziawg without tproxy": {Engine: "amneziawg"},
+		"amneziawg with socks": {
+			Engine: "amneziawg",
+			TProxy: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+			Socks:  &dto.ChainUserCoreSocks{Port: 26000, Username: "chain", Password: "pw"},
+		},
+		"amneziawg with fragments": {
+			Engine:    "amneziawg",
+			TProxy:    &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+			Fragments: json.RawMessage(handoverFragments),
+		},
 	}
 	for name, uc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -282,6 +303,35 @@ func TestAUserCoreThatDoesNotMatchItsEngineReachesNobody(t *testing.T) {
 				t.Fatalf("the refusal was silent:\n%s", logs.String())
 			}
 		})
+	}
+}
+
+// TestAnAmneziawgHandOffNobodyDrawsYetIsLoud pins the gap between the contract
+// and the door. The union knows amneziawg before the awg adapter can take a
+// hand-off, and the panel refuses such an entry at the save until it can. If a
+// well-formed block arrives anyway, it must land on the same alarm as any
+// drawing without a taker, not pass as applied.
+func TestAnAmneziawgHandOffNobodyDrawsYetIsLoud(t *testing.T) {
+	awg := &fakeCore{name: "amneziawg", engine: "amneziawg", running: true}
+	xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, awg, xray)
+
+	block := chainBlock()
+	block.UserCore = &dto.ChainUserCore{
+		Engine: "amneziawg",
+		TProxy: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+	}
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: block})
+
+	if strings.Contains(logs.String(), "chain userCore refused") {
+		t.Fatalf("a well-formed amneziawg block was refused as malformed:\n%s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "the chain is NOT applied") {
+		t.Fatalf("an awg hand-off no core draws went by without the alarm:\n%s", logs.String())
+	}
+	if len(xray.got) != 1 || xray.got[0] != nil {
+		t.Fatalf("xray was handed the awg hand-off: %v", xray.got)
 	}
 }
 

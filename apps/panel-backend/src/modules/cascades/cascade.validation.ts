@@ -51,6 +51,23 @@ function assertLinkCellExists(protocol: string | null | undefined, where: string
  * shared with the frontend (CHAIN_ENTRY_PROTOCOLS) so the screen offers exactly
  * what this accepts instead of keeping a second copy that drifts.
  */
+/**
+ * Entries whose users reach the cascade ONLY through the chain process on the
+ * entry node: a hysteria user is a password and an AmneziaWG user a key, so
+ * neither can carry a choice of way out, and neither core has an xray drawing
+ * to fall back on. For these the chain on the entry nodes is not an
+ * optimisation but the whole hand-off, which is what the save gate asks about.
+ *
+ * About the protocol's nature, not about what is allowed: amneziawg is named
+ * here before it joins CHAIN_ENTRY_PROTOCOLS, and until it does the save never
+ * gets this far with it.
+ */
+const ENTRIES_ONLY_THROUGH_CHAIN: readonly string[] = ['hysteria', 'amneziawg'];
+
+export function entryReachesCascadeOnlyThroughChain(protocol: string | null | undefined): boolean {
+  return protocol != null && ENTRIES_ONLY_THROUGH_CHAIN.includes(protocol);
+}
+
 function assertEntryIsChainable(protocol: string): void {
   if ((CHAIN_ENTRY_PROTOCOLS as readonly string[]).includes(protocol)) return;
   throw new CascadeEntryNotChainableError(protocol);
@@ -59,17 +76,19 @@ function assertEntryIsChainable(protocol: string): void {
 /**
  * A distinct error, because this refusal has a CODE the screen matches on.
  *
- * The operator's choice is not wrong, it is early: AmneziaWG entries arrive in
- * phase 7 (hysteria2 arrived in phase 6). A generic validation message would
- * read as "you cannot do this", and the difference between that and "not yet"
- * is the difference between an operator filing a bug and an operator waiting.
+ * The sentence names no phase any more. It said "phase 7 (amneziawg)" while
+ * mtproto, naive and mieru got the same promise by accident: nothing is planned
+ * to carry them, and a message that tells an operator to wait for a phase that
+ * will not bring their protocol is a wrong answer said politely. What it says
+ * now is true for every protocol it can be given: what the chain takes TODAY,
+ * read from the one list, so it moves on the day amneziawg joins that list.
  */
 export class CascadeEntryNotChainableError extends Error {
   readonly code = 'ENTRY_NOT_CHAINABLE';
   constructor(public protocol: string) {
     super(
-      `entry protocol ${protocol} is not carried by the chain yet: xray and hysteria today, ` +
-        `phase 7 (amneziawg)`,
+      `entry protocol ${protocol} cannot hand its users to the chain; ` +
+        `an entry serves one of: ${CHAIN_ENTRY_PROTOCOLS.join(', ')}`,
     );
     this.name = 'CascadeEntryNotChainableError';
   }

@@ -33,3 +33,33 @@ export const CHAIN_SOCKS_USER = 'chain';
 export function chainSocksPort(directionTag: number): number {
   return CHAIN_SOCKS_BASE + directionTag;
 }
+
+/**
+ * The chain's tproxy listener on loopback, where an AmneziaWG entry's packets
+ * are steered (phase 7). One per NODE: every awg interface points at it, and
+ * the rules that steer are told apart by the interface and its mark, not by
+ * the port. Between the link range (LINK_PORT_BASE 24000 + step) and the socks
+ * range (26000 + tag, tag <= MAX_DIRECTION_TAG), so it can meet neither.
+ */
+export const CHAIN_TPROXY_PORT = 25000;
+
+/** Above every port number, so mark and table are never 0 nor 253-255. */
+export const CHAIN_TPROXY_MARK_BASE = 0x10000;
+
+/**
+ * Firewall mark AND routing table of one awg interface, from its UDP listen
+ * port.
+ *
+ * Per INTERFACE and not per node, decided 2026-09-23: two awg interfaces on
+ * one node (protocol 1 beside protocol 3) with one mark would share one ip
+ * rule, and the PostDown of either, or the sweep before its bring-up, would
+ * take the other's away; that interface's users leave the chain silently. The
+ * listen port is the one number both sides already know and that is unique per
+ * interface on a node by construction, since two sockets cannot bind it.
+ */
+export function chainTProxyMark(listenPort: number): number {
+  if (!Number.isInteger(listenPort) || listenPort < 1 || listenPort > 65535) {
+    throw new RangeError(`awg listen port ${listenPort} is not a port`);
+  }
+  return CHAIN_TPROXY_MARK_BASE + listenPort;
+}

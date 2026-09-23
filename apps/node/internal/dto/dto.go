@@ -30,6 +30,9 @@ const (
 	EngineXray     EngineName = "xray"
 	EngineHysteria EngineName = "hysteria"
 	EngineSingbox  EngineName = "singbox"
+	// AmneziaWG as a chain entry, phase 7. Its adapter answers Engine() with
+	// the same word.
+	EngineAmneziawg EngineName = "amneziawg"
 )
 
 // NativeEngine returns the default core for a protocol when an inbound does not
@@ -265,16 +268,27 @@ type NodeChain struct {
 }
 
 // ChainUserCore mirrors NodeChain.userCore in shared/transport.ts, which is a
-// union by engine: xray carries Fragments, hysteria carries Socks (phase 6).
+// union by engine: xray carries Fragments, hysteria carries Socks (phase 6),
+// amneziawg carries TProxy (phase 7).
 //
-// Go has no sum types, so the union is two optional halves here and the rule is
+// Go has no sum types, so the union is optional halves here and the rule is
 // enforced by Payload: the half that belongs to the named engine must be there,
-// and the other one must not. The adapter the payload is handed to never has to
+// and no other one may be. The adapter the payload is handed to never has to
 // guess which half it was given.
 type ChainUserCore struct {
-	Engine    EngineName          `json:"engine"`
-	Fragments json.RawMessage     `json:"fragments,omitempty"`
-	Socks     *ChainUserCoreSocks `json:"socks,omitempty"`
+	Engine    EngineName           `json:"engine"`
+	Fragments json.RawMessage      `json:"fragments,omitempty"`
+	Socks     *ChainUserCoreSocks  `json:"socks,omitempty"`
+	TProxy    *ChainUserCoreTProxy `json:"tproxy,omitempty"`
+}
+
+// ChainUserCoreTProxy mirrors ChainUserCoreTProxy in shared/transport.ts: where
+// an awg interface steers its users. Mark is ONE number for the firewall mark
+// and the routing table, per interface (base + the interface's listen port), so
+// two awg interfaces on one node never take each other's ip rule down.
+type ChainUserCoreTProxy struct {
+	Port int    `json:"port"`
+	Mark uint32 `json:"mark"`
 }
 
 // ChainUserCoreSocks mirrors ChainUserCoreSocks in shared/transport.ts: where a
@@ -305,6 +319,9 @@ func (u *ChainUserCore) Payload() (json.RawMessage, error) {
 		if hasFragments {
 			return nil, fmt.Errorf("chain userCore: engine hysteria carries xray fragments")
 		}
+		if u.TProxy != nil {
+			return nil, fmt.Errorf("chain userCore: engine hysteria carries a tproxy hand-off")
+		}
 		return json.Marshal(u.Socks)
 	case EngineXray:
 		if !hasFragments {
@@ -313,7 +330,21 @@ func (u *ChainUserCore) Payload() (json.RawMessage, error) {
 		if u.Socks != nil {
 			return nil, fmt.Errorf("chain userCore: engine xray carries a socks hand-off")
 		}
+		if u.TProxy != nil {
+			return nil, fmt.Errorf("chain userCore: engine xray carries a tproxy hand-off")
+		}
 		return u.Fragments, nil
+	case EngineAmneziawg:
+		// Same failure shape as the other two: an awg entry told "nothing"
+		// draws no TPROXY rules, and its users leave by the host's own route,
+		// out of the entry country.
+		if u.TProxy == nil {
+			return nil, fmt.Errorf("chain userCore: engine amneziawg carries no tproxy hand-off")
+		}
+		if hasFragments || u.Socks != nil {
+			return nil, fmt.Errorf("chain userCore: engine amneziawg carries another engine's hand-off")
+		}
+		return json.Marshal(u.TProxy)
 	default:
 		return nil, fmt.Errorf("chain userCore: engine %q draws no user core", u.Engine)
 	}

@@ -14,6 +14,7 @@ import { eventBus } from '../../lib/infra/event-bus.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import {
   CascadeValidationError,
+  entryReachesCascadeOnlyThroughChain,
   foldPositionsIntoHops,
   validateCascadeHops,
   validateCascadeTopology,
@@ -321,7 +322,7 @@ async function assertNodesCarryCells(
 }
 
 /**
- * A hysteria entry on a node that cannot run the chain process, phase 6.
+ * A hysteria or AmneziaWG entry on a node that cannot run the chain process.
  *
  * Refused by FACT only (see canRunChainAtSave): the node reported its engines
  * in full and sing-box is not among them. Every node is named, not the first,
@@ -329,9 +330,12 @@ async function assertNodesCarryCells(
  */
 export class CascadeEntryCannotChainError extends Error {
   readonly code = 'ENTRY_CANNOT_CHAIN';
-  constructor(public conflicts: { nodeName: string; engines: string[] }[]) {
+  constructor(
+    public conflicts: { nodeName: string; engines: string[] }[],
+    public protocol: string,
+  ) {
     super(
-      `A hysteria entry hands every user to the chain process on the same node, and these ` +
+      `A ${protocol} entry hands every user to the chain process on the same node, and these ` +
         `entry nodes cannot run one: ` +
         conflicts
           .map(
@@ -443,17 +447,20 @@ async function assertEntryNodesDropConfirmed(
 }
 
 /**
- * The entry nodes of a hysteria entry must be able to run the chain.
+ * The entry nodes of a hysteria or AmneziaWG entry must be able to run the
+ * chain.
  *
- * Only the ENTRY: a hysteria entry's users reach the cascade through the chain
+ * Only the ENTRY: such an entry's users reach the cascade through the chain
  * process on that machine and through nothing else, so a node with no sing-box
- * is a cascade that exists on the screen and carries nobody.
+ * is a cascade that exists on the screen and carries nobody. Refused by fact
+ * only (canRunChainAtSave): a node that has not reported its engines is not a
+ * "no".
  */
 async function assertEntryCanChain(
   positions?: { position: number; nodeIds: string[]; entryProtocol?: string }[],
 ): Promise<void> {
   const entry = positions?.find((p) => p.position === 0);
-  if (entry?.entryProtocol !== 'hysteria' || entry.nodeIds.length === 0) return;
+  if (!entryReachesCascadeOnlyThroughChain(entry?.entryProtocol) || !entry || entry.nodeIds.length === 0) return;
   const nodes = await prisma.node.findMany({
     where: { id: { in: entry.nodeIds } },
     select: { name: true, cores: true, chainStatus: true },
@@ -462,7 +469,7 @@ async function assertEntryCanChain(
     .map((n) => ({ node: n, verdict: canRunChainAtSave(n) }))
     .filter((x) => !x.verdict.ok)
     .map((x) => ({ nodeName: x.node.name, engines: x.verdict.engines }));
-  if (conflicts.length > 0) throw new CascadeEntryCannotChainError(conflicts);
+  if (conflicts.length > 0) throw new CascadeEntryCannotChainError(conflicts, entry.entryProtocol!);
 }
 
 /**

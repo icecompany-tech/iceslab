@@ -4,6 +4,7 @@ import { CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import { buildApp } from '../../app.js';
 import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
+import { entryReachesCascadeOnlyThroughChain } from './cascade.validation.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
 
@@ -84,20 +85,35 @@ describe('the protocol a cascade entry serves users with', () => {
     expect(res.statusCode, res.body).toBe(201);
   });
 
-  it('refuses amneziawg and says which phase carries it', async () => {
-    const res = await save('amneziawg', await makeNode('ru-awg'), await makeNode('nl'));
-    expect(res.statusCode, res.body).toBe(400);
-    const body = JSON.parse(res.body);
-    // The CODE is what the screen matches on, so it is asserted separately
-    // from the sentence: a message can be reworded, the code cannot.
-    expect(body.error).toBe('ENTRY_NOT_CHAINABLE');
-    expect(body.message).toContain('amneziawg');
-    expect(body.message).toContain('phase 7 (amneziawg)');
-    // And no longer promises hysteria for a phase that has shipped.
-    expect(body.message).not.toContain('phase 6');
-    // Nothing was written: a refusal that leaves half a cascade behind is a
-    // refusal the operator has to clean up after.
-    expect(await prisma.cascade.count()).toBe(0);
+  // amneziawg stays here until the commit that makes the agent draw its TPROXY
+  // rules: a 200 over a node that changes nothing is a silence, not a refusal.
+  // The other three are here for good, and none of the four is promised a phase.
+  for (const protocol of ['amneziawg', 'mtproto', 'naive', 'mieru']) {
+    it(`refuses ${protocol} and names what the chain takes, not a phase`, async () => {
+      const res = await save(protocol, await makeNode(`ru-${protocol}`), await makeNode('nl'));
+      expect(res.statusCode, res.body).toBe(400);
+      const body = JSON.parse(res.body);
+      // The CODE is what the screen matches on, so it is asserted separately
+      // from the sentence: a message can be reworded, the code cannot.
+      expect(body.error).toBe('ENTRY_NOT_CHAINABLE');
+      expect(body.message).toContain(protocol);
+      expect(body.message).toContain(`one of: ${CHAIN_ENTRY_PROTOCOLS.join(', ')}`);
+      expect(body.message).not.toMatch(/phase/i);
+      // Nothing was written: a refusal that leaves half a cascade behind is a
+      // refusal the operator has to clean up after.
+      expect(await prisma.cascade.count()).toBe(0);
+    });
+  }
+
+  it('asks the chain gate about every entry that has no other way in', () => {
+    // hysteria and amneziawg users cannot carry a choice of way out, so the
+    // chain on the entry node is their whole hand-off and the save asks
+    // whether it can run there. amneziawg is named before it may be saved:
+    // the gate is ready on the day the door opens, not a commit later.
+    for (const p of ['hysteria', 'amneziawg']) expect(entryReachesCascadeOnlyThroughChain(p)).toBe(true);
+    for (const p of ['xray', 'mtproto', 'naive', 'mieru', null, undefined]) {
+      expect(entryReachesCascadeOnlyThroughChain(p)).toBe(false);
+    }
   });
 
   it('is refused against the list the screen reads', async () => {
