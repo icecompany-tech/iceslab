@@ -133,7 +133,7 @@ export const profiles = {
         auth: 'Always the user\'s own username and password: everyone has their own, the name and their UUID, and they are not typed here. There is no way in without a password: an open proxy on a public node would carry strangers\' traffic.',
         portSocks: 'The port is set when deploying to a node, 1080 by default, and goes through the same port check as everything else.',
         portHttp: 'The port is set when deploying to a node, 3128 by default, and goes through the same port check as everything else. 8080 is not offered: the xray API lives there.',
-        udp: 'UDP is off: Telegram calls do not go over SOCKS5 UDP, the client never uses UDP associate. A switch appears once the server accepts the field.',
+        udp: 'UDP is off: Telegram does not use it over SOCKS5.',
         httpClients: 'Telegram Desktop only, and Telegram has no link to add it: a person types the address, port, username and password by hand. A CONNECT tunnel, TCP only.',
         digest: 'Basic scheme; Digest is supported neither by the core nor by the Telegram client. Basic is a username and password in base64, not encryption.',
         noObfs: 'No obfuscation: for networks where a proxy is allowed, not for getting past DPI. Neither SOCKS5 nor HTTP encrypts anything by itself.',
