@@ -1,4 +1,4 @@
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
  * Quantumult X server_local proxy-line list (`?format=quantumultx`). One
@@ -20,7 +20,9 @@ export function buildQuantumultXConf(endpoints: SubscriptionEndpoint[]): string 
     const tag = safeTag(e.nodeName);
     if (e.protocol === 'shadowsocks') {
       lines.push(`shadowsocks=${e.host}:${e.port}, method=${e.method}, password=${e.password}, udp-relay=true, tag=${tag}`);
-    } else if (e.protocol === 'xray') {
+    } else if (e.protocol === 'xray' && !isPlainXray(e)) {
+      // socks/http (the Telegram doors) are carried by plain, clash, sing-box and
+      // xray-json only, by decision of 23.09; this format leaves them out.
       const sec = e.securityLayer ?? 'default';
       const reality = sec === 'default';
       const tls = sec !== 'none';

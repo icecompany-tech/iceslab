@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SubscriptionEndpoint } from './subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from './subscription.formats.js';
 
 /**
  * Who an endpoint IS, as opposed to what it is called.
@@ -27,7 +27,8 @@ import type { SubscriptionEndpoint } from './subscription.formats.js';
  */
 export function endpointKey(e: SubscriptionEndpoint): string {
   if (e.key) return e.key;
-  const transport = e.protocol === 'xray' ? (e.network ?? '') : '';
+  const transport =
+    e.protocol !== 'xray' ? '' : isPlainXray(e) ? e.subprotocol : (e.network ?? '');
   return [e.nodeId ?? '', e.nodeName, e.host, e.port, e.protocol, transport].join('|');
 }
 

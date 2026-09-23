@@ -1,5 +1,5 @@
 import type { RoutingPresetId } from '@iceslab/shared';
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 import { makeTagger } from '../endpoint-identity.js';
 
 /**
@@ -242,7 +242,9 @@ export function buildClashYaml(
   // instead of being replaced by an id. Same reasoning as the sing-box tag.
   const nameOf = makeTagger();
   for (const e of endpoints) {
-    const name = nameOf(e, `${e.nodeName}-${e.protocol}`);
+    // A socks/http door is named by what it is: "-xray" on a SOCKS5 proxy
+    // would tell the person picking it from the list the wrong thing.
+    const name = nameOf(e, `${e.nodeName}-${isPlainXray(e) ? e.subprotocol : e.protocol}`);
     if (e.protocol === 'hysteria') {
       proxyNames.push(name);
       const lines = [
@@ -269,6 +271,21 @@ export function buildClashYaml(
         lines.push(`    ports: ${e.portHoppingStart}-${e.portHoppingEnd}`);
       }
       proxies.push(lines.join('\n'));
+    } else if (isPlainXray(e)) {
+      // The Telegram doors: mihomo `socks5` / `http` with the user's login.
+      // No TLS, and UDP stays off as it is on the node (udp: false there).
+      proxyNames.push(name);
+      proxies.push(
+        [
+          `  - name: ${yamlString(name)}`,
+          `    type: ${e.subprotocol === 'socks' ? 'socks5' : 'http'}`,
+          `    server: ${e.host}`,
+          `    port: ${e.port}`,
+          `    username: ${yamlString(e.username)}`,
+          `    password: ${yamlString(e.password)}`,
+          ...(e.subprotocol === 'socks' ? ['    udp: false'] : []),
+        ].join('\n'),
+      );
     } else if (e.protocol === 'xray') {
       proxyNames.push(name);
       const sub = e.subprotocol ?? 'vless';

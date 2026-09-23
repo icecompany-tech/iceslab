@@ -1,4 +1,4 @@
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
  * Loon proxy-line list (`?format=loon`). Comma-positional + colon-keyed params:
@@ -24,7 +24,9 @@ export function buildLoonConf(endpoints: SubscriptionEndpoint[]): string {
       const p = [`${name} = Hysteria2,${e.host},${e.port},"${e.password}"`];
       if (e.obfsPassword) p.push(`salamander-password:${e.obfsPassword}`);
       lines.push(p.join(','));
-    } else if (e.protocol === 'xray') {
+    } else if (e.protocol === 'xray' && !isPlainXray(e)) {
+      // socks/http (the Telegram doors) are carried by plain, clash, sing-box and
+      // xray-json only, by decision of 23.09; this format leaves them out.
       const sec = e.securityLayer ?? 'default';
       const reality = sec === 'default';
       const tls = sec !== 'none';

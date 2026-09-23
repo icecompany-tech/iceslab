@@ -394,6 +394,9 @@ export const PAGE_CSS = String.raw`
     line-height:18px; color:var(--snow);}
   .dl-row__note{font-size:12px; line-height:16px; color:var(--mist);}
   .dl-row__note--warn{color:var(--warn);}
+  /* The four HTTP-proxy fields Telegram Desktop asks for, selectable. */
+  .dl-row__field{display:inline-block; margin:4px 12px 0 0;}
+  .dl-row__field code{font-family:var(--mono); color:var(--cyan); word-break:break-all;}
   /* Точка отмечает то, что подходит выбранной платформе. Строк это не
      убавляет: место под точку держится всегда, иначе имена дёргались бы влево
      и вправо при каждом переключении платформы. */

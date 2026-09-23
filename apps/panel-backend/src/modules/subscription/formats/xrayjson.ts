@@ -1,5 +1,5 @@
 import type { RoutingPresetId } from '@iceslab/shared';
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 import { endpointTag, makeTagger } from '../endpoint-identity.js';
 
 /**
@@ -189,6 +189,18 @@ function buildProxyOutbound(
   tag: string,
 ): Record<string, unknown> {
   if (e.protocol !== 'xray') throw new Error('unreachable'); // narrowing
+  // The Telegram doors: xray `socks` / `http` outbound, the `servers` form with
+  // one user (Xray-core infra/conf/socks.go:66-70, one member only). No TLS,
+  // no transport, and no TLS fragment: there is no ClientHello to split.
+  if (isPlainXray(e)) {
+    return {
+      tag,
+      protocol: e.subprotocol,
+      settings: {
+        servers: [{ address: e.host, port: e.port, users: [{ user: e.username, pass: e.password }] }],
+      },
+    };
+  }
   const sub = e.subprotocol ?? 'vless';
   const network = e.network ?? 'raw';
   // securityLayer: 'default' = REALITY, else 'tls' (own cert) / 'none' (plain).
@@ -572,7 +584,7 @@ export function buildXrayJsonArray(
   // exit (tag in UUID bytes 7-8), each labelled by its exit. Everything else
   // (hy2, or an xray endpoint with no exits) stays a single config as before.
   const configs = supported.flatMap((e) => {
-    if (e.protocol === 'xray' && e.cascadeExits && e.cascadeExits.length > 0) {
+    if (e.protocol === 'xray' && !isPlainXray(e) && e.cascadeExits && e.cascadeExits.length > 0) {
       return e.cascadeExits.map((profile) =>
         // The label is already unique across the subscription, made so once for
         // every format rather than guessed per format (see

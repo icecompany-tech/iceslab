@@ -31,8 +31,13 @@ import {
   buildVmessUri,
   encodePlainList,
   hostFromAddress,
+  isPlainXray,
   mtprotoSecret,
   withUriRemark,
+  buildSocksUri,
+  buildHttpProxyUri,
+  buildTelegramSocksUri,
+  isPlainSubprotocol,
   type ShadowsocksMethod,
   type SubscriptionEndpoint,
   type SubscriptionJsonResponse,
@@ -290,6 +295,8 @@ const PROTOCOL_LABEL: Record<string, string> = {
   shadowtls: 'ShadowTLS',
 };
 
+const PLAIN_LABEL: Record<'socks' | 'http', string> = { socks: 'SOCKS5', http: 'HTTP' };
+
 /**
  * What can be said about an endpoint to tell it apart from a namesake, best
  * first. Only consulted when something actually collides, and only the entry
@@ -298,7 +305,11 @@ const PROTOCOL_LABEL: Record<string, string> = {
  */
 function endpointDescriptors(e: SubscriptionEndpoint): (string | undefined)[] {
   return [
-    e.protocol === 'xray' ? TRANSPORT_LABEL[e.network ?? 'raw'] : PROTOCOL_LABEL[e.protocol],
+    isPlainXray(e)
+      ? PLAIN_LABEL[e.subprotocol]
+      : e.protocol === 'xray'
+        ? TRANSPORT_LABEL[e.network ?? 'raw']
+        : PROTOCOL_LABEL[e.protocol],
     e.hostRemark && e.hostRemark !== 'Default' ? e.hostRemark : undefined,
     String(e.port),
   ];
@@ -450,7 +461,9 @@ export function collapseCascadeLines(
   // (cascade-entry-key-label-af26): that reshuffles EVERYONE, so it waits for a
   // window where a reshuffle is acceptable.
   const keyOf = (e: SubscriptionEndpoint): string =>
-    `${e.nodeName}|${e.host}|${e.port}|${e.protocol === 'xray' ? (e.network ?? '') : ''}`;
+    `${e.nodeName}|${e.host}|${e.port}|${
+      e.protocol !== 'xray' ? '' : isPlainXray(e) ? e.subprotocol : (e.network ?? '')
+    }`;
 
   // cascadeId -> entry key -> endpoint
   const entriesByCascade = new Map<string, Map<string, SubscriptionEndpoint>>();
@@ -531,7 +544,7 @@ export function disambiguateCascadeLabels(endpoints: SubscriptionEndpoint[]): vo
   for (const e of endpoints) {
     for (const x of e.cascadeExits ?? []) {
       if ((seen.get(x.label) ?? 0) < 2) continue;
-      const network = e.protocol === 'xray' ? e.network : undefined;
+      const network = e.protocol === 'xray' && !isPlainXray(e) ? e.network : undefined;
       const suffix =
         (network ? TRANSPORT_LABEL[network] : undefined) ??
         (e.hostRemark && e.hostRemark !== 'Default' ? e.hostRemark : e.nodeName);
@@ -543,6 +556,8 @@ export function disambiguateCascadeLabels(endpoints: SubscriptionEndpoint[]): vo
 export function expandEndpointUris(e: SubscriptionEndpoint): string[] {
   if (
     e.protocol !== 'xray' ||
+    // A socks/http login carries no UUID to put a route into.
+    isPlainXray(e) ||
     !e.cascadeExits ||
     e.cascadeExits.length === 0 ||
     e.subprotocol === 'vmess'
@@ -990,6 +1005,31 @@ export async function generateSubscription(
           portHoppingStart: hyCfg?.portHoppingStart,
           portHoppingEnd: hyCfg?.portHoppingEnd,
         }),
+      });
+    } else if (
+      ib.protocol === 'xray' &&
+      user.xrayUuid &&
+      isPlainSubprotocol((ib.config as { subprotocol?: unknown } | null)?.subprotocol)
+    ) {
+      // The Telegram entries (23.09): SOCKS5 / HTTP on the xray process, login
+      // = username, password = xrayUuid, the pair the node renders. No REALITY,
+      // no transport, and no cascade route: a login has no UUID to carry one.
+      const subprotocol = (ib.config as { subprotocol: 'socks' | 'http' }).subprotocol;
+      const creds = { host, port, username: user.username, password: user.xrayUuid };
+      endpoints.push({
+        protocol: 'xray',
+        subprotocol,
+        nodeName,
+        host,
+        port,
+        ...hostMeta,
+        username: user.username,
+        password: user.xrayUuid,
+        uri:
+          subprotocol === 'socks'
+            ? buildSocksUri({ ...creds, name: nodeName })
+            : buildHttpProxyUri({ ...creds, name: nodeName }),
+        ...(subprotocol === 'socks' ? { tgUri: buildTelegramSocksUri(creds) } : {}),
       });
     } else if (ib.protocol === 'xray' && user.xrayUuid) {
       // ⚠ Every field here is OPTIONAL, whatever the schema says. This is

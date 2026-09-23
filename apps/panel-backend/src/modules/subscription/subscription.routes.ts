@@ -13,6 +13,7 @@ import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
 import { buildSubscriptionPage } from './subscription.page.js';
 import { subscriptionUrl } from './subscription.link.js';
+import { isPlainXray } from './subscription.formats.js';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {
   formatBytes,
@@ -559,6 +560,17 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             tmeUri: (e as { tmeUri?: string }).tmeUri ?? '',
           }))
           .filter((n) => n.uri !== '');
+        // SOCKS5 / HTTP for Telegram: one row per endpoint, not per node, and
+        // no dedupe, because the login in each is this person's own.
+        const telegramProxies = filtered.filter(isPlainXray).map((e) => ({
+          nodeName: e.nodeName,
+          kind: e.subprotocol,
+          tgUri: e.tgUri,
+          host: e.host,
+          port: e.port,
+          username: e.username,
+          password: e.password,
+        }));
         return reply.type('text/html; charset=utf-8').send(
           buildSubscriptionPage({
             brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
@@ -575,6 +587,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             protocols,
             awgNodes,
             mtprotoNodes,
+            telegramProxies,
             deadTexts: settings.deadTexts,
           }),
         );

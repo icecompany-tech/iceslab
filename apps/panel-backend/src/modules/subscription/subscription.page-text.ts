@@ -59,6 +59,9 @@ export interface Labels {
   dlGet: string;
   /** Кнопка строки MTProto: ссылка открывается в самом мессенджере. */
   tgOpen: string;
+  /** Поля HTTP-прокси, которые человек вводит в Telegram Desktop руками, и
+   *  кнопка копирования пароля (UUID руками не набирают). */
+  tgHttpFields: { server: string; port: string; login: string; password: string; copyPassword: string };
   dlCopy: string;
   dlDead: string;
   /** Подписи кнопок, что ведут за выбранным приложением и в него. */
@@ -210,6 +213,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlDead: 'While the subscription is not in force, no config is issued: these addresses answer with a refusal, the same one that brought you to this page. Everything comes back the moment it is renewed, on the same link.',
     dlGet: 'Download',
     tgOpen: 'Open in Telegram',
+    tgHttpFields: { server: 'Server', port: 'Port', login: 'Login', password: 'Password', copyPassword: 'Password' },
     dlCopy: 'Config',
     stepGet: 'Get',
     stepAdd: 'Add to',
@@ -233,6 +237,8 @@ export const L: Record<'ru' | 'en', Labels> = {
       amneziavpn: 'AmneziaVPN key',
       plain: 'Subscription link',
       mtproto: 'Telegram proxy',
+      'tg-socks': 'Telegram, SOCKS5',
+      'tg-http': 'Telegram, HTTP',
     },
     formats: {
       clash: 'Clash Verge, FlClash, Clash Mi. The whole subscription in one file',
@@ -249,6 +255,8 @@ export const L: Record<'ru' | 'en', Labels> = {
       amneziavpn: 'Copy it and paste it into the app, which reads it itself. One tunnel to one server',
       plain: 'The subscription itself, base64. This is what a client pulls from the link',
       mtproto: 'Inside Telegram only, and nothing else goes through it. No config file carries it',
+      'tg-socks': 'Opens the add-proxy dialog in Telegram, your own login inside. This server only',
+      'tg-http': 'Telegram Desktop only: Settings, Advanced, Connection type, HTTP proxy. Enter the four fields by hand',
     },
     transferTitle: 'Move this to another device',
     transferNote:
@@ -382,6 +390,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     dlDead: 'Пока подписка не действует, конфиги не выдаются: по этим адресам приходит тот же отказ, что привёл вас на эту страницу. Всё вернётся сразу после продления, ссылка та же.',
     dlGet: 'Скачать',
     tgOpen: 'Открыть в Telegram',
+    tgHttpFields: { server: 'Сервер', port: 'Порт', login: 'Логин', password: 'Пароль', copyPassword: 'Пароль' },
     dlCopy: 'Конфиг',
     stepGet: 'Скачать',
     stepAdd: 'Добавить в',
@@ -405,6 +414,8 @@ export const L: Record<'ru' | 'en', Labels> = {
       amneziavpn: 'Ключ AmneziaVPN',
       plain: 'Ссылка подписки',
       mtproto: 'Прокси для Telegram',
+      'tg-socks': 'Telegram, SOCKS5',
+      'tg-http': 'Telegram, HTTP',
     },
     formats: {
       clash: 'Clash Verge, FlClash, Clash Mi. Вся подписка одним файлом',
@@ -421,6 +432,8 @@ export const L: Record<'ru' | 'en', Labels> = {
       amneziavpn: 'Скопировать и вставить в приложение, оно разберёт само. Один туннель на один сервер',
       plain: 'Сама подписка, base64. Именно это забирает клиент по ссылке',
       mtproto: 'Только внутри Telegram, остальной трафик через него не идёт. Ни в один файл конфига он не попадает',
+      'tg-socks': 'Открывает в Telegram окно добавления прокси, внутри ваш логин. Только этот сервер',
+      'tg-http': 'Только Telegram Desktop: Настройки, Продвинутые настройки, Тип соединения, HTTP-прокси. Четыре поля вводятся руками',
     },
     transferTitle: 'Перенести на другое устройство',
     transferNote:

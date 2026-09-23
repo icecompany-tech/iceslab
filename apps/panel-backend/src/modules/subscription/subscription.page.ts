@@ -99,6 +99,21 @@ export interface SubscriptionPageData {
    * somebody, `uri` is the `tg://` form that opens the app directly.
    */
   mtprotoNodes?: Array<{ nodeName: string; uri: string; tmeUri: string }>;
+  /**
+   * The SOCKS5 and HTTP doors for Telegram (23.09), one row per endpoint, with
+   * THIS person's login in it. socks carries `tgUri` (tg://socks, opens the
+   * add-proxy dialog); http has no link in any Telegram client, so the page
+   * spells out the four fields Telegram Desktop asks for.
+   */
+  telegramProxies?: Array<{
+    nodeName: string;
+    kind: 'socks' | 'http';
+    tgUri?: string;
+    host: string;
+    port: number;
+    username: string;
+    password: string;
+  }>;
 }
 
 function esc(s: string): string {
@@ -660,6 +675,50 @@ function renderDownloads(
     })
     .join('');
 
+  /**
+   * SOCKS5 and HTTP for Telegram, beside MTProto: the same kind of handout
+   * (one server, inside Telegram only), but with the person's OWN login, so
+   * the row is theirs and not the node's.
+   */
+  const telegramProxies = (data.telegramProxies ?? [])
+    .map((p) => {
+      const key = p.kind === 'socks' ? 'tg-socks' : 'tg-http';
+      const name = `${t.formatNames[key] ?? key} · ${p.nodeName}`;
+      const head =
+        `<div class="dl-row" data-dl-fits="">` +
+        `<div class="dl-row__col">` +
+        `<div class="dl-row__name"><span class="dl-row__dot" aria-hidden="true"></span>${esc(name)}</div>` +
+        `<div class="dl-row__note dl-row__note--warn">${esc(t.formats[key] ?? '')}</div>`;
+      if (p.kind === 'socks' && p.tgUri) {
+        return (
+          head +
+          `</div>` +
+          `<div class="dl-row__actions">` +
+          `<button class="dl-btn dl-btn--ghost" type="button" data-copy-text="${esc(p.tgUri)}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(t.dlCopy)}</span></button>` +
+          `<a class="dl-btn" href="${esc(p.tgUri)}">${icons.draw('ExternalLink', { cls: 'ic' })}<span>${esc(t.tgOpen)}</span></a>` +
+          `</div></div>`
+        );
+      }
+      // HTTP: no link exists, so the fields themselves, selectable, and the
+      // password on a button because nobody types a UUID.
+      const f = t.tgHttpFields;
+      const field = (label: string, value: string) =>
+        `<span class="dl-row__field">${esc(label)} <code>${esc(value)}</code></span> `;
+      return (
+        head +
+        `<div class="dl-row__note">` +
+        field(f.server, p.host) +
+        field(f.port, String(p.port)) +
+        field(f.login, p.username) +
+        field(f.password, p.password) +
+        `</div></div>` +
+        `<div class="dl-row__actions">` +
+        `<button class="dl-btn dl-btn--ghost" type="button" data-copy-text="${esc(p.password)}">${icons.draw('copy', { cls: 'ic' })}<span>${esc(f.copyPassword)}</span></button>` +
+        `</div></div>`
+      );
+    })
+    .join('');
+
   const row = (r: Row) => {
     const href = `${sub}?format=${r.fmt}${r.q ?? ''}`;
     // Имя это то, ЧЕМ строка является для читателя, а не ключ формата.
@@ -711,12 +770,16 @@ function renderDownloads(
       group(t.dlGroupRouter, 'router', router) +
       // The Telegram rows sit with the other per-server handouts, which is what
       // they are: one node, one link, not the subscription.
-      (telegram
-        ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>${telegram}</div>`
+      (telegram || telegramProxies
+        ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>${telegram}${telegramProxies}</div>`
         : '') +
       group(t.dlGroupOther, 'other', other);
   const count =
-    clients.length + router.length + other.length + (data.mtprotoNodes?.length ?? 0);
+    clients.length +
+    router.length +
+    other.length +
+    (data.mtprotoNodes?.length ?? 0) +
+    (data.telegramProxies?.length ?? 0);
   // Нечего предложить и подписка в силе: карточки нет. Нечего предложить
   // ПОТОМУ ЧТО она не в силе: карточка остаётся. Блок, который исчезает, учит
   // читателя, что его там и не было, и продливший идёт искать вчерашнюю кнопку.

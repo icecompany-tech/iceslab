@@ -1,5 +1,5 @@
 import type { User, UserTraffic } from '../../generated/prisma/client.js';
-import type { EngineName, ProtocolName } from '@iceslab/shared';
+import { XRAY_PLAIN_SUBPROTOCOLS, type EngineName, type ProtocolName } from '@iceslab/shared';
 
 // Re-export so existing imports keep working (slice 16 moved the
 // implementation into core-adapters/hysteria, this file now hosts only
@@ -12,6 +12,10 @@ export {
   type TrojanRealityUriOpts,
   buildVmessUri,
   type VmessUriOpts,
+  buildSocksUri,
+  buildHttpProxyUri,
+  buildTelegramSocksUri,
+  type PlainProxyUriOpts,
 } from '../../core-adapters/xray/index.js';
 export {
   buildShadowsocksUri,
@@ -225,6 +229,38 @@ export interface XraySubscriptionEndpoint extends SubscriptionEndpointBase {
   subprotocol?: 'vless' | 'trojan' | 'vmess';
 }
 
+/**
+ * A SOCKS5 or HTTP door on the xray process (the Telegram entries, 23.09).
+ *
+ * A separate member of the union and not two more values of `subprotocol`
+ * above, on purpose: every builder that reads `uuid`, `publicKey` or `network`
+ * off an xray endpoint stops compiling until it says what it does with one of
+ * these. The quiet alternative is a builder that has never heard of socks and
+ * renders it as a VLESS outbound with an empty uuid.
+ *
+ * Login = the user's username, password = their xrayUuid, the same pair the
+ * node renders (apps/node xray plainInboundSettings). No TLS, no transport.
+ */
+export interface XrayPlainSubscriptionEndpoint extends SubscriptionEndpointBase {
+  protocol: 'xray';
+  subprotocol: 'socks' | 'http';
+  username: string;
+  password: string;
+  /** socks only: the tg://socks link that opens Telegram's proxy dialog. */
+  tgUri?: string;
+}
+
+/** Is a stored `subprotocol` one of the two plain doors? From shared, so the
+ *  schema, the node and this file agree on the pair. */
+export function isPlainSubprotocol(sub: unknown): sub is 'socks' | 'http' {
+  return (XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(sub);
+}
+
+/** Narrowing for the one question every xray branch now has to ask first. */
+export function isPlainXray(e: SubscriptionEndpoint): e is XrayPlainSubscriptionEndpoint {
+  return e.protocol === 'xray' && (e.subprotocol === 'socks' || e.subprotocol === 'http');
+}
+
 export interface AmneziawgSubscriptionEndpoint extends SubscriptionEndpointBase {
   protocol: 'amneziawg';
   /** User's WireGuard private key. */
@@ -324,6 +360,7 @@ export interface ShadowtlsSubscriptionEndpoint extends SubscriptionEndpointBase 
 export type SubscriptionEndpoint =
   | HysteriaSubscriptionEndpoint
   | XraySubscriptionEndpoint
+  | XrayPlainSubscriptionEndpoint
   | AmneziawgSubscriptionEndpoint
   | NaiveSubscriptionEndpoint
   | ShadowsocksSubscriptionEndpoint

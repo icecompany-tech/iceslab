@@ -1,5 +1,5 @@
 import type { RoutingPresetId } from '@iceslab/shared';
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 import { makeTagger } from '../endpoint-identity.js';
 
 /**
@@ -221,6 +221,30 @@ export function buildSingboxJson(
           alpn: ['h3'],
         },
       });
+    } else if (isPlainXray(e)) {
+      // The Telegram doors: sing-box `socks` (version 5) / `http` outbound with
+      // the user's login. No TLS, as on the node.
+      proxyTags.push(tag);
+      outbounds.push(
+        e.subprotocol === 'socks'
+          ? {
+              type: 'socks',
+              tag,
+              server: e.host,
+              server_port: e.port,
+              version: '5',
+              username: e.username,
+              password: e.password,
+            }
+          : {
+              type: 'http',
+              tag,
+              server: e.host,
+              server_port: e.port,
+              username: e.username,
+              password: e.password,
+            },
+      );
     } else if (e.protocol === 'xray') {
       proxyTags.push(tag);
       const sub = e.subprotocol ?? 'vless';

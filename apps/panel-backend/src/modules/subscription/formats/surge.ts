@@ -1,4 +1,4 @@
-import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
  * Surge proxy-line list (`?format=surge`). One `Name = type, host, port, ...`
@@ -29,7 +29,9 @@ export function buildSurgeConf(endpoints: SubscriptionEndpoint[]): string {
         p.push(`port-hopping=${e.portHoppingStart}-${e.portHoppingEnd}`);
       }
       lines.push(p.join(', '));
-    } else if (e.protocol === 'xray') {
+    } else if (e.protocol === 'xray' && !isPlainXray(e)) {
+      // socks/http (the Telegram doors) are carried by plain, clash, sing-box and
+      // xray-json only, by decision of 23.09; this format leaves them out.
       const sec = e.securityLayer ?? 'default';
       // Surge cannot do REALITY; only emit xray endpoints over real TLS.
       if (sec === 'default') continue;
