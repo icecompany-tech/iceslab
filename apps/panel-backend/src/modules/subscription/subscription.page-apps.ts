@@ -9,19 +9,24 @@
  *
  * Комментарии у записей это проверки по вендорским страницам с датами, они
  * дороже самих строк: не удаляйте их вместе с правкой.
+ *
+ * Имя, платформы и адрес приложения берутся из каталога клиентов
+ * (packages/shared/src/clients.ts): там же образцы User-Agent и правила,
+ * по которым панель выбирает формат, и одно название не живёт в двух местах.
+ * Здесь только то, что нужно странице: протоколы, действие, место в ряду.
+ * Комментарии про платформы у записей ниже это проверки, по которым
+ * платформы в каталоге такие, какие есть.
  */
-import type { ProtocolName } from '@iceslab/shared';
+import { CLIENTS, type ClientDef, type ClientId, type PlatformId, type ProtocolName } from '@iceslab/shared';
 import type { GlyphKey } from './subscription.page-icons.js';
 
-export type PlatformId =
-  | 'ios'
-  | 'android'
-  | 'windows'
-  | 'macos'
-  | 'linux'
-  | 'androidtv'
-  | 'appletv'
-  | 'router';
+export type { PlatformId } from '@iceslab/shared';
+
+/** The catalog's half of an app entry: who it is, where it runs, where to get it. */
+function fromCatalog(id: ClientId): Pick<AppDef, 'name' | 'platforms' | 'site'> {
+  const c: ClientDef = CLIENTS[id];
+  return { name: c.name, platforms: [...c.platforms], ...(c.site ? { site: c.site } : {}) };
+}
 
 /** Which glyph stands for a platform in the selector.
  *
@@ -129,9 +134,7 @@ export const APPS: AppDef[] = [
     // Vendor requirements page, checked 2026-09-21: iOS 15+, Android 5+,
     // Windows 10 (1809)+/11, macOS 13+, Linux, "Android TV 5.0+" and
     // "Apple TV (tvOS 15+)". Linux was missing here and is theirs.
-    name: 'Happ',
-    site: 'https://happ.su',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
+    ...fromCatalog('happ'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'happ' },
     recommended: true,
@@ -145,9 +148,7 @@ export const APPS: AppDef[] = [
     // this app is marked recommended, which is a promise we cannot keep for a
     // stranger's binary. Google Play still serves com.v2raytun.android.
     // If it comes back, the fix is to put the platforms back on this line.
-    name: 'v2RayTun',
-    site: 'https://v2raytun.com',
-    platforms: ['android'],
+    ...fromCatalog('v2raytun'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'v2raytun' },
     recommended: true,
@@ -157,9 +158,7 @@ export const APPS: AppDef[] = [
     // No androidtv: the TV build request is closed as not planned, and the
     // remote cannot reach part of the screen (hiddify-app #1246, #969). The apk
     // installs on a TV, which is not the same as being usable with a remote.
-    name: 'Hiddify',
-    site: 'https://hiddify.com',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android'],
+    ...fromCatalog('hiddify'),
     protocols: ['amneziawg', 'xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'hiddify' },
     recommended: true,
@@ -167,9 +166,7 @@ export const APPS: AppDef[] = [
   {
     // sing-box.sagernet.org/clients lists the Apple client as
     // "iOS/macOS/Apple tvOS", so tvOS was simply missing here.
-    name: 'sing-box',
-    site: 'https://github.com/SagerNet/sing-box/releases',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'appletv'],
+    ...fromCatalog('singbox'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'singbox' },
   },
@@ -178,9 +175,7 @@ export const APPS: AppDef[] = [
     // only one we were missing. Download page, 2026-09-21: iOS, tvOS, Android,
     // "Android TV Stable Version (armeabi-v7a)", Windows, macOS, Linux.
     // No deep link is documented, so the honest action is the link.
-    name: 'Karing',
-    site: 'https://karing.app',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
+    ...fromCatalog('karing'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
     recommended: true,
@@ -189,9 +184,7 @@ export const APPS: AppDef[] = [
     // App Store compatibility, 2026-09-21: iPhone, iPad, Mac (M1+), Vision Pro.
     // No Apple TV, so the appletv that stood here offered tvOS owners an app
     // they cannot install.
-    name: 'Streisand',
-    site: 'https://apps.apple.com/app/id6450534064',
-    platforms: ['ios', 'macos'],
+    ...fromCatalog('streisand'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'streisand' },
     recommended: true,
@@ -201,9 +194,7 @@ export const APPS: AppDef[] = [
     // tvOS 17.0 or later", alongside "Mac: Requires macOS 10.15 or later"
     // (Catalina, so a real Mac build rather than an iOS app on Apple silicon).
     // Both are the vendor's own claims on the store page.
-    name: 'Shadowrocket',
-    site: 'https://apps.apple.com/app/id932747118',
-    platforms: ['ios', 'macos', 'appletv'],
+    ...fromCatalog('shadowrocket'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'shadowrocket' },
   },
@@ -211,25 +202,19 @@ export const APPS: AppDef[] = [
     // No androidtv: the launcher activity carries no LEAN_BACK_LAUNCHER, so the
     // app does not appear in a TV's app list at all (v2rayNG #1848, unanswered).
     // That is why a separate Android-TV fork exists.
-    name: 'v2rayNG',
-    site: 'https://github.com/2dust/v2rayNG/releases',
-    platforms: ['android'],
+    ...fromCatalog('v2rayng'),
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'deeplink', scheme: 'v2rayng' },
     recommended: true,
   },
   {
-    name: 'NekoBox',
-    site: 'https://github.com/MatsuriDayo/NekoBoxForAndroid/releases',
-    platforms: ['android'],
+    ...fromCatalog('nekobox'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
     advanced: true,
   },
   {
-    name: 'v2rayN',
-    site: 'https://github.com/2dust/v2rayN/releases',
-    platforms: ['windows'],
+    ...fromCatalog('v2rayn'),
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'manual' },
     advanced: true,
@@ -240,25 +225,19 @@ export const APPS: AppDef[] = [
     // Throne (throneproj/Throne) is the community continuation, sing-box core,
     // Windows/Linux/macOS out of the box. We were pointing readers at an
     // archive.
-    name: 'Throne',
-    site: 'https://github.com/throneproj/Throne/releases',
-    platforms: ['windows', 'linux', 'macos'],
+    ...fromCatalog('throne'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
     advanced: true,
   },
   {
-    name: 'Clash Verge',
-    site: 'https://github.com/clash-verge-rev/clash-verge-rev/releases',
-    platforms: ['windows', 'macos', 'linux'],
+    ...fromCatalog('clashVerge'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'clash' },
     advanced: true,
   },
   {
-    name: 'FlClash',
-    site: 'https://github.com/chen08209/FlClash/releases',
-    platforms: ['android', 'windows', 'macos', 'linux'],
+    ...fromCatalog('flclash'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'deeplink', scheme: 'clash' },
   },
@@ -267,13 +246,11 @@ export const APPS: AppDef[] = [
     // its "add server from URL / QR". One-tap import needs its incy://crypt1
     // deep link (AES-GCM payload from @incy/link-encoder); wire that up once the
     // package is installed (see deeplinkHref). Until then: import via the link.
-    name: 'INCY',
     // incy.app раскладывает по магазинам сама: App Store id6756943388, Google
     // Play llc.itdev.incy и релизы INCY-DEV/incy-platforms для десктопа и ТВ.
     // Отдаём одну страницу, а не три ссылки: так читателю не надо выбирать
     // магазин за свою платформу, и нам не надо следить за тремя адресами.
-    site: 'https://incy.app',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android', 'androidtv', 'appletv'],
+    ...fromCatalog('incy'),
     protocols: ['xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
   },
@@ -283,29 +260,23 @@ export const APPS: AppDef[] = [
     // Android and Linux, and nothing for a television (checked 2026-09-21).
     // Not in the brief's table, same defect as the rows that were: with an
     // AmneziaWG subscription this was the one app a TV owner was shown.
-    name: 'AmneziaVPN',
-    site: 'https://amnezia.org',
-    platforms: ['ios', 'macos', 'windows', 'linux', 'android'],
+    ...fromCatalog('amneziavpn'),
     protocols: ['amneziawg'],
     action: { kind: 'awg-vpn' },
     recommended: true,
   },
   {
-    name: 'AmneziaWG',
-    site: 'https://github.com/amnezia-vpn/amneziawg-tools',
-    platforms: ['ios', 'android'],
+    ...fromCatalog('amneziawg'),
     protocols: ['amneziawg'],
     action: { kind: 'awg-conf' },
   },
   {
-    name: 'wg-quick / awg',
-    platforms: ['linux', 'router'],
+    ...fromCatalog('wgQuick'),
     protocols: ['amneziawg'],
     action: { kind: 'download' },
   },
   {
-    name: 'Keenetic',
-    platforms: ['router'],
+    ...fromCatalog('keenetic'),
     protocols: ['amneziawg'],
     action: { kind: 'download' },
   },
@@ -313,8 +284,7 @@ export const APPS: AppDef[] = [
     // PassWall (Xray) and HomeProxy (sing-box, "the modern ImmortalWrt proxy
     // platform") both live here, so the proxy subscription is as applicable on
     // this box as the AmneziaWG config is, just by hand.
-    name: 'OpenWrt',
-    platforms: ['router'],
+    ...fromCatalog('openwrt'),
     protocols: ['amneziawg', 'xray', 'shadowsocks', 'hysteria'],
     action: { kind: 'manual' },
   },
@@ -324,8 +294,7 @@ export const APPS: AppDef[] = [
     // through Xray and Mihomo on Keenetic/Netcraze routers"), config by hand in
     // /opt/etc/xray. Separate from the Keenetic row above because that one is
     // the AmneziaWG .conf download and this one is a link to paste.
-    name: 'XKeen / Entware',
-    platforms: ['router'],
+    ...fromCatalog('xkeen'),
     protocols: ['xray', 'shadowsocks'],
     action: { kind: 'manual' },
   },

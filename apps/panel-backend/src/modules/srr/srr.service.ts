@@ -91,8 +91,11 @@ export async function matchRuleForUserAgent(
  * Operators expect to paste patterns from grep/PCRE/Python so we strip the
  * inline flag prefix and pass the flags through to RegExp's second arg.
  * Unknown / unsupported flags (like `x`/`u` extras) are silently dropped.
+ *
+ * Exported for the client-catalog test, which runs every User-Agent sample
+ * through the seeded rules exactly as a request would.
  */
-function compileRule(pattern: string): RegExp {
+export function compileRule(pattern: string): RegExp {
   const m = pattern.match(/^\(\?([imsux]+)\)([\s\S]*)$/);
   if (m) {
     const flags = m[1]!.replace(/[^ims]/g, '');
