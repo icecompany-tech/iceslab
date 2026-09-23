@@ -34,6 +34,11 @@ export async function subscriptionUrl(token: string): Promise<string> {
  * `nodeName` EXACTLY (formats/wgconf.ts), so the name passed here must be the
  * one the endpoint carries, flag and dedupe suffix included, not the node row's
  * name. The same shape the public page links to.
+ *
+ * The client fetches it with its own User-Agent, and an SRR rule that picks a
+ * FORMAT by UA cannot touch it: an explicit ?format= wins before SRR is asked
+ * (subscription.routes.ts, resolveFormat). Only a rule that drops ENDPOINTS
+ * could make it come back empty.
  */
 export function awgConfUrl(subUrl: string, nodeName: string): string {
   return `${subUrl}?format=wgconf&node=${encodeURIComponent(nodeName)}`;
