@@ -129,16 +129,34 @@ export interface PolicyRefusal {
   policies?: string[];
 }
 
+/**
+ * Any refusal of the node-policies API, for the policy editor: every answer
+ * that API sends is a sentence naming the node, the policy or the reason.
+ *
+ * ⚠ Not for other screens: it takes ANY error that carries a message, a 500
+ * and a core-version 400 included. The node page uses `policyFitRefusal`.
+ */
 export function policyRefusal(err: unknown): PolicyRefusal | null {
+  if (!err || typeof err !== 'object') return null;
   const res = (err as {
     response?: { status?: number; data?: { error?: string; message?: string; policies?: string[] } };
   }).response;
-  if (!res?.data?.message) return null;
+  if (!res?.data || typeof res.data.message !== 'string' || !res.data.message) return null;
   return {
     code: res.data.error ?? String(res.status ?? ''),
     message: res.data.message,
-    ...(res.data.policies ? { policies: res.data.policies } : {}),
+    ...(Array.isArray(res.data.policies) ? { policies: res.data.policies } : {}),
   };
+}
+
+/**
+ * The one refusal the node page's policy strip is about: the policy this
+ * machine cannot carry out (POLICY_DOES_NOT_FIT_NODE, 409). Anything else,
+ * a core-version 400, a 500, a network failure, is not this strip's to show.
+ */
+export function policyFitRefusal(err: unknown): PolicyRefusal | null {
+  const r = policyRefusal(err);
+  return r && r.code === 'POLICY_DOES_NOT_FIT_NODE' ? r : null;
 }
 
 /** A policy that exists only in the browser, until the first save. */

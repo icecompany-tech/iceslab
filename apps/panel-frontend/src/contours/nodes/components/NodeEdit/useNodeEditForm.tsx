@@ -23,7 +23,7 @@ import { listRoutePolicies, type RoutePolicy } from '@/lib/domain/routePolicies'
 // Aliased: the state below holds the refusal and wants the plain name. An
 // import and a local under one name resolve to the local and fail far from
 // here, which is the same trap a shadowed `Text` or `Node` sets.
-import { listNodePolicies, policyRefusal as readPolicyRefusal } from '@/lib/domain/nodePolicies';
+import { listNodePolicies, policyFitRefusal as readPolicyRefusal } from '@/lib/domain/nodePolicies';
 import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -206,23 +206,15 @@ export function useNodeEditForm() {
       // A policy this machine cannot carry out comes back naming the node and
       // the reason. That sentence is the answer; a toast saying "save failed"
       // would throw away the only part that tells the operator what to fix, so
-      // it stays on the screen next to the picker that caused it.
+      // it stays on the screen next to the picker that caused it. Only that
+      // refusal: every other error has its own place.
+      const refusal = readPolicyRefusal(err);
+      setPolicyRefusal(refusal ? refusal.message : null);
       // Версия, которой нет в манифесте: сервер называет каждый компонент.
       // Строки встают в секции «Ядра», рядом с выбором, который их вызвал.
-      // Первым: разбор отказа политики ниже принимает любую ошибку с message.
       const coreLines = coreVersionRefusal(err);
-      if (coreLines) {
-        setPolicyRefusal(null);
-        setCoreRefusal(coreLines);
-        return;
-      }
-      setCoreRefusal(null);
-      const refusal = readPolicyRefusal(err);
-      if (refusal) {
-        setPolicyRefusal(refusal.message);
-        return;
-      }
-      setPolicyRefusal(null);
+      setCoreRefusal(coreLines);
+      if (refusal || coreLines) return;
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
