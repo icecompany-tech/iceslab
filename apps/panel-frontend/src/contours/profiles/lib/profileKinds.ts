@@ -1,4 +1,5 @@
 import type { ProtocolName } from '@/lib/domain/protocols';
+import { isPlainSubprotocol, type PlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 
 // Profile protocol dropdown. The sing-box engine is folded INTO this list
 // instead of a separate control: a protocol that runs on either core (xray /
@@ -15,6 +16,9 @@ export interface ProfileKind {
   protocol: ProtocolName;
   engine: 'native' | 'singbox';
   label: string;
+  /** SOCKS5 and HTTP are xray profiles told apart by their subprotocol, not
+   *  by a protocol name of their own. Absent on every other kind. */
+  subprotocol?: PlainSubprotocol;
 }
 
 // One kind per selectable (protocol, engine). A shared protocol has two (native
@@ -27,6 +31,10 @@ export const PROFILE_KINDS: ProfileKind[] = [
   { key: 'amneziawg', protocol: 'amneziawg', engine: 'native', label: 'AmneziaWG' },
   { key: 'naive', protocol: 'naive', engine: 'native', label: 'NaiveProxy' },
   { key: 'mtproto', protocol: 'mtproto', engine: 'native', label: 'MTProto (Telegram-only, mtg)' },
+  // xray only: the server refuses them on sing-box, so there is no
+  // `#singbox` twin to pick.
+  { key: 'socks5', protocol: 'xray', engine: 'native', subprotocol: 'socks', label: 'SOCKS5 (xray)' },
+  { key: 'http', protocol: 'xray', engine: 'native', subprotocol: 'http', label: 'HTTP (xray)' },
   { key: 'mieru', protocol: 'mieru', engine: 'native', label: 'Mieru (stealth proxy)' },
   { key: 'xray#singbox', protocol: 'xray', engine: 'singbox', label: 'Xray (VLESS/VMess/Trojan)' },
   { key: 'hysteria#singbox', protocol: 'hysteria', engine: 'singbox', label: 'Hysteria 2' },
@@ -39,37 +47,33 @@ export const PROFILE_KINDS: ProfileKind[] = [
 export const PROFILE_KIND_BY_KEY = new Map(PROFILE_KINDS.map((k) => [k.key, k] as const));
 
 /**
- * The Telegram client offers four ways in, and the panel speaks one of them.
- * The other three are drawn here because the operator needs to see the whole
- * shelf to know what is on it, but they are deliberately NOT ProfileKinds:
- * their names are not in the protocol enum, so nothing can post them and get a
- * 400 back. When the backend learns them, an entry moves from this list into
- * PROFILE_KINDS and the preview card is deleted.
- *
- * SOCKS5 and HTTP are plain xray inbounds, so they cost a profile kind and no
- * new binary on the node. WEB is a three-layer stack (Caddy on 443, the relay,
- * MTProxy) and upstream still calls it a proof-of-concept.
+ * The Telegram client offers four ways in. MTProto, SOCKS5 and HTTP are
+ * profiles; WEB is drawn here because the operator needs to see the whole
+ * shelf to know what is on it, but it is deliberately NOT a ProfileKind: its
+ * name is not in the protocol enum, so nothing can post it and get a 400 back.
+ * WEB is a three-layer stack (Caddy on 443, the relay, MTProxy) and upstream
+ * still calls it a proof-of-concept.
  */
-export type PreviewKindKey = 'socks5' | 'http' | 'telegramweb';
+export type PreviewKindKey = 'telegramweb';
 
 export interface PreviewKind {
   key: PreviewKindKey;
   label: string;
 }
 
-export const PREVIEW_KINDS: PreviewKind[] = [
-  { key: 'socks5', label: 'SOCKS5' },
-  { key: 'http', label: 'HTTP' },
-  { key: 'telegramweb', label: 'WEB' },
-];
-
-/** These two would ride the xray process already on the node, so the fleet's
- *  core version is a real fact about them, not a guess. */
-export const PREVIEW_ON_XRAY = new Set<PreviewKindKey>(['socks5', 'http']);
+export const PREVIEW_KINDS: PreviewKind[] = [{ key: 'telegramweb', label: 'WEB' }];
 
 // The Select key for a (protocol, engine) pair. Only a shared protocol on
 // sing-box gets the suffix; sing-box-only protocols key by their own name.
-export function profileKindKey(protocol: string, engine: 'native' | 'singbox'): string {
+// SOCKS5 and HTTP key by their own kind: they share `xray` with vless.
+export function profileKindKey(
+  protocol: string,
+  engine: 'native' | 'singbox',
+  subprotocol?: unknown,
+): string {
+  if (protocol === 'xray' && isPlainSubprotocol(subprotocol)) {
+    return PROFILE_KINDS.find((k) => k.subprotocol === subprotocol)?.key ?? protocol;
+  }
   return engine === 'singbox' && ENGINE_CHOICE_PROTOCOLS.includes(protocol)
     ? `${protocol}#singbox`
     : protocol;

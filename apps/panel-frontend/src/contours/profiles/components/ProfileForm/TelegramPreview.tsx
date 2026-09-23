@@ -3,10 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   Box,
   Group,
-  NumberInput,
   SegmentedControl,
   Stack,
-  Switch,
   Text,
   TextInput,
   UnstyledButton,
@@ -24,17 +22,17 @@ import {
 import { SectionCard } from '@/contours/profiles/components/ProfileForm/SectionCard';
 
 /**
- * The three Telegram views the backend does not know yet: SOCKS5, HTTP, WEB.
+ * The Telegram view the backend does not know yet: WEB. (SOCKS5 and HTTP were
+ * here too until they became xray profiles, 2026-09-23.)
  *
  * The fields are real inputs (owner's call, 2026-09-23): an operator can fill
  * them in and see the form the way it will be. The values stay in this card's
  * own state and go nowhere, the server never sees or checks them, and the save
- * button on the page is off while one of these views is open. The banner says
- * so first, before anyone types.
+ * button on the page is off while this view is open. The banner says so
+ * first, before anyone types.
  *
  * The draft lives here, not in the profile form: a preview view has no name
- * the API would accept, so it must not be able to reach a request body. One
- * draft for all three views, so switching between them keeps what was typed.
+ * the API would accept, so it must not be able to reach a request body.
  */
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -49,21 +47,16 @@ const MIST = '#7A8BA3';
 const DIM = '#4E5F76';
 const AMBER = '#F5B14C';
 const CLAY = '#E07A5F';
-const CYAN = '#67E8F9';
 
 /** Card accents follow the artboard, which paints WEB amber rather than
  *  Telegram blue: the top edge here carries the risk, not the brand. */
 const CARD_ACCENT: Record<PreviewKindKey, string> = {
-  socks5: CYAN,
-  http: AMBER,
   telegramweb: AMBER,
 };
 
 /** The key is `telegramweb` in the picker, where it sits next to protocol
  *  names; the copy calls it `web`, the way the Telegram client does. */
 const COPY_KEY: Record<PreviewKindKey, string> = {
-  socks5: 'socks5',
-  http: 'http',
   telegramweb: 'web',
 };
 
@@ -79,24 +72,10 @@ export function TelegramPreviewCard({ kind }: { kind: PreviewKindKey }) {
       icon={<IconBolt size={15} color={accent} stroke={1.8} />}
     >
       <NotBuiltBanner />
-      {kind === 'socks5' && (
-        <Socks5Fields
-          value={draft.socks5}
-          onChange={(patch) => setDraft((d) => ({ ...d, socks5: { ...d.socks5, ...patch } }))}
-        />
-      )}
-      {kind === 'http' && (
-        <HttpFields
-          value={draft.http}
-          onChange={(patch) => setDraft((d) => ({ ...d, http: { ...d.http, ...patch } }))}
-        />
-      )}
-      {kind === 'telegramweb' && (
-        <WebFields
-          value={draft.web}
-          onChange={(patch) => setDraft((d) => ({ ...d, web: { ...d.web, ...patch } }))}
-        />
-      )}
+      <WebFields
+        value={draft.web}
+        onChange={(patch) => setDraft((d) => ({ ...d, web: { ...d.web, ...patch } }))}
+      />
     </SectionCard>
   );
 }
@@ -126,63 +105,6 @@ function NotBuiltBanner() {
         </Text>
       </Stack>
     </Group>
-  );
-}
-
-function Socks5Fields({
-  value,
-  onChange,
-}: {
-  value: TelegramDraft['socks5'];
-  onChange: (patch: Partial<TelegramDraft['socks5']>) => void;
-}) {
-  const { t } = useTranslation();
-  const p = (k: string) => t(`profiles.telegramPreview.socks5.${k}`);
-  return (
-    <Row>
-      <Field width={200} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
-        <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="1080" value={value.port} onChange={(port) => onChange({ port })} />
-      </Field>
-
-      <Field width={280} label={p('udpLabel')} note={p('udpNote')}>
-        <Group style={{ height: 36 }} wrap="nowrap">
-          <Switch
-            checked={value.udp}
-            onChange={(e) => onChange({ udp: e.currentTarget.checked })}
-            label={value.udp ? p('udpOn') : p('udpOff')}
-          />
-        </Group>
-      </Field>
-
-      <WarnBox tone={CYAN}>{t('profiles.telegramPreview.auth')}</WarnBox>
-      <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
-    </Row>
-  );
-}
-
-function HttpFields({
-  value,
-  onChange,
-}: {
-  value: TelegramDraft['http'];
-  onChange: (patch: Partial<TelegramDraft['http']>) => void;
-}) {
-  const { t } = useTranslation();
-  const p = (k: string) => t(`profiles.telegramPreview.http.${k}`);
-  return (
-    <Stack gap={16}>
-      <Row>
-        <Field width={280} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
-          <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="3128" value={value.port} onChange={(port) => onChange({ port })} />
-        </Field>
-
-        <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
-      </Row>
-
-      <WarnBox tone={CYAN}>{`${t('profiles.telegramPreview.auth')} ${p('digest')}`}</WarnBox>
-
-      <WarnBox tone={AMBER}>{p('clients')}</WarnBox>
-    </Stack>
   );
 }
 
@@ -385,36 +307,6 @@ function Field({
         {note}
       </Text>
     </Stack>
-  );
-}
-
-/** A port as the operator types it. Empty is a legal state here: nothing is
- *  sent, so there is no default to invent for them. */
-function PortInput({
-  label,
-  placeholder,
-  value,
-  onChange,
-}: {
-  label: string;
-  placeholder: string;
-  value: number | '';
-  onChange: (port: number | '') => void;
-}) {
-  return (
-    <NumberInput
-      aria-label={label}
-      placeholder={placeholder}
-      min={1}
-      max={65535}
-      clampBehavior="strict"
-      allowDecimal={false}
-      allowNegative={false}
-      hideControls
-      value={value}
-      onChange={(v) => onChange(typeof v === 'number' ? v : '')}
-      styles={{ input: { fontFamily: MONO } }}
-    />
   );
 }
 

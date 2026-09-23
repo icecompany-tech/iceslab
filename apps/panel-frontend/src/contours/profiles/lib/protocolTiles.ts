@@ -1,12 +1,21 @@
+import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
+
 export type EngineTab = 'native' | 'xray' | 'singbox' | 'telegram';
 
-export function engineTabOf(protocol: string, engine: 'native' | 'singbox'): EngineTab {
+export function engineTabOf(
+  protocol: string,
+  engine: 'native' | 'singbox',
+  subprotocol?: unknown,
+): EngineTab {
   // MTProto answers a different question from its neighbours. The other three
   // tabs sort by which binary runs on the node; this one sorts by what the
   // Telegram client itself offers in its settings, and MTProto is the entry we
   // already speak. It still runs its own daemon, it just stops being filed
   // next to Hysteria, where nobody looking for Telegram would find it.
   if (protocol === 'mtproto') return 'telegram';
+  // SOCKS5 and HTTP ride the xray process but are filed where the Telegram
+  // settings screen lists them, by the same reasoning.
+  if (protocol === 'xray' && isPlainSubprotocol(subprotocol)) return 'telegram';
   if (engine === 'singbox') return 'singbox';
   return protocol === 'xray' || protocol === 'shadowsocks' ? 'xray' : 'native';
 }
@@ -19,8 +28,8 @@ export const PROTOCOL_TILE_HINT: Record<string, string> = {
   amneziawg: 'WireGuard with obfuscation',
   naive: 'Chromium TLS, Caddy fork',
   mtproto: "Telegram's own, fake-TLS",
-  socks5: 'Any client speaks it, not only Telegram',
-  http: 'CONNECT tunnel, TCP only',
+  socks5: 'tg://socks link, all three Telegram apps',
+  http: 'Telegram Desktop only, no link',
   telegramweb: 'MTProxy through a WebView over HTTPS',
   mieru: 'Stealth proxy, no handshake',
   'xray#singbox': 'VLESS, VMess, Trojan',
@@ -80,8 +89,8 @@ export const PROTOCOL_TILE_NOTE: Record<string, string> = {
   // only the xray core reports a version, so the line names the binary and
   // stops there rather than showing a number nobody measured.
   mtproto: 'mtg daemon, no per-user stats',
-  socks5: 'on the xray core',
-  http: 'on the xray core',
+  socks5: 'xray core, no obfuscation',
+  http: 'xray core, no obfuscation',
   telegramweb: 'proof-of-concept',
   mieru: 'no handshake to fingerprint',
   'xray#singbox': 'no REALITY probe-resist tuning',

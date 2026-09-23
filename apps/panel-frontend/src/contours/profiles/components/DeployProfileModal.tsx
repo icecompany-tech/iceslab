@@ -26,6 +26,7 @@ import {
   type Profile,
 } from '@/lib/domain/profiles';
 import { deployDiff } from '@/contours/profiles/lib/deployDiff';
+import { plainDefaultPort } from '@/contours/profiles/lib/plainSubprotocol';
 import { hostHiddenFacts, listHosts } from '@/lib/domain/hosts';
 import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
@@ -101,10 +102,14 @@ export function DeployProfileModal({ profile, onClose }: Props) {
    *  оператор снял сам, см. `deployDiff`. */
   const [seeded, setSeeded] = useState<Set<string>>(new Set());
 
+  // SOCKS5 / HTTP have a port people expect (1080, 3128), and that one wins
+  // over the server's next-free suggestion; the per-node check below still
+  // says whether it is free.
+  const plainPort = plainDefaultPort(profile);
   const defaultPort = useMemo(() => {
     const cfg = profile?.config as { port?: number } | undefined;
-    return cfg?.port ?? 443;
-  }, [profile]);
+    return plainPort ?? cfg?.port ?? 443;
+  }, [profile, plainPort]);
 
   // Port admin chooses for NEW bindings created in this modal session.
   // Existing bindings keep their port - admin edits them inline in
@@ -146,7 +151,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     return null;
   }, [selected, seeded]);
   useEffect(() => {
-    if (!opened || portTouched || firstNewNodeId === null) return;
+    if (!opened || portTouched || firstNewNodeId === null || plainPort !== null) return;
     let cancelled = false;
     getNextFreePort(firstNewNodeId)
       .then((p) => {
@@ -158,7 +163,7 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [opened, portTouched, firstNewNodeId]);
+  }, [opened, portTouched, firstNewNodeId, plainPort]);
 
   /**
    * Что панель знает про этот порт на КАЖДОЙ новой ноде, отдельно.
@@ -330,7 +335,9 @@ export function DeployProfileModal({ profile, onClose }: Props) {
           description={
             profile?.protocol === 'amneziawg'
               ? t('profileForm.deployHintAwgPort')
-              : t('profiles.deploy.portAutoHint')
+              : plainPort !== null
+                ? t('profiles.deploy.portPlainHint', { port: plainPort })
+                : t('profiles.deploy.portAutoHint')
           }
           min={1}
           max={65535}

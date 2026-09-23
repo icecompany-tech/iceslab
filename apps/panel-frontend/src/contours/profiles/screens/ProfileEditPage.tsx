@@ -17,6 +17,8 @@ import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModa
 import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
+import { apiErrorMessage } from '@/lib/net/client';
+import { engineRefused } from '@/contours/profiles/lib/plainSubprotocol';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
 /**
@@ -80,7 +82,7 @@ export function ProfileEditPage() {
       notifications.show({
         color: 'red',
         title: t('common.createError'),
-        message: err instanceof Error ? err.message : String(err),
+        message: engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err),
       }),
   });
 
@@ -94,7 +96,7 @@ export function ProfileEditPage() {
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
-        message: err instanceof Error ? err.message : String(err),
+        message: engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err),
       }),
   });
 

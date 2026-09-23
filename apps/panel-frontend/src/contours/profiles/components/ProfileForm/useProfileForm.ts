@@ -20,6 +20,7 @@ import { defaults } from '@/contours/profiles/lib/profileDefaults';
 import { MOBILE_PRESET, randomAwgHeaders, TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
 import { FLOW_COMPATIBLE_TRANSPORTS } from '@/contours/profiles/lib/xrayTransports';
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds';
+import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -180,6 +181,12 @@ export function useProfileForm({
         };
         break;
       case 'xray':
+        // SOCKS5 / HTTP: a reality or transport key left from a vless draft
+        // would be refused by the server, so none of them is sent.
+        if (isPlainSubprotocol(values.xraySubprotocol)) {
+          config = plainXrayConfig(values.xraySubprotocol);
+          break;
+        }
         config = {
           realityDest: values.xrayDest,
           realityServerNames: csvList(values.xrayServerNames),

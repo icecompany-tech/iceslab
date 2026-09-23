@@ -14,11 +14,11 @@ import { listNodes } from '@/lib/domain/nodes';
 import { isOlderThan } from '@/lib/domain/protocols';
 import {
   PREVIEW_KINDS,
-  PREVIEW_ON_XRAY,
   PROFILE_KINDS,
   type PreviewKindKey,
   type ProfileKind,
 } from '@/contours/profiles/lib/profileKinds';
+import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import {
   engineTabOf,
   PROTOCOL_ACCENT,
@@ -51,12 +51,15 @@ interface TileSpec {
 export function EnginePicker({
   engine,
   protocol,
+  subprotocol,
   preview,
   onPick,
   onPickPreview,
 }: {
   engine: 'native' | 'singbox';
   protocol: string;
+  /** The xray subprotocol: SOCKS5 and HTTP are told from vless by it alone. */
+  subprotocol: string;
   /** A Telegram view the panel can draw but not yet save, or null. */
   preview: PreviewKindKey | null;
   onPick: (kind: ProfileKind) => void;
@@ -77,8 +80,11 @@ export function EnginePicker({
   // A picked preview holds the tab open on its own: the form's protocol is
   // still whatever was selected before, and reading the tab from it would
   // throw the operator back to another sheet mid-choice.
-  const activeTab: EngineTab = preview ? 'telegram' : engineTabOf(protocol, engine);
-  const kinds = PROFILE_KINDS.filter((k) => engineTabOf(k.protocol, k.engine) === activeTab);
+  const activeTab: EngineTab = preview ? 'telegram' : engineTabOf(protocol, engine, subprotocol);
+  const kinds = PROFILE_KINDS.filter(
+    (k) => engineTabOf(k.protocol, k.engine, k.subprotocol) === activeTab,
+  );
+  const plain = protocol === 'xray' && isPlainSubprotocol(subprotocol) ? subprotocol : undefined;
 
   // Core version is a property of the node, not of the profile: one xray
   // process serves every xray-core profile on that box. Show what the fleet
@@ -117,7 +123,7 @@ export function EnginePicker({
   // The number belongs to whatever rides the xray binary, which on the
   // Telegram tab is SOCKS5 and HTTP. MTProto and WEB run their own daemons
   // and the panel is never told their versions, so they stay quiet.
-  const ridesXray = activeTab === 'xray' || (preview !== null && PREVIEW_ON_XRAY.has(preview));
+  const ridesXray = activeTab === 'xray' || (!preview && plain !== undefined);
 
   const tiles: TileSpec[] = [
     ...kinds.map((k) => ({
@@ -125,8 +131,9 @@ export function EnginePicker({
       title: PROTOCOL_TILE_LABEL[k.key] ?? k.label,
       hint: PROTOCOL_TILE_HINT[k.key] ?? PROTOCOL_TILE_HINT[k.protocol] ?? '',
       note: PROTOCOL_TILE_NOTE[k.key] ?? '',
-      accent: PROTOCOL_ACCENT[k.protocol] ?? '#7A8BA3',
-      active: !preview && k.protocol === protocol && k.engine === engine,
+      accent: PROTOCOL_ACCENT[k.key] ?? PROTOCOL_ACCENT[k.protocol] ?? '#7A8BA3',
+      active:
+        !preview && k.protocol === protocol && k.engine === engine && k.subprotocol === plain,
       warnNote: false,
       onClick: () => onPick(k),
     })),
@@ -165,7 +172,7 @@ export function EnginePicker({
           const active = activeTab === e.value;
           const isTelegram = e.value === 'telegram';
           const count =
-            PROFILE_KINDS.filter((k) => engineTabOf(k.protocol, k.engine) === e.value).length +
+            PROFILE_KINDS.filter((k) => engineTabOf(k.protocol, k.engine, k.subprotocol) === e.value).length +
             (isTelegram ? PREVIEW_KINDS.length : 0);
           return (
             <UnstyledButton
@@ -173,7 +180,7 @@ export function EnginePicker({
               type="button"
               onClick={() => {
                 const first = PROFILE_KINDS.find(
-                  (k) => engineTabOf(k.protocol, k.engine) === e.value,
+                  (k) => engineTabOf(k.protocol, k.engine, k.subprotocol) === e.value,
                 );
                 if (first) onPick(first);
               }}

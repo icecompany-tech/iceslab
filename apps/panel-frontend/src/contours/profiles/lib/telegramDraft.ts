@@ -1,6 +1,6 @@
 /**
- * What the operator types into the three Telegram cards the backend does not
- * know yet (SOCKS5, HTTP, WEB). The values live in the card's own state and
+ * What the operator types into the Telegram WEB card, which the backend does
+ * not know yet. The values live in the card's own state and
  * stop there: nothing here is a request body, and nothing is checked by the
  * server. The shapes follow docs/plan/telegram-ways-in.md.
  *
@@ -14,21 +14,13 @@
 export const WEB_CARRIERS = ['https', 'https-lanes', 'websocket', 'websocket-lanes'] as const;
 export type WebCarrier = (typeof WEB_CARRIERS)[number];
 
-/** No auth field on SOCKS5 or HTTP: they always authenticate by the users'
- *  own accounts (ARCH, 2026-09-23). An open proxy on a public VPS carries
- *  strangers' traffic through the operator's node, so "no password" is not a
- *  choice the panel offers. */
+/** SOCKS5 and HTTP left this draft when they became xray profiles
+ *  (plainSubprotocol.ts); WEB is the one view still drawn ahead of the backend. */
 export interface TelegramDraft {
-  socks5: { port: number | ''; udp: boolean };
-  http: { port: number | '' };
   web: { host: string; secret: string; path: string; carrier: WebCarrier };
 }
 
-/** UDP starts off: Telegram clients never use SOCKS5 UDP ASSOCIATE, their
- *  calls go through Telegram's own relays, so switching it on buys nothing. */
 export const EMPTY_TELEGRAM_DRAFT: TelegramDraft = {
-  socks5: { port: '', udp: false },
-  http: { port: '' },
   web: { host: '', secret: '', path: '', carrier: 'https' },
 };
 

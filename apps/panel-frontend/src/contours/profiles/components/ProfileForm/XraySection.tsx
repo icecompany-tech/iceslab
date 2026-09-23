@@ -23,6 +23,8 @@ import { XrayAdvanced } from '@/contours/profiles/components/ProfileForm/XrayAdv
 import { GenerateWarning } from '@/contours/profiles/components/ProfileForm/GenerateWarning';
 import { confirmGenerate } from '@/contours/profiles/lib/confirmGenerate';
 import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
+import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
+import { PlainXraySection } from '@/contours/profiles/components/ProfileForm/PlainXraySection';
 
 export function XraySection({
   generateXrayKeys,
@@ -41,6 +43,11 @@ export function XraySection({
 }) {
   const { t } = useTranslation();
   const impact = useGenerateImpact(profileId);
+  // SOCKS5 / HTTP have no subprotocol pill, transport, security or REALITY to
+  // offer: the server takes them plain only.
+  if (isPlainSubprotocol(form.values.xraySubprotocol)) {
+    return <PlainXraySection subprotocol={form.values.xraySubprotocol} />;
+  }
   return (
             <Stack>
               {/* The three decisions in one row, the way the artboard frames

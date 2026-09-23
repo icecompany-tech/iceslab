@@ -30,6 +30,7 @@ import { useProfileForm } from '@/contours/profiles/components/ProfileForm/usePr
 import type { FormValues, Mode } from '@/contours/profiles/lib/profileFormValues';
 import { PROTOCOL_ACCENT } from '@/contours/profiles/lib/protocolTiles';
 import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
+import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
 import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
 import { FormShell } from '@/contours/profiles/components/ProfileForm/FormShell';
@@ -165,11 +166,19 @@ export function ProfileFormModal({
             <EnginePicker
               engine={form.values.engine}
               protocol={form.values.protocol}
+              subprotocol={form.values.xraySubprotocol}
               preview={preview}
               onPick={(kind) => {
                 setPreview(null);
                 form.setFieldValue('engine', kind.engine);
                 form.setFieldValue('protocol', kind.protocol);
+                // SOCKS5 / HTTP are named by the subprotocol; leaving one of
+                // them for another xray tile goes back to vless rather than
+                // keeping a plain proxy under a REALITY tile.
+                if (kind.subprotocol) form.setFieldValue('xraySubprotocol', kind.subprotocol);
+                else if (isPlainSubprotocol(form.values.xraySubprotocol)) {
+                  form.setFieldValue('xraySubprotocol', 'vless');
+                }
               }}
               onPickPreview={setPreview}
             />
@@ -190,8 +199,10 @@ export function ProfileFormModal({
 
               A preview view has no recipes and no protocol the registry would
               answer for, so the rail steps aside rather than showing the ones
-              belonging to whatever was selected before. */}
-          {!preview && (
+              belonging to whatever was selected before. SOCKS5 and HTTP step
+              it aside too: every xray recipe is a REALITY one, and applying it
+              would quietly turn the proxy into vless. */}
+          {!preview && !(form.values.protocol === 'xray' && isPlainSubprotocol(form.values.xraySubprotocol)) && (
           <Box className="recipes-slot">
           <RecipePicker
             key={form.values.protocol}
@@ -305,7 +316,11 @@ export function ProfileFormModal({
               </UnstyledButton>
             }
           >
-          {form.values.protocol === 'xray' && <XrayConfigWarnings form={form} />}
+          {/* The warnings are about Vision, REALITY and transports, none of
+              which a SOCKS5 or HTTP profile has. */}
+          {form.values.protocol === 'xray' && !isPlainSubprotocol(form.values.xraySubprotocol) && (
+            <XrayConfigWarnings form={form} />
+          )}
 
           {form.values.protocol === 'hysteria' && <HysteriaSection form={form} />}
 

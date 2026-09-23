@@ -9,26 +9,8 @@ export const profiles = {
     telegramPreview: {
       banner: 'You can fill it in, you cannot save it yet',
       bannerHint:
-        'The fields are live, but the values stay on this page: the backend does not accept this way in yet, nothing is sent and the server checks nothing. MTProto creates a Telegram profile right now.',
+        'The fields are live, but the values stay on this page: the backend does not accept this way in yet, nothing is sent and the server checks nothing. MTProto, SOCKS5 and HTTP create a Telegram profile right now.',
       saveBlocked: 'The backend does not know this way in yet; fill the fields to see the form',
-      portLabel: 'Port',
-      auth: 'Always the user\'s own username and password: everyone has their own, the name and their UUID, and they are not typed here. There is no way in without a password: an open proxy on a public node would carry strangers\' traffic.',
-      socks5: {
-        title: 'SOCKS5 CONFIG',
-        portNote: 'The port the node opens for SOCKS5. All three Telegram clients take a tg://socks link.',
-        udpLabel: 'UDP associate',
-        udpOn: 'Enabled',
-        udpOff: 'Disabled',
-        udpNote: 'Off by default: Telegram calls do not go over SOCKS5 UDP, the client never uses UDP associate.',
-        warn: 'No obfuscation: for networks where a proxy is allowed, not for getting past DPI. SOCKS5 encrypts nothing by itself, and open to the internet without a password it becomes a shared proxy for anyone who knows the address.',
-      },
-      http: {
-        title: 'HTTP CONFIG',
-        digest: 'Basic scheme; Digest is supported neither by the core nor by the Telegram client.',
-        portNote: 'A CONNECT tunnel, TCP only: calls will not go over an HTTP proxy.',
-        clients: 'Telegram Desktop only, and Telegram has no link to add it: a person types the address and port by hand.',
-        warn: 'No obfuscation: for networks where a proxy is allowed, not for getting past DPI. Basic is a username and password in base64, not encryption, and without TLS on top anyone on the path reads them.',
-      },
       web: {
         title: 'TELEGRAM WEB CONFIG',
         hostLabel: 'Web proxy host *',
@@ -145,6 +127,17 @@ export const profiles = {
       descriptionPlaceholder: 'What this template is for',
       submitCreate: 'Create profile',
       submitEdit: 'Save',
+      plain: {
+        onXray: 'on the xray core: the same process as the node\'s other xray profiles, no new binary',
+        fixed: 'No TLS, REALITY or transport: Telegram clients talk to such a proxy directly over TCP, there is nothing to pick here.',
+        auth: 'Always the user\'s own username and password: everyone has their own, the name and their UUID, and they are not typed here. There is no way in without a password: an open proxy on a public node would carry strangers\' traffic.',
+        portSocks: 'The port is set when deploying to a node, 1080 by default, and goes through the same port check as everything else.',
+        portHttp: 'The port is set when deploying to a node, 3128 by default, and goes through the same port check as everything else. 8080 is not offered: the xray API lives there.',
+        udp: 'UDP is off: Telegram calls do not go over SOCKS5 UDP, the client never uses UDP associate. A switch appears once the server accepts the field.',
+        httpClients: 'Telegram Desktop only, and Telegram has no link to add it: a person types the address, port, username and password by hand. A CONNECT tunnel, TCP only.',
+        digest: 'Basic scheme; Digest is supported neither by the core nor by the Telegram client. Basic is a username and password in base64, not encryption.',
+        noObfs: 'No obfuscation: for networks where a proxy is allowed, not for getting past DPI. Neither SOCKS5 nor HTTP encrypts anything by itself.',
+      },
       cfg: {
         salamanderObfsLabel: 'Salamander obfs password',
         salamanderObfsDesc: 'Optional. Empty = no obfuscation.',
@@ -250,6 +243,7 @@ export const profiles = {
       hint: 'Tick the nodes you want this profile on. Unticking deletes existing bindings (cascade - users lose URLs for that node). Port for new bindings: {{port}}.',
       port: 'Port for new bindings',
       portAutoHint: 'Auto-picked free port on the selected node. Override if needed.',
+      portPlainHint: '{{port}}: the port clients expect. It is checked, not picked: the line under each ticked node says whether it is free there.',
       noNodes: 'No nodes - create one under Nodes first.',
       saved: 'Deployed: +{{added}} / removed: -{{removed}}',
       noChanges: 'No changes',
@@ -259,6 +253,7 @@ export const profiles = {
   profileEdit: {
     newTitle: 'New profile',
     newCrumb: 'NEW',
+    engineRefused: 'The server refused: this protocol does not run on the chosen engine. SOCKS5 and HTTP are served by the xray core only.',
     newSubtitle: 'PICK A PROTOCOL AND DEFINE THE TEMPLATE',
     editSubtitle: 'CHANGES REDEPLOY TO EVERY NODE RUNNING THIS PROFILE',
     // The door to POST /api/profiles/:id/test-connect (slice 31): the panel
