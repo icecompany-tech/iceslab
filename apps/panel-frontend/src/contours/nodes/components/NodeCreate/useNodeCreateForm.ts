@@ -15,10 +15,13 @@ import {
 } from '@/lib/domain/nodes';
 import { awgPayload } from '@/lib/domain/awg';
 import {
+  createCoreVersions,
   pickFreePort,
   type FormValues,
   type Registered,
 } from '@/contours/nodes/lib/nodeCreateForm';
+import { coreVersionRefusal } from '@/lib/domain/coreVersions';
+import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
 
 /**
@@ -54,6 +57,7 @@ export function useNodeCreateForm() {
       hardenRealisticFallback: false,
       hardenSshAllowlist: [],
       awgProtocol: null,
+      coreVersions: {},
     },
     validateInputOnBlur: true,
     validate: {
@@ -127,6 +131,11 @@ export function useNodeCreateForm() {
    */
   const fleetQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
   const awgKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.awgProtocol !== undefined);
+  // Знает ли сервер намерение по версиям ядер: тем же способом, по уже
+  // стоящим нодам (ключ отдаётся у каждой всегда).
+  const coreVersionsKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.coreVersions !== undefined);
+  /** Строки отказа 400 CORE_VERSION_NOT_LISTED после «Зарегистрировать». */
+  const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
 
   // A host can land here only if this node will run the core its profile needs:
   // the node's own core, or anything on sing-box when that engine is installed
@@ -195,6 +204,7 @@ export function useNodeCreateForm() {
     setCreating(true);
     try {
       const port = form.values.port === '' ? DEFAULT_NODE_PORT : Number(form.values.port);
+      const coreVersions = createCoreVersions(coreVersionsKnown, form.values.coreVersions);
       const node: NodeWithPayload = await createNode({
         name: form.values.name.trim(),
         address: `${form.values.host.trim()}:${port}`,
@@ -208,7 +218,11 @@ export function useNodeCreateForm() {
           SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
         // Только выбранное оператором и только если сервер поле знает.
         ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
+        // Версии ядер: только выбранные компоненты; ничего не выбрано = ключа
+        // нет, и сервер ставит пины.
+        ...(coreVersions ? { coreVersions } : {}),
       });
+      setCoreRefusal(null);
 
       // Bindings go one at a time; there is no batch endpoint. A host that
       // fails is reported by name rather than swallowed, because the node is
@@ -254,10 +268,15 @@ export function useNodeCreateForm() {
       });
       setStep(2);
     } catch (err) {
+      // Версия не из манифеста: строки сервера встают в блок «Версии ядер»
+      // на шаге параметров, туда же возвращаем оператора.
+      const coreLines = coreVersionRefusal(err);
+      setCoreRefusal(coreLines);
+      if (coreLines) setStep(0);
       notifications.show({
         color: 'red',
         title: t('common.createError'),
-        message: err instanceof Error ? err.message : String(err),
+        message: coreLines ? t('nodeEdit.coreVer.refused') : apiErrorMessage(err),
       });
     } finally {
       setCreating(false);
@@ -303,6 +322,8 @@ export function useNodeCreateForm() {
     waited,
     profilesQuery,
     awgKnown,
+    coreVersionsKnown,
+    coreRefusal,
     groups,
     portByProfile,
     toggle,

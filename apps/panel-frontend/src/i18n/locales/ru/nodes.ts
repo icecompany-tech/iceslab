@@ -66,7 +66,11 @@
       domain: 'Домен (FQDN, опционально)',
       domainDesc: 'A-запись на IP ноды. Используется как REALITY serverName для self-steal профилей (SNI совпадает с IP, переживает РФ-DPI). Не имя сертификата hysteria - оно берётся из адреса выше.',
       singboxEngine: 'Поставить также движок sing-box',
-      coreVersionsNote: 'Версии ядер: пины манифеста. Поменять можно на странице ноды после установки.',
+      coreVersionsTitle: 'Версии ядер',
+      coreVersionsOthers_one: 'остальные ядра ({{count}})',
+      coreVersionsOthers_few: 'остальные ядра ({{count}})',
+      coreVersionsOthers_many: 'остальные ядра ({{count}})',
+      coreVersionsNote: 'Эти версии уедут в установку вместе с bootstrap-токеном. Дальше их можно менять на странице ноды.',
       singboxEngineDesc: 'Добавит --with-singbox в install-команду - тогда нода сможет обслуживать и профили vless/vmess/trojan/hy2/ss с движком sing-box.',
       // Поколение AmneziaWG: свойство ноды, и от него зависит, каким клиентом
       // к ней можно подключиться. Поколения несовместимы.

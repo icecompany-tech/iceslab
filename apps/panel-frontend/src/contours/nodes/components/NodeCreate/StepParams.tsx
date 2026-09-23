@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 import { awgSelectorShown } from '@/lib/domain/awg';
 import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
+import { WizardCoreVersions } from '@/contours/nodes/components/NodeCreate/WizardCoreVersions';
 
 type Wizard = ReturnType<typeof useNodeCreateForm>;
 
@@ -21,7 +22,9 @@ type Wizard = ReturnType<typeof useNodeCreateForm>;
 export function StepParams({
   form,
   awgKnown,
-}: Pick<Wizard, 'form' | 'awgKnown'>) {
+  coreVersionsKnown,
+  coreRefusal,
+}: Pick<Wizard, 'form' | 'awgKnown' | 'coreVersionsKnown' | 'coreRefusal'>) {
   const { t } = useTranslation();
 
   return (
@@ -61,12 +64,17 @@ export function StepParams({
                 />
               )}
 
-              {/* Версии ядер здесь не выбираются: без намерения сервер кладёт
-                  в установку пины манифеста, а выбор живёт на странице ноды,
-                  рядом с тем, что нода потом сообщит. */}
-              <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>
-                {t('nodes.form.coreVersionsNote')}
-              </Text>
+              {/* Версии ядер на установку. Сервер старше поля (ни у одной ноды
+                  парка ключа нет): выбора нет, пины уходят сами. */}
+              {coreVersionsKnown && (
+                <WizardCoreVersions
+                  protocol={form.values.protocol}
+                  singboxEngine={SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine}
+                  value={form.values.coreVersions}
+                  onChange={(next) => form.setFieldValue('coreVersions', next)}
+                  refusal={coreRefusal}
+                />
+              )}
 
               {/* Поколение AmneziaWG. У новой ноды ядер ещё нет, поэтому
                   решает только основной протокол. */}

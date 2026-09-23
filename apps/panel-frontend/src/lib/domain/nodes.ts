@@ -261,6 +261,9 @@ export interface CreateNodeInput {
    *  до контракта сервер поля не знает, и ключ, которого он не ждёт, это отказ
    *  сохранения. */
   awgProtocol?: AwgProtocol | null;
+  /** Версии ядер на установку, только выбранные; нет ключа = все пины.
+   *  Отказ 400 CORE_VERSION_NOT_LISTED, см. `coreVersionRefusal`. */
+  coreVersions?: NodeCoreVersions;
 }
 
 export interface UpdateNodeInput {

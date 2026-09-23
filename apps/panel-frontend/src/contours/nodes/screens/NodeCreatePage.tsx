@@ -45,6 +45,8 @@ export function NodeCreatePage() {
     waited,
     profilesQuery,
     awgKnown,
+    coreVersionsKnown,
+    coreRefusal,
     groups,
     portByProfile,
     toggle,
@@ -308,7 +310,9 @@ export function NodeCreatePage() {
         })}
       </Box>
 
-      {step === 0 && <StepParams form={form} awgKnown={awgKnown} />}
+      {step === 0 && (
+        <StepParams form={form} awgKnown={awgKnown} coreVersionsKnown={coreVersionsKnown} coreRefusal={coreRefusal} />
+      )}
 
       {step === 1 && <StepHosts form={form} selected={selected} groupOpen={groupOpen} setGroupOpen={setGroupOpen} profilesQuery={profilesQuery} groups={groups} portByProfile={portByProfile} toggle={toggle} toggleAllCan={toggleAllCan} />}
 

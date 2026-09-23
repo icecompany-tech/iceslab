@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Box, Select, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { CoreArch, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
@@ -14,6 +14,7 @@ import {
   type CoreVersionLine,
 } from '@/lib/domain/coreVersions';
 import { CopyButton } from '@/ui/CopyButton';
+import { CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
 import {
   AMBER,
   CARD,
@@ -328,9 +329,6 @@ function CoreRow({
           выбор держится, даже когда пин сдвинется. Уходит кнопкой
           «Сохранить» вместе с остальными полями ноды. */}
       {pickable.map((component) => {
-        const options = coreReleaseOptions(component);
-        const byVersion = new Map(options.map((o) => [o.version, o] as const));
-        const pinned = options.find((o) => o.isPin)?.version ?? '';
         const part = component === 'amneziawg-module' ? 'module' : component === 'amneziawg-tools' ? 'tools' : null;
         return (
           <Box
@@ -340,45 +338,14 @@ function CoreRow({
             <Text style={{ fontSize: 12, lineHeight: '16px', color: MIST, minWidth: 64 }}>
               {part ? t(`nodeEdit.coreVer.part.${part}`) : t('nodeEdit.coreVer.pick')}
             </Text>
-            <Select
-              size="xs"
-              w={300}
-              allowDeselect={false}
-              aria-label={`${core.name} ${part ?? ''}`.trim()}
-              value={intent?.[component] ?? ''}
-              data={[
-                { value: '', label: t('nodeEdit.coreVer.pinOption', { v: pinned }) },
-                ...options.map((o) => ({
-                  value: o.version,
-                  label: [
-                    o.version,
-                    o.isPin ? t('nodeEdit.coreVer.isPin') : null,
-                    o.blocked ? t(`nodeEdit.coreVer.blocked.${o.blocked.kind}`) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · '),
-                  disabled: o.blocked !== null,
-                })),
-              ]}
-              renderOption={({ option }) => {
-                const o = byVersion.get(option.value);
-                return (
-                  <Stack gap={2}>
-                    <Text style={{ fontSize: 12 }}>{option.label}</Text>
-                    {o?.blocked && (
-                      <Text style={{ fontSize: 11, lineHeight: '15px', color: FAINT }}>{o.blocked.reason}</Text>
-                    )}
-                  </Stack>
-                );
-              }}
-              onChange={(v) => {
-                if (!intent || !onIntent) return;
-                const next = { ...intent };
-                if (!v) delete next[component];
-                else next[component] = v;
-                onIntent(next);
-              }}
-            />
+            {intent && onIntent && (
+              <CoreVersionSelect
+                component={component}
+                intent={intent}
+                onIntent={onIntent}
+                ariaLabel={`${core.name} ${part ?? ''}`.trim()}
+              />
+            )}
           </Box>
         );
       })}

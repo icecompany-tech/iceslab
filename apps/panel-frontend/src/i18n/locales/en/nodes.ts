@@ -64,7 +64,10 @@
       domain: 'Domain (FQDN, optional)',
       domainDesc: 'A-record this to the node IP. Used as REALITY serverName for self-steal profiles (SNI matches IP, survives RU DPI). Not the hysteria certificate name, that follows the address above.',
       singboxEngine: 'Also install sing-box engine',
-      coreVersionsNote: 'Core versions: the manifest pins. They can be changed on the node page after install.',
+      coreVersionsTitle: 'Core versions',
+      coreVersionsOthers_one: 'other cores ({{count}})',
+      coreVersionsOthers_other: 'other cores ({{count}})',
+      coreVersionsNote: 'These versions go into the install together with the bootstrap token. They can be changed on the node page afterwards.',
       singboxEngineDesc: 'Adds --with-singbox to the install command, so this node can also serve vless/vmess/trojan/hy2/ss profiles that use the sing-box engine.',
       // The AmneziaWG generation: a property of the node, and it decides which
       // client can connect. The generations are incompatible.
