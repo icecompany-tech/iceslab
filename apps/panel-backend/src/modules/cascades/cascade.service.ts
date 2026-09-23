@@ -373,6 +373,76 @@ export class CascadeEntryChangeDropsUsersError extends Error {
 }
 
 /**
+ * Nodes taken OUT of the entry, and somebody is standing on them, phase 6.7.
+ *
+ * The same silent loss as a protocol switch, along the other axis: a node that
+ * stops being an entry stops cascading its users, whatever the protocol, and
+ * they leave straight from that node's country. Same consent as the switch
+ * (`confirmEntryChange`), because to the operator it is the same question:
+ * "these people are about to leave the cascade, do you mean it".
+ */
+export class CascadeEntryNodesDroppedError extends Error {
+  readonly code = 'ENTRY_NODES_DROPPED';
+  constructor(public conflicts: { nodeName: string; profileName: string }[]) {
+    super(
+      `These nodes are leaving the cascade entry, and the users of these profiles on them will ` +
+        `leave straight from the node's own country: ` +
+        conflicts.map((c) => `profile "${c.profileName}" on node "${c.nodeName}"`).join('; ') +
+        `. Repeat the save with confirmEntryChange: true to go ahead.`,
+    );
+    this.name = 'CascadeEntryNodesDroppedError';
+  }
+}
+
+/**
+ * The entry nodes this save removes, and who is on them.
+ *
+ * Only profiles served with the entry protocol are named: those are the users
+ * the cascade carried from that node. A profile of another protocol on the same
+ * node was never cascaded, and naming it would be an alarm about nothing.
+ *
+ * Asked AFTER the protocol switch, so a save that changes both is refused
+ * about the switch first, and one confirmation covers both answers.
+ */
+async function assertEntryNodesDropConfirmed(
+  cascadeId: string,
+  positions: { position: number; nodeIds: string[]; entryProtocol?: string }[] | undefined,
+  confirmed: boolean,
+): Promise<void> {
+  const next = positions?.find((p) => p.position === 0);
+  if (!next || confirmed) return;
+  const [storedV4, storedHop] = await Promise.all([
+    prisma.cascadePosition.findFirst({
+      where: { cascadeId, position: 0 },
+      select: { entryProtocol: true, nodes: { select: { nodeId: true } } },
+    }),
+    prisma.cascadeHop.findFirst({
+      where: { cascadeId, position: 0 },
+      select: { entryProtocol: true, nodeId: true },
+    }),
+  ]);
+  const storedNodes = storedV4
+    ? storedV4.nodes.map((n) => n.nodeId)
+    : storedHop
+      ? [storedHop.nodeId]
+      : [];
+  const protocol = storedV4?.entryProtocol ?? storedHop?.entryProtocol ?? null;
+  const keep = new Set(next.nodeIds);
+  const dropped = storedNodes.filter((id) => !keep.has(id));
+  if (!protocol || dropped.length === 0) return;
+
+  const leaving = await prisma.profileNodeBinding.findMany({
+    where: { nodeId: { in: dropped }, enabled: true, profile: { protocol } },
+    select: { node: { select: { name: true } }, profile: { select: { name: true } } },
+    orderBy: [{ node: { name: 'asc' } }, { profile: { name: 'asc' } }],
+  });
+  if (leaving.length === 0) return;
+  throw new CascadeEntryNodesDroppedError(
+    leaving.map((b) => ({ nodeName: b.node.name, profileName: b.profile.name })),
+  );
+}
+
+/**
  * The entry nodes of a hysteria entry must be able to run the chain.
  *
  * Only the ENTRY: a hysteria entry's users reach the cascade through the chain
@@ -1612,6 +1682,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // that is then refused anyway would be a question with no useful answer.
   await assertEntryCanChain(positions);
   await assertEntryChangeConfirmed(id, positions, input.confirmEntryChange === true);
+  await assertEntryNodesDropConfirmed(id, positions, input.confirmEntryChange === true);
 
   try {
     const c = await prisma.$transaction(async (tx) => {

@@ -75,6 +75,11 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       conflicts: err.conflicts,
     });
   }
+  if (err instanceof svc.CascadeEntryNodesDroppedError) {
+    // The same shape and the same consent as ENTRY_CHANGE_DROPS_USERS: the
+    // screen shows who leaves and repeats the save with confirmEntryChange.
+    return reply.code(409).send({ error: err.code, message: err.message, conflicts: err.conflicts });
+  }
   if (err instanceof svc.CascadeEntryCoreTooOldError) {
     // T7: entry node's xray is too old for exit selection. 409: the request is
     // well-formed but conflicts with the node's current core version.

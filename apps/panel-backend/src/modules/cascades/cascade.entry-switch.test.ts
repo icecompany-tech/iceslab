@@ -243,3 +243,91 @@ describe('switching the entry protocol', () => {
     expect(JSON.parse(res.body).error).toBe('ENTRY_CANNOT_CHAIN');
   });
 });
+
+/**
+ * Phase 6.7: the same silent loss along the other axis. A node taken out of
+ * the entry stops cascading its users whatever the protocol, and they leave
+ * straight from that node's country.
+ */
+describe('taking nodes out of the entry', () => {
+  /** An entry POOL of two, so one can be taken out and the entry survives. */
+  async function createPooled(a: string, b: string, exit: string) {
+    seq += 1;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/cascades',
+      headers: auth(),
+      payload: {
+        name: `ru-out-${seq}`,
+        enabled: true,
+        positions: [{ position: 0, nodeIds: [a, b], entryProtocol: 'xray', linkProtocol: 'vless' }],
+        directions: [{ countryCode: 'NL', nodeIds: [exit] }],
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return JSON.parse(res.body) as { id: string };
+  }
+
+  it('asks before it lets the users of a dropped node go, and names them', async () => {
+    const a = await makeNode('ru-a');
+    const b = await makeNode('ru-b');
+    const exit = await makeNode('nl-exit');
+    await bindProfile(b, 'reality-b');
+    const c = await createPooled(a, b, exit);
+
+    const res = await put(c.id, body(a, exit, 'xray'));
+    expect(res.statusCode, res.body).toBe(409);
+    const got = JSON.parse(res.body);
+    expect(got.error).toBe('ENTRY_NODES_DROPPED');
+    // The shape the screen already parses for ENTRY_CHANGE_DROPS_USERS.
+    expect(got.conflicts).toEqual([{ nodeName: 'ru-b', profileName: 'reality-b' }]);
+    expect(got.message).toContain('ru-b');
+    // Nothing moved: both nodes are still the entry.
+    const stored = await prisma.cascadePosition.findFirst({
+      where: { cascadeId: c.id, position: 0 },
+      select: { nodes: { select: { nodeId: true } } },
+    });
+    expect(stored!.nodes.map((n) => n.nodeId).sort()).toEqual([a, b].sort());
+  });
+
+  it('goes through with the same consent as a protocol switch', async () => {
+    const a = await makeNode('ru-a');
+    const b = await makeNode('ru-b');
+    const exit = await makeNode('nl-exit');
+    await bindProfile(b, 'reality-b');
+    const c = await createPooled(a, b, exit);
+
+    const res = await put(c.id, { ...body(a, exit, 'xray'), confirmEntryChange: true });
+    expect(res.statusCode, res.body).toBe(200);
+  });
+
+  it('says nothing about a dropped node nobody on the entry protocol stands on', async () => {
+    // A hysteria profile on an xray entry's node was never cascaded: naming it
+    // would be an alarm about nothing.
+    const a = await makeNode('ru-a');
+    const b = await makeNode('ru-b');
+    const exit = await makeNode('nl-exit');
+    await bindProfile(b, 'hy2-b', 'hysteria', {});
+    const c = await createPooled(a, b, exit);
+
+    const res = await put(c.id, body(a, exit, 'xray'));
+    expect(res.statusCode, res.body).toBe(200);
+  });
+
+  it('asks about the protocol switch first when a save does both', async () => {
+    // One consent covers both answers; the switch is the bigger question and
+    // is asked first, so the operator does not confirm one only to meet the
+    // other.
+    const a = await makeNode('ru-a');
+    const b = await makeNode('ru-b');
+    const exit = await makeNode('nl-exit');
+    await bindProfile(a, 'reality-a');
+    await bindProfile(b, 'reality-b');
+    const c = await createPooled(a, b, exit);
+
+    const refused = await put(c.id, body(a, exit, 'hysteria'));
+    expect(JSON.parse(refused.body).error).toBe('ENTRY_CHANGE_DROPS_USERS');
+    const confirmed = await put(c.id, { ...body(a, exit, 'hysteria'), confirmEntryChange: true });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+  });
+});
