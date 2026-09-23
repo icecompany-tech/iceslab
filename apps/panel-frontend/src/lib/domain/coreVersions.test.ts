@@ -5,54 +5,62 @@ import type { NodeCore } from '@/lib/domain/nodes';
 
 const core = (c: Partial<NodeCore> & { name: NodeCore['name'] }): NodeCore => c as NodeCore;
 const PIN = (c: keyof typeof CORE_VERSIONS) => CORE_VERSIONS[c].pinned!;
+const SHA = (c: keyof typeof CORE_VERSIONS, arch: 'amd64' | 'arm64' | 'armv7') =>
+  CORE_VERSIONS[c].releases.find((r) => r.version === PIN(c))!.assets![arch]!.sha256;
+const line = (p: string, v: string, sha: string, script: string) =>
+  `sudo env ${p}_VERSION=${v} ${p}_SHA256=${sha} bash /opt/iceslab-node/apps/node/scripts/${script} && sudo systemctl restart iceslab-node`;
 
 describe('coreVersionFacts: one line per verdict', () => {
   it('intended, and the pin: no command', () => {
-    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: PIN('xray') }));
+    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: PIN('xray') }), 'amd64');
     expect(l).toMatchObject({ component: 'xray', part: null, verdict: { kind: 'intended', isPin: true }, command: null });
   });
 
-  it('drift: both numbers, and the line that moves it to the pin (sing-box takes the tag)', () => {
-    const [l] = coreVersionFacts(core({ name: 'tuic', engine: 'singbox', version: '1.13.12' }));
+  it('drift: both numbers, and the version with its checksum for this arch', () => {
+    const [l] = coreVersionFacts(core({ name: 'tuic', engine: 'singbox', version: '1.13.12' }), 'arm64');
     expect(l?.verdict).toEqual({ kind: 'drift', intended: PIN('singbox') });
     expect(l?.command).toEqual({
       kind: 'command',
-      text: `sudo env SINGBOX_VERSION=v${PIN('singbox')} /opt/iceslab-node/apps/node/scripts/bootstrap-singbox.sh && sudo systemctl restart iceslab-node`,
+      text: line('SINGBOX', PIN('singbox'), SHA('singbox', 'arm64'), 'bootstrap-singbox.sh'),
     });
   });
 
-  it('above the ceiling: the ceiling and its reason; xray has no script, and says so', () => {
-    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '26.8.1' }));
-    expect(l?.verdict.kind).toBe('above-ceiling');
-    expect(l?.command).toEqual({ kind: 'none', why: 'no-script' });
+  it('above the ceiling and known bad on xray: a command through bootstrap-xray.sh now', () => {
+    for (const v of ['26.8.1', '26.9.8']) {
+      const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: v }), 'amd64');
+      expect(['above-ceiling', 'known-bad']).toContain(l?.verdict.kind);
+      expect(l?.command).toEqual({ kind: 'command', text: line('XRAY', PIN('xray'), SHA('xray', 'amd64'), 'bootstrap-xray.sh') });
+    }
   });
 
-  it('known bad beats everything else', () => {
-    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '26.9.8' }));
+  it('no arch reported: the verdict stands, the command does not', () => {
+    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '26.9.8' }), undefined);
     expect(l?.verdict.kind).toBe('known-bad');
+    expect(l?.command).toEqual({ kind: 'none', why: 'no-arch' });
   });
 
   it('unpinned: the reason, and no command to offer', () => {
-    const [l] = coreVersionFacts(core({ name: 'naive', engine: 'naive', version: '2.10.0' }));
+    const [l] = coreVersionFacts(core({ name: 'naive', engine: 'naive', version: '2.10.0' }), 'amd64');
     expect(l?.verdict.kind).toBe('unpinned');
     expect(l?.command).toBeNull();
   });
 
   it('unknown stays silent: empty, garbage, or no field', () => {
-    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '' }))).toEqual([]);
-    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: 'dev-build' }))).toEqual([]);
-    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray' }))).toEqual([]);
+    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '' }), 'amd64')).toEqual([]);
+    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: 'dev-build' }), 'amd64')).toEqual([]);
+    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray' }), 'amd64')).toEqual([]);
   });
 
   it('a missing binary is not judged, whatever version rode along', () => {
-    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '26.9.8', installed: false }))).toEqual([]);
+    expect(coreVersionFacts(core({ name: 'xray', engine: 'xray', version: '26.9.8', installed: false }), 'amd64')).toEqual([]);
   });
 
   it('AmneziaWG: module and tools are two lines in one row; empty tools stay silent', () => {
-    const one = coreVersionFacts(core({ name: 'amneziawg', engine: 'amneziawg', version: PIN('amneziawg-module') }));
+    const one = coreVersionFacts(core({ name: 'amneziawg', engine: 'amneziawg', version: PIN('amneziawg-module') }), 'amd64');
     expect(one.map((l) => l.part)).toEqual(['module']);
     const two = coreVersionFacts(
       core({ name: 'amneziawg', engine: 'amneziawg', version: PIN('amneziawg-module'), toolsVersion: PIN('amneziawg-tools') }),
+      'amd64',
     );
     expect(two.map((l) => [l.part, l.verdict.kind])).toEqual([
       ['module', 'intended'],
@@ -61,28 +69,38 @@ describe('coreVersionFacts: one line per verdict', () => {
   });
 
   it('an engine row with no engine field is read by its name (older agent)', () => {
-    expect(coreVersionFacts(core({ name: 'hysteria', version: PIN('hysteria') }))[0]?.component).toBe('hysteria');
+    expect(coreVersionFacts(core({ name: 'hysteria', version: PIN('hysteria') }), 'amd64')[0]?.component).toBe('hysteria');
   });
 });
 
 describe('coreUpdateCommand', () => {
-  it('hysteria gets v + version, never its tag "app/v…" (that breaks the download URL)', () => {
-    const c = coreUpdateCommand('hysteria', PIN('hysteria'));
-    expect(c).toMatchObject({ kind: 'command' });
-    expect(c.kind === 'command' && c.text).toContain(`HYSTERIA_VERSION=v${PIN('hysteria')} `);
+  it('one form for every script: the release version as it is, no tag, no leading v', () => {
+    const c = coreUpdateCommand('hysteria', PIN('hysteria'), 'amd64');
+    expect(c).toEqual({ kind: 'command', text: line('HYSTERIA', PIN('hysteria'), SHA('hysteria', 'amd64'), 'bootstrap-hysteria.sh') });
   });
 
-  it('mtg and mita name only the script\'s pin: another version needs a checksum the panel does not have', () => {
-    expect(coreUpdateCommand('mtg', PIN('mtg'))).toEqual({
+  it('mtg and mita get a command now that the arch is known', () => {
+    expect(coreUpdateCommand('mtg', PIN('mtg'), 'armv7')).toEqual({
       kind: 'command',
-      text: 'sudo /opt/iceslab-node/apps/node/scripts/bootstrap-mtg.sh && sudo systemctl restart iceslab-node',
+      text: line('MTG', PIN('mtg'), SHA('mtg', 'armv7'), 'bootstrap-mtg.sh'),
     });
-    expect(coreUpdateCommand('mtg', '9.9.9')).toEqual({ kind: 'none', why: 'unpinned' });
   });
 
-  it('the variable goes through sudo env, not in front of sudo (sudo resets the environment)', () => {
-    const c = coreUpdateCommand('singbox', PIN('singbox'));
-    expect(c.kind === 'command' && c.text.startsWith('sudo env SINGBOX_VERSION=')).toBe(true);
+  it('a release with no build for the arch (mita on armv7) has no command, and says why', () => {
+    expect(coreUpdateCommand('mita', PIN('mita'), 'armv7')).toEqual({ kind: 'none', why: 'no-asset' });
+  });
+
+  it('a version the manifest does not list, and AmneziaWG, have no command', () => {
+    expect(coreUpdateCommand('mtg', '9.9.9', 'amd64')).toEqual({ kind: 'none', why: 'unpinned' });
+    expect(coreUpdateCommand('amneziawg-module', PIN('amneziawg-module'), 'amd64')).toEqual({
+      kind: 'none',
+      why: 'skips-installed',
+    });
+  });
+
+  it('through sudo env and bash: sudo resets the environment, the scripts have no executable bit', () => {
+    const c = coreUpdateCommand('singbox', PIN('singbox'), 'amd64');
+    expect(c.kind === 'command' && /^sudo env SINGBOX_VERSION=\S+ SINGBOX_SHA256=[0-9a-f]{64} bash \//.test(c.text)).toBe(true);
   });
 });
 
@@ -96,17 +114,18 @@ const SCRIPTS = import.meta.glob('../../../../node/scripts/bootstrap-*.sh', {
 
 describe('CORE_UPDATE against apps/node/scripts', () => {
   it('reads the scripts, not nothing', () => {
-    expect(Object.keys(SCRIPTS).length).toBeGreaterThanOrEqual(5);
+    expect(Object.keys(SCRIPTS).length).toBeGreaterThanOrEqual(6);
   });
 
-  it('every script named exists, takes its variable, and defaults to the manifest pin', () => {
+  it('every script named exists, takes both variables of its pair, and defaults to the manifest pin', () => {
     for (const component of CORE_COMPONENTS) {
       const how = CORE_UPDATE[component];
       if (typeof how === 'string') continue;
       const path = Object.keys(SCRIPTS).find((p) => p.endsWith(`/${how.script}`));
       expect(path, `${component}: ${how.script}`).toBeDefined();
       const src = SCRIPTS[path!]!;
-      if (how.env) expect(src, `${component}: ${how.env.name}`).toContain(`${how.env.name}=`);
+      expect(src, `${component}: ${how.prefix}_VERSION`).toMatch(new RegExp(`\\$\\{${how.prefix}_VERSION[:}]`));
+      expect(src, `${component}: ${how.prefix}_SHA256`).toMatch(new RegExp(`\\$\\{${how.prefix}_SHA256[:}]`));
       expect(src, `${component}: pin ${PIN(component)}`).toContain(PIN(component));
     }
   });

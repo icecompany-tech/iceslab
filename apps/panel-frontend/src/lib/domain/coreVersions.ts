@@ -2,8 +2,8 @@ import {
   CORE_COMPONENTS,
   CORE_VERSIONS,
   judgeCoreVersion,
+  type CoreArch,
   type CoreComponent,
-  type CoreRelease,
   type CoreVersionVerdict,
 } from '@iceslab/shared';
 import type { NodeCore } from '@/lib/domain/nodes';
@@ -26,56 +26,63 @@ export const NODE_DIR = '/opt/iceslab-node';
 /**
  * How one component is moved on the machine, or why a command cannot be given.
  *
- *   script / env   the bootstrap that installs it and the variable that picks
- *                  the release; `value` turns a release into what the variable
- *                  wants, because the scripts do not agree (sing-box takes the
- *                  tag, hysteria takes "v" + version: its tag "app/v2.12.3"
- *                  would break the download URL);
- *   env null       the script takes a version only together with a per-arch
- *                  sha256 (mtg, mita), so the command can name only the
- *                  script's own pin, which is the manifest's pin;
- *   'no-script'    xray has no bootstrap of its own: it comes with the main
- *                  installer, and re-running that wipes the node's mTLS keys;
+ *   script / prefix  the bootstrap that installs it and the prefix of its pair
+ *                    of variables, <P>_VERSION and <P>_SHA256. Every bootstrap
+ *                    takes a version only together with its checksum and strips
+ *                    a leading "v" itself, so the release's version goes as it
+ *                    is, one form for all;
  *   'skips-installed' the AmneziaWG bootstrap leaves a loaded module and
- *                  installed tools alone, so running it again moves nothing;
- *   'unpinned'     nothing to move to (caddy-naive is built from a branch).
+ *                    installed tools alone, so running it again moves nothing
+ *                    (until the reinstall mode of phase 7.2);
+ *   'unpinned'       nothing to move to (caddy-naive is built from a branch).
  */
-type CoreUpdate =
-  | { script: string; env: { name: string; value: (r: CoreRelease) => string } | null }
-  | 'no-script'
-  | 'skips-installed'
-  | 'unpinned';
+type CoreUpdate = { script: string; prefix: string } | 'skips-installed' | 'unpinned';
 
 export const CORE_UPDATE: Record<CoreComponent, CoreUpdate> = {
-  xray: 'no-script',
-  singbox: { script: 'bootstrap-singbox.sh', env: { name: 'SINGBOX_VERSION', value: (r) => r.tag } },
-  hysteria: { script: 'bootstrap-hysteria.sh', env: { name: 'HYSTERIA_VERSION', value: (r) => `v${r.version}` } },
+  xray: { script: 'bootstrap-xray.sh', prefix: 'XRAY' },
+  singbox: { script: 'bootstrap-singbox.sh', prefix: 'SINGBOX' },
+  hysteria: { script: 'bootstrap-hysteria.sh', prefix: 'HYSTERIA' },
   'amneziawg-module': 'skips-installed',
   'amneziawg-tools': 'skips-installed',
-  mtg: { script: 'bootstrap-mtg.sh', env: null },
-  mita: { script: 'bootstrap-mieru.sh', env: null },
+  mtg: { script: 'bootstrap-mtg.sh', prefix: 'MTG' },
+  mita: { script: 'bootstrap-mieru.sh', prefix: 'MIERU' },
   'caddy-naive': 'unpinned',
 };
 
 export type CoreCommand =
   | { kind: 'command'; text: string }
-  | { kind: 'none'; why: 'no-script' | 'skips-installed' | 'unpinned' | 'needs-checksum' };
+  | { kind: 'none'; why: 'skips-installed' | 'unpinned' | 'no-arch' | 'no-asset' };
 
-/** The ssh line that moves `component` to `target`, or why there is none. */
-export function coreUpdateCommand(component: CoreComponent, target: string | null): CoreCommand {
+/**
+ * The ssh line that moves `component` to `target` on a machine of `arch`, or
+ * why there is none.
+ *
+ * The pair is sent always, the pin included: the node's checkout of the
+ * scripts can be older than the panel's manifest, and its own default would
+ * then install something else. No arch, no command: every file and its
+ * sha256 is per arch, and a guess would be refused by the script at best.
+ */
+export function coreUpdateCommand(
+  component: CoreComponent,
+  target: string | null,
+  arch: CoreArch | undefined,
+): CoreCommand {
   const how = CORE_UPDATE[component];
   if (typeof how === 'string') return { kind: 'none', why: how };
   const release = target === null ? undefined : CORE_VERSIONS[component].releases.find((r) => r.version === target);
   if (!release) return { kind: 'none', why: 'unpinned' };
-  if (how.env === null && release.version !== CORE_VERSIONS[component].pinned) {
-    return { kind: 'none', why: 'needs-checksum' };
-  }
+  if (!arch) return { kind: 'none', why: 'no-arch' };
+  const asset = release.assets?.[arch];
+  if (!asset) return { kind: 'none', why: 'no-asset' };
   // `sudo env X=…`, not `X=… sudo`: sudo resets the environment, and the
-  // variable would never reach the script.
-  const env = how.env ? `env ${how.env.name}=${how.env.value(release)} ` : '';
+  // variables would never reach the script. `bash`: the scripts carry no
+  // executable bit.
+  const p = how.prefix;
   return {
     kind: 'command',
-    text: `sudo ${env}${NODE_DIR}/apps/node/scripts/${how.script} && sudo systemctl restart iceslab-node`,
+    text:
+      `sudo env ${p}_VERSION=${release.version} ${p}_SHA256=${asset.sha256} ` +
+      `bash ${NODE_DIR}/apps/node/scripts/${how.script} && sudo systemctl restart iceslab-node`,
   };
 }
 
@@ -101,8 +108,9 @@ const PART: Partial<Record<CoreComponent, 'module' | 'tools'>> = {
  * What a core row says about its version(s). Empty when there is nothing to
  * judge: a missing binary (`installed: false`, whatever version rode along),
  * no component reported by this engine, or every value empty or unparseable.
+ * `arch` is the machine's (`node.cores.arch`), needed only for the command.
  */
-export function coreVersionFacts(core: NodeCore): CoreVersionLine[] {
+export function coreVersionFacts(core: NodeCore, arch: CoreArch | undefined): CoreVersionLine[] {
   if (core.installed === false) return [];
   const engine = core.engine ?? core.name;
   const lines: CoreVersionLine[] = [];
@@ -121,7 +129,7 @@ export function coreVersionFacts(core: NodeCore): CoreVersionLine[] {
       part: PART[component] ?? null,
       reported,
       verdict,
-      command: moves ? coreUpdateCommand(component, target) : null,
+      command: moves ? coreUpdateCommand(component, target, arch) : null,
     });
   }
   return lines;

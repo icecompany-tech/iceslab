@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import type { CoreArch } from '@iceslab/shared';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
@@ -108,6 +109,7 @@ export function CoresPanel({ node }: { node: Node }) {
               key={`${c.name}:${c.engine ?? ''}`}
               core={c}
               nodeId={node.id}
+              arch={node.cores?.arch}
               // Поколение AWG: намерение ноды против версии, которую сообщило
               // ядро. Только у amneziawg и только когда сервер поле отдаёт.
               awg={c.name === 'amneziawg' ? awgVersionFacts(node.awgProtocol, readCoreAwg(c)) : null}
@@ -143,7 +145,18 @@ const BOOTSTRAP: Record<string, string> = {
  *  по умолчанию в `scripts/install-iceslab-node.sh`. */
 const NODE_DIR = '/opt/iceslab-node';
 
-function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: AwgVersionFacts | null }) {
+function CoreRow({
+  core,
+  nodeId,
+  arch,
+  awg,
+}: {
+  core: NodeCore;
+  nodeId: string;
+  /** The machine's arch from the same report: the update command needs it. */
+  arch: CoreArch | undefined;
+  awg: AwgVersionFacts | null;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [shown, setShown] = useState(false);
@@ -158,7 +171,7 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
   const version = coreVersionOf(core);
   // Версия против манифеста: вердикт судит judgeCoreVersion из контракта,
   // здесь только слова. Пусто, когда судить нечего (нет файла, нет версии).
-  const verLines = coreVersionFacts(core);
+  const verLines = coreVersionFacts(core, arch);
   const update = verLines.find((l) => l.command?.kind === 'command')?.command;
   const updateText = update?.kind === 'command' ? update.text : null;
   const [updateShown, setUpdateShown] = useState(false);
@@ -261,7 +274,8 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
             : l.verdict.kind === 'unpinned'
               ? { text: t('nodeEdit.coreVer.unpinnedWhy', { reason: l.verdict.reason }), color: FAINT }
               : null;
-        const noCmd = l.command?.kind === 'none' ? t(`nodeEdit.coreVer.noCommand.${l.command.why}`) : null;
+        const noCmd =
+          l.command?.kind === 'none' ? t(`nodeEdit.coreVer.noCommand.${l.command.why}`, { arch: arch ?? '' }) : null;
         if (!why && !noCmd) return null;
         return (
           <Stack key={`why-${l.component}`} gap={4} style={{ marginTop: 6, paddingLeft: 18 }}>

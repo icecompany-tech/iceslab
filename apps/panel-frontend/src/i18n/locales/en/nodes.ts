@@ -280,13 +280,12 @@
       part: { module: 'module', tools: 'tools' },
       howToUpdate: 'How to update',
       noCommand: {
-        'no-script':
-          'No command: xray has no install script of its own, it comes with the main installer, and re-running that wipes the node\'s mTLS keys.',
         'skips-installed':
           'No command: the AmneziaWG install script leaves a loaded module and installed tools alone, so running it again moves nothing.',
         unpinned: 'No command: the manifest lists no release to move to.',
-        'needs-checksum':
-          'No command: for this version the script also needs a checksum for the machine\'s architecture, which the panel does not know.',
+        'no-arch':
+          'No command: the node has not reported its architecture, and every release file and its checksum are per architecture.',
+        'no-asset': 'No command: this release has no build for the node\'s architecture ({{arch}}).',
       },
       afterUpdate:
         'The panel runs nothing on the machine: this is a line for your ssh. The node reports the new version by itself and the row updates.',
