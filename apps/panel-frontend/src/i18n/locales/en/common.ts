@@ -21,6 +21,7 @@ export const common = {
     search: 'Search',
     copy: 'Copy',
     copied: 'Copied',
+    copyFailed: 'Not copied',
     none: '-',
     all: 'All',
     nothingFound: 'Nothing found',

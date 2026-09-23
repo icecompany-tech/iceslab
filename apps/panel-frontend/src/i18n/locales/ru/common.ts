@@ -21,6 +21,7 @@ export const common = {
     search: 'Поиск',
     copy: 'Копировать',
     copied: 'Скопировано',
+    copyFailed: 'Не скопировалось',
     none: '-',
     all: 'Все',
     nothingFound: 'Ничего не найдено',

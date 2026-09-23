@@ -2,7 +2,7 @@ import { IconExternalLink, IconLink, IconRefresh } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN, FAINT, DISPLAY, FIELD_EDGE, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
-import { CopyButton } from '@/contours/users/components/UserDrawer/CopyButton';
+import { CopyButton } from '@/ui/CopyButton';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import { fetchAuthStatus } from '@/lib/auth/api';
 import { subscriptionUrl } from '@/lib/domain/users';

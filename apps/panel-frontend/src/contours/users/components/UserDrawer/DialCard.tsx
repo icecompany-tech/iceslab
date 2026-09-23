@@ -3,7 +3,7 @@ import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN, FAINT, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
 import { dialCopy } from '@/contours/users/lib/dialCopy';
-import { CopyButton } from '@/contours/users/components/UserDrawer/CopyButton';
+import { CopyButton } from '@/ui/CopyButton';
 import { dialTabOf, dialTabs } from '@/contours/users/lib/dialTabs';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

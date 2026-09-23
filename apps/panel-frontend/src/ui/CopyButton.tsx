@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconCopy, IconX } from '@tabler/icons-react';
 import { Text, UnstyledButton } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
-import { CYAN, DISPLAY, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED } from '@/contours/users/lib/colors';
+import { CYAN, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED } from '@/lib/ui/tokens';
 import { copyToClipboard } from '@/lib/ui/clipboard';
+
+const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /** Сколько держится «Скопировано», прежде чем кнопка вернётся к своей подписи. */
 const CONFIRM_MS = 1500;
@@ -16,6 +18,9 @@ const CONFIRM_MS = 1500;
  * что-то в буфер. Здесь три состояния: наведение (рамка ярче), «Скопировано»
  * с галкой на полторы секунды, и «Не скопировалось», если буфер отказал: копия
  * на http без secure context может не случиться, и подтверждать её тогда нельзя.
+ *
+ * Жила в ящике пользователя; переехала в `ui/`, когда понадобилась строке ядра
+ * на странице ноды (контуры друг друга не импортируют).
  *
  * `outline` для строк в карточке, `solid` для главной кнопки ссылки подписки.
  */
@@ -52,8 +57,7 @@ export function CopyButton({
   const solid = variant === 'solid';
   const tone = disabled ? FAINT : state === 'copied' ? MOSS : state === 'failed' ? RED : solid ? GROUND : MIST;
   const Icon = state === 'copied' ? IconCheck : state === 'failed' ? IconX : IconCopy;
-  const text_ =
-    state === 'copied' ? t('userDrawer.copied') : state === 'failed' ? t('userDrawer.copyFailed') : label;
+  const text_ = state === 'copied' ? t('common.copied') : state === 'failed' ? t('common.copyFailed') : label;
 
   return (
     <UnstyledButton
