@@ -1,5 +1,8 @@
 import type { NodeProtocol } from '@/lib/domain/nodes';
+import type { AwgProtocol } from '@/lib/domain/awg';
 export interface FormValues {
+  /** Поколение AmneziaWG (фаза 7). `null` = не задано, сервер читает как 1. */
+  awgProtocol: AwgProtocol | null;
   name: string;
   host: string;
   port: number | '';

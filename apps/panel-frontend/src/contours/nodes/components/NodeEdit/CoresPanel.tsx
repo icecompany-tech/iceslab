@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
+import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import {
   AMBER,
   CARD,
@@ -99,7 +100,14 @@ export function CoresPanel({ node }: { node: Node }) {
       ) : (
         <Stack gap={0}>
           {cores.map((c) => (
-            <CoreRow key={`${c.name}:${c.engine ?? ''}`} core={c} nodeId={node.id} />
+            <CoreRow
+              key={`${c.name}:${c.engine ?? ''}`}
+              core={c}
+              nodeId={node.id}
+              // Поколение AWG: намерение ноды против версии, которую сообщило
+              // ядро. Только у amneziawg и только когда сервер поле отдаёт.
+              awg={c.name === 'amneziawg' ? awgVersionFacts(node.awgProtocol, readCoreAwg(c)) : null}
+            />
           ))}
           {/* Инвентарь, а не живость: поднято ли ядро прямо сейчас, говорит
               статус ноды, и повторять его здесь второй раз значит завести
@@ -131,7 +139,7 @@ const BOOTSTRAP: Record<string, string> = {
  *  по умолчанию в `scripts/install-iceslab-node.sh`. */
 const NODE_DIR = '/opt/iceslab-node';
 
-function CoreRow({ core, nodeId }: { core: NodeCore; nodeId: string }) {
+function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: AwgVersionFacts | null }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [shown, setShown] = useState(false);
@@ -213,6 +221,39 @@ function CoreRow({ core, nodeId }: { core: NodeCore; nodeId: string }) {
           </RowButton>
         )}
       </Box>
+
+      {/* Поколение AmneziaWG. Расхождение намерения с фактом янтарным: клиенты
+          с конфигом одного поколения к ядру другого не подключатся, а на
+          экране это выглядело бы как исправное ядро. */}
+      {awg && (
+        <Text
+          style={{
+            marginTop: 6,
+            paddingLeft: 18,
+            fontSize: 12,
+            lineHeight: '17px',
+            color: awg.mismatch ? AMBER : FAINT,
+          }}
+        >
+          {/* Без `!`: расхождение и так подразумевает сообщённую версию, но
+              обещание в типе вчера уже роняло страницу, пусть проверит код. */}
+          {/* Как ядро исполняется, это третья часть строки, и только когда ядро
+              это сообщило. В строке расхождения она стоит в скобках у факта:
+              хвостом после «не подключатся» она читалась бы как продолжение
+              вывода, а это часть того, ЧТО стоит на машине. */}
+          {awg.mismatch && awg.reported !== null
+            ? t(awg.runtime ? 'nodeEdit.coresAwgMismatchRuntime' : 'nodeEdit.coresAwgMismatch', {
+                intended: awgLabel(awg.intended),
+                reported: awgLabel(awg.reported),
+                runtime: awg.runtime ? t(`nodeEdit.coresAwgRuntime.${awg.runtime}`) : '',
+              })
+            : awg.reported === null
+              ? t('nodeEdit.coresAwgNoReport', { version: awgLabel(awg.intended) })
+              : `${t('nodeEdit.coresAwg', { version: awgLabel(awg.intended) })}${
+                  awg.runtime ? ` · ${t(`nodeEdit.coresAwgRuntime.${awg.runtime}`)}` : ''
+                }`}
+        </Text>
+      )}
 
       {canShowCommand && shown && (
         <Stack gap={8} style={{ marginTop: 12 }}>

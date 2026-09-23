@@ -10,6 +10,8 @@ import { useTranslation } from 'react-i18next';
 import { policyReachFacts, type PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
 import { FAINT, MIST, MONO, MOSS } from '@/contours/nodes/lib/colors';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
+import { awgSelectorShown } from '@/lib/domain/awg';
+import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
 
 /**
  * Name, address, region and protocol of the node, plus the save bar.
@@ -20,7 +22,8 @@ export function NodeParamsForm({
   node,
   nodePoliciesQuery,
   policyRefusal,
-}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'node' | 'nodePoliciesQuery' | 'policyRefusal'>) {
+  awgKnown,
+}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'node' | 'nodePoliciesQuery' | 'policyRefusal' | 'awgKnown'>) {
   const { t } = useTranslation();
   const reach = policyReachFacts(node?.cores?.cores);
   const applicability = reach.state;
@@ -54,6 +57,17 @@ export function NodeParamsForm({
                     {...form.getInputProps('protocol')}
                   />
                 </Box>
+
+                {/* Поколение AmneziaWG: свойство ноды, и от него зависит, каким
+                    клиентом к ней можно подключиться. Подсказка под селектором
+                    говорит это словами. Где выбор показывать, решает фабрика. */}
+                {awgSelectorShown(awgKnown, form.values.protocol, node?.cores?.cores) && (
+                  <AwgProtocolSelect
+                    value={form.values.awgProtocol}
+                    onChange={(g) => form.setFieldValue('awgProtocol', g)}
+                    runtime={node?.awgRuntime}
+                  />
+                )}
 
                 <Box style={{ display: 'flex', alignItems: 'flex-start', gap: 20, width: '100%' }}>
                   <TextInput

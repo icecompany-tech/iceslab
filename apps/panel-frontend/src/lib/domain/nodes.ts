@@ -1,4 +1,5 @@
 import type { EngineName, NodeCoreInfo, NodeCores } from '@iceslab/shared';
+import type { AwgProtocol, AwgRuntime } from '@/lib/domain/awg';
 import { api } from '@/lib/net/client';
 
 export type NodeProtocol =
@@ -92,6 +93,18 @@ export interface Node {
    * node never carries a copy of them.
    */
   policyId: string | null;
+  /**
+   * Поколение AmneziaWG на этой ноде (фаза 7). См. `lib/domain/awg.ts`.
+   *
+   * ⚠ Три значения: `undefined` это «сервер поля не отдаёт» (экран молчит про
+   * версию), `null` это «не задана» (читается как 1, так живут ноды до фазы
+   * 7), `1 | 3` это выбор оператора. Контракт объявлен ARCH 23.09 заранее,
+   * сервер отдаёт ключ всегда.
+   */
+  awgProtocol?: AwgProtocol | null;
+  /** Как AWG исполняется на ноде (фаза 7): модуль ядра или отдельный процесс.
+   *  `undefined` пока сервер поле не отдаёт; тогда экран об этом молчит. */
+  awgRuntime?: AwgRuntime | null;
   /**
    * The cores this machine reported, with the panel's freshness stamp.
    *
@@ -231,9 +244,15 @@ export interface CreateNodeInput {
   domain?: string | null;
   hardening?: NodeHardening | null;
   singboxEngine?: boolean;
+  /** Поколение AmneziaWG (фаза 7). Уходит ТОЛЬКО если оператор его выбирал:
+   *  до контракта сервер поля не знает, и ключ, которого он не ждёт, это отказ
+   *  сохранения. */
+  awgProtocol?: AwgProtocol | null;
 }
 
 export interface UpdateNodeInput {
+  /** См. `CreateNodeInput.awgProtocol`: только при правке. */
+  awgProtocol?: AwgProtocol | null;
   name?: string;
   address?: string;
   protocol?: NodeProtocol;

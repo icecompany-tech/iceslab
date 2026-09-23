@@ -2,6 +2,7 @@ import type { EngineName } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 import type { ProtocolName } from '@/lib/domain/protocols';
 import type { InboundConfig } from '@/lib/domain/inbounds';
+import type { AwgProtocol } from '@/lib/domain/awg';
 
 // Replaces the per-node Inbound model. A Profile is a logical inbound
 // template (shared across nodes), a Binding deploys it to a specific node
@@ -38,6 +39,13 @@ export interface Profile {
   description: string | null;
   config: InboundConfig;
   enabled: boolean;
+  /**
+   * Поколение AmneziaWG у профиля amneziawg (фаза 7): то же поле, что у ноды,
+   * и сервер откажет привязке профиля одного поколения к ноде другого
+   * (409 AWG_PROTOCOL_MISMATCH). Три значения, как у ноды; экраном пока не
+   * читается.
+   */
+  awgProtocol?: AwgProtocol | null;
   bindingCount: number;
   /** Distinct users who can reach this profile via squad ACL. */
   userCount: number;

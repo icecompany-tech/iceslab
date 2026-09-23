@@ -61,6 +61,7 @@ export function NodeEditPage() {
     nodePoliciesQuery,
     syncQuery,
     policyRefusal,
+    awgKnown,
   } = useNodeEditForm();
 
   // The id in the URL may match nothing: show the fallback rather than an
@@ -248,6 +249,7 @@ export function NodeEditPage() {
                 node={node}
                 nodePoliciesQuery={nodePoliciesQuery}
                 policyRefusal={policyRefusal}
+                awgKnown={awgKnown}
               />
 
               <EgressCard navigate={navigate} cascade={cascade} warpMutation={warpMutation} egress={egress} />

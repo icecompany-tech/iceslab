@@ -10,8 +10,10 @@ import { createBinding, listProfiles, type Profile } from '@/lib/domain/profiles
 import {
   createNode,
   findNode,
+  listNodes,
   type NodeWithPayload,
 } from '@/lib/domain/nodes';
+import { awgPayload } from '@/lib/domain/awg';
 import {
   pickFreePort,
   type FormValues,
@@ -51,6 +53,7 @@ export function useNodeCreateForm() {
       hardenFail2ban: false,
       hardenRealisticFallback: false,
       hardenSshAllowlist: [],
+      awgProtocol: null,
     },
     validateInputOnBlur: true,
     validate: {
@@ -115,6 +118,15 @@ export function useNodeCreateForm() {
     queryFn: () => listProfiles(),
     enabled: step === 1,
   });
+
+  /**
+   * Знает ли сервер поле `awgProtocol`. У новой ноды ответа сервера про неё
+   * нет, поэтому смотрим на уже стоящие: ключ сервер отдаёт у каждой всегда,
+   * так что хватает одной. Пустой парк это «не знаем», и тогда выбора нет,
+   * а не выбор, который сервер может отвергнуть.
+   */
+  const fleetQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
+  const awgKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.awgProtocol !== undefined);
 
   // A host can land here only if this node will run the core its profile needs:
   // the node's own core, or anything on sing-box when that engine is installed
@@ -194,6 +206,8 @@ export function useNodeCreateForm() {
         hardening: buildHardening(form.values),
         singboxEngine:
           SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
+        // Только выбранное оператором и только если сервер поле знает.
+        ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
       });
 
       // Bindings go one at a time; there is no batch endpoint. A host that
@@ -288,6 +302,7 @@ export function useNodeCreateForm() {
     isOnline,
     waited,
     profilesQuery,
+    awgKnown,
     groups,
     portByProfile,
     toggle,

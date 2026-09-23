@@ -9,6 +9,8 @@ import { ServerIcon, ShieldPinIcon } from '@/contours/nodes/components/NodeCreat
 import { ToggleRow } from '@/contours/nodes/components/NodeCreate/ToggleRow';
 import { useTranslation } from 'react-i18next';
 import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
+import { awgSelectorShown } from '@/lib/domain/awg';
+import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
 
 type Wizard = ReturnType<typeof useNodeCreateForm>;
 
@@ -18,7 +20,8 @@ type Wizard = ReturnType<typeof useNodeCreateForm>;
  */
 export function StepParams({
   form,
-}: Pick<Wizard, 'form'>) {
+  awgKnown,
+}: Pick<Wizard, 'form' | 'awgKnown'>) {
   const { t } = useTranslation();
 
   return (
@@ -55,6 +58,15 @@ export function StepParams({
                   title={t('nodes.form.singboxEngine')}
                   hint={t('nodes.form.singboxEngineDesc')}
                   titleSize={13}
+                />
+              )}
+
+              {/* Поколение AmneziaWG. У новой ноды ядер ещё нет, поэтому
+                  решает только основной протокол. */}
+              {awgSelectorShown(awgKnown, form.values.protocol, null) && (
+                <AwgProtocolSelect
+                  value={form.values.awgProtocol}
+                  onChange={(g) => form.setFieldValue('awgProtocol', g)}
                 />
               )}
 

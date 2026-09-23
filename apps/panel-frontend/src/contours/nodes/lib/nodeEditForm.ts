@@ -1,4 +1,5 @@
 import type { Node, NodeProtocol } from '@/lib/domain/nodes';
+import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 export interface FormValues {
   name: string;
@@ -12,6 +13,9 @@ export interface FormValues {
   /** Э3 layer B: which node policy runs here. '' means none, and saving '' is
    *  a real detach, not a no-op: the config is rewritten without the rules. */
   policyId: string;
+  /** Поколение AmneziaWG (фаза 7). `null` = не задано, читается как 1. Уходит
+   *  на сервер только правленым (см. `awgPayload`). */
+  awgProtocol: AwgProtocol | null;
 }
 
 export function splitAddress(address: string): { host: string; port: number } {
@@ -36,5 +40,6 @@ export function defaults(node: Node | null): FormValues {
     consumptionMultiplier: node ? Number(node.consumptionMultiplier) : 1,
     maxUsers: node?.maxUsers ?? '',
     policyId: node?.policyId ?? '',
+    awgProtocol: node?.awgProtocol ?? null,
   };
 }
