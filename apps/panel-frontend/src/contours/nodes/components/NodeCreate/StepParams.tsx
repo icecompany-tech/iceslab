@@ -61,6 +61,13 @@ export function StepParams({
                 />
               )}
 
+              {/* Версии ядер здесь не выбираются: без намерения сервер кладёт
+                  в установку пины манифеста, а выбор живёт на странице ноды,
+                  рядом с тем, что нода потом сообщит. */}
+              <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>
+                {t('nodes.form.coreVersionsNote')}
+              </Text>
+
               {/* Поколение AmneziaWG. У новой ноды ядер ещё нет, поэтому
                   решает только основной протокол. */}
               {awgSelectorShown(awgKnown, form.values.protocol, null) && (

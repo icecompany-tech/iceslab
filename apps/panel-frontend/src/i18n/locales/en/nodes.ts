@@ -64,6 +64,7 @@
       domain: 'Domain (FQDN, optional)',
       domainDesc: 'A-record this to the node IP. Used as REALITY serverName for self-steal profiles (SNI matches IP, survives RU DPI). Not the hysteria certificate name, that follows the address above.',
       singboxEngine: 'Also install sing-box engine',
+      coreVersionsNote: 'Core versions: the manifest pins. They can be changed on the node page after install.',
       singboxEngineDesc: 'Adds --with-singbox to the install command, so this node can also serve vless/vmess/trojan/hy2/ss profiles that use the sing-box engine.',
       // The AmneziaWG generation: a property of the node, and it decides which
       // client can connect. The generations are incompatible.
@@ -271,8 +272,14 @@
       'The core that applies rules is not installed on this node. Install it from the «Cores» section below and the rules start working: there is nothing to detach.',
     coreVer: {
       intendedPin: '{{v}}, as pinned',
-      intendedChosen: '{{v}}, as set for the node',
+      intendedChosen: '{{v}}, as set by the operator',
       drift: '{{v}}, pin {{intended}}',
+      driftChosen: '{{v}}, set {{intended}}',
+      pick: 'version',
+      pinOption: 'manifest pin ({{v}})',
+      isPin: 'pin',
+      blocked: { 'known-bad': 'known bad', 'above-ceiling': 'above the ceiling' },
+      refused: 'The server refused the core versions, nothing was saved:',
       aboveCeiling: '{{v}}, above the ceiling {{ceiling}}',
       knownBad: '{{v}}, known bad',
       unpinned: '{{v}}, no pin',

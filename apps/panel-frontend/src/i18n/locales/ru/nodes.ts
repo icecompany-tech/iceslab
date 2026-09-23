@@ -66,6 +66,7 @@
       domain: 'Домен (FQDN, опционально)',
       domainDesc: 'A-запись на IP ноды. Используется как REALITY serverName для self-steal профилей (SNI совпадает с IP, переживает РФ-DPI). Не имя сертификата hysteria - оно берётся из адреса выше.',
       singboxEngine: 'Поставить также движок sing-box',
+      coreVersionsNote: 'Версии ядер: пины манифеста. Поменять можно на странице ноды после установки.',
       singboxEngineDesc: 'Добавит --with-singbox в install-команду - тогда нода сможет обслуживать и профили vless/vmess/trojan/hy2/ss с движком sing-box.',
       // Поколение AmneziaWG: свойство ноды, и от него зависит, каким клиентом
       // к ней можно подключиться. Поколения несовместимы.
@@ -278,8 +279,14 @@
     // Вердикт решает judgeCoreVersion, здесь только слова к нему.
     coreVer: {
       intendedPin: '{{v}}, как в пине',
-      intendedChosen: '{{v}}, как задано для ноды',
+      intendedChosen: '{{v}}, как задано оператором',
       drift: '{{v}}, пин {{intended}}',
+      driftChosen: '{{v}}, задано {{intended}}',
+      pick: 'версия',
+      pinOption: 'пин манифеста ({{v}})',
+      isPin: 'пин',
+      blocked: { 'known-bad': 'известная поломка', 'above-ceiling': 'выше потолка' },
+      refused: 'Сервер не принял версии ядер, ничего не сохранено:',
       aboveCeiling: '{{v}}, выше потолка {{ceiling}}',
       knownBad: '{{v}}, известная поломка',
       unpinned: '{{v}}, пина нет',

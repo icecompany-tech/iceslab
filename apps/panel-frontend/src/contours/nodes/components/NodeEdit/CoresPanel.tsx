@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Box, Select, Stack, Text, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { CoreArch } from '@iceslab/shared';
+import type { CoreArch, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
-import { coreVersionFacts, type CoreVersionLine } from '@/lib/domain/coreVersions';
+import {
+  componentsOfCore,
+  coreReleaseOptions,
+  coreVersionFacts,
+  type CoreVersionLine,
+} from '@/lib/domain/coreVersions';
 import { CopyButton } from '@/ui/CopyButton';
 import {
   AMBER,
@@ -65,7 +70,20 @@ import { ChipIcon } from '@/contours/nodes/components/NodeEdit/icons';
  * что та лежит (transport.ts, комментарий у типа). Живость целиком живёт в
  * статусе ноды, и секция отправляет туда, а не выдумывает её заново.
  */
-export function CoresPanel({ node }: { node: Node }) {
+export function CoresPanel({
+  node,
+  intent,
+  onIntent,
+  refusal,
+}: {
+  node: Node;
+  /** Выбор версий в форме ноды (ещё не сохранённый). undefined: сервер поля
+   *  не знает, и выбора нет. Судит строку СОХРАНЁННОЕ намерение ноды. */
+  intent?: NodeCoreVersions;
+  onIntent?: (next: NodeCoreVersions) => void;
+  /** Строки отказа 400 CORE_VERSION_NOT_LISTED после «Сохранить». */
+  refusal?: string[] | null;
+}) {
   const { t } = useTranslation();
   const cores = node.cores?.cores;
 
@@ -94,6 +112,29 @@ export function CoresPanel({ node }: { node: Node }) {
         )}
       </Box>
 
+      {/* Сервер не принял выбор версий: его строки, по одной на компонент.
+          Ничего не сохранено, в том числе остальные поля ноды. */}
+      {refusal && (
+        <Box
+          style={{
+            margin: '0 20px 14px',
+            padding: '10px 12px',
+            borderRadius: 8,
+            backgroundColor: `${RED}14`,
+            border: `1px solid ${RED}40`,
+          }}
+        >
+          <Text style={{ fontSize: 12, lineHeight: '17px', color: RED, fontWeight: 500 }}>
+            {t('nodeEdit.coreVer.refused')}
+          </Text>
+          {refusal.map((line) => (
+            <Text key={line} style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: SNOW, marginTop: 4 }}>
+              {line}
+            </Text>
+          ))}
+        </Box>
+      )}
+
       {/* Пусто и молчание это разные вещи, и разводятся они здесь, а не
           пустым списком, который читается как «ядер нет». */}
       {!cores || cores.length === 0 ? (
@@ -110,6 +151,9 @@ export function CoresPanel({ node }: { node: Node }) {
               core={c}
               nodeId={node.id}
               arch={node.cores?.arch}
+              storedIntent={node.coreVersions}
+              intent={intent}
+              onIntent={onIntent}
               // Поколение AWG: намерение ноды против версии, которую сообщило
               // ядро. Только у amneziawg и только когда сервер поле отдаёт.
               awg={c.name === 'amneziawg' ? awgVersionFacts(node.awgProtocol, readCoreAwg(c)) : null}
@@ -130,9 +174,9 @@ export function CoresPanel({ node }: { node: Node }) {
 }
 
 /** Бутстрапы, которые инсталлятор уже положил на машину. Ключ это ПРОТОКОЛ,
- *  значение это имя скрипта в `apps/node/scripts/`. У xray своего бутстрапа
- *  нет: он приезжает основным инсталлятором, и строки для него не будет. */
+ *  значение это имя скрипта в `apps/node/scripts/`. */
 const BOOTSTRAP: Record<string, string> = {
+  xray: 'bootstrap-xray.sh',
   hysteria: 'bootstrap-hysteria.sh',
   amneziawg: 'bootstrap-amneziawg.sh',
   mtproto: 'bootstrap-mtg.sh',
@@ -149,12 +193,20 @@ function CoreRow({
   core,
   nodeId,
   arch,
+  storedIntent,
+  intent,
+  onIntent,
   awg,
 }: {
   core: NodeCore;
   nodeId: string;
   /** The machine's arch from the same report: the update command needs it. */
   arch: CoreArch | undefined;
+  /** What the node is meant to run, as saved: the verdict is judged by this. */
+  storedIntent: NodeCoreVersions | undefined;
+  /** The picker's value in the unsaved form; undefined = no picker. */
+  intent: NodeCoreVersions | undefined;
+  onIntent: ((next: NodeCoreVersions) => void) | undefined;
   awg: AwgVersionFacts | null;
 }) {
   const { t } = useTranslation();
@@ -171,13 +223,19 @@ function CoreRow({
   const version = coreVersionOf(core);
   // Версия против манифеста: вердикт судит judgeCoreVersion из контракта,
   // здесь только слова. Пусто, когда судить нечего (нет файла, нет версии).
-  const verLines = coreVersionFacts(core, arch);
+  const verLines = coreVersionFacts(core, arch, storedIntent ?? {});
+  // Компоненты, у которых есть что выбирать (у caddy-naive релизов нет).
+  const pickable =
+    intent && onIntent && core.installed !== false
+      ? componentsOfCore(core).filter((c) => coreReleaseOptions(c).length > 0)
+      : [];
   const update = verLines.find((l) => l.command?.kind === 'command')?.command;
   const updateText = update?.kind === 'command' ? update.text : null;
   const [updateShown, setUpdateShown] = useState(false);
 
   const script = BOOTSTRAP[core.name];
-  const command = script ? `sudo ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
+  // Через bash: у скриптов нет исполняемого бита, и `sudo путь` отказал бы.
+  const command = script ? `sudo bash ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
   // Строку показываем только там, где она к месту: у ядра, которое стоит и
   // просто не занято, предложение переустановить его сбивает с толку.
   const canShowCommand = state === 'absent' && command !== null;
@@ -264,6 +322,66 @@ function CoreRow({
           </RowButton>
         )}
       </Box>
+
+      {/* Какую версию нода должна держать: релизы манифеста для компонента.
+          Пустое значение это пин (и он поедет вместе с манифестом); явный
+          выбор держится, даже когда пин сдвинется. Уходит кнопкой
+          «Сохранить» вместе с остальными полями ноды. */}
+      {pickable.map((component) => {
+        const options = coreReleaseOptions(component);
+        const byVersion = new Map(options.map((o) => [o.version, o] as const));
+        const pinned = options.find((o) => o.isPin)?.version ?? '';
+        const part = component === 'amneziawg-module' ? 'module' : component === 'amneziawg-tools' ? 'tools' : null;
+        return (
+          <Box
+            key={`pick-${component}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingLeft: 18 }}
+          >
+            <Text style={{ fontSize: 12, lineHeight: '16px', color: MIST, minWidth: 64 }}>
+              {part ? t(`nodeEdit.coreVer.part.${part}`) : t('nodeEdit.coreVer.pick')}
+            </Text>
+            <Select
+              size="xs"
+              w={300}
+              allowDeselect={false}
+              aria-label={`${core.name} ${part ?? ''}`.trim()}
+              value={intent?.[component] ?? ''}
+              data={[
+                { value: '', label: t('nodeEdit.coreVer.pinOption', { v: pinned }) },
+                ...options.map((o) => ({
+                  value: o.version,
+                  label: [
+                    o.version,
+                    o.isPin ? t('nodeEdit.coreVer.isPin') : null,
+                    o.blocked ? t(`nodeEdit.coreVer.blocked.${o.blocked.kind}`) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                  disabled: o.blocked !== null,
+                })),
+              ]}
+              renderOption={({ option }) => {
+                const o = byVersion.get(option.value);
+                return (
+                  <Stack gap={2}>
+                    <Text style={{ fontSize: 12 }}>{option.label}</Text>
+                    {o?.blocked && (
+                      <Text style={{ fontSize: 11, lineHeight: '15px', color: FAINT }}>{o.blocked.reason}</Text>
+                    )}
+                  </Stack>
+                );
+              }}
+              onChange={(v) => {
+                if (!intent || !onIntent) return;
+                const next = { ...intent };
+                if (!v) delete next[component];
+                else next[component] = v;
+                onIntent(next);
+              }}
+            />
+          </Box>
+        );
+      })}
 
       {/* Почему версия плохая (причина из манифеста), почему пина нет, и почему
           команды нет, если двигать надо, а скрипт не умеет. */}
@@ -423,7 +541,8 @@ function verdictWords(l: CoreVersionLine, t: (key: string, opts?: Record<string,
     case 'intended':
       return t(d.isPin ? 'nodeEdit.coreVer.intendedPin' : 'nodeEdit.coreVer.intendedChosen', { v });
     case 'drift':
-      return t('nodeEdit.coreVer.drift', { v, intended: d.intended });
+      // Против чего дрейф: пина манифеста или выбора оператора.
+      return t(l.targetIsPin ? 'nodeEdit.coreVer.drift' : 'nodeEdit.coreVer.driftChosen', { v, intended: d.intended });
     case 'above-ceiling':
       return t('nodeEdit.coreVer.aboveCeiling', { v, ceiling: d.ceiling });
     case 'known-bad':

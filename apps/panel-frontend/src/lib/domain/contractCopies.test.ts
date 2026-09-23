@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CORE_COMPONENTS,
+  CORE_ENV_PREFIX,
+  coreEnvPair,
   judgeCoreVersion,
   LINK_CELLS,
   LINK_CONGESTIONS,
@@ -39,6 +41,9 @@ const GUARDED = [
   'CORE_VERSIONS',
   'judgeCoreVersion',
   'compareCoreVersions',
+  // Имена переменных бутстрапов: одна таблица на установщик, агент и экран.
+  'CORE_ENV_PREFIX',
+  'coreEnvPair',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -79,6 +84,8 @@ describe('копии перечислений контракта', () => {
     expect(XRAY_PLAIN_SUBPROTOCOLS.length).toBeGreaterThan(0);
     expect(CORE_COMPONENTS.length).toBeGreaterThan(0);
     expect(typeof judgeCoreVersion).toBe('function');
+    expect(Object.keys(CORE_ENV_PREFIX).length).toBeGreaterThan(0);
+    expect(typeof coreEnvPair).toBe('function');
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {

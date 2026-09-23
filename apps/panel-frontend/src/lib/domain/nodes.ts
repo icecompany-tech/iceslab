@@ -1,4 +1,4 @@
-import type { EngineName, NodeCoreInfo, NodeCores } from '@iceslab/shared';
+import type { CoreComponent, EngineName, NodeCoreInfo, NodeCores, NodeCoreVersions } from '@iceslab/shared';
 import type { AwgProtocol, AwgRuntime } from '@/lib/domain/awg';
 import { api } from '@/lib/net/client';
 
@@ -173,6 +173,12 @@ export interface Node {
    * скрыта этим каскадом. См. `hostHiddenFacts`.
    */
   hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
+  /**
+   * Какие версии ядер оператор хочет на этой ноде. Отсутствие компонента это
+   * пин манифеста. Ключа нет вовсе: сервер старше поля, выбор версии молчит и
+   * в запрос не уходит.
+   */
+  coreVersions?: NodeCoreVersions;
   createdAt: string;
   updatedAt: string;
 }
@@ -280,6 +286,12 @@ export interface UpdateNodeInput {
    * direction this node does not dial). The screen shows that sentence.
    */
   policyId?: string | null;
+  /**
+   * Три значения на компонент: версия пишется, null возвращает на пин,
+   * пропущенный компонент не трогается; null на всё = все пины. Отказ 400
+   * CORE_VERSION_NOT_LISTED с `problems`, см. `coreVersionRefusal`.
+   */
+  coreVersions?: Partial<Record<CoreComponent, string | null>> | null;
 }
 
 /**

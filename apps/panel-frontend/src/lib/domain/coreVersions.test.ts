@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CORE_COMPONENTS, CORE_VERSIONS } from '@iceslab/shared';
-import { CORE_UPDATE, coreUpdateCommand, coreVersionFacts } from '@/lib/domain/coreVersions';
+import { CORE_COMPONENTS, CORE_VERSIONS, coreEnvPair } from '@iceslab/shared';
+import {
+  CORE_UPDATE,
+  coreReleaseOptions,
+  coreUpdateCommand,
+  coreVersionFacts,
+  coreVersionRefusal,
+  coreVersionsPatch,
+} from '@/lib/domain/coreVersions';
 import type { NodeCore } from '@/lib/domain/nodes';
 
 const core = (c: Partial<NodeCore> & { name: NodeCore['name'] }): NodeCore => c as NodeCore;
@@ -117,16 +124,83 @@ describe('CORE_UPDATE against apps/node/scripts', () => {
     expect(Object.keys(SCRIPTS).length).toBeGreaterThanOrEqual(6);
   });
 
-  it('every script named exists, takes both variables of its pair, and defaults to the manifest pin', () => {
+  it('every script named exists, takes both variables of its contract pair, and defaults to the manifest pin', () => {
     for (const component of CORE_COMPONENTS) {
       const how = CORE_UPDATE[component];
       if (typeof how === 'string') continue;
       const path = Object.keys(SCRIPTS).find((p) => p.endsWith(`/${how.script}`));
       expect(path, `${component}: ${how.script}`).toBeDefined();
       const src = SCRIPTS[path!]!;
-      expect(src, `${component}: ${how.prefix}_VERSION`).toMatch(new RegExp(`\\$\\{${how.prefix}_VERSION[:}]`));
-      expect(src, `${component}: ${how.prefix}_SHA256`).toMatch(new RegExp(`\\$\\{${how.prefix}_SHA256[:}]`));
+      const pair = coreEnvPair(component);
+      expect(pair, `${component}: pair`).not.toBeNull();
+      for (const name of pair!) expect(src, `${component}: ${name}`).toMatch(new RegExp(`\\$\\{${name}[:}]`));
       expect(src, `${component}: pin ${PIN(component)}`).toContain(PIN(component));
+    }
+  });
+});
+
+describe('intent: the row is judged against what the operator chose', () => {
+  it('a chosen version that is reported: «как задано», no command', () => {
+    const [l] = coreVersionFacts(core({ name: 'xray', engine: 'xray', version: PIN('xray') }), 'amd64', { xray: PIN('xray') });
+    expect(l?.verdict).toEqual({ kind: 'intended', isPin: true });
+  });
+
+  it('drift against the choice names the choice, and the command moves to it', () => {
+    // Every component lists one release today, so the "choice" is the pin; the
+    // flag says whose number the drift line prints.
+    const [l] = coreVersionFacts(core({ name: 'tuic', engine: 'singbox', version: '1.13.12' }), 'amd64', {
+      singbox: PIN('singbox'),
+    });
+    expect(l?.verdict).toEqual({ kind: 'drift', intended: PIN('singbox') });
+    expect(l?.targetIsPin).toBe(true);
+  });
+});
+
+describe('coreReleaseOptions', () => {
+  it('every listed release, the pin marked, none blocked in today\'s manifest', () => {
+    for (const component of CORE_COMPONENTS) {
+      const opts = coreReleaseOptions(component);
+      expect(opts.map((o) => o.version)).toEqual(CORE_VERSIONS[component].releases.map((r) => r.version));
+      for (const o of opts) {
+        expect(o.isPin).toBe(o.version === CORE_VERSIONS[component].pinned);
+        expect(o.blocked).toBeNull();
+      }
+    }
+  });
+});
+
+describe('coreVersionsPatch: three values', () => {
+  it('nothing changed, or a server that does not know the field: send nothing', () => {
+    expect(coreVersionsPatch({ xray: '26.3.27' }, { xray: '26.3.27' })).toBeUndefined();
+    expect(coreVersionsPatch(undefined, { xray: '26.3.27' })).toBeUndefined();
+  });
+
+  it('a set component goes as its version, a component put back on the pin as null, the rest not at all', () => {
+    expect(coreVersionsPatch({ mtg: '2.2.8', singbox: '1.13.14' }, { singbox: '1.13.14', xray: '26.3.27' })).toEqual({
+      mtg: null,
+      xray: '26.3.27',
+    });
+  });
+});
+
+describe('coreVersionRefusal', () => {
+  it('the server\'s 400 gives its lines', () => {
+    const err = {
+      response: {
+        status: 400,
+        data: {
+          error: 'CORE_VERSION_NOT_LISTED',
+          message: 'Core versions refused: xray: 26.4.1 is not a listed release (26.3.27)',
+          problems: ['xray: 26.4.1 is not a listed release (26.3.27)'],
+        },
+      },
+    };
+    expect(coreVersionRefusal(err)).toEqual(['xray: 26.4.1 is not a listed release (26.3.27)']);
+  });
+
+  it('anything else is not this refusal', () => {
+    for (const e of [null, undefined, 'x', new Error('x'), { response: { status: 400, data: { error: 'OTHER' } } }, { response: { status: 409, data: { error: 'CORE_VERSION_NOT_LISTED' } } }]) {
+      expect(coreVersionRefusal(e)).toBeNull();
     }
   });
 });

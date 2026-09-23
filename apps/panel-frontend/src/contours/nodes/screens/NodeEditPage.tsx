@@ -62,6 +62,7 @@ export function NodeEditPage() {
     syncQuery,
     policyRefusal,
     awgKnown,
+    coreRefusal,
   } = useNodeEditForm();
 
   // The id in the URL may match nothing: show the fallback rather than an
@@ -257,7 +258,14 @@ export function NodeEditPage() {
               {/* Состав ядер приходит от самой ноды, поэтому секция стоит
                   рядом с параметрами, а не в системной панели справа: это
                   свойство ноды, а не метрика хоста. */}
-              <CoresPanel node={node} />
+              <CoresPanel
+                node={node}
+                // Выбор версии живёт в форме ноды и уходит её «Сохранить».
+                // Сервер старше поля (ключа нет в ответе): выбора нет вовсе.
+                intent={node.coreVersions !== undefined ? form.values.coreVersions : undefined}
+                onIntent={(next) => form.setFieldValue('coreVersions', next)}
+                refusal={coreRefusal}
+              />
             </Box>
 
             <SystemPanel hostsQuery={hostsQuery} dashNode={dashNode} metrics={metrics} exposureMutation={exposureMutation} />

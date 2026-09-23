@@ -1,3 +1,4 @@
+import type { NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
@@ -16,6 +17,9 @@ export interface FormValues {
   /** Поколение AmneziaWG (фаза 7). `null` = не задано, читается как 1. Уходит
    *  на сервер только правленым (см. `awgPayload`). */
   awgProtocol: AwgProtocol | null;
+  /** Намерение по версиям ядер, как в `Node.coreVersions`: нет компонента =
+   *  пин. На сервер уходит только разница с сохранённым (`coreVersionsPatch`). */
+  coreVersions: NodeCoreVersions;
 }
 
 export function splitAddress(address: string): { host: string; port: number } {
@@ -41,5 +45,6 @@ export function defaults(node: Node | null): FormValues {
     maxUsers: node?.maxUsers ?? '',
     policyId: node?.policyId ?? '',
     awgProtocol: node?.awgProtocol ?? null,
+    coreVersions: { ...(node?.coreVersions ?? {}) },
   };
 }

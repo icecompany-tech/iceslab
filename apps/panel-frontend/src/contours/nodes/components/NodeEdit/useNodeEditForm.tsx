@@ -31,6 +31,7 @@ import { defaults, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 import { awgPayload } from '@/lib/domain/awg';
+import { coreVersionRefusal, coreVersionsPatch } from '@/lib/domain/coreVersions';
 export function useNodeEditForm() {
   const { t } = useTranslation();
 
@@ -165,6 +166,11 @@ export function useNodeEditForm() {
   // экран молчит про версию и в запрос её не кладёт.
   const awgKnown = node?.awgProtocol !== undefined && node !== null;
 
+  // Что из версий ядер оператор поменял против сохранённого. undefined, если
+  // ничего или если сервер поля не знает.
+  const coreVersionsDiff = coreVersionsPatch(node?.coreVersions, form.values.coreVersions);
+  const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const port = form.values.port === '' ? DEFAULT_NODE_PORT : Number(form.values.port);
@@ -181,10 +187,14 @@ export function useNodeEditForm() {
         // Поколение AWG уходит, только если сервер поле знает (ключ пришёл в
         // ответе про ноду) и оператор его менял.
         ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
+        // Версии ядер: только изменённые компоненты, и только если сервер поле
+        // знает (ключ пришёл в ответе про ноду).
+        ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
       });
     },
     onSuccess: () => {
       setPolicyRefusal(null);
+      setCoreRefusal(null);
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['node', id] });
       qc.invalidateQueries({ queryKey: ['node-policies'] });
@@ -197,6 +207,16 @@ export function useNodeEditForm() {
       // the reason. That sentence is the answer; a toast saying "save failed"
       // would throw away the only part that tells the operator what to fix, so
       // it stays on the screen next to the picker that caused it.
+      // Версия, которой нет в манифесте: сервер называет каждый компонент.
+      // Строки встают в секции «Ядра», рядом с выбором, который их вызвал.
+      // Первым: разбор отказа политики ниже принимает любую ошибку с message.
+      const coreLines = coreVersionRefusal(err);
+      if (coreLines) {
+        setPolicyRefusal(null);
+        setCoreRefusal(coreLines);
+        return;
+      }
+      setCoreRefusal(null);
       const refusal = readPolicyRefusal(err);
       if (refusal) {
         setPolicyRefusal(refusal.message);
@@ -278,6 +298,7 @@ export function useNodeEditForm() {
     bindingById,
     saveMutation,
     awgKnown,
+    coreRefusal,
     warpMutation,
     exposureMutation,
     bootstrapMutation,
