@@ -50,16 +50,30 @@ export interface PublicHostDto {
    * Only the endpoints that load the relations carry it.
    */
   configChangedAt?: string;
+  /**
+   * The cascade that keeps this host out of every subscription, or null.
+   *
+   * A host on a transit or an exit of an enabled cascade (with "hide hops",
+   * the default) is dropped by the subscription: users reach that node through
+   * the cascade's entry only. The save still answers 201, on purpose, since an
+   * operator may prepare a host for later, so this is a FACT beside the host
+   * rather than a refusal, computed by the same function the subscription
+   * filters with (getHiddenCascadeNodes). Present on list, get, create and
+   * update; the reorder response does not carry it.
+   */
+  hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
 }
 
 export function mapHost(
   h: Host,
   reach?: HostReach,
   configChangedAt?: string,
+  hiddenByCascade?: { cascadeId: string; cascadeName: string } | null,
 ): PublicHostDto {
   return {
     ...(reach ? { reach } : {}),
     ...(configChangedAt ? { configChangedAt } : {}),
+    ...(hiddenByCascade !== undefined ? { hiddenByCascade } : {}),
     id: h.id,
     bindingId: h.bindingId,
     remark: h.remark,

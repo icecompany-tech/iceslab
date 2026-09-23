@@ -15,6 +15,7 @@ import {
 } from '../profiles/profiles.service.js';
 import { mapHost, type HostReach, type PublicHostDto } from './hosts.mapper.js';
 import { hostConfigChangedAt } from './hosts.freshness.js';
+import { getHiddenCascadeNodes, type HidingCascade } from '../cascades/cascade.service.js';
 import type {
   CreateHostInput,
   ListHostsQuery,
@@ -109,6 +110,13 @@ async function assertSniMatchesProfileConfig(opts: {
 
 // ───── CRUD ─────
 
+/** Which cascade hides the node under a binding, or null. See PublicHostDto. */
+async function hidingCascadeOfBinding(bindingId: string): Promise<HidingCascade | null> {
+  const b = await prisma.profileNodeBinding.findUnique({ where: { id: bindingId }, select: { nodeId: true } });
+  if (!b) return null;
+  return (await getHiddenCascadeNodes()).get(b.nodeId) ?? null;
+}
+
 export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
   const where: Prisma.HostWhereInput = {};
   if (q.bindingId) where.bindingId = q.bindingId;
@@ -124,10 +132,12 @@ export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
     where,
     // The two rows under the host are part of its config: an operator who moved
     // the port edited the BINDING, and every client's link changed with it.
-    include: { binding: { select: { updatedAt: true, profile: { select: { updatedAt: true } } } } },
+    include: {
+      binding: { select: { updatedAt: true, nodeId: true, profile: { select: { updatedAt: true } } } },
+    },
     orderBy: [{ bindingId: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
   });
-  const reach = await reachByHost(rows.map((r) => r.id));
+  const [reach, hidden] = await Promise.all([reachByHost(rows.map((r) => r.id)), getHiddenCascadeNodes()]);
   return rows.map((r) =>
     mapHost(
       r,
@@ -137,6 +147,7 @@ export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
         binding: r.binding.updatedAt,
         profile: r.binding.profile.updatedAt,
       }).toISOString(),
+      hidden.get(r.binding.nodeId) ?? null,
     ),
   );
 }
@@ -183,7 +194,9 @@ async function reachByHost(hostIds: string[]): Promise<Map<string, HostReach>> {
 export async function getHostById(id: string): Promise<PublicHostDto> {
   const h = await prisma.host.findUnique({
     where: { id },
-    include: { binding: { select: { updatedAt: true, profile: { select: { updatedAt: true } } } } },
+    include: {
+      binding: { select: { updatedAt: true, nodeId: true, profile: { select: { updatedAt: true } } } },
+    },
   });
   if (!h) throw new HostNotFoundError(id);
   return mapHost(
@@ -194,6 +207,7 @@ export async function getHostById(id: string): Promise<PublicHostDto> {
       binding: h.binding.updatedAt,
       profile: h.binding.profile.updatedAt,
     }).toISOString(),
+    (await getHiddenCascadeNodes()).get(h.binding.nodeId) ?? null,
   );
 }
 
@@ -261,7 +275,7 @@ export async function createHost(input: CreateHostInput): Promise<PublicHostDto>
   // A host IS an endpoint in the subscription, so every mutation here changes
   // what users are handed.
   eventBus.emit('host.changed', {});
-  return mapHost(created);
+  return mapHost(created, undefined, undefined, await hidingCascadeOfBinding(created.bindingId));
 }
 
 /**
@@ -372,7 +386,7 @@ export async function updateHost(
 
   const updated = await prisma.host.update({ where: { id }, data });
   eventBus.emit('host.changed', {});
-  return mapHost(updated);
+  return mapHost(updated, undefined, undefined, await hidingCascadeOfBinding(updated.bindingId));
 }
 
 /**

@@ -672,7 +672,17 @@ function nodeRefsOfTopology(
 // reachable surface; v1 keeps a node in <=1 cascade, the subtraction is
 // defensive). Cached in-process (cascades change rarely) + busted on every
 // cascade write.
-let hiddenNodesCache: { value: Set<string>; expiresAt: number } | null = null;
+/** The cascade that keeps a node out of subscriptions. */
+export interface HidingCascade {
+  cascadeId: string;
+  cascadeName: string;
+}
+
+let hiddenNodesCache: {
+  ids: Set<string>;
+  byNode: Map<string, HidingCascade>;
+  expiresAt: number;
+} | null = null;
 const HIDDEN_NODES_TTL_MS = 60_000;
 
 export function invalidateHiddenCascadeNodeCache(): void {
@@ -680,47 +690,74 @@ export function invalidateHiddenCascadeNodeCache(): void {
 }
 
 export async function getHiddenCascadeNodeIds(): Promise<Set<string>> {
+  return (await readHiddenCascadeNodes()).ids;
+}
+
+/**
+ * The same set, with the cascade that hides each node.
+ *
+ * ONE computation for both: the subscription filters by the ids, and the hosts
+ * screen says why a host will never be handed out. Two readings of "hidden"
+ * would let the screen say "visible" about a node the subscription drops, which
+ * is the silence this exists to end (POST /api/hosts on an exit answered 201
+ * and nobody ever got the host). Where a node is a non-entry hop of more than
+ * one cascade, the first by name is named: one is enough to explain it.
+ */
+export async function getHiddenCascadeNodes(): Promise<Map<string, HidingCascade>> {
+  return (await readHiddenCascadeNodes()).byNode;
+}
+
+async function readHiddenCascadeNodes(): Promise<{ ids: Set<string>; byNode: Map<string, HidingCascade> }> {
   if (hiddenNodesCache && Date.now() < hiddenNodesCache.expiresAt) {
-    return hiddenNodesCache.value;
+    return hiddenNodesCache;
   }
   // Only cascades that opt INTO hiding (the default) suppress their non-entry
   // hops. An operator who unchecks `hideHopsFromSub` keeps the exits visible as
   // direct subscription picks (they still work standalone; the cascade just
   // additionally offers them behind its "Auto" entry).
+  const cascade = { select: { id: true, name: true } } as const;
   const [hops, positions, directionNodes] = await Promise.all([
     prisma.cascadeHop.findMany({
       where: { cascade: { enabled: true, hideHopsFromSub: true } },
-      select: { nodeId: true, position: true },
+      select: { nodeId: true, position: true, cascade },
     }),
     // v4: the same rule, read from the topology tables. Without this a v4-only
     // cascade would leak its transits and exits into subscriptions as direct
     // endpoints, which is exactly the bypass this function exists to stop.
     prisma.cascadePosition.findMany({
       where: { cascade: { enabled: true, hideHopsFromSub: true } },
-      select: { position: true, nodes: { select: { nodeId: true } } },
+      select: { position: true, nodes: { select: { nodeId: true } }, cascade },
     }),
     prisma.cascadeDirectionNode.findMany({
       where: { direction: { cascade: { enabled: true, hideHopsFromSub: true } } },
-      select: { nodeId: true },
+      select: { nodeId: true, direction: { select: { cascade } } },
     }),
   ]);
   const entry = new Set<string>();
-  const nonEntry = new Set<string>();
+  const nonEntry = new Map<string, HidingCascade>();
+  const hide = (nodeId: string, c: { id: string; name: string }) => {
+    const seen = nonEntry.get(nodeId);
+    if (!seen || c.name < seen.cascadeName) nonEntry.set(nodeId, { cascadeId: c.id, cascadeName: c.name });
+  };
   for (const p of positions) {
     for (const n of p.nodes) {
       if (p.position === 0) entry.add(n.nodeId);
-      else nonEntry.add(n.nodeId);
+      else hide(n.nodeId, p.cascade);
     }
   }
   // A direction is never an entry: it is the way OUT.
-  for (const d of directionNodes) nonEntry.add(d.nodeId);
+  for (const d of directionNodes) hide(d.nodeId, d.direction.cascade);
   for (const h of hops) {
     if (h.position === 0) entry.add(h.nodeId);
-    else nonEntry.add(h.nodeId);
+    else hide(h.nodeId, h.cascade);
   }
   for (const id of entry) nonEntry.delete(id);
-  hiddenNodesCache = { value: nonEntry, expiresAt: Date.now() + HIDDEN_NODES_TTL_MS };
-  return nonEntry;
+  hiddenNodesCache = {
+    ids: new Set(nonEntry.keys()),
+    byNode: nonEntry,
+    expiresAt: Date.now() + HIDDEN_NODES_TTL_MS,
+  };
+  return hiddenNodesCache;
 }
 
 /** One line a subscriber can pick at a cascade entry: what it is called, the tag
