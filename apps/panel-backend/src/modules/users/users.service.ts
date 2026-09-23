@@ -2,6 +2,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { generateUserCredentials, generateSubscriptionToken } from '../../lib/auth/credentials.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
+import { ensureAllSquad } from '../squads/squads.system.js';
 import * as repo from './users.repository.js';
 import type {
   CreateUserInput,
@@ -81,6 +82,11 @@ export async function createUser(input: CreateUserInput): Promise<PublicUserDto>
 
   let user;
   try {
+    // A user with no squad picked lands in the system "All" squad, and on a
+    // database that lost that row (dev, 2026-09-23) the membership failed on a
+    // foreign key. The row is repaired in the same transaction; membership of
+    // anybody else is not touched. Explicit squads need no repair.
+    const intoAll = input.groupIds.length === 0;
     user = await repo.create({
       username: input.username,
       shortId: creds.shortId,
@@ -128,7 +134,7 @@ export async function createUser(input: CreateUserInput): Promise<PublicUserDto>
           (groupId) => ({ groupId }),
         ),
       },
-    });
+    }, intoAll ? ensureAllSquad : undefined);
   } catch (err) {
     // Map a DB-level UNIQUE violation on the partial index
     // (users_username_active_key, WHERE deleted_at IS NULL) back to the

@@ -53,6 +53,19 @@ describe('a profile saved on a database that lost the All squad', () => {
     expect(all?.members).toEqual([]);
   });
 
+  it('saves a user with no squad picked, and puts them in the All squad it brings back', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { username: 'no-squad-user' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    const all = await prisma.group.findUnique({ where: { id: ALL_SQUAD_ID }, include: { members: true } });
+    expect(all?.name).toBe('All');
+    expect(all?.members.map((m) => m.userId)).toEqual([JSON.parse(res.body).id]);
+  });
+
   it('names the system row apart when a squad called All already exists', async () => {
     await prisma.group.create({ data: { name: 'All' } });
     const res = await create('hy-2');

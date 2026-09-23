@@ -135,10 +135,21 @@ export async function existsActive(id: string): Promise<boolean> {
   return count > 0;
 }
 
-export async function create(data: Prisma.UserCreateInput): Promise<UserWithTraffic> {
-  return prisma.user.create({
-    data,
-    include: USER_INCLUDE,
+/**
+ * `before`, when given, runs first in the same transaction: the service uses it
+ * to repair the system "All" squad before the membership that points at it
+ * (see squads.system.ts).
+ */
+export async function create(
+  data: Prisma.UserCreateInput,
+  before?: (tx: Prisma.TransactionClient) => Promise<void>,
+): Promise<UserWithTraffic> {
+  if (!before) {
+    return prisma.user.create({ data, include: USER_INCLUDE });
+  }
+  return prisma.$transaction(async (tx) => {
+    await before(tx);
+    return tx.user.create({ data, include: USER_INCLUDE });
   });
 }
 
