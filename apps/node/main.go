@@ -368,6 +368,35 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 		logger.Info("singbox (shadowtls) adapter registered")
 	}
 
+	return withAbsentEngines(adapters)
+}
+
+// knownEngines is every engine the agent can run, each under the protocol it
+// serves natively, which is the name its row carries when it is absent.
+var knownEngines = []struct{ protocol, engine string }{
+	{"xray", "xray"},
+	{"tuic", "singbox"},
+	{"hysteria", "hysteria"},
+	{"amneziawg", "amneziawg"},
+	{"naive", "naive"},
+	{"mtproto", "mtproto"},
+	{"mieru", "mieru"},
+}
+
+// withAbsentEngines adds a stand-in for every known engine nothing above
+// registered, so the node reports it as `installed: false` instead of leaving
+// it out (see core.Absent). An engine that IS registered keeps its adapters and
+// their own answer; hysteria is always registered and never needs one.
+func withAbsentEngines(adapters []core.CoreAdapter) []core.CoreAdapter {
+	have := map[string]bool{}
+	for _, a := range adapters {
+		have[a.Engine()] = true
+	}
+	for _, k := range knownEngines {
+		if !have[k.engine] {
+			adapters = append(adapters, core.NewAbsent(k.protocol, k.engine))
+		}
+	}
 	return adapters
 }
 

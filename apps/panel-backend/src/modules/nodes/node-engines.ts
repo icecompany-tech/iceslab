@@ -69,13 +69,24 @@ export function effectiveEngineOf(profile: {
  * An EMPTY list stays empty, because it is complete: there is no core whose
  * engine went unsaid. That an agent with zero adapters cannot happen (main.go
  * always registers at least one) is what keeps this from mattering.
+ *
+ * ⚠ A core with `installed: false` is NOT an engine the node runs. Since
+ * 2026-09-23 the agent reports every engine it knows, a missing one as a row
+ * with `installed: false`, and counting that row would turn every gate into a
+ * yes: "singbox" would be among the engines of a node with no sing-box on it.
+ * It was already true of hysteria, the one adapter registered unconditionally,
+ * so an xray-only node read as a hysteria node here before this line. Absent
+ * `installed` (an agent older than the field) still counts, as the DTO says.
  */
 export function reportedEngines(node: { cores: unknown }): EngineName[] | undefined {
   const cores = (node.cores as NodeCores | null) ?? null;
   if (!cores) return undefined;
   if (cores.cores.some((c) => c.engine === undefined)) return undefined;
   const out = new Set<EngineName>();
-  for (const c of cores.cores) out.add(c.engine as EngineName);
+  for (const c of cores.cores) {
+    if (c.installed === false) continue;
+    out.add(c.engine as EngineName);
+  }
   return [...out];
 }
 

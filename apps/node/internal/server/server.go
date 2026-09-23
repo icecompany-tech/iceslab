@@ -705,6 +705,12 @@ func (s *Server) applyPush(
 		wantEngine := ib.ResolvedEngine()
 		var matched core.CoreAdapter
 		for _, adapter := range s.cfg.Adapters {
+			// A stand-in for a core that is not installed is reported, never
+			// matched: its inbound takes the "no adapter" path below, as it did
+			// when the stand-in did not exist.
+			if core.IsAbsent(adapter) {
+				continue
+			}
 			if adapter.Name() == string(ib.Protocol) && adapter.Engine() == string(wantEngine) {
 				matched = adapter
 				break

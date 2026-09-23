@@ -335,6 +335,25 @@ func TestAnAmneziawgHandOffNobodyDrawsYetIsLoud(t *testing.T) {
 	}
 }
 
+// An inbound for an engine that is not installed goes where it went before the
+// stand-in existed: "no adapter", persisted, not applied, and not counted as a
+// failure of the push. The stand-in only REPORTS the engine; it never takes an
+// inbound, or the push would start refusing configs it used to keep.
+func TestAnInboundForAnAbsentEngineIsNotTakenByTheStandIn(t *testing.T) {
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, core.NewAbsent("tuic", "singbox"))
+
+	applied, failed, _ := s.applyPush(context.Background(), dto.ApplyInboundsRequest{
+		Inbounds: []dto.InboundDto{{ID: "ib-1", Protocol: "tuic", Port: 8443, Config: json.RawMessage(`{}`)}},
+	})
+	if applied != 0 || failed != 0 {
+		t.Fatalf("applied=%d failed=%d, want 0/0 as with no adapter at all", applied, failed)
+	}
+	if !strings.Contains(logs.String(), "no adapter for protocol/engine") {
+		t.Fatalf("the inbound did not take the no-adapter path:\n%s", logs.String())
+	}
+}
+
 func TestADrawingNobodyTakesIsStillLoud(t *testing.T) {
 	// The other side of the same condition: the chain handed over a drawing for
 	// a core this node does not run. That is the case the alarm exists for, and

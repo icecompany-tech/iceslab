@@ -88,6 +88,43 @@ func health(t *testing.T, adapters ...core.CoreAdapter) dto.HealthcheckResponse 
 	return out
 }
 
+// An engine that is not installed is a ROW, not a gap: installed false, idle
+// rather than down, and holding no port, said as an empty list.
+func TestAnAbsentEngineIsReportedAsNotInstalledAndHoldsNothing(t *testing.T) {
+	body := healthBody(t,
+		&provisionableCore{fakeCore{name: "xray", engine: "xray", running: true}, true},
+		core.NewAbsent("tuic", "singbox"),
+	)
+	var got dto.HealthcheckResponse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "ok" {
+		t.Fatalf("status = %q: an engine that is not installed must not degrade the node", got.Status)
+	}
+	var sb *dto.CoreStatus
+	for i := range got.Cores {
+		if got.Cores[i].Engine == "singbox" {
+			sb = &got.Cores[i]
+		}
+	}
+	if sb == nil {
+		t.Fatalf("the absent engine has no row: %s", body)
+	}
+	if sb.Installed == nil || *sb.Installed {
+		t.Errorf("installed = %v, want false", sb.Installed)
+	}
+	if sb.Provisioned == nil || *sb.Provisioned {
+		t.Errorf("provisioned = %v, want false", sb.Provisioned)
+	}
+	if sb.Running {
+		t.Error("an absent engine reports itself running")
+	}
+	if !strings.Contains(body, `"engine":"singbox"`) || !strings.Contains(body, `"reservedPorts":[]`) {
+		t.Errorf("an absent binary holds no port and must say so as []: %s", body)
+	}
+}
+
 func TestUnconfiguredCoreDoesNotDegradeTheNode(t *testing.T) {
 	got := health(t,
 		&provisionableCore{fakeCore{name: "xray", running: true}, true},

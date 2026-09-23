@@ -640,10 +640,19 @@ func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath)
 // Neither is an inbound the panel knows about, and both are ordinary listening
 // sockets. A profile saved onto one of them bound cleanly in the panel and then
 // failed to listen on the node, in the journal, hours later.
+//
+// The stats API only when the binary is here: hysteria opens it, not the agent,
+// so on a node without hysteria nothing listens there, and claiming the port
+// would refuse an operator's profile on 9999 for a socket that does not exist.
+// The auth callback stays either way: the agent itself holds it, even in
+// callback-only mode.
 func (a *Adapter) ReservedPorts() []core.ReservedPort {
 	out := make([]core.ReservedPort, 0, 2)
 	if a.cfg.AuthCallbackPort > 0 {
 		out = append(out, core.ReservedPort{Owner: "hysteria-auth", Port: a.cfg.AuthCallbackPort})
+	}
+	if !a.Installed() {
+		return out
 	}
 	if p := core.PortOfListenAddr(a.cfg.TrafficStatsListen); p > 0 {
 		out = append(out, core.ReservedPort{Owner: "hysteria-stats", Port: p})
