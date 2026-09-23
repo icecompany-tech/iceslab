@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
+import { ensureAllSquad } from '../squads/squads.system.js';
 import {
   PROTOCOL_CONFIG_SCHEMAS,
 } from '../inbounds/inbounds.schemas.js';
@@ -327,7 +328,9 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
         enabled: input.enabled,
       },
     });
-    // Slice 26 invariant: every new profile auto-attaches to "All" squad.
+    // Slice 26 invariant: every new profile auto-attaches to "All" squad. The
+    // row itself is repaired first on a database that lost it.
+    await ensureAllSquad(tx);
     await tx.groupProfile.upsert({
       where: { groupId_profileId: { groupId: ALL_SQUAD_ID, profileId: p.id } },
       create: { groupId: ALL_SQUAD_ID, profileId: p.id },
