@@ -32,9 +32,19 @@ import {
 import type { ProtocolName } from '@/lib/domain/protocols';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
-import { fromWireRecipe, recipesForProtocol, type Recipe } from '@/contours/profiles/lib/recipes';
+import {
+  fromWireRecipe,
+  recipesForKind,
+  registryProblems,
+  type Recipe,
+  type RegistryProblem,
+} from '@/contours/profiles/lib/recipes';
 
 interface Props {
+  /** The protocol tile (PROFILE_KINDS key) the built-ins are chosen by. */
+  kindKey: string;
+  /** How the tile is called on screen, for the empty state. */
+  kindLabel: string;
   protocol: ProtocolName;
   onPick: (recipe: Recipe) => void;
 }
@@ -87,7 +97,7 @@ function useRecipeText(recipe: Recipe) {
   };
 }
 
-export function RecipePicker({ protocol, onPick }: Props) {
+export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
   const { t, i18n } = useTranslation();
   // Same lookup as useRecipeText, but callable inside a map: built-ins carry
   // translated copy per id, registry recipes ship their own text.
@@ -100,41 +110,42 @@ export function RecipePicker({ protocol, onPick }: Props) {
         : r.description,
     };
   };
-  const builtins = recipesForProtocol(protocol);
+  const builtins = recipesForKind(kindKey);
   const [picked, setPicked] = useState<Recipe | null>(null);
   const [importOpen, importCtl] = useDisclosure(false);
   const [search, setSearch] = useState('');
 
   // Community registry for this protocol. The backend already filters by
   // protocol, validates + version-gates every entry and caches for 6h, so
-  // this is a cheap cached GET. Best-effort: errors surface as an offline
-  // hint, never break the picker.
+  // this is a cheap cached GET. Best-effort: errors surface as a line per
+  // source that failed, never break the picker.
   const registryQuery = useQuery({
     queryKey: ['recipes', 'registry', protocol],
     queryFn: () => getRecipeRegistry({ protocol }),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+  // Registry recipes carry a protocol and no tile: they are written against
+  // the protocol's own core, so they show only on its native tile. On the
+  // sing-box tile a native hysteria recipe would set fields the sing-box
+  // renderer reads differently.
+  const nativeTile = kindKey === protocol;
   const registry = useMemo(
-    () => (registryQuery.data?.recipes ?? []).map(fromWireRecipe),
-    [registryQuery.data],
+    () => (nativeTile ? (registryQuery.data?.recipes ?? []).map(fromWireRecipe) : []),
+    [registryQuery.data, nativeTile],
   );
   const stale = registryQuery.data?.stale ?? false;
+  const problems = registryProblems(registryQuery.data);
 
   const handlePick = (r: Recipe) => {
     setPicked(r);
     onPick(r);
   };
 
-  // Nothing to offer for this protocol (no built-ins, empty registry, done
-  // loading): render nothing so the form doesn't grow an empty header.
-  if (
-    builtins.length === 0 &&
-    registry.length === 0 &&
-    !registryQuery.isLoading
-  ) {
-    return null;
-  }
+  // The rail is always there (owner, 24.09): a tile with nothing built in
+  // still offers Import and says what to do, instead of a form that grows no
+  // rail at all.
+  const empty = builtins.length === 0 && registry.length === 0 && !registryQuery.isLoading;
 
   const visibleBuiltins = builtins.filter((r) => {
     const q = search.trim().toLowerCase();
@@ -210,17 +221,24 @@ export function RecipePicker({ protocol, onPick }: Props) {
         </Stack>
       )}
 
-      <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: '#5A6B82' }}>
-        {t('recipes.countLine', {
-          shown: visibleBuiltins.length,
-          total: builtins.length + registry.length,
-        })}
-      </Text>
+      {empty ? (
+        <Text style={{ fontSize: 11, lineHeight: '15px', color: '#7A8BA3' }}>
+          {t('recipes.emptyForKind', { kind: kindLabel })}
+        </Text>
+      ) : (
+        <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: '#5A6B82' }}>
+          {t('recipes.countLine', {
+            shown: visibleBuiltins.length,
+            total: builtins.length + registry.length,
+          })}
+        </Text>
+      )}
 
       <RegistrySection
         recipes={registry}
         loading={registryQuery.isLoading}
         stale={stale}
+        problems={problems}
         pickedKey={picked ? recipeKey(picked) : null}
         onPick={handlePick}
       />
@@ -390,12 +408,15 @@ function RegistrySection({
   recipes,
   loading,
   stale,
+  problems,
   pickedKey,
   onPick,
 }: {
   recipes: Recipe[];
   loading: boolean;
   stale: boolean;
+  /** Failed sources, one line each; null = the server does not say (old). */
+  problems: RegistryProblem[] | null;
   pickedKey: string | null;
   onPick: (r: Recipe) => void;
 }) {
@@ -424,18 +445,31 @@ function RegistrySection({
     );
   }
 
-  // Registry offline and nothing cached: a quiet one-liner, built-ins already
-  // rendered above so the picker still works.
-  if (recipes.length === 0) {
-    if (stale) {
-      return (
-        <Text size="xs" c="dimmed">
-          {t('recipes.registry.offline')}
-        </Text>
-      );
-    }
-    return null;
-  }
+  // Which source failed and why, a line each: «the repository is not there»
+  // and «try later» ask for different things. A server without sources[]
+  // keeps the one old line when its answer is stale.
+  const problemLines =
+    problems === null
+      ? stale
+        ? [t('recipes.registry.offline')]
+        : []
+      : problems.map((p) =>
+          t(`recipes.registry.reason.${p.reason}`, { name: p.name, status: p.httpStatus ?? '' }),
+        );
+  const problemBlock =
+    problemLines.length > 0 ? (
+      <Stack gap={2}>
+        {problemLines.map((line) => (
+          <Text key={line} size="xs" c="dimmed">
+            {line}
+          </Text>
+        ))}
+      </Stack>
+    ) : null;
+
+  // Nothing from the registry: only why, if anything failed. Built-ins
+  // already rendered above, so the picker still works.
+  if (recipes.length === 0) return problemBlock;
 
   return (
     <Stack gap={6} mt={4}>
@@ -479,6 +513,7 @@ function RegistrySection({
           />
         ))}
       </SimpleGrid>
+      {problemBlock}
     </Stack>
   );
 }

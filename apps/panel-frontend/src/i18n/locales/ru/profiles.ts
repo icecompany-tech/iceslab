@@ -323,6 +323,7 @@ export const profiles = {
   recipes: {
     searchPlaceholder: 'Поиск рецептов…',
     countLine: '{{shown}} из {{total}} рецептов · встроенный реестр',
+    emptyForKind: 'Встроенных рецептов для {{kind}} нет. Импортируйте свой или сохраните этот профиль как рецепт.',
     title: 'Рецепты быстрой настройки',
     subtitle: 'Клик - поля ниже заполнятся под выбранный сценарий. Ручная правка остаётся доступной.',
     appliedBadge: 'RECIPE ПРИМЕНЁН',
@@ -333,6 +334,13 @@ export const profiles = {
       title: 'Реестр сообщества',
       loading: 'Загрузка рецептов сообщества...',
       offline: 'Реестр сообщества недоступен, только встроенные рецепты.',
+      // По источнику: почему не пришли рецепты (sources[] ответа реестра).
+      reason: {
+        'not-found': 'Реестр {{name}} не найден (404): репозитория нет',
+        unreachable: 'Реестр {{name}} недоступен, попробуйте позже',
+        invalid: 'Реестр {{name}} ответил не списком рецептов',
+        unknown: 'Реестр {{name}} не отдал рецепты',
+      },
       staleBadge: 'кэш',
       official: 'official',
       community: 'community',
@@ -437,7 +445,7 @@ export const profiles = {
         name: 'SS-2022 (blake3-aes-256)',
         description: 'Современный Shadowsocks - XChaCha20 уровень security',
         details:
-          'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm. Современная alternative AEAD - лучше по производительности и резистентности к probe-attacks чем legacy chacha20. Поддерживается всеми актуальными SS-клиентами (Outline, Shadowrocket, sing-box).',
+          'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm. Современная alternative AEAD - лучше по производительности и резистентности к probe-attacks чем legacy chacha20. Поддерживается актуальными клиентами (Shadowrocket, sing-box, Clash Meta); Outline шифры 2022 не понимает.',
       },
       'mtproto-default': {
         name: 'MTProto (Telegram)',

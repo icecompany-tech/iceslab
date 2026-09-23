@@ -28,8 +28,12 @@ import {
 import { protocolLabel } from '@/lib/domain/protocols';
 import { useProfileForm } from '@/contours/profiles/components/ProfileForm/useProfileForm';
 import type { FormValues, Mode } from '@/contours/profiles/lib/profileFormValues';
-import { PROTOCOL_ACCENT } from '@/contours/profiles/lib/protocolTiles';
-import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
+import { PROTOCOL_ACCENT, PROTOCOL_TILE_LABEL } from '@/contours/profiles/lib/protocolTiles';
+import {
+  PROFILE_KIND_BY_KEY,
+  profileKindKey,
+  type PreviewKindKey,
+} from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
 import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
@@ -105,6 +109,8 @@ export function ProfileFormModal({
     applyAwgPreset,
     handleSubmit,
   } = useProfileForm({ profile, opened, mode, onSubmit, onClose });
+  // The tile the form is on: recipes are chosen by it, not by the protocol.
+  const kindKey = profileKindKey(form.values.protocol, form.values.engine, form.values.xraySubprotocol);
   return (
     <FormShell
       inline={inline}
@@ -201,13 +207,16 @@ export function ProfileFormModal({
 
               A preview view has no recipes and no protocol the registry would
               answer for, so the rail steps aside rather than showing the ones
-              belonging to whatever was selected before. SOCKS5 and HTTP step
-              it aside too: every xray recipe is a REALITY one, and applying it
-              would quietly turn the proxy into vless. */}
-          {!preview && !(form.values.protocol === 'xray' && isPlainSubprotocol(form.values.xraySubprotocol)) && (
+              belonging to whatever was selected before. Every other tile has
+              its rail, and the built-ins are chosen by the TILE, not the
+              protocol: SOCKS5 does not get the REALITY recipes of vless, and
+              hysteria on sing-box does not get its own daemon's. */}
+          {!preview && (
           <Box className="recipes-slot">
           <RecipePicker
-            key={form.values.protocol}
+            key={kindKey}
+            kindKey={kindKey}
+            kindLabel={PROTOCOL_TILE_LABEL[kindKey] ?? PROFILE_KIND_BY_KEY.get(kindKey)?.label ?? kindKey}
             protocol={form.values.protocol}
             onPick={async (recipe) => {
               // Resolve the recipe's field map. Built-ins may carry a thunk
@@ -232,7 +241,8 @@ export function ProfileFormModal({
               // chase 4 separate buttons (private key, public key, shortIds,
               // peer keys). Recipe = "I want this combo working" should mean
               // "form is ready to submit" after one click.
-              if (recipe.protocol === 'xray') {
+              // Not for SOCKS5 / HTTP: they have no REALITY to key.
+              if (recipe.protocol === 'xray' && !isPlainSubprotocol(fields.xraySubprotocol ?? form.values.xraySubprotocol)) {
                 const shortIdsEmpty = !form.values.xrayShortIds.trim();
                 const keysEmpty = !form.values.xrayPrivateKey;
                 const updates: Partial<FormValues> = {};

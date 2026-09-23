@@ -16,16 +16,26 @@
  */
 
 import type { ProtocolName } from '@/lib/domain/protocols';
-import { RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
+import { LINK_CONGESTIONS, RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
 import type {
   Recipe as WireRecipe,
   RecipeRandomize,
   RecipeRandomizeKind,
+  RecipeSourceProblem,
+  RecipeSourceStatus,
 } from '@iceslab/shared';
 
 export interface Recipe {
   id: string;
   protocol: ProtocolName;
+  /**
+   * The protocol tile this recipe belongs to (a PROFILE_KINDS key: `xray`,
+   * `xray#singbox`, `socks5`, `tuic`...). Absent means the protocol's native
+   * tile, which is every recipe written before the sing-box and Telegram
+   * tiles had any. A recipe for hysteria on its own daemon must not show on
+   * the sing-box tile: the two render different configs from the same fields.
+   */
+  kind?: string;
   /** Single emoji in the chip, pick from a tight palette for visual variety. */
   emoji: string;
   /** Card title, short, direct, intent-driven. */
@@ -362,7 +372,7 @@ export const RECIPES: Recipe[] = [
     name: 'SS-2022 (blake3-aes-256)',
     description: 'Современный Shadowsocks, XChaCha20 уровень security',
     details:
-      'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm. Современная alternative AEAD, лучше по производительности и резистентности к probe-attacks чем legacy chacha20. Поддерживается всеми актуальными SS-клиентами (Outline, Shadowrocket, sing-box).',
+      'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm. Современная alternative AEAD, лучше по производительности и резистентности к probe-attacks чем legacy chacha20. Поддерживается актуальными клиентами (Shadowrocket, sing-box, Clash Meta); Outline шифры 2022 не понимает.',
     dpiResistance: 3,
     speed: 5,
     apply: {
@@ -401,10 +411,227 @@ export const RECIPES: Recipe[] = [
       mieruMtu: 1400,
     },
   },
+
+  // ───── sing-box tiles ─────
+  //
+  // Only fields the form already has, and only values the agent's sing-box
+  // renderer actually writes (apps/node/internal/core/singbox/config.go), each
+  // checked against the sing-box inbound docs linked beside it.
+
+  // Xray protocols on sing-box. The agent renders the xray family on sing-box
+  // with REALITY only (config.go renderXrayFamilyConfig: tls.reality), so a
+  // plain-TLS recipe here would describe a config nobody builds.
+  // https://sing-box.sagernet.org/configuration/inbound/vless/ (flow:
+  // xtls-rprx-vision), https://sing-box.sagernet.org/configuration/shared/tls/
+  {
+    id: 'singbox-vless-reality-vision',
+    kind: 'xray#singbox',
+    protocol: 'xray',
+    emoji: '🛡',
+    name: 'VLESS + REALITY + Vision (sing-box)',
+    description: 'Без тонкой настройки REALITY против проб',
+    details:
+      'VLESS + REALITY + Vision поверх raw на движке sing-box. Та же ссылка vless://, что у ядра xray, но без тонкой настройки REALITY против проб (ограничение fallback, xver): у sing-box этих полей нет.',
+    dpiResistance: 4,
+    speed: 5,
+    apply: {
+      xraySubprotocol: 'vless',
+      xraySecurity: 'reality',
+      xrayFlow: 'xtls-rprx-vision',
+      xrayNetwork: 'raw',
+      xrayDest: 'www.cloudflare.com:443',
+      xrayServerNames: 'www.cloudflare.com',
+      xrayFingerprint: 'chrome',
+    },
+    notes: ['Vision работает только с raw, не меняй транспорт после применения рецепта'],
+  },
+
+  // Hysteria 2 on sing-box: the same two fields sets as the native daemon,
+  // which the agent writes as up_mbps / obfs salamander / masquerade.
+  // https://sing-box.sagernet.org/configuration/inbound/hysteria2/
+  {
+    id: 'singbox-hysteria-clean',
+    kind: 'hysteria#singbox',
+    protocol: 'hysteria',
+    emoji: '⚡',
+    name: 'Hysteria 2 (clean, sing-box)',
+    description: 'UDP, низкая latency, без obfs, для свободных регионов',
+    details:
+      'Hysteria 2 на движке sing-box без обфускации. Тот же протокол и та же ссылка hy2://, что у своего демона, одним процессом меньше.',
+    dpiResistance: 2,
+    speed: 5,
+    apply: {
+      hyObfsPassword: '',
+      hyMasqueradeUrl: '',
+      hyPortHopStart: '',
+      hyPortHopEnd: '',
+    },
+  },
+  {
+    id: 'singbox-hysteria-salamander',
+    kind: 'hysteria#singbox',
+    protocol: 'hysteria',
+    emoji: '🐉',
+    name: 'Hysteria 2 + Salamander (sing-box)',
+    description: 'Obfuscation для обхода UDP-DPI на РФ-мобиле',
+    details:
+      'Hysteria 2 на движке sing-box с obfs salamander и маскировкой под сайт при неудачной авторизации. Brutal 100/100 Mbps, port-hopping 20000-50000.',
+    dpiResistance: 4,
+    speed: 5,
+    apply: () => ({
+      hyObfsPassword: Math.random().toString(36).slice(2, 18),
+      hyMasqueradeUrl: 'https://www.bing.com',
+      hyBrutalUp: 100,
+      hyBrutalDown: 100,
+      hyPortHopStart: 20000,
+      hyPortHopEnd: 50000,
+    }),
+    notes: [
+      'Obfs password сгенерирован случайно, не теряй его, нужен на клиентах',
+      'Brutal CC 100/100 Mbps, настрой под реальную пропускную способность ноды',
+    ],
+  },
+
+  // SS2022 on sing-box: the method list is sing-box's own.
+  // https://sing-box.sagernet.org/configuration/inbound/shadowsocks/
+  {
+    id: 'singbox-ss-2022-blake3',
+    kind: 'shadowsocks#singbox',
+    protocol: 'shadowsocks',
+    emoji: '🔒',
+    name: 'SS-2022 (blake3-aes-256, sing-box)',
+    description: 'Современный Shadowsocks на движке sing-box',
+    details:
+      'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm на движке sing-box, мультипользовательский. Outline шифры 2022 не понимает.',
+    dpiResistance: 3,
+    speed: 5,
+    apply: { ssMethod: '2022-blake3-aes-256-gcm' },
+  },
+
+  // TUIC: congestion_control is one of cubic / new_reno / bbr, cubic by
+  // default; bbr holds throughput on lossy mobile links. The agent issues a
+  // self-signed cert for the SNI (TLS is required by the inbound).
+  // https://sing-box.sagernet.org/configuration/inbound/tuic/
+  {
+    id: 'tuic-bbr',
+    kind: 'tuic',
+    protocol: 'tuic',
+    emoji: '🚀',
+    name: 'TUIC (bbr, self-signed)',
+    description: 'QUIC с BBR, для потерь на мобильных сетях',
+    details:
+      'TUIC v5 на sing-box, congestion control bbr (по умолчанию у sing-box cubic). Сертификат нода выпускает сама под SNI из формы, клиентам нужен allow-insecure.',
+    dpiResistance: 3,
+    speed: 5,
+    apply: { tuicCongestion: LINK_CONGESTIONS.find((c) => c === 'bbr')! },
+    notes: ['Сертификат самоподписанный: в клиенте включи allow-insecure'],
+  },
+
+  // AnyTLS: an empty padding_scheme means sing-box's default scheme, and the
+  // agent leaves it empty (config.go: "padding_scheme is left at the sing-box
+  // default"), so the recipe has nothing to set but the SNI.
+  // https://sing-box.sagernet.org/configuration/inbound/anytls/
+  {
+    id: 'anytls-default-padding',
+    kind: 'anytls',
+    protocol: 'anytls',
+    emoji: '🧩',
+    name: 'AnyTLS (default padding)',
+    description: 'TLS-in-TLS с паддингом sing-box по умолчанию',
+    details:
+      'AnyTLS на sing-box. Схема паддинга стандартная (sing-box подставляет её при пустом padding_scheme), SNI для самоподписанного сертификата ноды.',
+    dpiResistance: 4,
+    speed: 4,
+    apply: { anytlsServerName: 'www.bing.com' },
+    notes: ['Сертификат самоподписанный: в клиенте включи allow-insecure'],
+  },
+
+  // ShadowTLS: the agent writes version 3 with strict_mode on (config.go),
+  // so the recipe only names the handshake site the TLS layer fronts.
+  // https://sing-box.sagernet.org/configuration/inbound/shadowtls/
+  {
+    id: 'shadowtls-v3-bing',
+    kind: 'shadowtls',
+    protocol: 'shadowtls',
+    emoji: '🎭',
+    name: 'ShadowTLS v3 → real site',
+    description: 'Рукопожатие настоящего сайта, strict mode',
+    details:
+      'ShadowTLS v3 в strict mode: TLS-рукопожатие проксируется на www.bing.com:443, внутри Shadowsocks 2022. Ссылки нет, выдаётся только в форматах sing-box и Clash (mihomo).',
+    dpiResistance: 5,
+    speed: 4,
+    apply: {
+      shadowtlsHandshake: 'www.bing.com',
+      shadowtlsSsMethod: '2022-blake3-aes-128-gcm',
+    },
+  },
+
+  // ───── Telegram tiles (xray subprotocols) ─────
+  // Nothing on the wire to pick (the server takes them plain only); the port
+  // belongs to the binding, so the number in the name is the one the deploy
+  // window offers.
+  {
+    id: 'telegram-socks5',
+    kind: 'socks5',
+    protocol: 'xray',
+    emoji: '✈',
+    name: 'Telegram SOCKS5 (1080)',
+    description: 'Ссылка tg://socks для всех трёх клиентов Telegram',
+    details:
+      'SOCKS5 на ядре xray, вход по логину и паролю пользователя. Без обфускации: для сетей, где прокси разрешён, не для обхода DPI. Порт 1080 предлагается при развёртывании на ноду.',
+    dpiResistance: 1,
+    speed: 5,
+    apply: { xraySubprotocol: 'socks' },
+    notes: ['Порт задаётся при развёртывании на ноду, по умолчанию 1080'],
+  },
+  {
+    id: 'telegram-http',
+    kind: 'http',
+    protocol: 'xray',
+    emoji: '🖥',
+    name: 'Telegram HTTP (3128)',
+    description: 'Только Telegram Desktop, адрес вводится руками',
+    details:
+      'HTTP CONNECT на ядре xray, вход по логину и паролю пользователя. Только Telegram Desktop, ссылки для добавления нет. Без обфускации. Порт 3128 предлагается при развёртывании на ноду.',
+    dpiResistance: 1,
+    speed: 5,
+    apply: { xraySubprotocol: 'http' },
+    notes: ['Порт задаётся при развёртывании на ноду, по умолчанию 3128'],
+  },
 ];
 
-export function recipesForProtocol(protocol: ProtocolName): Recipe[] {
-  return RECIPES.filter((r) => r.protocol === protocol);
+/**
+ * What the recipe rail says about the registry sources that failed, one line
+ * each, from `sources[]` of the registry answer. A source that fetched fine
+ * says nothing. `null` for a server older than `sources[]`: the rail then
+ * keeps its one old "registry offline" line when the answer is stale.
+ */
+export interface RegistryProblem {
+  id: string;
+  name: string;
+  reason: RecipeSourceProblem | 'unknown';
+  httpStatus?: number;
+}
+
+export function registryProblems(resp: { sources?: unknown } | null | undefined): RegistryProblem[] | null {
+  if (!resp || !Array.isArray(resp.sources)) return null;
+  const out: RegistryProblem[] = [];
+  for (const s of resp.sources as RecipeSourceStatus[]) {
+    if (!s || typeof s !== 'object' || s.ok) continue;
+    out.push({
+      id: s.id,
+      name: s.name,
+      // A reason this build does not know still gets a line, as «unknown».
+      reason: s.reason === 'not-found' || s.reason === 'unreachable' || s.reason === 'invalid' ? s.reason : 'unknown',
+      ...(typeof s.httpStatus === 'number' ? { httpStatus: s.httpStatus } : {}),
+    });
+  }
+  return out;
+}
+
+/** The built-in recipes of one protocol tile (a PROFILE_KINDS key). */
+export function recipesForKind(kindKey: string): Recipe[] {
+  return RECIPES.filter((r) => (r.kind ?? r.protocol) === kindKey);
 }
 
 // ───── Randomise resolvers ─────

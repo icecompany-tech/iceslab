@@ -320,6 +320,7 @@ export const profiles = {
   recipes: {
     searchPlaceholder: 'Search recipes…',
     countLine: '{{shown}} of {{total}} recipes · built-in registry',
+    emptyForKind: 'No built-in recipes for {{kind}}. Import your own or save this profile as a recipe.',
     title: 'Quick-setup recipes',
     subtitle: "Click and the fields below populate for the chosen scenario. Manual edits stay available.",
     appliedBadge: 'RECIPE APPLIED',
@@ -330,6 +331,12 @@ export const profiles = {
       title: 'Community registry',
       loading: 'Loading community recipes...',
       offline: 'Community registry is unreachable, built-in recipes only.',
+      reason: {
+        'not-found': 'Registry {{name}} not found (404): the repository is not there',
+        unreachable: 'Registry {{name}} is unreachable, try later',
+        invalid: 'Registry {{name}} did not answer with a recipe list',
+        unknown: 'Registry {{name}} gave no recipes',
+      },
       staleBadge: 'cached',
       official: 'official',
       community: 'community',
@@ -446,7 +453,7 @@ export const profiles = {
         name: 'SS-2022 (blake3-aes-256)',
         description: 'Modern Shadowsocks - XChaCha20-level security',
         details:
-          'Shadowsocks 2022 with the 2022-blake3-aes-256-gcm cipher. Modern alternative AEAD - better performance and probe-resistance than legacy chacha20. Supported by all current SS clients (Outline, Shadowrocket, sing-box).',
+          'Shadowsocks 2022 with the 2022-blake3-aes-256-gcm cipher. Modern alternative AEAD - better performance and probe-resistance than legacy chacha20. Supported by current clients (Shadowrocket, sing-box, Clash Meta); Outline does not speak the 2022 ciphers.',
       },
       'mtproto-default': {
         name: 'MTProto (Telegram)',
@@ -459,6 +466,69 @@ export const profiles = {
         description: 'Tuned against the Great Firewall - random padding',
         details:
           "Mieru by enfein - a modern stealth protocol with aggressive padding, designed against the Chinese GFW. Traffic looks like noise - no signatures. Supported by sing-box. Use when other protocols are cut in mainland China.",
+      },
+      'singbox-vless-reality-vision': {
+        name: 'VLESS + REALITY + Vision (sing-box)',
+        description: 'No REALITY probe-resist tuning',
+        details:
+          'VLESS + REALITY + Vision over raw on the sing-box engine. The same vless:// link as on the xray core, without the REALITY probe-resist tuning (fallback limits, xver): sing-box has no such fields.',
+        notes: ['Vision works only with raw, do not change the transport after applying the recipe'],
+      },
+      'singbox-hysteria-clean': {
+        name: 'Hysteria 2 (clean, sing-box)',
+        description: 'UDP, low latency, no obfs, for free regions',
+        details:
+          'Hysteria 2 on the sing-box engine without obfuscation. The same protocol and hy2:// link as on its own daemon, one process fewer.',
+      },
+      'singbox-hysteria-salamander': {
+        name: 'Hysteria 2 + Salamander (sing-box)',
+        description: 'Obfuscation to get past UDP DPI on RU mobile',
+        details:
+          'Hysteria 2 on the sing-box engine with salamander obfs and a site masquerade on failed auth. Brutal 100/100 Mbps, port hopping 20000-50000.',
+        notes: [
+          'The obfs password is random, keep it, clients need it',
+          'Brutal CC 100/100 Mbps, set it to the node\'s real bandwidth',
+        ],
+      },
+      'singbox-ss-2022-blake3': {
+        name: 'SS-2022 (blake3-aes-256, sing-box)',
+        description: 'Modern Shadowsocks on the sing-box engine',
+        details:
+          'Shadowsocks 2022 with 2022-blake3-aes-256-gcm on the sing-box engine, multi-user. Outline does not speak the 2022 ciphers.',
+      },
+      'tuic-bbr': {
+        name: 'TUIC (bbr, self-signed)',
+        description: 'QUIC with BBR, for lossy mobile networks',
+        details:
+          'TUIC v5 on sing-box with bbr congestion control (sing-box defaults to cubic). The node issues its own certificate for the SNI in the form, clients need allow-insecure.',
+        notes: ['Self-signed certificate: turn on allow-insecure in the client'],
+      },
+      'anytls-default-padding': {
+        name: 'AnyTLS (default padding)',
+        description: 'TLS-in-TLS with sing-box\'s default padding',
+        details:
+          'AnyTLS on sing-box. The padding scheme is the default one (sing-box uses it when padding_scheme is empty), and the SNI for the node\'s self-signed certificate.',
+        notes: ['Self-signed certificate: turn on allow-insecure in the client'],
+      },
+      'shadowtls-v3-bing': {
+        name: 'ShadowTLS v3 → real site',
+        description: 'A real site\'s handshake, strict mode',
+        details:
+          'ShadowTLS v3 in strict mode: the TLS handshake is proxied to www.bing.com:443, Shadowsocks 2022 inside. No share link, handed out only in the sing-box and Clash (mihomo) formats.',
+      },
+      'telegram-socks5': {
+        name: 'Telegram SOCKS5 (1080)',
+        description: 'A tg://socks link for all three Telegram apps',
+        details:
+          'SOCKS5 on the xray core, login with the user\'s own username and password. No obfuscation: for networks where a proxy is allowed, not for getting past DPI. Port 1080 is offered when deploying to a node.',
+        notes: ['The port is set when deploying to a node, 1080 by default'],
+      },
+      'telegram-http': {
+        name: 'Telegram HTTP (3128)',
+        description: 'Telegram Desktop only, the address is typed by hand',
+        details:
+          'HTTP CONNECT on the xray core, login with the user\'s own username and password. Telegram Desktop only, no link to add it. No obfuscation. Port 3128 is offered when deploying to a node.',
+        notes: ['The port is set when deploying to a node, 3128 by default'],
       },
     },
   },
