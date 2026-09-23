@@ -6,7 +6,12 @@
 # service on most installs (the package handles that); here we only
 # lay down the binary.
 #
-# Idempotent, safe to rerun.
+# Idempotent, safe to rerun: a node already on the pinned version is left alone,
+# a node on any other version is moved onto it.
+#
+# Env overrides (both or neither: a version nobody checked has no checksum):
+#   MIERU_VERSION   release to install instead of the pin, e.g. 3.37.0
+#   MIERU_SHA256    sha256 of mita_<version>_<arch>.deb for this machine
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -17,12 +22,36 @@ fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
 INSTALL_DIR=/usr/local/bin
 
-# ───── 1. Already installed? ─────
+# ───── pinned version ─────
+#
+# Same story as mtg: this used to take GitHub's `latest` and skip any node that
+# already had a mita, so the fleet drifted by install date. Pinned, and the
+# package is checked against the sha256 the release published (GitHub asset
+# digest, recomputed by hand on 2026-09-23). Upstream ships no armv7 package.
+MIERU_PINNED_VERSION="3.37.0"
+declare -A MIERU_PINNED_SHA256=(
+  [amd64]="22248dc1568280a8b1bdaf55051a59b3d64ac1edb4ec4918e3925088f78a35de"
+  [arm64]="d82a7d3c76e8dad42c2736955c5c08ad7ad8f99cafefe2ef4cd1f497ec8d3caa"
+)
+
+if [[ -n "${MIERU_VERSION:-}" && -z "${MIERU_SHA256:-}" ]] || [[ -z "${MIERU_VERSION:-}" && -n "${MIERU_SHA256:-}" ]]; then
+  fail "MIERU_VERSION and MIERU_SHA256 go together: a version without its checksum is not installed"
+fi
+MIERU_VERSION="${MIERU_VERSION:-$MIERU_PINNED_VERSION}"
+
+# `mita version` prints the bare version, "3.37.0".
+version_of() {
+  "$1" version 2>/dev/null | awk 'NR == 1 { v = $1 } END { print v }'
+}
+
+# ───── 1. Already on the wanted version? ─────
 if [[ -x "$INSTALL_DIR/mita" ]]; then
-  CURRENT=$("$INSTALL_DIR/mita" version 2>&1 | head -1 || echo "unknown")
-  log "mita already installed: $CURRENT (skipping download)"
-  log "To upgrade, remove $INSTALL_DIR/mita and rerun."
-  exit 0
+  CURRENT=$(version_of "$INSTALL_DIR/mita" || true)
+  if [[ "$CURRENT" == "$MIERU_VERSION" ]]; then
+    log "mita $CURRENT is already installed, which is the wanted version"
+    exit 0
+  fi
+  log "mita ${CURRENT:-unknown} is installed, moving it to $MIERU_VERSION"
 fi
 
 # ───── 2. Detect arch ─────
@@ -30,52 +59,47 @@ ARCH=$(uname -m)
 case "$ARCH" in
   x86_64)  M_ARCH="amd64" ;;
   aarch64) M_ARCH="arm64" ;;
-  armv7l)  M_ARCH="armv7" ;;
-  *)       fail "Unsupported architecture: $ARCH" ;;
+  *)       fail "Unsupported architecture: $ARCH (upstream ships mita for amd64 and arm64)" ;;
 esac
 log "Detected arch: $ARCH → $M_ARCH"
+WANT_SHA="${MIERU_SHA256:-${MIERU_PINNED_SHA256[$M_ARCH]:-}}"
+[[ -n "$WANT_SHA" ]] || fail "no pinned checksum for mita $MIERU_VERSION on $M_ARCH"
 
-# ───── 3. Resolve latest release ─────
-log "Resolving latest mieru release..."
-LATEST_TAG=$(curl -fsSL https://api.github.com/repos/enfein/mieru/releases/latest \
-  | grep '"tag_name"' | head -1 | sed -E 's/.*"v?([^"]+)".*/\1/')
-
-if [[ -z "$LATEST_TAG" ]]; then
-  fail "Could not resolve latest mieru release tag from GitHub API"
-fi
-log "Latest release: v$LATEST_TAG"
-
-# ───── 4. Download .deb (mita ships as Debian package) ─────
-DEB="mita_${LATEST_TAG}_${M_ARCH}.deb"
-DOWNLOAD_URL="https://github.com/enfein/mieru/releases/download/v${LATEST_TAG}/${DEB}"
+# ───── 3. Download and check the .deb (mita ships as a Debian package) ─────
+DEB="mita_${MIERU_VERSION}_${M_ARCH}.deb"
+DOWNLOAD_URL="https://github.com/enfein/mieru/releases/download/v${MIERU_VERSION}/${DEB}"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 log "Downloading $DOWNLOAD_URL"
-curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMPDIR/$DEB"
+curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMPDIR/$DEB" || fail "download failed: $DOWNLOAD_URL"
+GOT_SHA=$(sha256sum "$TMPDIR/$DEB" | awk '{print $1}')
+[[ "$GOT_SHA" == "$WANT_SHA" ]] || fail "checksum mismatch for $DEB: got $GOT_SHA, expected $WANT_SHA"
+log "Checksum OK ($GOT_SHA)"
 
-# ───── 5. Install via dpkg ─────
+# ───── 4. Install via dpkg ─────
 log "Installing $DEB via dpkg..."
 dpkg -i "$TMPDIR/$DEB" || {
   warn "dpkg returned non-zero, running apt-get install -f to fix deps"
   apt-get install -f -y
 }
 
-# ───── 6. Smoke-test ─────
-"$INSTALL_DIR/mita" version >/dev/null 2>&1 || fail "smoke test failed"
-log "Smoke-test passed"
+# ───── 5. Smoke-test ─────
+VERSION=$(version_of "$INSTALL_DIR/mita" || true)
+[[ "$VERSION" == "$MIERU_VERSION" ]] || fail "installed mita reports '${VERSION:-nothing}', expected $MIERU_VERSION"
+log "Smoke-test passed: mita $VERSION"
 
-# ───── 7. Make /etc/mita writable by node-agent ─────
+# ───── 6. Make /etc/mita writable by node-agent ─────
 mkdir -p /etc/mita
 chmod 0700 /etc/mita
 log "Created /etc/mita (mode 0700; node-agent will populate server.yaml on ApplyInbound)"
 
-# ───── 8. Summary ─────
+# ───── 7. Summary ─────
 echo
 log "mita is ready."
 echo "    Binary:  $INSTALL_DIR/mita"
-echo "    Version: $LATEST_TAG"
+echo "    Version: $VERSION"
 echo
 echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
 echo "    MITA_BINARY=$INSTALL_DIR/mita"

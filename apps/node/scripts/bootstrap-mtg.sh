@@ -5,7 +5,12 @@
 # is set. This script only places the binary at /usr/local/bin/mtg and verifies
 # it works.
 #
-# Idempotent, safe to rerun.
+# Idempotent, safe to rerun: a node already on the pinned version is left alone,
+# a node on any other version is moved onto it.
+#
+# Env overrides (both or neither: a version nobody checked has no checksum):
+#   MTG_VERSION   release to install instead of the pin, e.g. 2.2.8
+#   MTG_SHA256    sha256 of mtg-<version>-linux-<arch>.tar.gz for this machine
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -16,12 +21,40 @@ fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
 INSTALL_PATH=/usr/local/bin/mtg
 
-# ───── 1. Already installed? ─────
+# ───── pinned version ─────
+#
+# This script used to install whatever GitHub called `latest` the minute it ran,
+# and to skip any node that already had some mtg, so a fleet held as many mtg
+# releases as it had install dates and nothing said which. The version is now a
+# decision in the repository, and the tarball is checked against the sha256 the
+# release published (GitHub asset digest, recomputed by hand on 2026-09-23).
+MTG_PINNED_VERSION="2.2.8"
+declare -A MTG_PINNED_SHA256=(
+  [amd64]="7ef19d079d85f4e00d4f8334ec1f3f3c8718e3d0ed1f3109ea9a8673138a2102"
+  [arm64]="562a94dd4cafcb8f179b76cfeafb76da12747c8e230bc76235bf8746cc189644"
+  [armv7]="494ee3794ed00201e5333b478236ce2f434b33f2d3445f227debe9fc386bbef0"
+)
+
+if [[ -n "${MTG_VERSION:-}" && -z "${MTG_SHA256:-}" ]] || [[ -z "${MTG_VERSION:-}" && -n "${MTG_SHA256:-}" ]]; then
+  fail "MTG_VERSION and MTG_SHA256 go together: a version without its checksum is not installed"
+fi
+MTG_VERSION="${MTG_VERSION:-$MTG_PINNED_VERSION}"
+
+# What a binary says it is: `mtg --version` starts with the bare version,
+# "2.2.8 (go1.26.1: ...)". awk reads to the end so pipefail cannot kill the
+# script on an early SIGPIPE.
+version_of() {
+  "$1" --version 2>/dev/null | awk 'NR == 1 { v = $1 } END { print v }'
+}
+
+# ───── 1. Already on the wanted version? ─────
 if [[ -x "$INSTALL_PATH" ]]; then
-  CURRENT=$("$INSTALL_PATH" --version 2>&1 | head -1 || echo "unknown")
-  log "mtg already installed: $CURRENT, skipping download"
-  log "To upgrade, remove $INSTALL_PATH and rerun."
-  exit 0
+  CURRENT=$(version_of "$INSTALL_PATH" || true)
+  if [[ "$CURRENT" == "$MTG_VERSION" ]]; then
+    log "mtg $CURRENT is already installed, which is the wanted version"
+    exit 0
+  fi
+  log "mtg ${CURRENT:-unknown} is installed, moving it to $MTG_VERSION"
 fi
 
 # ───── 2. Detect arch ─────
@@ -33,51 +66,48 @@ case "$ARCH" in
   *)       fail "Unsupported architecture: $ARCH" ;;
 esac
 log "Detected arch: $ARCH → $MTG_ARCH"
+WANT_SHA="${MTG_SHA256:-${MTG_PINNED_SHA256[$MTG_ARCH]:-}}"
+[[ -n "$WANT_SHA" ]] || fail "no pinned checksum for mtg $MTG_VERSION on $MTG_ARCH"
 
-# ───── 3. Resolve latest release tag ─────
-log "Resolving latest mtg release..."
-LATEST_TAG=$(curl -fsSL https://api.github.com/repos/9seconds/mtg/releases/latest \
-  | grep '"tag_name"' | head -1 | sed -E 's/.*"v?([^"]+)".*/\1/')
-
-if [[ -z "$LATEST_TAG" ]]; then
-  fail "Could not resolve latest mtg release tag from GitHub API"
-fi
-log "Latest release: v$LATEST_TAG"
-
-# ───── 4. Download tarball ─────
-TARBALL="mtg-${LATEST_TAG}-linux-${MTG_ARCH}.tar.gz"
-DOWNLOAD_URL="https://github.com/9seconds/mtg/releases/download/v${LATEST_TAG}/${TARBALL}"
+# ───── 3. Download and check ─────
+TARBALL="mtg-${MTG_VERSION}-linux-${MTG_ARCH}.tar.gz"
+DOWNLOAD_URL="https://github.com/9seconds/mtg/releases/download/v${MTG_VERSION}/${TARBALL}"
 log "Downloading $DOWNLOAD_URL"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMPDIR/$TARBALL"
+curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMPDIR/$TARBALL" || fail "download failed: $DOWNLOAD_URL"
+GOT_SHA=$(sha256sum "$TMPDIR/$TARBALL" | awk '{print $1}')
+[[ "$GOT_SHA" == "$WANT_SHA" ]] || fail "checksum mismatch for $TARBALL: got $GOT_SHA, expected $WANT_SHA"
+log "Checksum OK ($GOT_SHA)"
 tar -xzf "$TMPDIR/$TARBALL" -C "$TMPDIR"
 
 # Find the mtg binary inside the extracted tree (release layout has changed).
 BIN=$(find "$TMPDIR" -type f -name mtg -perm -u+x | head -1)
 [[ -n "$BIN" ]] || fail "mtg binary not found in extracted tarball"
 
-# ───── 5. Smoke-test ─────
-"$BIN" --version >/dev/null 2>&1 || fail "smoke test failed"
-log "Smoke-test passed"
+# ───── 4. Smoke-test ─────
+# It has to say it is the version we asked for, or it does not get installed.
+VERSION=$(version_of "$BIN" || true)
+[[ "$VERSION" == "$MTG_VERSION" ]] || fail "downloaded binary reports '${VERSION:-nothing}', expected $MTG_VERSION"
+log "Smoke-test passed: mtg $VERSION"
 
-# ───── 6. Install ─────
+# ───── 5. Install ─────
 mv "$BIN" "$INSTALL_PATH"
 chmod +x "$INSTALL_PATH"
 log "Installed to $INSTALL_PATH"
 
-# ───── 7. /etc/mtg dir ─────
+# ───── 6. /etc/mtg dir ─────
 mkdir -p /etc/mtg
 chmod 0700 /etc/mtg
 log "Created /etc/mtg (mode 0700; node-agent will populate config.toml on ApplyInbound)"
 
-# ───── 8. Summary ─────
+# ───── 7. Summary ─────
 echo
 log "mtg is ready."
 echo "    Binary:  $INSTALL_PATH"
-echo "    Version: $LATEST_TAG"
+echo "    Version: $VERSION"
 echo
 echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
 echo "    MTG_BINARY=$INSTALL_PATH"
