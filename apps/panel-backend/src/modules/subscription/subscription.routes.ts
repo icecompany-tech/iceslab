@@ -13,7 +13,7 @@ import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
 import { buildSubscriptionPage } from './subscription.page.js';
 import { subscriptionUrl } from './subscription.link.js';
-import { isPlainXray } from './subscription.formats.js';
+import { endpointsForFormat, isPlainXray } from './subscription.formats.js';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {
   formatBytes,
@@ -482,6 +482,10 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       const filtered = result.endpoints.filter(
         (e) => !(e.disableForFormats ?? []).includes(format),
       );
+      // What THIS format carries, by FORMAT_DOORS: every builder below is
+      // handed this list and no other, so the table the screens read and the
+      // file a client receives are one decision (see endpointsForFormat).
+      const served = endpointsForFormat(format, filtered);
       // One line per server, when the operator asked for that. Applied here
       // and nowhere else: the whole-config formats keep every endpoint, so a
       // collapsed protocol is still downloadable from the page.
@@ -490,8 +494,10 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         lineShape === 'per-node'
           ? service.collapseToOneLinePerNode(result.endpoints)
           : result.endpoints;
-      const filteredPlain = plainSource
-        .filter((e) => !(e.disableForFormats ?? []).includes('plain'))
+      const filteredPlain = endpointsForFormat(
+        'plain',
+        plainSource.filter((e) => !(e.disableForFormats ?? []).includes('plain')),
+      )
         // A4: a balancer-cascade entry expands into one re-tagged URI per exit;
         // other endpoints pass through. (This note used to claim the JSON array
         // is not pingable in Happ. It is - checked in the field 2026-08-16 - and
@@ -585,6 +591,16 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             supportUrl: settings.supportUrl,
             user: result.json.user,
             protocols,
+            // A download row is offered exactly when its file would carry
+            // something: the same gate and the same host switches the file
+            // itself goes through.
+            carriedFormats: FORMAT_NAMES.filter(
+              (f) =>
+                endpointsForFormat(
+                  f,
+                  result.endpoints.filter((e) => !(e.disableForFormats ?? []).includes(f)),
+                ).length > 0,
+            ),
             awgNodes,
             mtprotoNodes,
             telegramProxies,
@@ -645,11 +661,11 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         case 'json':
           return reply
             .type('application/json')
-            .send({ ...result.json, endpoints: filtered });
+            .send({ ...result.json, endpoints: served });
         case 'clash':
           return reply
             .type('text/yaml; charset=utf-8')
-            .send(buildClashYaml(filtered, { routingPreset, customDomainLists }));
+            .send(buildClashYaml(served, { routingPreset, customDomainLists }));
         case 'singbox': {
           // TLS-fragment is intentionally NOT emitted for sing-box: the
           // upstream field is unstable across 1.12/1.14 (same rationale as the
@@ -663,7 +679,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               : undefined;
           return reply
             .type('application/json')
-            .send(buildSingboxJson(filtered, { bundle: sbBundle, routingPreset }));
+            .send(buildSingboxJson(served, { bundle: sbBundle, routingPreset }));
         }
         case 'wgconf': {
           // Filename = `<username>-<node>.conf` so a user with several AWG
@@ -676,7 +692,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           return reply
             .type('text/plain; charset=utf-8')
             .header('Content-Disposition', `attachment; filename="${fname}"`)
-            .send(buildWgQuickConf(filtered, query.node));
+            .send(buildWgQuickConf(served, query.node));
         }
         case 'amneziavpn': {
           // AmneziaVPN-app "vpn://" connection key (base64 blob the flagship
@@ -686,7 +702,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           // for this user (same 204-style contract as wgconf).
           return reply
             .type('text/plain; charset=utf-8')
-            .send(buildAwgVpnLink(filtered, query.node));
+            .send(buildAwgVpnLink(served, query.node));
         }
         case 'xrayjson': {
           const xjBundle: 'flat' | 'balancer' | undefined =
@@ -695,7 +711,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               : undefined;
           return reply
             .type('application/json')
-            .send(buildXrayJson(filtered, { bundle: xjBundle, routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
+            .send(buildXrayJson(served, { bundle: xjBundle, routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
         }
         case 'xrayjson-array': {
           // A1: top-level JSON array of standalone xray configs (one per
@@ -704,7 +720,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           // `bundle` (no balancer: the client picks a server, not an outbound).
           return reply
             .type('application/json')
-            .send(buildXrayJsonArray(filtered, { routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
+            .send(buildXrayJsonArray(served, { routingPreset, customRules: customRoutingRules, customDomainLists, tlsFragment }));
         }
         case 'xkeen': {
           // XKeen (xray-core on Keenetic routers): outbounds + routing +
@@ -721,24 +737,24 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               'Content-Disposition',
               `attachment; filename="${sanitizeFilename(result.json.user.username)}-xkeen.json"`,
             )
-            .send(buildXrayJson(filtered, { bundle: xkBundle, routingPreset, forRouter: true, customRules: customRoutingRules, customDomainLists }));
+            .send(buildXrayJson(served, { bundle: xkBundle, routingPreset, forRouter: true, customRules: customRoutingRules, customDomainLists }));
         }
         case 'outline':
           // SIP008 Shadowsocks online-config (Outline / shadowsocks-* clients).
           // SS-only; non-SS endpoints are skipped inside the builder.
           return reply
             .type('application/json')
-            .send(buildOutlineJson(filtered));
+            .send(buildOutlineJson(served));
         case 'surge':
           // Surge [Proxy] lines. ss/vmess/trojan/hy2; no vless/REALITY.
-          return reply.type('text/plain; charset=utf-8').send(buildSurgeConf(filtered));
+          return reply.type('text/plain; charset=utf-8').send(buildSurgeConf(served));
         case 'quantumultx':
           // Quantumult X server_local lines. ss/vmess/vless/trojan incl REALITY.
-          return reply.type('text/plain; charset=utf-8').send(buildQuantumultXConf(filtered));
+          return reply.type('text/plain; charset=utf-8').send(buildQuantumultXConf(served));
         case 'loon':
           // Loon proxy lines (best-effort; verify import in-app). ss/vmess/vless/
           // trojan/hy2 incl REALITY.
-          return reply.type('text/plain; charset=utf-8').send(buildLoonConf(filtered));
+          return reply.type('text/plain; charset=utf-8').send(buildLoonConf(served));
         case 'plain':
         default:
           return reply

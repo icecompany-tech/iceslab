@@ -16,11 +16,16 @@ import {
   UpdateProfileSchema,
 } from './profiles.schemas.js';
 import { resolveHostFields } from './host-fields.js';
+import { profileFormats } from './profile-formats.js';
 import { getProfileKeyImpact } from './profiles.key-impact.js';
 import * as svc from './profiles.service.js';
 
 const KeypairQuery = z.object({
   protocol: z.enum(['xray', 'amneziawg']).default('amneziawg'),
+});
+
+const FormatsQuery = z.object({
+  securityLayer: z.enum(['default', 'tls', 'none']).optional(),
 });
 
 export async function profilesRoutes(app: FastifyInstance): Promise<void> {
@@ -89,6 +94,25 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     try {
       const p = await svc.getProfileById(id);
       return reply.send({ fields: resolveHostFields(p.protocol, p.config) });
+    } catch (err) {
+      if (err instanceof svc.ProfileNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // Which subscription formats carry this profile, and why not where they do
+  // not: { door, formats: [{ format, carried, why }] }, one entry per
+  // FORMAT_NAMES. `?securityLayer=` is the host screen's own override (tls /
+  // none), because a REALITY profile fronted by a TLS host reaches formats the
+  // bare profile does not; 'default' or absent means the profile's own.
+  app.get('/api/profiles/:id/formats', auth, async (req, reply) => {
+    const { id } = ProfileIdParamSchema.parse(req.params);
+    const { securityLayer } = FormatsQuery.parse(req.query);
+    try {
+      const p = await svc.getProfileById(id);
+      return reply.send(profileFormats(p.protocol, p.config, securityLayer));
     } catch (err) {
       if (err instanceof svc.ProfileNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });

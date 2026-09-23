@@ -1,5 +1,13 @@
 import type { User, UserTraffic } from '../../generated/prisma/client.js';
-import { XRAY_PLAIN_SUBPROTOCOLS, type EngineName, type ProtocolName } from '@iceslab/shared';
+import {
+  XRAY_PLAIN_SUBPROTOCOLS,
+  doorOf,
+  formatCarries,
+  type Door,
+  type EngineName,
+  type ProtocolName,
+  type SubscriptionFormat,
+} from '@iceslab/shared';
 
 // Re-export so existing imports keep working (slice 16 moved the
 // implementation into core-adapters/hysteria, this file now hosts only
@@ -259,6 +267,30 @@ export function isPlainSubprotocol(sub: unknown): sub is 'socks' | 'http' {
 /** Narrowing for the one question every xray branch now has to ask first. */
 export function isPlainXray(e: SubscriptionEndpoint): e is XrayPlainSubscriptionEndpoint {
   return e.protocol === 'xray' && (e.subprotocol === 'socks' || e.subprotocol === 'http');
+}
+
+/** The door a client dials for this endpoint (see DOORS in shared). */
+export function endpointDoor(e: SubscriptionEndpoint): Door {
+  return doorOf({ protocol: e.protocol, subprotocol: e.protocol === 'xray' ? e.subprotocol : undefined });
+}
+
+/**
+ * The endpoints a format carries, by FORMAT_DOORS and nothing else.
+ *
+ * Every file the subscription serves is built from this list, so the table the
+ * screen reads (the page's download rows, GET /api/profiles/:id/formats) and
+ * the file a client receives cannot disagree: a builder never sees an endpoint
+ * the table says it does not carry, and the test beside the builders fails if a
+ * builder drops one the table says it does.
+ */
+export function endpointsForFormat(
+  format: SubscriptionFormat,
+  endpoints: SubscriptionEndpoint[],
+): SubscriptionEndpoint[] {
+  return endpoints.filter((e) => {
+    const security = e.protocol === 'xray' && !isPlainXray(e) ? e.securityLayer : undefined;
+    return formatCarries(format, endpointDoor(e), security).carried;
+  });
 }
 
 export interface AmneziawgSubscriptionEndpoint extends SubscriptionEndpointBase {

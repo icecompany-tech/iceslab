@@ -56,6 +56,21 @@ describe('the format list against what serves it', () => {
     }
   });
 
+  it('builds every file from the gated list, never from the raw one', () => {
+    // FORMAT_DOORS is one decision with the files only while every builder is
+    // handed endpointsForFormat's output (`served`). A builder call on the raw
+    // list would put back the per-builder literals the table replaced.
+    const src = readFileSync(ROUTES, 'utf8');
+    const start = src.indexOf('switch (format) {');
+    const end = src.indexOf("case 'plain':", start);
+    expect(start, 'the format switch is not where this test looks').toBeGreaterThan(0);
+    const block = src.slice(start, end);
+    const args = [...block.matchAll(/build\w+\((\w+)/g)].map((m) => m[1]);
+    expect(args.length, 'no builder calls found in the switch').toBeGreaterThan(8);
+    expect(new Set(args)).toEqual(new Set(['served']));
+    expect(block).toContain('endpoints: served');
+  });
+
   it('is the same list the host schema takes', () => {
     // Both schemas read FORMAT_NAMES now; this is the guard against somebody
     // pasting a literal back in. `mieru-json` is named because it is what the

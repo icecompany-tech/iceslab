@@ -11,8 +11,10 @@
 // interpolated from admin/user input is HTML-escaped (esc).
 
 import {
+  FORMAT_DOORS,
   PROTOCOL_NAMES,
-  formatCarriesAny,
+  XRAY_SUBPROTOCOLS,
+  doorOf,
   type ProtocolName,
   type SubscriptionFormat,
 } from '@iceslab/shared';
@@ -52,6 +54,14 @@ export interface SubscriptionPageData {
   };
   /** Distinct protocols present in this subscription. */
   protocols: ProtocolName[];
+  /**
+   * The formats whose file would carry something for this subscription,
+   * computed by the route through the same gate the files go through
+   * (endpointsForFormat, host switches included). Absent only for page data
+   * built by hand; the page then answers from `protocols`, coarsely: a protocol
+   * counts as carried when any of its doors is.
+   */
+  carriedFormats?: SubscriptionFormat[];
   /**
    * Что оператор написал своими словами для состояний, в которых подключиться
    * нельзя. Пусто, пробелы или отсутствие ключа означают «оставить наш текст»,
@@ -609,7 +619,14 @@ function renderDownloads(
    * `hasSs` is gone with it, because it was the same question asked once by
    * hand for the one format anybody had noticed.
    */
-  const carries = (fmt: SubscriptionFormat) => formatCarriesAny(fmt, data.protocols);
+  const carries = (fmt: SubscriptionFormat) =>
+    data.carriedFormats
+      ? data.carriedFormats.includes(fmt)
+      : data.protocols.some((p) =>
+          (p === 'xray' ? [...XRAY_SUBPROTOCOLS] : [doorOf({ protocol: p })]).some(
+            (d) => FORMAT_DOORS[fmt][d].carried,
+          ),
+        );
   const clients: Row[] = (
     [
       'clash',

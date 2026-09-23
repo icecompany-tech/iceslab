@@ -195,38 +195,178 @@ export const FORMAT_NAMES = [
 export type SubscriptionFormat = (typeof FORMAT_NAMES)[number];
 
 /**
- * Which protocols each format actually carries.
+ * A DOOR is what a client dials, which is finer than a protocol: the one xray
+ * process serves vless, vmess, trojan and the two Telegram doors (socks, http),
+ * and a format that carries one of them may well not carry the next. Every
+ * other protocol is one door, named after itself. The xray names do not collide
+ * with any ProtocolName, so one flat list serves.
  *
- * ⚠ Read off the BUILDERS, one branch at a time, not off what a client's
- * documentation claims to support. The page used to decide this with
- * `protocols.some(p => p !== 'amneziawg')`, which reads as "anything that is
- * not a tunnel is a proxy, so every proxy format applies". MTProto is not
- * amneziawg and appears in NO builder: `surge.ts` skips it, and so do clash,
- * sing-box, xray-json, Quantumult X and Loon. A subscription with an MTProto
- * node was therefore offered five files, every one of which came back without
- * its only server (issue #41).
- *
- * `plain` and `json` carry everything by construction: one is the raw URI list
- * the clients subscribe to, the other is this panel's own dump.
- *
- * When a builder learns a protocol, the entry here moves with it. The test
- * beside the builders is what keeps the two together.
+ * The protocol-level table this replaced said "surge carries xray", while
+ * Surge takes vmess and trojan and nothing else of xray's, and "plain carries
+ * everything", while plain has no link to give for AmneziaWG or ShadowTLS.
  */
-export const FORMAT_PROTOCOLS: Record<SubscriptionFormat, readonly ProtocolName[]> = {
-  plain: PROTOCOL_NAMES,
-  json: PROTOCOL_NAMES,
-  clash: ['hysteria', 'xray', 'shadowsocks', 'tuic', 'anytls', 'shadowtls', 'mieru'],
-  singbox: ['hysteria', 'xray', 'shadowsocks', 'tuic', 'anytls', 'shadowtls'],
-  wgconf: ['amneziawg'],
-  amneziavpn: ['amneziawg'],
-  xrayjson: ['xray', 'hysteria'],
-  'xrayjson-array': ['xray', 'hysteria'],
-  xkeen: ['xray', 'hysteria'],
-  outline: ['shadowsocks'],
-  surge: ['shadowsocks', 'hysteria', 'xray'],
-  quantumultx: ['shadowsocks', 'xray'],
-  loon: ['shadowsocks', 'hysteria', 'xray'],
+export const DOORS = [
+  'vless',
+  'vmess',
+  'trojan',
+  'socks',
+  'http',
+  'hysteria',
+  'shadowsocks',
+  'tuic',
+  'anytls',
+  'shadowtls',
+  'mieru',
+  'naive',
+  'mtproto',
+  'amneziawg',
+] as const;
+export type Door = (typeof DOORS)[number];
+
+/** The door of an endpoint or a profile: its xray subprotocol (vless when the
+ *  config names none, as every builder reads it), or its protocol. */
+export function doorOf(e: { protocol: ProtocolName; subprotocol?: XraySubprotocol | null }): Door {
+  if (e.protocol === 'xray') return e.subprotocol ?? 'vless';
+  return e.protocol;
+}
+
+/**
+ * Why a format does not carry a door, in the words the screen translates:
+ *   client-lacks-protocol  the clients of this format cannot speak it;
+ *   no-uri-standard        there is no share link for it, and the format is a
+ *                          list of links;
+ *   not-yet                the clients can, this panel does not build it yet.
+ * A carried door answers 'native'.
+ */
+export type FormatGap = 'client-lacks-protocol' | 'no-uri-standard' | 'not-yet';
+export type FormatWhy = 'native' | FormatGap;
+
+/**
+ * One cell of the table: carried, or not with the reason. `exceptReality`
+ * marks a door the format carries only over plain TLS or none: the clients
+ * have no REALITY (Surge).
+ */
+export type FormatDoor =
+  | { carried: true; exceptReality?: true }
+  | { carried: false; why: FormatGap };
+
+const YES: FormatDoor = { carried: true };
+const YES_NO_REALITY: FormatDoor = { carried: true, exceptReality: true };
+const LACKS: FormatDoor = { carried: false, why: 'client-lacks-protocol' };
+const NO_URI: FormatDoor = { carried: false, why: 'no-uri-standard' };
+const NOT_YET: FormatDoor = { carried: false, why: 'not-yet' };
+
+/** Every door not named in `cells` is one the clients cannot speak. */
+function formatTable(cells: Partial<Record<Door, FormatDoor>>): Record<Door, FormatDoor> {
+  return Object.fromEntries(DOORS.map((d) => [d, cells[d] ?? LACKS])) as Record<Door, FormatDoor>;
+}
+
+const XRAY_DOORS = { vless: YES, vmess: YES, trojan: YES, socks: YES, http: YES } as const;
+
+/**
+ * Which door each format carries, and why not where it does not.
+ *
+ * ⚠ The CARRIED cells are read off the builders, one branch at a time, and the
+ * subscription route builds every file through `endpointsForFormat` below, so a
+ * cell and a file cannot disagree: a door marked carried that a builder drops,
+ * or a builder emitting a door marked not carried, fails the test beside the
+ * builders. The page and GET /api/profiles/:id/formats read the same table.
+ *
+ * The REASONS for a gap are this panel's knowledge of the clients as of
+ * 2026-09-23 and are what the delivery-by-client recon (docs/plan/
+ * delivery-by-client.md) refines; `not-yet` is used only where the client is
+ * known to speak the door.
+ *
+ * `json` is this panel's own dump and carries every door by construction.
+ */
+export const FORMAT_DOORS: Record<SubscriptionFormat, Record<Door, FormatDoor>> = {
+  plain: formatTable({
+    ...XRAY_DOORS,
+    hysteria: YES,
+    shadowsocks: YES,
+    tuic: YES,
+    anytls: YES,
+    mieru: YES,
+    naive: YES,
+    mtproto: YES,
+    shadowtls: NO_URI,
+    amneziawg: NO_URI,
+  }),
+  json: formatTable(Object.fromEntries(DOORS.map((d) => [d, YES]))),
+  clash: formatTable({
+    ...XRAY_DOORS,
+    hysteria: YES,
+    shadowsocks: YES,
+    tuic: YES,
+    anytls: YES,
+    shadowtls: YES,
+    mieru: YES,
+    // mihomo's wireguard proxy takes the AmneziaWG parameters.
+    amneziawg: NOT_YET,
+  }),
+  singbox: formatTable({
+    ...XRAY_DOORS,
+    hysteria: YES,
+    shadowsocks: YES,
+    tuic: YES,
+    anytls: YES,
+    shadowtls: YES,
+  }),
+  wgconf: formatTable({ amneziawg: YES }),
+  amneziavpn: formatTable({ amneziawg: YES }),
+  // Only the array form builds hysteria (buildXrayJsonArray); the single
+  // config and xkeen take xray endpoints only, although xray-core has the
+  // hysteria outbound the array uses. The old protocol table promised it for
+  // all three.
+  xrayjson: formatTable({ ...XRAY_DOORS, hysteria: NOT_YET, shadowsocks: NOT_YET }),
+  'xrayjson-array': formatTable({ ...XRAY_DOORS, hysteria: YES, shadowsocks: NOT_YET }),
+  xkeen: formatTable({ ...XRAY_DOORS, hysteria: NOT_YET, shadowsocks: NOT_YET }),
+  outline: formatTable({ shadowsocks: YES }),
+  surge: formatTable({
+    vmess: YES_NO_REALITY,
+    trojan: YES_NO_REALITY,
+    hysteria: YES,
+    shadowsocks: YES,
+    // Surge takes socks5 and http proxies, TUIC v5 and ShadowTLS; left out of
+    // the builder (the Telegram doors by decision of 23.09).
+    socks: NOT_YET,
+    http: NOT_YET,
+    tuic: NOT_YET,
+    shadowtls: NOT_YET,
+  }),
+  quantumultx: formatTable({
+    vless: YES,
+    vmess: YES,
+    trojan: YES,
+    shadowsocks: YES,
+    socks: NOT_YET,
+    http: NOT_YET,
+  }),
+  loon: formatTable({
+    vless: YES,
+    vmess: YES,
+    trojan: YES,
+    hysteria: YES,
+    shadowsocks: YES,
+    socks: NOT_YET,
+    http: NOT_YET,
+  }),
 };
+
+/** What a format answers about one door over one security layer. The
+ *  securityLayer is the xray one: 'default' is REALITY. */
+export function formatCarries(
+  format: SubscriptionFormat,
+  door: Door,
+  securityLayer?: 'default' | 'tls' | 'none' | null,
+): { carried: boolean; why: FormatWhy } {
+  const cell = FORMAT_DOORS[format][door];
+  if (!cell.carried) return { carried: false, why: cell.why };
+  if (cell.exceptReality && (securityLayer ?? 'default') === 'default') {
+    return { carried: false, why: 'client-lacks-protocol' };
+  }
+  return { carried: true, why: 'native' };
+}
 
 /**
  * What the bare link may be set to answer with.
@@ -265,15 +405,6 @@ export const DEFAULT_FORMAT_NAMES = [
 
 export type DefaultSubscriptionFormat = (typeof DEFAULT_FORMAT_NAMES)[number];
 
-/** Does this format carry anything a subscription with these protocols has?
- *  The question the page asks before offering a file. */
-export function formatCarriesAny(
-  format: SubscriptionFormat,
-  protocols: readonly ProtocolName[],
-): boolean {
-  const carried = FORMAT_PROTOCOLS[format];
-  return protocols.some((p) => carried.includes(p));
-}
 
 export type ChainEntryProtocol = (typeof CHAIN_ENTRY_PROTOCOLS)[number];
 
