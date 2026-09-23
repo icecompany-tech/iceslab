@@ -712,6 +712,55 @@ export function refusedEntryChange(err: unknown): EntryChangeRefusal | null {
 }
 
 /**
+ * Пятый вопрос той же формы: 409 `ENTRY_NODES_DROPPED` (фаза 6).
+ *
+ * Не смена протокола, а уход НОД из входа: у них есть профили, и их
+ * пользователи после сохранения выйдут напрямую. Отдельный код и отдельная
+ * подпись («Убрать ноды из входа?»), без `from` и `to`: протокол не меняется.
+ * Согласие то же, `confirmEntryChange: true`.
+ *
+ * Профили группируются ПО НОДЕ: вопрос оператору про ноды, и список «нода:
+ * профили» читается как ответ на него, а плоский список пар нет.
+ */
+export interface EntryNodesDropped {
+  nodeName: string;
+  profiles: string[];
+}
+
+export function refusedEntryNodes(err: unknown): EntryNodesDropped[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_NODES_DROPPED') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const byNode = new Map<string, string[]>();
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.profileName !== 'string') continue;
+    const list = byNode.get(c.nodeName) ?? [];
+    if (!list.includes(c.profileName)) list.push(c.profileName);
+    byNode.set(c.nodeName, list);
+  }
+  return [...byNode.entries()].map(([nodeName, profiles]) => ({ nodeName, profiles }));
+}
+
+/**
+ * Можно ли открыть вопрос о согласии, или сервер повторяет уже отвеченный.
+ *
+ * Сервер задаёт вопросы по очереди (смена протокола, потом уход нод), и после
+ * первого согласия за тем же кликом законно приходит второй: это не ошибка, а
+ * следующий вопрос. Но тот же вопрос в ответ на запрос, где согласие уже было,
+ * это уже ошибка сервера или гонка, и открыть окно снова значило бы крутить
+ * оператора по кругу. Поэтому помним коды, на которые в этой цепочке уже
+ * согласились.
+ */
+export function entryQuestionRepeats(code: string, consented: ReadonlySet<string>, sentWithConsent: boolean): boolean {
+  return sentWithConsent && consented.has(code);
+}
+
+/**
  * Четвёртый отказ той же формы: 409 `ENTRY_CANNOT_CHAIN` (фаза 6).
  *
  * Входные ноды не могут поднять цепь: отчитались о движках, и sing-box среди

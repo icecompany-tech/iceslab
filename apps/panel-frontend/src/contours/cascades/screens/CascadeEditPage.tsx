@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Box, Stack, Text, TextInput } from '@mantine/core';
@@ -91,8 +91,10 @@ import {
   legPortNotes,
   poolRoleAt,
   refusedCells,
+  entryQuestionRepeats,
   refusedEntryChain,
   refusedEntryChange,
+  refusedEntryNodes,
   refusedLinkPorts,
   statusTone,
   toDirectionInputs,
@@ -101,6 +103,7 @@ import {
   type CellRefusal,
   type EntryChainConflict,
   type EntryChangeRefusal,
+  type EntryNodesDropped,
   type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
@@ -189,6 +192,21 @@ export function CascadeEditPage() {
   });
 
   /**
+   * Коды вопросов о согласии, на которые оператор уже ответил «да» в этой
+   * цепочке сохранения. Сервер задаёт их по очереди (смена протокола, потом
+   * уход нод), и второй после первого согласия законен; а вот тот же вопрос на
+   * запрос с согласием это повтор, и по кругу оператора не водим. Цепочка
+   * начинается заново с каждым нажатием «Сохранить».
+   */
+  const consented = useRef<Set<string>>(new Set());
+
+  /** Согласие на один вопрос: запомнить его код и повторить запрос с флагом. */
+  function consent(code: string) {
+    consented.current.add(code);
+    saveMutation.mutate(true);
+  }
+
+  /**
    * Вопрос, а не отказ: смена входа снимает каскад с перечисленных профилей, и
    * их пользователи дальше выходят напрямую из страны входа. Согласие даёт
    * только кнопка «всё равно сменить»: она и повторяет запрос с флагом.
@@ -216,8 +234,39 @@ export function CascadeEditPage() {
       ),
       labels: { confirm: t('cascadeEdit.entryDropConfirm'), cancel: t('common.cancel') },
       confirmProps: { color: 'red' },
-      onConfirm: () => saveMutation.mutate(true),
+      onConfirm: () => consent('ENTRY_CHANGE_DROPS_USERS'),
     });
+  }
+
+  /**
+   * Второй вопрос той же природы: из входа уходят НОДЫ, и пользователи их
+   * профилей выйдут напрямую. Протокол не меняется, поэтому без «с/на»; список
+   * по нодам, как оператор и думает про этот шаг.
+   */
+  function confirmEntryNodes(groups: EntryNodesDropped[]) {
+    modals.openConfirmModal({
+      title: t('cascadeEdit.entryNodesTitle'),
+      children: (
+        <Stack gap={10}>
+          <Text size="sm">{t('cascadeEdit.entryDropBody')}</Text>
+          <Stack gap={4}>
+            {groups.map((g) => (
+              <Text key={g.nodeName} size="sm" style={{ fontFamily: MONO }}>
+                {t('cascadeEdit.entryNodesRow', { node: g.nodeName, profiles: g.profiles.join(', ') })}
+              </Text>
+            ))}
+          </Stack>
+        </Stack>
+      ),
+      labels: { confirm: t('cascadeEdit.entryNodesConfirm'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => consent('ENTRY_NODES_DROPPED'),
+    });
+  }
+
+  /** Сервер повторил вопрос, на который в этой цепочке уже согласились. */
+  function repeatedQuestion() {
+    notifications.show({ color: 'red', title: t('common.saveError'), message: t('cascadeEdit.entryQuestionRepeated') });
   }
 
   const saveMutation = useMutation({
@@ -251,32 +300,38 @@ export function CascadeEditPage() {
       setDraft(toDraft(saved, nodeById));
       watchCascadeProvisioning(id, t);
     },
-    onError: (err) => {
+    onError: (err, confirmed) => {
       // A cascade write commits fast and provisions asynchronously, so a slow or
       // timed-out response can fire onError even though the change landed.
       qc.invalidateQueries({ queryKey: ['cascades'] });
-      // The form blocks both unstorable shapes, so a 400 means the API saw
-      // something this page did not. Its sentence is the useful one.
+      const withConsent = confirmed === true;
+
+      // Разбор идёт в серверном порядке: ENTRY_CANNOT_CHAIN, потом два вопроса
+      // о согласии (смена протокола, уход нод). За один клик после первого
+      // согласия законно приходит второй вопрос: это не ошибка, а следующий шаг.
       //
-      // Оно остаётся НА ЭКРАНЕ, а не уезжает тостом: сервер называет место
-      // («direction "DE"»), и читать это надо рядом со строками направлений, а
-      // не вдогонку исчезающему уведомлению. Так же сделано с занятым портом.
-      // Отказ по ноге называет НОДЫ, а не форму целиком, и место у него своё:
-      // строка под той ногой, о которой сервер говорит.
-      // Вход не поднимется: sing-box на входных нодах нет. Сервер отвечает этим
-      // РАНЬШЕ вопроса о согласии, и разбор идёт в том же порядке.
+      // Вход не поднимется: sing-box на входных нодах нет.
       const unchainable = refusedEntryChain(err);
       if (unchainable) {
         setEntryChainRefusals(unchainable);
         return;
       }
-      // Смена входа снимает каскад с профилей входных нод: не отказ, а вопрос.
-      // Сервер перечисляет, кого это касается, и ждёт явного согласия.
+      // Смена протокола входа снимает каскад с профилей входных нод.
       const dropped = refusedEntryChange(err);
       if (dropped) {
-        confirmEntryChange(dropped);
+        if (entryQuestionRepeats('ENTRY_CHANGE_DROPS_USERS', consented.current, withConsent)) repeatedQuestion();
+        else confirmEntryChange(dropped);
         return;
       }
+      // Из входа уходят ноды вместе с пользователями своих профилей.
+      const nodesGone = refusedEntryNodes(err);
+      if (nodesGone) {
+        if (entryQuestionRepeats('ENTRY_NODES_DROPPED', consented.current, withConsent)) repeatedQuestion();
+        else confirmEntryNodes(nodesGone);
+        return;
+      }
+      // Отказ по ноге называет НОДЫ, а не форму целиком, и место у него своё:
+      // строка под той ногой, о которой сервер говорит.
       const cells = refusedCells(err);
       if (cells) {
         setCellRefusals(cells);
@@ -289,6 +344,10 @@ export function CascadeEditPage() {
         setPortConflicts(ports);
         return;
       }
+      // The form blocks both unstorable shapes, so a 400 means the API saw
+      // something this page did not. Its sentence is the useful one, and it
+      // stays ON SCREEN rather than in a toast: the server names the place
+      // («direction "DE"»), and it is read next to the rows it is about.
       const shape = cascadeShapeError(err);
       if (shape) {
         setSaveRefusal(shape);
@@ -570,8 +629,12 @@ export function CascadeEditPage() {
             primary
             icon="tick"
             disabled={!valid || !dirty || saveMutation.isPending}
-            // Явное `false`: обычное сохранение согласия на смену входа не несёт.
-            onClick={() => saveMutation.mutate(false)}
+            // Явное `false`: обычное сохранение согласия не несёт. С каждым
+            // нажатием цепочка вопросов о согласии начинается заново.
+            onClick={() => {
+              consented.current.clear();
+              saveMutation.mutate(false);
+            }}
           >
             {saveMutation.isPending ? t('cascadeEdit.saving') : t('cascadeEdit.save')}
           </BarButton>

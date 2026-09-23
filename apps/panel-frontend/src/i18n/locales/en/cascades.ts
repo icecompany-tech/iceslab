@@ -160,6 +160,13 @@ export const cascades = {
     entryDropBody: 'These profiles leave the cascade and go direct, out of the entry country:',
     entryDropRow: '{{profile}} on {{node}}',
     entryDropConfirm: 'Change anyway',
+    // The second question of the same chain: nodes leave the entry, the
+    // protocol stays.
+    entryNodesTitle: 'Take these nodes out of the entry?',
+    entryNodesRow: '{{node}}: {{profiles}}',
+    entryNodesConfirm: 'Take them out anyway',
+    entryQuestionRepeated:
+      'The server asked again a question you already agreed to. The save stopped; reload the page and check the cascade.',
     attemptApplied: 'Last attempt {{when}} · all took it',
     attemptRefused: 'Last attempt {{when}} · {{refused}} of {{total}} refused',
     save: 'Save and push',

@@ -162,6 +162,12 @@ export const cascades = {
     entryDropBody: 'Эти профили выйдут из каскада и пойдут напрямую, из страны входа:',
     entryDropRow: '{{profile}} на {{node}}',
     entryDropConfirm: 'Всё равно сменить',
+    // Второй вопрос той же цепочки: из входа уходят ноды, протокол прежний.
+    entryNodesTitle: 'Убрать ноды из входа?',
+    entryNodesRow: '{{node}}: {{profiles}}',
+    entryNodesConfirm: 'Всё равно убрать',
+    entryQuestionRepeated:
+      'Сервер повторил вопрос, на который вы уже согласились. Сохранение остановлено, обновите страницу и проверьте каскад.',
     attemptApplied: 'Последняя попытка {{when}} · приняли все',
     attemptRefused: 'Последняя попытка {{when}} · отвергли {{refused}} из {{total}}',
     save: 'Сохранить и разослать',

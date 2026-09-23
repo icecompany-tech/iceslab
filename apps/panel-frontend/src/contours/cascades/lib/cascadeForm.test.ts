@@ -20,8 +20,10 @@ import {
   legPortNotes,
   poolRowFacts,
   refusedCells,
+  entryQuestionRepeats,
   refusedEntryChain,
   refusedEntryChange,
+  refusedEntryNodes,
   refusedLinkPorts,
   toPositionInputs,
   withEntryConfirm,
@@ -466,6 +468,61 @@ describe('refusedEntryChange', () => {
       response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS', conflicts: [] } },
     });
     expect(r).toEqual({ from: null, to: null, conflicts: [] });
+  });
+});
+
+/**
+ * 409 `ENTRY_NODES_DROPPED` (фаза 6): ноды уходят из входа вместе с
+ * пользователями своих профилей. Отдельный код, без from и to.
+ */
+describe('refusedEntryNodes', () => {
+  it('1. не тот отказ или не объект: спокойный null', () => {
+    for (const x of [null, undefined, 'строка']) expect(refusedEntryNodes(x)).toBeNull();
+    // Соседний вопрос о смене протокола сюда не попадает, и наоборот.
+    const sw = { response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS', conflicts: [] } } };
+    expect(refusedEntryNodes(sw)).toBeNull();
+  });
+
+  it('2. профили сгруппированы по ноде, повторы и мусор отброшены', () => {
+    expect(
+      refusedEntryNodes({
+        response: {
+          status: 409,
+          data: {
+            error: 'ENTRY_NODES_DROPPED',
+            conflicts: [
+              { nodeName: 'ru-01', profileName: 'vless-reality' },
+              { nodeName: 'ru-02', profileName: 'hy2' },
+              { nodeName: 'ru-01', profileName: 'vless-xhttp' },
+              { nodeName: 'ru-01', profileName: 'vless-reality' },
+              { nodeName: 'ru-02' },
+            ],
+          },
+        },
+      }),
+    ).toEqual([
+      { nodeName: 'ru-01', profiles: ['vless-reality', 'vless-xhttp'] },
+      { nodeName: 'ru-02', profiles: ['hy2'] },
+    ]);
+  });
+
+  it('3. вопрос о смене протокола этот код не читает', () => {
+    const nodes = { response: { status: 409, data: { error: 'ENTRY_NODES_DROPPED', conflicts: [] } } };
+    expect(refusedEntryChange(nodes)).toBeNull();
+  });
+});
+
+describe('entryQuestionRepeats', () => {
+  it('1. второй вопрос после первого согласия это не повтор, окно открывается', () => {
+    expect(entryQuestionRepeats('ENTRY_NODES_DROPPED', new Set(['ENTRY_CHANGE_DROPS_USERS']), true)).toBe(false);
+  });
+
+  it('2. тот же вопрос на запрос с согласием это повтор, по кругу не водим', () => {
+    expect(entryQuestionRepeats('ENTRY_NODES_DROPPED', new Set(['ENTRY_NODES_DROPPED']), true)).toBe(true);
+  });
+
+  it('3. обычное сохранение без согласия никогда не повтор', () => {
+    expect(entryQuestionRepeats('ENTRY_NODES_DROPPED', new Set(['ENTRY_NODES_DROPPED']), false)).toBe(false);
   });
 });
 
