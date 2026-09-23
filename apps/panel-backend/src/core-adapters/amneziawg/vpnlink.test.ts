@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { inflateSync } from 'node:zlib';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildAmneziaVpnLink, encodeAmneziaVpnKey } from './vpnlink.js';
+
+const GOLDEN_DIR = join(dirname(fileURLToPath(import.meta.url)), '__testdata__');
 
 // Mirror of Qt qUncompress: strip "vpn://", base64url-decode, read the 4-byte
 // big-endian uncompressed-length header, inflate from byte 4, and verify the
@@ -108,6 +113,7 @@ describe('buildAmneziaVpnLink', () => {
   });
 
   it('emits S3/S4 and psk_key when they carry a real value', () => {
+    // (golden below pins the whole key for both cases)
     const key = buildAmneziaVpnLink({ ...baseOpts, s3: 12, s4: 34, pskKey: 'pskBase64' });
     const env = decodeVpnKey(key) as { containers: Array<{ awg: Record<string, unknown> }> };
     const awg = env.containers[0]!.awg;
@@ -118,5 +124,54 @@ describe('buildAmneziaVpnLink', () => {
     // the inline .conf carries the same non-zero S3/S4
     expect(inner.config as string).toContain('S3 = 12');
     expect(inner.config as string).toContain('S4 = 34');
+  });
+});
+
+/**
+ * The whole key, pinned: what the AmneziaVPN app receives, decoded.
+ *
+ * Why a golden and not more `toBe`s: the key's JSON is about to be cut down
+ * (amnezia-client recon: which of last_config the import actually reads, the
+ * key is what makes the QR too dense to scan off a screen), and the one thing
+ * that must not happen along the way is a quiet change to a key the app does
+ * read. With a golden every change is a diff somebody reads.
+ *
+ * Two cases, because S3/S4 are the question the stand asked on 23.09 ("S3/S4
+ * did not make it into the key at all"):
+ *   awg1-s3s4-zero  the fleet today (AmneziaWG 1.x, S3 = S4 = 0): S3/S4 are
+ *                   ABSENT, on purpose. The AmneziaVPN iOS network extension
+ *                   (4.8.19) cannot parse the keys even at 0 and aborts with
+ *                   ParseError 9, the tunnel never starts; desktop and Android
+ *                   accept the absence. The .conf builder follows the same rule
+ *                   (wgconf.ts), so the key and the file never disagree.
+ *   awg2-s3s4-set   non-zero S3/S4 (a 2.0-shaped profile): both appear, at the
+ *                   awg level, in last_config and in the embedded .conf.
+ *
+ * `keyLength` is pinned beside the JSON: it decides the QR version, and the QR
+ * is where the length is felt.
+ */
+describe('the AmneziaVPN key, whole', () => {
+  function golden(name: string, key: string): void {
+    const envelope = decodeVpnKey(key) as {
+      containers: Array<{ awg: Record<string, unknown> }>;
+    };
+    const lastConfig = JSON.parse(envelope.containers[0]!.awg.last_config as string) as Record<string, unknown>;
+    const got = `${JSON.stringify({ keyLength: key.length, envelope, lastConfig }, null, 2)}\n`;
+    const path = join(GOLDEN_DIR, `vpnlink-${name}.json`);
+    if (process.env.UPDATE_GOLDEN) {
+      writeFileSync(path, got);
+      return;
+    }
+    expect(got, `golden ${name} is out of date; retake with UPDATE_GOLDEN=1 and read the diff`).toBe(
+      readFileSync(path, 'utf8'),
+    );
+  }
+
+  it('awg1-s3s4-zero: the fleet today, S3/S4 absent', () => {
+    golden('awg1-s3s4-zero', buildAmneziaVpnLink(baseOpts));
+  });
+
+  it('awg2-s3s4-set: non-zero S3/S4 travel everywhere the app reads them', () => {
+    golden('awg2-s3s4-set', buildAmneziaVpnLink({ ...baseOpts, s1: 15, s2: 18, s3: 24, s4: 20 }));
   });
 });
