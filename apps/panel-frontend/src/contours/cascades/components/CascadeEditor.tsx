@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Box, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
 import type { CascadeProtocol } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
-import { COUNTRIES, countryFlag } from '@/lib/domain/countries';
+import { COUNTRIES, countryFlag, countryName } from '@/lib/domain/countries';
+import { protocolLabelCompact } from '@/lib/domain/protocols';
 import {
   AMBER,
   CARD,
@@ -31,6 +32,7 @@ import {
   protocolOptions,
   statusTone,
   type CellGap,
+  type EntryBystander,
   type EntryChainFacts,
   type HopRole,
   type LegFacts,
@@ -1897,6 +1899,28 @@ export function EntryChainNote({ facts }: { facts: EntryChainFacts | null }) {
     <Note tone={MIST} icon={<InfoIcon size={13} color={MIST} />}>
       {t('cascadeCreate.entryHy2Auto')}
     </Note>
+  );
+}
+
+/**
+ * Профили входных нод, которые в каскад не входят. Спокойная строка: это
+ * свойство модели «один вход на каскад», а не ошибка оператора.
+ */
+export function EntryBystandersNote({ items }: { items: EntryBystander[] | undefined }) {
+  const { t } = useTranslation();
+  if (!items || items.length === 0) return null;
+  return (
+    <>
+      {items.map((b) => (
+        <Note key={`bystander-${b.nodeId}`} tone={MIST} icon={<InfoIcon size={13} color={MIST} />}>
+          {t('cascadeCreate.entryBystanders', {
+            protocols: b.protocols.map((p) => protocolLabelCompact(p)).join(', '),
+            name: b.nodeName,
+            country: b.countryCode ? countryName(b.countryCode) : t('cascadeCreate.entryCountryUnknown'),
+          })}
+        </Note>
+      ))}
+    </>
   );
 }
 

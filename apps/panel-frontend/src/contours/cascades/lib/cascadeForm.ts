@@ -133,6 +133,55 @@ export function entryNoteKind(facts: EntryChainFacts | null): EntryNoteKind | nu
   return null;
 }
 
+/**
+ * Профили на входной ноде, которые в каскад НЕ входят.
+ *
+ * На каскаде один протокол входа (фаза 6). Всё, что привязано к входной ноде
+ * другим протоколом, живёт мимо каскада, и его пользователи выходят напрямую из
+ * страны этой ноды. Это факт модели, а не поломка, и оператор должен видеть
+ * его в момент выбора входа, а не когда пользователь hy2 спросит, почему у
+ * него IP входа.
+ *
+ * `undefined` это «сказать нечего», и его два разных повода: вход не выбран,
+ * или привязки с профилями ещё не пришли. Во втором случае строка про «нет
+ * чужих профилей» соврала бы, поэтому молчание, а не пустой список.
+ *
+ * Сравнение идёт по ПРОТОКОЛУ профиля, тем же правилом, что у сервера: при
+ * смене входа он снимал с каскада профиль `hy2` именно как hysteria-профиль.
+ * Выключенная привязка в счёт не идёт: пользователей через неё нет.
+ */
+export interface EntryBystander {
+  nodeId: string;
+  nodeName: string;
+  countryCode: string | null;
+  protocols: string[];
+}
+
+export function entryBystanders(
+  entryProtocol: string | null | undefined,
+  entryNodes: { id: string; name: string; countryCode: string | null }[],
+  bindings: { profileId: string; nodeId: string; enabled: boolean }[] | undefined,
+  profiles: { id: string; protocol: string }[] | undefined,
+): EntryBystander[] | undefined {
+  if (!entryProtocol || !bindings || !profiles) return undefined;
+  const protocolOf = new Map(profiles.map((p) => [p.id, p.protocol]));
+  const out: EntryBystander[] = [];
+  for (const node of entryNodes) {
+    const foreign = new Set<string>();
+    for (const b of bindings) {
+      if (b.nodeId !== node.id || !b.enabled) continue;
+      const proto = protocolOf.get(b.profileId);
+      // Профиль, которого нет в списке, ничего не говорит о протоколе: его не
+      // считаем, чтобы не назвать чужим то, чего мы просто не видим.
+      if (proto && proto !== entryProtocol) foreign.add(proto);
+    }
+    if (foreign.size > 0) {
+      out.push({ nodeId: node.id, nodeName: node.name, countryCode: node.countryCode, protocols: [...foreign].sort() });
+    }
+  }
+  return out;
+}
+
 export type HopRole = 'entry' | 'transit' | 'exit';
 
 export const ROLE_TONE: Record<HopRole, string> = {

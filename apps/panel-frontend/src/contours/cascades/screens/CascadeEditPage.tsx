@@ -23,6 +23,7 @@ import { isRealisedLinkCell } from '@/lib/domain/engines';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
+import { useEntryBystanders } from '@/contours/cascades/lib/useEntryBystanders';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -38,6 +39,7 @@ import {
   DashedAdd,
   DirectionLegRow,
   DirectionRow,
+  EntryBystandersNote,
   EntryChainNote,
   EyeIcon,
   FieldLabel,
@@ -160,6 +162,13 @@ export function CascadeEditPage() {
   /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`).
    *  Рисуются у карточки входа по нодам. */
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
+  // Хук стоит ДО раннего выхода страницы: иначе число хуков меняется между
+  // рендерами, пока черновик не засеян. Пока черновика нет, запросов нет.
+  const bystanders = useEntryBystanders(
+    draft?.pools[0]?.entryProtocol,
+    draft?.pools[0]?.nodeIds ?? [],
+    nodeById,
+  );
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
@@ -669,6 +678,7 @@ export function CascadeEditPage() {
                 {/* Отказ сервера по входным нодам: sing-box на них нет. Факт
                     сервера по отчёту ноды, поэтому показывается только после
                     отказа, а не предсказанием заранее. */}
+                {i === 0 && <EntryBystandersNote items={bystanders} />}
                 {i === 0 &&
                   entryChainRefusals.map((c) => (
                     <Note key={`chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>

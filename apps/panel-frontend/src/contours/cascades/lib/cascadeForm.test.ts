@@ -9,6 +9,7 @@ import {
   CHAIN_ENTRY_PROTOCOLS,
   LINK_PROTOCOL_VALUES,
   cellGaps,
+  entryBystanders,
   entryChainFacts,
   entryNoteKind,
   toDirectionInputs,
@@ -719,6 +720,52 @@ describe('entryChainFacts', () => {
  * красной строка быть не должна; но и молчать о ней нельзя, иначе оператор
  * узнает о границе от пользователя, который «не может выбрать страну».
  */
+/**
+ * Профили входных нод, которые в каскад не входят (модель «один вход на
+ * каскад», фаза 6).
+ */
+describe('entryBystanders', () => {
+  const nodes = [
+    { id: 'n1', name: 'ru-01', countryCode: 'RU' },
+    { id: 'n2', name: 'ru-02', countryCode: null },
+  ];
+  const profiles = [
+    { id: 'p-vless', protocol: 'xray' },
+    { id: 'p-hy2', protocol: 'hysteria' },
+    { id: 'p-awg', protocol: 'amneziawg' },
+  ];
+  const bind = (profileId: string, nodeId: string, enabled = true) => ({ profileId, nodeId, enabled });
+
+  it('1. чужих профилей нет: строки нет', () => {
+    expect(entryBystanders('xray', nodes, [bind('p-vless', 'n1')], profiles)).toEqual([]);
+  });
+
+  it('2. один чужой протокол: одна строка у своей ноды', () => {
+    expect(entryBystanders('xray', nodes, [bind('p-vless', 'n1'), bind('p-hy2', 'n1')], profiles)).toEqual([
+      { nodeId: 'n1', nodeName: 'ru-01', countryCode: 'RU', protocols: ['hysteria'] },
+    ]);
+  });
+
+  it('3. два чужих протокола: перечислены оба', () => {
+    const out = entryBystanders('xray', nodes, [bind('p-hy2', 'n2'), bind('p-awg', 'n2')], profiles);
+    expect(out).toEqual([{ nodeId: 'n2', nodeName: 'ru-02', countryCode: null, protocols: ['amneziawg', 'hysteria'] }]);
+  });
+
+  it('4. выключенная привязка в счёт не идёт: пользователей через неё нет', () => {
+    expect(entryBystanders('xray', nodes, [bind('p-hy2', 'n1', false)], profiles)).toEqual([]);
+  });
+
+  it('5. данные не пришли или вход не выбран: сказать нечего, а не «чужих нет»', () => {
+    expect(entryBystanders('xray', nodes, undefined, profiles)).toBeUndefined();
+    expect(entryBystanders('xray', nodes, [], undefined)).toBeUndefined();
+    expect(entryBystanders(null, nodes, [], profiles)).toBeUndefined();
+  });
+
+  it('6. профиль, которого нет в списке, чужим не называется', () => {
+    expect(entryBystanders('xray', nodes, [bind('p-gone', 'n1')], profiles)).toEqual([]);
+  });
+});
+
 describe('entryNoteKind', () => {
   const PHASE6 = ['xray', 'hysteria'];
 

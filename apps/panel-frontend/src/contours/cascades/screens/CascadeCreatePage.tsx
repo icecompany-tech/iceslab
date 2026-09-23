@@ -15,6 +15,7 @@ import {
 import { listNodes } from '@/lib/domain/nodes';
 import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
+import { useEntryBystanders } from '@/contours/cascades/lib/useEntryBystanders';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import {
@@ -24,6 +25,7 @@ import {
   Counter,
   DashedAdd,
   DirectionRow,
+  EntryBystandersNote,
   EntryChainNote,
   EyeIcon,
   FieldLabel,
@@ -135,6 +137,9 @@ export function CascadeCreatePage() {
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n] as const)), [nodes]);
+  // Входная нода, взятая в новый каскад, может уже держать профили другого
+  // протокола: они в каскад не войдут, и сказать это надо при выборе входа.
+  const bystanders = useEntryBystanders(pools[0]?.entryProtocol, pools[0]?.nodeIds ?? [], nodeById);
 
   // Which cascade already claims a node. The config generator picks the first
   // enabled cascade a node belongs to, so a second one would be written and then
@@ -508,6 +513,7 @@ export function CascadeCreatePage() {
                 onDown={() => movePool(i, 1)}
                 onDelete={() => setPools((prev) => prev.filter((_, j) => j !== i))}
               >
+                {i === 0 && <EntryBystandersNote items={bystanders} />}
                 {i === 0 &&
                   entryChainRefusals.map((c) => (
                     <Note key={`chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>

@@ -110,6 +110,11 @@ export const cascades = {
     // missing. A server FACT from the node's report, so the button is not
     // disabled ahead of it.
     entryCannotChain: '{{name}} reported {{engines}}, sing-box is not on it.',
+    // A fact of the one-entry-per-cascade model, not a fault: a quiet line.
+    // It belongs next to the entry picker, not in a user's call about a foreign IP.
+    entryBystanders:
+      'The {{protocols}} profiles on {{name}} are outside the cascade; their users leave straight from {{country}}.',
+    entryCountryUnknown: "this node's country",
     legPort: 'port {{port}}',
     legUnknown: 'no link cell picked',
     legToDirections: 'the leg to the exit is set on the direction',
