@@ -10,7 +10,7 @@ import { ensureDefaultHost } from '../hosts/hosts.service.js';
 import {
   generateSsServerPsk,
 } from './ss-helpers.js';
-import { engineValidForProtocol } from './profiles.schemas.js';
+import { engineServesSubprotocol, engineValidForProtocol } from './profiles.schemas.js';
 import {
   effectiveEngineOf,
   nodeRendersProfile,
@@ -52,6 +52,16 @@ export class ProfileNameTakenError extends Error {
   constructor(public name: string) {
     super(`Profile name "${name}" already in use`);
     this.name = 'ProfileNameTakenError';
+  }
+}
+
+/** An edit that would put a socks or http profile on the sing-box engine. The
+ *  create path refuses the same pair in the schema (engineServesSubprotocol). */
+export class ProfileEngineNotForSubprotocolError extends Error {
+  readonly code = 'INVALID';
+  constructor() {
+    super('socks and http are served by the xray engine only');
+    this.name = 'ProfileEngineNotForSubprotocolError';
   }
 }
 /**
@@ -420,6 +430,14 @@ export async function updateProfile(
         ? stripInapplicableTransportFields(parsed as Record<string, unknown>)
         : parsed
     ) as never;
+  }
+
+  // The pair as it will be stored: an edit may change either half alone, and a
+  // socks profile moved to sing-box is refused just as one created there is.
+  const nextEngine = input.engine !== undefined ? input.engine : existing.engine;
+  const nextConfig = data.config !== undefined ? data.config : existing.config;
+  if (!engineServesSubprotocol(existing.protocol, nextEngine, nextConfig)) {
+    throw new ProfileEngineNotForSubprotocolError();
   }
 
   /**

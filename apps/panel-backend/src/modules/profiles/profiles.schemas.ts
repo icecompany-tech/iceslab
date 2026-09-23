@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { XRAY_PLAIN_SUBPROTOCOLS } from '@iceslab/shared';
 import {
   PROTOCOL_CONFIG_SCHEMAS,
   type CreateInboundInput,
@@ -75,6 +76,22 @@ export function engineValidForProtocol(
   return (ENGINE_OPTIONS[protocol] ?? []).includes(engine);
 }
 
+/**
+ * socks and http are served by the xray process and nothing else (decision of
+ * 23.09: one process, no new adapters). The sing-box adapter refuses them on
+ * the node, loudly but late; here the save says so while the operator is
+ * still on the form. Undefined config reads as "no subprotocol named".
+ */
+export function engineServesSubprotocol(
+  protocol: string,
+  engine: string | null | undefined,
+  config: unknown,
+): boolean {
+  if (protocol !== 'xray' || engine !== 'singbox') return true;
+  const sub = (config as { subprotocol?: unknown } | null | undefined)?.subprotocol;
+  return !(XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(sub);
+}
+
 // Discriminated union, same shape as the old InboundConfigByProtocol but
 // without the per-node `nodeId/port/publicHost` fields. Profile holds the
 // shared template only.
@@ -106,6 +123,13 @@ export const CreateProfileSchema = z
       ctx.addIssue({
         code: 'custom',
         message: `engine "${val.engine}" is not valid for protocol "${val.protocol}"`,
+        path: ['engine'],
+      });
+    }
+    if (!engineServesSubprotocol(val.protocol, val.engine ?? null, val.config)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'socks and http are served by the xray engine only',
         path: ['engine'],
       });
     }

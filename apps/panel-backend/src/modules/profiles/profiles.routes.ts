@@ -109,6 +109,9 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileNameTakenError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      if (err instanceof svc.ProfileEngineNotForSubprotocolError) {
+        return reply.code(400).send({ error: err.code, message: err.message });
+      }
       // Switching the engine would leave this profile deployed on a node whose
       // cores cannot serve it. Named separately from CONFLICT so the screen can
       // point at the node instead of at the field.
