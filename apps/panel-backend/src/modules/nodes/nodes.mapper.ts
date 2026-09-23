@@ -122,6 +122,15 @@ export interface PublicNodeDto {
    * `rendersPolicy`.
    */
   engines?: EngineName[];
+  /**
+   * The cascade that keeps this node out of every subscription, or null: it is
+   * a transit or an exit of an enabled cascade that hides its hops. A host put
+   * on such a node is served to nobody, and the deploy window says so before
+   * the host exists. Computed by the same function the subscription filters
+   * with (getHiddenCascadeNodes), so the two cannot disagree. Present on the
+   * list and on GET by id; other responses leave it out.
+   */
+  hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
   createdAt: string;
   updatedAt: string;
 }

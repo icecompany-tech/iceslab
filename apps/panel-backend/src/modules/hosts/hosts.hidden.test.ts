@@ -108,6 +108,22 @@ describe('hiddenByCascade on a host', () => {
     expect(nodeIds.has(nl.id)).toBe(false);
   });
 
+  it('says the same on the node itself, so the deploy window warns before a host exists', async () => {
+    const ru = await node('ru');
+    const nl = await node('nl');
+    const c = await cascade('ru-out', ru.id, nl.id);
+
+    const list = await app.inject({ method: 'GET', url: '/api/nodes', headers: auth() });
+    const byId = new Map(
+      (JSON.parse(list.body).nodes as { id: string; hiddenByCascade: unknown }[]).map((n) => [n.id, n]),
+    );
+    expect(byId.get(nl.id)?.hiddenByCascade).toEqual({ cascadeId: c.id, cascadeName: 'ru-out' });
+    expect(byId.get(ru.id)?.hiddenByCascade).toBeNull();
+
+    const one = await app.inject({ method: 'GET', url: `/api/nodes/${nl.id}`, headers: auth() });
+    expect(JSON.parse(one.body).hiddenByCascade).toEqual({ cascadeId: c.id, cascadeName: 'ru-out' });
+  });
+
   it('is null where the cascade does not hide: switched off, or hops left visible', async () => {
     const ru = await node('ru');
     const nl = await node('nl');

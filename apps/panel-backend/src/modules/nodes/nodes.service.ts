@@ -7,6 +7,7 @@ import * as repo from './nodes.repository.js';
 import { getPanelPublicIp } from './panel-ip.js';
 import { issueBootstrapToken } from './bootstrap.service.js';
 import { registerWarpDevice } from '../warp/warp.service.js';
+import { getHiddenCascadeNodes } from '../cascades/cascade.service.js';
 import { assertPolicyFitsNode } from '../node-policies/node-policies.service.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import {
@@ -296,9 +297,9 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   page: number;
   limit: number;
 }> {
-  const { nodes, total } = await repo.list(query);
+  const [{ nodes, total }, hidden] = await Promise.all([repo.list(query), getHiddenCascadeNodes()]);
   return {
-    nodes: nodes.map(mapNodeToPublic),
+    nodes: nodes.map((n) => ({ ...mapNodeToPublic(n), hiddenByCascade: hidden.get(n.id) ?? null })),
     total,
     page: query.page,
     limit: query.limit,
@@ -308,7 +309,7 @@ export async function listNodes(query: ListNodesQuery): Promise<{
 export async function getNodeById(id: string): Promise<PublicNodeDto> {
   const node = await repo.findActiveById(id);
   if (!node) throw new NodeNotFoundError(id);
-  return mapNodeToPublic(node);
+  return { ...mapNodeToPublic(node), hiddenByCascade: (await getHiddenCascadeNodes()).get(id) ?? null };
 }
 
 /**
