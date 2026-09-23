@@ -519,6 +519,7 @@ func (a *Adapter) AddUser(user core.User) error {
 	desired := xrayClient{
 		ID:    user.XrayUUID,
 		Email: user.UserID,
+		Login: user.Username,
 	}
 	if exists && existing == desired {
 		a.mu.Unlock()
@@ -532,7 +533,15 @@ func (a *Adapter) AddUser(user core.User) error {
 	if dormant {
 		return nil
 	}
-	if a.liveUpdateUser(context.Background(), liveAdd, desired) {
+	change := userChange{op: liveAdd, target: desired}
+	if exists {
+		// A rename changes only the socks/http login. The user is already on
+		// every vless/trojan/vmess inbound with the same id, and re-adding them
+		// there would fail as a duplicate and fall back to a restart.
+		change.managedUnchanged = existing.ID == desired.ID && existing.Email == desired.Email
+		change.prevLogin = existing.Login
+	}
+	if a.liveUpdateUser(context.Background(), change) {
 		return nil
 	}
 	return a.regenerateAndRestart(context.Background())
@@ -578,7 +587,7 @@ func (a *Adapter) RemoveUser(userID string) error {
 	if dormant {
 		return nil
 	}
-	if a.liveUpdateUser(context.Background(), liveRemove, removed) {
+	if a.liveUpdateUser(context.Background(), userChange{op: liveRemove, target: removed}) {
 		return nil
 	}
 	return a.regenerateAndRestart(context.Background())
@@ -590,6 +599,37 @@ const (
 	liveAdd liveOp = iota
 	liveRemove
 )
+
+// userChange is one AddUser/RemoveUser as the live path needs to see it.
+type userChange struct {
+	op     liveOp
+	target xrayClient
+	// managedUnchanged: the user's id and email are what the vless/trojan/vmess
+	// inbounds already carry, so only the socks/http accounts move (a rename).
+	managedUnchanged bool
+	// prevLogin: the login this user had before an add that replaced them.
+	prevLogin string
+}
+
+// accountsBeforeChange: how many socks/http accounts the running core carried
+// BEFORE this change, from the count after it. It decides whether each plain
+// inbound exists in the running core right now (an inbound with no accounts is
+// not rendered, see renderMultiConfig), so whether it has to be removed before
+// it is added back.
+func accountsBeforeChange(after int, c userChange) int {
+	has := func(login string) int {
+		if login != "" {
+			return 1
+		}
+		return 0
+	}
+	switch c.op {
+	case liveAdd:
+		return after - has(c.target.Login) + has(c.prevLogin)
+	default:
+		return after + has(c.target.Login)
+	}
+}
 
 // buildAduInbound renders the JSON that `xray api adu` consumes. It MUST be a
 // full config with a top-level "inbounds" array: adu parses the file via
@@ -669,7 +709,8 @@ func buildAduInboundEntry(inbound InboundConfig, target xrayClient) map[string]a
 // HandlerService and keeps the on-disk config in sync. Returns true on success;
 // false tells the caller to fall back to a full restart. restartMu-guarded so
 // it can't race a regenerateAndRestart; a.mu only for the fast snapshot.
-func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClient) bool {
+func (a *Adapter) liveUpdateUser(ctx context.Context, change userChange) bool {
+	op, target := change.op, change.target
 	a.restartMu.Lock()
 	defer a.restartMu.Unlock()
 
@@ -718,6 +759,116 @@ func (a *Adapter) liveUpdateUser(ctx context.Context, op liveOp, target xrayClie
 	defer cancel()
 	server := fmt.Sprintf("--server=127.0.0.1:%d", cfg.ApiPort)
 
+	// Two kinds of inbound, two ways to change who is on them. vless, trojan
+	// and vmess are user managers and take adu/rmu. socks and http are not
+	// (Xray-core v26.3.27 proxy/proxy.go:77), so they are replaced whole. Asking
+	// adu to cover them would come back short of "Added N" and send every user
+	// change on the node into a restart, dropping every vless session on it.
+	managed, plain := splitInbounds(inbounds)
+	if len(managed) > 0 && !change.managedUnchanged {
+		if !a.liveManaged(cctx, run, binPath, server, op, managed, target) {
+			return false
+		}
+	}
+	if len(plain) > 0 {
+		after := len(plainAccounts(clients))
+		before := accountsBeforeChange(after, change)
+		if !a.refreshPlainInbounds(cctx, run, binPath, server, plain, clients, before > 0, after > 0) {
+			return false
+		}
+	}
+	return true
+}
+
+// splitInbounds separates the inbounds adu/rmu can change from the ones that
+// have to be replaced.
+func splitInbounds(inbounds []InboundConfig) (managed, plain []InboundConfig) {
+	for _, in := range inbounds {
+		if in.isPlain() {
+			plain = append(plain, in)
+		} else {
+			managed = append(managed, in)
+		}
+	}
+	return managed, plain
+}
+
+// refreshPlainInbounds replaces each socks/http inbound in the running core
+// with its new accounts: `api rmi <tag>`, then `api adi` with the same object
+// the file on disk carries (userInboundEntry). No process restart, so no other
+// inbound notices.
+//
+// The order is rmi first: adi of a tag that still listens would fail on the
+// busy port. The gap between the two is a moment with the port closed, and
+// Telegram reconnects through it; that is the whole cost, and it falls on the
+// socks/http users of this node, not on its vless users.
+//
+// wasLive / isLive: whether the inbound exists in the running core before and
+// after this change. An inbound with no accounts is not rendered (an http
+// inbound without accounts is an open proxy), so the first account arrives as
+// adi alone and the last one leaves as rmi alone.
+//
+// Any failure answers false, and the caller restarts the core from the file
+// already on disk, which is the state this was trying to reach.
+func (a *Adapter) refreshPlainInbounds(
+	ctx context.Context,
+	run RunCmdFunc,
+	binPath, server string,
+	plain []InboundConfig,
+	clients []xrayClient,
+	wasLive, isLive bool,
+) bool {
+	for _, in := range plain {
+		cfg := in.withDefaults()
+		if wasLive {
+			out, err := runLiveOp(ctx, run, binPath, "api", "rmi", server, cfg.Tag)
+			if err != nil {
+				a.logger.Warn("xray api rmi failed; falling back to restart",
+					"tag", cfg.Tag, "err", err, "out", strings.TrimSpace(string(out)))
+				return false
+			}
+		}
+		if !isLive {
+			continue
+		}
+		data, err := json.Marshal(map[string]any{"inbounds": []any{userInboundEntry(cfg, clients)}})
+		if err != nil {
+			return false
+		}
+		tmp, err := os.CreateTemp("", "ice-xray-adi-*.json")
+		if err != nil {
+			return false
+		}
+		tmpPath := tmp.Name()
+		_, werr := tmp.Write(data)
+		cerr := tmp.Close()
+		if werr != nil || cerr != nil {
+			_ = os.Remove(tmpPath)
+			return false
+		}
+		out, err := runLiveOp(ctx, run, binPath, "api", "adi", server, tmpPath)
+		_ = os.Remove(tmpPath)
+		if err != nil {
+			a.logger.Warn("xray api adi failed; falling back to restart",
+				"tag", cfg.Tag, "err", err, "out", strings.TrimSpace(string(out)))
+			return false
+		}
+	}
+	a.logger.Info("xray socks/http accounts replaced live (no restart)",
+		"inbounds", len(plain), "accounts", len(plainAccounts(clients)))
+	return true
+}
+
+// liveManaged is the adu/rmu half: every vless/trojan/vmess inbound, which xray
+// can change in place.
+func (a *Adapter) liveManaged(
+	cctx context.Context,
+	run RunCmdFunc,
+	binPath, server string,
+	op liveOp,
+	inbounds []InboundConfig,
+	target xrayClient,
+) bool {
 	switch op {
 	case liveAdd:
 		data, err := buildAduPayload(inbounds, target)
@@ -858,8 +1009,14 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		apiPort = 8080 // mirror withDefaults
 	}
 	users := make([]core.UserStats, 0, len(a.users))
-	for id := range a.users {
+	// socks/http counters are keyed by the login, not the id (see
+	// xrayClient.Login); this is how they find their way back to the user.
+	loginOf := make(map[string]string, len(a.users))
+	for id, c := range a.users {
 		users = append(users, core.UserStats{UserID: id})
+		if c.Login != "" && c.Login != id {
+			loginOf[id] = c.Login
+		}
 	}
 	run := a.cfg.RunCmd
 	proc := a.proc
@@ -901,6 +1058,13 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		} else {
 			for _, u := range users {
 				c := counters[u.UserID]
+				// The same person through a socks/http door: a second counter
+				// under their login, added to the first.
+				if login, ok := loginOf[u.UserID]; ok {
+					viaLogin := counters[login]
+					c.UplinkBytes += viaLogin.UplinkBytes
+					c.DownlinkBytes += viaLogin.DownlinkBytes
+				}
 				out = append(out, core.UserStats{UserID: u.UserID, BytesIn: c.UplinkBytes, BytesOut: c.DownlinkBytes})
 				userIn += c.UplinkBytes
 				userOut += c.DownlinkBytes

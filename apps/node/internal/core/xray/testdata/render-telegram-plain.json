@@ -1,0 +1,197 @@
+{
+  "api": {
+    "services": [
+      "StatsService",
+      "HandlerService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "u-alice",
+            "id": "11111111-1111-4111-8111-111111111111"
+          },
+          {
+            "email": "u-bob",
+            "id": "22222222-2222-4222-8222-222222222222"
+          },
+          {
+            "email": "u-nameless",
+            "id": "33333333-3333-4333-8333-333333333333"
+          }
+        ],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "raw",
+        "realitySettings": {
+          "dest": "www.cloudflare.com:443",
+          "privateKey": "aGVsbG8td29ybGQtdGhpcy1pcy1hLWZha2Uta2V5MDA",
+          "serverNames": [
+            "www.cloudflare.com"
+          ],
+          "shortIds": [
+            "abc123"
+          ],
+          "show": false,
+          "xver": 0
+        },
+        "security": "reality"
+      },
+      "tag": "in-vless"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "accounts": [
+          {
+            "pass": "11111111-1111-4111-8111-111111111111",
+            "user": "alice"
+          },
+          {
+            "pass": "22222222-2222-4222-8222-222222222222",
+            "user": "bob"
+          }
+        ],
+        "auth": "password",
+        "udp": false
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "none"
+      },
+      "tag": "in-socks"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 3128,
+      "protocol": "http",
+      "settings": {
+        "accounts": [
+          {
+            "pass": "11111111-1111-4111-8111-111111111111",
+            "user": "alice"
+          },
+          {
+            "pass": "22222222-2222-4222-8222-222222222222",
+            "user": "bob"
+          }
+        ],
+        "allowTransparent": false
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "none"
+      },
+      "tag": "in-http"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 8080,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api-in"
+    }
+  ],
+  "log": {
+    "loglevel": "warning"
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "streamSettings": {
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      },
+      "tag": "direct"
+    },
+    {
+      "protocol": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true
+    }
+  },
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "inboundTag": [
+          "api-in"
+        ],
+        "outboundTag": "api",
+        "type": "field"
+      },
+      {
+        "outboundTag": "dns-out",
+        "protocol": [
+          "dns"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "protocol": [
+          "bittorrent"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "port": "25",
+        "type": "field"
+      }
+    ]
+  },
+  "stats": {}
+}

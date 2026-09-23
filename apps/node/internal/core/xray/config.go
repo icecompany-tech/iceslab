@@ -321,8 +321,8 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 }
 
 // Subprotocols of the user-facing inbound, as the panel's schema names them.
-// socks and http are in the contract (Telegram entries, 2026-09-23) and not yet
-// rendered here; see validateSubprotocol.
+// socks and http are the Telegram entries (2026-09-23): plain SOCKS5 and HTTP
+// CONNECT, a login per user, no TLS and no transport.
 const (
 	subprotocolSocks = "socks"
 	subprotocolHTTP  = "http"
@@ -331,25 +331,43 @@ const (
 // validateSubprotocol refuses a subprotocol this agent does not render.
 //
 // ⚠ Refusing is the whole point. userInboundProtocol falls through to vless for
-// anything it does not know, so a `socks` inbound pushed to an agent without a
-// socks render would come up as a VLESS inbound on that port: a door of the
-// wrong kind that loads cleanly, while the operator's Telegram users get
-// nothing. It is called before the inbound is stored, so a refused one never
-// reaches the render of the others.
+// anything it does not know, so an unknown name would come up as a VLESS
+// inbound on that port: a door of the wrong kind that loads cleanly. It is
+// called before the inbound is stored, so a refused one never reaches the
+// render of the others.
 func (c *InboundConfig) validateSubprotocol() error {
 	switch c.Subprotocol {
-	case "", "vless", "trojan", "vmess":
+	case "", "vless", "trojan", "vmess", subprotocolSocks, subprotocolHTTP:
 		return nil
-	case subprotocolSocks, subprotocolHTTP:
-		return fmt.Errorf("subprotocol %q is in the contract and this agent does not render it yet", c.Subprotocol)
 	default:
 		return fmt.Errorf("unknown xray subprotocol %q", c.Subprotocol)
 	}
 }
 
+// isPlain reports a subprotocol with a login per user and nothing else: no
+// REALITY, no TLS, no transport. xray serves these through proxy/socks and
+// proxy/http, which are NOT user managers (Xray-core v26.3.27 proxy/proxy.go:77),
+// so `api adu`/`rmu` cannot change who is on them; the adapter replaces the
+// whole inbound instead (see refreshPlainInbounds).
+func (c *InboundConfig) isPlain() bool {
+	return c.Subprotocol == subprotocolSocks || c.Subprotocol == subprotocolHTTP
+}
+
 func (c *InboundConfig) validate() error {
 	if err := c.validateSubprotocol(); err != nil {
 		return err
+	}
+	// Telegram dials these without TLS and without a transport. An empty
+	// Security means REALITY in this agent, so "none" is required in so many
+	// words rather than assumed.
+	if c.isPlain() {
+		if c.Security != "none" {
+			return fmt.Errorf("subprotocol %s takes security none only, got %q", c.Subprotocol, c.Security)
+		}
+		if c.Network != "" && c.Network != "raw" && c.Network != "tcp" {
+			return fmt.Errorf("subprotocol %s takes network raw only, got %q", c.Subprotocol, c.Network)
+		}
+		return nil
 	}
 	// WARP egress is orthogonal to inbound security, so validate it first.
 	if c.Warp != nil {
@@ -441,6 +459,26 @@ func validateRealityDest(dest string) error {
 type xrayClient struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
+	// Login is the user's panel username, the name a person types into a
+	// SOCKS5 or HTTP proxy. Those two carry no email field (xray
+	// infra/conf/socks.go:14, http.go:14), and xray keys their per-user
+	// counters by the login instead (proxy/socks/protocol.go:162,
+	// proxy/http/server.go:131), so GetStats folds a login's counters back
+	// into the user's id. Empty for a panel that does not send it: such a user
+	// gets no socks/http account rather than an account with an empty name.
+	Login string `json:"-"`
+}
+
+// plainAccounts are the users that can hold a socks/http account: the ones
+// with a login.
+func plainAccounts(users []xrayClient) []xrayClient {
+	out := make([]xrayClient, 0, len(users))
+	for _, u := range users {
+		if u.Login != "" {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // CascadeFragments are the extra xray config pieces a cascade hop contributes,
@@ -618,24 +656,15 @@ func renderMultiConfig(
 		}
 		seenTags[cfg.Tag] = struct{}{}
 		seenPorts[cfg.ListenPort] = struct{}{}
-		inbounds = append(inbounds, map[string]any{
-			"tag":            cfg.Tag,
-			"listen":         cfg.ListenHost,
-			"port":           cfg.ListenPort,
-			"protocol":       userInboundProtocol(cfg),
-			"settings":       buildUserInboundSettings(cfg, users),
-			"streamSettings": buildStreamSettings(cfg),
-			// Sniffing: slice 24c part 2. Lets routing rules see the
-			// real destination protocol/SNI rather than just the IP/port,
-			// which is needed for the `geosite:` and `protocol:` matchers
-			// below to actually fire. `routeOnly: false` (default) means
-			// the sniffed value also drives the connection, so DNS-over-
-			// HTTPS hijack-protection rules work too.
-			"sniffing": map[string]any{
-				"enabled":      true,
-				"destOverride": []string{"http", "tls", "quic"},
-			},
-		})
+		// ⚠ A socks or http inbound with nobody on it is NOT rendered. xray's
+		// http inbound asks for a password only when it has accounts
+		// (proxy/http/server.go:125), so an empty one is an open proxy on the
+		// internet. socks with an empty list happens to refuse everyone, and is
+		// left out too, so the rule is one rule.
+		if cfg.isPlain() && len(plainAccounts(users)) == 0 {
+			continue
+		}
+		inbounds = append(inbounds, userInboundEntry(cfg, users))
 	}
 
 	// One management inbound for the whole process, not one per user inbound:
@@ -841,6 +870,31 @@ func renderMultiConfig(
 	return json.MarshalIndent(doc, "", "  ")
 }
 
+// userInboundEntry is one user-facing inbound as the full config carries it.
+// The live replacement of a socks/http inbound (`api adi`) sends exactly this
+// object, so the running core and the file on disk cannot disagree about it.
+// cfg must already carry its defaults.
+func userInboundEntry(cfg InboundConfig, users []xrayClient) map[string]any {
+	return map[string]any{
+		"tag":            cfg.Tag,
+		"listen":         cfg.ListenHost,
+		"port":           cfg.ListenPort,
+		"protocol":       userInboundProtocol(cfg),
+		"settings":       buildUserInboundSettings(cfg, users),
+		"streamSettings": buildStreamSettings(cfg),
+		// Sniffing: slice 24c part 2. Lets routing rules see the
+		// real destination protocol/SNI rather than just the IP/port,
+		// which is needed for the `geosite:` and `protocol:` matchers
+		// below to actually fire. `routeOnly: false` (default) means
+		// the sniffed value also drives the connection, so DNS-over-
+		// HTTPS hijack-protection rules work too.
+		"sniffing": map[string]any{
+			"enabled":      true,
+			"destOverride": []string{"http", "tls", "quic"},
+		},
+	}
+}
+
 // userInboundProtocol picks the Xray-core inbound protocol for the user-
 // facing endpoint based on the configured subprotocol. Both protocols share
 // the REALITY streamSettings stack and the api/stats infrastructure, only
@@ -851,8 +905,38 @@ func userInboundProtocol(cfg InboundConfig) string {
 		return "trojan"
 	case "vmess":
 		return "vmess"
+	case subprotocolSocks:
+		return "socks"
+	case subprotocolHTTP:
+		return "http"
 	default:
 		return "vless"
+	}
+}
+
+// plainInboundSettings is the settings block of a socks or http inbound: one
+// account per user, login = username, password = xrayUuid.
+//
+// Both defaults that matter are written out, not left to xray:
+//   - socks `auth: "password"`: without it xray builds a NO_AUTH server
+//     (infra/conf/socks.go:40-48, the default branch), an open proxy;
+//   - socks `udp: false` and http `allowTransparent: false`: xray's zero values
+//     already, pinned here so a default changing upstream cannot open them.
+func plainInboundSettings(cfg InboundConfig, users []xrayClient) map[string]any {
+	accounts := make([]map[string]any, 0, len(users))
+	for _, u := range plainAccounts(users) {
+		accounts = append(accounts, map[string]any{"user": u.Login, "pass": u.ID})
+	}
+	if cfg.Subprotocol == subprotocolSocks {
+		return map[string]any{
+			"auth":     "password",
+			"accounts": accounts,
+			"udp":      false,
+		}
+	}
+	return map[string]any{
+		"accounts":         accounts,
+		"allowTransparent": false,
 	}
 }
 
@@ -865,6 +949,9 @@ func userInboundProtocol(cfg InboundConfig) string {
 // entropy and the user already has one (`user.xrayUuid`) tracked by the
 // panel, so we don't grow the credential surface.
 func buildUserInboundSettings(cfg InboundConfig, users []xrayClient) map[string]any {
+	if cfg.isPlain() {
+		return plainInboundSettings(cfg, users)
+	}
 	if cfg.Subprotocol == "trojan" {
 		clients := make([]map[string]any, 0, len(users))
 		for _, u := range users {

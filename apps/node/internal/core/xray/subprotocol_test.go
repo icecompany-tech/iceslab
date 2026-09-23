@@ -11,7 +11,7 @@ import (
 // that port; and stored, it would fail every later render of the core and take
 // the inbounds that are fine down with it.
 func TestASubprotocolThisAgentDoesNotRenderIsRefusedAndNotStored(t *testing.T) {
-	for _, sub := range []string{"socks", "http", "shadowsocks-2077"} {
+	for _, sub := range []string{"shadowsocks-2077", "SOCKS"} {
 		t.Run(sub, func(t *testing.T) {
 			core := &fakeCore{}
 			a, _ := validatingAdapter(t, core)
@@ -47,7 +47,7 @@ func TestASubprotocolThisAgentDoesNotRenderIsRefusedAndNotStored(t *testing.T) {
 }
 
 func TestTheSubprotocolsThisAgentRendersStillPass(t *testing.T) {
-	for _, sub := range []string{"", "vless", "trojan", "vmess"} {
+	for _, sub := range []string{"", "vless", "trojan", "vmess", "socks", "http"} {
 		c := InboundConfig{Subprotocol: sub}
 		if err := c.validateSubprotocol(); err != nil {
 			t.Errorf("%q: %v", sub, err)

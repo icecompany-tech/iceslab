@@ -296,7 +296,7 @@ func TestN1_LiveAdd_FallsBackWhenAduAddsNobody(t *testing.T) {
 	}
 	defer func() { _ = a.proc.Stop(context.Background()) }()
 
-	if a.liveUpdateUser(context.Background(), liveAdd, xrayClient{ID: "uuid-a", Email: "alice"}) {
+	if a.liveUpdateUser(context.Background(), userChange{op: liveAdd, target: xrayClient{ID: "uuid-a", Email: "alice"}}) {
 		t.Errorf("liveUpdateUser must return false when adu added 0 users (force restart fallback)")
 	}
 }
