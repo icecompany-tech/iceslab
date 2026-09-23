@@ -36,17 +36,13 @@ import {
   deleteProfile,
   listBindings,
   listProfiles,
-  updateProfile,
   type Profile,
-  type UpdateProfileInput,
 } from '@/lib/domain/profiles';
 import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
 import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { DeployProfileModal } from '@/contours/profiles/components/DeployProfileModal';
 import { profilePairLabel } from '@/lib/domain/engines';
-import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
 import { AMBER, CARD, CYAN, CYAN_HI, HAIRLINE, MIST, MOSS, PINK, PURPLE, SNOW, VIOLET } from '@/contours/profiles/lib/colors';
 
 const PROTOCOL_ACCENT: Record<string, string> = {
@@ -73,10 +69,9 @@ export function ProfilesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Create and edit moved to /profiles/:id (creation is /profiles/new).
-  const [editing, setEditing] = useState<Profile | null>(null);
+  // Create and edit live on /profiles/:id (creation is /profiles/new), and the
+  // connection test moved there too.
   const [deploying, setDeploying] = useState<Profile | null>(null);
-  const [testing, setTesting] = useState<Profile | null>(null);
   const [search, setSearch] = useState('');
   const [protocolFilter, setProtocolFilter] = useState<ProtocolName | 'all'>('all');
 
@@ -105,20 +100,6 @@ export function ProfilesPage() {
     }),
   ]);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateProfileInput }) =>
-      updateProfile(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['profiles'] });
-      notifications.show({ color: 'green', message: t('profiles.notify.updated') });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.saveError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
 
   const deleteMutation = useMutation({
     mutationFn: deleteProfile,
@@ -373,27 +354,15 @@ export function ProfilesPage() {
         </SimpleGrid>
       )}
 
-      <ProfileFormModal
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        profile={editing}
-        loading={updateMutation.isPending}
-        onSubmit={async (input) => {
-          if (!editing) return;
-          await updateMutation.mutateAsync({
-            id: editing.id,
-            input: input as UpdateProfileInput,
-          });
-        }}
-      />
-
+      {/* ⚠ Не открывается: `deploying` никто не ставит с тех пор, как
+          «Развернуть» ведёт на /hosts/new?profileId=... Оставлен сознательно:
+          у /hosts/new нет трёх вещей, которые умеет это окно (развернуть на
+          несколько нод разом, снять привязку снятой галкой, подсказать
+          свободный порт через /api/bindings/next-free-port). Решение о нём
+          за ARCH, 23.09. */}
       <DeployProfileModal
         profile={deploying}
         onClose={() => setDeploying(null)}
-      />
-      <TestConnectModal
-        profile={testing}
-        onClose={() => setTesting(null)}
       />
     </Stack>
   );

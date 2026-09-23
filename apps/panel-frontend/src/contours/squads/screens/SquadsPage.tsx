@@ -19,20 +19,12 @@ import {
   IconTrash,
   IconUsers,
 } from '@tabler/icons-react';
-import { ALL_SQUAD_ID, listRoutePolicies } from '@/lib/domain/routePolicies';
-import {
-  deleteSquad,
-  listSquads,
-  updateSquad,
-  type CreateSquadInput,
-  type Squad,
-  type UpdateSquadInput,
-} from '@/lib/domain/squads';
-import { listBindings, listProfiles } from '@/lib/domain/profiles';
+import { ALL_SQUAD_ID } from '@/lib/domain/routePolicies';
+import { deleteSquad, listSquads, type Squad } from '@/lib/domain/squads';
+import { listBindings } from '@/lib/domain/profiles';
 import { listCascades } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { SquadFormModal } from '@/contours/squads/components/SquadFormModal';
 import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, SNOW, VIOLET, WELL } from '@/contours/squads/lib/colors';
 
 /**
@@ -56,33 +48,14 @@ export function SquadsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // Creation moved to its own page (/squads/new); the modal below serves only
-  // edit-in-place paths.
-  const [editing, setEditing] = useState<Squad | null>(null);
+  // Creation and editing live on their own page (/squads/new, /squads/:id).
   const [search, setSearch] = useState('');
 
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
-  const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const bindingsQuery = useQuery({ queryKey: ['bindings'], queryFn: () => listBindings() });
   const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
   // A4 increment 2 - balancer cascades for the per-squad exit allow-list.
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
-  // A4 ad-split - route-policies the squad can grant.
-  const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateSquadInput }) => updateSquad(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['squads'] });
-      notifications.show({ color: 'green', message: t('squads.notify.updated') });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.saveError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
 
   const deleteMutation = useMutation({
     mutationFn: deleteSquad,
@@ -98,13 +71,6 @@ export function SquadsPage() {
       }),
   });
 
-  function handleUpdate(input: CreateSquadInput | UpdateSquadInput): Promise<void> {
-    if (!editing) return Promise.resolve();
-    return updateMutation
-      .mutateAsync({ id: editing.id, input: input as UpdateSquadInput })
-      .then(() => undefined);
-  }
-
   function handleDelete(squad: Squad) {
     modals.openConfirmModal({
       title: t('squads.deleteTitle', { name: squad.name }),
@@ -118,17 +84,7 @@ export function SquadsPage() {
   // Через `useMemo`: `?? []` возвращает новый массив на каждый рендер, и
   // мемоизация ниже, держащая его в зависимостях, молча перестаёт работать.
   const squads = useMemo(() => squadsQuery.data?.squads ?? [], [squadsQuery.data]);
-  const profiles = useMemo(() => profilesQuery.data?.profiles ?? [], [profilesQuery.data]);
   const cascades = useMemo(() => cascadesQuery.data?.cascades ?? [], [cascadesQuery.data]);
-  const routePolicies = policiesQuery.data?.policies ?? [];
-
-  const bindingsByProfile = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const b of bindingsQuery.data?.bindings ?? []) {
-      m.set(b.profileId, (m.get(b.profileId) ?? 0) + 1);
-    }
-    return m;
-  }, [bindingsQuery.data]);
 
   /**
    * Countries a squad can actually reach: its profiles, wherever those are
@@ -313,18 +269,6 @@ export function SquadsPage() {
           ))}
         </SimpleGrid>
       )}
-
-      <SquadFormModal
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        squad={editing}
-        profiles={profiles}
-        bindingsByProfile={bindingsByProfile}
-        cascades={cascades}
-        routePolicies={routePolicies}
-        onSubmit={handleUpdate}
-        loading={updateMutation.isPending}
-      />
     </Stack>
   );
 }

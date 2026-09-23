@@ -10,9 +10,11 @@ import {
   listProfiles,
   updateProfile,
   type CreateProfileInput,
+  type Profile,
   type UpdateProfileInput,
 } from '@/lib/domain/profiles';
 import { ProfileFormModal } from '@/contours/profiles/components/ProfileFormModal';
+import { TestConnectModal } from '@/contours/profiles/components/TestConnectModal';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
@@ -58,6 +60,8 @@ export function ProfileEditPage() {
   // effect, and a fresh function every render would loop.
   const [previewing, setPreviewing] = useState(false);
   const handlePreviewChange = useCallback((v: boolean) => setPreviewing(v), []);
+  // Профиль, для которого открыта проверка подключения; `null` = окно закрыто.
+  const [testing, setTesting] = useState<Profile | null>(null);
 
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const profile = isNew ? null : (profilesQuery.data?.profiles.find((p) => p.id === id) ?? null);
@@ -155,6 +159,12 @@ export function ProfileEditPage() {
           {isNew ? t('profileEdit.newSubtitle') : t('profileEdit.editSubtitle')}
         </Text>
         <Box style={{ flex: 1 }} />
+        {/* Проверка подключения: единственная дверь к test-connect (slice 31).
+            Жила в модалке списка, которую перестали открывать, и потерялась
+            вместе с ней; у нового профиля проверять ещё нечего. */}
+        {!isNew && profile && (
+          <PageButton onClick={() => setTesting(profile)}>{t('profileEdit.testConnect')}</PageButton>
+        )}
         <PageButton onClick={() => navigate('/profiles')}>{t('common.cancel')}</PageButton>
         {/* Submits the form below by id: the artboard puts the primary action
             in the bar, where it stays reachable without scrolling to the end
@@ -207,6 +217,8 @@ export function ProfileEditPage() {
           else await updateMutation.mutateAsync(input as UpdateProfileInput);
         }}
       />
+
+      <TestConnectModal profile={testing} onClose={() => setTesting(null)} />
     </Stack>
   );
 }

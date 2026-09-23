@@ -250,6 +250,9 @@ export const profiles = {
     newCrumb: 'NEW',
     newSubtitle: 'PICK A PROTOCOL AND DEFINE THE TEMPLATE',
     editSubtitle: 'CHANGES REDEPLOY TO EVERY NODE RUNNING THIS PROFILE',
+    // The door to POST /api/profiles/:id/test-connect (slice 31): the panel
+    // probes every binding of the profile itself, no ssh to the node.
+    testConnect: 'Test connection',
     notFound: 'This profile no longer exists.',
     backToList: 'Back to profiles',
     create: 'Create profile',

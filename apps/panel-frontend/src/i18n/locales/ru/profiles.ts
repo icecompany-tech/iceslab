@@ -255,6 +255,9 @@ export const profiles = {
     newCrumb: 'НОВЫЙ',
     newSubtitle: 'ВЫБЕРИТЕ ПРОТОКОЛ И ОПИШИТЕ ШАБЛОН',
     editSubtitle: 'ИЗМЕНЕНИЯ УЕДУТ НА КАЖДУЮ НОДУ С ЭТИМ ПРОФИЛЕМ',
+    // Дверь к POST /api/profiles/:id/test-connect (slice 31): панель сама
+    // стучится на каждую привязку профиля, без ssh на ноду.
+    testConnect: 'Проверить подключение',
     notFound: 'Такого профиля больше нет.',
     backToList: 'К списку профилей',
     create: 'Создать профиль',
