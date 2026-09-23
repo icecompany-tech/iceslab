@@ -11,7 +11,7 @@ import {
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { listNodes } from '@/lib/domain/nodes';
-import { isOlderThan } from '@/lib/domain/protocols';
+import { compareCoreVersions } from '@iceslab/shared';
 import {
   PREVIEW_KINDS,
   PROFILE_KINDS,
@@ -96,14 +96,14 @@ export function EnginePicker({
 
   // Which nodes sit on each version. A plain `.sort()` used to pick the
   // newest, and that is string order: it puts 25.9.5 above 25.10.1 because
-  // "9" > "1". isOlderThan compares the dotted numbers, the way the cascade
-  // gate already does.
+  // "9" > "1". The order is the contract's compareCoreVersions; a pair it
+  // cannot order keeps its place.
   const byVersion = new Map<string, string[]>();
   for (const n of versioned) {
     byVersion.set(n.coreVersion, [...(byVersion.get(n.coreVersion) ?? []), n.name]);
   }
   const versions = [...byVersion.keys()].sort((a, b) =>
-    isOlderThan(a, b) ? 1 : isOlderThan(b, a) ? -1 : 0,
+    compareCoreVersions(b, a) ?? 0,
   );
   const newest = versions[0] ?? null;
 

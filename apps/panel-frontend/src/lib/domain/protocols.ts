@@ -1,3 +1,5 @@
+import { compareCoreVersions } from '@iceslab/shared';
+
 /**
  * Shared human-readable labels for the seven supported protocol enums.
  *
@@ -64,20 +66,19 @@ export function protocolLabelCompact(value: string): string {
  */
 export const MIN_CASCADE_CORE = '25.9.5';
 
-/** Dotted-version compare. A missing version is not "older": a node that has
- *  not reported one yet is unknown, and guessing would cry wolf. */
+/**
+ * Is this version below `min`? The comparison is the contract's
+ * (`compareCoreVersions`), not one of our own: two comparators in one panel
+ * are two answers about "-2", and the manifest's is the one that knows.
+ *
+ * A missing version is not "older": a node that has not reported one yet is
+ * unknown, and guessing would cry wolf. The same holds for an order the
+ * contract cannot decide (unparseable, or equal numbers with different
+ * suffixes): `undefined` there means "cannot claim", never "older".
+ */
 export function isOlderThan(version: string | null | undefined, min: string): boolean {
   if (!version) return false;
-  const parse = (v: string) => v.replace(/^v/i, '').split(/[-+]/)[0]!.split('.').map(Number);
-  const a = parse(version);
-  const b = parse(min);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (Number.isNaN(x)) return false;
-    if (x !== y) return x < y;
-  }
-  return false;
+  return compareCoreVersions(version, min) === -1;
 }
 
 export type ProtocolName =
