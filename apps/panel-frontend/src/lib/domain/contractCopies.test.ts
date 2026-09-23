@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CORE_COMPONENTS,
+  judgeCoreVersion,
   LINK_CELLS,
   LINK_CONGESTIONS,
   TEMPLATE_TYPES,
@@ -31,6 +33,12 @@ const GUARDED = [
   'FORMAT_NAMES',
   'XRAY_SUBPROTOCOLS',
   'XRAY_PLAIN_SUBPROTOCOLS',
+  // Манифест версий ядер: состав компонентов и единственный судья версии.
+  // Своё сравнение версий рядом с ним это второй судья, который разойдётся.
+  'CORE_COMPONENTS',
+  'CORE_VERSIONS',
+  'judgeCoreVersion',
+  'compareCoreVersions',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -47,9 +55,9 @@ describe('копии перечислений контракта', () => {
     for (const [path, code] of Object.entries(FILES)) {
       if (path === SELF) continue;
       for (const name of GUARDED) {
-        // `const X =`, `let X =`, `var X =`, с `export` или без. Импорт и
-        // реэкспорт под эту форму не попадают.
-        if (new RegExp(`(^|\\n)\\s*(export\\s+)?(const|let|var)\\s+${name}\\b`).test(code)) {
+        // `const X =`, `let X =`, `var X =`, `function X(`, с `export` или
+        // без. Импорт и реэкспорт под эту форму не попадают.
+        if (new RegExp(`(^|\\n)\\s*(export\\s+)?(const|let|var|function)\\s+${name}\\b`).test(code)) {
           guilty.push(`${path}: ${name}`);
         }
       }
@@ -69,6 +77,8 @@ describe('копии перечислений контракта', () => {
     expect(TEMPLATE_TYPES.length).toBeGreaterThan(0);
     expect(XRAY_SUBPROTOCOLS.length).toBeGreaterThan(0);
     expect(XRAY_PLAIN_SUBPROTOCOLS.length).toBeGreaterThan(0);
+    expect(CORE_COMPONENTS.length).toBeGreaterThan(0);
+    expect(typeof judgeCoreVersion).toBe('function');
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {

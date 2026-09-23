@@ -269,6 +269,28 @@
       'This node has not reported its cores yet, or its agent predates the field. That is neither an error nor «no cores»: wait for the first poll.',
     policyWhyNotInstalled:
       'The core that applies rules is not installed on this node. Install it from the «Cores» section below and the rules start working: there is nothing to detach.',
+    coreVer: {
+      intendedPin: '{{v}}, as pinned',
+      intendedChosen: '{{v}}, as set for the node',
+      drift: '{{v}}, pin {{intended}}',
+      aboveCeiling: '{{v}}, above the ceiling {{ceiling}}',
+      knownBad: '{{v}}, known bad',
+      unpinned: '{{v}}, no pin',
+      unpinnedWhy: 'No pin: {{reason}}',
+      part: { module: 'module', tools: 'tools' },
+      howToUpdate: 'How to update',
+      noCommand: {
+        'no-script':
+          'No command: xray has no install script of its own, it comes with the main installer, and re-running that wipes the node\'s mTLS keys.',
+        'skips-installed':
+          'No command: the AmneziaWG install script leaves a loaded module and installed tools alone, so running it again moves nothing.',
+        unpinned: 'No command: the manifest lists no release to move to.',
+        'needs-checksum':
+          'No command: for this version the script also needs a checksum for the machine\'s architecture, which the panel does not know.',
+      },
+      afterUpdate:
+        'The panel runs nothing on the machine: this is a line for your ssh. The node reports the new version by itself and the row updates.',
+    },
     coresHowToInstall: 'How to install',
     coresAttachProfile: 'Attach a profile',
     coresHideCommand: 'Hide',

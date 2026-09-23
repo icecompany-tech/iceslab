@@ -6,6 +6,8 @@ import { notifications } from '@mantine/notifications';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
+import { coreVersionFacts, type CoreVersionLine } from '@/lib/domain/coreVersions';
+import { CopyButton } from '@/ui/CopyButton';
 import {
   AMBER,
   CARD,
@@ -16,6 +18,7 @@ import {
   MIST,
   MONO,
   MOSS,
+  RED,
   SNOW,
   WELL,
 } from '@/contours/nodes/lib/colors';
@@ -153,6 +156,12 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
     core.installed === false ? 'absent' : core.provisioned === false ? 'idle' : 'configured';
   const tone = state === 'configured' ? MOSS : state === 'absent' ? AMBER : FAINT;
   const version = coreVersionOf(core);
+  // Версия против манифеста: вердикт судит judgeCoreVersion из контракта,
+  // здесь только слова. Пусто, когда судить нечего (нет файла, нет версии).
+  const verLines = coreVersionFacts(core);
+  const update = verLines.find((l) => l.command?.kind === 'command')?.command;
+  const updateText = update?.kind === 'command' ? update.text : null;
+  const [updateShown, setUpdateShown] = useState(false);
 
   const script = BOOTSTRAP[core.name];
   const command = script ? `sudo ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
@@ -174,10 +183,20 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
           </Text>
         )}
 
-        {/* Своя версия ядра, никогда не node.coreVersion: та версия xray. */}
-        {version && (
-          <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>{version}</Text>
-        )}
+        {/* Своя версия ядра, никогда не node.coreVersion: та версия xray.
+            С вердиктом манифеста, когда компонент известен; иначе голая. */}
+        {verLines.length > 0
+          ? verLines.map((l) => (
+              <Text
+                key={l.component}
+                style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: verdictTone(l.verdict.kind) }}
+              >
+                {verdictWords(l, t)}
+              </Text>
+            ))
+          : version && (
+              <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>{version}</Text>
+            )}
 
         {/* Одно слово, и только при ответе ДА. Политику уровня ноды сегодня
             применяет ровно одно ядро из девяти, и здесь видно, какое именно.
@@ -223,7 +242,66 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
             {t('nodeEdit.coresAttachProfile')}
           </RowButton>
         )}
+
+        {/* Версия ушла от пина, выше потолка или известна как поломка: строка
+            для ssh, которая вернёт её на пин. Панель её не выполняет. */}
+        {updateText && (
+          <RowButton onClick={() => setUpdateShown((v) => !v)}>
+            {t(updateShown ? 'nodeEdit.coresHideCommand' : 'nodeEdit.coreVer.howToUpdate')}
+          </RowButton>
+        )}
       </Box>
+
+      {/* Почему версия плохая (причина из манифеста), почему пина нет, и почему
+          команды нет, если двигать надо, а скрипт не умеет. */}
+      {verLines.map((l) => {
+        const why =
+          l.verdict.kind === 'known-bad' || l.verdict.kind === 'above-ceiling'
+            ? { text: l.verdict.reason, color: RED }
+            : l.verdict.kind === 'unpinned'
+              ? { text: t('nodeEdit.coreVer.unpinnedWhy', { reason: l.verdict.reason }), color: FAINT }
+              : null;
+        const noCmd = l.command?.kind === 'none' ? t(`nodeEdit.coreVer.noCommand.${l.command.why}`) : null;
+        if (!why && !noCmd) return null;
+        return (
+          <Stack key={`why-${l.component}`} gap={4} style={{ marginTop: 6, paddingLeft: 18 }}>
+            {why && <Text style={{ fontSize: 12, lineHeight: '17px', color: why.color }}>{why.text}</Text>}
+            {noCmd && <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{noCmd}</Text>}
+          </Stack>
+        );
+      })}
+
+      {updateText && updateShown && (
+        <Stack gap={8} style={{ marginTop: 12 }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '11px 13px',
+              borderRadius: 8,
+              backgroundColor: GROUND,
+              border: `1px solid ${HAIRLINE}`,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: MONO,
+                fontSize: 12,
+                lineHeight: '17px',
+                color: SNOW,
+                flex: 1,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {updateText}
+            </Text>
+            <CopyButton text={updateText} label={t('common.copy')} />
+          </Box>
+          <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{t('nodeEdit.coreVer.afterUpdate')}</Text>
+        </Stack>
+      )}
 
       {/* Поколение AmneziaWG. Расхождение намерения с фактом янтарным: клиенты
           с конфигом одного поколения к ядру другого не подключатся, а на
@@ -314,6 +392,31 @@ function CoreRow({ core, nodeId, awg }: { core: NodeCore; nodeId: string; awg: A
       )}
     </Box>
   );
+}
+
+/** Цвет вердикта: серый у спокойных, янтарь у дрейфа, красный у плохих. */
+function verdictTone(kind: CoreVersionLine['verdict']['kind']): string {
+  if (kind === 'drift') return AMBER;
+  if (kind === 'known-bad' || kind === 'above-ceiling') return RED;
+  return FAINT;
+}
+
+/** «26.3.27, как в пине», «модуль 1.0.20260611, как в пине», «1.13.12, пин 1.13.14». */
+function verdictWords(l: CoreVersionLine, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const v = l.part ? `${t(`nodeEdit.coreVer.part.${l.part}`)} ${l.reported}` : l.reported;
+  const d = l.verdict;
+  switch (d.kind) {
+    case 'intended':
+      return t(d.isPin ? 'nodeEdit.coreVer.intendedPin' : 'nodeEdit.coreVer.intendedChosen', { v });
+    case 'drift':
+      return t('nodeEdit.coreVer.drift', { v, intended: d.intended });
+    case 'above-ceiling':
+      return t('nodeEdit.coreVer.aboveCeiling', { v, ceiling: d.ceiling });
+    case 'known-bad':
+      return t('nodeEdit.coreVer.knownBad', { v });
+    case 'unpinned':
+      return t('nodeEdit.coreVer.unpinned', { v });
+  }
 }
 
 /** Кнопка в строке ядра. Обе выглядят одинаково намеренно: они равны по весу,
