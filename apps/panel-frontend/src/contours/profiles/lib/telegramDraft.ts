@@ -14,17 +14,21 @@
 export const WEB_CARRIERS = ['https', 'https-lanes', 'websocket', 'websocket-lanes'] as const;
 export type WebCarrier = (typeof WEB_CARRIERS)[number];
 
+/** No auth field on SOCKS5 or HTTP: they always authenticate by the users'
+ *  own accounts (ARCH, 2026-09-23). An open proxy on a public VPS carries
+ *  strangers' traffic through the operator's node, so "no password" is not a
+ *  choice the panel offers. */
 export interface TelegramDraft {
-  socks5: { auth: 'password' | 'none'; port: number | ''; udp: boolean };
-  http: { auth: 'basic' | 'none'; port: number | '' };
+  socks5: { port: number | ''; udp: boolean };
+  http: { port: number | '' };
   web: { host: string; secret: string; path: string; carrier: WebCarrier };
 }
 
 /** UDP starts off: Telegram clients never use SOCKS5 UDP ASSOCIATE, their
  *  calls go through Telegram's own relays, so switching it on buys nothing. */
 export const EMPTY_TELEGRAM_DRAFT: TelegramDraft = {
-  socks5: { auth: 'password', port: '', udp: false },
-  http: { auth: 'basic', port: '' },
+  socks5: { port: '', udp: false },
+  http: { port: '' },
   web: { host: '', secret: '', path: '', carrier: 'https' },
 };
 

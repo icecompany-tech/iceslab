@@ -12,13 +12,9 @@ export const profiles = {
         'The fields are live, but the values stay on this page: the backend does not accept this way in yet, nothing is sent and the server checks nothing. MTProto creates a Telegram profile right now.',
       saveBlocked: 'The backend does not know this way in yet; fill the fields to see the form',
       portLabel: 'Port',
+      auth: 'Always the user\'s own username and password: everyone has their own, the name and their UUID, and they are not typed here. There is no way in without a password: an open proxy on a public node would carry strangers\' traffic.',
       socks5: {
         title: 'SOCKS5 CONFIG',
-        authLabel: 'Auth method',
-        authPassword: 'Username and password',
-        authNone: 'No password',
-        authNote:
-          'RFC 1929. Username and password are not typed here: every user has their own, the name and their UUID.',
         portNote: 'The port the node opens for SOCKS5. All three Telegram clients take a tg://socks link.',
         udpLabel: 'UDP associate',
         udpOn: 'Enabled',
@@ -28,11 +24,7 @@ export const profiles = {
       },
       http: {
         title: 'HTTP CONFIG',
-        authLabel: 'Auth method',
-        authBasic: 'Basic',
-        authNone: 'No password',
-        authNote:
-          'Username and password are not typed here: every user has their own, the name and their UUID. Digest is supported neither by the core nor by the Telegram client.',
+        digest: 'Basic scheme; Digest is supported neither by the core nor by the Telegram client.',
         portNote: 'A CONNECT tunnel, TCP only: calls will not go over an HTTP proxy.',
         clients: 'Telegram Desktop only, and Telegram has no link to add it: a person types the address and port by hand.',
         warn: 'No obfuscation: for networks where a proxy is allowed, not for getting past DPI. Basic is a username and password in base64, not encryption, and without TLS on top anyone on the path reads them.',

@@ -140,17 +140,6 @@ function Socks5Fields({
   const p = (k: string) => t(`profiles.telegramPreview.socks5.${k}`);
   return (
     <Row>
-      <Field width={320} label={p('authLabel')} note={p('authNote')}>
-        <Group gap={6} wrap="nowrap">
-          <Choice accent={CYAN} active={value.auth === 'password'} onClick={() => onChange({ auth: 'password' })}>
-            {p('authPassword')}
-          </Choice>
-          <Choice accent={CYAN} active={value.auth === 'none'} onClick={() => onChange({ auth: 'none' })}>
-            {p('authNone')}
-          </Choice>
-        </Group>
-      </Field>
-
       <Field width={200} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
         <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="1080" value={value.port} onChange={(port) => onChange({ port })} />
       </Field>
@@ -165,6 +154,7 @@ function Socks5Fields({
         </Group>
       </Field>
 
+      <WarnBox tone={CYAN}>{t('profiles.telegramPreview.auth')}</WarnBox>
       <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
     </Row>
   );
@@ -182,23 +172,14 @@ function HttpFields({
   return (
     <Stack gap={16}>
       <Row>
-        <Field width={320} label={p('authLabel')} note={p('authNote')}>
-          <Group gap={6} wrap="nowrap">
-            <Choice accent={AMBER} active={value.auth === 'basic'} onClick={() => onChange({ auth: 'basic' })}>
-              {p('authBasic')}
-            </Choice>
-            <Choice accent={AMBER} active={value.auth === 'none'} onClick={() => onChange({ auth: 'none' })}>
-              {p('authNone')}
-            </Choice>
-          </Group>
-        </Field>
-
         <Field width={280} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
-          <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="8080" value={value.port} onChange={(port) => onChange({ port })} />
+          <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="3128" value={value.port} onChange={(port) => onChange({ port })} />
         </Field>
 
         <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
       </Row>
+
+      <WarnBox tone={CYAN}>{`${t('profiles.telegramPreview.auth')} ${p('digest')}`}</WarnBox>
 
       <WarnBox tone={AMBER}>{p('clients')}</WarnBox>
     </Stack>
@@ -434,50 +415,6 @@ function PortInput({
       onChange={(v) => onChange(typeof v === 'number' ? v : '')}
       styles={{ input: { fontFamily: MONO } }}
     />
-  );
-}
-
-/** One of two answers, pressed or not. A button, so the keyboard reaches it
- *  and the form does not submit on it. */
-function Choice({
-  children,
-  accent,
-  active,
-  onClick,
-}: {
-  children: ReactNode;
-  accent: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <UnstyledButton
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-        height: 36,
-        paddingInline: 14,
-        borderRadius: 8,
-        backgroundColor: active ? `${accent}14` : 'transparent',
-        border: `1px solid ${active ? accent : HAIRLINE}`,
-      }}
-    >
-      <Text
-        style={{
-          fontFamily: DISPLAY,
-          fontSize: 12,
-          fontWeight: active ? 500 : 400,
-          lineHeight: '16px',
-          color: active ? SNOW : MIST,
-        }}
-      >
-        {children}
-      </Text>
-    </UnstyledButton>
   );
 }
 
