@@ -89,11 +89,14 @@ import {
   legPortNotes,
   poolRoleAt,
   refusedCells,
+  refusedEntryChange,
   refusedLinkPorts,
   statusTone,
   toDirectionInputs,
   toPositionInputs,
+  withEntryConfirm,
   type CellRefusal,
+  type EntryChangeConflict,
   type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
@@ -171,17 +174,55 @@ export function CascadeEditPage() {
     refetchInterval: (q) => (q.state.data?.done ? false : 10_000),
   });
 
+  /**
+   * Вопрос, а не отказ: смена входа снимает каскад с перечисленных профилей, и
+   * их пользователи дальше выходят напрямую из страны входа. Согласие даёт
+   * только кнопка «всё равно сменить»: она и повторяет запрос с флагом.
+   * Закрытие окна любым другим способом ничего не отправляет.
+   */
+  function confirmEntryChange(dropped: EntryChangeConflict[]) {
+    modals.openConfirmModal({
+      title: t('cascadeEdit.entryDropTitle'),
+      children: (
+        <Stack gap={10}>
+          <Text size="sm">{t('cascadeEdit.entryDropBody')}</Text>
+          <Stack gap={4}>
+            {dropped.map((c) => (
+              <Text key={`${c.nodeName}-${c.profileName}`} size="sm" style={{ fontFamily: MONO }}>
+                {t('cascadeEdit.entryDropRow', { profile: c.profileName, node: c.nodeName })}
+              </Text>
+            ))}
+          </Stack>
+        </Stack>
+      ),
+      labels: { confirm: t('cascadeEdit.entryDropConfirm'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => saveMutation.mutate(true),
+    });
+  }
+
   const saveMutation = useMutation({
-    mutationFn: () => {
+    // `confirmed` это согласие на смену входа, снимающую каскад с профилей
+    // (409 ENTRY_CHANGE_DROPS_USERS). Живёт ровно один запрос: кнопка «Сохранить»
+    // зовёт без него, и только «всё равно сменить» в окне подтверждения с ним.
+    // Строго `=== true` ниже: `onClick={saveMutation.mutate}` передал бы сюда
+    // событие клика, и оно, будучи объектом, сошло бы за согласие.
+    mutationFn: (confirmed?: boolean) => {
       if (!draft) throw new Error('nothing to save');
-      return updateCascadeV4(id, {
-        name: draft.name.trim(),
-        enabled: draft.enabled,
-        hideHopsFromSub: draft.hideHops,
-        autoProfile: draft.autoProfile,
-        positions: toPositionInputs(draft.pools),
-        directions: toDirectionInputs(draft.directions),
-      });
+      return updateCascadeV4(
+        id,
+        withEntryConfirm(
+          {
+            name: draft.name.trim(),
+            enabled: draft.enabled,
+            hideHopsFromSub: draft.hideHops,
+            autoProfile: draft.autoProfile,
+            positions: toPositionInputs(draft.pools),
+            directions: toDirectionInputs(draft.directions),
+          },
+          confirmed === true,
+        ),
+      );
     },
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ['cascades'] });
@@ -203,6 +244,13 @@ export function CascadeEditPage() {
       // не вдогонку исчезающему уведомлению. Так же сделано с занятым портом.
       // Отказ по ноге называет НОДЫ, а не форму целиком, и место у него своё:
       // строка под той ногой, о которой сервер говорит.
+      // Смена входа снимает каскад с профилей входных нод: не отказ, а вопрос.
+      // Сервер перечисляет, кого это касается, и ждёт явного согласия.
+      const dropped = refusedEntryChange(err);
+      if (dropped) {
+        confirmEntryChange(dropped);
+        return;
+      }
       const cells = refusedCells(err);
       if (cells) {
         setCellRefusals(cells);
@@ -495,7 +543,8 @@ export function CascadeEditPage() {
             primary
             icon="tick"
             disabled={!valid || !dirty || saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
+            // Явное `false`: обычное сохранение согласия на смену входа не несёт.
+            onClick={() => saveMutation.mutate(false)}
           >
             {saveMutation.isPending ? t('cascadeEdit.saving') : t('cascadeEdit.save')}
           </BarButton>

@@ -242,7 +242,14 @@ export interface CreateCascadeV4Input {
  */
 export const CASCADE_V4_WRITES_LIVE = true;
 
-export type UpdateCascadeV4Input = Partial<CreateCascadeV4Input>;
+export type UpdateCascadeV4Input = Partial<CreateCascadeV4Input> & {
+  /**
+   * Согласие на смену входа, которая снимает каскад с профилей входных нод
+   * (фаза 6, ответ 409 `ENTRY_CHANGE_DROPS_USERS`). Только `true` и только
+   * после явного подтверждения оператором; по умолчанию ключа нет вовсе.
+   */
+  confirmEntryChange?: true;
+};
 
 /** The API's own sentence when it refuses a shape it cannot store. */
 export function cascadeShapeError(err: unknown): string | null {

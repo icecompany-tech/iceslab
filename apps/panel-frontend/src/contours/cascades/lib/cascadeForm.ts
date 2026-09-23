@@ -612,6 +612,55 @@ export function refusedLinkPorts(err: unknown): LinkPortConflict[] | null {
   return out;
 }
 
+/**
+ * Третий отказ той же формы: 409 `ENTRY_CHANGE_DROPS_USERS` (фаза 6).
+ *
+ * На каскаде один протокол входа. Смена входа с xray на hysteria снимает
+ * каскад с xray-профилей входных нод, и их пользователи дальше выходят
+ * НАПРЯМУЮ из страны входа. Сервер не молчит об этом, а отказывает и
+ * перечисляет, кого это касается; сменить можно, но только повторив запрос с
+ * явным согласием (`confirmEntryChange: true`).
+ *
+ * Разбор тот же, что у двух соседних: вход проверяется первым, `null` значит
+ * «отказ не этот», запись без обязательных полей пропускается.
+ */
+export interface EntryChangeConflict {
+  nodeName: string;
+  profileName: string;
+}
+
+export function refusedEntryChange(err: unknown): EntryChangeConflict[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_CHANGE_DROPS_USERS') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: EntryChangeConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.profileName !== 'string') continue;
+    out.push({ nodeName: c.nodeName, profileName: c.profileName });
+  }
+  return out;
+}
+
+/**
+ * Пейлоад сохранения с согласием на смену входа или без него.
+ *
+ * ⚠ Флаг уходит ТОЛЬКО после явного «всё равно сменить». Отдельной функцией,
+ * а не полем черновика: черновик живёт между сохранениями, и флаг, однажды
+ * попавший туда, уехал бы и со следующим сохранением, уже без вопроса. Здесь
+ * он существует ровно на один запрос.
+ */
+export function withEntryConfirm<T extends object>(
+  input: T,
+  confirmed: boolean,
+): T & { confirmEntryChange?: true } {
+  return confirmed ? { ...input, confirmEntryChange: true } : input;
+}
+
 /** Занятые порты, относящиеся к ЭТОЙ ноге: та же нода и тот же номер. */
 export function legPortNotes(
   nodeIds: string[],

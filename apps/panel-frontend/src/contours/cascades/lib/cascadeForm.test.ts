@@ -19,8 +19,10 @@ import {
   legPortNotes,
   poolRowFacts,
   refusedCells,
+  refusedEntryChange,
   refusedLinkPorts,
   toPositionInputs,
+  withEntryConfirm,
 } from '@/contours/cascades/lib/cascadeForm';
 
 /**
@@ -416,6 +418,60 @@ describe('refusedLinkPorts', () => {
       },
     });
     expect(parsed).toEqual([{ nodeName: 'ru-01', port: 24000, transport: '', profileName: '' }]);
+  });
+});
+
+/**
+ * Смена входа, снимающая каскад с профилей (фаза 6): 409
+ * `ENTRY_CHANGE_DROPS_USERS`, и согласие на неё.
+ */
+describe('refusedEntryChange', () => {
+  it('1. не тот отказ или не объект: спокойный null', () => {
+    for (const x of [null, undefined, 'строка']) expect(refusedEntryChange(x)).toBeNull();
+    expect(refusedEntryChange({ response: { status: 409, data: { error: 'LINK_PORT_IN_USE' } } })).toBeNull();
+    expect(refusedEntryChange({ response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS' } } })).toBeNull();
+  });
+
+  it('2. перечисляются все профили с нодами, мусор пропускается', () => {
+    expect(
+      refusedEntryChange({
+        response: {
+          status: 409,
+          data: {
+            error: 'ENTRY_CHANGE_DROPS_USERS',
+            conflicts: [
+              { nodeName: 'ru-01', profileName: 'vless-reality' },
+              { nodeName: 'ru-02' },
+              { nodeName: 'ru-02', profileName: 'vless-xhttp' },
+            ],
+          },
+        },
+      }),
+    ).toEqual([
+      { nodeName: 'ru-01', profileName: 'vless-reality' },
+      { nodeName: 'ru-02', profileName: 'vless-xhttp' },
+    ]);
+  });
+});
+
+describe('withEntryConfirm', () => {
+  const body = { name: 'ru-de', positions: [], directions: [] };
+
+  it('1. без согласия флага нет ВОВСЕ, ключа тоже', () => {
+    const out = withEntryConfirm(body, false);
+    expect('confirmEntryChange' in out).toBe(false);
+    expect(out).toEqual(body);
+  });
+
+  it('2. с согласием флаг ровно true', () => {
+    expect(withEntryConfirm(body, true)).toEqual({ ...body, confirmEntryChange: true });
+  });
+
+  it('3. флаг не прилипает к исходному объекту', () => {
+    // Иначе следующее сохранение того же черновика уехало бы с согласием, уже
+    // без вопроса.
+    withEntryConfirm(body, true);
+    expect('confirmEntryChange' in body).toBe(false);
   });
 });
 

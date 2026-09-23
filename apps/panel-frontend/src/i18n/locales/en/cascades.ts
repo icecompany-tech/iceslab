@@ -141,6 +141,13 @@ export const cascades = {
     // hearing it from a user who "cannot choose a country" is worse.
     entryHy2Auto:
       'A hysteria entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
+    // An entry change that takes the cascade off the entry nodes' profiles
+    // (phase 6). A question, not a refusal: the operator sees who is affected
+    // before it happens.
+    entryDropTitle: 'Change the cascade entry?',
+    entryDropBody: 'These profiles leave the cascade and go direct, out of the entry country:',
+    entryDropRow: '{{profile}} on {{node}}',
+    entryDropConfirm: 'Change anyway',
     attemptApplied: 'Last attempt {{when}} · all took it',
     attemptRefused: 'Last attempt {{when}} · {{refused}} of {{total}} refused',
     save: 'Save and push',
