@@ -629,19 +629,68 @@ export interface EntryChangeConflict {
   profileName: string;
 }
 
-export function refusedEntryChange(err: unknown): EntryChangeConflict[] | null {
+/**
+ * Весь вопрос целиком. `from` и `to` называет СЕРВЕР: подпись «с xray на
+ * hysteria», собранная по форме, соврала бы, если форму успели поправить ещё
+ * раз, пока летел запрос. `null` у них значит «сервер не назвал», и тогда
+ * подпись без них, а не с угаданными.
+ */
+export interface EntryChangeRefusal {
+  from: string | null;
+  to: string | null;
+  conflicts: EntryChangeConflict[];
+}
+
+export function refusedEntryChange(err: unknown): EntryChangeRefusal | null {
   if (!err || typeof err !== 'object') return null;
   const res = (err as { response?: { status?: number; data?: unknown } }).response;
   if (!res || res.status !== 409) return null;
-  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  const data = res.data as { error?: string; conflicts?: unknown; from?: unknown; to?: unknown } | undefined;
   if (!data || data.error !== 'ENTRY_CHANGE_DROPS_USERS') return null;
   if (!Array.isArray(data.conflicts)) return null;
-  const out: EntryChangeConflict[] = [];
+  const conflicts: EntryChangeConflict[] = [];
   for (const raw of data.conflicts) {
     if (!raw || typeof raw !== 'object') continue;
     const c = raw as Record<string, unknown>;
     if (typeof c.nodeName !== 'string' || typeof c.profileName !== 'string') continue;
-    out.push({ nodeName: c.nodeName, profileName: c.profileName });
+    conflicts.push({ nodeName: c.nodeName, profileName: c.profileName });
+  }
+  return {
+    from: typeof data.from === 'string' ? data.from : null,
+    to: typeof data.to === 'string' ? data.to : null,
+    conflicts,
+  };
+}
+
+/**
+ * Четвёртый отказ той же формы: 409 `ENTRY_CANNOT_CHAIN` (фаза 6).
+ *
+ * Входные ноды не могут поднять цепь: отчитались о движках, и sing-box среди
+ * них нет. Это ФАКТ сервера по отчёту ноды, поэтому кнопку заранее мы им не
+ * гасим: частичный или старый список движков годится, чтобы сказать «да», и
+ * не годится, чтобы сказать «нет» (правило ворот, 2026-09-11).
+ *
+ * На сервере этот отказ стоит РАНЬШЕ вопроса о согласии на смену входа:
+ * спрашивать «снять ли профили», когда вход всё равно не поднимется, незачем.
+ */
+export interface EntryChainConflict {
+  nodeName: string;
+  engines: EngineName[];
+}
+
+export function refusedEntryChain(err: unknown): EntryChainConflict[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_CANNOT_CHAIN') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: EntryChainConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string') continue;
+    out.push({ nodeName: c.nodeName, engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [] });
   }
   return out;
 }

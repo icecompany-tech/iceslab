@@ -1895,7 +1895,7 @@ export function EntryChainNote({ facts }: { facts: EntryChainFacts | null }) {
   }
   return (
     <Note tone={MIST} icon={<InfoIcon size={13} color={MIST} />}>
-      {t('cascadeEdit.entryHy2Auto')}
+      {t('cascadeCreate.entryHy2Auto')}
     </Note>
   );
 }

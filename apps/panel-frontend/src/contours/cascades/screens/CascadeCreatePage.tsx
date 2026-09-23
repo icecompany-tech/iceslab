@@ -56,6 +56,7 @@ import {
   MIST,
   MONO,
   MOSS,
+  RED,
   SNOW,
   VIOLET,
   WELL,
@@ -72,10 +73,12 @@ import {
   legPortNotes,
   poolRoleAt,
   refusedCells,
+  refusedEntryChain,
   refusedLinkPorts,
   toDirectionInputs,
   toPositionInputs,
   type CellRefusal,
+  type EntryChainConflict,
   type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
@@ -111,6 +114,8 @@ export function CascadeCreatePage() {
   const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
   /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). */
   const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
+  /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`). */
+  const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
 
   const nextKey = useRef(2);
   // Pools are the entry and any transits after it. The exit is not a pool: it
@@ -285,6 +290,13 @@ export function CascadeCreatePage() {
     onError: (err) => {
       // Отказ по ноге называет ноды, и место у него своё: строка под той ногой,
       // о которой сервер говорит. Тост тут увёл бы список имён с экрана.
+      // Вход не поднимется: sing-box на входных нодах нет. У нового каскада
+      // вопроса о согласии не бывает (снимать некого), этот отказ бывает.
+      const unchainable = refusedEntryChain(err);
+      if (unchainable) {
+        setEntryChainRefusals(unchainable);
+        return;
+      }
       const cells = refusedCells(err);
       if (cells) {
         setCellRefusals(cells);
@@ -496,6 +508,15 @@ export function CascadeCreatePage() {
                 onDown={() => movePool(i, 1)}
                 onDelete={() => setPools((prev) => prev.filter((_, j) => j !== i))}
               >
+                {i === 0 &&
+                  entryChainRefusals.map((c) => (
+                    <Note key={`chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                      {t('cascadeCreate.entryCannotChain', {
+                        name: c.nodeName,
+                        engines: c.engines.length ? c.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+                      })}
+                    </Note>
+                  ))}
                 {i === 0 &&
                   staleEntries.map((n) => (
                     <Note key={n.id} tone={AMBER} icon={<WarnIcon size={13} color={AMBER} />}>

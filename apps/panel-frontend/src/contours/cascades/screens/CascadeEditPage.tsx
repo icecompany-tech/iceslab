@@ -89,6 +89,7 @@ import {
   legPortNotes,
   poolRoleAt,
   refusedCells,
+  refusedEntryChain,
   refusedEntryChange,
   refusedLinkPorts,
   statusTone,
@@ -96,7 +97,8 @@ import {
   toPositionInputs,
   withEntryConfirm,
   type CellRefusal,
-  type EntryChangeConflict,
+  type EntryChainConflict,
+  type EntryChangeRefusal,
   type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
@@ -155,6 +157,9 @@ export function CascadeEditPage() {
   /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). Рисуются у
    *  своих ног: порт назначает сервер, и искать его в общем тексте негде. */
   const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
+  /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`).
+   *  Рисуются у карточки входа по нодам. */
+  const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
 
   // Seed once per cascade, and only once the node list is in: a direction is
   // named after a country, which is a fact about the node under it. Re-seeding
@@ -180,14 +185,19 @@ export function CascadeEditPage() {
    * только кнопка «всё равно сменить»: она и повторяет запрос с флагом.
    * Закрытие окна любым другим способом ничего не отправляет.
    */
-  function confirmEntryChange(dropped: EntryChangeConflict[]) {
+  function confirmEntryChange(asked: EntryChangeRefusal) {
     modals.openConfirmModal({
-      title: t('cascadeEdit.entryDropTitle'),
+      // Откуда и куда называет сервер. Если не назвал, подпись без них, а не с
+      // угаданными по форме.
+      title:
+        asked.from && asked.to
+          ? t('cascadeEdit.entryDropTitle', { from: asked.from, to: asked.to })
+          : t('cascadeEdit.entryDropTitleBare'),
       children: (
         <Stack gap={10}>
           <Text size="sm">{t('cascadeEdit.entryDropBody')}</Text>
           <Stack gap={4}>
-            {dropped.map((c) => (
+            {asked.conflicts.map((c) => (
               <Text key={`${c.nodeName}-${c.profileName}`} size="sm" style={{ fontFamily: MONO }}>
                 {t('cascadeEdit.entryDropRow', { profile: c.profileName, node: c.nodeName })}
               </Text>
@@ -244,6 +254,13 @@ export function CascadeEditPage() {
       // не вдогонку исчезающему уведомлению. Так же сделано с занятым портом.
       // Отказ по ноге называет НОДЫ, а не форму целиком, и место у него своё:
       // строка под той ногой, о которой сервер говорит.
+      // Вход не поднимется: sing-box на входных нодах нет. Сервер отвечает этим
+      // РАНЬШЕ вопроса о согласии, и разбор идёт в том же порядке.
+      const unchainable = refusedEntryChain(err);
+      if (unchainable) {
+        setEntryChainRefusals(unchainable);
+        return;
+      }
       // Смена входа снимает каскад с профилей входных нод: не отказ, а вопрос.
       // Сервер перечисляет, кого это касается, и ждёт явного согласия.
       const dropped = refusedEntryChange(err);
@@ -305,6 +322,7 @@ export function CascadeEditPage() {
     setSaveRefusal(null);
     setCellRefusals([]);
     setPortConflicts([]);
+    setEntryChainRefusals([]);
     setDraft((d) => (d ? { ...d, ...p } : d));
   };
   const positionCount = pools.length + 1;
@@ -648,6 +666,18 @@ export function CascadeEditPage() {
                 onDown={() => movePool(i, 1)}
                 onDelete={() => patch({ pools: pools.filter((_, j) => j !== i) })}
               >
+                {/* Отказ сервера по входным нодам: sing-box на них нет. Факт
+                    сервера по отчёту ноды, поэтому показывается только после
+                    отказа, а не предсказанием заранее. */}
+                {i === 0 &&
+                  entryChainRefusals.map((c) => (
+                    <Note key={`chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                      {t('cascadeCreate.entryCannotChain', {
+                        name: c.nodeName,
+                        engines: c.engines.length ? c.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+                      })}
+                    </Note>
+                  ))}
                 {i === 0 &&
                   staleEntries.map((n) => (
                     <Note key={n.id} tone={AMBER} icon={<WarnIcon size={13} color={AMBER} />}>

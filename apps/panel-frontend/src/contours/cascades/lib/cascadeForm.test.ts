@@ -19,6 +19,7 @@ import {
   legPortNotes,
   poolRowFacts,
   refusedCells,
+  refusedEntryChain,
   refusedEntryChange,
   refusedLinkPorts,
   toPositionInputs,
@@ -432,13 +433,15 @@ describe('refusedEntryChange', () => {
     expect(refusedEntryChange({ response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS' } } })).toBeNull();
   });
 
-  it('2. перечисляются все профили с нодами, мусор пропускается', () => {
+  it('2. перечисляются все профили с нодами, мусор пропускается, from и to от сервера', () => {
     expect(
       refusedEntryChange({
         response: {
           status: 409,
           data: {
             error: 'ENTRY_CHANGE_DROPS_USERS',
+            from: 'xray',
+            to: 'hysteria',
             conflicts: [
               { nodeName: 'ru-01', profileName: 'vless-reality' },
               { nodeName: 'ru-02' },
@@ -447,10 +450,55 @@ describe('refusedEntryChange', () => {
           },
         },
       }),
+    ).toEqual({
+      from: 'xray',
+      to: 'hysteria',
+      conflicts: [
+        { nodeName: 'ru-01', profileName: 'vless-reality' },
+        { nodeName: 'ru-02', profileName: 'vless-xhttp' },
+      ],
+    });
+  });
+
+  it('3. сервер не назвал from и to: null, а не угаданное по форме', () => {
+    const r = refusedEntryChange({
+      response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS', conflicts: [] } },
+    });
+    expect(r).toEqual({ from: null, to: null, conflicts: [] });
+  });
+});
+
+/**
+ * 409 `ENTRY_CANNOT_CHAIN` (фаза 6): входные ноды не могут поднять цепь.
+ * Факт сервера по отчёту ноды, поэтому кнопку заранее им не гасим.
+ */
+describe('refusedEntryChain', () => {
+  it('1. не тот отказ или не объект: спокойный null', () => {
+    for (const x of [null, undefined, 'строка']) expect(refusedEntryChain(x)).toBeNull();
+    expect(refusedEntryChain({ response: { status: 409, data: { error: 'ENTRY_CHANGE_DROPS_USERS' } } })).toBeNull();
+  });
+
+  it('2. ноды с движками; без списка движков пустой список, а не выдумка', () => {
+    expect(
+      refusedEntryChain({
+        response: {
+          status: 409,
+          data: {
+            error: 'ENTRY_CANNOT_CHAIN',
+            conflicts: [{ nodeName: 'ru-01', engines: ['xray'] }, { nodeName: 'ru-02' }, { engines: [] }],
+          },
+        },
+      }),
     ).toEqual([
-      { nodeName: 'ru-01', profileName: 'vless-reality' },
-      { nodeName: 'ru-02', profileName: 'vless-xhttp' },
+      { nodeName: 'ru-01', engines: ['xray'] },
+      { nodeName: 'ru-02', engines: [] },
     ]);
+  });
+
+  it('3. этот отказ разбирается РАНЬШЕ вопроса о согласии и с ним не путается', () => {
+    const err = { response: { status: 409, data: { error: 'ENTRY_CANNOT_CHAIN', conflicts: [] } } };
+    expect(refusedEntryChain(err)).toEqual([]);
+    expect(refusedEntryChange(err)).toBeNull();
   });
 });
 

@@ -97,10 +97,19 @@ export const cascades = {
     // The leg row between positions. The port is read-only: the panel assigns
     // it from the step number, and it is shown because it is what gets opened
     // in the firewall.
-    // A non-xray entry. The option stays in the list: it is planned, and
-    // hiding it would lie about the plan the way silence lies about today.
-    entryNotCarried:
-      'An entry over {{protocol}} does not reach the chain yet: a cascade only carries xray traffic. Phase 6 brings hy2, phase 7 AWG.',
+    // An entry the chain does not carry. The option stays in the list: it is
+    // planned, and hiding it would lie about the plan the way silence lies
+    // about today. Since phase 6.4 (2026-09-23) hysteria is carried, and only
+    // AmneziaWG is left here: naming phase 6 would now be untrue.
+    entryNotCarried: 'An entry over {{protocol}} does not reach the chain yet. Phase 7 brings it.',
+    // The edge of phase 6, and it belongs where the operator picks the entry:
+    // hearing it from a user who "cannot choose a country" is worse.
+    entryHy2Auto:
+      'A hysteria entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
+    // The server's refusal: the entry nodes cannot run the chain, sing-box is
+    // missing. A server FACT from the node's report, so the button is not
+    // disabled ahead of it.
+    entryCannotChain: '{{name}} reported {{engines}}, sing-box is not on it.',
     legPort: 'port {{port}}',
     legUnknown: 'no link cell picked',
     legToDirections: 'the leg to the exit is set on the direction',
@@ -137,14 +146,12 @@ export const cascades = {
     // The timestamp in the header is the SAVE time, and it has to say so: a
     // bare "36 d ago" under a heading about pushes read as the push time.
     savedAgo: 'saved {{when}}',
-    // The edge of phase 6, and it belongs where the operator picks the entry:
-    // hearing it from a user who "cannot choose a country" is worse.
-    entryHy2Auto:
-      'A hysteria entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
     // An entry change that takes the cascade off the entry nodes' profiles
     // (phase 6). A question, not a refusal: the operator sees who is affected
-    // before it happens.
-    entryDropTitle: 'Change the cascade entry?',
+    // before it happens. The SERVER names from and to: guessing them from the
+    // form would caption the wrong change if the form moved again meanwhile.
+    entryDropTitle: 'Change the cascade entry from {{from}} to {{to}}?',
+    entryDropTitleBare: 'Change the cascade entry?',
     entryDropBody: 'These profiles leave the cascade and go direct, out of the entry country:',
     entryDropRow: '{{profile}} on {{node}}',
     entryDropConfirm: 'Change anyway',
