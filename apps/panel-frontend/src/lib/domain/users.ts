@@ -1,4 +1,4 @@
-import type { RoutingPresetId } from '@iceslab/shared';
+import type { RoutingPresetId, XraySubprotocol } from '@iceslab/shared';
 import { api, API_BASE_URL } from '@/lib/net/client';
 import type { ProtocolName } from '@/lib/domain/protocols';
 
@@ -218,6 +218,9 @@ export function subscriptionUrl(
 
 export interface UserEndpoint {
   protocol: string;
+  /** xray endpoints only: which of the xray subprotocols the line speaks.
+   *  Absent on every other protocol, and on a server older than the key. */
+  subprotocol?: XraySubprotocol;
   /** What the client will show for this line: a host remark, or country plus
    *  node name. One node produces several of these, so it is a caption, never
    *  an identity. */

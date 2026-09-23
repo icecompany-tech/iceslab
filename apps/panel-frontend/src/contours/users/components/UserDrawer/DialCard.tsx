@@ -4,7 +4,7 @@ import { CARD, CYAN, FAINT, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } fr
 import { LABEL } from '@/contours/users/lib/userForm';
 import { dialCopy } from '@/contours/users/lib/dialCopy';
 import { CopyButton } from '@/contours/users/components/UserDrawer/CopyButton';
-import { protocolLabel } from '@/lib/domain/protocols';
+import { dialTabOf, dialTabs } from '@/contours/users/lib/dialTabs';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UserForm } from '@/contours/users/components/UserDrawer/useUserForm';
@@ -23,13 +23,12 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
   const { t } = useTranslation();
 
   const endpoints = useMemo(() => query.data?.endpoints ?? [], [query.data]);
-  const protocols = useMemo(
-    () => [...new Set(endpoints.map((e) => e.protocol))],
-    [endpoints],
-  );
+  // A tab per protocol, and SOCKS5 / HTTP apart from the rest of xray: see
+  // dialTabs for why.
+  const tabs = useMemo(() => dialTabs(endpoints), [endpoints]);
   const [active, setActive] = useState<string | null>(null);
-  const current = active && protocols.includes(active) ? active : (protocols[0] ?? null);
-  const shown = endpoints.filter((e) => e.protocol === current);
+  const current = active && tabs.some((tab) => tab.key === active) ? active : (tabs[0]?.key ?? null);
+  const shown = endpoints.filter((e) => dialTabOf(e).key === current);
 
   /**
    * Why there is nothing to dial, when there is nothing.
@@ -77,12 +76,12 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
       )}
 
       <Box style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {protocols.map((p) => {
-          const on = p === current;
+        {tabs.map((tab) => {
+          const on = tab.key === current;
           return (
             <UnstyledButton
-              key={p}
-              onClick={() => setActive(p)}
+              key={tab.key}
+              onClick={() => setActive(tab.key)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -103,7 +102,7 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
                   color: on ? CYAN : MIST,
                 }}
               >
-                {protocolLabel(p as never)}
+                {tab.label}
               </Text>
             </UnstyledButton>
           );
