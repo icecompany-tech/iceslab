@@ -588,6 +588,11 @@ type HealthcheckResponse struct {
 	// ⚠ A panel must never read absence as "chain down". Doing so would turn
 	// the whole fleet red on the day this field shipped.
 	Chain *ChainStatusDto `json:"chain,omitempty"`
+	// Arch is this machine in the version manifest's names: amd64, arm64 or
+	// armv7. Empty when it is none of them. The panel needs it to hand an
+	// operator an update command: every release file and its sha256 is per
+	// arch, and a bootstrap takes no version without its checksum.
+	Arch string `json:"arch,omitempty"`
 }
 
 // ───── GET /metrics ─────

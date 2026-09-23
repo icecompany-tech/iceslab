@@ -9,6 +9,8 @@
  * may eventually need string encoding; revisit when quotas exceed ~8 PB.
  */
 
+import type { CoreArch } from './core-versions.js';
+
 /**
  * Every protocol name that can appear on the wire.
  *
@@ -1423,6 +1425,13 @@ export interface HealthcheckResponse {
    * whole fleet red on the day the field was added.
    */
   chain?: ChainStatus;
+  /**
+   * This machine in the version manifest's names (CORE_ARCHES). Absent when it
+   * is none of them, or from an agent older than the field. The update command
+   * needs it: every release file and its sha256 is per arch, and a bootstrap
+   * takes no version without its checksum.
+   */
+  arch?: CoreArch;
 }
 
 /**
@@ -1442,6 +1451,8 @@ export interface HealthcheckResponse {
  */
 export interface NodeCores {
   observedAt: string;
+  /** See HealthcheckResponse.arch. Inventory like the cores: kept per node. */
+  arch?: CoreArch;
   cores: NodeCoreInfo[];
 }
 

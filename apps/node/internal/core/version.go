@@ -56,23 +56,36 @@ func execOutput(ctx context.Context, name string, args ...string) ([]byte, error
 type VersionProbe struct {
 	mu    sync.Mutex
 	stamp string
-	value string
+	out   string
+	ok    bool
 }
 
 // Version returns the version of the binary at `bin`, asking it with `args`.
 // An empty path, a missing file or a failed run all answer "".
 func (p *VersionProbe) Version(bin string, args []string, run RunForOutput) string {
+	out, ok := p.Answer(bin, args, run)
+	if !ok {
+		return ""
+	}
+	return ParseVersion([]byte(out))
+}
+
+// Answer is what the binary printed and whether it ran at all, under the same
+// cache as Version. For a caller that needs more than the number: AmneziaWG
+// reads the NAME in `awg --version`, because wireguard-tools answers the same
+// command under the same file name.
+func (p *VersionProbe) Answer(bin string, args []string, run RunForOutput) (string, bool) {
 	stamp := binaryStamp(bin)
 	p.mu.Lock()
 	if stamp == "" {
-		p.stamp, p.value = "", ""
+		p.stamp, p.out, p.ok = "", "", false
 		p.mu.Unlock()
-		return ""
+		return "", false
 	}
 	if stamp == p.stamp {
-		v := p.value
+		out, ok := p.out, p.ok
 		p.mu.Unlock()
-		return v
+		return out, ok
 	}
 	p.mu.Unlock()
 
@@ -80,17 +93,17 @@ func (p *VersionProbe) Version(bin string, args []string, run RunForOutput) stri
 		run = execOutput
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	out, err := run(ctx, bin, args...)
+	raw, err := run(ctx, bin, args...)
 	cancel()
-	v := ""
-	if err == nil {
-		v = ParseVersion(out)
+	out, ok := string(raw), err == nil
+	if !ok {
+		out = ""
 	}
 
 	p.mu.Lock()
-	p.stamp, p.value = stamp, v
+	p.stamp, p.out, p.ok = stamp, out, ok
 	p.mu.Unlock()
-	return v
+	return out, ok
 }
 
 // binaryStamp identifies the file at `bin` by path, size and mtime, or "" when

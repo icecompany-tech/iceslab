@@ -268,6 +268,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			if v, ok := adapter.(core.Versioner); ok {
 				cs.Version = v.CoreVersion()
 			}
+			if v, ok := adapter.(core.ToolsVersioner); ok {
+				cs.ToolsVersion = v.ToolsVersion()
+			}
 			// Whether this core is configured at all. Same optional-interface
 			// pattern; adapters that don't report count as configured.
 			if p, ok := adapter.(core.Provisionable); ok {
@@ -376,6 +379,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Status: status,
 		Cores:  cores,
 		Chain:  chainStatus,
+		Arch:   core.MachineArch(),
 	})
 }
 

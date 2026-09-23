@@ -70,6 +70,29 @@ describe('what the panel keeps from the healthcheck', () => {
     expect('rendersPolicy' in got.cores[0]!).toBe(false);
   });
 
+  it('keeps the AmneziaWG tools version beside the module version', () => {
+    // Two upstream tags, two fields: the manifest judges each against its own
+    // pin (amneziawg-module, amneziawg-tools).
+    const got = observedCores(
+      [
+        core({ name: 'amneziawg', engine: 'amneziawg', version: '1.0.20260611', toolsVersion: '1.0.20260618-2' }),
+        core({ name: 'xray', engine: 'xray', version: '26.3.27' }),
+      ],
+      AT,
+    );
+    expect(got.cores).toEqual([
+      { name: 'amneziawg', engine: 'amneziawg', version: '1.0.20260611', toolsVersion: '1.0.20260618-2' },
+      { name: 'xray', engine: 'xray', version: '26.3.27' },
+    ]);
+  });
+
+  it('keeps the machine arch the manifest names, and no other', () => {
+    // The update command picks a release file and its sha256 by arch.
+    expect(observedCores([], AT, 'arm64').arch).toBe('arm64');
+    expect('arch' in observedCores([], AT)).toBe(false);
+    expect('arch' in observedCores([], AT, 'riscv64' as never)).toBe(false);
+  });
+
   it('does not keep liveness, which belongs to the node status', () => {
     // Stored only when something changes, so a copy of `running` here would sit
     // stale next to a node the panel knows is down.
@@ -109,6 +132,10 @@ describe('when the inventory is written back', () => {
       ],
     });
     expect(coresWorthWriting(inventory(), two, at(AT))).toBe(true);
+  });
+
+  it('writes when the arch is first learned, from an agent that now reports it', () => {
+    expect(coresWorthWriting(inventory(), inventory({ arch: 'amd64' }), at(AT))).toBe(true);
   });
 
   it('refreshes the stamp on the heartbeat so it keeps meaning something', () => {

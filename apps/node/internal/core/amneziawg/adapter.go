@@ -78,12 +78,15 @@ type Adapter struct {
 	healthResult    bool
 	healthProbing   bool
 
-	// Whether the `awg` on this machine is really amneziawg-tools, asked once
-	// and remembered (guarded by mu). Installed() runs on every healthcheck
-	// poll, and this answer changes only when somebody reinstalls the tools,
-	// which does not happen while the agent is running.
-	toolsChecked    bool
-	toolsAreAmnezia bool
+	// What `awg --version` answered, remembered until the binary on disk
+	// changes. Installed() runs on every healthcheck poll, so it cannot fork
+	// each time; and "once per agent" was wrong, because bootstrap-amneziawg.sh
+	// replaces the tools under a running agent (the ru-02 repair is exactly
+	// that), and the node kept saying "not amneziawg" until a restart.
+	tools core.VersionProbe
+	// The last non-amneziawg answer already warned about (guarded by mu), so
+	// a wrong binary is logged once per binary, not once per poll.
+	toolsWarned string
 }
 
 type peerCounters struct {
@@ -715,34 +718,44 @@ func (a *Adapter) Installed() bool {
 // with NO obfuscation at all, which is the failure this whole product exists to
 // avoid, and it looks healthy the entire time.
 //
-// Asked once and cached: Installed() runs on every healthcheck poll, and the
-// answer cannot change under a running agent. A failure to run it at all
-// (missing, not executable, timeout) counts as "not amneziawg": an answer we
-// could not get is not a yes.
+// Asked through core.VersionProbe, so the binary runs again only when the file
+// changes. A failure to run it at all (missing, not executable, timeout) counts
+// as "not amneziawg": an answer we could not get is not a yes.
 func (a *Adapter) toolsAreAmneziawg() bool {
-	a.mu.Lock()
-	if a.toolsChecked {
-		defer a.mu.Unlock()
-		return a.toolsAreAmnezia
+	out, verdict := a.toolsAnswer()
+	if out != "" && !verdict {
+		a.mu.Lock()
+		fresh := a.toolsWarned != out
+		a.toolsWarned = out
+		a.mu.Unlock()
+		if fresh {
+			a.logger.Warn("the binary at AwgBin is not amneziawg-tools",
+				"awgBin", a.cfg.AwgBin, "version", strings.TrimSpace(out))
+		}
 	}
-	run := a.cfg.runCmd
-	bin := a.cfg.AwgBin
-	a.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	out, err := run(ctx, bin, "--version")
-	verdict := err == nil && strings.Contains(strings.ToLower(string(out)), "amneziawg")
-	if err == nil && !verdict {
-		a.logger.Warn("the binary at AwgBin is not amneziawg-tools",
-			"awgBin", bin, "version", strings.TrimSpace(string(out)))
-	}
-
-	a.mu.Lock()
-	a.toolsChecked = true
-	a.toolsAreAmnezia = verdict
-	a.mu.Unlock()
 	return verdict
+}
+
+// toolsAnswer is what `awg --version` printed and whether it names amneziawg.
+func (a *Adapter) toolsAnswer() (string, bool) {
+	out, ok := a.tools.Answer(a.cfg.AwgBin, []string{"--version"}, core.RunForOutput(a.cfg.runCmd))
+	return out, ok && strings.Contains(strings.ToLower(out), "amneziawg")
+}
+
+// ToolsVersion implements core.ToolsVersioner with `awg --version`
+// ("amneziawg-tools v1.0.20260618-2 - ..." gives "1.0.20260618-2"), the
+// component amneziawg-tools in the version manifest. Empty when the binary is
+// not amneziawg-tools at all: wireguard-tools under the name `awg` has a version
+// too, and reporting it here would put a number for the wrong program beside
+// the AmneziaWG pin.
+var _ core.ToolsVersioner = (*Adapter)(nil)
+
+func (a *Adapter) ToolsVersion() string {
+	out, genuine := a.toolsAnswer()
+	if !genuine {
+		return ""
+	}
+	return core.ParseVersion([]byte(out))
 }
 
 // CoreVersion implements core.Versioner with the KERNEL MODULE's version, read

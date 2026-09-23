@@ -189,6 +189,40 @@ func TestEachCoreReportsWhetherItRendersThePolicy(t *testing.T) {
 	}
 }
 
+// versionedCore answers a module version and a tools version, as AmneziaWG does.
+type versionedCore struct {
+	fakeCore
+	version, tools string
+}
+
+func (v *versionedCore) CoreVersion() string  { return v.version }
+func (v *versionedCore) ToolsVersion() string { return v.tools }
+
+// The AmneziaWG module and its tools come from different upstream tags, so they
+// travel in two fields; a core with no separate tools says nothing about them.
+func TestToolsVersionTravelsBesideTheCoreVersion(t *testing.T) {
+	body := healthBody(t,
+		&versionedCore{fakeCore{name: "amneziawg", running: true}, "1.0.20260611", "1.0.20260618-2"},
+		&fakeCore{name: "hysteria", running: true},
+	)
+	if !strings.Contains(body, `"version":"1.0.20260611"`) ||
+		!strings.Contains(body, `"toolsVersion":"1.0.20260618-2"`) {
+		t.Errorf("module and tools versions must both be on the wire: %s", body)
+	}
+	if strings.Count(body, `"toolsVersion"`) != 1 {
+		t.Errorf("only the core with separate tools reports a tools version: %s", body)
+	}
+}
+
+// The machine's arch travels with every health answer: the panel's update
+// command needs it to pick a release file and its sha256.
+func TestHealthNamesTheMachineArch(t *testing.T) {
+	got := health(t, &fakeCore{name: "xray", running: true})
+	if got.Arch != core.MachineArch() {
+		t.Errorf("arch = %q, want %q", got.Arch, core.MachineArch())
+	}
+}
+
 // Adapters that don't report provisioning keep counting, so adding the field
 // cannot silently hide a core that was being watched before.
 func TestCoreThatDoesNotReportProvisioningStillCounts(t *testing.T) {

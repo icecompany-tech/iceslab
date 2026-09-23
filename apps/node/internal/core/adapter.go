@@ -279,3 +279,12 @@ type Versioner interface {
 	// be goroutine-safe and cheap to call repeatedly (implementations cache).
 	CoreVersion() string
 }
+
+// ToolsVersioner is an OPTIONAL interface for a core whose userspace tools are
+// versioned apart from the core itself. Only AmneziaWG today: CoreVersion is
+// the kernel module, this is `awg --version`, and the two come from different
+// upstream tags, so one field for both would be a number nobody can compare.
+// Same contract as CoreVersion: "" when unknown, goroutine-safe, cheap.
+type ToolsVersioner interface {
+	ToolsVersion() string
+}

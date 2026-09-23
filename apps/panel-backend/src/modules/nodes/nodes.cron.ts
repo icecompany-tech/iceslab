@@ -7,7 +7,8 @@ import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-n
 import { getLogger } from '../../lib/infra/logger.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import type { CoreStatus, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
+import { CORE_ARCHES } from '@iceslab/shared';
+import type { CoreArch, CoreStatus, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
 
 const METRICS_KEY_PREFIX = 'node:metrics:';
 const METRICS_TTL_SECONDS = 60;
@@ -299,13 +300,21 @@ function restartsWorthWriting(
  * stay "unknown" rather than turn into false somewhere in here. A false would
  * tell the operator their policy is ignored on a core that may well apply it.
  */
-export function observedCores(cores: CoreStatus[], observedAt: string): NodeCores {
+export function observedCores(
+  cores: CoreStatus[],
+  observedAt: string,
+  arch?: CoreArch,
+): NodeCores {
   return {
     observedAt,
+    // Only a name the manifest knows: the update command picks a release file
+    // and its sha256 by it, and a guessed arch hands out the wrong download.
+    ...(arch && (CORE_ARCHES as readonly string[]).includes(arch) ? { arch } : {}),
     cores: cores.map((c) => ({
       name: c.name,
       ...(c.engine !== undefined ? { engine: c.engine } : {}),
       ...(c.version ? { version: c.version } : {}),
+      ...(c.toolsVersion ? { toolsVersion: c.toolsVersion } : {}),
       ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
       ...(c.installed !== undefined ? { installed: c.installed } : {}),
       ...(c.rendersPolicy !== undefined ? { rendersPolicy: c.rendersPolicy } : {}),
@@ -339,6 +348,7 @@ export function coresWorthWriting(
 ): boolean {
   if (!stored) return true;
   if (JSON.stringify(stored.cores) !== JSON.stringify(fresh.cores)) return true;
+  if (stored.arch !== fresh.arch) return true;
   const storedAt = Date.parse(stored.observedAt);
   // NaN (missing or garbled stamp from an older build) counts as stale, so the
   // next poll repairs it instead of freezing forever.
@@ -437,7 +447,7 @@ async function checkOne(node: {
       ...verdict,
       coreVersion,
       coreRestarts,
-      cores: observedCores(res.cores, new Date().toISOString()),
+      cores: observedCores(res.cores, new Date().toISOString(), res.arch),
       // `null` and `undefined` are different answers here: null is "the node
       // answered and has no chain", undefined never reaches this line because
       // an unreachable node returns from the catch below.
