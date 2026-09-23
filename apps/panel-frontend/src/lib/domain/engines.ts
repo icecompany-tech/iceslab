@@ -146,7 +146,7 @@ export function installIntentLabel(
  *  protocol. The same table exists once in the panel and once in the agent, and
  *  this copy is deliberately confined to a form about a machine that does not
  *  exist yet, where there is nothing to ask. */
-function nativeEngineOfIntent(protocol: string): EngineName {
+export function nativeEngineOfIntent(protocol: string): EngineName {
   if (protocol === 'shadowsocks') return 'xray';
   if (protocol === 'tuic' || protocol === 'anytls' || protocol === 'shadowtls') return 'singbox';
   return protocol as EngineName;

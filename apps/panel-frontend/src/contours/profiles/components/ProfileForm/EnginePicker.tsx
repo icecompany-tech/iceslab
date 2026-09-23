@@ -1,17 +1,11 @@
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Group, Menu, Stack, Text, UnstyledButton } from '@mantine/core';
-import {
-  IconAlertTriangle,
-  IconBolt,
-  IconCheck,
-  IconInfoCircle,
-  IconPlus,
-  IconSelector,
-} from '@tabler/icons-react';
+import { Box, Group, Text, UnstyledButton } from '@mantine/core';
+import { IconBolt, IconCheck, IconInfoCircle, IconPlus } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import type { EngineName } from '@iceslab/shared';
 import { listNodes } from '@/lib/domain/nodes';
-import { compareCoreVersions } from '@iceslab/shared';
+import { nativeEngineOfIntent } from '@/lib/domain/engines';
+import { CoreVersionStrip } from '@/contours/profiles/components/ProfileForm/CoreVersionStrip';
 import {
   PREVIEW_KINDS,
   PROFILE_KINDS,
@@ -67,9 +61,6 @@ export function EnginePicker({
 }) {
   const { t } = useTranslation();
   const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
-  // Which core version the operator is inspecting. Null means "the newest one
-  // the fleet runs", which is what the row opens on.
-  const [picked, setPicked] = useState<string | null>(null);
 
   const tabs: { value: EngineTab; label: string }[] = [
     { value: 'native', label: t('profiles.engine.native') },
@@ -86,44 +77,13 @@ export function EnginePicker({
   );
   const plain = protocol === 'xray' && isPlainSubprotocol(subprotocol) ? subprotocol : undefined;
 
-  // Core version is a property of the node, not of the profile: one xray
-  // process serves every xray-core profile on that box. Show what the fleet
-  // actually runs, and name the nodes that lag behind.
-  const versioned = (nodesQuery.data?.nodes ?? []).filter(
-    (n): n is typeof n & { coreVersion: string } => !!n.coreVersion,
-  );
-  const coreVersions = versioned.map((n) => n.coreVersion);
-
-  // Which nodes sit on each version. A plain `.sort()` used to pick the
-  // newest, and that is string order: it puts 25.9.5 above 25.10.1 because
-  // "9" > "1". The order is the contract's compareCoreVersions; a pair it
-  // cannot order keeps its place.
-  const byVersion = new Map<string, string[]>();
-  for (const n of versioned) {
-    byVersion.set(n.coreVersion, [...(byVersion.get(n.coreVersion) ?? []), n.name]);
-  }
-  const versions = [...byVersion.keys()].sort((a, b) =>
-    compareCoreVersions(b, a) ?? 0,
-  );
-  const newest = versions[0] ?? null;
-
-  // Which version the operator is looking at. The list comes from live node
-  // data, so a pick can vanish under us when the fleet is upgraded; falling
-  // back to the newest beats rendering a version nobody runs.
-  const selected = picked && byVersion.has(picked) ? picked : newest;
-  const onSelected = selected ? (byVersion.get(selected) ?? []) : [];
-  const behind = coreVersions.filter((v) => v !== newest);
-
-  // A fleet of thirty nodes would otherwise print thirty names into a chip
-  // that sits on one row of a form. Three and a tail says the same thing.
-  const nameList = (names: string[]) =>
-    names.length <= 3
-      ? names.join(', ')
-      : `${names.slice(0, 3).join(', ')}, ${t('profiles.engine.andMore', { count: names.length - 3 })}`;
-  // The number belongs to whatever rides the xray binary, which on the
-  // Telegram tab is SOCKS5 and HTTP. MTProto and WEB run their own daemons
-  // and the panel is never told their versions, so they stay quiet.
-  const ridesXray = activeTab === 'xray' || (!preview && plain !== undefined);
+  // Which binary the selected tile runs on the node: its version is what the
+  // strip below talks about. A preview (WEB) runs nothing the panel builds.
+  const selectedEngine: EngineName | null = preview
+    ? null
+    : engine === 'singbox'
+      ? 'singbox'
+      : nativeEngineOfIntent(protocol);
 
   const tiles: TileSpec[] = [
     ...kinds.map((k) => ({
@@ -287,206 +247,10 @@ export function EnginePicker({
         </Group>
       </Box>
 
-      {/* The binary's version belongs to the fleet, not to this template. Say
-          so, and name how many boxes still run something older. Only the xray
-          core reports its version to the panel, so the other tabs stay quiet
-          rather than showing a number that belongs to a different binary. */}
-      {ridesXray && selected && (
-        <Stack
-          gap={8}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 8,
-            backgroundColor: '#0B1420',
-            border: '1px solid #1C2A3D',
-          }}
-        >
-          {/* Version on the left, fleet verdict on the right, explanation on
-              its own line under both. It used to be one nowrap row, and the
-              explanation was the only elastic part of it: on the profile page
-              the recipe rail takes 380px from 1400px up, which leaves the row
-              barely 560px and the sentence about a hundred. Wrapping is
-              cheaper than a media query and holds at every width. */}
-          <Group gap={10} align="center" justify="space-between">
-            <Group gap={10} wrap="nowrap" style={{ flexShrink: 0 }}>
-              <Text
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  fontWeight: 500,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: '#7A8BA3',
-                }}
-              >
-                {t('profiles.engine.coreVersion')}
-              </Text>
-              {/* The artboard draws this as a select, and it is one: the list
-                  is the versions the fleet actually reports. Picking one does
-                  not install anything, the panel has no way to ask a node for
-                  a different binary; it changes which version the row is
-                  talking about, which is the question an operator opens this
-                  row with when the numbers disagree. */}
-              <Menu
-                position="bottom-start"
-                offset={6}
-                withinPortal
-                disabled={versions.length < 2}
-              >
-                <Menu.Target>
-                  <UnstyledButton
-                    type="button"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      height: 32,
-                      padding: '0 12px',
-                      borderRadius: 8,
-                      backgroundColor: '#08101A',
-                      border: '1px solid #1C2A3D',
-                      cursor: versions.length < 2 ? 'default' : 'pointer',
-                    }}
-                  >
-                    <Text style={{ fontFamily: MONO, fontSize: 12, color: '#C8D4E3' }}>
-                      xray {selected}
-                    </Text>
-                    <VersionBadge latest={selected === newest} />
-                    {/* Only a fleet running more than one version has anything
-                        to choose between; a single-version fleet keeps the box
-                        without pretending it opens. */}
-                    {versions.length > 1 && (
-                      <IconSelector size={14} color="#7A8BA3" stroke={2} />
-                    )}
-                  </UnstyledButton>
-                </Menu.Target>
-                <Menu.Dropdown
-                  style={{ backgroundColor: '#0B1420', border: '1px solid #1C2A3D' }}
-                >
-                  <Menu.Label
-                    style={{
-                      fontFamily: MONO,
-                      fontSize: 9,
-                      letterSpacing: '0.14em',
-                      textTransform: 'uppercase',
-                      color: '#5A6B82',
-                    }}
-                  >
-                    {t('profiles.engine.versionMenuTitle')}
-                  </Menu.Label>
-                  {versions.map((v) => {
-                    const names = byVersion.get(v) ?? [];
-                    return (
-                      <Menu.Item
-                        key={v}
-                        onClick={() => setPicked(v)}
-                        style={{ backgroundColor: v === selected ? '#7DD3FC0F' : 'transparent' }}
-                      >
-                        <Stack gap={3} style={{ minWidth: 0 }}>
-                          <Group gap={8} wrap="nowrap">
-                            <Text
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 12,
-                                color: v === selected ? '#7DD3FC' : '#C8D4E3',
-                              }}
-                            >
-                              xray {v}
-                            </Text>
-                            <VersionBadge latest={v === newest} />
-                          </Group>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              lineHeight: '14px',
-                              color: '#5A6B82',
-                              maxWidth: 280,
-                            }}
-                          >
-                            {t('profiles.engine.nodesWith', { count: names.length })} ·{' '}
-                            {nameList(names)}
-                          </Text>
-                        </Stack>
-                      </Menu.Item>
-                    );
-                  })}
-                </Menu.Dropdown>
-              </Menu>
-            </Group>
-            {/* The chip answers "who is on this", so it follows the pick: on
-                an older version it names those nodes, on the newest one it
-                keeps the fleet verdict it always gave. */}
-            {selected !== newest ? (
-              <Group
-                gap={8}
-                wrap="nowrap"
-                align="flex-start"
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  backgroundColor: '#F5B14C1A',
-                  border: '1px solid #F5B14C40',
-                  minWidth: 0,
-                }}
-              >
-                <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} style={{ flexShrink: 0, marginTop: 1 }} />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C', minWidth: 0 }}>
-                  {t('profiles.engine.runsOn', { names: nameList(onSelected) })}
-                </Text>
-              </Group>
-            ) : behind.length > 0 ? (
-              <Group
-                gap={8}
-                wrap="nowrap"
-                align="flex-start"
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  backgroundColor: '#F5B14C1A',
-                  border: '1px solid #F5B14C40',
-                  // The sentence inside is a full clause and runs long in
-                  // Russian. It wraps rather than being clipped, and the whole
-                  // chip drops to its own line when even that does not fit.
-                  minWidth: 0,
-                }}
-              >
-                <IconAlertTriangle size={13} color="#F5B14C" stroke={1.9} style={{ flexShrink: 0, marginTop: 1 }} />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#F5B14C', minWidth: 0 }}>
-                  {t('profiles.engine.behind', {
-                    count: behind.length,
-                    total: coreVersions.length,
-                    version: behind[0],
-                  })}
-                </Text>
-              </Group>
-            ) : (
-              <Group
-                gap={8}
-                wrap="nowrap"
-                align="flex-start"
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  backgroundColor: '#A7D8B91A',
-                  border: '1px solid #A7D8B940',
-                  minWidth: 0,
-                }}
-              >
-                <IconCheck size={13} color="#A7D8B9" stroke={2.2} style={{ flexShrink: 0, marginTop: 1 }} />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#A7D8B9', minWidth: 0 }}>
-                  {t('profiles.engine.allCurrent', {
-                    count: coreVersions.length,
-                    version: newest,
-                  })}
-                </Text>
-              </Group>
-            )}
-          </Group>
-          <Text style={{ fontSize: 11, lineHeight: '16px', color: '#7A8BA3' }}>
-            {t('profiles.engine.coreVersionHint')}
-          </Text>
-        </Stack>
-      )}
+      {/* The binary's version belongs to the node, not to this template: the
+          strip names the manifest's pin for the selected tile's core and how
+          the fleet stands against it, on every tab. */}
+      {selectedEngine && <CoreVersionStrip engine={selectedEngine} nodes={nodesQuery.data?.nodes ?? []} />}
 
       {/* Tiles, not a list: each one says what the protocol actually speaks,
           which is the thing an operator is choosing between. Every protocol
@@ -602,34 +366,3 @@ export function EnginePicker({
  * tab answers "what runs on the node", not "what does the column say".
  */
 
-/** Green for the newest version the fleet reports, amber for anything behind
- *  it. Both are facts about the fleet, not about upstream: the panel has no
- *  idea what XTLS released last week. */
-function VersionBadge({ latest }: { latest: boolean }) {
-  const { t } = useTranslation();
-  const tone = latest ? '#A7D8B9' : '#F5B14C';
-  return (
-    <Box
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        height: 18,
-        padding: '0 7px',
-        borderRadius: 6,
-        backgroundColor: `${tone}1F`,
-        flexShrink: 0,
-      }}
-    >
-      <Text
-        style={{
-          fontFamily: MONO,
-          fontSize: 9,
-          letterSpacing: '0.08em',
-          color: tone,
-        }}
-      >
-        {latest ? t('profiles.engine.latest') : t('profiles.engine.older')}
-      </Text>
-    </Box>
-  );
-}

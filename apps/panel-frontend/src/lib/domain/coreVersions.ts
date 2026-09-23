@@ -8,7 +8,7 @@ import {
   type CoreVersionVerdict,
   type NodeCoreVersions,
 } from '@iceslab/shared';
-import type { NodeCore } from '@/lib/domain/nodes';
+import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 /**
  * A core row against the version manifest (packages/shared/core-versions.ts).
@@ -109,8 +109,7 @@ const PART: Partial<Record<CoreComponent, 'module' | 'tools'>> = {
 
 /** The components a core row carries: the ones its engine reports. */
 export function componentsOfCore(core: Pick<NodeCore, 'name' | 'engine'>): CoreComponent[] {
-  const engine = core.engine ?? core.name;
-  return CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].reportedBy.engine === engine);
+  return componentsOfEngine(core.engine ?? core.name);
 }
 
 /**
@@ -170,6 +169,76 @@ export function coreReleaseOptions(component: CoreComponent): CoreReleaseOption[
         v.kind === 'known-bad' || v.kind === 'above-ceiling' ? { kind: v.kind, reason: v.reason } : null,
     };
   });
+}
+
+/** The components an engine reports (AmneziaWG: module and tools). */
+export function componentsOfEngine(engine: string): CoreComponent[] {
+  return CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].reportedBy.engine === engine);
+}
+
+/**
+ * How the fleet stands against the pin for one component, as the profile
+ * form shows it: the version is the node's, the profile only says so.
+ *
+ *   onPin    reports the pin;
+ *   other    reports something else (drift, above the ceiling, known bad, or
+ *            anything at all when the component has no pin), with what it said;
+ *   silent   cannot say: the node never reported its cores, or reports this
+ *            engine without a version the contract can read.
+ * A node whose report lacks this engine does not run it and is not counted.
+ * Judged by the contract's judgeCoreVersion with no intent (the pin), over
+ * cores[].version, never node.coreVersion (that one is xray's alone).
+ */
+export interface CoreFleetNode {
+  id: string;
+  name: string;
+}
+
+export interface CoreVersionFleet {
+  component: CoreComponent;
+  pinned: string | null;
+  unpinnedReason: string | null;
+  onPin: CoreFleetNode[];
+  other: (CoreFleetNode & { version: string })[];
+  silent: CoreFleetNode[];
+  total: number;
+}
+
+export function coreVersionFleet(
+  component: CoreComponent,
+  nodes: readonly Pick<Node, 'id' | 'name' | 'cores'>[],
+): CoreVersionFleet {
+  const entry = CORE_VERSIONS[component];
+  const onPin: CoreFleetNode[] = [];
+  const other: (CoreFleetNode & { version: string })[] = [];
+  const silent: CoreFleetNode[] = [];
+  for (const n of nodes) {
+    const who = { id: n.id, name: n.name };
+    const cores = n.cores?.cores;
+    if (!cores || cores.length === 0) {
+      silent.push(who);
+      continue;
+    }
+    const row = cores.find(
+      (c) => (c.engine ?? c.name) === entry.reportedBy.engine && c.installed !== false,
+    );
+    if (!row) continue;
+    const raw = row[entry.reportedBy.field];
+    const reported = typeof raw === 'string' ? raw.trim() : '';
+    const verdict = judgeCoreVersion(component, reported);
+    if (verdict.kind === 'unknown') silent.push(who);
+    else if (verdict.kind === 'intended' && verdict.isPin) onPin.push(who);
+    else other.push({ ...who, version: reported });
+  }
+  return {
+    component,
+    pinned: entry.pinned,
+    unpinnedReason: entry.pinned === null ? (entry.unpinnedReason ?? '') : null,
+    onPin,
+    other,
+    silent,
+    total: onPin.length + other.length + silent.length,
+  };
 }
 
 /**

@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { CORE_COMPONENTS, CORE_VERSIONS, coreEnvPair } from '@iceslab/shared';
 import {
   CORE_UPDATE,
+  componentsOfEngine,
   coreReleaseOptions,
+  coreVersionFleet,
   coreUpdateCommand,
   coreVersionFacts,
   coreVersionRefusal,
   coreVersionsPatch,
 } from '@/lib/domain/coreVersions';
-import type { NodeCore } from '@/lib/domain/nodes';
+import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const core = (c: Partial<NodeCore> & { name: NodeCore['name'] }): NodeCore => c as NodeCore;
 const PIN = (c: keyof typeof CORE_VERSIONS) => CORE_VERSIONS[c].pinned!;
@@ -153,6 +155,52 @@ describe('intent: the row is judged against what the operator chose', () => {
     });
     expect(l?.verdict).toEqual({ kind: 'drift', intended: PIN('singbox') });
     expect(l?.targetIsPin).toBe(true);
+  });
+});
+
+describe('coreVersionFleet: the fleet against the pin, per component', () => {
+  const node = (id: string, cores?: NodeCore[]) =>
+    ({ id, name: id, cores: cores ? { observedAt: '', cores } : undefined }) as Pick<Node, 'id' | 'name' | 'cores'>;
+  const sb = (version: string) => core({ name: 'tuic', engine: 'singbox', version });
+
+  it('everyone on the pin', () => {
+    const f = coreVersionFleet('singbox', [node('a', [sb(PIN('singbox'))]), node('b', [sb(PIN('singbox'))])]);
+    expect(f).toMatchObject({ pinned: PIN('singbox'), total: 2, other: [], silent: [] });
+    expect(f.onPin.map((n) => n.id)).toEqual(['a', 'b']);
+  });
+
+  it('drift is «other» with what the node said; a node without this engine is not counted', () => {
+    const f = coreVersionFleet('singbox', [
+      node('a', [sb('1.13.12')]),
+      node('b', [core({ name: 'xray', engine: 'xray', version: '26.3.27' })]),
+    ]);
+    expect(f.other).toEqual([{ id: 'a', name: 'a', version: '1.13.12' }]);
+    expect(f.total).toBe(1);
+  });
+
+  it('never reported, or reported without a readable version, is silent; xray\'s coreVersion is not read', () => {
+    const f = coreVersionFleet('singbox', [
+      { ...node('a'), coreVersion: '26.3.27' } as Pick<Node, 'id' | 'name' | 'cores'>,
+      node('b', [sb('')]),
+      node('c', [core({ name: 'tuic', engine: 'singbox', version: '1.13.14', installed: false })]),
+    ]);
+    expect(f.silent.map((n) => n.id)).toEqual(['a', 'b']);
+    expect(f.total).toBe(2);
+  });
+
+  it('empty fleet; and a component with no pin files every reported version under «other»', () => {
+    expect(coreVersionFleet('xray', [])).toMatchObject({ total: 0, onPin: [], other: [], silent: [] });
+    const naive = coreVersionFleet('caddy-naive', [node('a', [core({ name: 'naive', engine: 'naive', version: '2.10.0' })])]);
+    expect(naive.pinned).toBeNull();
+    expect(naive.unpinnedReason).toBeTruthy();
+    expect(naive.other).toEqual([{ id: 'a', name: 'a', version: '2.10.0' }]);
+  });
+
+  it('AmneziaWG: two components from one engine, the tools read from toolsVersion', () => {
+    expect(componentsOfEngine('amneziawg')).toEqual(['amneziawg-module', 'amneziawg-tools']);
+    const awg = core({ name: 'amneziawg', engine: 'amneziawg', version: PIN('amneziawg-module'), toolsVersion: '' });
+    expect(coreVersionFleet('amneziawg-module', [node('a', [awg])]).onPin).toHaveLength(1);
+    expect(coreVersionFleet('amneziawg-tools', [node('a', [awg])]).silent).toHaveLength(1);
   });
 });
 
