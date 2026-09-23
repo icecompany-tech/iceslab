@@ -1,6 +1,13 @@
 import type { Node } from '../../generated/prisma/client.js';
-import type { DnsCfg, EngineName, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
+import type {
+  DnsCfg,
+  EngineName,
+  NodeCoreRestarts,
+  NodeCores,
+  NodeCoreVersions,
+} from '@iceslab/shared';
 import { reportedEngines } from './node-engines.js';
+import { readCoreVersions } from './node-core-versions.js';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -112,6 +119,13 @@ export interface PublicNodeDto {
    */
   cores: NodeCores | null;
   /**
+   * Which core versions the operator WANTS here, the other half of `cores`.
+   * Always present; a missing component is the manifest's pin, so `{}` is a
+   * node that follows the manifest. Judge a report with
+   * judgeCoreVersion(component, reported, coreVersions).
+   */
+  coreVersions: NodeCoreVersions;
+  /**
    * The distinct engines those cores run, which is the question almost every
    * caller actually has ("can this node render that profile").
    *
@@ -167,6 +181,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     policyId: node.policyId,
     dns: (node.dns as DnsCfg | null) ?? null,
     cores: (node.cores as NodeCores | null) ?? null,
+    coreVersions: readCoreVersions(node.coreVersions),
     ...(engines !== undefined ? { engines } : {}),
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),

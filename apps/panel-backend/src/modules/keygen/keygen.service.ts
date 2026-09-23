@@ -1,3 +1,4 @@
+import type { BootstrapCoreVersions } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { notifyTelegramAsync } from '../../lib/notify/telegram-notify.js';
 import {
@@ -34,6 +35,11 @@ export interface NodePayload {
   // movement window where a compromised node's leaf could be replayed
   // against other nodes.
   panelClientFingerprint?: string;
+  // The release of every core this node should get, resolved from its intent
+  // (Node.coreVersions) and the version manifest. The installer reads it
+  // through `iceslab-node core-env` as defaults for the bootstrap scripts; the
+  // Go mirror is CoreVersions in apps/node/internal/payload.
+  coreVersions?: BootstrapCoreVersions;
 }
 
 /**

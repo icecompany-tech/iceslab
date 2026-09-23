@@ -47,6 +47,13 @@ model Node {
   // NULL = no reporting agent has checked in yet, which is NOT "this node has
   // no cores".
   cores                 Json?
+  // Which core versions the operator WANTS here, the other half of `cores`:
+  // { "<component>": "<version>" }, components from CORE_COMPONENTS and versions
+  // from the manifest's releases (packages/shared/src/core-versions.ts). A
+  // missing key is the pin, so '{}' (every node until someone chooses) follows
+  // the manifest. Checked by checkCoreVersionIntent on every write; the database
+  // only holds the shape to an object.
+  coreVersions          Json      @default("{}") @map("core_versions")
   // Stamped when the node ACKNOWLEDGES an inbound push (applyInbounds returned
   // ok), never on a failure and never on a plain liveness tick. That makes it a
   // truthful "this node applied the config we sent" marker: comparing it with a

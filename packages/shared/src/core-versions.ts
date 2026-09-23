@@ -312,6 +312,39 @@ export const CORE_VERSIONS: Record<CoreComponent, CoreVersionEntry> = {
 };
 
 /**
+ * The variable prefix each component's bootstrap script reads, as the scripts
+ * already named them (an operator who exported MIERU_VERSION last month must
+ * not find it silently ignored). One table for everyone who names those
+ * variables: the generated pin blocks, the agent's `core-env`
+ * (componentEnv in apps/node/internal/payload/coreenv.go, held equal by
+ * core-pins.test.ts), the installer and the node card's update command.
+ */
+export const CORE_ENV_PREFIX: Record<CoreComponent, string> = {
+  xray: 'XRAY',
+  singbox: 'SINGBOX',
+  hysteria: 'HYSTERIA',
+  'amneziawg-module': 'AWG_MODULE',
+  'amneziawg-tools': 'AWG_TOOLS',
+  mtg: 'MTG',
+  mita: 'MIERU',
+  'caddy-naive': 'CADDY_NAIVE',
+};
+
+/**
+ * The two variables a script takes a chosen release by, always as a pair: a
+ * release binary by `<P>_VERSION` and `<P>_SHA256` (the file for the machine's
+ * arch), a core built from a commit by `<P>_TAG` and `<P>_SHA` (the commit).
+ * null for a component with nothing to choose (caddy-naive).
+ */
+export function coreEnvPair(component: CoreComponent): [string, string] | null {
+  const entry = CORE_VERSIONS[component];
+  const release = entry.releases[0];
+  if (!release) return null;
+  const p = CORE_ENV_PREFIX[component];
+  return release.commit ? [`${p}_TAG`, `${p}_SHA`] : [`${p}_VERSION`, `${p}_SHA256`];
+}
+
+/**
  * What an operator chose for one node, per component. A missing key means "the
  * pin", so a node nobody touched follows the manifest when the pin moves.
  * Every value has to be one of that component's `releases`.

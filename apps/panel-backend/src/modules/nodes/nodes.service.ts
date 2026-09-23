@@ -23,6 +23,9 @@ import type {
   ListNodesQuery,
   HardeningInput,
 } from './nodes.schemas.js';
+import { resolveCoreVersions } from '@iceslab/shared';
+import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
+export { CoreVersionIntentError } from './node-core-versions.js';
 
 // ───── Domain errors ─────
 
@@ -100,6 +103,9 @@ export async function createNode(
   const byAddress = await repo.findActiveByAddress(input.address);
   if (byAddress) throw new NodeAlreadyExistsError('address', input.address);
 
+  // Checked before the row exists: a refused version creates nothing.
+  const coreVersions = applyCoreVersionsPatch({}, input.coreVersions ?? {});
+
   let node;
   try {
     node = await repo.create({
@@ -120,6 +126,8 @@ export async function createNode(
       dns: (input.dns as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
       // Engine-choice: install sing-box alongside the native core when opted in.
       singboxEngine: input.singboxEngine,
+      // Which core versions to install; '{}' (every pin) when none were chosen.
+      coreVersions,
       // Slice 38: heartbeat-self-destruct secret. 32 bytes of entropy is
       // overkill for HMAC-SHA256 keying, but stays well under the 64-byte
       // block size and matches our convention for symmetric secrets.
@@ -147,7 +155,9 @@ export async function createNode(
     commonName: input.name,
     sans: buildSans(input.address),
   });
-  const payload = encodeNodePayload(cert);
+  // The same core versions the bootstrap redeem hands out, for the operator who
+  // pastes this payload instead of using the token.
+  const payload = encodeNodePayload({ ...cert, coreVersions: resolveCoreVersions(coreVersions) });
 
   const tokenInfo = await issueBootstrapToken(node.id);
   const bootstrap: BootstrapInfo = {
@@ -383,6 +393,15 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   if (input.policyId !== undefined) {
     if (input.policyId) await assertPolicyFitsNode(input.policyId, id);
     data.policyId = input.policyId;
+  }
+  // Which core versions the operator wants. `'coreVersions' in input`, not
+  // `??`: an absent key is no edit, null is "every pin", and a map patches per
+  // component. Checked against the manifest on the merged result.
+  if ('coreVersions' in input && input.coreVersions !== undefined) {
+    data.coreVersions = applyCoreVersionsPatch(
+      readCoreVersions(existing.coreVersions),
+      input.coreVersions,
+    );
   }
 
   // Three fields feed the config we push to the agent, so editing any of them

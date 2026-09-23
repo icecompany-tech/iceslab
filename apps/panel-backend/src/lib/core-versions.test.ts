@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   CORE_COMPONENTS,
+  CORE_ENV_PREFIX,
   CORE_VERSIONS,
   ENGINE_NAMES,
+  coreEnvPair,
   checkCoreVersionIntent,
   compareCoreVersions,
   judgeCoreVersion,
@@ -81,6 +83,21 @@ describe('the manifest keeps its own rules', () => {
   it('hysteria armv7 names the file upstream actually ships', () => {
     // There is no hysteria-linux-armv7; bootstrap-hysteria.sh asked for it.
     expect(CORE_VERSIONS.hysteria.releases[0]!.assets!.armv7!.file).toBe('hysteria-linux-arm');
+  });
+});
+
+describe('the variables a script takes a release by', () => {
+  it('names a pair for every pinned component, by how its release is checked', () => {
+    expect(coreEnvPair('xray')).toEqual(['XRAY_VERSION', 'XRAY_SHA256']);
+    expect(coreEnvPair('mita')).toEqual(['MIERU_VERSION', 'MIERU_SHA256']);
+    expect(coreEnvPair('amneziawg-module')).toEqual(['AWG_MODULE_TAG', 'AWG_MODULE_SHA']);
+    expect(coreEnvPair('caddy-naive')).toBeNull();
+  });
+
+  it('keeps one prefix per component, none shared', () => {
+    const prefixes = Object.values(CORE_ENV_PREFIX);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+    expect(Object.keys(CORE_ENV_PREFIX).sort()).toEqual([...CORE_COMPONENTS].sort());
   });
 });
 

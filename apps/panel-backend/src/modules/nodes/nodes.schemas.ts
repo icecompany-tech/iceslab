@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CORE_COMPONENTS } from '@iceslab/shared';
 
 const NameSchema = z
   .string()
@@ -92,6 +93,23 @@ export const DnsSchema = z
   .nullish();
 export type DnsInput = z.infer<typeof DnsSchema>;
 
+/**
+ * Node.coreVersions on a write. Keys are CORE_COMPONENTS (an unknown one is a
+ * 400, not a silently kept typo); whether a version is one the manifest lists
+ * is checked in the service against the merged result, see
+ * node-core-versions.ts.
+ *
+ * On create a value is a version. On update a value may also be null, which
+ * puts that component back on the pin; a component left out is not touched, and
+ * `coreVersions: null` puts every component back on the pin.
+ */
+const CoreVersionValueSchema = z.string().min(1).max(64);
+const CoreComponentSchema = z.enum(CORE_COMPONENTS);
+const CoreVersionsCreateSchema = z.partialRecord(CoreComponentSchema, CoreVersionValueSchema);
+const CoreVersionsPatchSchema = z
+  .partialRecord(CoreComponentSchema, CoreVersionValueSchema.nullable())
+  .nullable();
+
 // Slice 27: keep parity with the inbound/profile protocol enum in
 // inbounds.schemas.ts. Node.protocol is a label for "which adapter is the
 // primary / installed on this VPS"; the actual deployment is per-binding.
@@ -124,6 +142,8 @@ export const CreateNodeSchema = z.object({
   singboxEngine: z.boolean().default(false),
   // Э3 F: the resolver this node's users get. Absent = the host's own.
   dns: DnsSchema,
+  // Which core versions to install; absent components get the pin.
+  coreVersions: CoreVersionsCreateSchema.optional(),
 });
 export type CreateNodeInput = z.infer<typeof CreateNodeSchema>;
 
@@ -146,6 +166,10 @@ export const UpdateNodeSchema = z.object({
   // the config WITHOUT a dns section rather than leaving the last resolver
   // answering on a node the panel shows as having none.
   dns: DnsSchema,
+  // Absent = untouched; per component: version sets, null puts back on the
+  // pin, left out is untouched; null for the whole map = every pin. No
+  // .default(): an absent key must reach the service as absent.
+  coreVersions: CoreVersionsPatchSchema.optional(),
 });
 export type UpdateNodeInput = z.infer<typeof UpdateNodeSchema>;
 

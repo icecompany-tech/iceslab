@@ -137,6 +137,11 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof nodesService.NodeAlreadyExistsError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      if (err instanceof nodesService.CoreVersionIntentError) {
+        return reply
+          .code(400)
+          .send({ error: err.code, message: err.message, problems: err.problems });
+      }
       throw err;
     }
   });
@@ -347,6 +352,13 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
         return reply
           .code(409)
           .send({ error: 'POLICY_DOES_NOT_FIT_NODE', message: err.message });
+      }
+      // A version the manifest does not list: no checksum to install it by.
+      // `problems` names each component and what it can be instead.
+      if (err instanceof nodesService.CoreVersionIntentError) {
+        return reply
+          .code(400)
+          .send({ error: err.code, message: err.message, problems: err.problems });
       }
       throw err;
     }
