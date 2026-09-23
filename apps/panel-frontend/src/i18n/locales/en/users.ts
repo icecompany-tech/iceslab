@@ -195,6 +195,14 @@ export const users = {
     subUpdated: 'updated {{when}}',
     copy: 'Copy',
     copyUri: 'Copy this line',
+    // The copy button says it copied: without that it "did not look
+    // clickable" on the live panel (2026-09-23).
+    copied: 'Copied',
+    copyFailed: 'Not copied',
+    // AmneziaWG has no link line, only a link to one node's config file.
+    copyLink: 'Copy link',
+    copyLinkHint: "Copy the link to this node's config",
+    copyNoLink: 'AmneziaWG has no link line; the config is fetched as a file on the subscription page',
     openAsClient: 'Open as client',
     revoke: 'Revoke',
     revokeHint:

@@ -1,8 +1,8 @@
 import { IconExternalLink, IconLink, IconRefresh } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
-import { CARD, CYAN, FAINT, DISPLAY, FIELD_EDGE, GROUND, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
+import { CARD, CYAN, FAINT, DISPLAY, FIELD_EDGE, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
-import { copyToClipboard } from '@/lib/ui/clipboard';
+import { CopyButton } from '@/contours/users/components/UserDrawer/CopyButton';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import { fetchAuthStatus } from '@/lib/auth/api';
 import { subscriptionUrl } from '@/lib/domain/users';
@@ -84,21 +84,10 @@ export function SubscriptionCard({
         >
           {url}
         </Text>
-        <UnstyledButton
-          onClick={() => copyToClipboard(url)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexShrink: 0,
-            padding: '5px 10px',
-            borderRadius: 6,
-            backgroundColor: CYAN,
-          }}
-        >
-          <Text style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 600, color: GROUND }}>
-            {t('userDrawer.copy')}
-          </Text>
-        </UnstyledButton>
+        {/* Тот же приём, что у строк «Что может набрать»: наведение, и
+            «Скопировано» на полторы секунды, иначе не видно, ушло ли. */}
+        <CopyButton text={url} label={t('userDrawer.copy')} variant="solid" />
+
       </Box>
 
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

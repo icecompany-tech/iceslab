@@ -1,8 +1,9 @@
-import { IconCopy, IconList } from '@tabler/icons-react';
+import { IconList } from '@tabler/icons-react';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN, FAINT, DISPLAY, HAIRLINE, MIST, MONO, MOSS, SNOW, WELL } from '@/contours/users/lib/colors';
 import { LABEL } from '@/contours/users/lib/userForm';
-import { copyToClipboard } from '@/lib/ui/clipboard';
+import { dialCopy } from '@/contours/users/lib/dialCopy';
+import { CopyButton } from '@/contours/users/components/UserDrawer/CopyButton';
 import { protocolLabel } from '@/lib/domain/protocols';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -139,26 +140,14 @@ export function DialCard({ query }: { query: EndpointsQuery }) {
           <Text style={{ fontFamily: MONO, fontSize: 10, color: MIST, flexShrink: 0 }}>
             {e.port}
           </Text>
-          <UnstyledButton
-            onClick={() => copyToClipboard(e.uri)}
-            title={t('userDrawer.copyUri')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              flexShrink: 0,
-              height: 26,
-              paddingInline: 8,
-              borderRadius: 6,
-              border: `1px solid ${HAIRLINE}`,
-              color: MIST,
-            }}
-          >
-            <IconCopy size={12} stroke={1.8} />
-            <Text style={{ fontFamily: DISPLAY, fontSize: 11, color: MIST }}>
-              {t('userDrawer.copy')}
-            </Text>
-          </UnstyledButton>
+          {(() => {
+            // Что делает кнопка, решает фабрика: у AmneziaWG строки-ссылки нет,
+            // и копировать пустоту кнопка не должна.
+            const c = dialCopy(e.uri, e.protocol);
+            return (
+              <CopyButton text={e.uri} label={t(c.labelKey)} title={t(c.titleKey)} disabled={!c.enabled} />
+            );
+          })()}
         </Box>
       ))}
 
