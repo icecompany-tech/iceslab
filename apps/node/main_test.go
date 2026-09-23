@@ -50,6 +50,29 @@ func TestAnAgentWithNothingConfiguredReportsSevenEnginesAllAbsent(t *testing.T) 
 	}
 }
 
+// Every real core answers its version, so the node card shows one for each
+// engine and not only for xray (until 2026-09-23 xray was the one Versioner).
+// A stand-in for a missing engine does not: there is no binary to ask.
+func TestEveryRealCoreAnswersItsVersion(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	t.Setenv("XRAY_BINARY", "/nonexistent/xray")
+	t.Setenv("SINGBOX_BINARY", "/nonexistent/sing-box")
+	t.Setenv("MTG_BINARY", "/nonexistent/mtg")
+	t.Setenv("MITA_BINARY", "/nonexistent/mita")
+	for _, a := range buildAdapters(logger) {
+		_, versioned := a.(core.Versioner)
+		if core.IsAbsent(a) {
+			if versioned {
+				t.Errorf("%s/%s: a stand-in answers a version", a.Name(), a.Engine())
+			}
+			continue
+		}
+		if !versioned {
+			t.Errorf("%s/%s answers no version", a.Name(), a.Engine())
+		}
+	}
+}
+
 // A registered engine keeps its own adapters and gets no stand-in beside it: a
 // second row for the same engine would say "installed" and "not installed" at
 // once.

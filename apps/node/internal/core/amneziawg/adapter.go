@@ -745,6 +745,24 @@ func (a *Adapter) toolsAreAmneziawg() bool {
 	return verdict
 }
 
+// CoreVersion implements core.Versioner with the KERNEL MODULE's version, read
+// from /sys/module/amneziawg/version (the file `modinfo` reads, without an
+// exec on every poll). The module is the core here: it speaks the protocol,
+// and its tag carries the protocol generation (v1.x against v3.x), which is
+// the one number an operator needs off this card. The tools version is not
+// folded into this string; two numbers in one field are one the panel cannot
+// compare. Empty when the module is not loaded.
+func (a *Adapter) CoreVersion() string {
+	b, err := os.ReadFile(moduleVersionPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// moduleVersionPath is a variable so the test can point it at a file.
+var moduleVersionPath = "/sys/module/amneziawg/version"
+
 // kernelModuleLoaded reports whether the amneziawg kernel module is loaded.
 //
 // /sys/module rather than shelling out to lsmod: this runs on every healthcheck

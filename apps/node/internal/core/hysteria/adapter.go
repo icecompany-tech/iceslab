@@ -113,6 +113,9 @@ type HTTPClient interface {
 type RunCmdFunc func(ctx context.Context, name string, args ...string) error
 
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg    Config
 	logger *slog.Logger
 
@@ -658,4 +661,11 @@ func (a *Adapter) ReservedPorts() []core.ReservedPort {
 		out = append(out, core.ReservedPort{Owner: "hysteria-stats", Port: p})
 	}
 	return out
+}
+
+// CoreVersion implements core.Versioner from `hysteria version` (its `Version:` line), re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.BinaryPath, []string{"version"}, nil)
 }

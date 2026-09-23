@@ -36,6 +36,9 @@ type Config struct {
 type RunCmdFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
 
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg    Config
 	logger *slog.Logger
 
@@ -276,3 +279,10 @@ func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.BinaryPath)
 // what an adapter says when it cannot speak at all, and the panel refuses to
 // call a port free on a node where anything is silent.
 func (a *Adapter) ReservedPorts() []core.ReservedPort { return nil }
+
+// CoreVersion implements core.Versioner from `mita version`, re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.BinaryPath, []string{"version"}, nil)
+}

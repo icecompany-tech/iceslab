@@ -50,6 +50,9 @@ type Config struct {
 
 // Adapter implements core.CoreAdapter for NaiveProxy via Caddy.
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg    Config
 	logger *slog.Logger
 
@@ -364,3 +367,10 @@ func (a *Adapter) Installed() bool { return core.BinaryPresent(a.cfg.CaddyBin) }
 // nothing" is an answer, and it is what lets the panel be certain about a node
 // running only this core.
 func (a *Adapter) ReservedPorts() []core.ReservedPort { return nil }
+
+// CoreVersion implements core.Versioner from `caddy-naive version` (the Caddy fork answers with its Caddy version), re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.CaddyBin, []string{"version"}, nil)
+}

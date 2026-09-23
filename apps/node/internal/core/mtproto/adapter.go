@@ -54,6 +54,9 @@ type RunCmdFunc func(ctx context.Context, name string, args ...string) ([]byte, 
 // so AddUser/RemoveUser are no-ops. The adapter just tracks which user
 // IDs are "associated with this inbound" for GetStats book-keeping.
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg    Config
 	logger *slog.Logger
 
@@ -395,4 +398,11 @@ func (a *Adapter) ReservedPorts() []core.ReservedPort {
 		return nil
 	}
 	return []core.ReservedPort{{Owner: "mtproto-stats", Port: port}}
+}
+
+// CoreVersion implements core.Versioner from `mtg --version`, re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.BinaryPath, []string{"--version"}, nil)
 }

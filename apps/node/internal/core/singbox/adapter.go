@@ -55,6 +55,9 @@ type Config struct {
 }
 
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg      Config
 	protocol string
 	logger   *slog.Logger
@@ -558,4 +561,11 @@ func (a *Adapter) ReservedPorts() []core.ReservedPort {
 		return nil
 	}
 	return []core.ReservedPort{{Owner: "singbox-api", Port: p}}
+}
+
+// CoreVersion implements core.Versioner from `sing-box version`, re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.BinaryPath, []string{"version"}, nil)
 }

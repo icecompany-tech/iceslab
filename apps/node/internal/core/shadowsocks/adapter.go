@@ -43,6 +43,9 @@ type Config struct {
 type RunCmdFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
 
 type Adapter struct {
+	// See CoreVersion: asked again only when the binary on disk changes.
+	versions core.VersionProbe
+
 	cfg    Config
 	logger *slog.Logger
 
@@ -540,4 +543,11 @@ func (a *Adapter) ReservedPorts() []core.ReservedPort {
 		apiPort = 8081
 	}
 	return []core.ReservedPort{{Owner: "shadowsocks-api", Port: apiPort}}
+}
+
+// CoreVersion implements core.Versioner from `xray version`: SS2022 runs inside xray-core, so this is xray's version, re-asked only when
+// the binary on disk changes, so an upgrade shows without an agent restart.
+// Empty when the binary is absent or does not answer.
+func (a *Adapter) CoreVersion() string {
+	return a.versions.Version(a.cfg.BinaryPath, []string{"version"}, nil)
 }
