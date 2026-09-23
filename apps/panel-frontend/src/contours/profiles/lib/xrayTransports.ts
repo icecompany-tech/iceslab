@@ -16,6 +16,37 @@ export const XRAY_TRANSPORTS: {
   { value: 'kcp', label: 'mKCP', hint: 'UDP-based, resilient on lossy links. Do not share a UDP port with Hysteria/AWG.' },
 ];
 
+/**
+ * What the xray family can be on the sing-box engine: REALITY steal-others
+ * over raw, and nothing else. The agent renders it that way only (singbox
+ * config.go renderXrayFamilyConfig) and refuses the rest; TLS, none,
+ * self-steal and every other transport stay on the xray core. The form
+ * offers only this on the sing-box tile, so an operator does not walk into
+ * the refusal.
+ */
+export const SINGBOX_XRAY = { network: 'raw', security: 'reality', realityMode: 'steal-others' } as const;
+
+/**
+ * The fields to change so an xray-family form fits the sing-box engine, or
+ * {} when it already does (or is not on sing-box). Coming from the xray tile
+ * with xhttp or self-steal would otherwise carry them onto a tile that
+ * cannot render them.
+ */
+export function singboxXrayPatch(values: {
+  protocol: string;
+  engine: 'native' | 'singbox';
+  xrayNetwork: string;
+  xraySecurity: string;
+  xrayRealityMode: string;
+}): Partial<Pick<FormValues, 'xrayNetwork' | 'xraySecurity' | 'xrayRealityMode'>> {
+  if (values.protocol !== 'xray' || values.engine !== 'singbox') return {};
+  return {
+    ...(values.xrayNetwork !== SINGBOX_XRAY.network ? { xrayNetwork: SINGBOX_XRAY.network } : {}),
+    ...(values.xraySecurity !== SINGBOX_XRAY.security ? { xraySecurity: SINGBOX_XRAY.security } : {}),
+    ...(values.xrayRealityMode !== SINGBOX_XRAY.realityMode ? { xrayRealityMode: SINGBOX_XRAY.realityMode } : {}),
+  };
+}
+
 // Vision flow is only valid on raw/xhttp; other transports reject it.
 export const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];
 // path + host header apply to these transports (same URI param names).

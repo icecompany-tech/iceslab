@@ -13,6 +13,7 @@ import {
 import { IconChevronDown, IconKey } from '@tabler/icons-react';
 import {
   PATH_HOST_TRANSPORTS,
+  SINGBOX_XRAY,
   XRAY_TRANSPORTS,
 } from '@/contours/profiles/lib/xrayTransports';
 import { PillChip } from '@/contours/profiles/components/ProfileForm/PillChip';
@@ -43,6 +44,10 @@ export function XraySection({
 }) {
   const { t } = useTranslation();
   const impact = useGenerateImpact(profileId);
+  // На sing-box xray-семейство это только REALITY steal-others по raw: всё
+  // прочее агент отказывает, поэтому здесь оно недоступно с причиной.
+  const onSingbox = form.values.engine === 'singbox';
+  const singboxWhy = t('profiles.form.cfg.singboxXrayOnly');
   // SOCKS5 / HTTP have no subprotocol pill, transport, security or REALITY to
   // offer: the server takes them plain only.
   if (isPlainSubprotocol(form.values.xraySubprotocol)) {
@@ -74,15 +79,19 @@ export function XraySection({
                   <Group gap={8}>
                     {/* What each transport actually is stays on hover: the
                         artboard keeps this row to pills alone. */}
-                    {XRAY_TRANSPORTS.map((tr) => (
-                      <PillChip
-                        key={tr.value}
-                        label={tr.label}
-                        title={tr.hint}
-                        active={form.values.xrayNetwork === tr.value}
-                        onClick={() => form.setFieldValue('xrayNetwork', tr.value)}
-                      />
-                    ))}
+                    {XRAY_TRANSPORTS.map((tr) => {
+                      const locked = onSingbox && tr.value !== SINGBOX_XRAY.network;
+                      return (
+                        <PillChip
+                          key={tr.value}
+                          label={tr.label}
+                          title={locked ? singboxWhy : tr.hint}
+                          disabled={locked}
+                          active={form.values.xrayNetwork === tr.value}
+                          onClick={() => form.setFieldValue('xrayNetwork', tr.value)}
+                        />
+                      );
+                    })}
                   </Group>
                 </Stack>
 
@@ -98,19 +107,27 @@ export function XraySection({
                     />
                     <PillChip
                       label="none"
-                      title="Plain transport, for a CDN that terminates TLS in front."
+                      title={onSingbox ? singboxWhy : 'Plain transport, for a CDN that terminates TLS in front.'}
+                      disabled={onSingbox}
                       active={form.values.xraySecurity === 'none'}
                       onClick={() => form.setFieldValue('xraySecurity', 'none')}
                     />
                     <PillChip
                       label="TLS"
-                      title="The node terminates TLS with your own certificate."
+                      title={onSingbox ? singboxWhy : 'The node terminates TLS with your own certificate.'}
+                      disabled={onSingbox}
                       active={form.values.xraySecurity === 'tls'}
                       onClick={() => form.setFieldValue('xraySecurity', 'tls')}
                     />
                   </Group>
                 </Stack>
               </Group>
+
+              {/* Почему половина пилюль серая: одна строка под рядом, а не
+                  только в подсказке при наведении. */}
+              {onSingbox && (
+                <Text style={{ fontSize: 12, lineHeight: '17px', color: '#7A8BA3' }}>{singboxWhy}</Text>
+              )}
 
               {PATH_HOST_TRANSPORTS.includes(form.values.xrayNetwork) && (
                 <Group grow align="flex-start">
@@ -157,7 +174,7 @@ export function XraySection({
                     label={t('profiles.form.cfg.realityModeLabel')}
                     data={[
                       { value: 'steal-others', label: t('profiles.form.cfg.realityModeStealOthers') },
-                      { value: 'self-steal', label: t('profiles.form.cfg.realityModeSelfSteal') },
+                      { value: 'self-steal', label: t('profiles.form.cfg.realityModeSelfSteal'), disabled: onSingbox },
                     ]}
                     {...form.getInputProps('xrayRealityMode')}
                   />

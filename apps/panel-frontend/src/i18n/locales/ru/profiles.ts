@@ -175,6 +175,7 @@ export const profiles = {
         realityModeDesc: 'Как REALITY заимствует TLS-личность',
         realityModeStealOthers: 'steal-from-others (внешний декой)',
         realityModeSelfSteal: 'self-steal (локальный fallback, РФ-2026)',
+        singboxXrayOnly: 'На sing-box только REALITY (steal-others) по raw; TLS, self-steal и другие транспорты на ядре xray.',
         realityModeSelfStealHint:
           'Self-steal: нода поднимает локальный TLS-fallback, dest REALITY смотрит на него. В поле ниже укажите домен, резолвящийся в IP ЭТОЙ ноды, чтобы SNI и IP совпадали (переживает whitelist-shutdown в РФ). dest игнорируется.',
         realityFallbackUpstreamLabel: 'Реалистичный fallback (G1, опц.)',

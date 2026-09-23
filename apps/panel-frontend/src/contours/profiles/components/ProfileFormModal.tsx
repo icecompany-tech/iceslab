@@ -35,6 +35,7 @@ import {
   type PreviewKindKey,
 } from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
+import { singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
 import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
 import { FormShell } from '@/contours/profiles/components/ProfileForm/FormShell';
@@ -187,6 +188,12 @@ export function ProfileFormModal({
                 else if (isPlainSubprotocol(form.values.xraySubprotocol)) {
                   form.setFieldValue('xraySubprotocol', 'vless');
                 }
+                // The xray family on sing-box is REALITY steal-others over raw
+                // only: a form coming from the xray tile with xhttp, TLS or
+                // self-steal is brought back to that before the agent refuses.
+                form.setValues(
+                  singboxXrayPatch({ ...form.values, protocol: kind.protocol, engine: kind.engine }),
+                );
               }}
               onPickPreview={setPreview}
             />

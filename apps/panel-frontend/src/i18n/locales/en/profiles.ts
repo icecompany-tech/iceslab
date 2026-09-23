@@ -171,6 +171,7 @@ export const profiles = {
         realityModeDesc: 'How REALITY borrows a TLS identity',
         realityModeStealOthers: 'steal-from-others (external decoy)',
         realityModeSelfSteal: 'self-steal (local fallback, RU-2026)',
+        singboxXrayOnly: 'On sing-box only REALITY (steal-others) over raw; TLS, self-steal and other transports are on the xray core.',
         realityModeSelfStealHint:
           'Self-steal: the node runs a local TLS fallback and REALITY dest points at it. Set the domain below to one that resolves to THIS node IP, so SNI and IP match (survives RU whitelist-shutdown). dest is ignored.',
         realityFallbackUpstreamLabel: 'Realistic fallback (G1, optional)',

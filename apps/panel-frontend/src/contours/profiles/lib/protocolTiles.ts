@@ -93,7 +93,9 @@ export const PROTOCOL_TILE_NOTE: Record<string, string> = {
   http: 'xray core, no obfuscation',
   telegramweb: 'proof-of-concept',
   mieru: 'no handshake to fingerprint',
-  'xray#singbox': 'no REALITY probe-resist tuning',
+  // The agent renders the xray family on sing-box as REALITY steal-others over
+  // raw and refuses the rest; the tile says so before anyone picks it.
+  'xray#singbox': 'REALITY steal-others over raw only',
   'hysteria#singbox': 'stats via sing-box API',
   'shadowsocks#singbox': 'multi-user, per-user keys',
   tuic: 'sing-box only',

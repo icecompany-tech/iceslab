@@ -11,6 +11,7 @@ import {
 } from '@/contours/profiles/lib/profileKinds';
 import { SectionCard } from '@/contours/profiles/components/ProfileForm/SectionCard';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
+import { singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
 
 /**
  * Name, description, enabled and the protocol picker: what the profile is
@@ -79,6 +80,9 @@ export function IdentitySection({
                 const kind = val ? PROFILE_KIND_BY_KEY.get(val) : undefined;
                 if (!kind) return;
                 form.setFieldValue('engine', kind.engine);
+                // Switching an xray profile onto sing-box: only REALITY
+                // steal-others over raw renders there.
+                form.setValues(singboxXrayPatch({ ...form.values, protocol: kind.protocol, engine: kind.engine }));
                 if (!isEdit) {
                   form.setFieldValue('protocol', kind.protocol);
                   if (kind.subprotocol) form.setFieldValue('xraySubprotocol', kind.subprotocol);
