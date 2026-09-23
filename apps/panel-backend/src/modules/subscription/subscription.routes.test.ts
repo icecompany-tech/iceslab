@@ -394,8 +394,15 @@ describe('GET /sub/:token - multi-format (slice 21)', () => {
     expect(Object.keys(body)).toEqual(['server', 'server_port', 'method', 'password']);
     expect(body).toMatchObject({ server: '10.0.0.2', server_port: 8388, method: 'chacha20-ietf-poly1305' });
 
+    // Without node: the first Outline can read IN THIS USER'S ORDER. The order
+    // is a rendezvous hash on (user, node), so which node that is changes from
+    // user to user and is read off the subscription itself, not assumed.
+    const eps = JSON.parse(
+      (await app.inject({ method: 'GET', url: `/sub/${user.subscriptionToken}?format=json` })).body,
+    ).endpoints as Array<{ protocol: string; method?: string; host: string }>;
+    const firstAead = eps.find((e) => e.protocol === 'shadowsocks' && e.method === 'chacha20-ietf-poly1305')!;
     const first = JSON.parse((await get('')).body);
-    expect(first).toMatchObject({ server: '10.0.0.1', method: 'chacha20-ietf-poly1305' });
+    expect(first).toMatchObject({ server: firstAead.host, method: 'chacha20-ietf-poly1305' });
 
     expect((await get(node('eu-3'))).body).toBe('');
     expect((await get('&node=nowhere')).body).toBe('');
