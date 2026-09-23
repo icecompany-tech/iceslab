@@ -8,184 +8,112 @@ import (
 	"testing"
 )
 
-// Which xray a new node installs, pinned.
+// How xray gets onto a node: one script, bootstrap-xray.sh, for a fresh install
+// (the xray and the shadowsocks protocol) and for moving a live node.
 //
-// The INSTALLER was pinned to a commit; the CORE it downloads was not. Both
-// call sites ran `bash "$XR_TMP" install`, which takes the latest release on
-// the day the node happens to be built, so two nodes installed a week apart
-// run different cores and the panel has no way to know. sing-box and the
-// AmneziaWG module were closed the same way on 2026-09-21; xray was the last
-// one left open.
+// WHICH xray, and the ceiling it must stay under (26.9.8 and later refuse every
+// leg a sing-box chain dials, REALITY wants X25519MLKEM768), live in the version
+// manifest, packages/shared/src/core-versions.ts, and reach the script as a
+// generated block; apps/panel-backend/src/lib/util/core-pins.test.ts holds the
+// block to the manifest. This test used to keep its own copy of the pin and of
+// the ceiling, a second place to forget. What is left here is what the manifest
+// cannot see: that the script USES the pin and checks what it installs, and that
+// nothing else installs xray.
 //
-// v26.3.27 is what the four stand nodes already run, confirmed 2026-09-11, so
-// this default changes nothing about the fleet. What it removes is the drift.
+// ⚠ Reads files outside the package: `go test -count=1` locally.
 const (
-	pinnedXrayVersion = "v26.3.27"
-	installerRelPath  = "../../../../../scripts/install-iceslab-node.sh"
+	installerRelPath = "../../../../../scripts/install-iceslab-node.sh"
+	bootstrapRelPath = "../../../scripts/bootstrap-xray.sh"
 )
 
-func readInstaller(t *testing.T) string {
+func readFile(t *testing.T, rel string) string {
 	t.Helper()
-	blob, err := os.ReadFile(filepath.Clean(installerRelPath))
+	blob, err := os.ReadFile(filepath.Clean(rel))
 	if err != nil {
-		t.Fatalf("read %s: %v", installerRelPath, err)
+		t.Fatalf("read %s: %v", rel, err)
 	}
 	return string(blob)
 }
 
-func TestInstallerPinsXrayVersion(t *testing.T) {
-	script := readInstaller(t)
-
-	if !strings.Contains(script, `XRAY_VERSION=${XRAY_VERSION:-`+pinnedXrayVersion+`}`) {
-		t.Errorf("XRAY_VERSION is not pinned to %s.\n"+
-			"If the pin moved on purpose, move the constant here too. Check the stand\n"+
-			"first: a core older than v25.9.5 rejects the vlessRoute auth the cascade\n"+
-			"entry needs, so the pin is not a free-floating number.", pinnedXrayVersion)
+func TestBootstrapDefaultsToTheManifestPin(t *testing.T) {
+	script := readFile(t, bootstrapRelPath)
+	if !strings.Contains(script, "# >>> core-pins:xray >>>") {
+		t.Fatal("bootstrap-xray.sh carries no generated xray block")
 	}
-
 	// An empty default would mean "latest", which is the thing being closed.
-	// It was a real risk and not a theoretical one: HYSTERIA_VERSION next door
-	// sat empty until phase 6 pinned it too, and copying that shape here would
-	// undo this.
-	if regexp.MustCompile(`XRAY_VERSION=\$\{XRAY_VERSION:-\}`).MatchString(script) {
-		t.Error("XRAY_VERSION defaults to empty, which the installer reads as latest")
+	if !strings.Contains(script, `XRAY_VERSION="${XRAY_VERSION:-$XRAY_PINNED_VERSION}"`) {
+		t.Error("XRAY_VERSION does not default to the pin from the generated block")
 	}
-}
-
-// xrayCeiling is the highest xray the fleet may run, and it is a HARD line.
-//
-// Established 2026-09-23 from source (docs/plan/recon-2026-09-23.md, section
-// 8): XTLS/REALITY 8cdf7bf, shipped in xray 26.9.8 (xrayMLKEMRelease), makes
-// the server refuse a ClientHello without X25519MLKEM768 ahead of X25519. Our
-// inter-hop legs dial from sing-box, which pins metacubex/utls v1.8.7, where
-// HelloFirefox_Auto is HelloFirefox_120 with only X25519 and CurveP256 in its
-// key shares, and HelloChrome_Auto sends no MLKEM either (SagerNet/sing-box
-// #4520). This is not "untested": the dialler provably cannot pass.
-const (
-	xrayCeiling      = "v26.7.28"
-	xrayMLKEMRelease = "v26.9.8"
-	// The marker a bump past the ceiling has to flip, beside the pin in the
-	// installer, with the measurement that justifies it written next to it.
-	mlkemVerifiedMarker = "# reality-mlkem-verified: yes"
-)
-
-// TestXrayPinStaysBelowTheRealityMLKEMChange refuses a pin above the ceiling
-// unless the installer says, in so many words, that MLKEM has been verified.
-//
-// Separate from the exact pin on purpose: a bump of the exact pin is caught
-// anyway, but this is the test that says WHY the next bump must not cross the
-// line, in the place the next person bumping it will be looking.
-func TestXrayPinStaysBelowTheRealityMLKEMChange(t *testing.T) {
-	if compareVersions(pinnedXrayVersion, xrayCeiling) <= 0 {
-		return
-	}
-	if strings.Contains(readInstaller(t), mlkemVerifiedMarker) {
-		return
-	}
-	t.Fatalf("xray is pinned to %s, above the hard ceiling %s.\n"+
-		"XTLS/REALITY 8cdf7bf (xray %s and later) refuses a ClientHello without\n"+
-		"X25519MLKEM768, and our legs dial from sing-box, whose utls (metacubex\n"+
-		"v1.8.7) sends none for firefox or chrome: sing-box #4520. Every leg into\n"+
-		"such a node fails with every config loading. Moving past the ceiling needs\n"+
-		"the dialler fixed and MEASURED, then %q beside the pin in\n"+
-		"install-iceslab-node.sh with that measurement written next to it.",
-		pinnedXrayVersion, xrayCeiling, xrayMLKEMRelease, mlkemVerifiedMarker)
-}
-
-// TestTheMLKEMMarkerIsHonest keeps the marker honest in the other direction.
-// It must exist, so a bump has something to flip, and it may say yes only when
-// the pin actually crosses the ceiling: a "yes" under the ceiling verifies
-// nothing, and left there by copy-paste it would open the line for the next
-// bump without anyone having measured it.
-func TestTheMLKEMMarkerIsHonest(t *testing.T) {
-	script := readInstaller(t)
-	yes := strings.Contains(script, mlkemVerifiedMarker)
-	no := strings.Contains(script, "# reality-mlkem-verified: no")
-	if yes == no {
-		t.Fatal("beside the xray pin there must be exactly one marker, " +
-			"`# reality-mlkem-verified: no` or `: yes`")
-	}
-	if yes && compareVersions(pinnedXrayVersion, xrayCeiling) <= 0 {
-		t.Errorf("the installer says MLKEM is verified while xray is pinned to %s, "+
-			"below the ceiling: nothing was verified, set it back to no", pinnedXrayVersion)
-	}
-}
-
-// compareVersions compares dotted versions with an optional leading v:
-// -1, 0 or 1. Missing or non-numeric parts count as 0.
-func compareVersions(a, b string) int {
-	parse := func(s string) []int {
-		parts := strings.Split(strings.TrimPrefix(s, "v"), ".")
-		out := make([]int, len(parts))
-		for i, p := range parts {
-			n := 0
-			for _, c := range p {
-				if c < '0' || c > '9' {
-					break
-				}
-				n = n*10 + int(c-'0')
-			}
-			out[i] = n
-		}
-		return out
-	}
-	x, y := parse(a), parse(b)
-	for i := 0; i < len(x) || i < len(y); i++ {
-		var p, q int
-		if i < len(x) {
-			p = x[i]
-		}
-		if i < len(y) {
-			q = y[i]
-		}
-		if p != q {
-			if p < q {
-				return -1
-			}
-			return 1
-		}
-	}
-	return 0
-}
-
-func TestCompareVersionsOrdersTheReleasesThatMatter(t *testing.T) {
-	// The comparison the ceiling rests on, pinned with the actual releases in
-	// question: string order would put "26.10.0" below "26.9.8".
-	cases := []struct {
-		a, b string
-		want int
-	}{
-		{"v26.3.27", "v26.7.28", -1},
-		{"v26.7.28", "v26.7.28", 0},
-		{"v26.9.8", "v26.7.28", 1},
-		{"v26.10.0", "v26.9.8", 1},
-		{"26.7.28", "v26.7.28", 0},
-	}
-	for _, c := range cases {
-		if got := compareVersions(c.a, c.b); got != c.want {
-			t.Errorf("compareVersions(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+	for _, pair := range []string{
+		"pair_or_fail XRAY_VERSION XRAY_SHA256",
+		"pair_or_fail XRAY_INSTALLER_REF XRAY_INSTALLER_SHA",
+	} {
+		if !strings.Contains(script, pair) {
+			t.Errorf("an override without its checksum is not refused: %q is gone", pair)
 		}
 	}
 }
 
-// TestInstallerPassesTheVersionAtEveryCallSite is the half that actually holds.
-//
-// A pin sitting in a variable nothing reads is decoration. There are TWO sites,
-// because shadowsocks runs inside xray-core and installs it separately, and a
-// fix applied to one of them leaves half the fleet unpinned in a way nothing
-// else would show.
-func TestInstallerPassesTheVersionAtEveryCallSite(t *testing.T) {
-	script := readInstaller(t)
-
-	bare := regexp.MustCompile(`(?m)^\s*bash "\$XR_TMP" install\s*$`)
-	if bare.MatchString(script) {
-		t.Error("an xray install still runs without --version; that call takes whatever " +
-			"release is latest on the day the node is built")
+// Both files are checked: the release zip against the manifest's sha256, and
+// upstream's install-release.sh against the sha256 of the pinned commit. Then
+// the checked zip goes in through --local; left to itself, `install --version`
+// fetches whatever that version resolves to.
+func TestBootstrapInstallsOnlyCheckedFiles(t *testing.T) {
+	script := readFile(t, bootstrapRelPath)
+	for _, want := range []string{
+		`ZIP_NAME="${XRAY_PINNED_FILE[$XR_ARCH]:-}"`,
+		`[[ "$GOT_SHA" == "$WANT_SHA" ]]`,
+		`[[ "$GOT_SHA" == "$XRAY_INSTALLER_SHA" ]]`,
+		`install --local "$TMP/xray.zip" </dev/null`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("bootstrap-xray.sh lost %q", want)
+		}
 	}
+	if regexp.MustCompile(`install --version`).MatchString(script) {
+		t.Error("bootstrap-xray.sh lets upstream download xray unchecked")
+	}
+	if !regexp.MustCompile(`XRAY_INSTALLER_PINNED_SHA="[0-9a-f]{64}"`).MatchString(script) {
+		t.Error("the pinned install-release.sh has no sha256")
+	}
+}
 
-	pinned := strings.Count(script, `bash "$XR_TMP" install --version "$XRAY_VERSION"`)
-	if pinned != 2 {
-		t.Errorf("expected both xray install sites (the xray protocol and shadowsocks, "+
-			"which runs inside xray-core) to pass the pinned version, found %d", pinned)
+// On a live node upstream's script reads the agent's running xray as its own
+// service and starts xray.service again at the end, on the config the agent's
+// xray holds the ports of. The agent is stopped for the install and brought
+// back by the trap, whatever happens; and the script's exit status is not
+// trusted, the binary is asked.
+func TestBootstrapIsSafeOnALiveNode(t *testing.T) {
+	script := readFile(t, bootstrapRelPath)
+	for _, want := range []string{
+		"systemctl stop iceslab-node",
+		"trap cleanup EXIT",
+		"systemctl start iceslab-node",
+		"systemctl disable xray.service",
+		`[[ "$VERSION" == "$XRAY_VERSION" ]]`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("bootstrap-xray.sh lost %q", want)
+		}
+	}
+	// The node's identity is not the bootstrap's to touch.
+	if strings.Contains(script, "/etc/iceslab-node") && !strings.Contains(script, "nothing under /etc/iceslab-node") {
+		t.Error("bootstrap-xray.sh reaches into /etc/iceslab-node")
+	}
+}
+
+// One road: both sites in the main installer (the xray protocol, and
+// shadowsocks, which runs inside xray-core) chain the bootstrap, and nothing in
+// the installer installs xray by itself any more.
+func TestInstallerChainsTheBootstrapAtBothSites(t *testing.T) {
+	script := readFile(t, installerRelPath)
+	if n := strings.Count(script, `bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"`); n != 2 {
+		t.Errorf("expected both xray sites to chain bootstrap-xray.sh, found %d", n)
+	}
+	if strings.Contains(script, "install-release.sh") && regexp.MustCompile(`bash "\$XR_TMP"`).MatchString(script) {
+		t.Error("the installer still runs install-release.sh itself")
+	}
+	if strings.Contains(script, "core-pins:xray") {
+		t.Error("the installer carries its own xray pin block; the bootstrap is the one place")
 	}
 }

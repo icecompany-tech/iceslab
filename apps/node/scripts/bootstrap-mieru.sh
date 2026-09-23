@@ -26,18 +26,32 @@ INSTALL_DIR=/usr/local/bin
 #
 # Same story as mtg: this used to take GitHub's `latest` and skip any node that
 # already had a mita, so the fleet drifted by install date. Pinned, and the
-# package is checked against the sha256 the release published (GitHub asset
-# digest, recomputed by hand on 2026-09-23). Upstream ships no armv7 package.
+# package is checked against the sha256 the release published. The pin, the
+# file per arch and its sha256 come from the version manifest
+# (packages/shared/src/core-versions.ts), in the block below. Upstream ships no
+# armv7 package, which is why that entry is empty.
+# >>> core-pins:mita >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
 MIERU_PINNED_VERSION="3.37.0"
+MIERU_PINNED_TAG="v3.37.0"
+declare -A MIERU_PINNED_FILE=(
+  [amd64]="mita_3.37.0_amd64.deb"
+  [arm64]="mita_3.37.0_arm64.deb"
+  [armv7]=""
+)
 declare -A MIERU_PINNED_SHA256=(
   [amd64]="22248dc1568280a8b1bdaf55051a59b3d64ac1edb4ec4918e3925088f78a35de"
   [arm64]="d82a7d3c76e8dad42c2736955c5c08ad7ad8f99cafefe2ef4cd1f497ec8d3caa"
+  [armv7]=""
 )
+# <<< core-pins:mita <<<
 
 if [[ -n "${MIERU_VERSION:-}" && -z "${MIERU_SHA256:-}" ]] || [[ -z "${MIERU_VERSION:-}" && -n "${MIERU_SHA256:-}" ]]; then
   fail "MIERU_VERSION and MIERU_SHA256 go together: a version without its checksum is not installed"
 fi
 MIERU_VERSION="${MIERU_VERSION:-$MIERU_PINNED_VERSION}"
+MIERU_VERSION="${MIERU_VERSION#v}"
 
 # `mita version` prints the bare version, "3.37.0".
 version_of() {
@@ -64,10 +78,13 @@ esac
 log "Detected arch: $ARCH → $M_ARCH"
 WANT_SHA="${MIERU_SHA256:-${MIERU_PINNED_SHA256[$M_ARCH]:-}}"
 [[ -n "$WANT_SHA" ]] || fail "no pinned checksum for mita $MIERU_VERSION on $M_ARCH"
+# The pinned file for this arch, with the version swapped in for an override.
+DEB="${MIERU_PINNED_FILE[$M_ARCH]:-}"
+[[ -n "$DEB" ]] || fail "upstream ships no mita for $M_ARCH"
+DEB="${DEB//"$MIERU_PINNED_VERSION"/$MIERU_VERSION}"
 
 # ───── 3. Download and check the .deb (mita ships as a Debian package) ─────
-DEB="mita_${MIERU_VERSION}_${M_ARCH}.deb"
-DOWNLOAD_URL="https://github.com/enfein/mieru/releases/download/v${MIERU_VERSION}/${DEB}"
+DOWNLOAD_URL="https://github.com/enfein/mieru/releases/download/${MIERU_PINNED_TAG//"$MIERU_PINNED_VERSION"/$MIERU_VERSION}/${DEB}"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT

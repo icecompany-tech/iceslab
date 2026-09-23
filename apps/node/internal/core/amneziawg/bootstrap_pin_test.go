@@ -19,15 +19,16 @@ import (
 // fleet is on 1.x (ru-01 and se-01: module 1.0.20260611, tools
 // v1.0.20260618-2), so that pin would have installed the OTHER PROTOCOL
 // GENERATION on the next node built, and every client older than 4.8.12.9
-// would have stopped connecting to it. These values are the fleet's, read off
-// docs/qa/field-test/00-stand.md and verified against the GitHub API.
-const (
-	pinnedModuleTag  = "v1.0.20260611"
-	pinnedModuleSHA  = "2a6e1a02ac024f54a23e18f894a279b7f870b8fb"
-	pinnedToolsTag   = "v1.0.20260618-2"
-	pinnedToolsSHA   = "61e741780e8465a67a7d7fb6cffe14a8a15d624a"
-	bootstrapRelPath = "../../../scripts/bootstrap-amneziawg.sh"
-)
+// would have stopped connecting to it.
+//
+// The tags and commits are the version manifest's now
+// (packages/shared/src/core-versions.ts), which also marks every other
+// generation known-bad and refuses a pin inside that range; the script carries
+// them as generated blocks, held to the manifest by core-pins.test.ts. The
+// generation check below stays as a second lock on the script itself.
+//
+// ⚠ Reads a file outside the package: `go test -count=1` locally.
+const bootstrapRelPath = "../../../scripts/bootstrap-amneziawg.sh"
 
 func readBootstrap(t *testing.T) string {
 	t.Helper()
@@ -49,8 +50,8 @@ func readBootstrap(t *testing.T) string {
 // exactly how it arrived once: see the constants above.
 func TestBootstrapPinsTheProtocolGeneration(t *testing.T) {
 	script := readBootstrap(t)
-	for _, name := range []string{"AWG_MODULE_TAG", "AWG_TOOLS_TAG"} {
-		m := regexp.MustCompile(name + `="\$\{` + name + `:-([^}]+)\}"`).FindStringSubmatch(script)
+	for _, name := range []string{"AWG_MODULE_PINNED_TAG", "AWG_TOOLS_PINNED_TAG"} {
+		m := regexp.MustCompile(`(?m)^` + name + `="([^"]+)"$`).FindStringSubmatch(script)
 		if m == nil {
 			t.Fatalf("%s is not pinned at all, or the shape of the line changed; "+
 				"this test is checking nothing. Fix the pattern, do not delete the test.", name)
@@ -65,20 +66,17 @@ func TestBootstrapPinsTheProtocolGeneration(t *testing.T) {
 	}
 }
 
-func TestBootstrapPinsBothRefs(t *testing.T) {
+// The refs the clones use default to the generated block, both halves.
+func TestBootstrapDefaultsBothRefsToTheManifest(t *testing.T) {
 	script := readBootstrap(t)
-	for _, want := range []struct{ name, value string }{
-		{"AWG_MODULE_TAG", pinnedModuleTag},
-		{"AWG_MODULE_SHA", pinnedModuleSHA},
-		{"AWG_TOOLS_TAG", pinnedToolsTag},
-		{"AWG_TOOLS_SHA", pinnedToolsSHA},
+	for _, want := range []struct{ name, pinned string }{
+		{"AWG_MODULE_TAG", "AWG_MODULE_PINNED_TAG"},
+		{"AWG_MODULE_SHA", "AWG_MODULE_PINNED_COMMIT"},
+		{"AWG_TOOLS_TAG", "AWG_TOOLS_PINNED_TAG"},
+		{"AWG_TOOLS_SHA", "AWG_TOOLS_PINNED_COMMIT"},
 	} {
-		if !strings.Contains(script, want.name+`="${`+want.name+`:-`+want.value+`}"`) {
-			t.Errorf("%s is not pinned to %s.\n"+
-				"If the pin moved on purpose, move the constant here too, and read the\n"+
-				"tag first: the leading v1 / v3 is the AmneziaWG PROTOCOL generation, and\n"+
-				"changing it re-issues every config already handed to a person.",
-				want.name, want.value)
+		if !strings.Contains(script, want.name+`="${`+want.name+`:-$`+want.pinned+`}"`) {
+			t.Errorf("%s does not default to %s from the generated block", want.name, want.pinned)
 		}
 	}
 }

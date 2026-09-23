@@ -244,56 +244,74 @@ ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.0}
 # upstream releases.
 HYSTERIA_INSTALLER_REF=${HYSTERIA_INSTALLER_REF:-app/v2.9.1}
 HYSTERIA_INSTALLER_SHA=${HYSTERIA_INSTALLER_SHA:-}
-# The installer SCRIPT is pinned above; the BINARY it installs was not, until
-# phase 6. This line used to default to empty, which upstream's install_server.sh
-# reads as "latest", so hysteria was the last engine a node took from whatever
-# GitHub answered on the day it was built (xray and sing-box were pinned first).
-#
-# v2.12.3 is not a guess: it is the release the phase-6 hand-off was MEASURED
-# against on 2026-09-23 (a socks5 outbound with no acl carries every user to the
-# chain, because the first outbound in the array is the default). The same value
-# is pinned in apps/node/scripts/bootstrap-hysteria.sh, the path used when a core
-# is added to a node later, and one Go test holds both files to one constant, so
-# they cannot drift apart. Moving it is a change in the repository with that
-# measurement run again.
-HYSTERIA_VERSION=${HYSTERIA_VERSION:-v2.12.3}   # passed as --version to upstream's script
+# The installer SCRIPT is pinned above; the BINARY it installs is pinned by the
+# version manifest (packages/shared/src/core-versions.ts), written into the
+# block below. We download that binary ourselves, check it against the sha256
+# upstream published, and hand the checked file to install_server.sh with
+# --local: left to itself the script downloads whatever --version names and
+# checks nothing. Why this release is the pin is written in the manifest.
+# >>> core-pins:hysteria >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
+HYSTERIA_PINNED_VERSION="2.12.3"
+HYSTERIA_PINNED_TAG="app/v2.12.3"
+declare -A HYSTERIA_PINNED_FILE=(
+  [amd64]="hysteria-linux-amd64"
+  [arm64]="hysteria-linux-arm64"
+  [armv7]="hysteria-linux-arm"
+)
+declare -A HYSTERIA_PINNED_SHA256=(
+  [amd64]="8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e"
+  [arm64]="c8dc653c3ba0a28d29a26b8fa52d2086f27c0927afddce95c09965e7174e78b0"
+  [armv7]="cc4bc596c2db473dd7ec1bbcc3cd10e0cb60302759facd95e0be73bc8751e110"
+)
+# <<< core-pins:hysteria <<<
 
-# Xray-install: XTLS/Xray-install publishes no tags/releases, only a
-# `main` branch. We pin to a specific commit SHA so a hostile commit to
-# main doesn't auto-deploy. Bump by reading `git rev-parse main` on the
-# upstream repo and updating both this default and SECURITY.md. The
-# `pinned_fetch` SHA-256 knob (XRAY_INSTALLER_SHA) is the second line of
-# defence; production operators should set it.
-XRAY_INSTALLER_REF=${XRAY_INSTALLER_REF:-e741a4f56d368afbb9e5be3361b40c4552d3710d}
-XRAY_INSTALLER_SHA=${XRAY_INSTALLER_SHA:-}
-# The installer is pinned; the CORE it installs was not. Without this the
-# script took whatever xray was latest on the day the node was built, so two
-# nodes installed a week apart ran different cores and the panel had no way to
-# know. That is the same hole sing-box and the AmneziaWG module had until they
-# were pinned, and xray was the last one left.
-#
-# v26.3.27 is what the four stand nodes run, confirmed 2026-09-11, so this
-# default changes nothing about the fleet and stops it drifting further.
-# Not empty-by-default, and never to be: an empty value here means "latest",
-# which is exactly what is being closed (HYSTERIA_VERSION above used to be the
-# empty one, and was the last engine to be pinned). Moving to a newer core is
-# its own decision, made by bumping this line deliberately.
-#
-# ⚠ HARD CEILING: NOT ABOVE v26.7.28. Established 2026-09-23 from source, not
-# from a changelog (docs/plan/recon-2026-09-23.md, section 8):
-#   - XTLS/REALITY 8cdf7bf, shipped in xray 26.9.8, makes the SERVER refuse a
-#     ClientHello that does not offer X25519MLKEM768 ahead of X25519;
-#   - our inter-hop legs dial from sing-box, which pins metacubex/utls v1.8.7,
-#     and there HelloFirefox_Auto is HelloFirefox_120 with only X25519 and
-#     CurveP256 in its key shares (u_parrots.go). HelloChrome_Auto sends no
-#     MLKEM either. No fix upstream: SagerNet/sing-box #4520.
-# So a node on xray 26.9.8 or newer refuses every leg a sing-box chain dials
-# into it, with every config loading cleanly. This is not "until measured": the
-# dialler provably cannot pass. The marker below is what a bump past the ceiling
-# must flip, and only with the measurement that justifies it written beside it;
-# apps/node/internal/core/xray/installer_pin_test.go reads both.
-# reality-mlkem-verified: no
-XRAY_VERSION=${XRAY_VERSION:-v26.3.27}
+# Overrides go in pairs: a version nobody checked has no checksum. The same
+# rule as the bootstrap scripts.
+if [[ -n "${HYSTERIA_VERSION:-}" && -z "${HYSTERIA_SHA256:-}" ]] || [[ -z "${HYSTERIA_VERSION:-}" && -n "${HYSTERIA_SHA256:-}" ]]; then
+  fail "HYSTERIA_VERSION and HYSTERIA_SHA256 go together: a version without its checksum is not installed"
+fi
+HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"
+HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
+
+# fetch_hysteria <out-path>
+# Downloads the wanted hysteria for this machine and refuses it unless it
+# matches the sha256: the pinned one from the block above, or HYSTERIA_SHA256
+# with an override. Redirects are followed (GitHub hands release assets out from
+# another host) but only over https; the checksum is what makes the file
+# trustworthy, not the route it took.
+fetch_hysteria() {
+  local out="$1" arch file tag sha url got
+  case "$(uname -m)" in
+    x86_64|amd64)  arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    armv7l)        arch=armv7 ;;
+    *)             fail "unsupported architecture: $(uname -m)" ;;
+  esac
+  file="${HYSTERIA_PINNED_FILE[$arch]:-}"
+  [[ -n "$file" ]] || fail "upstream ships no hysteria for $arch"
+  tag="${HYSTERIA_PINNED_TAG//"$HYSTERIA_PINNED_VERSION"/$HYSTERIA_VERSION}"
+  sha="${HYSTERIA_SHA256:-${HYSTERIA_PINNED_SHA256[$arch]:-}}"
+  [[ -n "$sha" ]] || fail "no pinned checksum for hysteria $HYSTERIA_VERSION on $arch"
+  url="https://github.com/apernet/hysteria/releases/download/${tag//\//%2F}/${file}"
+  log "Downloading $url"
+  curl --proto '=https' --proto-redir '=https' -fsSL "$url" -o "$out" \
+    || fail "download failed: $url"
+  got=$(sha256sum "$out" | awk '{print $1}')
+  if [[ "$got" != "$sha" ]]; then
+    rm -f "$out"
+    fail "sha256 mismatch for $file (expected $sha, got $got)"
+  fi
+  log "sha256 verified for $file"
+}
+
+# xray is installed by apps/node/scripts/bootstrap-xray.sh, for the xray and the
+# shadowsocks protocol alike: its pin, the pinned XTLS/Xray-install commit and
+# both checksums live there, and the panel's update command runs the same
+# script on a live node. XRAY_VERSION/XRAY_SHA256 and
+# XRAY_INSTALLER_REF/XRAY_INSTALLER_SHA set here reach it through the
+# environment.
 
 # pinned_fetch <url> <out-path> [<expected-sha256>]
 # Fetches a URL over HTTPS with no redirects, optionally verifying the
@@ -867,12 +885,12 @@ case "$PROTOCOL" in
         "https://raw.githubusercontent.com/apernet/hysteria/${HYSTERIA_INSTALLER_REF}/scripts/install_server.sh" \
         "$HY_TMP" \
         "$HYSTERIA_INSTALLER_SHA"
-      if [[ -n "$HYSTERIA_VERSION" ]]; then
-        bash "$HY_TMP" --version "$HYSTERIA_VERSION"
-      else
-        bash "$HY_TMP"
-      fi
-      rm -f "$HY_TMP"
+      HY_BIN=$(mktemp)
+      fetch_hysteria "$HY_BIN"
+      # --local installs the file we checked; upstream's script still lays
+      # down its user, config and units around it.
+      bash "$HY_TMP" --local "$HY_BIN"
+      rm -f "$HY_TMP" "$HY_BIN"
     else
       log "hysteria already present: $(hysteria version | head -1)"
     fi
@@ -880,28 +898,10 @@ case "$PROTOCOL" in
     PROTO_CONFIG=/etc/hysteria/config.yaml
     ;;
   xray)
-    if ! command -v xray >/dev/null; then
-      log "Installing xray $XRAY_VERSION via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
-      XR_TMP=$(mktemp)
-      pinned_fetch \
-        "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
-        "$XR_TMP" \
-        "$XRAY_INSTALLER_SHA"
-      # XTLS/Xray-install's install-release.sh takes the operation as its
-      # first positional arg ('install', 'install-geodata', 'remove', etc).
-      # An earlier copy of this line had `@ install`; the stray `@` made
-      # the installer print "unknown option -- -" and abort. Pass the
-      # operation directly.
-      bash "$XR_TMP" install --version "$XRAY_VERSION"
-      rm -f "$XR_TMP"
-    else
-      log "xray already present: $(xray version | head -1)"
-    fi
-    # XTLS installer creates its own xray.service that conflicts with our
-    # node-agent's subprocess management. Disable it: iceslab-node owns xray.
-    systemctl stop xray.service  >/dev/null 2>&1 || true
-    systemctl disable xray.service >/dev/null 2>&1 || true
-    log "XTLS xray.service disabled; iceslab-node manages xray directly"
+    # Installs the pinned, checked xray, or moves an existing one onto it, and
+    # disables upstream's xray.service: iceslab-node owns xray.
+    log "Chaining bootstrap-xray.sh"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"
     PROTO_BINARY=$(command -v xray)
     PROTO_CONFIG=/usr/local/etc/xray/config.json
     ;;
@@ -922,26 +922,9 @@ case "$PROTOCOL" in
     # Reuse the xray install path; the SS adapter on the node-agent shells out
     # to its own xray-api inbound on 127.0.0.1:8081 (one above the VLESS
     # adapter's :8080 to avoid collision when both adapters live on one node).
-    if ! command -v xray >/dev/null; then
-      log "Installing xray $XRAY_VERSION (SS2022 runs inside xray-core) via pinned XTLS/Xray-install@$XRAY_INSTALLER_REF"
-      XR_TMP=$(mktemp)
-      pinned_fetch \
-        "https://raw.githubusercontent.com/XTLS/Xray-install/${XRAY_INSTALLER_REF}/install-release.sh" \
-        "$XR_TMP" \
-        "$XRAY_INSTALLER_SHA"
-      # XTLS/Xray-install's install-release.sh takes the operation as its
-      # first positional arg ('install', 'install-geodata', 'remove', etc).
-      # An earlier copy of this line had `@ install`; the stray `@` made
-      # the installer print "unknown option -- -" and abort. Pass the
-      # operation directly.
-      bash "$XR_TMP" install --version "$XRAY_VERSION"
-      rm -f "$XR_TMP"
-    else
-      log "xray already present: $(xray version | head -1)"
-    fi
-    systemctl stop xray.service  >/dev/null 2>&1 || true
-    systemctl disable xray.service >/dev/null 2>&1 || true
-    log "XTLS xray.service disabled; iceslab-node manages xray directly"
+    # Same script as the xray protocol: one road for xray onto a node.
+    log "Chaining bootstrap-xray.sh (SS2022 runs inside xray-core)"
+    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"
     PROTO_BINARY=$(command -v xray)
     PROTO_CONFIG=/etc/xray/shadowsocks.json
     ;;

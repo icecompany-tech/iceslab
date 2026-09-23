@@ -221,6 +221,9 @@ jobs:
             [ "$attempt" = 3 ] && exit 1
             sleep $(( attempt * 5 ))
           done
+          # The manifest's sha256 (packages/shared/src/core-versions.ts);
+          # core-pins.test.ts holds this line and the URL to it.
+          echo "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae  /tmp/xray.zip" | sha256sum -c -
           unzip -o /tmp/xray.zip xray -d /tmp/xray-bin
           chmod +x /tmp/xray-bin/xray
           echo "XRAY_BIN=/tmp/xray-bin/xray" >> "$GITHUB_ENV"
@@ -231,9 +234,9 @@ jobs:
       # PANEL renders, and structure tests cannot answer the only question that
       # matters on a node, will the engine start. `sing-box check` can.
       #
-      # Same version the node installs (bootstrap-singbox.sh pins v1.13.14) and
-      # the same tarball name, so CI validates against the build the fleet
-      # actually runs rather than against a newer parser. Bump both together.
+      # Same release, tarball and sha256 the node installs (the version
+      # manifest), so CI validates against the build the fleet actually runs
+      # rather than against a newer parser. core-pins.test.ts holds them equal.
       #
       # Without SINGBOX_BIN those tests skip themselves, exactly like the xray
       # ones, so a laptop with no sing-box still runs the suite.
@@ -248,6 +251,7 @@ jobs:
             [ "$attempt" = 3 ] && exit 1
             sleep $(( attempt * 5 ))
           done
+          echo "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697  /tmp/sing-box.tar.gz" | sha256sum -c -
           tar -xzf /tmp/sing-box.tar.gz -C /tmp
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
@@ -428,9 +432,9 @@ jobs:
       # renders.
       #
       # hysteria has no `check`, so the tests START it and read the log for
-      # "server up and running" or FATAL. Same version both installers pin
-      # (bootstrap-hysteria.sh and install-iceslab-node.sh); a Go test holds this
-      # line to the same constant, so the three cannot drift apart. Without
+      # "server up and running" or FATAL. Same release and sha256 both installers
+      # pin (the version manifest); core-pins.test.ts holds this line to it, so
+      # the three cannot drift apart. Without
       # HYSTERIA_BIN those tests skip themselves, so a laptop still runs the rest.
       - name: Install hysteria (for config-validity tests)
         run: |
@@ -443,6 +447,7 @@ jobs:
             [ "$attempt" = 3 ] && exit 1
             sleep $(( attempt * 5 ))
           done
+          echo "8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e  /tmp/hysteria" | sha256sum -c -
           chmod +x /tmp/hysteria
           echo "HYSTERIA_BIN=/tmp/hysteria" >> "$GITHUB_ENV"
           /tmp/hysteria version | grep '^Version:'

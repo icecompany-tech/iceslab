@@ -8,9 +8,9 @@
 # Idempotent, safe to rerun: a node already on the pinned version is left alone,
 # a node on any other version is moved onto it.
 #
-# Env overrides:
-#   HYSTERIA_VERSION  release to install (default: the pinned one below, or the
-#                     literal `latest` to resolve the newest release on purpose)
+# Env overrides (both or neither: a version nobody checked has no checksum):
+#   HYSTERIA_VERSION  release to install instead of the pin, e.g. 2.12.3
+#   HYSTERIA_SHA256   sha256 of hysteria-linux-<arch> of that release
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -32,13 +32,34 @@ INSTALL_PATH=/usr/local/bin/hysteria
 #
 # It matters more from phase 6 on: the agent renders the hysteria config that
 # hands users to the chain (a socks5 outbound, and no acl), and that shape was
-# MEASURED against 2.12.3 on 2026-09-23, not read from documentation. Moving the
-# pin is a change in the repository with the same measurement behind it.
+# MEASURED against the pinned release, not read from documentation. Moving the
+# pin is a change in the version manifest (packages/shared/src/core-versions.ts)
+# with the same measurement behind it; the block below is generated from it.
 #
-# Pass HYSTERIA_VERSION=latest to resolve the newest release on purpose, which
-# is a thing you may want on a throwaway box and never on the fleet.
-HYSTERIA_PINNED_VERSION="v2.12.3"
+# `latest` is gone: the binary is now checked against a sha256, and a release
+# resolved on the day has none to check against.
+# >>> core-pins:hysteria >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
+HYSTERIA_PINNED_VERSION="2.12.3"
+HYSTERIA_PINNED_TAG="app/v2.12.3"
+declare -A HYSTERIA_PINNED_FILE=(
+  [amd64]="hysteria-linux-amd64"
+  [arm64]="hysteria-linux-arm64"
+  [armv7]="hysteria-linux-arm"
+)
+declare -A HYSTERIA_PINNED_SHA256=(
+  [amd64]="8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e"
+  [arm64]="c8dc653c3ba0a28d29a26b8fa52d2086f27c0927afddce95c09965e7174e78b0"
+  [armv7]="cc4bc596c2db473dd7ec1bbcc3cd10e0cb60302759facd95e0be73bc8751e110"
+)
+# <<< core-pins:hysteria <<<
+
+if [[ -n "${HYSTERIA_VERSION:-}" && -z "${HYSTERIA_SHA256:-}" ]] || [[ -z "${HYSTERIA_VERSION:-}" && -n "${HYSTERIA_SHA256:-}" ]]; then
+  fail "HYSTERIA_VERSION and HYSTERIA_SHA256 go together: a version without its checksum is not installed"
+fi
 HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"
+HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
 
 # What a binary says it is. Read from its own `Version:` line rather than the
 # first v-number in the output: `hysteria version` also prints the versions of
@@ -53,19 +74,10 @@ version_of() {
 }
 
 # ───── 1. Already on the wanted version? ─────
-# Only the literal `latest` asks GitHub, and it is resolved before this check so
-# that "already on latest" means what it says.
-if [[ "$HYSTERIA_VERSION" == "latest" ]]; then
-  log "Resolving latest Hysteria 2 release (asked for explicitly)..."
-  HYSTERIA_VERSION=$(curl -fsSL https://api.github.com/repos/apernet/hysteria/releases/latest \
-    | grep '"tag_name"' | grep -oP '"app/v[\d.]+"' | tr -d '"' | sed 's|app/||')
-  [[ -n "$HYSTERIA_VERSION" ]] || fail "Could not resolve latest release (set HYSTERIA_VERSION)"
-fi
-[[ "$HYSTERIA_VERSION" == v* ]] || HYSTERIA_VERSION="v${HYSTERIA_VERSION}"
-
+# `hysteria version` says "v2.12.3"; the manifest keeps the bare number.
 if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
-  if [[ "$CURRENT" == "$HYSTERIA_VERSION" ]]; then
+  if [[ "${CURRENT#v}" == "$HYSTERIA_VERSION" ]]; then
     log "hysteria $CURRENT is already installed, which is the wanted version"
     echo
     log "hysteria is ready at $INSTALL_PATH"
@@ -85,22 +97,33 @@ case "$ARCH" in
   *)       fail "Unsupported architecture: $ARCH" ;;
 esac
 log "Detected arch: $ARCH → $HY_ARCH"
+WANT_SHA="${HYSTERIA_SHA256:-${HYSTERIA_PINNED_SHA256[$HY_ARCH]:-}}"
+[[ -n "$WANT_SHA" ]] || fail "no pinned checksum for hysteria $HYSTERIA_VERSION on $HY_ARCH"
+# The file name is the manifest's: upstream calls its armv7 build
+# hysteria-linux-arm, and this script used to ask for hysteria-linux-armv7,
+# which does not exist, so every armv7 install died on a 404.
+ASSET="${HYSTERIA_PINNED_FILE[$HY_ARCH]:-}"
+[[ -n "$ASSET" ]] || fail "upstream ships no hysteria for $HY_ARCH"
 
-# ───── 3. Download the wanted release ─────
+# ───── 3. Download and check the wanted release ─────
 # Releases are tagged `app/vX.Y.Z` upstream, hence the escaped slash.
-DOWNLOAD_URL="https://github.com/apernet/hysteria/releases/download/app%2F${HYSTERIA_VERSION}/hysteria-linux-${HY_ARCH}"
+TAG="${HYSTERIA_PINNED_TAG//"$HYSTERIA_PINNED_VERSION"/$HYSTERIA_VERSION}"
+DOWNLOAD_URL="https://github.com/apernet/hysteria/releases/download/${TAG//\//%2F}/${ASSET}"
 log "Downloading hysteria $HYSTERIA_VERSION from $DOWNLOAD_URL"
 
 TMP=$(mktemp)
-curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMP" || fail "download failed: $DOWNLOAD_URL"
+curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "$TMP" || { rm -f "$TMP"; fail "download failed: $DOWNLOAD_URL"; }
+GOT_SHA=$(sha256sum "$TMP" | awk '{print $1}')
+[[ "$GOT_SHA" == "$WANT_SHA" ]] \
+  || { rm -f "$TMP"; fail "checksum mismatch for $ASSET: got $GOT_SHA, expected $WANT_SHA"; }
+log "Checksum OK ($GOT_SHA)"
 chmod +x "$TMP"
 
 # ───── 4. Smoke-test ─────
 # The binary has to say it is the version we asked for, or it does not get
-# installed: a mirror or a redirect handing back something else is the failure
-# this check exists for.
+# installed.
 VERSION=$(version_of "$TMP" || true)
-[[ "$VERSION" == "$HYSTERIA_VERSION" ]] \
+[[ "${VERSION#v}" == "$HYSTERIA_VERSION" ]] \
   || { rm -f "$TMP"; fail "downloaded binary reports '${VERSION:-nothing}', expected $HYSTERIA_VERSION"; }
 log "Downloaded hysteria $VERSION, OK"
 

@@ -7,91 +7,71 @@ import (
 	"testing"
 )
 
-// The version a node runs is pinned in bootstrap-hysteria.sh, and from phase 6
-// on this adapter renders a config shape that was MEASURED against exactly that
-// release: the socks5 outbound that hands users to the chain, with no acl, is
-// taken as the default only because 2.12.3 was asked on 2026-09-23 and routed
-// through the first outbound in the array. The two have to be told about each
-// other, or the pin moves and nobody re-asks the binary.
-const pinnedHysteriaVersion = "v2.12.3"
+// Which hysteria a node runs is the version manifest's
+// (packages/shared/src/core-versions.ts): both installers and CI carry it as a
+// generated block or a checked line, and core-pins.test.ts in the backend holds
+// all three to it. From phase 6 on this adapter renders a config shape that was
+// MEASURED against that release (the socks5 outbound that hands users to the
+// chain, with no acl); the manifest's `why` says so, and moving the pin means
+// adding a release there with the measurement run again.
+//
+// What stays here is what the manifest cannot see: that the scripts USE the pin
+// and check the checksum.
+//
+// ⚠ These read files outside the package, so `go test` caches their PASS across
+// edits to those files. Run them with -count=1 locally; CI has no cache.
 
-// TestBootstrapPinsTheVersion keeps the installer honest.
-//
-// It resolved `latest` from the GitHub API, and it was the only engine installer
-// here that still did after sing-box and xray were pinned. A fleet installed
-// across two weeks ended up on two hysteria releases, and a rendered config
-// could be correct on one node and refused on the next.
-//
-// ⚠ This test reads a file outside its package, so `go test` caches its PASS
-// across edits to that file. Run it with -count=1 locally; CI has no cache.
-func TestBootstrapPinsTheVersion(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "scripts", "bootstrap-hysteria.sh")
+func readScript(t *testing.T, parts ...string) string {
+	t.Helper()
+	path := filepath.Join(parts...)
 	blob, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	script := string(blob)
+	return string(blob)
+}
 
-	want := `HYSTERIA_PINNED_VERSION="` + pinnedHysteriaVersion + `"`
-	if !strings.Contains(script, want) {
-		t.Fatalf("installer does not pin %s.\n"+
-			"If the pin moved on purpose, move pinnedHysteriaVersion here too and\n"+
-			"re-ask the new binary what the chain hand-off needs (which outbound it\n"+
-			"takes without an acl): this constant is the only thing tying the two\n"+
-			"together.", pinnedHysteriaVersion)
+func TestBootstrapInstallsThePinnedCheckedRelease(t *testing.T) {
+	script := readScript(t, "..", "..", "..", "scripts", "bootstrap-hysteria.sh")
+
+	if !strings.Contains(script, "# >>> core-pins:hysteria >>>") {
+		t.Fatal("bootstrap-hysteria.sh carries no generated hysteria block")
 	}
-
-	// The default has to BE the pin. A script that declares the pin and then
-	// resolves latest anyway is the old behaviour with a comment on top.
 	if !strings.Contains(script, `HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"`) {
-		t.Fatal("installer declares a pin but does not default to it")
+		t.Error("the script declares a pin but does not default to it")
 	}
-
-	// GitHub is asked only when somebody passes the literal `latest`. Checked by
-	// position: the API call must sit after the branch that tests for it, or a
-	// refactor could hoist it back to the top and resolve latest on every run.
-	api := strings.Index(script, "api.github.com/repos/apernet/hysteria/releases/latest")
-	branch := strings.Index(script, `if [[ "$HYSTERIA_VERSION" == "latest" ]]`)
-	if api == -1 || branch == -1 || api < branch {
-		t.Fatal("the latest-release lookup must live inside the explicit `latest` branch, and only there")
+	// GitHub is not asked what is latest: a release resolved on the day has no
+	// checksum to be held to.
+	if strings.Contains(script, "releases/latest") {
+		t.Error("bootstrap-hysteria.sh still asks GitHub for the latest release")
 	}
-}
-
-// TestCIAsksThePinnedEngine holds the third copy of the number: the binary CI
-// downloads to ask whether this adapter's render loads. A CI on another release
-// would answer for an engine no node runs, which is the same drift one step
-// removed: green in CI, refused on the fleet.
-func TestCIAsksThePinnedEngine(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "..", "..", ".github", "workflows", "ci.yml")
-	blob, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+	// The file name comes from the manifest. Built by hand it asked for
+	// hysteria-linux-armv7, which upstream does not publish (its armv7 build is
+	// hysteria-linux-arm), and every armv7 install died on a 404.
+	if !strings.Contains(script, `ASSET="${HYSTERIA_PINNED_FILE[$HY_ARCH]:-}"`) ||
+		strings.Contains(script, "hysteria-linux-${HY_ARCH}") {
+		t.Error("the download has to take its file name from the manifest block")
 	}
-	want := "releases/download/app%2F" + pinnedHysteriaVersion + "/hysteria-linux-amd64"
-	if !strings.Contains(string(blob), want) {
-		t.Fatalf("ci.yml does not install hysteria %s for the engine tests", pinnedHysteriaVersion)
+	if !strings.Contains(script, "sha256sum") || !strings.Contains(script, "checksum mismatch") {
+		t.Error("the binary is not verified against the pinned sha256")
 	}
 }
 
-// TestNodeInstallerPinsTheSameVersion holds the OTHER road to the same binary.
-//
-// A node built with --protocol hysteria never runs bootstrap-hysteria.sh: the
-// main installer fetches upstream's install_server.sh and passes it
-// HYSTERIA_VERSION, which defaulted to EMPTY, and upstream reads empty as
-// latest. So pinning only the bootstrap script would have pinned the path used
-// when a core is added later and left every freshly built hysteria node on
-// whatever GitHub said that day. Two files, one release, one constant here.
-func TestNodeInstallerPinsTheSameVersion(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "..", "..", "scripts", "install-iceslab-node.sh")
-	blob, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+// The OTHER road to the same binary: a node built with --protocol hysteria
+// never runs bootstrap-hysteria.sh. The main installer hands upstream's
+// install_server.sh a file it downloaded and checked itself, with --local;
+// given --version instead, the script downloads on its own and checks nothing.
+func TestNodeInstallerHandsUpstreamTheCheckedBinary(t *testing.T) {
+	script := readScript(t, "..", "..", "..", "..", "..", "scripts", "install-iceslab-node.sh")
+
+	if !strings.Contains(script, "# >>> core-pins:hysteria >>>") {
+		t.Fatal("install-iceslab-node.sh carries no generated hysteria block")
 	}
-	want := `HYSTERIA_VERSION=${HYSTERIA_VERSION:-` + pinnedHysteriaVersion + `}`
-	if !strings.Contains(string(blob), want) {
-		t.Fatalf("install-iceslab-node.sh does not default HYSTERIA_VERSION to %s.\n"+
-			"An empty default is read by upstream's install_server.sh as latest,\n"+
-			"which is exactly the drift the pin in bootstrap-hysteria.sh closes.",
-			pinnedHysteriaVersion)
+	if !strings.Contains(script, `fetch_hysteria "$HY_BIN"`) ||
+		!strings.Contains(script, `bash "$HY_TMP" --local "$HY_BIN"`) {
+		t.Error("the installer must download and check hysteria itself, then install it with --local")
+	}
+	if strings.Contains(script, `bash "$HY_TMP" --version`) {
+		t.Error("the installer still lets upstream's script download hysteria unchecked")
 	}
 }

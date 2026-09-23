@@ -27,18 +27,30 @@ INSTALL_PATH=/usr/local/bin/mtg
 # and to skip any node that already had some mtg, so a fleet held as many mtg
 # releases as it had install dates and nothing said which. The version is now a
 # decision in the repository, and the tarball is checked against the sha256 the
-# release published (GitHub asset digest, recomputed by hand on 2026-09-23).
+# release published. The pin, the file per arch and its sha256 come from the
+# version manifest (packages/shared/src/core-versions.ts), in the block below.
+# >>> core-pins:mtg >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
 MTG_PINNED_VERSION="2.2.8"
+MTG_PINNED_TAG="v2.2.8"
+declare -A MTG_PINNED_FILE=(
+  [amd64]="mtg-2.2.8-linux-amd64.tar.gz"
+  [arm64]="mtg-2.2.8-linux-arm64.tar.gz"
+  [armv7]="mtg-2.2.8-linux-armv7.tar.gz"
+)
 declare -A MTG_PINNED_SHA256=(
   [amd64]="7ef19d079d85f4e00d4f8334ec1f3f3c8718e3d0ed1f3109ea9a8673138a2102"
   [arm64]="562a94dd4cafcb8f179b76cfeafb76da12747c8e230bc76235bf8746cc189644"
   [armv7]="494ee3794ed00201e5333b478236ce2f434b33f2d3445f227debe9fc386bbef0"
 )
+# <<< core-pins:mtg <<<
 
 if [[ -n "${MTG_VERSION:-}" && -z "${MTG_SHA256:-}" ]] || [[ -z "${MTG_VERSION:-}" && -n "${MTG_SHA256:-}" ]]; then
   fail "MTG_VERSION and MTG_SHA256 go together: a version without its checksum is not installed"
 fi
 MTG_VERSION="${MTG_VERSION:-$MTG_PINNED_VERSION}"
+MTG_VERSION="${MTG_VERSION#v}"
 
 # What a binary says it is: `mtg --version` starts with the bare version,
 # "2.2.8 (go1.26.1: ...)". awk reads to the end so pipefail cannot kill the
@@ -68,10 +80,14 @@ esac
 log "Detected arch: $ARCH → $MTG_ARCH"
 WANT_SHA="${MTG_SHA256:-${MTG_PINNED_SHA256[$MTG_ARCH]:-}}"
 [[ -n "$WANT_SHA" ]] || fail "no pinned checksum for mtg $MTG_VERSION on $MTG_ARCH"
+# The pinned file for this arch, with the version swapped in for an override:
+# upstream's naming, arch spelling included, comes from the manifest.
+TARBALL="${MTG_PINNED_FILE[$MTG_ARCH]:-}"
+[[ -n "$TARBALL" ]] || fail "upstream ships no mtg for $MTG_ARCH"
+TARBALL="${TARBALL//"$MTG_PINNED_VERSION"/$MTG_VERSION}"
 
 # ───── 3. Download and check ─────
-TARBALL="mtg-${MTG_VERSION}-linux-${MTG_ARCH}.tar.gz"
-DOWNLOAD_URL="https://github.com/9seconds/mtg/releases/download/v${MTG_VERSION}/${TARBALL}"
+DOWNLOAD_URL="https://github.com/9seconds/mtg/releases/download/${MTG_PINNED_TAG//"$MTG_PINNED_VERSION"/$MTG_VERSION}/${TARBALL}"
 log "Downloading $DOWNLOAD_URL"
 
 TMPDIR=$(mktemp -d)

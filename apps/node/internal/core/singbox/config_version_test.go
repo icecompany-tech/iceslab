@@ -9,19 +9,21 @@ import (
 	"testing"
 )
 
-// The version a node runs is pinned in bootstrap-singbox.sh, and every config
-// this adapter renders is rendered FOR that version. The two have to be told
-// about each other, or the pin moves and nobody re-reads what we emit.
-const pinnedSingboxVersion = "v1.13.14"
+// Every config this adapter renders is rendered FOR the pinned sing-box, which
+// is the version manifest's (packages/shared/src/core-versions.ts, held to the
+// script by core-pins.test.ts in the backend). Moving it means adding a release
+// there and re-reading what renderConfig emits against that release's schema.
 
-// TestBootstrapPinsTheVersion keeps the installer honest.
+// TestBootstrapInstallsThePinnedCheckedRelease keeps the installer honest.
 //
 // It used to resolve `latest` from the GitHub API, so a fleet installed across
 // two weeks ended up on two engines and the same rendered config was correct
-// on one node and wrong on the next. 1.14 is in beta and drops compatibility
-// with older config forms, which is exactly the move `latest` would have made
-// on its own.
-func TestBootstrapPinsTheVersion(t *testing.T) {
+// on one node and wrong on the next. `latest` is gone altogether now: the
+// tarball is checked against a sha256, and a release resolved on the day has
+// none to be held to.
+//
+// ⚠ Reads a file outside the package: `go test -count=1` locally.
+func TestBootstrapInstallsThePinnedCheckedRelease(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "scripts", "bootstrap-singbox.sh")
 	blob, err := os.ReadFile(path)
 	if err != nil {
@@ -29,18 +31,20 @@ func TestBootstrapPinsTheVersion(t *testing.T) {
 	}
 	script := string(blob)
 
-	want := `SINGBOX_PINNED_VERSION="` + pinnedSingboxVersion + `"`
-	if !strings.Contains(script, want) {
-		t.Fatalf("installer does not pin %s.\n"+
-			"If the pin moved on purpose, move pinnedSingboxVersion here too and\n"+
-			"re-read what renderConfig emits against that release's schema: this\n"+
-			"constant is the only thing tying the two together.", pinnedSingboxVersion)
+	if !strings.Contains(script, "# >>> core-pins:singbox >>>") {
+		t.Fatal("bootstrap-singbox.sh carries no generated sing-box block")
 	}
-
-	// The API call stays, but only behind an explicit `latest`. A default that
-	// asks the internet what to install is the thing being fixed.
-	if !strings.Contains(script, `if [[ "$SINGBOX_VERSION" == "latest" ]]; then`) {
-		t.Error("the GitHub release lookup must be reachable only via an explicit SINGBOX_VERSION=latest")
+	if !strings.Contains(script, `SINGBOX_VERSION="${SINGBOX_VERSION:-$SINGBOX_PINNED_VERSION}"`) {
+		t.Error("the script declares a pin but does not default to it")
+	}
+	if strings.Contains(script, "releases/latest") {
+		t.Error("bootstrap-singbox.sh still asks GitHub for the latest release")
+	}
+	if !strings.Contains(script, `TARBALL="${SINGBOX_PINNED_FILE[$ARCH]:-}"`) {
+		t.Error("the download has to take its file name from the manifest block")
+	}
+	if !strings.Contains(script, "sha256sum") || !strings.Contains(script, "checksum mismatch") {
+		t.Error("the tarball is not verified against the pinned sha256")
 	}
 }
 
@@ -98,8 +102,8 @@ func TestRenderedConfigUsesNoRetiredFields(t *testing.T) {
 		for _, key := range retired {
 			re := regexp.MustCompile(`"` + key + `"\s*:`)
 			if re.Match(blob) {
-				t.Errorf("%s: config carries %q, which %s no longer accepts in that place",
-					name, key, pinnedSingboxVersion)
+				t.Errorf("%s: config carries %q, which the pinned sing-box no longer accepts in that place",
+					name, key)
 			}
 		}
 		// `block` is an outbound TYPE rather than a key, so it is checked as a

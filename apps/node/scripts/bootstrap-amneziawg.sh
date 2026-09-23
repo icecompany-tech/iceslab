@@ -68,10 +68,28 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y "linux-headers-${KERNEL_VER}" 
 # The SHA is checked after the clone because a tag can be moved and a commit
 # cannot. If upstream ever re-tags, the install fails loudly instead of
 # installing something else under a familiar name.
-AWG_MODULE_TAG="${AWG_MODULE_TAG:-v1.0.20260611}"
-AWG_MODULE_SHA="${AWG_MODULE_SHA:-2a6e1a02ac024f54a23e18f894a279b7f870b8fb}"
-AWG_TOOLS_TAG="${AWG_TOOLS_TAG:-v1.0.20260618-2}"
-AWG_TOOLS_SHA="${AWG_TOOLS_SHA:-61e741780e8465a67a7d7fb6cffe14a8a15d624a}"
+#
+# Tags and commits come from the version manifest
+# (packages/shared/src/core-versions.ts), in the blocks below; the manifest also
+# marks every other generation known-bad, so a pin cannot cross it by accident.
+# >>> core-pins:amneziawg-module >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
+AWG_MODULE_PINNED_VERSION="1.0.20260611"
+AWG_MODULE_PINNED_TAG="v1.0.20260611"
+AWG_MODULE_PINNED_COMMIT="2a6e1a02ac024f54a23e18f894a279b7f870b8fb"
+# <<< core-pins:amneziawg-module <<<
+# >>> core-pins:amneziawg-tools >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
+AWG_TOOLS_PINNED_VERSION="1.0.20260618-2"
+AWG_TOOLS_PINNED_TAG="v1.0.20260618-2"
+AWG_TOOLS_PINNED_COMMIT="61e741780e8465a67a7d7fb6cffe14a8a15d624a"
+# <<< core-pins:amneziawg-tools <<<
+AWG_MODULE_TAG="${AWG_MODULE_TAG:-$AWG_MODULE_PINNED_TAG}"
+AWG_MODULE_SHA="${AWG_MODULE_SHA:-$AWG_MODULE_PINNED_COMMIT}"
+AWG_TOOLS_TAG="${AWG_TOOLS_TAG:-$AWG_TOOLS_PINNED_TAG}"
+AWG_TOOLS_SHA="${AWG_TOOLS_SHA:-$AWG_TOOLS_PINNED_COMMIT}"
 
 # Clone one ref and refuse anything but the commit we asked for.
 clone_pinned() {

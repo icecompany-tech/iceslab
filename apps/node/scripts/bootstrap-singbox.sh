@@ -12,8 +12,9 @@
 #     later slice (shared with the hysteria/naive ACME work).
 #
 # Env overrides:
-#   SINGBOX_VERSION  release tag to install (default: the pinned one below,
-#                    or the literal `latest` to resolve the newest stable)
+#   SINGBOX_VERSION  release to install instead of the pin, e.g. 1.13.14, and
+#   SINGBOX_SHA256   sha256 of its sing-box-<version>-linux-<arch>.tar.gz: both
+#                    or neither, a version nobody checked has no checksum
 #   SINGBOX_DEST     binary path     (default /usr/local/bin/sing-box)
 #   SINGBOX_DIR      cert/config dir (default /etc/sing-box)
 #   SINGBOX_SNI      cert CN / SNI   (default www.bing.com)
@@ -30,22 +31,42 @@ SINGBOX_SNI="${SINGBOX_SNI:-www.bing.com}"
 # two different engines, and the same rendered config was then correct on one
 # node and wrong on the next, with nothing anywhere saying so.
 #
-# 1.13.14 is the stable line as of 2026-09-21. 1.14 is in beta and drops
-# compatibility with older config forms, so `latest` would have quietly moved
-# the fleet onto it.
+# Why this release is the pin is written beside it in the version manifest
+# (packages/shared/src/core-versions.ts); the block below is generated from it.
+# Moving it is a change there, with a test run behind it.
 #
-# Moving this is a change in the repository with a test run behind it. Pass
-# SINGBOX_VERSION=latest to resolve the newest stable on purpose, which is a
-# thing you may want on a throwaway box and never on the fleet.
-SINGBOX_PINNED_VERSION="v1.13.14"
-SINGBOX_VERSION="${SINGBOX_VERSION:-$SINGBOX_PINNED_VERSION}"
+# `latest` is gone: the tarball is now checked against a sha256, and a release
+# resolved on the day has none to check against.
+# >>> core-pins:singbox >>>
+# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
+# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
+SINGBOX_PINNED_VERSION="1.13.14"
+SINGBOX_PINNED_TAG="v1.13.14"
+declare -A SINGBOX_PINNED_FILE=(
+  [amd64]="sing-box-1.13.14-linux-amd64.tar.gz"
+  [arm64]="sing-box-1.13.14-linux-arm64.tar.gz"
+  [armv7]="sing-box-1.13.14-linux-armv7.tar.gz"
+)
+declare -A SINGBOX_PINNED_SHA256=(
+  [amd64]="f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697"
+  [arm64]="4742df6a4314e8ecc41736849fca6d73b8f9e91b6e8b06ee794ff17ba180579e"
+  [armv7]="e01a58d28512b1447ab6156017afdeeaa306169a95d27abc00e112599e4ae46c"
+)
+# <<< core-pins:singbox <<<
 
 log()  { printf '[bootstrap-singbox] %s\n' "$*"; }
 fail() { printf '[bootstrap-singbox] ERROR: %s\n' "$*" >&2; exit 1; }
 
+if [[ -n "${SINGBOX_VERSION:-}" && -z "${SINGBOX_SHA256:-}" ]] || [[ -z "${SINGBOX_VERSION:-}" && -n "${SINGBOX_SHA256:-}" ]]; then
+  fail "SINGBOX_VERSION and SINGBOX_SHA256 go together: a version without its checksum is not installed"
+fi
+SINGBOX_VERSION="${SINGBOX_VERSION:-$SINGBOX_PINNED_VERSION}"
+SINGBOX_VERSION="${SINGBOX_VERSION#v}"
+
 command -v curl    >/dev/null 2>&1 || fail "curl is required"
 command -v openssl >/dev/null 2>&1 || fail "openssl is required"
 command -v tar     >/dev/null 2>&1 || fail "tar is required"
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 
 # ───── host arch ─────
 case "$(uname -m)" in
@@ -55,25 +76,24 @@ case "$(uname -m)" in
   *) fail "unsupported arch: $(uname -m)" ;;
 esac
 
-# ───── resolve version ─────
-# Only the literal `latest` asks GitHub. Anything else, including the default,
-# installs exactly what it says.
-if [[ "$SINGBOX_VERSION" == "latest" ]]; then
-  log "resolving latest stable sing-box release (asked for explicitly)"
-  SINGBOX_VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest \
-    | grep -m1 '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')"
-  [[ -n "$SINGBOX_VERSION" ]] || fail "could not resolve latest version (set SINGBOX_VERSION)"
-fi
-VER="${SINGBOX_VERSION#v}"
-log "installing sing-box v${VER} (${ARCH})"
+WANT_SHA="${SINGBOX_SHA256:-${SINGBOX_PINNED_SHA256[$ARCH]:-}}"
+[[ -n "$WANT_SHA" ]] || fail "no pinned checksum for sing-box $SINGBOX_VERSION on $ARCH"
+# The pinned file for this arch, with the version swapped in for an override.
+TARBALL="${SINGBOX_PINNED_FILE[$ARCH]:-}"
+[[ -n "$TARBALL" ]] || fail "upstream ships no sing-box for $ARCH"
+TARBALL="${TARBALL//"$SINGBOX_PINNED_VERSION"/$SINGBOX_VERSION}"
+TAG="${SINGBOX_PINNED_TAG//"$SINGBOX_PINNED_VERSION"/$SINGBOX_VERSION}"
+log "installing sing-box ${SINGBOX_VERSION} (${ARCH})"
 
-# ───── download + install binary ─────
+# ───── download, check, install binary ─────
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-TARBALL="sing-box-${VER}-linux-${ARCH}.tar.gz"
-URL="https://github.com/SagerNet/sing-box/releases/download/v${VER}/${TARBALL}"
+URL="https://github.com/SagerNet/sing-box/releases/download/${TAG}/${TARBALL}"
 log "downloading ${URL}"
 curl -fsSL "$URL" -o "$TMP/sb.tar.gz" || fail "download failed: $URL"
+GOT_SHA=$(sha256sum "$TMP/sb.tar.gz" | awk '{print $1}')
+[[ "$GOT_SHA" == "$WANT_SHA" ]] || fail "checksum mismatch for $TARBALL: got $GOT_SHA, expected $WANT_SHA"
+log "checksum OK ($GOT_SHA)"
 tar -xzf "$TMP/sb.tar.gz" -C "$TMP"
 BIN="$(find "$TMP" -type f -name sing-box | head -n1)"
 [[ -n "$BIN" ]] || fail "sing-box binary not found in tarball"
