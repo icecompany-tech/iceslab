@@ -1,6 +1,7 @@
 /**
  * ISO 3166-1 alpha-2 country list, top hosting + VPN destinations.
- * Used by NodeFormModal's searchable Country picker.
+ * Used by the country pickers of the node forms (the create wizard and the
+ * node page) and by every screen that names a country by code.
  *
  * Flag emojis are the canonical Unicode regional-indicator pairs, most
  * modern OSes render them as flags; older Windows shows two-letter boxes

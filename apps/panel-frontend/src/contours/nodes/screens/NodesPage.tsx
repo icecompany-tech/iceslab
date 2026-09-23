@@ -15,7 +15,6 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,31 +32,26 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '@/lib/net/client';
-import { createBinding } from '@/lib/domain/profiles';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { geoVersionFacts } from '@/lib/domain/geoSets';
 import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
-  createNode,
   deleteNode,
   listNodes,
   listRegions,
   refreshNodeBootstrap,
-  type CreateNodeInput,
   type Node,
 } from '@/lib/domain/nodes';
 import { listCascades } from '@/lib/domain/cascades';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { NodeFormModal } from '@/contours/nodes/components/NodeFormModal';
 import { NodePayloadModal } from '@/contours/nodes/components/NodePayloadModal';
 import { NodeCard } from '@/contours/nodes/components/NodeCard';
 import { CascadesPanel } from '@/contours/nodes/components/CascadesPanel';
 import type { CascadeLayout } from '@/contours/nodes/components/CascadesView';
 import { countryFlag } from '@/lib/domain/countries';
-import { parseNodeAgentPort, pickFreeQuickDeployPort } from '@/lib/domain/ports';
 import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 
 const MONO_FAMILY = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -413,7 +407,6 @@ export function NodesPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [createOpen, { close: closeCreate }] = useDisclosure(false);
   const [payload, setPayload] = useState<{
     name: string;
     payload: string;
@@ -586,27 +579,6 @@ export function NodesPage() {
             t('pageMeta.nodeCountries', { count: fleetFacts.countries }),
           ],
   );
-
-  const createMutation = useMutation({
-    mutationFn: createNode,
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['nodes'] });
-      notifications.show({ color: 'green', message: 'Node created' });
-      // Surface the one-time payload + bootstrap token - neither is shown
-      // by the panel on subsequent reads.
-      setPayload({
-        name: data.name,
-        payload: data.payload,
-        bootstrap: data.bootstrap,
-      });
-    },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: 'Create failed',
-        message: err instanceof Error ? err.message : String(err),
-      }),
-  });
 
   const deleteMutation = useMutation({
     mutationFn: deleteNode,
@@ -1184,57 +1156,6 @@ export function NodesPage() {
       )}
         </>
       )}
-
-      <NodeFormModal
-        opened={createOpen}
-        onClose={closeCreate}
-        node={null}
-        loading={createMutation.isPending}
-        onSubmit={async (input, profileIds) => {
-          // Step 1: register the node and get its ID. Bootstrap modal opens
-          // automatically via createMutation.onSuccess.
-          const created = await createMutation.mutateAsync(input as CreateNodeInput);
-          // Step 2: auto-create bindings for each picked profile. Done in
-          // sequence (low volume - admin won't pick 50 profiles at once)
-          // and tolerant - one binding failure doesn't block the rest.
-          if (profileIds.length > 0) {
-            const ok: string[] = [];
-            const fail: string[] = [];
-            // Assign a distinct port per profile. A fresh node has no bindings
-            // yet, so hardcoding 443 made every profile after the first collide
-            // (409 PORT_IN_USE). Reserve the node-agent's own mTLS port so an
-            // inbound never shadows it, and feed each pick the ports already
-            // assigned in this batch.
-            const agentPort = parseNodeAgentPort((input as CreateNodeInput).address);
-            const reserved = agentPort !== null ? [agentPort] : [];
-            const assigned: number[] = [];
-            for (const profileId of profileIds) {
-              const port = pickFreeQuickDeployPort(assigned, reserved);
-              try {
-                await createBinding({ profileId, nodeId: created.id, port });
-                assigned.push(port);
-                ok.push(profileId);
-              } catch {
-                fail.push(profileId);
-              }
-            }
-            qc.invalidateQueries({ queryKey: ['bindings'] });
-            qc.invalidateQueries({ queryKey: ['profiles'] });
-            if (fail.length > 0) {
-              notifications.show({
-                color: 'yellow',
-                title: t('nodeConfirm.bindingsPartialTitle'),
-                message: t('nodeConfirm.bindingsPartialMessage', { ok: ok.length, fail: fail.length }),
-              });
-            } else {
-              notifications.show({
-                color: 'green',
-                message: t('nodeConfirm.bindingsAllOk', { count: ok.length }),
-              });
-            }
-          }
-        }}
-      />
 
       {payload && (
         <NodePayloadModal
