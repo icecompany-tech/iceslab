@@ -1753,6 +1753,8 @@ export async function getCascadeFragmentsForNode(
   nodeId: string,
 ): Promise<XrayCascadeFragments | null> {
   const fragments = await buildCascadeFragmentsForNode(nodeId);
+  // Nothing to draw by design, and nothing to warn about either.
+  if (fragments === NOT_AN_XRAY_ENTRY) return null;
   if (fragments) return fragments;
   // Only on the null path, so a node in no cascade at all pays nothing on the
   // way through, and the ordinary case stays one query lighter.
@@ -1954,13 +1956,47 @@ async function enabledCascadesTouching(nodeId: string): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
+/**
+ * "This node's xray draws nothing of the cascade, and that is the design."
+ *
+ * Returned for the ENTRY of a cascade whose users enter on another core
+ * (hysteria, phase 6). Distinct from null on purpose: null is logged as a
+ * cascade that builds no fragments, and on a hysteria entry that line would
+ * fire on every push until an operator learned to ignore it, which is the one
+ * line that matters when something is really missing.
+ */
+const NOT_AN_XRAY_ENTRY = Symbol('not-an-xray-entry');
+
+/**
+ * Is this node the entry of a cascade whose users do NOT enter on xray?
+ *
+ * ⚠ Such an entry must carry NO xray drawing at all, and this is what closes
+ * it. The agent tells xray "not you" (ApplyCascade(nil)) when the chain block
+ * names hysteria, and nil there does not mean "no cascade": it means "read the
+ * transitional copy on your inbound". If the panel still attached one, xray
+ * would dial the legacy legs ITSELF beside the chain process, and its users
+ * would stay cascaded: the opposite of what the operator confirmed when they
+ * switched the entry, and a second process drawing one chain.
+ */
+function entersOnAnotherCore(nodeId: string, entryProtocol: string | null | undefined, entryNodeIds: string[]): boolean {
+  return entryProtocol === 'hysteria' && entryNodeIds.includes(nodeId);
+}
+
 async function buildCascadeFragmentsForNode(
   nodeId: string,
-): Promise<XrayCascadeFragments | null> {
+): Promise<XrayCascadeFragments | null | typeof NOT_AN_XRAY_ENTRY> {
   // v4 first. Falls through to the hop path for cascades written before the
   // topology tables existed, so a half-migrated fleet keeps serving.
-  const v4 = await getTopologyFragmentsForNode(nodeId);
-  if (v4) return v4;
+  const v4 = await readTopologyForNode(nodeId);
+  if (v4) {
+    // Before the fall-through, not after it: the hop path would draw the same
+    // entry from the legacy rows and put the xray drawing right back.
+    if (entersOnAnotherCore(nodeId, v4.entryProtocol, v4.positions[0]?.nodeIds ?? [])) {
+      return NOT_AN_XRAY_ENTRY;
+    }
+    const mine = buildTopologyFragmentsForNode(nodeId, v4);
+    if (mine) return toWireFragments(mine);
+  }
 
   // A node belongs to at most one cascade in the v1 model; first enabled match.
   const member = await prisma.cascadeHop.findFirst({
@@ -1980,6 +2016,11 @@ async function buildCascadeFragmentsForNode(
   });
   // A single-hop "cascade" has no links to build - treat as not-a-cascade.
   if (!cascade || cascade.hops.length < 2) return null;
+  // The same rule on the legacy rows, for a cascade that only has them.
+  const entryHop = cascade.hops.find((h) => h.position === 0);
+  if (entryHop && entersOnAnotherCore(nodeId, entryHop.entryProtocol, [entryHop.nodeId])) {
+    return NOT_AN_XRAY_ENTRY;
+  }
 
   const hopInputs: CascadeConfigHopInput[] = cascade.hops.map((h) => ({
     nodeId: h.nodeId,
@@ -2047,22 +2088,6 @@ async function buildCascadeFragmentsForNode(
   const mine = configs.find((c) => c.nodeId === nodeId);
   if (!mine) return null;
 
-  return toWireFragments(mine);
-}
-
-/**
- * v4 fragment resolution: read the topology tables and let the shape-agnostic
- * builder do the work. Returns null when this node has no v4 links, which is
- * both "not in a cascade" and "this cascade predates the topology tables" - the
- * caller then falls back to the hop path.
- */
-async function getTopologyFragmentsForNode(
-  nodeId: string,
-): Promise<XrayCascadeFragments | null> {
-  const input = await readTopologyForNode(nodeId);
-  if (!input) return null;
-  const mine = buildTopologyFragmentsForNode(nodeId, input);
-  if (!mine) return null;
   return toWireFragments(mine);
 }
 
