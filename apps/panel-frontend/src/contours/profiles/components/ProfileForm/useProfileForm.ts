@@ -21,6 +21,7 @@ import { MOBILE_PRESET, randomAwgHeaders, TSPU_PRESET } from '@/contours/profile
 import { FLOW_COMPATIBLE_TRANSPORTS } from '@/contours/profiles/lib/xrayTransports';
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
+import { saveThen } from '@/contours/profiles/lib/saveThen';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -302,28 +303,31 @@ export function useProfileForm({
         ? 'singbox'
         : null;
 
-    if (isEdit) {
-      const update: UpdateProfileInput = {
-        name: values.name,
-        description: values.description.trim() || null,
-        enabled: values.enabled,
-        engine,
-        config: config as never,
-      };
-      await onSubmit(update, mode);
-    } else {
-      const create: CreateProfileInput = {
-        protocol: values.protocol,
-        name: values.name,
-        description: values.description.trim() || null,
-        enabled: values.enabled,
-        engine,
-        config: config as never,
-      };
-      await onSubmit(create, mode);
-    }
-    onClose();
-    form.reset();
+    const input: CreateProfileInput | UpdateProfileInput = isEdit
+      ? {
+          name: values.name,
+          description: values.description.trim() || null,
+          enabled: values.enabled,
+          engine,
+          config: config as never,
+        }
+      : {
+          protocol: values.protocol,
+          name: values.name,
+          description: values.description.trim() || null,
+          enabled: values.enabled,
+          engine,
+          config: config as never,
+        };
+    // A refusal is reported by the caller; the form stays open and keeps
+    // what was typed, and nothing is thrown past it.
+    await saveThen(
+      () => onSubmit(input, mode),
+      () => {
+        onClose();
+        form.reset();
+      },
+    );
   }
 
 

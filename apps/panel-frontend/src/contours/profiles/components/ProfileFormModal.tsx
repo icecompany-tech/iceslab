@@ -52,6 +52,8 @@ interface Props {
   opened: boolean;
   onClose: () => void;
   profile: Profile | null;
+  /** Rejects when the save is refused, and reports the refusal itself: the
+   *  form only stays open with the operator's values (see saveThen). */
   onSubmit: (input: CreateProfileInput | UpdateProfileInput, mode: Mode) => Promise<void>;
   loading?: boolean;
   /**
