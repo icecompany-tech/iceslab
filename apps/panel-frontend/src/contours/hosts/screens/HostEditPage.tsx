@@ -54,7 +54,13 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
-import { formatLabel, getProfileFormats, hostFormatFacts } from '@/lib/domain/formats';
+import {
+  formatGapGroups,
+  formatGapKey,
+  formatLabel,
+  getProfileFormats,
+  hostFormatFacts,
+} from '@/lib/domain/formats';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -196,6 +202,10 @@ export function HostEditPage() {
     retry: false,
   });
   const formatFacts = hostFormatFacts(formatsQuery.data ?? null, disabledFormats);
+  const whyLabel = (why: string) => {
+    const key = formatGapKey(why);
+    return key ? t(key) : t('hostEdit.formatWhyUnknown', { code: why });
+  };
   /** No answer yet, or none coming: every control stays visible. */
   const can = (f: string) => (fields ? fields[f]?.supported === true : true);
   const inherited = (f: string): string => {
@@ -1038,7 +1048,7 @@ export function HostEditPage() {
                         key={f}
                         active={on}
                         disabled={cannot}
-                        title={row.state === 'cannot' ? t(`hostEdit.formatWhy.${row.why}`) : undefined}
+                        title={row.state === 'cannot' ? whyLabel(row.why) : undefined}
                         onClick={() => {
                           if (cannot) return;
                           setDisabledFormats((prev) =>
@@ -1053,21 +1063,17 @@ export function HostEditPage() {
                     );
                   })}
                 </Box>
-                {/* Почему серые серые: по причине строка, в ней форматы. */}
-                {(['client-lacks-protocol', 'no-uri-standard', 'not-yet'] as const).map((why) => {
-                  const names = formatFacts.rows
-                    .filter((r) => r.state === 'cannot' && r.why === why)
-                    .map((r) => formatLabel(r.format, t));
-                  if (names.length === 0) return null;
-                  return (
-                    <Text
-                      key={why}
-                      style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT, marginTop: 6 }}
-                    >
-                      {t(`hostEdit.formatWhy.${why}`)}: {names.join(', ')}
-                    </Text>
-                  );
-                })}
+                {/* Почему серые серые: по причине строка, в ней форматы.
+                    Причины из ответа, а не из списка здесь: незнакомая этой
+                    сборке тоже получает строку, с кодом. */}
+                {formatGapGroups(formatFacts.rows).map(({ why, formats }) => (
+                  <Text
+                    key={why}
+                    style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT, marginTop: 6 }}
+                  >
+                    {whyLabel(why)}: {formats.map((f) => formatLabel(f, t)).join(', ')}
+                  </Text>
+                ))}
               </Stack>
             )}
           </Box>

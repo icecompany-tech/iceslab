@@ -160,9 +160,11 @@ export const hosts = {
     formatsCount: 'Carried by {{carried}} of {{total}}, turned off {{off}}',
     formatWhy: {
       'client-lacks-protocol': 'The client does not speak this protocol',
+      'client-lacks-cipher': 'This client does not speak this cipher',
       'no-uri-standard': 'The protocol has no share link',
       'not-yet': 'The panel does not build it yet, the client can',
     },
+    formatWhyUnknown: 'Not carried by the client: {{code}}',
     optional: 'OPTIONAL',
     needName: 'Name it first',
     needProfile: 'Pick a profile',

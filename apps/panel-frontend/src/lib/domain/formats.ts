@@ -71,6 +71,38 @@ export type HostFormatRow =
   | { format: SubscriptionFormat; state: 'on' | 'off' }
   | { format: SubscriptionFormat; state: 'cannot'; why: FormatGap };
 
+/**
+ * Подпись причины, по которой формат не несёт хост. Record по типу контракта:
+ * новая причина в FormatGap роняет сборку здесь, пока у неё нет слов (так
+ * молча выпал client-lacks-cipher, когда причины перебирались списком).
+ */
+const FORMAT_GAP_KEY: Record<FormatGap, string> = {
+  'client-lacks-protocol': 'hostEdit.formatWhy.client-lacks-protocol',
+  'client-lacks-cipher': 'hostEdit.formatWhy.client-lacks-cipher',
+  'no-uri-standard': 'hostEdit.formatWhy.no-uri-standard',
+  'not-yet': 'hostEdit.formatWhy.not-yet',
+};
+
+/** Ключ подписи причины, или null для причины, которой эта сборка не знает
+ *  (сервер новее экрана): её экран называет кодом, но не молчит. */
+export function formatGapKey(why: string): string | null {
+  return (FORMAT_GAP_KEY as Record<string, string>)[why] ?? null;
+}
+
+/**
+ * Не несущие форматы по причинам, в порядке первого появления. Причины берутся
+ * из строк, а не из списка на экране: какую бы ни прислал сервер, у неё будет
+ * своя строка.
+ */
+export function formatGapGroups(rows: readonly HostFormatRow[]): { why: string; formats: SubscriptionFormat[] }[] {
+  const groups = new Map<string, SubscriptionFormat[]>();
+  for (const r of rows) {
+    if (r.state !== 'cannot') continue;
+    groups.set(r.why, [...(groups.get(r.why) ?? []), r.format]);
+  }
+  return [...groups].map(([why, formats]) => ({ why, formats }));
+}
+
 export interface HostFormatFacts {
   rows: HostFormatRow[];
   /** null без контракта: считать «несётся N» не из чего. */

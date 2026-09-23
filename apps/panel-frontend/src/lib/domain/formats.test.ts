@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { FORMAT_NAMES, formatCarries, type Door } from '@iceslab/shared';
-import { HOST_FORMATS, formatLabelKey, hostFormatFacts, type ProfileFormats } from '@/lib/domain/formats';
+import {
+  HOST_FORMATS,
+  formatGapGroups,
+  formatGapKey,
+  formatLabelKey,
+  hostFormatFacts,
+  type HostFormatRow,
+  type ProfileFormats,
+} from '@/lib/domain/formats';
 import ru from '@/i18n/locales/ru';
 import en from '@/i18n/locales/en';
 
@@ -82,6 +90,47 @@ describe('hostFormatFacts: три состояния формата на хос�
     expect(f.rows.find((r) => r.format === carries)?.state).toBe('off');
     expect(f.rows.find((r) => r.format === cannot)?.state).toBe('cannot');
     expect(f.counts?.off).toBe(1);
+  });
+
+  it('причины: у каждой из четырёх своя строка, незнакомая тоже, по порядку появления', () => {
+    const rows = [
+      { format: 'plain', state: 'cannot', why: 'no-uri-standard' },
+      { format: 'outline', state: 'cannot', why: 'client-lacks-cipher' },
+      { format: 'surge', state: 'cannot', why: 'client-lacks-protocol' },
+      { format: 'clash', state: 'cannot', why: 'not-yet' },
+      { format: 'loon', state: 'cannot', why: 'client-lacks-protocol' },
+      { format: 'json', state: 'on' },
+      { format: 'xkeen', state: 'cannot', why: 'client-lacks-quic' },
+    ] as HostFormatRow[];
+    expect(formatGapGroups(rows)).toEqual([
+      { why: 'no-uri-standard', formats: ['plain'] },
+      { why: 'client-lacks-cipher', formats: ['outline'] },
+      { why: 'client-lacks-protocol', formats: ['surge', 'loon'] },
+      { why: 'not-yet', formats: ['clash'] },
+      { why: 'client-lacks-quic', formats: ['xkeen'] },
+    ]);
+    expect(formatGapKey('client-lacks-cipher')).toBe('hostEdit.formatWhy.client-lacks-cipher');
+    expect(formatGapKey('client-lacks-quic')).toBeNull();
+  });
+
+  it('у каждой известной причины есть подпись в обеих локалях, и у незнакомой тоже', () => {
+    for (const why of ['client-lacks-protocol', 'client-lacks-cipher', 'no-uri-standard', 'not-yet']) {
+      const key = formatGapKey(why)!;
+      expect(typeof label(ru as Dict, key), `ru ${why}`).toBe('string');
+      expect(typeof label(en as Dict, key), `en ${why}`).toBe('string');
+    }
+    expect(typeof label(ru as Dict, 'hostEdit.formatWhyUnknown')).toBe('string');
+    expect(typeof label(en as Dict, 'hostEdit.formatWhyUnknown')).toBe('string');
+  });
+
+  it('SS2022: Outline не несёт по шифру, как отвечает контракт', () => {
+    const f = hostFormatFacts(answer('shadowsocks'), []);
+    const outline = f.rows.find((r) => r.format === 'outline');
+    expect(outline).toEqual(
+      formatCarries('outline', 'shadowsocks').carried
+        ? { format: 'outline', state: 'on' }
+        : { format: 'outline', state: 'cannot', why: formatCarries('outline', 'shadowsocks').why },
+    );
   });
 
   it('формат, про который сервер промолчал, не выдаётся за «не несёт»', () => {

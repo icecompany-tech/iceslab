@@ -172,9 +172,12 @@ export const hosts = {
     formatsCount: 'Несётся {{carried}} из {{total}}, выключено {{off}}',
     formatWhy: {
       'client-lacks-protocol': 'Клиент этот протокол не понимает',
+      'client-lacks-cipher': 'Клиент этот шифр не понимает',
       'no-uri-standard': 'У протокола нет строки-ссылки',
       'not-yet': 'Панель ещё не рисует, клиент умеет',
     },
+    // Причина, которой эта сборка не знает (сервер новее): называем кодом.
+    formatWhyUnknown: 'Клиент не несёт: {{code}}',
     optional: 'НЕОБЯЗАТЕЛЬНО',
     needName: 'Сначала имя',
     needProfile: 'Выберите профиль',
