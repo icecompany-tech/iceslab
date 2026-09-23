@@ -137,6 +137,10 @@ export const cascades = {
     // The timestamp in the header is the SAVE time, and it has to say so: a
     // bare "36 d ago" under a heading about pushes read as the push time.
     savedAgo: 'saved {{when}}',
+    // The edge of phase 6, and it belongs where the operator picks the entry:
+    // hearing it from a user who "cannot choose a country" is worse.
+    entryHy2Auto:
+      'A hysteria entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
     attemptApplied: 'Last attempt {{when}} · all took it',
     attemptRefused: 'Last attempt {{when}} · {{refused}} of {{total}} refused',
     save: 'Save and push',

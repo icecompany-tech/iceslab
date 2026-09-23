@@ -10,6 +10,7 @@ import {
   LINK_PROTOCOL_VALUES,
   cellGaps,
   entryChainFacts,
+  entryNoteKind,
   toDirectionInputs,
   lastAttemptFacts,
   legCellNotes,
@@ -554,16 +555,25 @@ describe('toDirectionInputs и нога', () => {
  * сервера, и подмена источника не должна переписывать проверку.
  */
 describe('entryChainFacts', () => {
-  it('1. xray: цепь такой трафик несёт', () => {
-    expect(entryChainFacts('xray')).toEqual({ protocol: 'xray', carried: true });
+  // Список несомых входов подаётся ЯВНО. До 23.09 тесты 2 и 3 брали его по
+  // умолчанию из контракта и тем самым утверждали сегодняшний СОСТАВ: с Ф6.4
+  // в контракт приедет `hysteria`, и тест «hysteria не несёт» упал бы на
+  // правильном коммите. Состав контракта сторожит тест 6, и только он.
+  const TODAY = ['xray'];
+  const PHASE6 = ['xray', 'hysteria'];
+
+  it('1. xray: цепь такой трафик несёт, и выход клиент выбирает сам', () => {
+    expect(entryChainFacts('xray', TODAY)).toEqual({ protocol: 'xray', carried: true, perUserExit: true });
   });
 
-  it('2. hysteria2: не несёт, и это факт, а не запрет выбора', () => {
-    expect(entryChainFacts('hysteria')).toEqual({ protocol: 'hysteria', carried: false });
+  it('2. hysteria до фазы 6: не несёт, и это факт, а не запрет выбора', () => {
+    expect(entryChainFacts('hysteria', TODAY)).toEqual({
+      protocol: 'hysteria', carried: false, perUserExit: false,
+    });
   });
 
-  it('3. amneziawg: не несёт', () => {
-    expect(entryChainFacts('amneziawg')).toEqual({ protocol: 'amneziawg', carried: false });
+  it('3. amneziawg: не несёт и после фазы 6', () => {
+    expect(entryChainFacts('amneziawg', PHASE6)).toMatchObject({ carried: false, perUserExit: false });
   });
 
   it('4. протокол не выбран: сказать нечего', () => {
@@ -573,11 +583,11 @@ describe('entryChainFacts', () => {
   });
 
   it('5. список приходит снаружи: с фазой 6 ответ меняется без правки функции', () => {
-    expect(entryChainFacts('hysteria', ['xray', 'hysteria'])).toEqual({
-      protocol: 'hysteria', carried: true,
+    expect(entryChainFacts('hysteria', PHASE6)).toEqual({
+      protocol: 'hysteria', carried: true, perUserExit: false,
     });
     // И наоборот: пустой список это «пока ничего», а не «всё подходит».
-    expect(entryChainFacts('xray', [])).toEqual({ protocol: 'xray', carried: false });
+    expect(entryChainFacts('xray', [])).toMatchObject({ carried: false });
   });
 
   it('6. список приходит из контракта, а не из копии на фронте', () => {
@@ -594,5 +604,39 @@ describe('entryChainFacts', () => {
     expect(f?.protocol).toBe('hysteria');
     expect(LINK_PROTOCOL_VALUES).toContain('hysteria');
     expect(LINK_PROTOCOL_VALUES).not.toContain('hysteria2');
+  });
+});
+
+/**
+ * Строка под селектором входа.
+ *
+ * Граница фазы 6: вход по hysteria цепь несёт, но выход его клиенты сами не
+ * выбирают, только «Авто» или правила политики. Это не ошибка оператора, и
+ * красной строка быть не должна; но и молчать о ней нельзя, иначе оператор
+ * узнает о границе от пользователя, который «не может выбрать страну».
+ */
+describe('entryNoteKind', () => {
+  const PHASE6 = ['xray', 'hysteria'];
+
+  it('1. hysteria после фазы 6: строка про «Авто» есть', () => {
+    expect(entryNoteKind(entryChainFacts('hysteria', PHASE6))).toBe('autoOnly');
+  });
+
+  it('2. xray: строки нет, выход клиент выбирает сам', () => {
+    expect(entryNoteKind(entryChainFacts('xray', PHASE6))).toBeNull();
+  });
+
+  it('3. hysteria ДО фазы 6: отказ, а про «Авто» молчание', () => {
+    // Обещать выбор через «Авто» у входа, который в цепь не идёт вовсе, значит
+    // врать дважды: отказ проверяется первым.
+    expect(entryNoteKind(entryChainFacts('hysteria', ['xray']))).toBe('notCarried');
+  });
+
+  it('4. amneziawg после фазы 6: всё ещё отказ', () => {
+    expect(entryNoteKind(entryChainFacts('amneziawg', PHASE6))).toBe('notCarried');
+  });
+
+  it('5. протокол не выбран: сказать нечего', () => {
+    expect(entryNoteKind(null)).toBeNull();
   });
 });

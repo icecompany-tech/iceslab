@@ -24,12 +24,14 @@ import {
 } from '@/contours/cascades/lib/colors';
 import {
   ROLE_TONE,
+  entryNoteKind,
   isKnownProtocol,
   legParamFacts,
   poolRowFacts,
   protocolOptions,
   statusTone,
   type CellGap,
+  type EntryChainFacts,
   type HopRole,
   type LegFacts,
   type LinkPortConflict,
@@ -1872,6 +1874,29 @@ export function EyeIcon({ size, color }: { size: number; color: string }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/**
+ * Строка под селектором входа. Какую сказать, решает `entryNoteKind`; здесь
+ * только краска: отказ красный, граница фазы спокойная, потому что это не
+ * ошибка оператора, а свойство протокола, о котором он должен знать заранее.
+ */
+export function EntryChainNote({ facts }: { facts: EntryChainFacts | null }) {
+  const { t } = useTranslation();
+  const kind = entryNoteKind(facts);
+  if (!facts || !kind) return null;
+  if (kind === 'notCarried') {
+    return (
+      <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+        {t('cascadeCreate.entryNotCarried', { protocol: facts.protocol })}
+      </Note>
+    );
+  }
+  return (
+    <Note tone={MIST} icon={<InfoIcon size={13} color={MIST} />}>
+      {t('cascadeEdit.entryHy2Auto')}
+    </Note>
   );
 }
 

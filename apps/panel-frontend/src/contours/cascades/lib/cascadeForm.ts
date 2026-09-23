@@ -76,7 +76,27 @@ export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS]
 export interface EntryChainFacts {
   protocol: string;
   carried: boolean;
+  /**
+   * Может ли КЛИЕНТ этого входа выбирать выход сам.
+   *
+   * Выбор выхода по пользователю это трюк xray: направление едет в байтах
+   * UUID, которым клиент авторизуется. У входа на hysteria такого канала нет,
+   * поэтому его клиенты выходят через «Авто» или по правилам политики. Это
+   * граница фазы 6, и молчать о ней нельзя: оператор, выбравший hy2-вход,
+   * иначе узнает о ней от пользователя, который «не может выбрать страну».
+   *
+   * Отдельное поле, а не вывод из `carried`: с фазой 7 приедет AmneziaWG, и он
+   * будет таким же, то есть несомым, но без выбора по пользователю.
+   */
+  perUserExit: boolean;
 }
+
+/**
+ * Сегодня выбор выхода по пользователю умеет один xray. Список короткий и
+ * лежит здесь, а не в контракте: сервер по нему ничего не решает, это свойство
+ * КЛИЕНТСКОГО протокола, о котором панель рассказывает оператору.
+ */
+const PER_USER_EXIT_PROTOCOLS = ['xray'];
 
 export function entryChainFacts(
   entryProtocol: string | null | undefined,
@@ -84,7 +104,33 @@ export function entryChainFacts(
 ): EntryChainFacts | null {
   const p = entryProtocol && entryProtocol.trim() !== '' ? entryProtocol : null;
   if (!p) return null;
-  return { protocol: p, carried: supported.includes(p) };
+  return {
+    protocol: p,
+    carried: supported.includes(p),
+    perUserExit: PER_USER_EXIT_PROTOCOLS.includes(p),
+  };
+}
+
+/**
+ * Что сказать под селектором входа.
+ *
+ * `notCarried` это отказ: цепь такой трафик не несёт, сохранять нельзя.
+ * `autoOnly` это граница, а не ошибка: вход несётся, но его клиенты не
+ * выбирают выход сами, только «Авто» или правила политики. С фазы 6 это
+ * hysteria, с фазы 7 будет и AmneziaWG. `null` это «сказать нечего».
+ *
+ * Порядок проверок важен: у несомого-с-ограничением сначала должно
+ * срабатывать «несётся ли вообще». Пока `CHAIN_ENTRY_PROTOCOLS` держит один
+ * xray, у hysteria стоит отказ, а про «Авто» молчание: обещать выбор через
+ * «Авто» у входа, который никуда не ведёт, значит врать дважды.
+ */
+export type EntryNoteKind = 'notCarried' | 'autoOnly';
+
+export function entryNoteKind(facts: EntryChainFacts | null): EntryNoteKind | null {
+  if (!facts) return null;
+  if (!facts.carried) return 'notCarried';
+  if (!facts.perUserExit) return 'autoOnly';
+  return null;
 }
 
 export type HopRole = 'entry' | 'transit' | 'exit';

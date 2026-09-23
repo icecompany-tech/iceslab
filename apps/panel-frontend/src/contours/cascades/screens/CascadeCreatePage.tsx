@@ -24,6 +24,7 @@ import {
   Counter,
   DashedAdd,
   DirectionRow,
+  EntryChainNote,
   EyeIcon,
   FieldLabel,
   Hint,
@@ -55,7 +56,6 @@ import {
   MIST,
   MONO,
   MOSS,
-  RED,
   SNOW,
   VIOLET,
   WELL,
@@ -488,13 +488,7 @@ export function CascadeCreatePage() {
                 onNodes={(ids) => setPoolNodes(i, ids)}
                 entryProtocol={i === 0 ? pool.entryProtocol : null}
                 onEntryProtocol={(v) => setPool(i, { entryProtocol: v })}
-                entryNote={
-                  i === 0 && entryChain && !entryChain.carried ? (
-                    <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
-                      {t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol })}
-                    </Note>
-                  ) : undefined
-                }
+                entryNote={i === 0 ? <EntryChainNote facts={entryChain} /> : undefined}
                 canUp={i > 1}
                 canDown={i > 0 && i < pools.length - 1}
                 canDelete={i > 0}
