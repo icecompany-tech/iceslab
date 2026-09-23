@@ -1,21 +1,40 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Group, Stack, Text } from '@mantine/core';
-import { IconBolt, IconEye } from '@tabler/icons-react';
+import {
+  Box,
+  Group,
+  NumberInput,
+  SegmentedControl,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from '@mantine/core';
+import { IconBolt, IconEye, IconRefresh } from '@tabler/icons-react';
 import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
+import {
+  EMPTY_TELEGRAM_DRAFT,
+  WEB_CARRIERS,
+  generateWebSecret,
+  webLinkFacts,
+  type TelegramDraft,
+  type WebCarrier,
+} from '@/contours/profiles/lib/telegramDraft';
 import { SectionCard } from '@/contours/profiles/components/ProfileForm/SectionCard';
 
 /**
- * The three Telegram views the panel can draw but not yet create.
+ * The three Telegram views the backend does not know yet: SOCKS5, HTTP, WEB.
  *
- * They are drawn, not wired, and the card says so in the first line rather
- * than letting the operator find out at save time. Every control here is a
- * static box on purpose: a disabled input reads as "broken", a plain box reads
- * as "not built yet", and the difference is the whole point of the card.
+ * The fields are real inputs (owner's call, 2026-09-23): an operator can fill
+ * them in and see the form the way it will be. The values stay in this card's
+ * own state and go nowhere, the server never sees or checks them, and the save
+ * button on the page is off while one of these views is open. The banner says
+ * so first, before anyone types.
  *
- * Nothing on this card is stored, sent or validated. When the backend learns
- * the protocol, the fields become real inputs in a section of their own and
- * this file loses that view.
+ * The draft lives here, not in the profile form: a preview view has no name
+ * the API would accept, so it must not be able to reach a request body. One
+ * draft for all three views, so switching between them keeps what was typed.
  */
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -51,6 +70,7 @@ const COPY_KEY: Record<PreviewKindKey, string> = {
 export function TelegramPreviewCard({ kind }: { kind: PreviewKindKey }) {
   const { t } = useTranslation();
   const accent = CARD_ACCENT[kind];
+  const [draft, setDraft] = useState<TelegramDraft>(EMPTY_TELEGRAM_DRAFT);
 
   return (
     <SectionCard
@@ -59,9 +79,24 @@ export function TelegramPreviewCard({ kind }: { kind: PreviewKindKey }) {
       icon={<IconBolt size={15} color={accent} stroke={1.8} />}
     >
       <NotBuiltBanner />
-      {kind === 'socks5' && <Socks5Fields />}
-      {kind === 'http' && <HttpFields />}
-      {kind === 'telegramweb' && <WebFields />}
+      {kind === 'socks5' && (
+        <Socks5Fields
+          value={draft.socks5}
+          onChange={(patch) => setDraft((d) => ({ ...d, socks5: { ...d.socks5, ...patch } }))}
+        />
+      )}
+      {kind === 'http' && (
+        <HttpFields
+          value={draft.http}
+          onChange={(patch) => setDraft((d) => ({ ...d, http: { ...d.http, ...patch } }))}
+        />
+      )}
+      {kind === 'telegramweb' && (
+        <WebFields
+          value={draft.web}
+          onChange={(patch) => setDraft((d) => ({ ...d, web: { ...d.web, ...patch } }))}
+        />
+      )}
     </SectionCard>
   );
 }
@@ -94,26 +129,39 @@ function NotBuiltBanner() {
   );
 }
 
-function Socks5Fields() {
+function Socks5Fields({
+  value,
+  onChange,
+}: {
+  value: TelegramDraft['socks5'];
+  onChange: (patch: Partial<TelegramDraft['socks5']>) => void;
+}) {
   const { t } = useTranslation();
   const p = (k: string) => t(`profiles.telegramPreview.socks5.${k}`);
   return (
     <Row>
       <Field width={320} label={p('authLabel')} note={p('authNote')}>
         <Group gap={6} wrap="nowrap">
-          <Pill accent={CYAN} active>
+          <Choice accent={CYAN} active={value.auth === 'password'} onClick={() => onChange({ auth: 'password' })}>
             {p('authPassword')}
-          </Pill>
-          <Pill>{p('authNone')}</Pill>
+          </Choice>
+          <Choice accent={CYAN} active={value.auth === 'none'} onClick={() => onChange({ auth: 'none' })}>
+            {p('authNone')}
+          </Choice>
         </Group>
+      </Field>
+
+      <Field width={200} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
+        <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="1080" value={value.port} onChange={(port) => onChange({ port })} />
       </Field>
 
       <Field width={280} label={p('udpLabel')} note={p('udpNote')}>
-        <Group gap={10} wrap="nowrap" style={{ height: 36 }}>
-          <Switch accent={CYAN} />
-          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: SNOW }}>
-            {p('udpOn')}
-          </Text>
+        <Group style={{ height: 36 }} wrap="nowrap">
+          <Switch
+            checked={value.udp}
+            onChange={(e) => onChange({ udp: e.currentTarget.checked })}
+            label={value.udp ? p('udpOn') : p('udpOff')}
+          />
         </Group>
       </Field>
 
@@ -122,62 +170,153 @@ function Socks5Fields() {
   );
 }
 
-function HttpFields() {
+function HttpFields({
+  value,
+  onChange,
+}: {
+  value: TelegramDraft['http'];
+  onChange: (patch: Partial<TelegramDraft['http']>) => void;
+}) {
   const { t } = useTranslation();
   const p = (k: string) => t(`profiles.telegramPreview.http.${k}`);
   return (
-    <Row>
-      <Field width={320} label={p('authLabel')} note={p('authNote')}>
-        <Group gap={6} wrap="nowrap">
-          <Pill accent={AMBER} active>
-            {p('authBasic')}
-          </Pill>
-          <Pill>{p('authNone')}</Pill>
-        </Group>
-      </Field>
+    <Stack gap={16}>
+      <Row>
+        <Field width={320} label={p('authLabel')} note={p('authNote')}>
+          <Group gap={6} wrap="nowrap">
+            <Choice accent={AMBER} active={value.auth === 'basic'} onClick={() => onChange({ auth: 'basic' })}>
+              {p('authBasic')}
+            </Choice>
+            <Choice accent={AMBER} active={value.auth === 'none'} onClick={() => onChange({ auth: 'none' })}>
+              {p('authNone')}
+            </Choice>
+          </Group>
+        </Field>
 
-      <Field width={280} label={p('tunnelLabel')} note={p('tunnelNote')}>
-        <ReadOnlyBox>
-          <Text style={{ fontFamily: MONO, fontSize: 12, lineHeight: '16px', color: SNOW }}>
-            {p('tunnelValue')}
-          </Text>
-        </ReadOnlyBox>
-      </Field>
+        <Field width={280} label={t('profiles.telegramPreview.portLabel')} note={p('portNote')}>
+          <PortInput label={t('profiles.telegramPreview.portLabel')} placeholder="8080" value={value.port} onChange={(port) => onChange({ port })} />
+        </Field>
 
-      <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
-    </Row>
+        <WarnBox tone={CLAY}>{p('warn')}</WarnBox>
+      </Row>
+
+      <WarnBox tone={AMBER}>{p('clients')}</WarnBox>
+    </Stack>
   );
 }
 
-function WebFields() {
+function WebFields({
+  value,
+  onChange,
+}: {
+  value: TelegramDraft['web'];
+  onChange: (patch: Partial<TelegramDraft['web']>) => void;
+}) {
   const { t } = useTranslation();
   const p = (k: string) => t(`profiles.telegramPreview.web.${k}`);
+  const facts = webLinkFacts(value);
+  const bad = facts.kind === 'bad' ? facts.field : null;
+
   return (
     <Stack gap={16}>
       <Row>
         <Field width={400} label={p('hostLabel')} note={p('hostNote')}>
-          <ReadOnlyBox height={38}>
-            <Text style={{ fontFamily: MONO, fontSize: 12, lineHeight: '16px', color: '#5A6B82' }}>
-              {p('hostPlaceholder')}
-            </Text>
-          </ReadOnlyBox>
+          <TextInput
+            aria-label={p('hostLabel')}
+            placeholder={p('hostPlaceholder')}
+            value={value.host}
+            onChange={(e) => onChange({ host: e.currentTarget.value })}
+            error={bad === 'host' ? p('hostBad') : undefined}
+            styles={{ input: { fontFamily: MONO } }}
+          />
         </Field>
 
         <Field width={430} label={p('keyLabel')} note={p('keyNote')}>
-          <ReadOnlyBox height={38}>
-            <Group gap={10} wrap="nowrap" justify="space-between" style={{ width: '100%' }}>
-              <Text style={{ fontFamily: MONO, fontSize: 12, lineHeight: '16px', color: '#5A6B82' }}>
-                {p('keyPlaceholder')}
+          <Group gap={8} wrap="nowrap" align="flex-start">
+            <TextInput
+              style={{ flex: 1, minWidth: 0 }}
+              aria-label={p('keyLabel')}
+              placeholder={p('keyPlaceholder')}
+              value={value.secret}
+              onChange={(e) => onChange({ secret: e.currentTarget.value })}
+              error={bad === 'secret' ? p('keyBad') : undefined}
+              styles={{ input: { fontFamily: MONO } }}
+            />
+            <UnstyledButton
+              type="button"
+              onClick={() => onChange({ secret: generateWebSecret() })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 36,
+                paddingInline: 12,
+                borderRadius: 8,
+                backgroundColor: SUNK,
+                border: `1px solid ${HAIRLINE}`,
+                flexShrink: 0,
+              }}
+            >
+              <IconRefresh size={13} color={MIST} stroke={1.8} />
+              <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: SNOW }}>
+                {p('keyGenerate')}
               </Text>
-              <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '14px', color: DIM }}>
-                {p('keyHint')}
-              </Text>
-            </Group>
-          </ReadOnlyBox>
+            </UnstyledButton>
+          </Group>
+        </Field>
+      </Row>
+
+      <Row>
+        <Field width={300} label={p('pathLabel')} note={p('pathNote')}>
+          <TextInput
+            aria-label={p('pathLabel')}
+            placeholder={p('pathPlaceholder')}
+            value={value.path}
+            onChange={(e) => onChange({ path: e.currentTarget.value })}
+            error={bad === 'path' ? p('pathBad') : undefined}
+            styles={{ input: { fontFamily: MONO } }}
+          />
         </Field>
 
-        <WarnBox tone={AMBER}>{p('warn')}</WarnBox>
+        <Field width={470} label={p('carrierLabel')} note={p(`carriers.${value.carrier}`)}>
+          <SegmentedControl
+            aria-label={p('carrierLabel')}
+            value={value.carrier}
+            onChange={(v) => onChange({ carrier: v as WebCarrier })}
+            data={WEB_CARRIERS.map((c) => ({ value: c, label: c }))}
+            styles={{ label: { fontFamily: MONO, fontSize: 11 } }}
+          />
+        </Field>
       </Row>
+
+      <Field width={900} label={p('linkLabel')} note={p('linkNote')}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: 38,
+            paddingInline: 12,
+            paddingBlock: 8,
+            borderRadius: 8,
+            backgroundColor: WELL,
+            border: `1px solid ${HAIRLINE}`,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: facts.kind === 'link' ? MONO : DISPLAY,
+              fontSize: 12,
+              lineHeight: '16px',
+              color: facts.kind === 'link' ? SNOW : DIM,
+              wordBreak: 'break-all',
+            }}
+          >
+            {facts.kind === 'link' ? facts.link : facts.kind === 'wait' ? p('linkWait') : p('linkBad')}
+          </Text>
+        </Box>
+      </Field>
+
+      <WarnBox tone={AMBER}>{p('warn')}</WarnBox>
 
       {/* What the node would actually run. Three layers instead of one daemon
           is the whole reason this view is not simply another protocol. */}
@@ -268,17 +407,54 @@ function Field({
   );
 }
 
-function Pill({
+/** A port as the operator types it. Empty is a legal state here: nothing is
+ *  sent, so there is no default to invent for them. */
+function PortInput({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: number | '';
+  onChange: (port: number | '') => void;
+}) {
+  return (
+    <NumberInput
+      aria-label={label}
+      placeholder={placeholder}
+      min={1}
+      max={65535}
+      clampBehavior="strict"
+      allowDecimal={false}
+      allowNegative={false}
+      hideControls
+      value={value}
+      onChange={(v) => onChange(typeof v === 'number' ? v : '')}
+      styles={{ input: { fontFamily: MONO } }}
+    />
+  );
+}
+
+/** One of two answers, pressed or not. A button, so the keyboard reaches it
+ *  and the form does not submit on it. */
+function Choice({
   children,
   accent,
   active,
+  onClick,
 }: {
   children: ReactNode;
-  accent?: string;
-  active?: boolean;
+  accent: string;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <Box
+    <UnstyledButton
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -286,8 +462,8 @@ function Pill({
         height: 36,
         paddingInline: 14,
         borderRadius: 8,
-        backgroundColor: active && accent ? `${accent}14` : 'transparent',
-        border: `1px solid ${active && accent ? accent : HAIRLINE}`,
+        backgroundColor: active ? `${accent}14` : 'transparent',
+        border: `1px solid ${active ? accent : HAIRLINE}`,
       }}
     >
       <Text
@@ -301,46 +477,7 @@ function Pill({
       >
         {children}
       </Text>
-    </Box>
-  );
-}
-
-function Switch({ accent }: { accent: string }) {
-  return (
-    <Box
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        width: 36,
-        height: 20,
-        padding: 2,
-        borderRadius: 999,
-        backgroundColor: accent,
-        flexShrink: 0,
-      }}
-    >
-      <Box style={{ width: 16, height: 16, borderRadius: 999, backgroundColor: WELL }} />
-    </Box>
-  );
-}
-
-function ReadOnlyBox({ children, height = 36 }: { children: ReactNode; height?: number }) {
-  return (
-    <Box
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        width: '100%',
-        height,
-        paddingInline: 12,
-        borderRadius: 8,
-        backgroundColor: WELL,
-        border: `1px solid ${HAIRLINE}`,
-      }}
-    >
-      {children}
-    </Box>
+    </UnstyledButton>
   );
 }
 

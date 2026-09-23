@@ -174,6 +174,14 @@ export function ProfileEditPage() {
         {!isNew && profile && (
           <PageButton onClick={() => setDeploying(profile)}>{t('profileEdit.deploy')}</PageButton>
         )}
+        {/* The reason sits beside the dead button, not only in its tooltip: the
+            fields above take input now, so a silent grey button would read as
+            a broken save. */}
+        {previewing && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: MIST, maxWidth: 360 }}>
+            {t('profiles.telegramPreview.saveBlocked')}
+          </Text>
+        )}
         <PageButton onClick={() => navigate('/profiles')}>{t('common.cancel')}</PageButton>
         {/* Submits the form below by id: the artboard puts the primary action
             in the bar, where it stays reachable without scrolling to the end
