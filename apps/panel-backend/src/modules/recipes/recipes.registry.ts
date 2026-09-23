@@ -1,4 +1,10 @@
-import type { Recipe, RecipeRegistryResponse, RecipeSource } from '@iceslab/shared';
+import type {
+  Recipe,
+  RecipeRegistryResponse,
+  RecipeSource,
+  RecipeSourceProblem,
+  RecipeSourceStatus,
+} from '@iceslab/shared';
 import { isNewer, readCurrentVersion } from '../system/system.service.js';
 import { parseRecipe, RegistryIndexSchema } from './recipes.schemas.js';
 import { getEnabledSources } from './recipes.sources.js';
@@ -58,16 +64,46 @@ export function parseRecipes(payload: unknown): Recipe[] {
   return out;
 }
 
+/**
+ * A source fetch that failed, with the reason the screen shows. Thrown where
+ * the reason is known (the status line, the size cap, the redirect chain);
+ * anything else a fetch throws is a network failure (see sourceProblem).
+ */
+export class RecipeFetchError extends Error {
+  constructor(
+    message: string,
+    readonly reason: RecipeSourceProblem,
+    readonly httpStatus?: number,
+  ) {
+    super(message);
+    this.name = 'RecipeFetchError';
+  }
+}
+
+/**
+ * Why a fetch failed. A 404 is its own answer: the default source points at a
+ * repository that does not exist yet, and calling that "unreachable" sent the
+ * operator to check their network. A body that is not JSON is `invalid`; a
+ * throw from fetch itself (DNS, refused, reset, the abort timer) is
+ * `unreachable`, and so is anything unrecognised, because it says "try
+ * later" and claims nothing about the source.
+ */
+export function sourceProblem(err: unknown): { reason: RecipeSourceProblem; httpStatus?: number } {
+  if (err instanceof RecipeFetchError) return { reason: err.reason, httpStatus: err.httpStatus };
+  if (err instanceof SyntaxError) return { reason: 'invalid' }; // JSON.parse
+  return { reason: 'unreachable' };
+}
+
 // Read a response body with a hard byte cap, streamed so an oversized or
 // slow-drip body cannot buffer unbounded (the abort signal still bounds time).
 async function readBounded(res: Response, maxBytes: number): Promise<string> {
   const len = Number(res.headers.get('content-length'));
   if (Number.isFinite(len) && len > maxBytes) {
-    throw new Error('source payload too large');
+    throw new RecipeFetchError('source payload too large', 'invalid', res.status);
   }
   if (!res.body) {
     const t = await res.text();
-    if (t.length > maxBytes) throw new Error('source payload too large');
+    if (t.length > maxBytes) throw new RecipeFetchError('source payload too large', 'invalid', res.status);
     return t;
   }
   const reader = res.body.getReader();
@@ -83,7 +119,7 @@ async function readBounded(res: Response, maxBytes: number): Promise<string> {
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw new Error('source payload too large');
+      throw new RecipeFetchError('source payload too large', 'invalid', res.status);
     }
     text += decoder.decode(value, { stream: true });
   }
@@ -100,7 +136,14 @@ async function readBounded(res: Response, maxBytes: number): Promise<string> {
 async function fetchGuardedText(startUrl: string): Promise<string> {
   let url = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    assertFetchableUrl(url); // re-validate the start URL and every redirect hop
+    // Re-validate the start URL and every redirect hop. A refusal keeps its
+    // message (the import route shows it) and reads as `invalid`: the address,
+    // not the network, is what is wrong.
+    try {
+      assertFetchableUrl(url);
+    } catch (err) {
+      throw new RecipeFetchError((err as Error).message, 'invalid');
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -111,17 +154,23 @@ async function fetchGuardedText(startUrl: string): Promise<string> {
       });
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get('location');
-        if (!loc) throw new Error(`redirect ${res.status} without Location`);
+        if (!loc) throw new RecipeFetchError(`redirect ${res.status} without Location`, 'invalid', res.status);
         url = new URL(loc, url).toString(); // resolve relative, re-checked next hop
         continue;
       }
-      if (!res.ok) throw new Error(`source HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new RecipeFetchError(
+          `source HTTP ${res.status}`,
+          res.status === 404 ? 'not-found' : 'unreachable',
+          res.status,
+        );
+      }
       return await readBounded(res, MAX_BYTES);
     } finally {
       clearTimeout(timer);
     }
   }
-  throw new Error('too many redirects');
+  throw new RecipeFetchError('too many redirects', 'invalid');
 }
 
 /**
@@ -140,6 +189,8 @@ interface SourceCache {
   fetchedAt: number; // epoch ms of the last SUCCESSFUL fetch
   ok: boolean; // did the most recent attempt succeed
   failedAt?: number; // epoch ms of the last FAILED attempt (negative cache)
+  reason?: RecipeSourceProblem; // why the most recent attempt failed
+  httpStatus?: number; // what the source answered, if it answered
 }
 const cache = new Map<string, SourceCache>();
 const inflight = new Map<string, Promise<SourceCache>>();
@@ -172,14 +223,16 @@ async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
         const entry: SourceCache = { recipes, fetchedAt: Date.now(), ok: true };
         cache.set(key, entry);
         return entry;
-      } catch {
+      } catch (err) {
         // Keep the last good set for this URL, flagged not-ok (stale), and
-        // stamp failedAt so the negative cache above throttles retries.
+        // stamp failedAt so the negative cache above throttles retries. The
+        // reason rides the cached entry, so a negative-cache hit says the same.
         const entry: SourceCache = {
           recipes: prev?.recipes ?? [],
           fetchedAt: prev?.fetchedAt ?? 0,
           ok: false,
           failedAt: Date.now(),
+          ...sourceProblem(err),
         };
         cache.set(key, entry);
         return entry;
@@ -208,9 +261,21 @@ export async function getRecipeRegistry(
   let anyFailed = false;
   let latest = 0;
   const merged: Recipe[] = [];
+  const statuses: RecipeSourceStatus[] = [];
   const seen = new Set<string>(); // dedupe across sources by sourceId:id
   for (const { source, cache: c } of results) {
     if (!c.ok) anyFailed = true;
+    statuses.push(
+      c.ok
+        ? { id: source.id, name: source.name, ok: true }
+        : {
+            id: source.id,
+            name: source.name,
+            ok: false,
+            reason: c.reason ?? 'unreachable',
+            ...(c.httpStatus !== undefined ? { httpStatus: c.httpStatus } : {}),
+          },
+    );
     if (c.fetchedAt > latest) latest = c.fetchedAt;
     for (const r of c.recipes) {
       const key = `${source.id}:${r.id}`;
@@ -240,5 +305,6 @@ export async function getRecipeRegistry(
     source: sources.map((s) => s.name).join(', ') || 'none',
     recipes,
     stale: anyFailed,
+    sources: statuses,
   };
 }

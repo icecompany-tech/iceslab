@@ -117,6 +117,33 @@ export interface RecipeRegistryResponse {
    * empty). Lets the UI show a "registry offline" hint without erroring.
    */
   stale: boolean;
+  /**
+   * Every enabled source and how its last fetch went, so the screen can say
+   * WHICH source failed and WHY instead of one "offline" for all of them.
+   */
+  sources: RecipeSourceStatus[];
+}
+
+/**
+ * Why a source's last fetch failed, in the words the screen translates:
+ *   not-found    the address answered 404: the file or the repository is not
+ *                there (a repository that was never created looks like this);
+ *   unreachable  no answer, a timeout, a 5xx or another refusal: try later;
+ *   invalid      it answered, and what came back is not a recipe list (not
+ *                JSON, over the size cap, a redirect loop, an address the
+ *                guard refuses).
+ */
+export type RecipeSourceProblem = 'not-found' | 'unreachable' | 'invalid';
+
+export interface RecipeSourceStatus {
+  id: string;
+  name: string;
+  /** The most recent fetch succeeded. */
+  ok: boolean;
+  /** Set exactly when `ok` is false. */
+  reason?: RecipeSourceProblem;
+  /** The HTTP status the source answered with, when it answered at all. */
+  httpStatus?: number;
 }
 
 /**
