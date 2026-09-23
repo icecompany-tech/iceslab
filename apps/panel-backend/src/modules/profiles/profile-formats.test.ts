@@ -54,7 +54,7 @@ describe('profileFormats', () => {
     const legacy = byFormat(profileFormats('shadowsocks', { method: 'chacha20-ietf-poly1305' }));
     expect(legacy.outline).toMatchObject({ carried: true, why: 'native' });
     const ss2022 = byFormat(profileFormats('shadowsocks', { method: '2022-blake3-aes-128-gcm' }));
-    expect(ss2022.outline).toMatchObject({ carried: false, why: 'client-lacks-protocol' });
+    expect(ss2022.outline).toMatchObject({ carried: false, why: 'client-lacks-cipher' });
     // The rest of the Shadowsocks formats take either.
     expect(ss2022.clash).toMatchObject({ carried: true, why: 'native' });
     // No cipher on the config: not a fact to refuse on.

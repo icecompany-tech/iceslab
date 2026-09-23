@@ -27,6 +27,7 @@ export {
 } from '../../core-adapters/xray/index.js';
 export {
   buildShadowsocksUri,
+  ssClientPassword,
   type ShadowsocksUriOpts,
   type ShadowsocksMethod,
 } from '../../core-adapters/shadowsocks/index.js';

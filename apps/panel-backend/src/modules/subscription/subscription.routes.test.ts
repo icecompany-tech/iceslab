@@ -6,6 +6,7 @@ import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
 import { invalidateSrrCache } from '../srr/srr.service.js';
+import { deriveSsPassword } from '../../lib/auth/credentials.js';
 
 let app: FastifyInstance;
 let token: string;
@@ -398,6 +399,32 @@ describe('GET /sub/:token - multi-format (slice 21)', () => {
 
     expect((await get(node('eu-3'))).body).toBe('');
     expect((await get('&node=nowhere')).body).toBe('');
+  });
+
+  it('hands a legacy AEAD client its own key alone, an SS2022 client server:user (E19)', async () => {
+    const user = await createUser('alice');
+    const eu1 = await createNode('eu-1', '10.0.0.1:8443');
+    const eu2 = await createNode('eu-2', '10.0.0.2:8443');
+    await createBinding(await createProfile('shadowsocks', { method: 'chacha20-ietf-poly1305' }, 'aead'), eu1, 8388);
+    await createBinding(await createProfile('shadowsocks', { method: '2022-blake3-aes-128-gcm' }, 's22'), eu2, 8389);
+    const psk = (method: string) => deriveSsPassword(user.xrayUuid, method);
+
+    const res = await app.inject({ method: 'GET', url: `/sub/${user.subscriptionToken}?format=json` });
+    const ss = (JSON.parse(res.body).endpoints as Array<{ protocol: string; method?: string; password?: string; uri: string }>)
+      .filter((e) => e.protocol === 'shadowsocks');
+    const aead = ss.find((e) => e.method === 'chacha20-ietf-poly1305')!;
+    const s22 = ss.find((e) => e.method === '2022-blake3-aes-128-gcm')!;
+
+    // The panel stores a serverPsk on the legacy profile too; it must not reach
+    // the client, in the field every format reads nor in the link.
+    expect(aead.password).toBe(psk('chacha20-ietf-poly1305'));
+    const userinfo = (uri: string) =>
+      Buffer.from(uri.slice('ss://'.length, uri.indexOf('@')), 'base64url').toString('utf8');
+    expect(userinfo(aead.uri)).toBe(`chacha20-ietf-poly1305:${psk('chacha20-ietf-poly1305')}`);
+
+    // SS2022 as it was: the server key, a colon, the user key.
+    expect(s22.password).toMatch(new RegExp(`^[^:]+:${psk('2022-blake3-aes-128-gcm').replace(/[+/=]/g, '\\$&')}$`));
+    expect(userinfo(s22.uri)).toBe(`2022-blake3-aes-128-gcm:${s22.password}`);
   });
 
   it('rejects unknown ?format value with 400', async () => {

@@ -1,0 +1,118 @@
+{
+  "api": {
+    "services": [
+      "StatsService",
+      "HandlerService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 8388,
+      "protocol": "shadowsocks",
+      "settings": {
+        "clients": [
+          {
+            "email": "u-alice",
+            "method": "chacha20-ietf-poly1305",
+            "password": "516QKhKOpDWSBfCyLZ2XHu60KOmc67glDaUdC13VQkY="
+          },
+          {
+            "email": "u-bob",
+            "method": "chacha20-ietf-poly1305",
+            "password": "7KsmJ+rK+b2uqf9K4gZOD6/5fhQtZxw4k4tdG3sDKxo="
+          }
+        ],
+        "method": "chacha20-ietf-poly1305",
+        "network": "tcp,udp",
+        "password": "aWNlc2xhYi1zcy1maXh0dXJlLXBzay1sZWdhY3ktMDA="
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "tag": "ss-in"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 8081,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api-in"
+    }
+  ],
+  "log": {
+    "loglevel": "warning"
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "streamSettings": {
+        "sockopt": {
+          "tcpCongestion": "bbr",
+          "tcpFastOpen": true
+        }
+      },
+      "tag": "direct"
+    },
+    {
+      "protocol": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true
+    }
+  },
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "inboundTag": [
+          "api-in"
+        ],
+        "outboundTag": "api",
+        "type": "field"
+      },
+      {
+        "outboundTag": "dns-out",
+        "protocol": [
+          "dns"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "protocol": [
+          "bittorrent"
+        ],
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "port": "25",
+        "type": "field"
+      }
+    ]
+  },
+  "stats": {}
+}

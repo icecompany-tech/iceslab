@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildShadowsocksUri } from './uri.js';
+import { buildShadowsocksUri, ssClientPassword } from './uri.js';
 
 const baseOpts = {
   method: '2022-blake3-aes-256-gcm' as const,
@@ -75,5 +75,25 @@ describe('buildShadowsocksUri', () => {
     expect(decoded.startsWith('chacha20-ietf-poly1305:')).toBe(true);
     // After the cipher prefix, just the user PSK, no extra colons.
     expect(decoded).toBe(`chacha20-ietf-poly1305:${baseOpts.userPsk}`);
+  });
+
+  it('drops a serverPsk handed in with a legacy cipher (E19)', () => {
+    // The panel stores a serverPsk on legacy profiles too, and the node knows
+    // the user by the uPSK alone: a joined password never authenticated.
+    for (const method of ['chacha20-ietf-poly1305', 'aes-256-gcm', 'aes-128-gcm'] as const) {
+      const decoded = decodeUserinfo(buildShadowsocksUri({ ...baseOpts, method }));
+      expect(decoded, method).toBe(`${method}:${baseOpts.userPsk}`);
+    }
+  });
+});
+
+describe('ssClientPassword', () => {
+  it('joins the server key on SS2022 and never on legacy AEAD', () => {
+    expect(ssClientPassword('2022-blake3-aes-128-gcm', 'U', 'S')).toBe('S:U');
+    expect(ssClientPassword('2022-blake3-chacha20-poly1305', 'U', 'S')).toBe('S:U');
+    expect(ssClientPassword('chacha20-ietf-poly1305', 'U', 'S')).toBe('U');
+    expect(ssClientPassword('aes-256-gcm', 'U', 'S')).toBe('U');
+    // Single-tenant SS2022 (no server key): the user key alone.
+    expect(ssClientPassword('2022-blake3-aes-256-gcm', 'U')).toBe('U');
   });
 });

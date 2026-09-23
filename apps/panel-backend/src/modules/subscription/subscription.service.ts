@@ -38,6 +38,7 @@ import {
   buildHttpProxyUri,
   buildTelegramSocksUri,
   isPlainSubprotocol,
+  ssClientPassword,
   type ShadowsocksMethod,
   type SubscriptionEndpoint,
   type SubscriptionJsonResponse,
@@ -1275,16 +1276,14 @@ export async function generateSubscription(
         method: ShadowsocksMethod;
         serverPsk?: string;
       };
-      // SS2022 multi-user: the per-user uPSK is DERIVED from xrayUuid - a raw
-      // UUID is not a valid base64 key, and the node derives the identical value
-      // (core.DeriveSsPassword). The client credential is ServerPSK:UserPSK
-      // colon-joined; the clash/sing-box/outline formats read endpoint.password
-      // directly, so set the combined value there and hand the parts to the URI
-      // builder (which joins them).
+      // The per-user uPSK is DERIVED from xrayUuid - a raw UUID is not a valid
+      // base64 key, and the node derives the identical value
+      // (core.DeriveSsPassword). The client credential is ServerPSK:UserPSK on
+      // SS2022 and the uPSK alone on legacy AEAD (ssClientPassword, E19); the
+      // clash/sing-box/outline formats read endpoint.password directly, so the
+      // same value goes there and into the URI.
       const ssUserPsk = deriveSsPassword(user.xrayUuid, ssCfg.method);
-      const ssClientPassword = ssCfg.serverPsk
-        ? `${ssCfg.serverPsk}:${ssUserPsk}`
-        : ssUserPsk;
+      const ssPassword = ssClientPassword(ssCfg.method, ssUserPsk, ssCfg.serverPsk);
       endpoints.push({
         protocol: 'shadowsocks',
         nodeName,
@@ -1292,7 +1291,7 @@ export async function generateSubscription(
         port,
         ...hostMeta,
         method: ssCfg.method,
-        password: ssClientPassword,
+        password: ssPassword,
         uri: buildShadowsocksUri({
           method: ssCfg.method,
           userPsk: ssUserPsk,

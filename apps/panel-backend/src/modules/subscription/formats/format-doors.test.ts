@@ -235,7 +235,9 @@ describe('the table itself', () => {
     // The Outline SDK has chacha20-ietf-poly1305 and aes-*-gcm only.
     expect(formatCarries('outline', 'shadowsocks', undefined, '2022-blake3-aes-128-gcm')).toEqual({
       carried: false,
-      why: 'client-lacks-protocol',
+      // The door is spoken, the cipher is not: the screen must not say
+      // "does not speak this protocol" about a cipher.
+      why: 'client-lacks-cipher',
     });
     expect(formatCarries('outline', 'shadowsocks', undefined, 'aes-256-gcm').carried).toBe(true);
     // A cipher nobody told us is not a fact to refuse on.

@@ -235,10 +235,13 @@ export function doorOf(e: { protocol: ProtocolName; subprotocol?: XraySubprotoco
  *   client-lacks-protocol  the clients of this format cannot speak it;
  *   no-uri-standard        there is no share link for it, and the format is a
  *                          list of links;
- *   not-yet                the clients can, this panel does not build it yet.
+ *   not-yet                the clients can, this panel does not build it yet;
+ *   client-lacks-cipher    the clients speak the door, not this endpoint's
+ *                          cipher (Outline and 2022-blake3). Never a cell of
+ *                          the table: formatCarries answers it from the cipher.
  * A carried door answers 'native'.
  */
-export type FormatGap = 'client-lacks-protocol' | 'no-uri-standard' | 'not-yet';
+export type FormatGap = 'client-lacks-protocol' | 'client-lacks-cipher' | 'no-uri-standard' | 'not-yet';
 export type FormatWhy = 'native' | FormatGap;
 
 /**
@@ -399,7 +402,7 @@ export function formatCarries(
     return { carried: false, why: 'client-lacks-protocol' };
   }
   if (cell.exceptSs2022 && ssMethod?.startsWith('2022-')) {
-    return { carried: false, why: 'client-lacks-protocol' };
+    return { carried: false, why: 'client-lacks-cipher' };
   }
   return { carried: true, why: 'native' };
 }

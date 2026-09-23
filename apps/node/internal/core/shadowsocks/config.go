@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
@@ -92,11 +93,11 @@ func (c *InboundConfig) validate() error {
 	return nil
 }
 
-// ssClient mirrors xray's `clients` element for protocol=shadowsocks.
-// Per upstream xray-core, SS2022 multi-user requires `password` + `email`
-// per client (legacy SS uses inbound-level password, no per-user). We
-// always emit the SS2022 shape, clients on legacy ciphers tolerate the
-// extra `email` field.
+// ssClient is one user as the adapter holds it. On the wire (see
+// buildUserInboundSettings) every client carries `password` + `email`, and a
+// client on a legacy cipher also its `method`: with `clients` present xray
+// ignores the inbound-level password on a legacy cipher and knows each user by
+// their own password and method.
 type ssClient struct {
 	Password string `json:"password"`
 	Email    string `json:"email"`
@@ -115,12 +116,24 @@ func buildUserInboundSettings(cfg InboundConfig, users []ssClient) map[string]an
 	// same value (core.DeriveSsPassword), keeping client and server in sync.
 	// Pre-fix this emitted the raw UUID, which xray-core/sing-box reject as an
 	// invalid PSK length - SS2022 never actually authenticated.
+	//
+	// Legacy AEAD (not 2022-blake3) needs the cipher on EVERY client: for such
+	// a cipher xray-core builds each user from its own `method` and refuses an
+	// empty one ("unsupported cipher method: ", infra/conf/shadowsocks.go,
+	// Build, checked on the pinned 26.3.27). The inbound-level method is not
+	// inherited. SS2022 clients carry no method: the inbound's is theirs.
+	// Field bug E19: without this a legacy profile never started.
+	legacy := !strings.HasPrefix(cfg.Method, "2022-")
 	clients := make([]map[string]any, 0, len(users))
 	for _, u := range users {
-		clients = append(clients, map[string]any{
+		c := map[string]any{
 			"password": core.DeriveSsPassword(u.Password, cfg.Method),
 			"email":    u.Email,
-		})
+		}
+		if legacy {
+			c["method"] = cfg.Method
+		}
+		clients = append(clients, c)
 	}
 	return map[string]any{
 		"method": cfg.Method,

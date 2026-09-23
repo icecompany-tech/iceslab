@@ -20,8 +20,8 @@
  * `serverPsk` here and we'll skip the colon prefix.
  *
  * Legacy AEAD ciphers (`aes-256-gcm`, `chacha20-ietf-poly1305`) work with
- * just one password, pass the user's PSK as `userPsk`, leave
- * `serverPsk` empty.
+ * just one password, the user's PSK. A `serverPsk` passed with such a cipher
+ * is ignored (see ssClientPassword).
  */
 
 export type ShadowsocksMethod =
@@ -45,12 +45,25 @@ export interface ShadowsocksUriOpts {
   name: string;
 }
 
+/**
+ * The password a client sends, one rule for the link and for every format.
+ *
+ * SS2022 multi-user: `<ServerPSK>:<UserPSK>`, the server key is the identity
+ * header's key. Legacy AEAD: the user's own password and nothing else, because
+ * the key is derived from the WHOLE string, and the node knows this user by
+ * the uPSK alone (xray clients[].password, sing-box users[].password). The
+ * panel generates a serverPsk for legacy profiles too (the agent requires the
+ * field), so "serverPsk is set" is no test of which case this is: the cipher
+ * is. Joining it on legacy was field bug E19: the client never authenticated.
+ */
+export function ssClientPassword(method: string, userPsk: string, serverPsk?: string): string {
+  return serverPsk && method.startsWith('2022-') ? `${serverPsk}:${userPsk}` : userPsk;
+}
+
 export function buildShadowsocksUri(opts: ShadowsocksUriOpts): string {
   // SS2022 multi-user: `<method>:<ServerPSK>:<UserPSK>` joined with colons.
-  // Single-tenant: `<method>:<UserPSK>` (no server PSK).
-  const password = opts.serverPsk
-    ? `${opts.serverPsk}:${opts.userPsk}`
-    : opts.userPsk;
+  // Legacy AEAD and single-tenant: `<method>:<UserPSK>`.
+  const password = ssClientPassword(opts.method, opts.userPsk, opts.serverPsk);
   const userinfo = base64UrlNoPad(`${opts.method}:${password}`);
   return `ss://${userinfo}@${opts.host}:${opts.port}#${encodeURIComponent(opts.name)}`;
 }
