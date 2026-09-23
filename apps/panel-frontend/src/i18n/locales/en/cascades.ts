@@ -99,9 +99,10 @@ export const cascades = {
     // in the firewall.
     // An entry the chain does not carry. The option stays in the list: it is
     // planned, and hiding it would lie about the plan the way silence lies
-    // about today. Since phase 6.4 (2026-09-23) hysteria is carried, and only
-    // AmneziaWG is left here: naming phase 6 would now be untrue.
-    entryNotCarried: 'An entry over {{protocol}} does not reach the chain yet. Phase 7 brings it.',
+    // about today. No phase numbers: they changed twice in two days and each
+    // time made the line untrue. The supported list comes from
+    // CHAIN_ENTRY_PROTOCOLS, the same one the server refusal reads.
+    entryNotCarried: 'An entry over {{protocol}} does not reach the chain: a cascade entry serves only {{supported}}.',
     // The edge of phase 6, and it belongs where the operator picks the entry:
     // hearing it from a user who "cannot choose a country" is worse.
     entryHy2Auto:

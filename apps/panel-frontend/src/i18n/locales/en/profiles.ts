@@ -258,6 +258,22 @@ export const profiles = {
     create: 'Create profile',
   },
 
+  // The connection-test window (slice 31). The panel probes every binding of
+  // the profile from its own container, no ssh to the node.
+  testConnect: {
+    title: 'Connection test',
+    scope:
+      "The probe runs from the panel container's network: DNS, firewall, TLS handshake. It does NOT prove end-user reachability; their ISP may still block.",
+    running: 'Probing every binding and every host…',
+    failed: 'The probe failed',
+    empty: 'This profile has no enabled bindings, nothing to probe.',
+    rerun: 'Run again',
+    close: 'Close',
+    sniHint: 'The SNI we sent',
+    certHint: 'The peer certificate CN: for REALITY this should be the masquerade site, not your domain',
+    tlsHint: 'The negotiated TLS version: a REALITY masquerade target needs TLSv1.3',
+  },
+
   profileForm: {
     nameLatinOnly: 'Latin letters, digits, dot, _ and - only. No spaces or Cyrillic.',
     awgImportantTitle: 'What you should know about AmneziaWG 2.0:',

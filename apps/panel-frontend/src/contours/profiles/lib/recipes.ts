@@ -5,11 +5,11 @@
  * known-good combination of fields. Lets new admins configure DPI-resistant
  * transports without learning every protocol's quirks.
  *
- * Differentiator vs Remnawave/Marzban: those panels show raw form fields
- * sorted alphabetically; we group by intent ("max stealth" / "CDN-friendly"
- * / "RU-mobile-tuned") and self-validate combos that xray-core silently
- * rejects (REALITY+ws is the canonical example, looks fine in the form,
- * dies on `xray run` with `REALITY only supports RAW, XHTTP and gRPC`).
+ * Why this exists instead of raw form fields sorted alphabetically: recipes
+ * are grouped by intent ("max stealth" / "CDN-friendly" / "RU-mobile-tuned")
+ * and self-validate combos that xray-core silently rejects (REALITY+ws is the
+ * canonical example, looks fine in the form, dies on `xray run` with
+ * `REALITY only supports RAW, XHTTP and gRPC`).
  *
  * Recipes only touch protocol-specific fields. Common fields (name,
  * description, enabled) are left to the user.

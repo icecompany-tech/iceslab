@@ -69,6 +69,7 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   LEG_PORT_BASE,
+  chainEntryList,
   entryChainFacts,
   legCellNotes,
   legFacts,
@@ -336,7 +337,7 @@ export function CascadeCreatePage() {
           : overLinks
             ? t('cascadeCreate.tooManyLinks', { n: links, max: MAX_LINKS })
             : entryChain && !entryChain.carried
-              ? t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol })
+              ? t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol, supported: chainEntryList() })
               : null;
 
   return (

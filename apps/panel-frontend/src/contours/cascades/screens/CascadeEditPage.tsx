@@ -83,6 +83,7 @@ import {
   MAX_POSITIONS,
   ROLE_TONE,
   LEG_PORT_BASE,
+  chainEntryList,
   isKnownProtocol,
   entryChainFacts,
   lastAttemptFacts,
@@ -525,7 +526,7 @@ export function CascadeEditPage() {
                   value: legacy[0]!.bad.join(', '),
                 })
               : entryChain && !entryChain.carried
-                ? t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol })
+                ? t('cascadeCreate.entryNotCarried', { protocol: entryChain.protocol, supported: chainEntryList() })
                 : null;
 
   function confirmDelete() {

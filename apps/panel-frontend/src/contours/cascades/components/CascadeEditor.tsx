@@ -25,6 +25,7 @@ import {
 } from '@/contours/cascades/lib/colors';
 import {
   ROLE_TONE,
+  chainEntryList,
   entryNoteKind,
   isKnownProtocol,
   legParamFacts,
@@ -1891,7 +1892,7 @@ export function EntryChainNote({ facts }: { facts: EntryChainFacts | null }) {
   if (kind === 'notCarried') {
     return (
       <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
-        {t('cascadeCreate.entryNotCarried', { protocol: facts.protocol })}
+        {t('cascadeCreate.entryNotCarried', { protocol: facts.protocol, supported: chainEntryList() })}
       </Note>
     );
   }

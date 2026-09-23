@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Badge,
@@ -28,18 +29,20 @@ interface Props {
 }
 
 /**
- * Slice 31 - admin clicks "Test connect" in a profile card and the panel
- * fires outbound probes against every binding × host. Results appear as a
- * list of green / red rows with TLS handshake CN, latency, or the probe
- * error string. UDP-based protocols (Hysteria/AmneziaWG/Mieru) get a
- * yellow caveat - the TCP-port probe doesn't actually validate them.
+ * Slice 31: the operator asks for a connection test on a profile, and the
+ * panel fires outbound probes against every binding × host. Results appear as
+ * green / red rows with the TLS handshake CN, latency, or the probe error.
+ * UDP-based protocols (Hysteria/AmneziaWG/Mieru) get a yellow caveat: the
+ * TCP-port probe does not actually validate them.
  *
- * Differentiator vs Remnawave / Marzban: those panels make the admin SSH
- * to the node and run a curl/openssl manually to verify a fresh inbound.
- * Here it's one click and the panel does the network IO from its
- * container - same network path the subscription generator runs from.
+ * The point is that a fresh inbound can be checked without ssh to the node
+ * and a hand-run curl/openssl: one click, and the panel does the network IO
+ * from its container, the same network path the subscription generator uses.
+ *
+ * The door is on the profile page (ProfileEditPage), next to the save bar.
  */
 export function TestConnectModal({ profile, onClose }: Props) {
+  const { t } = useTranslation();
   const [results, setResults] = useState<TestConnectResult[] | null>(null);
 
   const mutation = useMutation({
@@ -80,7 +83,7 @@ export function TestConnectModal({ profile, onClose }: Props) {
             <IconBolt size={16} />
           </ThemeIcon>
           <Stack gap={0}>
-            <Text fw={600}>Test connect</Text>
+            <Text fw={600}>{t('testConnect.title')}</Text>
             <Text size="xs" c="dimmed">
               {profile?.name}
             </Text>
@@ -91,28 +94,24 @@ export function TestConnectModal({ profile, onClose }: Props) {
     >
       <Stack gap="sm">
         <Alert color="blue" variant="light" icon={<IconShieldLock size={14} />}>
-          Probe runs from panel container's network. Validates DNS / firewall
-          / TLS handshake - but NOT end-user reachability (their ISP may
-          still block).
+          {t('testConnect.scope')}
         </Alert>
 
         {mutation.isPending && (
           <Text size="sm" c="dimmed" ta="center" py="xl">
-            Probing all bindings × hosts…
+            {t('testConnect.running')}
           </Text>
         )}
 
         {mutation.isError && (
           <Alert color="red" variant="light">
-            {mutation.error instanceof Error
-              ? mutation.error.message
-              : 'Probe failed'}
+            {mutation.error instanceof Error ? mutation.error.message : t('testConnect.failed')}
           </Alert>
         )}
 
         {results && results.length === 0 && (
           <Text size="sm" c="dimmed" ta="center" py="xl">
-            У этого профиля нет включённых bindings - нечего проверять.
+            {t('testConnect.empty')}
           </Text>
         )}
 
@@ -136,10 +135,10 @@ export function TestConnectModal({ profile, onClose }: Props) {
               }
             }}
           >
-            Re-run
+            {t('testConnect.rerun')}
           </Button>
           <Button variant="subtle" onClick={onClose}>
-            Закрыть
+            {t('testConnect.close')}
           </Button>
         </Group>
       </Stack>
@@ -148,6 +147,7 @@ export function TestConnectModal({ profile, onClose }: Props) {
 }
 
 function ResultRow({ result }: { result: TestConnectResult }) {
+  const { t } = useTranslation();
   const okColor = result.ok ? 'teal' : 'red';
   const Icon = result.ok ? IconCircleCheck : IconCircleX;
   return (
@@ -180,17 +180,17 @@ function ResultRow({ result }: { result: TestConnectResult }) {
               {result.endpoint}:{result.port}
             </Code>
             {result.sni && (
-              <Tooltip label="TLS SNI we sent">
+              <Tooltip label={t('testConnect.sniHint')}>
                 <Code style={{ fontSize: 11 }}>SNI={result.sni}</Code>
               </Tooltip>
             )}
             {result.certCn && (
-              <Tooltip label="Peer cert subject CN - for REALITY this should be the masquerade target, not your domain">
+              <Tooltip label={t('testConnect.certHint')}>
                 <Code style={{ fontSize: 11 }}>cert={result.certCn}</Code>
               </Tooltip>
             )}
             {result.tlsVersion && (
-              <Tooltip label="Negotiated TLS version - REALITY needs the dest to speak TLSv1.3">
+              <Tooltip label={t('testConnect.tlsHint')}>
                 <Code
                   style={{ fontSize: 11 }}
                   c={result.tlsVersion !== 'TLSv1.3' && result.kind === 'dest' ? 'red' : undefined}

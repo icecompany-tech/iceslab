@@ -67,6 +67,12 @@ export function protocolOptions(current: string | null): { value: string; label:
  */
 export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS];
 
+/** Поддержанные входы строкой для текста отказа: имена как на проводе
+ *  (`hysteria`, не подпись «hysteria2»), тем же списком, что читает сервер. */
+export function chainEntryList(): string {
+  return CHAIN_ENTRY_PROTOCOLS.join(', ');
+}
+
 /**
  * Пускает ли цепь трафик, зашедший этим протоколом.
  *
