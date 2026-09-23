@@ -1210,9 +1210,18 @@ function dirOutTag(directionTag: number, idx: number): string {
 /** Email given to a link's inbound client. It is how a TRANSIT tells directions
  *  apart: the transit sees an internal link rather than a user, so the only
  *  thing that says "this traffic is headed for direction 7" is which credential
- *  it arrived on. Routing then matches on `user`. */
+ *  it arrived on. Routing then matches on `user`.
+ *
+ *  ⚠ The WHOLE node id, not a prefix. It used to be the first 8 characters, and
+ *  two dialling nodes of one pool whose ids share them become two clients with
+ *  one email on one listener: xray refuses the config ("User ... already
+ *  exists") and the receiving node's core does not start, which takes every leg
+ *  into it down, fail-closed on the whole cascade. Rare with random uuids, 1 in
+ *  about 4 billion per pair, but the price is an outage; caught by CI on
+ *  2026-09-23 with fixture ids that differ only at the end. xray takes any
+ *  string here, and nothing reads the email back but this module's routing. */
 function linkClientEmail(directionTag: number, fromNodeId: string): string {
-  return `lnk-d${directionTag}-${fromNodeId.slice(0, 8)}`;
+  return `lnk-d${directionTag}-${fromNodeId}`;
 }
 
 /**
