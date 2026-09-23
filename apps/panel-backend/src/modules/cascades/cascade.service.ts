@@ -51,7 +51,7 @@ import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
 import { CHAIN_SOCKS_USER, chainSocksPort } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
-import { carriesCellAtSave } from './cell-carriage.js';
+import { canRunChainAtSave, carriesCellAtSave } from './cell-carriage.js';
 import {
   matchStoredDirections,
   resolveDirections,
@@ -318,6 +318,126 @@ async function assertNodesCarryCells(
     conflicts.push({ nodeName: node.name, cell: w.cell, engines: carriage.engines });
   }
   if (conflicts.length > 0) throw new CascadeCellNotCarriedError(conflicts);
+}
+
+/**
+ * A hysteria entry on a node that cannot run the chain process, phase 6.
+ *
+ * Refused by FACT only (see canRunChainAtSave): the node reported its engines
+ * in full and sing-box is not among them. Every node is named, not the first,
+ * like the port and the cell refusals.
+ */
+export class CascadeEntryCannotChainError extends Error {
+  readonly code = 'ENTRY_CANNOT_CHAIN';
+  constructor(public conflicts: { nodeName: string; engines: string[] }[]) {
+    super(
+      `A hysteria entry hands every user to the chain process on the same node, and these ` +
+        `entry nodes cannot run one: ` +
+        conflicts
+          .map(
+            (c) =>
+              `node "${c.nodeName}" reports ` +
+              (c.engines.length > 0 ? `only ${c.engines.join(', ')}` : 'no engines'),
+          )
+          .join('; ') +
+        `. Install sing-box on them (bootstrap-singbox.sh) or keep the entry on xray.`,
+    );
+    this.name = 'CascadeEntryCannotChainError';
+  }
+}
+
+/**
+ * Switching the entry protocol takes people out of the cascade, phase 6.
+ *
+ * One protocol per entry, by decision. Moving it from xray to hysteria (or back)
+ * means the users of the OLD protocol on the entry nodes stop being cascaded
+ * and leave straight from the entry country. That is allowed, and it must be
+ * SAID: the save refuses with the list of who leaves, and goes through only
+ * when the same request is repeated with `confirmEntryChange: true`.
+ */
+export class CascadeEntryChangeDropsUsersError extends Error {
+  readonly code = 'ENTRY_CHANGE_DROPS_USERS';
+  constructor(
+    public from: string,
+    public to: string,
+    public conflicts: { nodeName: string; profileName: string }[],
+  ) {
+    super(
+      `Changing the entry from ${from} to ${to} takes these profiles out of the cascade, and ` +
+        `their users will leave straight from the entry country: ` +
+        conflicts.map((c) => `profile "${c.profileName}" on node "${c.nodeName}"`).join('; ') +
+        `. Repeat the save with confirmEntryChange: true to go ahead.`,
+    );
+    this.name = 'CascadeEntryChangeDropsUsersError';
+  }
+}
+
+/**
+ * The entry nodes of a hysteria entry must be able to run the chain.
+ *
+ * Only the ENTRY: a hysteria entry's users reach the cascade through the chain
+ * process on that machine and through nothing else, so a node with no sing-box
+ * is a cascade that exists on the screen and carries nobody.
+ */
+async function assertEntryCanChain(
+  positions?: { position: number; nodeIds: string[]; entryProtocol?: string }[],
+): Promise<void> {
+  const entry = positions?.find((p) => p.position === 0);
+  if (entry?.entryProtocol !== 'hysteria' || entry.nodeIds.length === 0) return;
+  const nodes = await prisma.node.findMany({
+    where: { id: { in: entry.nodeIds } },
+    select: { name: true, cores: true, chainStatus: true },
+  });
+  const conflicts = nodes
+    .map((n) => ({ node: n, verdict: canRunChainAtSave(n) }))
+    .filter((x) => !x.verdict.ok)
+    .map((x) => ({ nodeName: x.node.name, engines: x.verdict.engines }));
+  if (conflicts.length > 0) throw new CascadeEntryCannotChainError(conflicts);
+}
+
+/**
+ * The entry protocol moved, and somebody is standing on the old one.
+ *
+ * `from` is what is stored (the v4 entry, or the legacy entry hop for a cascade
+ * written before the topology tables); `to` is what this save asks for. Who
+ * leaves is every enabled binding of a profile served with the OLD protocol on
+ * the NEW entry nodes: those nodes stay entries, and their users of the old
+ * protocol stop being cascaded. A node dropped from the entry at the same time
+ * loses its cascade whatever the protocol, and that is a different change.
+ */
+async function assertEntryChangeConfirmed(
+  cascadeId: string,
+  positions: { position: number; nodeIds: string[]; entryProtocol?: string }[] | undefined,
+  confirmed: boolean,
+): Promise<void> {
+  const next = positions?.find((p) => p.position === 0);
+  if (!next?.entryProtocol || confirmed) return;
+  const [storedV4, storedHop] = await Promise.all([
+    prisma.cascadePosition.findFirst({
+      where: { cascadeId, position: 0 },
+      select: { entryProtocol: true },
+    }),
+    prisma.cascadeHop.findFirst({
+      where: { cascadeId, position: 0 },
+      select: { entryProtocol: true },
+    }),
+  ]);
+  const from = storedV4?.entryProtocol ?? storedHop?.entryProtocol ?? null;
+  if (!from || from === next.entryProtocol) return;
+
+  const leaving = await prisma.profileNodeBinding.findMany({
+    where: { nodeId: { in: next.nodeIds }, enabled: true, profile: { protocol: from } },
+    select: { node: { select: { name: true } }, profile: { select: { name: true } } },
+    orderBy: [{ node: { name: 'asc' } }, { profile: { name: 'asc' } }],
+  });
+  // Nobody on the old protocol, nobody to warn: the switch goes through as an
+  // ordinary edit.
+  if (leaving.length === 0) return;
+  throw new CascadeEntryChangeDropsUsersError(
+    from,
+    next.entryProtocol,
+    leaving.map((b) => ({ nodeName: b.node.name, profileName: b.profile.name })),
+  );
 }
 
 export class CascadeEntryCoreTooOldError extends Error {
@@ -1299,6 +1419,9 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // saved") about the same walk, and an operator fixing one wants to hear about
   // the other in the same breath.
   await assertNodesCarryCells(positions, directions);
+  // Phase 6: a hysteria entry reaches the cascade only through the chain
+  // process, so its nodes must be able to run one.
+  await assertEntryCanChain(positions);
   // v4 topology, validated separately from the fold: the fold answers "can the
   // old storage hold this", these rules answer "is this a sane cascade at all".
   const topology =
@@ -1484,6 +1607,11 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // dropdown, and the node it lands on may be an xray-only machine nobody has
   // touched since.
   await assertNodesCarryCells(positions, directions);
+  // Phase 6, in this order. First whether the entry CAN chain, because that is
+  // a refusal no confirmation lifts; asking the operator to confirm a switch
+  // that is then refused anyway would be a question with no useful answer.
+  await assertEntryCanChain(positions);
+  await assertEntryChangeConfirmed(id, positions, input.confirmEntryChange === true);
 
   try {
     const c = await prisma.$transaction(async (tx) => {

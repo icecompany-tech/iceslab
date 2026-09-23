@@ -59,17 +59,17 @@ function assertEntryIsChainable(protocol: string): void {
 /**
  * A distinct error, because this refusal has a CODE the screen matches on.
  *
- * The operator's choice is not wrong, it is early: hysteria2 entries arrive in
- * phase 6 and AmneziaWG in phase 7. A generic validation message would read as
- * "you cannot do this", and the difference between that and "not yet" is the
- * difference between an operator filing a bug and an operator waiting.
+ * The operator's choice is not wrong, it is early: AmneziaWG entries arrive in
+ * phase 7 (hysteria2 arrived in phase 6). A generic validation message would
+ * read as "you cannot do this", and the difference between that and "not yet"
+ * is the difference between an operator filing a bug and an operator waiting.
  */
 export class CascadeEntryNotChainableError extends Error {
   readonly code = 'ENTRY_NOT_CHAINABLE';
   constructor(public protocol: string) {
     super(
-      `entry protocol ${protocol} is not carried by the chain yet: xray only until phase 6 ` +
-        `(hysteria2) and 7 (amneziawg)`,
+      `entry protocol ${protocol} is not carried by the chain yet: xray and hysteria today, ` +
+        `phase 7 (amneziawg)`,
     );
     this.name = 'CascadeEntryNotChainableError';
   }

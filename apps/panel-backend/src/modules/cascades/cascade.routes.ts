@@ -59,6 +59,22 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       conflicts: err.conflicts,
     });
   }
+  if (err instanceof svc.CascadeEntryCannotChainError) {
+    // 409: well-formed, and in conflict with what those nodes have installed.
+    return reply.code(409).send({ error: err.code, message: err.message, conflicts: err.conflicts });
+  }
+  if (err instanceof svc.CascadeEntryChangeDropsUsersError) {
+    // 409 and not 400: the request is valid and becomes acceptable with one
+    // more field. The screen matches the code, shows who leaves, and repeats
+    // the save with confirmEntryChange: true.
+    return reply.code(409).send({
+      error: err.code,
+      message: err.message,
+      from: err.from,
+      to: err.to,
+      conflicts: err.conflicts,
+    });
+  }
   if (err instanceof svc.CascadeEntryCoreTooOldError) {
     // T7: entry node's xray is too old for exit selection. 409: the request is
     // well-formed but conflicts with the node's current core version.

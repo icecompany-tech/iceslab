@@ -144,9 +144,17 @@ export const LINK_CELL_TRANSPORT: Record<LinkCell, Transport> = {
  * come to disagree, and the disagreement shows up as a form that offers an
  * option the server rejects.
  *
- * It grows with the phases: hysteria2 in 6, amneziawg in 7.
+ * It grows with the phases: hysteria2 in 6 (here now), amneziawg in 7.
+ *
+ * ⚠ The two entries are not two spellings of one thing. An xray entry lets a
+ * user pick the way out (the choice rides in the UUID as vlessRoute); a
+ * hysteria entry cannot, because a hysteria user is a password, so the whole
+ * entry hands to the chain's Auto line and the policy. One protocol per
+ * cascade, by decision, and switching it moves the cascade from one set of
+ * users to the other: the save asks for confirmation (ENTRY_CHANGE_DROPS_USERS)
+ * rather than letting it happen quietly.
  */
-export const CHAIN_ENTRY_PROTOCOLS = ['xray'] as const;
+export const CHAIN_ENTRY_PROTOCOLS = ['xray', 'hysteria'] as const;
 
 /**
  * The formats a subscription can be served in.

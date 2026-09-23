@@ -58,11 +58,37 @@ export function carriesCellAtSave(
   node: { cores: unknown; chainStatus: unknown },
   cell: LinkCell,
 ): CellCarriage {
+  const carriers = LINK_CELL_ENGINES[cell];
+  return judge(node, (engines) => engines.some((e) => carriers.includes(e)));
+}
+
+/**
+ * Can this node RUN the chain process at all? Phase 6, for a hysteria entry.
+ *
+ * A hysteria entry has no fallback: its users reach the cascade only through
+ * the chain process on the same machine (there is no legacy xray drawing for
+ * hysteria). So the question is not which cell, but whether sing-box is there.
+ *
+ * The SAME three answers as a cell, read by the same code, for the same
+ * reasons, and the absence of a chain block is again not a "no": it is how
+ * every node answers before its first cascade, and the chain block is sent BY
+ * this save. Refusing on it would refuse every first hysteria cascade, forever.
+ * The one real refusal is a node that reported its engines in full and sing-box
+ * is not among them.
+ */
+export function canRunChainAtSave(node: { cores: unknown; chainStatus: unknown }): CellCarriage {
+  return judge(node, (engines) => engines.includes('singbox'));
+}
+
+/** The three answers both questions share. See carriesCellAtSave's header. */
+function judge(
+  node: { cores: unknown; chainStatus: unknown },
+  enough: (engines: EngineName[]) => boolean,
+): CellCarriage {
   const chain = (node.chainStatus as ChainStatus | null) ?? null;
   if (chain?.running === true) return { ok: true, by: 'chain', engines: [] };
   if (chain) return { ok: true, by: 'unknown', engines: [] };
   const engines = reportedEngines(node);
   if (!engines) return { ok: true, by: 'unknown', engines: [] };
-  const carriers = LINK_CELL_ENGINES[cell];
-  return { ok: engines.some((e) => carriers.includes(e)), by: 'engines', engines };
+  return { ok: enough(engines), by: 'engines', engines };
 }

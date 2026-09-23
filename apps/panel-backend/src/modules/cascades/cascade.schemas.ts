@@ -250,6 +250,14 @@ export const UpdateCascadeSchema = z
     hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS).optional(),
     positions: z.array(CascadePositionSchema).min(1).max(MAX_CASCADE_HOPS).optional(),
     directions: z.array(CascadeDirectionSchema).min(1).optional(),
+    /**
+     * Consent to an entry-protocol switch that takes profiles out of the
+     * cascade (phase 6, 409 ENTRY_CHANGE_DROPS_USERS). Only `true` counts, and
+     * it lives for ONE request: nothing stores it, so the next switch asks
+     * again. A flag that stuck would let a later edit move people with no
+     * question at all.
+     */
+    confirmEntryChange: z.boolean().optional(),
   })
   .superRefine((val, ctx) => {
     if ((val.positions === undefined) !== (val.directions === undefined)) {

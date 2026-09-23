@@ -76,29 +76,34 @@ describe('the protocol a cascade entry serves users with', () => {
     expect(res.statusCode, res.body).toBe(201);
   });
 
-  // The WIRE values, which are not what an operator calls them: the schema's
-  // enum says `hysteria`, the protocol is known as hysteria2, and the message
-  // names both so neither reader is left guessing.
-  for (const protocol of ['hysteria', 'amneziawg'] as const) {
-    it(`refuses ${protocol} and says which phase carries it`, async () => {
-      const res = await save(protocol, await makeNode(`ru-${protocol}`), await makeNode('nl'));
-      expect(res.statusCode, res.body).toBe(400);
-      const body = JSON.parse(res.body);
-      // The CODE is what the screen matches on, so it is asserted separately
-      // from the sentence: a message can be reworded, the code cannot.
-      expect(body.error).toBe('ENTRY_NOT_CHAINABLE');
-      expect(body.message).toContain(protocol);
-      expect(body.message).toContain('phase 6 (hysteria2) and 7 (amneziawg)');
-      // Nothing was written: a refusal that leaves half a cascade behind is a
-      // refusal the operator has to clean up after.
-      expect(await prisma.cascade.count()).toBe(0);
-    });
-  }
+  it('takes hysteria since phase 6, on a node that has said nothing yet', async () => {
+    // The node reported no cores at all, which is every node before its first
+    // cascade. The chain block is sent BY this save, so refusing on the absence
+    // would refuse every first hysteria cascade, forever.
+    const res = await save('hysteria', await makeNode('ru-hy'), await makeNode('nl'));
+    expect(res.statusCode, res.body).toBe(201);
+  });
+
+  it('refuses amneziawg and says which phase carries it', async () => {
+    const res = await save('amneziawg', await makeNode('ru-awg'), await makeNode('nl'));
+    expect(res.statusCode, res.body).toBe(400);
+    const body = JSON.parse(res.body);
+    // The CODE is what the screen matches on, so it is asserted separately
+    // from the sentence: a message can be reworded, the code cannot.
+    expect(body.error).toBe('ENTRY_NOT_CHAINABLE');
+    expect(body.message).toContain('amneziawg');
+    expect(body.message).toContain('phase 7 (amneziawg)');
+    // And no longer promises hysteria for a phase that has shipped.
+    expect(body.message).not.toContain('phase 6');
+    // Nothing was written: a refusal that leaves half a cascade behind is a
+    // refusal the operator has to clean up after.
+    expect(await prisma.cascade.count()).toBe(0);
+  });
 
   it('is refused against the list the screen reads', async () => {
     // One list, shared. A second copy on the frontend is how a form comes to
     // offer an option the server rejects, and the operator learns the rule from
     // an error instead of from the control.
-    expect([...CHAIN_ENTRY_PROTOCOLS]).toEqual(['xray']);
+    expect([...CHAIN_ENTRY_PROTOCOLS]).toEqual(['xray', 'hysteria']);
   });
 });
