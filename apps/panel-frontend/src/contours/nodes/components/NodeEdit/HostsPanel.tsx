@@ -4,6 +4,7 @@ import { deleteHost } from '@/lib/domain/hosts';
 import { GlobeIcon, LinkIcon, TrashIcon } from '@/contours/nodes/components/NodeEdit/icons';
 import { PROTOCOL_DOT, shapeOf } from '@/contours/nodes/lib/nodeFormat';
 import { engineWord, profilePairLabel, type EngineName } from '@/lib/domain/engines';
+import { plainSubprotocolOf } from '@/lib/domain/xraySubprotocol';
 import { PlainButton } from '@/contours/nodes/components/NodeEdit/PlainButton';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { CARD, CYAN_HI, DIM, DISPLAY, EDGE, FAINT, HAIRLINE, MIST, MONO, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
@@ -281,7 +282,9 @@ function wireLabel(
   profile: { protocol: string; effectiveEngine: EngineName; config: unknown },
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
-  if (profile.protocol !== 'xray') return profilePairLabel(profile, t);
+  // SOCKS5 / HTTP have no wire shape worth reading («socks tcp none»); the
+  // pair names them the way the rest of the panel does.
+  if (profile.protocol !== 'xray' || plainSubprotocolOf(profile)) return profilePairLabel(profile, t);
   const shape = shapeOf(profile.protocol, profile.config as Record<string, unknown>);
   return profile.effectiveEngine === 'singbox'
     ? `${shape} · ${engineWord('singbox', t)}`

@@ -2,6 +2,7 @@ import { LINK_CELLS } from '@iceslab/shared';
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
+import { PLAIN_LABEL, plainSubprotocolOf } from '@/lib/domain/xraySubprotocol';
 
 /**
  * The pair (protocol, engine), which is what the dispatcher on a node actually
@@ -105,11 +106,18 @@ export function profilePair(profile: {
   return { protocol: profile.protocol, engine: profile.effectiveEngine };
 }
 
-/** «VLESS · ядро xray» for a profile row. */
+/**
+ * «VLESS · ядро xray» for a profile row, and «SOCKS5 · ядро xray» for the
+ * Telegram entries: those are xray profiles by protocol, and only the
+ * subprotocol in their config says what a person actually connects to.
+ * Without `config` (a caller that does not have it) the protocol answers.
+ */
 export function profilePairLabel(
-  profile: { protocol: string; effectiveEngine: EngineName },
+  profile: { protocol: string; effectiveEngine: EngineName; config?: unknown },
   t: T,
 ): string {
+  const plain = plainSubprotocolOf(profile);
+  if (plain) return t('engine.pair', { protocol: PLAIN_LABEL[plain], engine: engineWord(profile.effectiveEngine, t) });
   return pairLabel(profilePair(profile), t);
 }
 

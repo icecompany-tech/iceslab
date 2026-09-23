@@ -1,4 +1,13 @@
-import { XRAY_PLAIN_SUBPROTOCOLS } from '@iceslab/shared';
+import { plainSubprotocolOf, type PlainSubprotocol } from '@/lib/domain/xraySubprotocol';
+
+// The naming half lives in lib/domain, where every screen can read it; the
+// form half stays here.
+export {
+  isPlainSubprotocol,
+  plainSubprotocolOf,
+  PLAIN_LABEL,
+  type PlainSubprotocol,
+} from '@/lib/domain/xraySubprotocol';
 
 /**
  * SOCKS5 and HTTP on the xray core: the Telegram entries
@@ -11,12 +20,6 @@ import { XRAY_PLAIN_SUBPROTOCOLS } from '@iceslab/shared';
  * nothing left over from a vless draft. Authentication has no field either:
  * it is always the users' own accounts (username and xray UUID).
  */
-
-export type PlainSubprotocol = (typeof XRAY_PLAIN_SUBPROTOCOLS)[number];
-
-export function isPlainSubprotocol(s: unknown): s is PlainSubprotocol {
-  return (XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(s);
-}
 
 /** 1080 and 3128 are what clients and people expect; 8080 is not offered
  *  because the node's xray API sits there (ARCH, 2026-09-23). */
@@ -56,15 +59,3 @@ export function plainDefaultPort(
   const sub = plainSubprotocolOf(profile);
   return sub ? PLAIN_DEFAULT_PORT[sub] : null;
 }
-
-/** Which of the two a saved profile is, or `null` for every other profile. */
-export function plainSubprotocolOf(
-  profile: { protocol: string; config?: unknown } | null | undefined,
-): PlainSubprotocol | null {
-  if (!profile || profile.protocol !== 'xray') return null;
-  const sub = (profile.config as { subprotocol?: unknown } | null | undefined)?.subprotocol;
-  return isPlainSubprotocol(sub) ? sub : null;
-}
-
-/** The name a person knows it by: nobody calls a SOCKS5 proxy "xray". */
-export const PLAIN_LABEL: Record<PlainSubprotocol, string> = { socks: 'SOCKS5', http: 'HTTP' };

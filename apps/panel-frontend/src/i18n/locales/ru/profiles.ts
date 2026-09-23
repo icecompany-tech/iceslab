@@ -70,9 +70,7 @@ export const profiles = {
       unused: 'НЕ ИСПОЛЬЗУЮТСЯ',
     },
     allProtocols: 'Все протоколы',
-    configButton: 'Настройки {{core}}',
-    plainOnXray: 'ядро xray',
-    engine: {
+    configButton: 'Настройки {{core}}',    engine: {
       native: 'Нативный демон',
       xray: 'Ядро Xray',
       singbox: 'Sing-box',

@@ -66,9 +66,7 @@ export const profiles = {
       unused: 'UNUSED',
     },
     allProtocols: 'All protocols',
-    configButton: '{{core}} config',
-    plainOnXray: 'xray core',
-    engine: {
+    configButton: '{{core}} config',    engine: {
       native: 'Native daemon',
       xray: 'Xray core',
       singbox: 'Sing-box',

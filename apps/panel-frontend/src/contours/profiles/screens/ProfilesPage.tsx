@@ -539,9 +539,7 @@ function ProfileCard({
         >
           {/* The pair: two profiles of one protocol can be served by different
               cores, and on this card the protocol alone made them twins. */}
-          {plain
-            ? `${PLAIN_LABEL[plain]} · ${t('profiles.plainOnXray')}`
-            : profilePairLabel(profile, t)}
+          {profilePairLabel(profile, t)}
         </Badge>
         {/* The count of nodes serving this profile, and the second door.
             «0» here is the sentence an operator reads at the exact moment they
