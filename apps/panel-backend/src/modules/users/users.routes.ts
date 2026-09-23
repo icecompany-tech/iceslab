@@ -18,6 +18,7 @@ import {
   SubscriptionForbiddenError,
   SubscriptionNotFoundError,
 } from '../subscription/subscription.service.js';
+import { awgConfUrl, subscriptionUrl } from '../subscription/subscription.link.js';
 
 // B12-tail - response schema for the paginated users list (Users page keeps it
 // warm via placeholderData). Compiles a fast-json-stringify serializer over the
@@ -356,6 +357,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         // Admin context, no UA-driven SRR filtering, return every endpoint.
         userAgent: '',
       });
+      const subUrl = await subscriptionUrl(user.subscriptionToken);
       return reply.send({
         endpoints: result.endpoints.map((e) => ({
           protocol: e.protocol,
@@ -376,7 +378,12 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
           nodeId: e.nodeId,
           host: e.host,
           port: e.port,
-          uri: e.uri,
+          // AmneziaWG has no URI, so its endpoint carries "" in every format
+          // and the card's Copy button copied nothing (stand, 2026-09-23). Here,
+          // and only here, it gets the link to that node's .conf: the file an
+          // operator actually hands over. The formats keep "" on purpose, a
+          // subscriber's client has no use for a link to itself.
+          uri: e.protocol === 'amneziawg' ? awgConfUrl(subUrl, e.nodeName) : e.uri,
         })),
       });
     } catch (err) {

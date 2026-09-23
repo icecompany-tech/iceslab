@@ -12,6 +12,7 @@ import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
 import { buildSubscriptionPage } from './subscription.page.js';
+import { subscriptionUrl } from './subscription.link.js';
 import { matchFormatForUserAgent } from '../srr/srr.service.js';
 import {
   formatBytes,
@@ -20,7 +21,7 @@ import {
 } from '../settings/settings.service.js';
 import { enforceHwid, resolveSquadHwidLimit } from '../hwid/hwid.service.js';
 import { prisma } from '../../prisma.js';
-import { config, subscriptionOrigin } from '../../config.js';
+import { config } from '../../config.js';
 import { subscriptionRequests } from '../../lib/infra/metrics.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import { redis } from '../../lib/infra/redis.js';
@@ -204,21 +205,6 @@ function wantsHtmlPage(
   return acceptHeader.toLowerCase().includes('text/html');
 }
 
-/**
- * The origin every subscription link is printed on.
- *
- * The panel-settable host wins over the environment: an operator who moves
- * /sub to its own domain should not need a redeploy to make the panel say so.
- * Falls back to subscriptionOrigin(), which is SUBSCRIPTION_PUBLIC_URL or the
- * panel's own URL, exactly as before.
- *
- * Scheme is always https here: the host field stores a bare host, and there is
- * no case for handing subscribers a plaintext link.
- */
-async function subscriptionLinkOrigin(): Promise<string> {
-  const { publicHost } = await getSubscriptionSettings();
-  return publicHost ? `https://${publicHost}` : subscriptionOrigin();
-}
 function pickLang(acceptLanguage: string | undefined): 'ru' | 'en' {
   return (acceptLanguage ?? '').toLowerCase().includes('ru') ? 'ru' : 'en';
 }
@@ -262,7 +248,7 @@ async function refusalPage(
       query.lang ??
       settings.defaultLocale ??
       pickLang(request.headers['accept-language'] as string | undefined),
-    subUrl: `${await subscriptionLinkOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${token}`,
+    subUrl: await subscriptionUrl(token),
     supportUrl: settings.supportUrl,
     user: {
       username: user.username,
@@ -522,7 +508,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // config, just links + copy + per-format download buttons.
       if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
         const settings = await getSubscriptionSettings();
-        const subUrl = `${await subscriptionLinkOrigin()}${config.SUBSCRIPTION_PATH_PREFIX}/${params.token}`;
+        const subUrl = await subscriptionUrl(params.token);
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
         // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
         // are single-tunnel-per-key, so a user with several AWG servers gets each
