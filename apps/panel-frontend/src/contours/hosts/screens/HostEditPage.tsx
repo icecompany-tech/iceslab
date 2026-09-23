@@ -31,10 +31,12 @@ import {
   createHost,
   getHostFreshness,
   goneWhileEditing,
+  hostHiddenFacts,
   listHosts,
   portConflict,
   updateHost,
 } from '@/lib/domain/hosts';
+import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { HostFreshnessCard } from '@/contours/hosts/components/HostFreshnessCard';
 import {
   getProfileHostFields,
@@ -590,6 +592,11 @@ export function HostEditPage() {
         </Box>
       </Box>
 
+      {/* Хост есть, а подписка его не отдаёт: нода в каскаде не вход. Над
+          формой, потому что правка полей ниже этого не изменит: решается это
+          на странице каскада, куда и ведёт ссылка. */}
+      {!isNew && <HostHiddenLine facts={hostHiddenFacts(host, currentNode?.name ?? '?')} />}
+
       {/* Who is still holding the previous link. Above the form, because the
           fields below are what will make that number grow. */}
       {!isNew && <HostFreshnessCard data={freshnessQuery.data} />}
@@ -985,11 +992,15 @@ export function HostEditPage() {
                 <Box style={{ height: 1, backgroundColor: HAIRLINE, width: '100%', marginTop: 18 }} />
                 <Box style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
                   <Text style={{ ...LABEL }}>{t('hostEdit.formats')}</Text>
-                  <Box style={{ flex: 1 }} />
-                  <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', color: DIM }}>
-                    {t('hostEdit.formatsComputed')}
-                  </Text>
                 </Box>
+                {/* Подпись говорит, что это за список: ручные выключения хоста.
+                    Прежняя обещала расчёт из профиля, которого нет; расчёт
+                    придёт с серверным фактом о том, какой формат несёт протокол.
+                    Строкой под заголовком, а не справа капсом: это предложение,
+                    и читаться должно как предложение. */}
+                <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM, marginTop: 4 }}>
+                  {t('hostEdit.formatsCaption')}
+                </Text>
                 {/* A format is on unless the operator turned it off. The list is
                     what the subscription can emit, not what this host is good
                     at: whether a client understands it is the client's problem.

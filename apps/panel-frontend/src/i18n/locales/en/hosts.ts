@@ -1,5 +1,13 @@
 export const hosts = {
 
+  // A host on a node that is not the entry of a cascade. Shared namespace: the
+  // host card, the host page and the deploy window all draw it, and three
+  // copies would drift. The cascade name in the line links to it.
+  hostHidden: {
+    before: 'Node {{node}} is not the entry of cascade ',
+    after: ': no subscription will hand this host out while the cascade is on.',
+  },
+
   // The port check on a node. Lives in the shared namespace rather than in
   // hostEdit: both forms show the line, the binding and the inbound, and a
   // second copy of the text would drift from the first on the first edit.
@@ -143,7 +151,12 @@ export const hosts = {
     alpn: 'ALPN',
     securityLayer: 'Security layer',
     formats: 'SUBSCRIPTION FORMATS',
-    formatsComputed: 'COMPUTED FROM PROFILE + OVERRIDES',
+    // Used to say "computed from profile + overrides", untrue from day one:
+    // the list is the host's manual opt-outs, nothing is computed. Whether a
+    // format carries the protocol comes from the server later
+    // (GET /api/profiles/:id/formats).
+    formatsCaption:
+      'Everything is on unless the operator turned it off. Whether a client handles this protocol, the page does not know yet.',
     optional: 'OPTIONAL',
     needName: 'Name it first',
     needProfile: 'Pick a profile',

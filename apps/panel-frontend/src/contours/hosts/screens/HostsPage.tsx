@@ -30,7 +30,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { deleteHost, listHosts } from '@/lib/domain/hosts';
+import { deleteHost, hostHiddenFacts, listHosts, type HostHiddenFacts } from '@/lib/domain/hosts';
+import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
@@ -83,6 +84,9 @@ export function HostsPage() {
           lastOfBinding:
             (hostsQuery.data?.hosts ?? []).filter((x) => x.bindingId === h.bindingId).length === 1,
           nodeName: node?.name ?? null,
+          // Нода в каскаде не вход: подписка этот хост не выдаёт. Факт сервера,
+          // здесь только имя ноды к нему.
+          hidden: hostHiddenFacts(h, node?.name ?? '?'),
           port: h.portOverride ?? binding?.publicPort ?? binding?.port ?? null,
           address: h.addressOverride ?? binding?.publicHost ?? null,
           countryCode: node?.countryCode ? node.countryCode.toUpperCase() : null,
@@ -317,6 +321,7 @@ type Row = {
   nodes: { id: string; name: string; status: string }[];
   lastOfBinding: boolean;
   nodeName: string | null;
+  hidden: HostHiddenFacts | null;
   port: number | null;
   address: string | null;
   countryCode: string | null;
@@ -414,6 +419,10 @@ function HostCard({
           </Menu.Dropdown>
         </Menu>
       </Box>
+
+      {/* Хост есть, а подписка его не отдаёт: нода в каскаде не вход. Сразу под
+          строкой, которую читает клиент, потому что именно её он и не увидит. */}
+      <HostHiddenLine facts={row.hidden} compact />
 
       <FieldRow label={t('hostsPage.card.profile')}>
         {row.profile ? (

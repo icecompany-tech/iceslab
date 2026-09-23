@@ -39,8 +39,40 @@ export interface Host {
    * holding an unchanged link is not stale.
    */
   configChangedAt?: string;
+  /**
+   * Хост стоит на ноде, которая в каскаде НЕ вход, и пока каскад включён,
+   * подписка его не выдаёт никому: клиенты заходят через вход каскада.
+   *
+   * Три значения: отсутствие ключа это «бэкенд старше поля», `null` это «не
+   * скрыт», объект это «скрыт этим каскадом». Первые два одинаково молчат на
+   * экране; разница нужна только тому, кто читает тип. В ответе reorder ключа
+   * нет по контракту.
+   */
+  hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Что сказать про хост, который ни одна подписка не выдаст.
+ *
+ * `null` это «сказать нечего»: ключа нет (старый бэкенд) или хост не скрыт.
+ * Имя ноды приходит снаружи: у хоста его нет, а строка без имени ноды не
+ * объясняет, какая машина стоит в каскаде не входом.
+ */
+export interface HostHiddenFacts {
+  nodeName: string;
+  cascadeId: string;
+  cascadeName: string;
+}
+
+export function hostHiddenFacts(
+  host: { hiddenByCascade?: { cascadeId: string; cascadeName: string } | null } | null | undefined,
+  nodeName: string,
+): HostHiddenFacts | null {
+  const h = host?.hiddenByCascade;
+  if (!h) return null;
+  return { nodeName, cascadeId: h.cascadeId, cascadeName: h.cascadeName };
 }
 
 /**

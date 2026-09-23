@@ -26,6 +26,8 @@ import {
   type Profile,
 } from '@/lib/domain/profiles';
 import { deployDiff } from '@/contours/profiles/lib/deployDiff';
+import { hostHiddenFacts, listHosts } from '@/lib/domain/hosts';
+import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
 import {
   engineCoreWord,
@@ -68,6 +70,23 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     queryFn: () => listBindings({ profileId: profile!.id }),
     enabled: opened && profile !== null,
   });
+
+  // Хосты профиля: только ради того, чтобы сказать под нодой, что её хост ни
+  // одна подписка не выдаст (нода в каскаде не вход). Факт сервера на хосте.
+  const hostsQuery = useQuery({
+    queryKey: ['hosts', { profileId: profile?.id }],
+    queryFn: () => listHosts({ profileId: profile!.id }),
+    enabled: opened && profile !== null,
+  });
+  const hiddenByNode = useMemo(() => {
+    const nodeOfBinding = new Map((bindingsQuery.data?.bindings ?? []).map((b) => [b.id, b.nodeId] as const));
+    const m = new Map<string, { cascadeId: string; cascadeName: string }>();
+    for (const h of hostsQuery.data?.hosts ?? []) {
+      const nodeId = nodeOfBinding.get(h.bindingId);
+      if (nodeId && h.hiddenByCascade) m.set(nodeId, h.hiddenByCascade);
+    }
+    return m;
+  }, [bindingsQuery.data, hostsQuery.data]);
 
   const initialSelected = useMemo(() => {
     const set = new Set<string>();
@@ -356,13 +375,20 @@ export function DeployProfileModal({ profile, onClose }: Props) {
         ) : (
           <Stack gap="xs">
             {nodes.map((node) => (
-              <NodeRow
-                key={node.id}
-                node={node}
-                wanted={profile?.effectiveEngine ?? null}
-                checked={selected.has(node.id)}
-                onToggle={() => toggle(node.id)}
-              />
+              <Stack key={node.id} gap={4}>
+                <NodeRow
+                  node={node}
+                  wanted={profile?.effectiveEngine ?? null}
+                  checked={selected.has(node.id)}
+                  onToggle={() => toggle(node.id)}
+                />
+                {/* Хост профиля на этой ноде есть, а подписка его не отдаёт:
+                    нода в каскаде не вход. Под именем ноды, как решено. */}
+                <HostHiddenLine
+                  facts={hostHiddenFacts({ hiddenByCascade: hiddenByNode.get(node.id) ?? null }, node.name)}
+                  compact
+                />
+              </Stack>
             ))}
           </Stack>
         )}
