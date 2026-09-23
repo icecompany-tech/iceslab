@@ -157,6 +157,12 @@ export const hosts = {
     // (GET /api/profiles/:id/formats).
     formatsCaption:
       'Everything is on unless the operator turned it off. Whether a client handles this protocol, the page does not know yet.',
+    formatsCount: 'Carried by {{carried}} of {{total}}, turned off {{off}}',
+    formatWhy: {
+      'client-lacks-protocol': 'The client does not speak this protocol',
+      'no-uri-standard': 'The protocol has no share link',
+      'not-yet': 'The panel does not build it yet, the client can',
+    },
     optional: 'OPTIONAL',
     needName: 'Name it first',
     needProfile: 'Pick a profile',

@@ -54,7 +54,7 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
-import { HOST_FORMATS, formatLabel } from '@/lib/domain/formats';
+import { formatLabel, getProfileFormats, hostFormatFacts } from '@/lib/domain/formats';
 import { listNodes } from '@/lib/domain/nodes';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
@@ -181,6 +181,21 @@ export function HostEditPage() {
     staleTime: 5 * 60_000,
   });
   const fields = fieldsQuery.data?.fields ?? null;
+
+  /**
+   * Какие форматы подписки вообще несут профиль этого хоста при его слое
+   * безопасности. Слой из формы хоста: REALITY-профиль за TLS-хостом доходит до
+   * форматов, до которых голый профиль не доходит (Surge), поэтому смена слоя
+   * перезапрашивает. Старый сервер без маршрута даёт null, и список остаётся
+   * прежним (ручные выключения без трёх состояний).
+   */
+  const formatsQuery = useQuery({
+    queryKey: ['profile-formats', profileId, securityLayer],
+    queryFn: () => getProfileFormats(profileId!, securityLayer),
+    enabled: Boolean(profileId),
+    retry: false,
+  });
+  const formatFacts = hostFormatFacts(formatsQuery.data ?? null, disabledFormats);
   /** No answer yet, or none coming: every control stays visible. */
   const can = (f: string) => (fields ? fields[f]?.supported === true : true);
   const inherited = (f: string): string => {
@@ -998,24 +1013,34 @@ export function HostEditPage() {
                     придёт с серверным фактом о том, какой формат несёт протокол.
                     Строкой под заголовком, а не справа капсом: это предложение,
                     и читаться должно как предложение. */}
+                {/* С контрактом: честный счёт, сколько файлов понесут этот
+                    хост. Без него (старый сервер) прежняя подпись про ручные
+                    выключения. */}
                 <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: DIM, marginTop: 4 }}>
-                  {t('hostEdit.formatsCaption')}
+                  {formatFacts.counts
+                    ? t('hostEdit.formatsCount', formatFacts.counts)
+                    : t('hostEdit.formatsCaption')}
                 </Text>
-                {/* A format is on unless the operator turned it off. The list is
-                    what the subscription can emit, not what this host is good
-                    at: whether a client understands it is the client's problem.
+                {/* Три состояния: несёт (галочка, можно выключить), выключен
+                    оператором, и не несёт вовсе (серым, недоступно): там
+                    выключатель ничего бы не менял, а причина ниже.
 
                     Список берётся из контракта: своя копия здесь держала имя
                     `xrayjson`, которого схема хостов не знает, и сохранение с
                     ним падало 400 (issue #41). */}
                 <Box style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                  {HOST_FORMATS.map((f) => {
-                    const on = !disabledFormats.includes(f);
+                  {formatFacts.rows.map((row) => {
+                    const f = row.format;
+                    const on = row.state === 'on';
+                    const cannot = row.state === 'cannot';
                     return (
                       <Chip
                         key={f}
                         active={on}
+                        disabled={cannot}
+                        title={row.state === 'cannot' ? t(`hostEdit.formatWhy.${row.why}`) : undefined}
                         onClick={() => {
+                          if (cannot) return;
                           setDisabledFormats((prev) =>
                             prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f],
                           );
@@ -1028,6 +1053,21 @@ export function HostEditPage() {
                     );
                   })}
                 </Box>
+                {/* Почему серые серые: по причине строка, в ней форматы. */}
+                {(['client-lacks-protocol', 'no-uri-standard', 'not-yet'] as const).map((why) => {
+                  const names = formatFacts.rows
+                    .filter((r) => r.state === 'cannot' && r.why === why)
+                    .map((r) => formatLabel(r.format, t));
+                  if (names.length === 0) return null;
+                  return (
+                    <Text
+                      key={why}
+                      style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT, marginTop: 6 }}
+                    >
+                      {t(`hostEdit.formatWhy.${why}`)}: {names.join(', ')}
+                    </Text>
+                  );
+                })}
               </Stack>
             )}
           </Box>
@@ -1284,14 +1324,21 @@ function Chip({
   children,
   active,
   onClick,
+  disabled = false,
+  title,
 }: {
   children: ReactNode;
   active: boolean;
   onClick: () => void;
+  /** Формат, который этот хост не несёт вовсе: выключатель тут ничего не менял бы. */
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <UnstyledButton
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -1299,7 +1346,9 @@ function Chip({
         padding: '0 12px',
         borderRadius: 7,
         backgroundColor: active ? `${CYAN}14` : WELL,
-        border: `1px solid ${active ? `${CYAN}4D` : HAIRLINE}`,
+        border: `1px ${disabled ? 'dashed' : 'solid'} ${active ? `${CYAN}4D` : HAIRLINE}`,
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >
       <Text
@@ -1307,7 +1356,7 @@ function Chip({
           fontFamily: MONO,
           fontSize: 11,
           fontWeight: active ? 500 : 400,
-          color: active ? CYAN : MIST,
+          color: disabled ? FAINT : active ? CYAN : MIST,
         }}
       >
         {children}
