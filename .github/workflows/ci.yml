@@ -421,6 +421,32 @@ jobs:
         working-directory: apps/node
         run: go vet ./...
 
+      # A hysteria binary, for the engine-verdict tests in core/hysteria (phase
+      # 6). The AGENT renders the hysteria config, so the question "will the
+      # engine load this" belongs to this job and not to the backend's, where the
+      # xray and sing-box binaries are installed for the configs the PANEL
+      # renders.
+      #
+      # hysteria has no `check`, so the tests START it and read the log for
+      # "server up and running" or FATAL. Same version both installers pin
+      # (bootstrap-hysteria.sh and install-iceslab-node.sh); a Go test holds this
+      # line to the same constant, so the three cannot drift apart. Without
+      # HYSTERIA_BIN those tests skip themselves, so a laptop still runs the rest.
+      - name: Install hysteria (for config-validity tests)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/hysteria \
+              https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.3/hysteria-linux-amd64
+            then break; fi
+            echo "hysteria download failed (attempt ${attempt}/3)"
+            [ "$attempt" = 3 ] && exit 1
+            sleep $(( attempt * 5 ))
+          done
+          chmod +x /tmp/hysteria
+          echo "HYSTERIA_BIN=/tmp/hysteria" >> "$GITHUB_ENV"
+          /tmp/hysteria version | grep '^Version:'
+
       - name: Test
         working-directory: apps/node
         run: go test ./... | tee /tmp/go-test.txt
@@ -438,6 +464,7 @@ jobs:
             else
               echo "- the suite produced no output, so it did not get as far as running"
             fi
+            echo "- config validity asked of the pinned engine: hysteria v2.12.3"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Slice 36 follow-up: build + publish container images to GHCR on every

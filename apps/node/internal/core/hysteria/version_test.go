@@ -57,6 +57,22 @@ func TestBootstrapPinsTheVersion(t *testing.T) {
 	}
 }
 
+// TestCIAsksThePinnedEngine holds the third copy of the number: the binary CI
+// downloads to ask whether this adapter's render loads. A CI on another release
+// would answer for an engine no node runs, which is the same drift one step
+// removed: green in CI, refused on the fleet.
+func TestCIAsksThePinnedEngine(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "..", ".github", "workflows", "ci.yml")
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	want := "releases/download/app%2F" + pinnedHysteriaVersion + "/hysteria-linux-amd64"
+	if !strings.Contains(string(blob), want) {
+		t.Fatalf("ci.yml does not install hysteria %s for the engine tests", pinnedHysteriaVersion)
+	}
+}
+
 // TestNodeInstallerPinsTheSameVersion holds the OTHER road to the same binary.
 //
 // A node built with --protocol hysteria never runs bootstrap-hysteria.sh: the
