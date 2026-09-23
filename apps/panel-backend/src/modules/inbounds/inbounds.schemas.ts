@@ -231,7 +231,21 @@ export const XrayConfigSchema = z.object({
         message: `subprotocol ${cfg.subprotocol} takes network "raw" only (got "${cfg.network}")`,
       });
     }
-  });
+  })
+  // ...and a socks/http config is STORED as exactly those three keys. The
+  // defaults above belong to vless (flow xtls-rprx-vision, fingerprint,
+  // realityMode and the rest), and letting them fill a socks config put them in
+  // the database and in every response: the node never read them, the screen
+  // did, and drew a SOCKS5 profile as "Xray REALITY" (FRONT, 23.09).
+  .transform((cfg) =>
+    isPlainSubprotocolName(cfg.subprotocol)
+      ? { subprotocol: cfg.subprotocol, security: 'none' as const, network: 'raw' as const }
+      : cfg,
+  );
+
+function isPlainSubprotocolName(sub: string): sub is 'socks' | 'http' {
+  return (XRAY_PLAIN_SUBPROTOCOLS as readonly string[]).includes(sub);
+}
 
 // Bounds and defaults match upstream amnezia-vpn AmneziaWG v2.0 spec
 // (docs.amnezia.org/documentation/amnezia-wg). Old TSPU presets from

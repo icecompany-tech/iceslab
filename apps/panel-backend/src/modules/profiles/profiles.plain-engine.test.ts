@@ -56,6 +56,29 @@ describe('the engine of a socks or http profile', () => {
     expect(res.body).toContain('xray engine only');
   });
 
+  it('stores the config as three keys on create, and an edit with extra keys keeps it three', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/profiles',
+      headers: auth(),
+      payload: { name: 'tg-socks-3', protocol: 'xray', config: socks },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+    const three = { subprotocol: 'socks', security: 'none', network: 'raw' };
+    expect((await prisma.profile.findUniqueOrThrow({ where: { id } })).config).toEqual(three);
+    expect(JSON.parse(created.body).config).toEqual(three);
+
+    const edited = await app.inject({
+      method: 'PUT',
+      url: `/api/profiles/${id}`,
+      headers: auth(),
+      payload: { config: { ...socks, flow: 'xtls-rprx-vision', fingerprint: 'chrome', udp: true } },
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect((await prisma.profile.findUniqueOrThrow({ where: { id } })).config).toEqual(three);
+  });
+
   it('refuses moving an existing socks profile onto sing-box', async () => {
     const created = await app.inject({
       method: 'POST',

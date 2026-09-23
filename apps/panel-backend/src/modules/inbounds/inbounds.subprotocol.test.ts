@@ -36,9 +36,25 @@ describe('the socks and http subprotocols', () => {
 
   it('reads its dictionary from shared', () => {
     for (const sub of XRAY_SUBPROTOCOLS) {
-      const r = XrayConfigSchema.shape.subprotocol.safeParse(sub);
+      const r = XrayConfigSchema.safeParse({ subprotocol: sub, security: 'none', network: 'raw' });
       expect(r.success, sub).toBe(true);
     }
-    expect(XrayConfigSchema.shape.subprotocol.safeParse('mtproto').success).toBe(false);
+    expect(XrayConfigSchema.safeParse({ subprotocol: 'mtproto', security: 'none' }).success).toBe(false);
+  });
+
+  it('stores a socks or http config as exactly three keys, whatever came with it', () => {
+    // The vless defaults (flow, fingerprint, realityMode...) used to fill it,
+    // land in the database, and make the screen draw "Xray REALITY".
+    for (const sub of ['socks', 'http'] as const) {
+      const r = XrayConfigSchema.parse({
+        subprotocol: sub,
+        security: 'none',
+        network: 'raw',
+        flow: 'xtls-rprx-vision',
+        realityServerNames: ['www.example.com'],
+        udp: true,
+      });
+      expect(r).toEqual({ subprotocol: sub, security: 'none', network: 'raw' });
+    }
   });
 });
