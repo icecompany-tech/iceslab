@@ -23,7 +23,7 @@ const PIN = (c: keyof typeof CORE_VERSIONS) => CORE_VERSIONS[c].pinned!;
 const SHA = (c: keyof typeof CORE_VERSIONS, arch: 'amd64' | 'arm64' | 'armv7') =>
   CORE_VERSIONS[c].releases.find((r) => r.version === PIN(c))!.assets![arch]!.sha256;
 const line = (p: string, v: string, sha: string, script: string) =>
-  `sudo env ${p}_VERSION=${v} ${p}_SHA256=${sha} bash /opt/iceslab-node/apps/node/scripts/${script} && sudo systemctl restart iceslab-node`;
+  `sudo env ${p}_VERSION=${v} ${p}_SHA256=${sha} bash /opt/iceslab-node/apps/node/scripts/${script} --restart-agent`;
 
 describe('coreVersionFacts: one line per verdict', () => {
   it('intended, and the pin: no command', () => {

@@ -112,7 +112,7 @@ describe('nodeCoreFit: the four states the deploy window draws', () => {
 
 describe('coreGateRefusal: the two 409 of the BACK core gate', () => {
   const res = (data: unknown, status = 409) => ({ response: { status, data } });
-  const cmd = 'sudo env SINGBOX_VERSION=1.13.14 SINGBOX_SHA256=ab bash /opt/iceslab-node/apps/node/scripts/bootstrap-singbox.sh && sudo systemctl restart iceslab-node';
+  const cmd = 'sudo env SINGBOX_VERSION=1.13.14 SINGBOX_SHA256=ab bash /opt/iceslab-node/apps/node/scripts/bootstrap-singbox.sh --restart-agent';
 
   it('CORE_NOT_ON_NODE: node, engine, the server command and whether it is pinned', () => {
     expect(
