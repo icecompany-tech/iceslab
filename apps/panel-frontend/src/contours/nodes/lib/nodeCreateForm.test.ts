@@ -54,6 +54,11 @@ describe('движки ноды: чипы, основной, протокол п
     expect(toggleEngine(['xray'], 'xray')).toEqual(['xray']);
   });
 
+  it('у стоящей ноды основное не снимается, остальные снимаются (core-lifecycle §8)', () => {
+    expect(toggleEngine(['xray', 'hysteria'], 'xray', true)).toEqual(['xray', 'hysteria']);
+    expect(toggleEngine(['xray', 'hysteria'], 'hysteria', true)).toEqual(['xray']);
+  });
+
   it('основной переставляется вперёд, протокол следует за ним', () => {
     expect(makePrimary(['xray', 'hysteria', 'singbox'], 'singbox')).toEqual(['singbox', 'xray', 'hysteria']);
     expect(protocolForPrimary('shadowsocks', 'xray')).toBe('shadowsocks');

@@ -70,6 +70,7 @@
       enginesMakePrimary: 'make primary',
       enginesMakePrimaryHint: 'The primary core is first in the list: its protocol becomes the node label',
       enginesLastOne: 'At least one core is required',
+      enginesPrimaryLocked: 'The node\'s primary core does not come off: make another one primary first',
       enginesRefused: 'The server did not accept the node cores: the reason is under the chips',
       enginesProtocol: 'Protocol of the primary core ({{engine}})',
       enginesHint: 'Every ticked core is installed. The primary is first: its protocol is the node label in lists. Cores can be added or removed later on the node page.',
@@ -318,6 +319,23 @@
     coresCopyFailed: 'Could not copy, select the line by hand',
     coresAfterInstall:
       'The panel runs nothing on the machine: this is a command for your own ssh. Once it is installed the node reports the new core within a minute, nothing to push by hand.',
+    coreRemove: {
+      how: 'How to remove',
+      hosts_one: 'Cannot remove: {{count}} host needs it, take it off first.',
+      hosts_other: 'Cannot remove: {{count}} hosts need it, take them off first.',
+      cascade: 'Cannot remove: cascade "{{name}}" needs it.',
+      cascadeOff: 'Cannot remove: cascade "{{name}}" needs it (disabled, it would break when switched on).',
+      primary: 'Cannot remove: the node\'s primary core, make another one primary first.',
+      unknown: 'Cannot tell whether it can go: the panel did not report {{what}}.',
+      unknownWhat: {
+        hosts: 'how many hosts wait for it',
+        cascades: 'the cascades',
+        intent: 'the node\'s cores',
+      },
+      dropped: 'Taken off the node\'s cores, still on the machine: the command below removes it.',
+      after:
+        'The panel runs nothing on the machine: this is a command for your own ssh. The script stops the core, removes it and restarts the agent; the node reports the core gone by itself.',
+    },
     egressTitle: 'Egress · the door out',
     egressHint: 'One node, one door. Pick one.',
     egressDirect: 'Direct',

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import {
   coreInstallCommand,
+  coreRemoveCommand,
   ENGINE_NAMES,
   type CoreArch,
   type EngineName,
@@ -20,6 +21,12 @@ import {
   type CoreVersionLine,
 } from '@/lib/domain/coreVersions';
 import { CopyButton } from '@/ui/CopyButton';
+import {
+  coreEngine,
+  coreRemoveFacts,
+  firstRowOfEngine,
+  type CoreRemoveFacts,
+} from '@/contours/nodes/lib/coreRemove';
 import { CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
 import {
   AMBER,
@@ -152,10 +159,13 @@ export function CoresPanel({
         </Box>
       ) : (
         <Stack gap={0}>
-          {cores.map((c) => (
+          {cores.map((c, i) => (
             <CoreRow
               key={`${c.name}:${c.engine ?? ''}`}
               core={c}
+              // «Как удалить» решается на ДВИЖОК и рисуется у его первой
+              // строки: sing-box стоит под несколькими протоколами.
+              remove={firstRowOfEngine(cores, i) ? removeOf(c, node) : null}
               nodeId={node.id}
               arch={node.cores?.arch}
               storedIntent={node.coreVersions}
@@ -180,8 +190,24 @@ export function CoresPanel({
   );
 }
 
+/** Решение «Как удалить» по движку строки и команда к нему; null, если
+ *  движок строки панели не известен. */
+function removeOf(core: NodeCore, node: Node): RowRemove | null {
+  const engine = coreEngine(core);
+  if (engine === null) return null;
+  // Та же строка, что у сервера: coreRemoveCommand контракта, без своей копии.
+  return { facts: coreRemoveFacts(engine, node), command: coreRemoveCommand(engine).command };
+}
+
+interface RowRemove {
+  facts: CoreRemoveFacts;
+  /** Строка для ssh из контракта (coreRemoveCommand). */
+  command: string;
+}
+
 function CoreRow({
   core,
+  remove,
   nodeId,
   arch,
   storedIntent,
@@ -190,6 +216,8 @@ function CoreRow({
   awg,
 }: {
   core: NodeCore;
+  /** «Как удалить» у первой строки движка; null у остальных. */
+  remove: RowRemove | null;
   nodeId: string;
   /** The machine's arch from the same report: the update command needs it. */
   arch: CoreArch | undefined;
@@ -228,6 +256,8 @@ function CoreRow({
   const update = verLines.find((l) => l.command?.kind === 'command')?.command;
   const updateText = update?.kind === 'command' ? update.text : null;
   const [updateShown, setUpdateShown] = useState(false);
+  const [removeShown, setRemoveShown] = useState(false);
+  const removeCommand = remove?.facts.kind === 'allowed' ? remove.command : null;
 
   // Та же строка, что сервер кладёт в howToInstall отказа CORE_NOT_ON_NODE:
   // coreInstallCommand контракта, с парой версии под арку ноды. Своя таблица
@@ -330,7 +360,74 @@ function CoreRow({
             {t(updateShown ? 'nodeEdit.coresHideCommand' : 'nodeEdit.coreVer.howToUpdate')}
           </RowButton>
         )}
+
+        {/* Удаление: только когда по фактам ядро никому не нужно. Кнопка, как
+            и у установки, ничего не выполняет: открывает строку для ssh. */}
+        {removeCommand && (
+          <RowButton onClick={() => setRemoveShown((v) => !v)}>
+            {t(removeShown ? 'nodeEdit.coresHideCommand' : 'nodeEdit.coreRemove.how')}
+          </RowButton>
+        )}
       </Box>
+
+      {/* Почему удалить нельзя: кому ядро нужно, по строке на причину. Или что
+          панель не сообщила: молчание не «никому», кнопки тогда нет. */}
+      {remove && remove.facts.kind === 'refused' && (
+        <Stack gap={2} style={{ marginTop: 6, paddingLeft: 18 }}>
+          {remove.facts.reasons.map((r, i) => (
+            <Text key={i} style={{ fontSize: 12, lineHeight: '17px', color: MIST }}>
+              {r.kind === 'hosts'
+                ? t('nodeEdit.coreRemove.hosts', { count: r.count })
+                : r.kind === 'cascade'
+                  ? t(r.enabled ? 'nodeEdit.coreRemove.cascade' : 'nodeEdit.coreRemove.cascadeOff', { name: r.name })
+                  : t('nodeEdit.coreRemove.primary')}
+            </Text>
+          ))}
+        </Stack>
+      )}
+      {remove && remove.facts.kind === 'unknown' && (
+        <Text style={{ marginTop: 6, paddingLeft: 18, fontSize: 12, lineHeight: '17px', color: FAINT }}>
+          {t('nodeEdit.coreRemove.unknown', {
+            what: remove.facts.missing.map((m) => t(`nodeEdit.coreRemove.unknownWhat.${m}`)).join(', '),
+          })}
+        </Text>
+      )}
+      {remove && remove.facts.kind === 'allowed' && remove.facts.dropped && (
+        <Text style={{ marginTop: 6, paddingLeft: 18, fontSize: 12, lineHeight: '17px', color: AMBER }}>
+          {t('nodeEdit.coreRemove.dropped')}
+        </Text>
+      )}
+      {removeCommand && removeShown && (
+        <Stack gap={8} style={{ marginTop: 12 }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '11px 13px',
+              borderRadius: 8,
+              backgroundColor: GROUND,
+              border: `1px solid ${HAIRLINE}`,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: MONO,
+                fontSize: 12,
+                lineHeight: '17px',
+                color: SNOW,
+                flex: 1,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {removeCommand}
+            </Text>
+            <CopyButton text={removeCommand} label={t('common.copy')} />
+          </Box>
+          <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{t('nodeEdit.coreRemove.after')}</Text>
+        </Stack>
+      )}
 
       {/* Какую версию нода должна держать: релизы манифеста для компонента.
           Пустое значение это пин (и он поедет вместе с манифестом); явный

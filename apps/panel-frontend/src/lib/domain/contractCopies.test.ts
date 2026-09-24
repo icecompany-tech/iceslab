@@ -6,6 +6,7 @@ import {
   componentsOfEngine,
   coreEnvPair,
   coreInstallCommand,
+  coreRemoveCommand,
   ENGINE_BOOTSTRAP,
   judgeCoreVersion,
   DEFAULT_LINK_UNDERLAY,
@@ -63,6 +64,8 @@ const GUARDED = [
   'CORE_NODE_DIR',
   'ENGINE_BOOTSTRAP',
   'coreInstallCommand',
+  // Строка «Как удалить» (core-lifecycle §8): тот же бутстрап с --remove.
+  'coreRemoveCommand',
   // Предел записи хендшейка REALITY и цели, замеренные на проход: строка
   // пробы dest печатает число, отказ сервера называет цели (46f634c). Копия
   // 8192 во фронте жила до 46f634c.
@@ -115,6 +118,7 @@ describe('копии перечислений контракта', () => {
     expect(CORE_NODE_DIR.length).toBeGreaterThan(0);
     expect(Object.keys(ENGINE_BOOTSTRAP).length).toBeGreaterThan(0);
     expect(typeof coreInstallCommand).toBe('function');
+    expect(coreRemoveCommand('xray').command).toContain('--remove');
     expect(REALITY_RECORD_LIMIT).toBeGreaterThan(0);
     expect(REALITY_TARGET_SUGGESTIONS.length).toBeGreaterThan(0);
   });

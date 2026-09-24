@@ -37,12 +37,15 @@ export function EngineChips({
   protocol,
   onChange,
   error,
+  lockPrimary = false,
 }: {
   engines: EngineName[];
   protocol: NodeProtocol;
   onChange: (next: { engines: EngineName[]; protocol: NodeProtocol }) => void;
   /** The server's INVALID_ENGINES sentence, under the chips. */
   error?: string | null;
+  /** A node that exists: the primary chip does not untick (toggleEngine). */
+  lockPrimary?: boolean;
 }) {
   const { t } = useTranslation();
   const primary = engines[0]!;
@@ -73,8 +76,14 @@ export function EngineChips({
               <UnstyledButton
                 type="button"
                 aria-pressed={on}
-                title={on && engines.length === 1 ? t('nodes.form.enginesLastOne') : undefined}
-                onClick={() => set(toggleEngine(engines, e))}
+                title={
+                  on && lockPrimary && isPrimary
+                    ? t('nodes.form.enginesPrimaryLocked')
+                    : on && engines.length === 1
+                      ? t('nodes.form.enginesLastOne')
+                      : undefined
+                }
+                onClick={() => set(toggleEngine(engines, e, lockPrimary))}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, height: '100%', padding: '0 11px' }}
               >
                 <Box

@@ -96,6 +96,15 @@ export interface Node {
    */
   intendedEngines?: EngineName[];
   /**
+   * Which engines of this node the cascades it stands in need (core-lifecycle
+   * §8): sing-box for a chain, xray for an entry. Disabled cascades come too,
+   * with `enabled: false`: a core taken off would break them when switched
+   * on. Empty = the node is in no cascade. Absent = a server older than the
+   * field, which is not "no cascades": the screen then says it cannot tell.
+   * Read through `readCascadeNeeds`, which checks the shape first.
+   */
+  cascadeNeedsEngines?: CascadeEngineNeed[];
+  /**
    * Э3 layer B: the node-level routing policy this node runs, null = none.
    * Only the id: the rules live behind /api/node-policies and are shared, so a
    * node never carries a copy of them.
@@ -201,6 +210,12 @@ export interface Node {
  * is worse than silence.
  */
 export type NodeCore = NodeCoreInfo;
+
+/** One engine of a node that cascades need, with those cascades (core-lifecycle §8). */
+export interface CascadeEngineNeed {
+  engine: EngineName;
+  cascades: { id: string; name: string; enabled: boolean }[];
+}
 
 export interface Region {
   id: string;

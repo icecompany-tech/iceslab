@@ -75,9 +75,22 @@ export function primaryProtocols(engine: EngineName): NodeProtocol[] {
   return PROTOCOL_OPTIONS.map((p) => p.value).filter((p) => nativeEngineOfIntent(p) === engine);
 }
 
-/** Add an engine at the end, or take it off; the last one cannot go. */
-export function toggleEngine(engines: readonly EngineName[], engine: EngineName): EngineName[] {
+/**
+ * Add an engine at the end, or take it off; the last one cannot go.
+ *
+ * `lockPrimary` (a node that exists, core-lifecycle §8): the primary does not
+ * leave the list until another is made primary. On a machine the primary is
+ * what `protocol` names, and dropping it by a click would quietly promote the
+ * next engine to the node's label. The wizard has no machine yet and keeps the
+ * free toggle.
+ */
+export function toggleEngine(
+  engines: readonly EngineName[],
+  engine: EngineName,
+  lockPrimary = false,
+): EngineName[] {
   if (!engines.includes(engine)) return [...engines, engine];
+  if (lockPrimary && engines[0] === engine) return [...engines];
   return engines.length > 1 ? engines.filter((e) => e !== engine) : [...engines];
 }
 

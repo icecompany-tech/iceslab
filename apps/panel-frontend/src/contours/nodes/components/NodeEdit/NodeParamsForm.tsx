@@ -85,6 +85,9 @@ export function NodeParamsForm({
                     engines={form.values.engines}
                     protocol={form.values.protocol}
                     error={enginesRefusal}
+                    // Нода стоит: основное ядро не снимается щелчком, сперва
+                    // назначить другое (core-lifecycle §8).
+                    lockPrimary
                     onChange={({ engines, protocol }) => {
                       form.setFieldValue('engines', engines);
                       form.setFieldValue('protocol', protocol);
