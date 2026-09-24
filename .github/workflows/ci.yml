@@ -258,6 +258,45 @@ jobs:
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
           /tmp/sing-box-bin/sing-box version | head -1
 
+      # Phase 9: the panel converts v2fly geo lists into the chain's rule-sets
+      # itself, and geo-dat.test.ts compares that, key by key, with sing-box's
+      # own export of the same release (sing-geosite is built from the same
+      # dlc.dat). The pair is pinned by release tag and sha256; the dlc pin is
+      # GEO_BUILTIN in packages/shared/src/geo.ts and the test holds this step
+      # to it. Cached under a key made of both sha256, so a run downloads them
+      # only when a pin moves.
+      #
+      # Unlike the engine tests, the comparison does NOT skip itself in CI
+      # when the files are missing: it fails, on purpose.
+      - name: Cache the pinned geo lists (for the conversion test)
+        uses: actions/cache@v6
+        with:
+          path: /tmp/geo
+          key: geo-dlc-ccfd5caee2947964da989f6b94cc3c96f068cba198b163f3ac64def70a0addb5-sing-48cbdf0fea7467b9ceb1d347474a2f704747027ee9063fe1884f427de341c9e9
+
+      - name: Fetch the pinned geo lists
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/geo
+          fetch() {
+            local url="$1" out="$2" sha="$3"
+            if ! echo "${sha}  ${out}" | sha256sum -c - >/dev/null 2>&1; then
+              for attempt in 1 2 3; do
+                if curl -fsSL --retry 2 --retry-delay 3 -o "$out" "$url"; then break; fi
+                echo "download failed: $url (attempt ${attempt}/3)"
+                [ "$attempt" = 3 ] && exit 1
+                sleep $(( attempt * 5 ))
+              done
+            fi
+            echo "${sha}  ${out}" | sha256sum -c -
+          }
+          fetch https://github.com/v2fly/domain-list-community/releases/download/20260922112956/dlc.dat \
+            /tmp/geo/dlc.dat ccfd5caee2947964da989f6b94cc3c96f068cba198b163f3ac64def70a0addb5
+          fetch https://github.com/SagerNet/sing-geosite/releases/download/20260922112956/geosite.db \
+            /tmp/geo/geosite.db 48cbdf0fea7467b9ceb1d347474a2f704747027ee9063fe1884f427de341c9e9
+          echo "GEO_DLC_DAT=/tmp/geo/dlc.dat" >> "$GITHUB_ENV"
+          echo "SING_GEOSITE_DB=/tmp/geo/geosite.db" >> "$GITHUB_ENV"
+
       - name: Typecheck backend
         working-directory: apps/panel-backend
         run: pnpm exec tsc --noEmit
@@ -289,6 +328,7 @@ jobs:
               echo "- tests: no report, so the suite did not get as far as running"
             fi
             echo "- config validity asked of the pinned engines: xray v26.3.27, sing-box v1.13.14"
+            echo "- geo rule-sets compared with sing-geosite 20260922112956"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # No Postgres, no Redis, no Prisma: the SPA never touches them. Its own job

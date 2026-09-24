@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { GEO_BUILTIN, geoBuiltinUrl } from '@iceslab/shared';
 import {
   GeoDatError,
   GeoTagUnknownError,
@@ -194,13 +196,43 @@ describe('geoip', () => {
  * by their converter from that same file. Three tags whose composition
  * sing-geosite does not rewrite (filterTags, mergeTags) must come out equal,
  * key by key. Both files are megabytes and stay out of the repo.
+ *
+ * A laptop without them skips this; CI does not. There the files come from a
+ * cached step, and a missing one is a failure, not a quiet skip.
  */
 const DLC = process.env.GEO_DLC_DAT ?? '';
 const SING_DB = process.env.SING_GEOSITE_DB ?? '';
 const SINGBOX_BIN =
   process.env.SINGBOX_BIN ?? ['/usr/local/bin/sing-box', '/usr/bin/sing-box'].find((p) => existsSync(p)) ?? '';
+const HAVE_FILES = Boolean(DLC && SING_DB && SINGBOX_BIN);
+const IN_CI = process.env.CI === 'true';
 
-describe.runIf(DLC && SING_DB && SINGBOX_BIN)('the pinned release against sing-box export', () => {
+/** sing-geosite's release built from the pinned dlc, and its geosite.db. */
+const SING_GEOSITE = {
+  url: 'https://github.com/SagerNet/sing-geosite/releases/download/20260922112956/geosite.db',
+  sha256: '48cbdf0fea7467b9ceb1d347474a2f704747027ee9063fe1884f427de341c9e9',
+};
+
+describe('CI compares against the release the panel pins', () => {
+  const ci = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../../../../.github/workflows/ci.yml'),
+    'utf8',
+  );
+  it('the dlc.dat of GEO_BUILTIN, by the same sha256, and sing-geosite of the same tag', () => {
+    const dlc = GEO_BUILTIN.geosite;
+    expect(ci).toContain(geoBuiltinUrl(dlc));
+    expect(ci).toContain(dlc.sha256);
+    expect(SING_GEOSITE.url).toContain(`/${dlc.tag}/`);
+    expect(ci).toContain(SING_GEOSITE.url);
+    expect(ci).toContain(SING_GEOSITE.sha256);
+  });
+});
+
+describe.runIf(HAVE_FILES || IN_CI)('the pinned release against sing-box export', () => {
+  it('has the files it compares', () => {
+    expect(HAVE_FILES, 'CI must set GEO_DLC_DAT, SING_GEOSITE_DB and SINGBOX_BIN (the "Fetch the pinned geo lists" step)').toBe(true);
+  });
+
   const buf = new Uint8Array(DLC ? readFileSync(DLC) : []);
   const index = DLC ? parseGeoDat(buf, 'geosite') : null;
   const dir = mkdtempSync(join(tmpdir(), 'geo-'));
