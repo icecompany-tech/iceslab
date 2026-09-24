@@ -197,6 +197,11 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 	statsListen := a.cfg.StatsListen
 	bin := a.cfg.XrayStatsBin
 	run := a.cfg.RunCmd
+	// Asked only of a process that is running. Every adapter is registered on
+	// every node, so an idle one (no inbound pushed, no process) was asked
+	// anyway and answered with a refused connection: six WARN lines every 30 s
+	// per node, and the lines that mattered drowned in them (stand, 24.09).
+	running := a.proc != nil && a.proc.Running()
 	userIDs := make([]string, 0, len(a.users))
 	for id := range a.users {
 		userIDs = append(userIDs, id)
@@ -211,7 +216,7 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		return &core.Stats{Users: out}
 	}
 
-	if statsListen == "" || bin == "" || run == nil {
+	if statsListen == "" || bin == "" || run == nil || !running {
 		return zero(), nil
 	}
 

@@ -67,6 +67,17 @@ type Config struct {
 	// engine, which is the difference between a bad config stopping at the door
 	// and a bad config crash-looping the chain.
 	Run RunCmdFunc
+	// Lifetime is the context the chain PROCESS lives by: the agent's own, so
+	// it ends when the agent does and at no other time. Nil is
+	// context.Background().
+	//
+	// ⚠ Never the request's. Apply is called from the push handler, and the
+	// request context is cancelled the moment the response is sent; the
+	// subprocess is started with exec.CommandContext, whose cancel is SIGKILL
+	// to the whole group. That is E21 (stand, 24.09): "chain applied", then
+	// "chain subprocess exited: signal: killed" 0.4 s later, every time, while
+	// `sing-box check` was clean and a manual run lived.
+	Lifetime context.Context
 }
 
 type Manager struct {
@@ -101,6 +112,9 @@ func New(cfg Config) *Manager {
 		// A node gets the real runner by default. Only a test passes its own,
 		// and only a test should be able to skip asking the engine.
 		cfg.Run = defaultRun
+	}
+	if cfg.Lifetime == nil {
+		cfg.Lifetime = context.Background()
 	}
 	return &Manager{cfg: cfg}
 }
@@ -149,9 +163,16 @@ func (m *Manager) Status() *dto.ChainStatusDto {
 	}
 	if !st.Running {
 		st.Error = m.lastErr
+		if st.Error == "" && m.proc != nil {
+			// The process itself: how it exited and the last thing it wrote
+			// to stderr. E21 went out as "left no reason" while the agent's own
+			// log said "signal: killed"; the reason existed and was not kept.
+			st.Error = m.proc.ExitReason()
+		}
 		if st.Error == "" {
-			// Something stopped it and nothing said why. Saying so beats an
-			// empty field, which reads like "no problem" next to running:false.
+			// Nothing has run yet, or it exited without a status. Saying so
+			// beats an empty field, which reads like "no problem" next to
+			// running:false.
 			st.Error = "the chain process is not running and left no reason"
 		}
 	}
@@ -261,7 +282,10 @@ func (m *Manager) Apply(ctx context.Context, block *dto.NodeChain) error {
 		MaxRestarts:    subprocess.DefaultMaxRestarts,
 		RestartBackoff: subprocess.DefaultRestartBackoff,
 	})
-	if err := proc.Start(ctx); err != nil {
+	// The agent's lifetime, not ctx: ctx is the push request's and dies with
+	// the response (see Config.Lifetime). ctx still bounds the check above and
+	// the version read below, which are part of answering the request.
+	if err := proc.Start(m.cfg.Lifetime); err != nil {
 		return m.fail(fmt.Errorf("start the chain process: %w", err))
 	}
 

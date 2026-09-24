@@ -90,6 +90,9 @@ func main() {
 		BinaryPath: os.Getenv("SINGBOX_BINARY"),
 		ConfigPath: getenv("CHAIN_CONFIG", defaultChainConfigPath),
 		Logger:     logger,
+		// The agent's lifetime: the chain process must not die with the push
+		// request that started it (E21).
+		Lifetime: ctx,
 	})
 
 	srv, err := server.New(server.Config{

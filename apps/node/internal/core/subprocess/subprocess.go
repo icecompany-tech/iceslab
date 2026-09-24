@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -159,6 +160,11 @@ type Subprocess struct {
 	// intentional memory restart from a real crash and label it accordingly.
 	memKill bool
 	memRSS  uint64 // last RSS sample, 0 until the watchdog takes one
+	// How the most recent process ended, kept past the respawn that clears
+	// exitErr, and the stderr of the most recent spawn, for ExitReason.
+	lastExit    error
+	lastExitSet bool
+	stderr      *logWriter
 }
 
 // New builds a Subprocess; nothing is spawned until Start is called.
@@ -192,7 +198,8 @@ func (s *Subprocess) Start(ctx context.Context) error {
 func (s *Subprocess) spawnLocked(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, s.cfg.Binary, s.cfg.Args...)
 	cmd.Stdout = newLogWriter(s.cfg.Logger, slog.LevelInfo, s.cfg.Name)
-	cmd.Stderr = newLogWriter(s.cfg.Logger, slog.LevelError, s.cfg.Name)
+	stderr := &logWriter{logger: s.cfg.Logger, level: slog.LevelError, source: s.cfg.Name}
+	cmd.Stderr = stderr
 	// N5 - put the child in its own process group so Stop (and ctx-cancel) can
 	// signal the WHOLE group (-pgid), reaping any grandchildren the core forks
 	// (helper procs, ACME/cert workers). Without this an orphaned grandchild
@@ -209,6 +216,7 @@ func (s *Subprocess) spawnLocked(ctx context.Context) error {
 	}
 	s.cmd = cmd
 	s.ctx = ctx
+	s.stderr = stderr
 	s.lastSpawnAt = time.Now()
 	exited := make(chan struct{})
 	s.exited = exited
@@ -242,6 +250,8 @@ func (s *Subprocess) watch(cmd *exec.Cmd, exited chan struct{}, ctx context.Cont
 
 	s.mu.Lock()
 	s.exitErr = err
+	s.lastExit = err
+	s.lastExitSet = true
 	// Only act if this watcher's cmd is still the active one, Stop() or an
 	// earlier restart may have already swapped it out. Compare by pointer.
 	isCurrent := s.cmd == cmd
@@ -519,6 +529,34 @@ func (s *Subprocess) Running() bool {
 	}
 }
 
+// ExitReason says how the most recent process ended, in words an operator
+// can act on: the exit status ("signal: killed", "exit status 1") and the
+// last line it wrote to stderr, which is usually the engine's own reason.
+// Empty while nothing has exited yet.
+//
+// Kept past a crash-restart: the respawn clears the live exit state, and the
+// reason is wanted exactly when the process is down again and the panel asks
+// why (E21: the chain died of a cancelled context and the panel was told it
+// "left no reason").
+func (s *Subprocess) ExitReason() string {
+	s.mu.Lock()
+	set, err, stderr := s.lastExitSet, s.lastExit, s.stderr
+	s.mu.Unlock()
+	if !set {
+		return ""
+	}
+	reason := "exited cleanly"
+	if err != nil {
+		reason = err.Error()
+	}
+	if stderr != nil {
+		if line := stderr.lastLine(); line != "" {
+			reason += "; last stderr line: " + line
+		}
+	}
+	return reason
+}
+
 // ───── log-line writer (moved from hysteria/adapter.go) ─────
 
 func newLogWriter(logger *slog.Logger, level slog.Level, source string) io.Writer {
@@ -531,6 +569,8 @@ type logWriter struct {
 	source string
 	mu     sync.Mutex
 	buf    []byte
+	// last is the most recent non-empty complete line, for ExitReason.
+	last string
 }
 
 func (w *logWriter) Write(p []byte) (int, error) {
@@ -544,9 +584,23 @@ func (w *logWriter) Write(p []byte) (int, error) {
 		}
 		line := string(w.buf[:idx])
 		w.buf = w.buf[idx+1:]
+		if t := strings.TrimSpace(line); t != "" {
+			w.last = t
+		}
 		w.logger.Log(context.Background(), w.level, line, "source", w.source)
 	}
 	return len(p), nil
+}
+
+// lastLine is the most recent line, or the unterminated tail when the process
+// died mid-line, which is how a crash often leaves its last words.
+func (w *logWriter) lastLine() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if t := strings.TrimSpace(string(w.buf)); t != "" {
+		return t
+	}
+	return w.last
 }
 
 func indexNewline(b []byte) int {

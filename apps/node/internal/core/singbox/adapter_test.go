@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"runtime"
 	"testing"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core/subprocess"
 )
 
 func testAdapter() *Adapter {
@@ -87,6 +89,8 @@ func TestGetStatsViaFakeRunCmd(t *testing.T) {
 	if err := a.AddUser(core.User{UserID: "u1", TuicUUID: "uuid1", TuicPassword: "pw1"}); err != nil {
 		t.Fatalf("AddUser: %v", err)
 	}
+	// Stats are asked only of a running engine; a sleeping process stands in.
+	a.proc = runningStandIn(t)
 
 	stats, err := a.GetStats()
 	if err != nil {
@@ -101,6 +105,49 @@ func TestGetStatsViaFakeRunCmd(t *testing.T) {
 	if stats.Users[0].BytesIn != 100 || stats.Users[0].BytesOut != 200 {
 		t.Errorf("counters = in %d out %d, want 100/200", stats.Users[0].BytesIn, stats.Users[0].BytesOut)
 	}
+}
+
+// An idle adapter (registered on every node, no inbound, no process) is not
+// asked for stats at all. It used to be, got a refused connection, and wrote a
+// WARN every poll: six lines every 30 s per node on the stand (24.09).
+func TestGetStatsDoesNotAskAnEngineThatIsNotRunning(t *testing.T) {
+	a := New(Config{
+		StatsListen:  "127.0.0.1:8082",
+		XrayStatsBin: "/usr/local/bin/xray",
+		RunCmd: func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+			t.Error("statsquery was run against an engine that is not running")
+			return nil, nil
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := a.AddUser(core.User{UserID: "u1", TuicUUID: "uuid1", TuicPassword: "pw1"}); err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	stats, err := a.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if len(stats.Users) != 1 || stats.Users[0].BytesIn != 0 || stats.Cumulative {
+		t.Fatalf("an idle engine reports zero, not cumulative: %+v", stats)
+	}
+}
+
+// runningStandIn is a live process for the adapter to see as its engine.
+func runningStandIn(t *testing.T) *subprocess.Subprocess {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a unix sleep: the agent runs on Linux")
+	}
+	p := subprocess.New(subprocess.Config{
+		Name:   "stand-in",
+		Binary: "sleep",
+		Args:   []string{"60"},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err := p.Start(context.Background()); err != nil {
+		t.Skipf("no sleep to stand in for the engine: %v", err)
+	}
+	t.Cleanup(func() { _ = p.Stop(context.Background()) })
+	return p
 }
 
 func TestAnytlsAdapter(t *testing.T) {
