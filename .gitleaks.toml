@@ -115,4 +115,12 @@ regexes = [
   # prefix covers them, and only them: a real key pasted beside them does not
   # start with it.
   '''aWNlc2xhYi10dW5uZWwtZml4dHVyZS1''',
+  # The actions/cache key of the pinned geo lists in ci.yml ("Cache the pinned
+  # geo lists"): the sha256 of two public release files, v2fly dlc.dat and
+  # sing-geosite geosite.db. The same digests sit in the open in
+  # packages/shared/src/geo.ts (GEO_BUILTIN) and geo-dat.test.ts; the key
+  # guards nothing. Allowed by its exact shape, two digests between fixed
+  # words, so a real secret pasted into ci.yml is still caught. The scan reads
+  # history, where df28c4c holds it, so this line stays for good.
+  '''geo-dlc-[0-9a-f]{64}-sing-[0-9a-f]{64}''',
 ]
