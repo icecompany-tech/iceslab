@@ -2,12 +2,18 @@
 # Install the Mieru server (`mita`) on a fresh Ubuntu/Debian VPS.
 #
 # The node-agent (iceslab-node) invokes `mita apply config <path>` and
-# `mita reload` to manage user lists. mita runs as its own systemd
-# service on most installs (the package handles that); here we only
-# lay down the binary.
+# `mita reload` to manage user lists, which talk to a RUNNING mita: the
+# package ships mita.service, and this script makes sure it is enabled and
+# running rather than trusting the package's postinst. Then it writes the mita
+# block of the agent's env (lib/node-env.sh), which used to be printed for the
+# operator to copy (E20).
 #
 # Idempotent, safe to rerun: a node already on the pinned version is left alone,
-# a node on any other version is moved onto it.
+# a node on any other version is moved onto it; the unit and the env block are
+# seen to either way.
+#
+# Flags:
+#   --restart-agent  restart iceslab-node at the end
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   MIERU_VERSION   release to install instead of the pin, e.g. 3.37.0
@@ -18,9 +24,38 @@ log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 INSTALL_DIR=/usr/local/bin
+
+# Where the package put mita, which is not a promise this script makes.
+wire_env() {
+  node_env_block mieru \
+    "MITA_BINARY=$(command -v mita 2>/dev/null || echo "$INSTALL_DIR/mita")" \
+    "MITA_CONFIG=$(node_env_keep MITA_CONFIG /etc/mita/server.json)"
+}
+
+# mita.service comes with the package. Without a running mita every
+# `mita apply config` the agent makes fails.
+mita_unit() {
+  if systemctl cat mita.service >/dev/null 2>&1; then
+    systemctl enable --now mita.service >/dev/null 2>&1 || warn "could not start mita.service; check: systemctl status mita"
+  else
+    warn "the mita package installed no mita.service; the agent's mita calls will fail until one runs"
+  fi
+}
+
+finish() {
+  mkdir -p /etc/mita
+  chmod 0700 /etc/mita
+  mita_unit
+  wire_env
+  node_env_done mieru
+}
 
 # ───── pinned version ─────
 #
@@ -63,6 +98,7 @@ if [[ -x "$INSTALL_DIR/mita" ]]; then
   CURRENT=$(version_of "$INSTALL_DIR/mita" || true)
   if [[ "$CURRENT" == "$MIERU_VERSION" ]]; then
     log "mita $CURRENT is already installed, which is the wanted version"
+    finish
     exit 0
   fi
   log "mita ${CURRENT:-unknown} is installed, moving it to $MIERU_VERSION"
@@ -107,23 +143,6 @@ VERSION=$(version_of "$INSTALL_DIR/mita" || true)
 [[ "$VERSION" == "$MIERU_VERSION" ]] || fail "installed mita reports '${VERSION:-nothing}', expected $MIERU_VERSION"
 log "Smoke-test passed: mita $VERSION"
 
-# ───── 6. Make /etc/mita writable by node-agent ─────
-mkdir -p /etc/mita
-chmod 0700 /etc/mita
-log "Created /etc/mita (mode 0700; node-agent will populate server.yaml on ApplyInbound)"
-
-# ───── 7. Summary ─────
-echo
-log "mita is ready."
-echo "    Binary:  $INSTALL_DIR/mita"
-echo "    Version: $VERSION"
-echo
-echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
-echo "    MITA_BINARY=$INSTALL_DIR/mita"
-echo "    MITA_CONFIG=/etc/mita/server.json"
-echo "    MITA_PORT=2012"
-echo "    MITA_MTU=1400        # min 1280; drop to 1280 on PPPoE / odd VPN paths"
-echo "Then: systemctl restart iceslab-node"
-echo
-warn "If your distro doesn't ship a mita systemd unit by default, the .deb"
-warn "should install one. Check: systemctl status mita"
+# ───── 6. /etc/mita (node-agent writes server.json there), unit, agent env ─────
+finish
+log "mita $VERSION is ready"

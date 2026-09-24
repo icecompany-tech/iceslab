@@ -2,11 +2,16 @@
 # Install the mtg (9seconds/mtg) MTProto-proxy binary on a fresh Ubuntu/Debian VPS.
 #
 # The node-agent (iceslab-node) spawns mtg as a child process when MTG_BINARY
-# is set. This script only places the binary at /usr/local/bin/mtg and verifies
-# it works.
+# is set, so there is no unit to write. This script places the binary at
+# /usr/local/bin/mtg, verifies it, and writes the mtg block of the agent's env
+# (lib/node-env.sh), which used to be printed for the operator to copy (E20).
 #
 # Idempotent, safe to rerun: a node already on the pinned version is left alone,
-# a node on any other version is moved onto it.
+# a node on any other version is moved onto it; the env block is written either
+# way.
+#
+# Flags:
+#   --restart-agent  restart iceslab-node at the end
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   MTG_VERSION   release to install instead of the pin, e.g. 2.2.8
@@ -17,9 +22,21 @@ log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 INSTALL_PATH=/usr/local/bin/mtg
+
+# Port, stats port and the Fake-TLS domain have defaults in the agent and come
+# from the panel's push; only what registers the adapter is written here.
+wire_env() {
+  node_env_block mtproto \
+    "MTG_BINARY=$INSTALL_PATH" \
+    "MTG_CONFIG=$(node_env_keep MTG_CONFIG /etc/mtg/config.toml)"
+}
 
 # ───── pinned version ─────
 #
@@ -64,6 +81,8 @@ if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
   if [[ "$CURRENT" == "$MTG_VERSION" ]]; then
     log "mtg $CURRENT is already installed, which is the wanted version"
+    wire_env
+    node_env_done mtproto
     exit 0
   fi
   log "mtg ${CURRENT:-unknown} is installed, moving it to $MTG_VERSION"
@@ -119,15 +138,7 @@ mkdir -p /etc/mtg
 chmod 0700 /etc/mtg
 log "Created /etc/mtg (mode 0700; node-agent will populate config.toml on ApplyInbound)"
 
-# ───── 7. Summary ─────
-echo
-log "mtg is ready."
-echo "    Binary:  $INSTALL_PATH"
-echo "    Version: $VERSION"
-echo
-echo "Set the following in /etc/iceslab-node/env then restart node-agent:"
-echo "    MTG_BINARY=$INSTALL_PATH"
-echo "    MTG_CONFIG=/etc/mtg/config.toml"
-echo "    MTG_PORT=443"
-echo "    MTG_DOMAIN=www.cloudflare.com   # optional pre-seed; panel can override"
-echo "Then: systemctl restart iceslab-node"
+# ───── 7. Agent env ─────
+wire_env
+node_env_done mtproto
+log "mtg $VERSION is ready at $INSTALL_PATH"

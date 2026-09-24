@@ -6,12 +6,30 @@
 #   Ubuntu 24.04 (noble) and later:   PPA doesn't register for noble, so we
 #     install via DKMS from the upstream GitHub source + build awg-tools.
 #
+# Ends by writing the amneziawg block of the agent's env (lib/node-env.sh).
+# The agent looks for awg at /usr/bin/awg unless told otherwise, and `make
+# install` may put it elsewhere; the block names where it actually is. The
+# agent brings interfaces up with awg-quick itself, so there is no unit here.
+#
 # Idempotent, safe to rerun.
+#
+# Flags:
+#   --restart-agent  restart iceslab-node at the end
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
+wire_env() {
+  node_env_block amneziawg \
+    "AMNEZIAWG_BIN=$(command -v awg 2>/dev/null || echo /usr/bin/awg)" \
+    "AMNEZIAWG_QUICK_BIN=$(command -v awg-quick 2>/dev/null || echo /usr/bin/awg-quick)"
+}
 
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
@@ -185,7 +203,11 @@ if [[ ! -f "$SYSCTL_CONF" ]]; then
   sysctl --system >/dev/null
 fi
 
-# ───── 7. Summary ─────
+# ───── 7. Agent env ─────
+wire_env
+node_env_done amneziawg
+
+# ───── 8. Summary ─────
 echo
 if $DKMS_OK; then
   log "AmneziaWG kernel-mode is ready."

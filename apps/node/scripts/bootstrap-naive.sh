@@ -6,7 +6,10 @@
 # `xcaddy` to compile a Caddy with the naive plugin and drop the result at
 # /usr/local/bin/caddy-naive.
 #
-# Usage:  sudo bash bootstrap-naive.sh
+# The node-agent spawns this Caddy itself, so there is no unit to write; the
+# script ends by writing the naive block of the agent's env (lib/node-env.sh).
+#
+# Usage:  sudo bash bootstrap-naive.sh [--restart-agent]
 # Idempotent, safe to rerun (re-pulls upstream sources, re-builds binary).
 set -euo pipefail
 
@@ -14,9 +17,22 @@ log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 CADDY_NAIVE_BIN=${CADDY_NAIVE_BIN:-/usr/local/bin/caddy-naive}
+
+# The agent finds caddy-naive at its default path on its own; the block says
+# where it is anyway, so a CADDY_NAIVE_BIN override reaches the agent too.
+# (The installer used to write NAIVE_BINARY, which the agent never read.)
+wire_env() {
+  node_env_block naive \
+    "CADDY_NAIVE_BIN=$CADDY_NAIVE_BIN" \
+    "NAIVE_CONFIG=$(node_env_keep NAIVE_CONFIG /etc/caddy/Caddyfile)"
+}
 GO_VERSION=${GO_VERSION:-1.23.4}
 
 # ───── 1. Distro check ─────
@@ -115,15 +131,18 @@ if ! "$CADDY_NAIVE_BIN" list-modules 2>/dev/null | grep -q '^http\.handlers\.for
 fi
 log "✓ forward_proxy module is linked"
 
-# ───── 7. Summary ─────
+# ───── 7. Agent env ─────
+mkdir -p /etc/caddy
+wire_env
+node_env_done naive
+
+# ───── 8. Summary ─────
 echo
 log "✓ Caddy + NaiveProxy fork is ready."
 echo
 echo "Next steps:"
-echo "  - Open the inbound's TCP port (default :443) in the firewall."
 echo "  - Point the DNS A-record at this VPS so Caddy can auto-fetch LE certs"
 echo "    via tls-alpn-01 / http-01."
-echo "  - Start the Iceslab node-agent; it will write the Caddyfile and reload."
 echo
 warn "NaiveProxy bumps Chromium roughly every 30 days. Re-run this script"
 warn "periodically; a stale TLS fingerprint is easier to fingerprint."

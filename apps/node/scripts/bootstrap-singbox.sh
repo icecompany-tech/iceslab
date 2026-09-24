@@ -10,6 +10,12 @@
 #     TUIC mandates TLS; for the alpha the client connects with allow_insecure
 #     plus a matching SNI. A real Let's Encrypt cert on the node domain is a
 #     later slice (shared with the hysteria/naive ACME work).
+#   - writes the sing-box block of the agent's env (lib/node-env.sh): the agent
+#     registers its sing-box adapters, and runs a cascade chain, only when
+#     SINGBOX_BINARY is set. E20: this used to be printed, not written.
+#
+# Flags:
+#   --restart-agent  restart iceslab-node at the end
 #
 # Env overrides:
 #   SINGBOX_VERSION  release to install instead of the pin, e.g. 1.13.14, and
@@ -56,6 +62,17 @@ declare -A SINGBOX_PINNED_SHA256=(
 
 log()  { printf '[bootstrap-singbox] %s\n' "$*"; }
 fail() { printf '[bootstrap-singbox] ERROR: %s\n' "$*" >&2; exit 1; }
+
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
+wire_env() {
+  node_env_block singbox \
+    "SINGBOX_BINARY=$SINGBOX_DEST" \
+    "SINGBOX_CERT=$SINGBOX_DIR/cert.pem" \
+    "SINGBOX_KEY=$SINGBOX_DIR/key.pem"
+}
 
 if [[ -n "${SINGBOX_VERSION:-}" && -z "${SINGBOX_SHA256:-}" ]] || [[ -z "${SINGBOX_VERSION:-}" && -n "${SINGBOX_SHA256:-}" ]]; then
   fail "SINGBOX_VERSION and SINGBOX_SHA256 go together: a version without its checksum is not installed"
@@ -114,5 +131,6 @@ else
   chmod 644 "$SINGBOX_DIR/cert.pem"
 fi
 
+wire_env
+node_env_done singbox
 log "done."
-log "node-agent env: SINGBOX_BINARY=$SINGBOX_DEST SINGBOX_CERT=$SINGBOX_DIR/cert.pem SINGBOX_KEY=$SINGBOX_DIR/key.pem"

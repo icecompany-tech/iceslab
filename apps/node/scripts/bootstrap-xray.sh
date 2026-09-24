@@ -6,11 +6,16 @@
 # panel's "how to update" command calls it on a live node. The node-agent runs
 # xray as its own child process, so xray.service is disabled at the end.
 #
-# Leaves the agent's identity alone: nothing under /etc/iceslab-node (mTLS
-# keys, env) is read or written, and the agent's xray config is left in place.
+# Leaves the agent's identity alone: of /etc/iceslab-node it touches only its
+# own block of the env file (lib/node-env.sh), never the payload or the mTLS
+# keys, and the agent's xray config is left in place.
 #
 # Idempotent, safe to rerun: a node already on the wanted version is left alone,
-# a node on any other version is moved onto it.
+# a node on any other version is moved onto it. Either way the xray block of
+# the agent's env is written, so the agent registers xray on its next start.
+#
+# Flags:
+#   --restart-agent     restart iceslab-node at the end
 #
 # Env overrides:
 #   XRAY_VERSION        release to install instead of the pin, e.g. 26.3.27, and
@@ -24,9 +29,26 @@ log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 INSTALL_PATH=/usr/local/bin/xray
+
+# The agent registers xray (and shadowsocks, which runs inside it) when
+# XRAY_BINARY is set. XRAY_CONFIG keeps what the node already has. A node that
+# has xray but no XRAY_CONFIG (installed as shadowsocks) runs on the agent's
+# default, /etc/xray/config.json, and is written that, not moved; a fresh one
+# gets where upstream's installer puts it.
+wire_env() {
+  local config=/usr/local/etc/xray/config.json
+  [[ -n "$(node_env_value XRAY_BINARY)" ]] && config=/etc/xray/config.json
+  node_env_block xray \
+    "XRAY_BINARY=$INSTALL_PATH" \
+    "XRAY_CONFIG=$(node_env_keep XRAY_CONFIG "$config")"
+}
 
 # ───── pinned version ─────
 #
@@ -91,6 +113,8 @@ if [[ -x "$INSTALL_PATH" ]]; then
   if [[ "$CURRENT" == "$XRAY_VERSION" ]]; then
     log "xray $CURRENT is already installed, which is the wanted version"
     disable_upstream_unit
+    wire_env
+    node_env_done xray
     exit 0
   fi
   log "xray ${CURRENT:-unknown} is installed, moving it to $XRAY_VERSION"
@@ -164,3 +188,6 @@ disable_upstream_unit
 VERSION=$(version_of "$INSTALL_PATH" || true)
 [[ "$VERSION" == "$XRAY_VERSION" ]] || fail "installed xray reports '${VERSION:-nothing}', expected $XRAY_VERSION"
 log "xray $VERSION is ready at $INSTALL_PATH"
+# Before the trap starts the agent again, so the start reads the block.
+wire_env
+node_env_done xray

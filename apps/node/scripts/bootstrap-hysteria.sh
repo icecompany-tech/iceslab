@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# Install the Hysteria 2 binary on a fresh Ubuntu/Debian VPS.
+# Install Hysteria 2 on an Ubuntu/Debian VPS and wire it into the node-agent.
 #
-# The node-agent (iceslab-node) spawns hysteria as a child process, so no
-# separate systemd unit is needed. This script only places the binary at
-# /usr/local/bin/hysteria and verifies it works.
+#   - places the pinned, checked binary at /usr/local/bin/hysteria;
+#   - writes /etc/systemd/system/hysteria.service. The agent runs hysteria
+#     through it (HYSTERIA_SERVICE_UNIT): it writes the config and restarts
+#     the unit on every push. The unit starts only once a config exists, so a
+#     node waiting for its first push does not crash-loop;
+#   - writes the hysteria block of the agent's env (lib/node-env.sh): binary,
+#     config, auth callback port, the unit, and the traffic-stats listener and
+#     secret. The secret is kept across runs: the config on disk carries it.
 #
-# Idempotent, safe to rerun: a node already on the pinned version is left alone,
-# a node on any other version is moved onto it.
+# E20, stand 2026-09-24: all of the above but the binary used to be done only
+# by install-iceslab-node.sh for --protocol hysteria, so hysteria added to a
+# node later was a binary the agent never used.
+#
+# Idempotent, safe to rerun: a node already on the pinned version keeps its
+# binary, a node on any other version is moved onto it; the unit and the env
+# block are written either way.
+#
+# Flags:
+#   --restart-agent  restart iceslab-node at the end
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   HYSTERIA_VERSION  release to install instead of the pin, e.g. 2.12.3
@@ -17,9 +30,76 @@ log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# shellcheck source=lib/node-env.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
+node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
 
 INSTALL_PATH=/usr/local/bin/hysteria
+HYSTERIA_CONFIG_PATH=/etc/hysteria/config.yaml
+HYSTERIA_UNIT=/etc/systemd/system/hysteria.service
+
+# The six the agent needs, and nothing that belongs to one install (hostname,
+# ACME e-mail: install-iceslab-node.sh writes those from its own flags, and
+# the panel pushes the hostname anyway).
+wire_env() {
+  local secret
+  secret="$(node_env_keep HYSTERIA_STATS_SECRET "")"
+  if [[ -z "$secret" ]]; then
+    secret="$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+  node_env_block hysteria \
+    "HYSTERIA_BINARY=$INSTALL_PATH" \
+    "HYSTERIA_CONFIG=$HYSTERIA_CONFIG_PATH" \
+    "HYSTERIA_AUTH_PORT=$(node_env_keep HYSTERIA_AUTH_PORT 9000)" \
+    "HYSTERIA_SERVICE_UNIT=hysteria" \
+    "HYSTERIA_STATS_LISTEN=$(node_env_keep HYSTERIA_STATS_LISTEN 127.0.0.1:9999)" \
+    "HYSTERIA_STATS_SECRET=$secret"
+}
+
+# The unit the agent restarts. Rewritten only when it differs, so a rerun does
+# not reload systemd for nothing. Enabled, not started: without a config it has
+# nothing to run, and the agent's first push starts it.
+write_unit() {
+  local want
+  want="$(cat <<EOF
+[Unit]
+Description=Hysteria 2 server (run by iceslab-node)
+After=network-online.target iceslab-node.service
+Wants=network-online.target
+ConditionPathExists=${HYSTERIA_CONFIG_PATH}
+
+[Service]
+Type=simple
+ExecStart=${INSTALL_PATH} server -c ${HYSTERIA_CONFIG_PATH}
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+)"
+  mkdir -p "$(dirname "$HYSTERIA_CONFIG_PATH")"
+  if [[ ! -f "$HYSTERIA_UNIT" ]] || [[ "$(cat "$HYSTERIA_UNIT")" != "$want" ]]; then
+    printf '%s\n' "$want" >"$HYSTERIA_UNIT"
+    systemctl daemon-reload
+    log "Wrote $HYSTERIA_UNIT"
+  fi
+  systemctl enable hysteria.service >/dev/null 2>&1 || warn "could not enable hysteria.service"
+  # Upstream's own units, if an older install left them: a second hysteria on
+  # the same port is what "address already in use" looks like.
+  systemctl disable --now hysteria-server.service >/dev/null 2>&1 || true
+}
+
+finish() {
+  write_unit
+  wire_env
+  node_env_done hysteria
+}
 
 # ───── pinned version ─────
 #
@@ -79,7 +159,7 @@ if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
   if [[ "${CURRENT#v}" == "$HYSTERIA_VERSION" ]]; then
     log "hysteria $CURRENT is already installed, which is the wanted version"
-    echo
+    finish
     log "hysteria is ready at $INSTALL_PATH"
     exit 0
   fi
@@ -131,12 +211,6 @@ log "Downloaded hysteria $VERSION, OK"
 mv "$TMP" "$INSTALL_PATH"
 log "Installed to $INSTALL_PATH"
 
-# ───── 6. Summary ─────
-echo
-log "Hysteria 2 is ready."
-echo "    Binary:  $INSTALL_PATH"
-echo "    Version: $VERSION"
-echo
-echo "Set HYSTERIA_BINARY=$INSTALL_PATH in the node-agent env file:"
-echo "    /etc/iceslab-node/env"
-echo "Then restart: systemctl restart iceslab-node"
+# ───── 6. Unit and agent env ─────
+finish
+log "Hysteria 2 $VERSION is ready at $INSTALL_PATH"

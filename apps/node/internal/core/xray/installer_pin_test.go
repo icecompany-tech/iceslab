@@ -96,9 +96,15 @@ func TestBootstrapIsSafeOnALiveNode(t *testing.T) {
 			t.Errorf("bootstrap-xray.sh lost %q", want)
 		}
 	}
-	// The node's identity is not the bootstrap's to touch.
-	if strings.Contains(script, "/etc/iceslab-node") && !strings.Contains(script, "nothing under /etc/iceslab-node") {
-		t.Error("bootstrap-xray.sh reaches into /etc/iceslab-node")
+	// The node's identity is not the bootstrap's to touch. Since E20 it writes
+	// its own block of the agent's env, through lib/node-env.sh and nothing
+	// else: no payload, no keys, no line of the env file by hand.
+	if strings.Contains(script, "NODE_PAYLOAD") ||
+		regexp.MustCompile(`>>?\s*"?(/etc/iceslab-node|\$ICESLAB_NODE_ENV)`).MatchString(script) {
+		t.Error("bootstrap-xray.sh writes into /etc/iceslab-node by hand")
+	}
+	if !strings.Contains(script, "node_env_block xray") {
+		t.Error("bootstrap-xray.sh no longer wires xray into the agent's env")
 	}
 }
 
