@@ -64,6 +64,14 @@ model GeoSetVersion {
   fetchedAt DateTime @map("fetched_at") @db.Timestamptz(6)
   /// GeoSetTag[] as the tags route serves them, taken when it was verified.
   tags      Json
+  /// Phase 9.4: sha256 of the file as it CAME (a sidecar or the operator
+  /// vouches for this one). The same as `sha256` for a .dat; for a rule-set
+  /// JSON or a MaxMind database `sha256` is the .dat it was converted into.
+  sourceSha256 String  @map("source_sha256") @db.Char(64)
+  /// Phase 9.4: the validators of the response it came in, for the next
+  /// conditional request (If-None-Match, If-Modified-Since). URL sets only.
+  etag         String? @db.VarChar(512)
+  lastModified String? @map("last_modified") @db.VarChar(64)
 
   blob      GeoBlob      @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
   currentOf GeoSet?      @relation("GeoSetCurrent")

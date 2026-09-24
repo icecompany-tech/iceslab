@@ -5,7 +5,8 @@ import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { ROOT, cidr, datFile, domain, geoip, site } from '../../../tests/helpers/geo-dat.js';
-import { ensureBuiltinSets, fetchBuiltin, fetchUrl, ingestGeoFile, sha256Hex } from './geo-sets.store.js';
+import { ensureBuiltinSets, fetchBuiltin, fetchUrl, ingestGeoFile, sha256Hex, urlSetDue } from './geo-sets.store.js';
+import { buildMmdb, country } from '../../../tests/helpers/mmdb.js';
 
 /**
  * Phase 9.1: how a file becomes a version. The status is the last attempt,
@@ -198,6 +199,90 @@ describe('a set fetched from a URL', () => {
   it('a manual sha256 the file does not have', async () => {
     const { id } = await urlSet('manual', 'cd'.repeat(32));
     expect(await fetchUrl(id, site_(null))).toMatchObject({ status: 'broken', error: expect.stringMatching(/^sha256 of the file is/) });
+  });
+});
+
+describe('refreshing a URL set, conditionally (phase 9.4)', () => {
+  const URL_ = 'https://lists.example.com/cond.dat';
+  async function urlSet() {
+    return prisma.geoSet.create({
+      data: { name: 'cond', kind: 'geosite', sourceType: 'url', url: URL_, sha256Source: 'manual', sha256Manual: sha256Hex(good) },
+      select: { id: true },
+    });
+  }
+  /** A server that remembers what it was asked and answers 304 to a match. */
+  function server() {
+    const asked: Record<string, string>[] = [];
+    const f = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const h = (init?.headers ?? {}) as Record<string, string>;
+      asked.push(h);
+      if (h['If-None-Match'] === '"v1"') return new Response(null, { status: 304 });
+      return new Response(Buffer.from(good), { headers: { etag: '"v1"', 'last-modified': 'Wed, 23 Sep 2026 10:00:00 GMT' } });
+    }) as typeof fetch;
+    return { f, asked };
+  }
+
+  it('keeps the validators and sends them back; a 304 is nothing new, not even checking', async () => {
+    const { id } = await urlSet();
+    const s = server();
+    expect((await fetchUrl(id, s.f)).status).toBe('verified');
+    expect(s.asked[0]).toEqual({});
+    const v = await prisma.geoSetVersion.findFirstOrThrow({ where: { geoSetId: id } });
+    expect(v).toMatchObject({ etag: '"v1"', lastModified: 'Wed, 23 Sep 2026 10:00:00 GMT' });
+
+    // "Refresh now" set it to checking; the 304 puts it back.
+    await prisma.geoSet.update({ where: { id }, data: { status: 'checking' } });
+    expect(await fetchUrl(id, s.f)).toEqual({ status: 'unchanged' });
+    expect(s.asked[1]).toEqual({ 'If-None-Match': '"v1"', 'If-Modified-Since': 'Wed, 23 Sep 2026 10:00:00 GMT' });
+    expect(await prisma.geoSetVersion.count({ where: { geoSetId: id } })).toBe(1);
+    expect((await read(id)).status).toBe('verified');
+  });
+
+  it('a network that is down is broken in words, and the current list stays', async () => {
+    const { id } = await urlSet();
+    await fetchUrl(id, server().f);
+    const down = (async () => {
+      throw new Error('connect ECONNREFUSED');
+    }) as typeof fetch;
+    expect(await fetchUrl(id, down)).toMatchObject({ status: 'broken', error: expect.stringMatching(/ECONNREFUSED/) });
+    expect((await read(id)).current!.sha256).toBe(sha256Hex(good));
+  });
+
+  it('is due by its refreshHours, and after a failure within the hour', () => {
+    const now = new Date('2026-09-24T12:00:00Z');
+    const ago = (h: number) => new Date(now.getTime() - h * 3_600_000);
+    expect(urlSetDue({ status: 'checking', checkedAt: null, refreshHours: 24 }, now)).toBe(true);
+    expect(urlSetDue({ status: 'verified', checkedAt: ago(23), refreshHours: 24 }, now)).toBe(false);
+    expect(urlSetDue({ status: 'verified', checkedAt: ago(24), refreshHours: 24 }, now)).toBe(true);
+    expect(urlSetDue({ status: 'verified', checkedAt: ago(6), refreshHours: null }, now)).toBe(false);
+    expect(urlSetDue({ status: 'broken', checkedAt: ago(0.5), refreshHours: 24 }, now)).toBe(false);
+    expect(urlSetDue({ status: 'broken', checkedAt: ago(1), refreshHours: 24 }, now)).toBe(true);
+  });
+});
+
+describe('the other formats become a .dat (phase 9.4)', () => {
+  it('a rule-set JSON: the file as it came vouched for, the .dat stored, one tag named after the set', async () => {
+    const { id } = await userSet('mylist', 'geosite');
+    const file = new TextEncoder().encode(JSON.stringify({ version: 2, rules: [{ domain_suffix: ['ads.example'] }] }));
+    expect((await ingestGeoFile(id, { bytes: file, expectedSha256: sha256Hex(file) })).status).toBe('verified');
+    const s = await prisma.geoSet.findUniqueOrThrow({
+      where: { id },
+      select: { format: true, current: { select: { sha256: true, sourceSha256: true, version: true, tags: true } } },
+    });
+    expect(s.format).toBe('rule-set-json');
+    expect(s.current!.sourceSha256).toBe(sha256Hex(file));
+    expect(s.current!.sha256).not.toBe(sha256Hex(file));
+    expect(s.current!.version).toBe(sha256Hex(file).slice(0, 12));
+    expect(s.current!.tags).toEqual([{ name: 'mylist', entries: 1, attrs: [] }]);
+  });
+
+  it('a MaxMind database into a geosite set is broken in words', async () => {
+    const { id } = await userSet('mm', 'geosite');
+    const db = buildMmdb(4, [{ ip: [1, 2, 3, 0], prefix: 24, data: country('RU') }]);
+    expect(await ingestGeoFile(id, { bytes: db })).toEqual({
+      status: 'broken',
+      error: 'this is a MaxMind database, which is a geoip list, and the set is geosite',
+    });
   });
 });
 

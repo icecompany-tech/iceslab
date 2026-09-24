@@ -6,12 +6,14 @@ import {
   GEO_SET_KINDS,
   geoBuiltinUrl,
   type GeoBuiltinRelease,
+  type GeoSetFormat,
   type GeoSetKind,
 } from '@iceslab/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import { GeoDatError, geoTagList, parseGeoDat } from './geo-dat.js';
+import { toGeoDat } from './geo-formats.js';
 
 /**
  * Where a geo set's files come in and become versions. Everything that ends in
@@ -28,12 +30,17 @@ export type IngestOutcome = { status: 'verified'; versionId: string } | { status
 export interface IngestInput {
   bytes: Uint8Array;
   /** The version label: a built-in's release tag. Otherwise the first 12 hex
-   *  of the sha256. */
+   *  of the sha256 of the file as it came. */
   version?: string;
   /** What the source vouches for (a release manifest, a sidecar, the
-   *  operator). Without it only the parse stands between a cut file and a
-   *  node, and a file cut exactly on an entry boundary parses. */
+   *  operator), about the file AS IT CAME. Without it only the parse stands
+   *  between a cut file and a node, and a file cut exactly on an entry
+   *  boundary parses. */
   expectedSha256?: string;
+  /** The validators of the response a URL set's file came in, kept on the
+   *  version for the next conditional request. */
+  etag?: string | null;
+  lastModified?: string | null;
 }
 
 export function sha256Hex(bytes: Uint8Array): string {
@@ -42,28 +49,44 @@ export function sha256Hex(bytes: Uint8Array): string {
 
 const MB = 1024 * 1024;
 
-/** Checks `bytes` as the set's kind and, when they hold, makes them the set's
- *  current version. Never throws for a bad file: that is `broken`, in words. */
+/**
+ * Checks `bytes` as the set's kind and, when they hold, makes them the set's
+ * current version. Never throws for a bad file: that is `broken`, in words.
+ *
+ * Phase 9.4: the file may be a v2fly `.dat`, a sing-box rule-set JSON or a
+ * MaxMind database, recognised by its bytes (geo-formats.ts). The sha256 the
+ * source vouches for is checked against the file as it came; what is stored
+ * and laid out is the `.dat` it becomes, so every reader downstream sees one
+ * format.
+ */
 export async function ingestGeoFile(setId: string, input: IngestInput): Promise<IngestOutcome> {
-  const set = await prisma.geoSet.findUniqueOrThrow({ where: { id: setId }, select: { kind: true } });
+  const set = await prisma.geoSet.findUniqueOrThrow({ where: { id: setId }, select: { kind: true, name: true } });
+  const kind = set.kind as GeoSetKind;
   const { bytes } = input;
 
   if (bytes.length > GEO_FILE_MAX_BYTES) {
     return markBroken(setId, `the file is ${(bytes.length / MB).toFixed(1)} MB, the ceiling is ${GEO_FILE_MAX_BYTES / MB} MB`);
   }
-  const sha256 = sha256Hex(bytes);
-  if (input.expectedSha256 && input.expectedSha256.toLowerCase() !== sha256) {
-    return markBroken(setId, `sha256 of the file is ${sha256}, expected ${input.expectedSha256.toLowerCase()}`);
+  const sourceSha256 = sha256Hex(bytes);
+  if (input.expectedSha256 && input.expectedSha256.toLowerCase() !== sourceSha256) {
+    return markBroken(setId, `sha256 of the file is ${sourceSha256}, expected ${input.expectedSha256.toLowerCase()}`);
   }
+  let dat: Uint8Array;
+  let format: GeoSetFormat;
   let tags;
   try {
-    tags = geoTagList(parseGeoDat(bytes, set.kind as GeoSetKind));
+    ({ dat, format } = toGeoDat(bytes, kind, set.name));
+    tags = geoTagList(parseGeoDat(dat, kind));
   } catch (err) {
     if (err instanceof GeoDatError) return markBroken(setId, err.message);
     throw err;
   }
+  if (dat.length > GEO_FILE_MAX_BYTES) {
+    return markBroken(setId, `converted to a .dat the list is ${(dat.length / MB).toFixed(1)} MB, the ceiling is ${GEO_FILE_MAX_BYTES / MB} MB`);
+  }
+  const sha256 = format === 'dat' ? sourceSha256 : sha256Hex(dat);
 
-  const version = input.version ?? sha256.slice(0, 12);
+  const version = input.version ?? sourceSha256.slice(0, 12);
   const now = new Date();
   let versionId: string;
   try {
@@ -73,10 +96,20 @@ export async function ingestGeoFile(setId: string, input: IngestInput): Promise<
     // nothing is lost: the row is keyed by its content, a second write of the
     // same bytes is a no-op, and a blob no version names is only garbage.
     await prisma.geoBlob.createMany({
-      data: [{ sha256, data: Buffer.from(bytes), sizeBytes: bytes.length }],
+      data: [{ sha256, data: Buffer.from(dat), sizeBytes: dat.length }],
       skipDuplicates: true,
     });
-    versionId = await publishVersion(setId, { version, sha256, sizeBytes: bytes.length, now, tags });
+    versionId = await publishVersion(setId, {
+      version,
+      sha256,
+      sourceSha256,
+      sizeBytes: dat.length,
+      now,
+      tags,
+      format,
+      etag: input.etag ?? null,
+      lastModified: input.lastModified ?? null,
+    });
   } catch (err) {
     // Not a bad file, and still never left at `checking`: the set says what
     // went wrong on this side.
@@ -87,9 +120,19 @@ export async function ingestGeoFile(setId: string, input: IngestInput): Promise<
 
 async function publishVersion(
   setId: string,
-  v: { version: string; sha256: string; sizeBytes: number; now: Date; tags: unknown },
+  v: {
+    version: string;
+    sha256: string;
+    sourceSha256: string;
+    sizeBytes: number;
+    now: Date;
+    tags: unknown;
+    format: GeoSetFormat;
+    etag: string | null;
+    lastModified: string | null;
+  },
 ): Promise<string> {
-  const { version, sha256, sizeBytes, now, tags } = v;
+  const { version, sha256, sourceSha256, sizeBytes, now, tags, format, etag, lastModified } = v;
   return prisma.$transaction(async (tx) => {
     const row = await tx.geoSetVersion.upsert({
       where: { geoSetId_sha256: { geoSetId: setId, sha256 } },
@@ -97,23 +140,26 @@ async function publishVersion(
         geoSetId: setId,
         version,
         sha256,
+        sourceSha256,
         sizeBytes,
         fetchedAt: now,
         tags: tags as Prisma.InputJsonValue,
+        etag,
+        lastModified,
       },
-      // The same content fetched again: the label and the date follow the
-      // latest fetch, the row (and every pin on it) stays.
-      update: { version, fetchedAt: now },
+      // The same content fetched again: the label, the date and the
+      // validators follow the latest fetch, the row (and every pin on it)
+      // stays.
+      update: { version, fetchedAt: now, etag, lastModified },
       select: { id: true },
     });
     await tx.geoSet.update({
       where: { id: setId },
-      data: { currentVersionId: row.id, status: 'verified', checkedAt: now, error: null },
+      data: { currentVersionId: row.id, status: 'verified', checkedAt: now, error: null, format },
     });
     return row.id;
   });
 }
-
 export async function markBroken(setId: string, error: string): Promise<IngestOutcome> {
   await prisma.geoSet.update({
     where: { id: setId },
@@ -151,43 +197,98 @@ export async function ensureBuiltinSets(): Promise<void> {
  * publishers ship them). A sidecar that cannot be read is `broken`: a file
  * nobody vouched for is not quietly taken on the parse alone.
  *
- * The schedule, conditional requests and the other formats are phase 9.4.
+ * Conditional (phase 9.4): the validators of the current version go out as
+ * If-None-Match and If-Modified-Since. A 304 is "nothing new": no version, no
+ * `checking`, only `checkedAt` moves, and a status the "refresh now" button
+ * set to `checking` goes back to what the current version is. The sidecar is
+ * read only when the file itself came back new.
+ *
+ * A failure of the network is `broken` in words and leaves `current` where
+ * it is; the scheduler asks again.
  */
-export async function fetchUrl(setId: string, fetchImpl: typeof fetch = fetch): Promise<IngestOutcome> {
+export async function fetchUrl(
+  setId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<IngestOutcome | { status: 'unchanged' }> {
   const set = await prisma.geoSet.findUniqueOrThrow({
     where: { id: setId },
-    select: { url: true, sha256Source: true, sha256Manual: true },
+    select: {
+      url: true,
+      sha256Source: true,
+      sha256Manual: true,
+      current: { select: { etag: true, lastModified: true } },
+    },
   });
   if (!set.url) return markBroken(setId, 'the set has no URL');
-  await markChecking(setId);
+  const url = set.url;
 
-  const get = async (url: string): Promise<Uint8Array | string> => {
-    try {
-      const res = await fetchImpl(url, { redirect: 'follow', signal: AbortSignal.timeout(600_000) });
-      if (!res.ok) return `HTTP ${res.status} from ${url}`;
-      return new Uint8Array(await res.arrayBuffer());
-    } catch (err) {
-      return `${err instanceof Error ? err.message : String(err)} (${url})`;
-    }
-  };
+  const conditional: Record<string, string> = {};
+  if (set.current?.etag) conditional['If-None-Match'] = set.current.etag;
+  if (set.current?.lastModified) conditional['If-Modified-Since'] = set.current.lastModified;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(url, { redirect: 'follow', headers: conditional, signal: AbortSignal.timeout(600_000) });
+  } catch (err) {
+    return markBroken(setId, `download failed: ${err instanceof Error ? err.message : String(err)} (${url})`);
+  }
+  if (res.status === 304 && set.current) {
+    await prisma.geoSet.update({
+      where: { id: setId },
+      data: { status: 'verified', error: null, checkedAt: new Date() },
+    });
+    return { status: 'unchanged' };
+  }
+  if (!res.ok) return markBroken(setId, `download failed: HTTP ${res.status} from ${url}`);
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await res.arrayBuffer());
+  } catch (err) {
+    return markBroken(setId, `download failed: ${err instanceof Error ? err.message : String(err)} (${url})`);
+  }
 
   let expected: string;
   if (set.sha256Source === 'manual') {
     if (!set.sha256Manual) return markBroken(setId, 'sha256 is set to manual and none was given');
     expected = set.sha256Manual;
   } else {
-    const side = await get(`${set.url}.sha256sum`);
-    if (typeof side === 'string') return markBroken(setId, `sidecar sha256 not read: ${side}`);
+    let side: Uint8Array;
+    try {
+      const s = await fetchImpl(`${url}.sha256sum`, { redirect: 'follow', signal: AbortSignal.timeout(60_000) });
+      if (!s.ok) return markBroken(setId, `sidecar sha256 not read: HTTP ${s.status} from ${url}.sha256sum`);
+      side = new Uint8Array(await s.arrayBuffer());
+    } catch (err) {
+      return markBroken(setId, `sidecar sha256 not read: ${err instanceof Error ? err.message : String(err)} (${url}.sha256sum)`);
+    }
     const hex = /^\s*([0-9a-fA-F]{64})\b/.exec(new TextDecoder().decode(side.subarray(0, 512)))?.[1];
-    if (!hex) return markBroken(setId, `sidecar ${set.url}.sha256sum does not start with a sha256`);
+    if (!hex) return markBroken(setId, `sidecar ${url}.sha256sum does not start with a sha256`);
     expected = hex.toLowerCase();
   }
 
-  const bytes = await get(set.url);
-  if (typeof bytes === 'string') return markBroken(setId, `download failed: ${bytes}`);
-  return ingestGeoFile(setId, { bytes, expectedSha256: expected });
+  return ingestGeoFile(setId, {
+    bytes,
+    expectedSha256: expected,
+    etag: res.headers.get('etag'),
+    lastModified: res.headers.get('last-modified'),
+  });
 }
 
+/**
+ * Whether a URL set is due a scheduled fetch at `now`: never fetched, or its
+ * `refreshHours` gone by since the last attempt. A broken attempt is retried
+ * sooner, after an hour (or `refreshHours` when that is shorter): a network
+ * that was down should not cost a day, and a list that is broken for good
+ * should not be downloaded every tick either.
+ */
+export function urlSetDue(
+  s: { status: string; checkedAt: Date | null; refreshHours: number | null },
+  now: Date,
+): boolean {
+  if (!s.checkedAt) return true;
+  const hours = s.refreshHours ?? 24;
+  const wait = s.status === 'broken' ? Math.min(hours, 1) : hours;
+  return now.getTime() - s.checkedAt.getTime() >= wait * 3_600_000;
+}
 /** Whether the built-in set of `kind` still has to fetch its pinned release. */
 export async function builtinNeedsFetch(kind: GeoSetKind, release: GeoBuiltinRelease = GEO_BUILTIN[kind]): Promise<boolean> {
   const set = await prisma.geoSet.findUnique({

@@ -98,7 +98,12 @@ export const GEO_FILE_MAX_BYTES = 64 * 1024 * 1024;
 export interface GeoSetVersionDto {
   /** builtin: the release tag; url and upload: the first 12 hex of sha256. */
   version: string;
+  /** Of the `.dat` the nodes get. */
   sha256: string;
+  /** Of the file as it came (phase 9.4): what an operator compares with the
+   *  file they hold. Equal to `sha256` for a `.dat`; for a rule-set JSON or a
+   *  MaxMind database, `sha256` is the `.dat` it was converted into. */
+  sourceSha256: string;
   sizeBytes: number;
   fetchedAt: string;
   tagCount: number;

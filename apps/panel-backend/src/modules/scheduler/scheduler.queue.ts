@@ -11,6 +11,7 @@ import {
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
 import { pruneHistory } from '../maintenance/retention.cron.js';
+import { queueDueUrlFetches } from '../geo-sets/geo-sets.queue.js';
 import { getLogger } from '../../lib/infra/logger.js';
 
 // ───── Queue ─────
@@ -46,6 +47,7 @@ const CRON_JOBS: CronJobSpec[] = [
   { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут - catch-up for status-flip crashes / dropped jobs
   { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день - B2 retention для append-only history-таблиц
   { name: 'alert-near-expiry',              pattern: '0 9 * * *'  },     // 09:00 каждый день - K3 near-expiry/near-cap дайджест в Telegram
+  { name: 'geo-url-refresh',                pattern: '*/10 * * * *' },   // каждые 10 минут - Ф9.4: гео-наборы по URL, у которых вышел refreshHours
 ];
 
 // ───── Регистрация (вызывается один раз при бутстрапе) ─────
@@ -133,6 +135,11 @@ export function startCronTasksWorker(): Worker {
         case 'alert-near-expiry': {
           const n = await alertNearLimits();
           if (n > 0) getLogger().info(`[cron] alert-near-expiry - digest sent for ${n} user(s)`);
+          break;
+        }
+        case 'geo-url-refresh': {
+          const n = await queueDueUrlFetches();
+          if (n > 0) getLogger().info(`[cron] geo-url-refresh - queued ${n} geo set fetch(es)`);
           break;
         }
         case 'prune-history': {

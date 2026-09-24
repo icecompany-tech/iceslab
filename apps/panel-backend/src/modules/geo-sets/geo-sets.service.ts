@@ -104,7 +104,9 @@ const SET_SELECT = {
   currentVersionId: true,
   createdAt: true,
   updatedAt: true,
-  current: { select: { id: true, version: true, sha256: true, sizeBytes: true, fetchedAt: true, tags: true } },
+  current: {
+    select: { id: true, version: true, sha256: true, sourceSha256: true, sizeBytes: true, fetchedAt: true, tags: true },
+  },
 } as const;
 
 type SetRow = NonNullable<Awaited<ReturnType<typeof findSet>>>;
@@ -195,6 +197,7 @@ async function toDto(s: SetRow, sites: GeoUseSite[]): Promise<GeoSetDto> {
       ? {
           version: s.current.version,
           sha256: s.current.sha256,
+          sourceSha256: s.current.sourceSha256,
           sizeBytes: s.current.sizeBytes,
           fetchedAt: s.current.fetchedAt.toISOString(),
           tagCount: tagsOf(s).length,

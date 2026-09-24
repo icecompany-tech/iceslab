@@ -2,7 +2,8 @@ import { Queue, Worker, type Job } from 'bullmq';
 import { GEO_BUILTIN, GEO_SET_KINDS, type GeoSetKind } from '@iceslab/shared';
 import { redis } from '../../lib/infra/redis.js';
 import { getLogger } from '../../lib/infra/logger.js';
-import { builtinNeedsFetch, ensureBuiltinSets, fetchBuiltin, fetchUrl } from './geo-sets.store.js';
+import { prisma } from '../../prisma.js';
+import { builtinNeedsFetch, ensureBuiltinSets, fetchBuiltin, fetchUrl, urlSetDue } from './geo-sets.store.js';
 
 /**
  * Geo files are fetched and checked in the background: a list of tens of
@@ -37,6 +38,22 @@ export async function enqueueBuiltinFetch(kind: GeoSetKind): Promise<void> {
  *  first is still downloading joins it instead of starting another. */
 export async function enqueueUrlFetch(setId: string): Promise<void> {
   await geoSetsQueue.add('fetchUrl', { setId }, { jobId: `url-${setId}` });
+}
+
+/**
+ * Phase 9.4, on the scheduler's tick: every URL set that is due by its
+ * `refreshHours` (urlSetDue) gets a fetch. The fetch is conditional, so a list
+ * that did not change costs a 304 and nothing else. Answers how many were
+ * queued.
+ */
+export async function queueDueUrlFetches(now = new Date()): Promise<number> {
+  const sets = await prisma.geoSet.findMany({
+    where: { sourceType: 'url' },
+    select: { id: true, status: true, checkedAt: true, refreshHours: true },
+  });
+  const due = sets.filter((s) => urlSetDue(s, now));
+  for (const s of due) await enqueueUrlFetch(s.id);
+  return due.length;
 }
 
 /**
