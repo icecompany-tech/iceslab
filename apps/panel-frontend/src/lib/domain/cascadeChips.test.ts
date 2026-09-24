@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cascadeNodeChips, cascadeUnderlays, coreChipText, legEngine } from '@/lib/domain/cascadeChips';
+import { cascadeNodeChips, coreChipText, legEngine } from '@/lib/domain/cascadeChips';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const core = (c: Partial<NodeCore> & { name: NodeCore['name'] }): NodeCore => c as NodeCore;
@@ -70,23 +70,6 @@ describe('cascadeNodeChips: only the cores the cascade uses on the node', () => 
     expect(
       texts(cascadeNodeChips(node, 'entry', { entryProtocol: 'xray', outLeg: 'vless', inUnderlay: 'awg' })).shown,
     ).toEqual(['xray 26.3.27']);
-  });
-
-  it('подложка ног каскада: своя у позиции, у направления своя или последней позиции', () => {
-    const u = cascadeUnderlays({
-      positions: [
-        { position: 0, nodeIds: [], entryProtocol: 'xray', linkProtocol: 'vless', linkParams: { underlay: 'awg' } },
-        { position: 1, nodeIds: [], entryProtocol: null, linkProtocol: 'vless', linkParams: null },
-      ],
-      directions: [
-        { id: 'a', tag: 1, countryCode: 'DE', nodeIds: [], linkParams: { underlay: 'awg' } },
-        { id: 'b', tag: 2, countryCode: 'NL', nodeIds: [] },
-      ],
-    });
-    expect([u.position(0), u.position(1)]).toEqual(['awg', undefined]);
-    expect([u.direction(1), u.direction(2), u.direction(9)]).toEqual(['awg', undefined, undefined]);
-    const legacy = cascadeUnderlays({ positions: [], directions: [] });
-    expect(legacy.direction(1)).toBeUndefined();
   });
 
   it('ячейки ног: vless и shadowsocks у xray, hy2 и tuic у sing-box', () => {

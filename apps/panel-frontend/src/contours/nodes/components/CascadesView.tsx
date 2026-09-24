@@ -2,7 +2,7 @@
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { getCascadeStatus, type Cascade } from '@/lib/domain/cascades';
-import { cascadeNodeChips, cascadeUnderlays, type CascadeLegs } from '@/lib/domain/cascadeChips';
+import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
 import { CoreChips } from '@/ui/CoreChips';
 import { countryFlag } from '@/lib/domain/countries';
 import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/cascadeRows';
@@ -108,13 +108,8 @@ function CascadeCard({
   const { cascade, entry, transits, directions } = row;
   const fan = directions.length > 1;
   const accent = !cascade.enabled ? DIM : fan ? CYAN : MOSS;
-  // На чём едет каждая нога (фаза 8): подпись стрелки и AWG в фишках пары.
-  const underlays = cascadeUnderlays(cascade);
-  const entryLegs: CascadeLegs = {
-    entryProtocol: entry?.hop.entryProtocol,
-    outLeg: entry?.hop.linkProtocol,
-    outUnderlay: underlays.position(0),
-  };
+  // Шаг, который набирает ноги в направления: последний транзит или вход.
+  const feeder = transits[transits.length - 1] ?? entry;
 
   // A cascade that is off pushes nothing, so it collapses to one line: the
   // shape of a path nobody is walking is not worth the vertical space.
@@ -141,11 +136,11 @@ function CascadeCard({
         <ShapeChip row={row} />
         <Divider />
         <Box style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          {[entry, ...transits].filter(Boolean).map((h, i) => (
-            <Box key={h!.hop.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          {[entry, ...transits].filter((h): h is HopView => h !== null).map((h, i) => (
+            <Box key={h.key} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               {i > 0 && <Arrow tone={EDGE} />}
               <Text style={{ fontFamily: MONO, fontSize: 12, lineHeight: '15px', color: FAINT }}>
-                {h!.hop.nodeName}
+                {poolName(h)}
               </Text>
             </Box>
           ))}
@@ -208,73 +203,75 @@ function CascadeCard({
         <IconButton onClick={onDelete} kind="delete" />
       </Box>
 
-      {/* One way out is drawn as a path of tiles; several are drawn as a list,
+      {/* The path as the API answers it (cascadePath): the entry pool, the
+          transits in order, then the ways out. One way out is drawn as a tile
+          at the end of the path; several as a list behind the last step,
           because they are a choice rather than a sequence. The choice is the
           client's: it picks a direction by picking a server, so there is no
-          probe to report under the arrow. */}
-      {fan ? (
-        <Box style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '0 20px 18px' }}>
-          {entry && <HopTile hop={entry} role="entry" legs={entryLegs} />}
-          <LinkColumn
-            protocol={entry?.hop.linkProtocol ?? null}
-            // Та же нога, чью ячейку подписывает эта колонка: нога входа.
-            underlay={underlays.position(0)}
-            fan
-            note={t('cascades.clientPicks')}
+          probe to report under the arrow. Every arrow is the leg of the step
+          before it: its cell, and «in AWG» when it rides a tunnel. */}
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: fan ? 'center' : 'stretch',
+          width: '100%',
+          padding: '0 20px 18px',
+          overflowX: 'auto',
+        }}
+      >
+        {entry && (
+          <HopTile
+            hop={entry}
+            role="entry"
+            legs={{ entryProtocol: entry.entryProtocol, outLeg: entry.outCell, outUnderlay: entry.outUnderlay }}
           />
-          <Stack gap={8} style={{ flex: 1, minWidth: 0 }}>
-            {directions.map((d) => (
-              <DirectionLine
-                key={d.key}
-                direction={d}
-                inLeg={entry?.hop.linkProtocol ?? null}
-                inUnderlay={underlays.direction(d.tag)}
-              />
-            ))}
-          </Stack>
-        </Box>
-      ) : (
-        <Box style={{ display: 'flex', alignItems: 'stretch', width: '100%', padding: '0 20px 18px' }}>
-          {entry && <HopTile hop={entry} role="entry" legs={entryLegs} />}
-          {transits.map((h, i) => (
-            <Box key={h.hop.id} style={{ display: 'flex', alignItems: 'stretch' }}>
-              <LinkColumn
-                protocol={(i === 0 ? entry?.hop.linkProtocol : transits[i - 1]?.hop.linkProtocol) ?? null}
-                underlay={underlays.position(i)}
-              />
+        )}
+        {transits.map((h, i) => {
+          const prev = i === 0 ? entry : transits[i - 1];
+          return (
+            <Box key={h.key} style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
+              <LinkColumn protocol={prev?.outCell ?? null} underlay={prev?.outUnderlay} />
               <HopTile
                 hop={h}
                 role="transit"
                 legs={{
-                  inLeg: (i === 0 ? entry?.hop.linkProtocol : transits[i - 1]?.hop.linkProtocol) ?? null,
-                  outLeg: h.hop.linkProtocol,
-                  inUnderlay: underlays.position(i),
-                  outUnderlay: underlays.position(i + 1),
+                  inLeg: prev?.outCell ?? null,
+                  inUnderlay: prev?.outUnderlay,
+                  outLeg: h.outCell,
+                  outUnderlay: h.outUnderlay,
                 }}
               />
             </Box>
-          ))}
-          {directions.map((d) => (
-            <Box key={d.key} style={{ display: 'flex', alignItems: 'stretch' }}>
-              <LinkColumn
-                protocol={
-                  (transits.length ? transits[transits.length - 1]?.hop.linkProtocol : entry?.hop.linkProtocol) ??
-                  null
-                }
-                underlay={underlays.direction(d.tag)}
-              />
-              <DirectionTile
-                direction={d}
-                inLeg={
-                  (transits.length ? transits[transits.length - 1]?.hop.linkProtocol : entry?.hop.linkProtocol) ?? null
-                }
-                inUnderlay={underlays.direction(d.tag)}
-              />
-            </Box>
-          ))}
-          <Box style={{ flex: 1, minWidth: 0 }} />
-        </Box>
-      )}
+          );
+        })}
+        {fan ? (
+          <>
+            <LinkColumn
+              protocol={feeder?.outCell ?? null}
+              underlay={feeder?.outUnderlay}
+              fan
+              note={t('cascades.clientPicks')}
+            />
+            {/* Не уже строки направления: с транзитами путь шире карточки, и
+                тогда карточка прокручивается, а не мнёт строки. */}
+            <Stack gap={8} style={{ flex: 1, minWidth: 660 }}>
+              {directions.map((d) => (
+                <DirectionLine key={d.key} direction={d} />
+              ))}
+            </Stack>
+          </>
+        ) : (
+          <>
+            {directions.map((d) => (
+              <Box key={d.key} style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
+                <LinkColumn protocol={d.inCell} underlay={d.inUnderlay} />
+                <DirectionTile direction={d} />
+              </Box>
+            ))}
+            <Box style={{ flex: 1, minWidth: 0 }} />
+          </>
+        )}
+      </Box>
 
       <Box
         style={{
@@ -383,8 +380,11 @@ function HopTile({ hop, role, legs }: { hop: HopView; role: 'entry' | 'transit' 
         {hop.node?.countryCode && (
           <Text style={{ fontSize: 14, lineHeight: '14px' }}>{countryFlag(hop.node.countryCode)}</Text>
         )}
-        <Text style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, lineHeight: '18px', color: SNOW }}>
-          {hop.hop.nodeName}
+        <Text
+          title={hop.nodes.length > 1 ? hop.nodes.map((n) => n.name).join(', ') : undefined}
+          style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, lineHeight: '18px', color: SNOW }}
+        >
+          {poolName(hop)}
         </Text>
         <Box style={{ flex: 1 }} />
         <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -438,7 +438,6 @@ function LinkColumn({
   note?: string;
 }) {
   const { t } = useTranslation();
-  const cell = protocol ?? 'vless';
   return (
     <Stack
       gap={6}
@@ -447,7 +446,7 @@ function LinkColumn({
       style={{ width: 120, flexShrink: 0, alignSelf: fan ? 'stretch' : undefined }}
     >
       <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', lineHeight: '12px', color: MIST }}>
-        {underlay === 'awg' ? t('cascades.legInAwg', { cell }) : cell}
+        {legWords(protocol, underlay, t)}
       </Text>
       <Box style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '0 10px' }}>
         <Box style={{ flex: 1, height: 1, backgroundColor: EDGE }} />
@@ -473,6 +472,19 @@ function LinkColumn({
   );
 }
 
+/** A pool by its first node, the rest counted: «ru-01 +2». */
+function poolName(step: { nodeName: string | null; nodes: { name: string }[] }): string {
+  const extra = step.nodes.length - 1;
+  return extra > 0 ? `${step.nodeName ?? ''} +${extra}` : (step.nodeName ?? '');
+}
+
+/** A leg in words: its cell, «in AWG» when it rides a tunnel. An unset cell is
+ *  the entry's default leg, vless. */
+function legWords(cell: string | null, underlay: string | undefined, t: (k: string, o?: Record<string, unknown>) => string): string {
+  const c = cell ?? 'vless';
+  return underlay === 'awg' ? t('cascades.legInAwg', { cell: c }) : c;
+}
+
 /** Four hex digits, as they ride in the UUID. */
 function tagLabel(tag: number): string {
   return tag.toString(16).padStart(4, '0');
@@ -481,8 +493,8 @@ function tagLabel(tag: number): string {
 /** How many doors in, how many ways out. Read from the path, not from a stored
  *  mode: the panel no longer keeps one. */
 function ShapeChip({ row }: { row: CascadeRow }) {
-  // One node per position until pools ship; then this counts the entry pool.
-  const entries = row.entry ? 1 : 0;
+  // The entry is a pool: every node of it is a door.
+  const entries = row.entry?.nodes.length ?? 0;
   const fan = row.directions.length > 1;
   return (
     <Chip tone={fan ? CYAN : undefined} edge={!fan}>
@@ -496,15 +508,7 @@ function ShapeChip({ row }: { row: CascadeRow }) {
  * country and the tag lead; the node under it is a detail that can change
  * without the tag ever moving.
  */
-function DirectionLine({
-  direction,
-  inLeg,
-  inUnderlay,
-}: {
-  direction: DirectionView;
-  inLeg: string | null;
-  inUnderlay?: string;
-}) {
+function DirectionLine({ direction }: { direction: DirectionView }) {
   const { t } = useTranslation();
   const tone = statusTone(direction.status);
   const dead = direction.status !== 'online';
@@ -550,8 +554,13 @@ function DirectionLine({
       >
         {tagLabel(direction.tag)}
       </Text>
+      {/* Нога ДО этого выхода: у веера она своя у каждого направления. */}
+      <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: DIM, whiteSpace: 'nowrap' }}>
+        {legWords(direction.inCell, direction.inUnderlay, t)}
+      </Text>
       <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tone, flexShrink: 0 }} />
       <Text
+        title={direction.nodes.length > 1 ? direction.nodes.map((n) => n.name).join(', ') : undefined}
         style={{
           fontFamily: MONO,
           fontSize: 12,
@@ -560,13 +569,20 @@ function DirectionLine({
           whiteSpace: 'nowrap',
         }}
       >
-        {direction.nodeName ?? t('cascades.directionNoNode')}
+        {direction.nodeName ? poolName(direction) : t('cascades.directionNoNode')}
         {dead && direction.nodeName ? ` · ${direction.status}` : ''}
       </Text>
       <Box style={{ flex: 1, minWidth: 0 }}>
-        {direction.node && <CoreChips {...cascadeNodeChips(direction.node, 'exit', { inLeg, inUnderlay })} />}
+        {direction.node && (
+          <CoreChips
+            {...cascadeNodeChips(direction.node, 'exit', {
+              inLeg: direction.inCell,
+              inUnderlay: direction.inUnderlay,
+            })}
+          />
+        )}
       </Box>
-      <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: dead ? DIM : MIST }}>
+      <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: dead ? DIM : MIST, whiteSpace: 'nowrap' }}>
         {direction.todayBytes === null ? '-' : formatBytes(direction.todayBytes)}
       </Text>
     </Box>
@@ -574,15 +590,7 @@ function DirectionLine({
 }
 
 /** The same direction as a tile, for a cascade with a single way out. */
-function DirectionTile({
-  direction,
-  inLeg,
-  inUnderlay,
-}: {
-  direction: DirectionView;
-  inLeg: string | null;
-  inUnderlay?: string;
-}) {
+function DirectionTile({ direction }: { direction: DirectionView }) {
   const { t } = useTranslation();
   const tone = statusTone(direction.status);
   return (
@@ -622,7 +630,7 @@ function DirectionTile({
         </Box>
       </Box>
       <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>
-        {direction.nodeName ?? t('cascades.directionNoNode')}
+        {direction.nodeName ? poolName(direction) : t('cascades.directionNoNode')}
         {direction.node?.address ? ` · ${direction.node.address}` : ''}
       </Text>
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -634,7 +642,11 @@ function DirectionTile({
           {direction.todayBytes === null ? '-' : formatBytes(direction.todayBytes)}
         </Text>
       </Box>
-      {direction.node && <CoreChips {...cascadeNodeChips(direction.node, 'exit', { inLeg, inUnderlay })} />}
+      {direction.node && (
+        <CoreChips
+          {...cascadeNodeChips(direction.node, 'exit', { inLeg: direction.inCell, inUnderlay: direction.inUnderlay })}
+        />
+      )}
     </Stack>
   );
 }
@@ -685,32 +697,34 @@ function CascadeLine({ row, onEdit, onDelete }: { row: CascadeRow; onEdit: () =>
       </Box>
 
       <Box style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-        {entry && <NodePill hop={entry} role="entry" />}
-        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
-          {cascadeUnderlays(cascade).position(0) === 'awg'
-            ? t('cascades.legInAwg', { cell: entry?.hop.linkProtocol ?? 'vless' })
-            : (entry?.hop.linkProtocol ?? 'vless')}
-        </Text>
-        {fan ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-            <path
-              d="M6 6l6 6l-6 6M13 6l6 6l-6 6"
-              fill="none"
-              stroke={CYAN}
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ) : (
-          <Arrow tone={EDGE} />
-        )}
-        {transits.map((h) => (
-          <Box key={h.hop.id} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <NodePill hop={h} role="transit" />
-            <Arrow tone={EDGE} />
-          </Box>
-        ))}
+        {/* Каждая стрелка подписана ногой шага перед ней; веер в конце. */}
+        {[entry, ...transits]
+          .filter((h): h is HopView => h !== null)
+          .map((h, i, steps) => {
+            const lastStep = i === steps.length - 1;
+            return (
+              <Box key={h.key} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <NodePill hop={h} role={i === 0 ? 'entry' : 'transit'} />
+                <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: FAINT }}>
+                  {legWords(h.outCell, h.outUnderlay, t)}
+                </Text>
+                {lastStep && fan ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                    <path
+                      d="M6 6l6 6l-6 6M13 6l6 6l-6 6"
+                      fill="none"
+                      stroke={CYAN}
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : (
+                  <Arrow tone={EDGE} />
+                )}
+              </Box>
+            );
+          })}
         {directions.map((d) => (
           <DirectionPill key={d.key} direction={d} />
         ))}
@@ -837,8 +851,11 @@ function NodePill({ hop, role }: { hop: HopView; role: 'entry' | 'transit' | 'ex
       {hop.node?.countryCode && (
         <Text style={{ fontSize: 12, lineHeight: '12px' }}>{countryFlag(hop.node.countryCode)}</Text>
       )}
-      <Text style={{ fontFamily: MONO, fontSize: 12, lineHeight: '15px', color: SNOW, whiteSpace: 'nowrap' }}>
-        {hop.hop.nodeName}
+      <Text
+        title={hop.nodes.length > 1 ? hop.nodes.map((n) => n.name).join(', ') : undefined}
+        style={{ fontFamily: MONO, fontSize: 12, lineHeight: '15px', color: SNOW, whiteSpace: 'nowrap' }}
+      >
+        {poolName(hop)}
       </Text>
       <Text
         style={{
