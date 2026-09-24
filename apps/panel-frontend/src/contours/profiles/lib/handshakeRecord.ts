@@ -1,13 +1,10 @@
+import { REALITY_RECORD_LIMIT } from '@iceslab/shared';
 import type { TestConnectResult } from '@/lib/domain/profiles';
 
-/**
- * The REALITY listener's limit per handshake record, header included (E23).
- * It is the engine's, not ours: metacubex/utls v1.8.4 reality.go:72 in sing-box
- * 1.13.14, xtls/reality tls.go:140 in xray 26.3.27. The server measures against
- * the same number (REALITY_RECORD_LIMIT, test-connect/reality-dest-flight.ts)
- * and is the one that says no; the screen only prints the ratio.
- */
-export const REALITY_RECORD_LIMIT = 8192;
+// The REALITY listener's limit per handshake record, header included (E23),
+// comes from the contract (packages/shared/src/reality.ts): the server measures
+// against the same number and is the one that says no; the screen only prints
+// the ratio. A copy here is what contractCopies refuses.
 
 /**
  * «запись хендшейка N байт из 8192» for a dest row, or null.

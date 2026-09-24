@@ -12,6 +12,8 @@ import {
   LINK_CELLS,
   LINK_CONGESTIONS,
   LINK_UNDERLAYS,
+  REALITY_RECORD_LIMIT,
+  REALITY_TARGET_SUGGESTIONS,
   TEMPLATE_TYPES,
   XRAY_PLAIN_SUBPROTOCOLS,
   XRAY_SUBPROTOCOLS,
@@ -61,6 +63,11 @@ const GUARDED = [
   'CORE_NODE_DIR',
   'ENGINE_BOOTSTRAP',
   'coreInstallCommand',
+  // Предел записи хендшейка REALITY и цели, замеренные на проход: строка
+  // пробы dest печатает число, отказ сервера называет цели (46f634c). Копия
+  // 8192 во фронте жила до 46f634c.
+  'REALITY_RECORD_LIMIT',
+  'REALITY_TARGET_SUGGESTIONS',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -108,6 +115,8 @@ describe('копии перечислений контракта', () => {
     expect(CORE_NODE_DIR.length).toBeGreaterThan(0);
     expect(Object.keys(ENGINE_BOOTSTRAP).length).toBeGreaterThan(0);
     expect(typeof coreInstallCommand).toBe('function');
+    expect(REALITY_RECORD_LIMIT).toBeGreaterThan(0);
+    expect(REALITY_TARGET_SUGGESTIONS.length).toBeGreaterThan(0);
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {
