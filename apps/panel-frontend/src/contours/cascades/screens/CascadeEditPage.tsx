@@ -62,6 +62,7 @@ import {
   TrashIcon,
   WarnIcon,
 } from '@/contours/cascades/components/CascadeEditor';
+import { TunnelsCard } from '@/contours/cascades/components/TunnelsCard';
 import {
   AMBER,
   CARD,
@@ -1135,6 +1136,9 @@ export function CascadeEditPage() {
               {directions.length > 1 ? t('cascadeEdit.subHintMany') : t('cascadeEdit.subHintOne')}
             </Text>
           </Stack>
+
+          {/* AWG TUNNELS: only when a leg rides one (Ф8.3). */}
+          <TunnelsCard cascadeId={cascade.id} tunnels={cascade.tunnels} nodeById={nodeById} />
 
           {/* LAST PUSH */}
           <Stack

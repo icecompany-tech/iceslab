@@ -154,8 +154,33 @@ export interface Cascade {
    * a number that is already spent. Read it, never compute it.
    */
   nextDirectionTag: number;
+  /** AmneziaWG tunnels under the legs (phase 8.3). Absent on a server older
+   *  than the field; empty when no leg rides a tunnel. */
+  tunnels?: CascadeTunnel[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One AmneziaWG tunnel under a cascade leg (Ф8.3). Read-only: minted on save
+ * from `linkParams.underlay`, re-keyed only by rotateCascadeTunnels. No key
+ * travels here.
+ */
+export interface CascadeTunnel {
+  fromNodeId: string;
+  toNodeId: string;
+  /** `awg-l<n>`, the same on both ends. */
+  iface: string;
+  /** The /30 and the two inner addresses. */
+  network: string;
+  fromAddress: string;
+  toAddress: string;
+  /** UDP, on the receiving end. */
+  port: number;
+  /** The receiving node's link port stays open to the internet: a leg into it
+   *  rides without a tunnel, and a wildcard listener and an inner one cannot
+   *  share a port. */
+  publicLinkPortOpen: boolean;
 }
 
 export interface CascadeHopInput {
@@ -316,6 +341,20 @@ export interface CascadeStatus {
 }
 
 /** Provisioning state of a cascade's hops, polled after a save. */
+/**
+ * Re-key the AmneziaWG tunnels under the cascade's legs (phase 8.3): one node
+ * pair, or every pair when `pair` is absent. Keys and obfuscation are minted
+ * afresh; interface, /30 and port stay. Answers the cascade; 404
+ * TUNNEL_NOT_FOUND for a pair it no longer has.
+ */
+export async function rotateCascadeTunnels(
+  id: string,
+  pair?: { fromNodeId: string; toNodeId: string },
+): Promise<Cascade> {
+  const { data } = await api.post<Cascade>(`/api/cascades/${id}/tunnels/rotate`, pair ?? {});
+  return data;
+}
+
 export async function getCascadeStatus(id: string): Promise<CascadeStatus> {
   const { data } = await api.get<CascadeStatus>(`/api/cascades/${id}/status`);
   return data;
