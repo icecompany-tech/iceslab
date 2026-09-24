@@ -204,6 +204,8 @@ model Node {
   cascadeTunnelsFrom CascadeTunnel[]       @relation("CascadeTunnelFrom")
   cascadeTunnelsTo   CascadeTunnel[]       @relation("CascadeTunnelTo")
   groupCascadeExits GroupCascadeExit[]
+  // Phase 9: which version of each geo set this node was given.
+  geoPins           NodeGeoPin[]
   region            Region?                @relation(fields: [regionId], references: [id], onDelete: SetNull)
   // SetNull, not Restrict: deleting a policy is an explicit act on a screen
   // that lists which nodes run it, and the honest result is those nodes going

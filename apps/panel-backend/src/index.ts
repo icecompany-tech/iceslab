@@ -11,6 +11,7 @@ import { registerWebhookEventHandlers } from './modules/webhooks/webhook.events.
 import { registerBindingsCacheBust } from './modules/subscription/subscription.bindings-cache.js';
 import { startNodeUsersWorker } from './modules/users/users.queue.js';
 import { startInboundSyncWorker } from './modules/inbounds/inbounds.queue.js';
+import { scheduleBuiltinFetch, startGeoSetsWorker } from './modules/geo-sets/geo-sets.queue.js';
 import {
   startCronTasksWorker,
   registerCronJobs,
@@ -24,6 +25,7 @@ let app: FastifyInstance | null = null;
 let nodeUsersWorker: Worker | null = null;
 let inboundSyncWorker: Worker | null = null;
 let cronTasksWorker: Worker | null = null;
+let geoSetsWorker: Worker | null = null;
 let stopMetricsRefresh: (() => void) | null = null;
 let stopTelegramBot: (() => void) | null = null;
 
@@ -50,6 +52,7 @@ async function start() {
     nodeUsersWorker = startNodeUsersWorker();
     inboundSyncWorker = startInboundSyncWorker();
     cronTasksWorker = startCronTasksWorker();
+    geoSetsWorker = startGeoSetsWorker();
 
     app = await buildApp();
     // Route background-job logs (crons, queue workers, event-bus) through the
@@ -63,6 +66,14 @@ async function start() {
 
     await registerCronJobs();
     app.log.info('Cron jobs registered');
+
+    // Phase 9: the built-in geo sets fetch their pinned release in the
+    // background. A failure is the set's `broken`, never the panel's start.
+    try {
+      await scheduleBuiltinFetch();
+    } catch (err) {
+      app.log.error({ err }, 'geo: could not schedule the built-in sets');
+    }
 
     stopMetricsRefresh = startMetricsRefreshLoop();
     app.log.info('Metrics refresh loop started');
@@ -90,6 +101,9 @@ async function shutdown() {
   }
   if (cronTasksWorker) {
     await cronTasksWorker.close();
+  }
+  if (geoSetsWorker) {
+    await geoSetsWorker.close();
   }
   if (stopMetricsRefresh) {
     stopMetricsRefresh();

@@ -1,0 +1,114 @@
+// Phase 9: geo sets, the lists a rule names with `geosite:<tag>`,
+// `geoip:<tag>` or `ext:<name>:<tag>`. Contract: docs/plan/geo-contract.md.
+//
+// The files live in Postgres (geo_blobs), not on a volume: the backend image
+// writes nothing to disk at runtime and its compose carries no volume for it
+// (apps/panel-backend/Dockerfile, the note above USER node). A version row and
+// its bytes are then one transaction and one backup; a file on a volume the
+// operator's compose never mounted would vanish on the next container
+// recreate and leave `verified` rows pointing at nothing.
+
+model GeoSet {
+  id   String @id @default(uuid()) @db.Uuid
+  /// ^[a-z0-9-]{1,32}$, checked by the API and by a CHECK in the migration.
+  /// 'geosite' and 'geoip' are the two built-in sets.
+  name String @unique @db.VarChar(32)
+  /// geosite | geoip
+  kind String @db.VarChar(16)
+
+  // The source, flat here and an object on the DTO (GeoSetSource in shared).
+  /// builtin | url | upload
+  sourceType   String  @map("source_type") @db.VarChar(16)
+  /// builtin: the release tag of the pin it was last fetched against.
+  sourceTag    String? @map("source_tag") @db.VarChar(64)
+  url          String?
+  /// url: sidecar | manual
+  sha256Source String? @map("sha256_source") @db.VarChar(16)
+  /// url with sha256Source manual: the sha256 the operator vouched for.
+  sha256Manual String? @map("sha256_manual") @db.Char(64)
+  refreshHours Int?    @map("refresh_hours")
+  /// upload: the name the file had on the operator's machine, for the screen.
+  filename     String? @db.VarChar(255)
+
+  /// dat | rule-set-json | mmdb
+  format    String    @default("dat") @db.VarChar(16)
+  /// checking | verified | broken: the LAST attempt, not the current version.
+  status    String    @default("checking") @db.VarChar(16)
+  checkedAt DateTime? @map("checked_at") @db.Timestamptz(6)
+  /// In words, when broken.
+  error     String?
+
+  /// The last verified version, what a rollout sends. A broken refresh leaves
+  /// it where it was.
+  currentVersionId String?         @unique @map("current_version_id") @db.Uuid
+  current          GeoSetVersion?  @relation("GeoSetCurrent", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions         GeoSetVersion[] @relation("GeoSetVersions")
+  pins             NodeGeoPin[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("geo_sets")
+}
+
+/// One verified content of a set. Kept while a node is pinned to it or it is
+/// the set's current; removed in the background otherwise, never by a rollout.
+model GeoSetVersion {
+  id        String   @id @default(uuid()) @db.Uuid
+  geoSetId  String   @map("geo_set_id") @db.Uuid
+  geoSet    GeoSet   @relation("GeoSetVersions", fields: [geoSetId], references: [id], onDelete: Cascade)
+  /// builtin: the release tag; url and upload: the first 12 hex of sha256.
+  version   String   @db.VarChar(64)
+  sha256    String   @db.Char(64)
+  sizeBytes Int      @map("size_bytes")
+  fetchedAt DateTime @map("fetched_at") @db.Timestamptz(6)
+  /// GeoSetTag[] as the tags route serves them, taken when it was verified.
+  tags      Json
+
+  blob      GeoBlob      @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
+  currentOf GeoSet?      @relation("GeoSetCurrent")
+  pins      NodeGeoPin[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([geoSetId, sha256])
+  @@index([sha256])
+  @@map("geo_set_versions")
+}
+
+/// The bytes, once per content. Its own table so no listing of versions ever
+/// drags megabytes along by accident.
+model GeoBlob {
+  sha256    String   @id @db.Char(64)
+  data      Bytes
+  sizeBytes Int      @map("size_bytes")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  versions GeoSetVersion[]
+
+  @@map("geo_blobs")
+}
+
+/// Which version of a set a node was given. Ordinary pushes follow the pin,
+/// not the set's current, so nobody's unrelated save restarts xray with a new
+/// list; a rollout moves the pin.
+model NodeGeoPin {
+  nodeId    String        @map("node_id") @db.Uuid
+  node      Node          @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  geoSetId  String        @map("geo_set_id") @db.Uuid
+  geoSet    GeoSet        @relation(fields: [geoSetId], references: [id], onDelete: Cascade)
+  versionId String        @map("version_id") @db.Uuid
+  /// A version a node stands on is not deleted under it. NoAction rather than
+  /// Restrict: it is checked at the end of the statement, so deleting a whole
+  /// set (which cascades to its pins and its versions at once) goes through,
+  /// while deleting one pinned version alone is still refused.
+  version   GeoSetVersion @relation(fields: [versionId], references: [id], onDelete: NoAction)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([nodeId, geoSetId])
+  @@index([geoSetId])
+  @@index([versionId])
+  @@map("node_geo_pins")
+}

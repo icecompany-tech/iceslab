@@ -58,6 +58,13 @@ export const TABLES = [
   //   - regions is referenced by nodes with SET NULL, so truncating nodes left
   //     the regions behind, and `name` and `code` are both unique.
   'node_user_traffic_snapshot',
+  // Phase 9. Listed the day they landed. geo_blobs has no FK pointing out of
+  // it and nothing cascades into it from nodes, so without this line the bytes
+  // of one test's set would still be there for the next.
+  'node_geo_pins',
+  'geo_set_versions',
+  'geo_sets',
+  'geo_blobs',
   'nodes',
   'regions',
   'api_tokens',
