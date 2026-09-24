@@ -7,7 +7,9 @@ import { checkSniConsistency } from '../profiles/host-fields.js';
 // route created the binding.
 import {
   assertPortFreeOfOthers,
+  assertSingboxServesBinding,
   NodeNotFoundError,
+  ProfileEngineNotForTransportError,
   PortHeldByCascadeError,
   PortHeldByCoreServiceError,
   PortInUseError,
@@ -43,6 +45,7 @@ export class BindingNotFoundError extends Error {
 // module, which it otherwise has no business knowing about.
 export {
   NodeNotFoundError,
+  ProfileEngineNotForTransportError,
   PortHeldByCascadeError,
   PortHeldByCoreServiceError,
   PortInUseError,
@@ -217,6 +220,12 @@ export async function createHost(input: CreateHostInput): Promise<PublicHostDto>
   // the host fail afterwards would leave an orphan the operator cannot see or
   // remove: the new UI has no screen for bindings at all.
   const plan = await planHostCreate(input);
+  // Creating the binding here is the fourth way onto a node, and a profile
+  // saved before the sing-box rule existed (xray family on sing-box with TLS or
+  // xhttp) would otherwise reach the node through it unrefused.
+  if (!plan.bindingId) {
+    assertSingboxServesBinding({ ...plan.profile, engine: plan.profile.engine ?? null }, undefined);
+  }
 
   await assertSniMatchesProfileConfig({
     protocol: plan.profile.protocol,
@@ -291,7 +300,7 @@ export async function createHost(input: CreateHostInput): Promise<PublicHostDto>
  */
 async function planHostCreate(input: CreateHostInput): Promise<{
   bindingId: string | null;
-  profile: { id: string; protocol: string; config: unknown };
+  profile: { id: string; protocol: string; config: unknown; engine?: string | null };
   nodeId?: string;
   port?: number;
 }> {
@@ -310,7 +319,7 @@ async function planHostCreate(input: CreateHostInput): Promise<{
 
   const profile = await prisma.profile.findUnique({
     where: { id: profileId },
-    select: { id: true, protocol: true, config: true },
+    select: { id: true, protocol: true, config: true, engine: true },
   });
   if (!profile) throw new ProfileNotFoundError(profileId);
 

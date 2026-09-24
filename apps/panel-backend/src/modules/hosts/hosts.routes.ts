@@ -69,6 +69,11 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
           .code(409)
           .send({ error: err.code, message: err.message, conflicts: err.conflicts });
       }
+      // The new binding would put an xray-family profile on sing-box with a
+      // field sing-box cannot serve: the bindings route's answer, word for word.
+      if (err instanceof svc.ProfileEngineNotForTransportError) {
+        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+      }
       // The form shows this next to the SNI field, so it carries the served
       // names rather than only prose.
       if (err instanceof svc.SniMismatchError) {

@@ -59,10 +59,14 @@ async function create(name: string, config: Record<string, unknown>, engine?: st
   });
 }
 
-/** The path of the one issue a refused create carries. */
+/** The path of the one issue a refused create carries, found by its CODE: the
+ *  socks/http refusal shares the path, and the screen tells them apart by this. */
 function issuePath(body: string): unknown {
-  const b = JSON.parse(body) as { issues?: Array<{ path: unknown; message: string }> };
-  const issue = b.issues?.find((i) => i.message === SINGBOX_XRAY_FAMILY_MESSAGE);
+  const b = JSON.parse(body) as {
+    issues?: Array<{ path: unknown; message: string; params?: { code?: string } }>;
+  };
+  const issue = b.issues?.find((i) => i.params?.code === 'SINGBOX_XRAY_FAMILY');
+  expect(issue?.message).toBe(SINGBOX_XRAY_FAMILY_MESSAGE);
   return issue?.path;
 }
 
@@ -104,7 +108,7 @@ describe('an xray-family profile on the sing-box engine', () => {
     });
     expect(res.statusCode, res.body).toBe(400);
     expect(JSON.parse(res.body)).toEqual({
-      error: 'INVALID',
+      error: 'SINGBOX_XRAY_FAMILY',
       message: SINGBOX_XRAY_FAMILY_MESSAGE,
       path: ['config', 'security'],
     });
@@ -121,7 +125,7 @@ describe('an xray-family profile on the sing-box engine', () => {
       payload: { config: { ...reality, network: 'grpc' } },
     });
     expect(res.statusCode, res.body).toBe(400);
-    expect(JSON.parse(res.body).path).toEqual(['config', 'network']);
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'SINGBOX_XRAY_FAMILY', path: ['config', 'network'] });
   });
 
   it('refuses a binding whose overrides pin another transport, the path on the override', async () => {
@@ -142,7 +146,7 @@ describe('an xray-family profile on the sing-box engine', () => {
       payload: { profileId, nodeId, port: 8443, overrides: { network: 'xhttp' } },
     });
     expect(bad.statusCode, bad.body).toBe(400);
-    expect(JSON.parse(bad.body).path).toEqual(['overrides', 'network']);
+    expect(JSON.parse(bad.body)).toMatchObject({ error: 'SINGBOX_XRAY_FAMILY', path: ['overrides', 'network'] });
 
     const ok = await app.inject({
       method: 'POST',
@@ -158,7 +162,36 @@ describe('an xray-family profile on the sing-box engine', () => {
       payload: { overrides: { security: 'none' } },
     });
     expect(edit.statusCode, edit.body).toBe(400);
-    expect(JSON.parse(edit.body).path).toEqual(['overrides', 'security']);
+    expect(JSON.parse(edit.body)).toMatchObject({ error: 'SINGBOX_XRAY_FAMILY', path: ['overrides', 'security'] });
+  });
+
+  it('refuses the binding a host would create for a profile saved before the rule', async () => {
+    // A sing-box TLS profile from before 0c7dcc7: written straight to the row,
+    // because no door lets it be saved any more.
+    const created = await create('old-sb-tls', tls);
+    const profileId = JSON.parse(created.body).id as string;
+    await prisma.profile.update({ where: { id: profileId }, data: { engine: 'singbox' } });
+    const node = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth(),
+      payload: { name: 'sb-host-node', address: '10.0.0.10:8443' },
+    });
+    const nodeId = JSON.parse(node.body).id as string;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/hosts',
+      headers: auth(),
+      payload: { profileId, nodeId, port: 8443, remark: 'old' },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(JSON.parse(res.body)).toEqual({
+      error: 'SINGBOX_XRAY_FAMILY',
+      message: SINGBOX_XRAY_FAMILY_MESSAGE,
+      path: ['config', 'security'],
+    });
+    // Nothing written: no binding, no host.
+    expect(await prisma.profileNodeBinding.count({ where: { profileId } })).toBe(0);
   });
 
   it('leaves the same configs alone on the xray engine', async () => {

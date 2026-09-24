@@ -14,6 +14,7 @@ import {
 import {
   engineServesSubprotocol,
   engineValidForProtocol,
+  SINGBOX_XRAY_FAMILY_CODE,
   SINGBOX_XRAY_FAMILY_MESSAGE,
   singboxRefusesXrayField,
   type SingboxXrayField,
@@ -74,7 +75,9 @@ export class ProfileEngineNotForSubprotocolError extends Error {
 /** An xray-family profile on sing-box with a field sing-box cannot serve
  *  (singboxRefusesXrayField). `path` names the field, as a schema issue would. */
 export class ProfileEngineNotForTransportError extends Error {
-  readonly code = 'INVALID';
+  /** Its own code, not INVALID: the socks/http refusal shares the path, and a
+   *  screen must not have to tell the two apart by their prose. */
+  readonly code = SINGBOX_XRAY_FAMILY_CODE;
   readonly path: [string, SingboxXrayField];
   constructor(field: SingboxXrayField, where: 'config' | 'overrides' = 'config') {
     super(SINGBOX_XRAY_FAMILY_MESSAGE);
@@ -685,7 +688,7 @@ export async function assertPortFreeOfOthers(
  * pushed the profile merged with them (resolveBindingConfig). The path points
  * at the override when it is the override that carries the field.
  */
-function assertSingboxServesBinding(
+export function assertSingboxServesBinding(
   profile: { protocol: string; engine: string | null; config: unknown },
   overrides: unknown,
 ): void {

@@ -92,6 +92,10 @@ export function engineServesSubprotocol(
   return !(XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(sub);
 }
 
+/** The code every door answers this refusal with: `params.code` on the create
+ *  issue, `error` on the edit and binding answers. */
+export const SINGBOX_XRAY_FAMILY_CODE = 'SINGBOX_XRAY_FAMILY';
+
 export const SINGBOX_XRAY_FAMILY_MESSAGE =
   'sing-box serves the xray family only as REALITY over raw; use the xray engine for TLS, none, self-steal and other transports';
 
@@ -175,7 +179,12 @@ export const CreateProfileSchema = z
     }
     const field = singboxRefusesXrayField(val.protocol, val.engine ?? null, val.config);
     if (field) {
-      ctx.addIssue({ code: 'custom', message: SINGBOX_XRAY_FAMILY_MESSAGE, path: ['config', field] });
+      ctx.addIssue({
+        code: 'custom',
+        message: SINGBOX_XRAY_FAMILY_MESSAGE,
+        path: ['config', field],
+        params: { code: SINGBOX_XRAY_FAMILY_CODE },
+      });
     }
   });
 export type CreateProfileInput = z.infer<typeof CreateProfileSchema>;
