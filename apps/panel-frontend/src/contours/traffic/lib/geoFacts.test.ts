@@ -1,160 +1,130 @@
 import { describe, expect, it } from 'vitest';
 import {
+  geoNameProblem,
+  geoRolloutFacts,
   geoScreenFacts,
   geoSetActions,
-  rolloutFacts,
-  rolloutSummary,
+  geoSetState,
+  uploadProblem,
 } from '@/contours/traffic/lib/geoFacts';
-import type { GeoSet } from '@/lib/domain/geoSets';
+import type { GeoRolloutPlan, GeoSet } from '@/lib/domain/geoSets';
 
-/**
- * Гео-наборы: состояние экрана и раскладка по нодам.
- *
- * Главное здесь это четыре ответа раскладки. «Отстаёт» и «ушла вперёд» это
- * разные новости: первое значит, что пуш ещё не дошёл, второе, что файл на
- * ноде положили руками мимо панели, и увидеть второе стоит больше всего.
- */
+const current = { version: 'a1b2c3d4e5f6', sha256: 'ff', sizeBytes: 10, fetchedAt: '2026-09-24T10:00:00.000Z', tagCount: 3 };
 
 function set(p: Partial<GeoSet> = {}): GeoSet {
   return {
-    id: p.id ?? 'g1',
-    name: p.name ?? 'geosite-ru',
-    kind: p.kind ?? 'geosite',
-    source: p.source ?? { type: 'url', url: 'https://example.com/geosite.dat' },
-    version: p.version ?? '20260922a',
-    sha256: p.sha256 ?? 'abc123',
-    fetchedAt: p.fetchedAt ?? '2026-09-22T10:00:00.000Z',
-    status: p.status ?? 'ready',
-    error: p.error,
+    id: 'g1',
+    name: 'ru-blocked',
+    kind: 'geosite',
+    source: { type: 'url', url: 'https://example.com/g.dat', sha256Source: 'sidecar', refreshHours: 24 },
+    format: 'dat',
+    status: 'verified',
+    checkedAt: '2026-09-24T10:00:00.000Z',
+    error: null,
+    current,
+    usedByRules: 2,
+    nodes: { total: 4, behind: 1 },
+    createdAt: '2026-09-24T09:00:00.000Z',
+    updatedAt: '2026-09-24T10:00:00.000Z',
+    ...p,
   };
 }
 
 describe('geoScreenFacts', () => {
-  it('1. сервер отвечает 404: заглушка, а не ошибка и не пустота', () => {
+  it('404 или ответа нет: заглушка, а не «пусто»', () => {
     expect(geoScreenFacts({ notImplemented: true }).state).toBe('unavailable');
-  });
-
-  it('2. ответа ещё нет: тоже не «пусто»', () => {
     expect(geoScreenFacts({}).state).toBe('unavailable');
-  });
-
-  it('3. сервер ответил пустым списком: это ПУСТО', () => {
     expect(geoScreenFacts({ sets: [] }).state).toBe('empty');
   });
 
-  it('4. сломанные и качающиеся идут первыми: экран открывают из-за них', () => {
+  it('битые, потом в проверке, потом проверенные; есть проверка: переспрашивать', () => {
     const f = geoScreenFacts({
       sets: [
-        set({ id: '1', name: 'ready-b', status: 'ready' }),
-        set({ id: '2', name: 'broken', status: 'invalid' }),
-        set({ id: '3', name: 'ready-a', status: 'ready' }),
-        set({ id: '4', name: 'loading', status: 'fetching' }),
+        set({ id: '1', name: 'b', status: 'verified' }),
+        set({ id: '2', name: 'x', status: 'broken' }),
+        set({ id: '3', name: 'a', status: 'verified' }),
+        set({ id: '4', name: 'y', status: 'checking' }),
       ],
     });
-    expect(f.sets.map((x) => x.name)).toEqual(['broken', 'loading', 'ready-a', 'ready-b']);
-    expect(f.total).toBe(4);
+    expect(f.sets.map((s) => s.name)).toEqual(['x', 'y', 'a', 'b']);
+    expect(f.anyChecking).toBe(true);
   });
 });
 
-describe('rolloutFacts', () => {
-  const s = set({ version: 'v2', fetchedAt: '2026-09-22T10:00:00.000Z' });
-
-  it('1. версия совпала: всё на месте', () => {
-    const f = rolloutFacts(s, { nodeId: 'n1', version: 'v2', appliedAt: '2026-09-22T10:05:00.000Z' });
-    expect(f.state).toBe('same');
+describe('geoSetState: битый это два разных текста', () => {
+  it('broken без current: проверенной версии нет', () => {
+    expect(geoSetState(set({ status: 'broken', current: null }))).toBe('broken-empty');
   });
-
-  it('2. нода ничего не сообщила: нет данных, а не «отстаёт»', () => {
-    expect(rolloutFacts(s, { nodeId: 'n1', version: null, appliedAt: null }).state).toBe('unknown');
+  it('broken при current: обновление битое, на нодах прежняя', () => {
+    expect(geoSetState(set({ status: 'broken' }))).toBe('broken-update');
   });
-
-  it('3. версия другая и применена ДО панельной: отстаёт, пуш не дошёл', () => {
-    const f = rolloutFacts(s, { nodeId: 'n1', version: 'v1', appliedAt: '2026-09-22T09:00:00.000Z' });
-    expect(f.state).toBe('behind');
-  });
-
-  it('4. версия другая и применена ПОСЛЕ панельной: файл положили руками', () => {
-    // Панель такого не посылала: она забрала v2 в 10:00, а нода в 11:00
-    // применила что-то другое. Это янтарное состояние, и его стоит увидеть.
-    const f = rolloutFacts(s, { nodeId: 'n1', version: 'v3', appliedAt: '2026-09-22T11:00:00.000Z' });
-    expect(f.state).toBe('diverged');
-  });
-
-  it('5. версия другая, а времени нет: сказать НЕЧЕГО, а не догадка', () => {
-    // Версия это тег или первые 12 знаков sha, и sha не сравнивается на
-    // «старше». Без отметки времени направление неизвестно.
-    expect(rolloutFacts(s, { nodeId: 'n1', version: 'v1', appliedAt: null }).state).toBe('unknown');
-    expect(
-      rolloutFacts(set({ version: 'v2', fetchedAt: '' }), {
-        nodeId: 'n1', version: 'v1', appliedAt: '2026-09-22T09:00:00.000Z',
-      }).state,
-    ).toBe('unknown');
-  });
-
-  it('6. факты несут саму версию и время: без них оператору некуда идти', () => {
-    const f = rolloutFacts(s, { nodeId: 'n7', version: 'v1', appliedAt: '2026-09-22T09:00:00.000Z' });
-    expect(f).toEqual({
-      nodeId: 'n7', state: 'behind', version: 'v1', appliedAt: '2026-09-22T09:00:00.000Z',
-    });
-  });
-});
-
-describe('rolloutSummary', () => {
-  const s = set({ version: 'v2', fetchedAt: '2026-09-22T10:00:00.000Z' });
-
-  it('1. «на 3 из 4» считается по совпавшим, а не по отчитавшимся', () => {
-    const sum = rolloutSummary(s, [
-      { nodeId: '1', version: 'v2', appliedAt: '2026-09-22T10:01:00.000Z' },
-      { nodeId: '2', version: 'v2', appliedAt: '2026-09-22T10:02:00.000Z' },
-      { nodeId: '3', version: 'v2', appliedAt: '2026-09-22T10:03:00.000Z' },
-      { nodeId: '4', version: 'v1', appliedAt: '2026-09-22T09:00:00.000Z' },
-    ]);
-    expect(sum.same).toBe(3);
-    expect(sum.total).toBe(4);
-    expect(sum.behind).toBe(1);
-  });
-
-  it('2. ушедшая вперёд нода поднимает флаг: это руками положенный файл', () => {
-    const sum = rolloutSummary(s, [
-      { nodeId: '1', version: 'v2', appliedAt: '2026-09-22T10:01:00.000Z' },
-      { nodeId: '2', version: 'vX', appliedAt: '2026-09-22T12:00:00.000Z' },
-    ]);
-    expect(sum.diverged).toBe(1);
-    expect(sum.hasDiverged).toBe(true);
-  });
-
-  it('3. молчащие ноды считаются отдельно и в «совпало» не идут', () => {
-    const sum = rolloutSummary(s, [
-      { nodeId: '1', version: null, appliedAt: null },
-      { nodeId: '2', version: null, appliedAt: null },
-    ]);
-    expect(sum).toMatchObject({ same: 0, unknown: 2, total: 2, hasDiverged: false });
-  });
-
-  it('4. нод нет вовсе: считать нечего, но и падать не на чем', () => {
-    expect(rolloutSummary(s, [])).toMatchObject({ same: 0, total: 0, hasDiverged: false });
+  it('checking и verified как есть', () => {
+    expect(geoSetState(set({ status: 'checking', current: null }))).toBe('checking');
+    expect(geoSetState(set())).toBe('verified');
   });
 });
 
 describe('geoSetActions', () => {
-  it('1. url и builtin обновляются', () => {
-    expect(geoSetActions(set({ source: { type: 'url', url: 'x' } })).canRefresh).toBe(true);
-    expect(geoSetActions(set({ source: { type: 'builtin', tag: 'geosite' } })).canRefresh).toBe(true);
+  it('ссылка и встроенный обновляются; загруженный заменяется файлом', () => {
+    expect(geoSetActions(set())).toMatchObject({ refresh: true, replaceFile: false });
+    expect(geoSetActions(set({ source: { type: 'builtin', tag: '202609240000' } }))).toMatchObject({ refresh: true });
+    expect(geoSetActions(set({ source: { type: 'upload', filename: 'x.dat' } }))).toMatchObject({
+      refresh: false,
+      replaceFile: true,
+    });
   });
 
-  it('2. загруженный файл не «обновляется»: его загружают заново', () => {
-    expect(geoSetActions(set({ source: { type: 'upload', filename: 'geo.dat' } })).canRefresh).toBe(false);
+  it('разослать только при проверенной версии, даже если последнее обновление битое', () => {
+    expect(geoSetActions(set({ current: null, status: 'broken' })).rollout).toBe(false);
+    expect(geoSetActions(set({ status: 'broken' })).rollout).toBe(true);
   });
 
-  it('3. пока качается, не трогаем ни обновление, ни удаление', () => {
-    const a = geoSetActions(set({ status: 'fetching' }));
-    expect(a).toEqual({ canRefresh: false, canDelete: false });
+  it('встроенный не удаляется; в проверке не трогаем источник и удаление', () => {
+    expect(geoSetActions(set({ source: { type: 'builtin', tag: 't' } })).delete).toBe(false);
+    expect(geoSetActions(set({ status: 'checking' }))).toMatchObject({ refresh: false, delete: false });
+    // Кто держит набор, скажет сервер: экран удаление не запрещает.
+    expect(geoSetActions(set({ usedByRules: 5 })).delete).toBe(true);
+  });
+});
+
+describe('geoRolloutFacts: окно «Разослать»', () => {
+  const plan: GeoRolloutPlan = {
+    version: 'v2',
+    nodes: [
+      { id: 'a', name: 'ru-01', from: 'v1', filesToSend: ['iceslab-ru-blocked.dat'], restartsXray: true },
+      { id: 'b', name: 'se-01', from: null, filesToSend: ['iceslab-ru-blocked.ru.json'], restartsXray: false },
+      { id: 'c', name: 'nl-01', from: 'v2', filesToSend: [], restartsXray: false },
+    ],
+    breaks: [],
+  };
+
+  it('кому уедет, кто уже на версии, у кого рестарт xray по именам', () => {
+    const f = geoRolloutFacts(plan);
+    expect(f.sending.map((n) => n.name)).toEqual(['ru-01', 'se-01']);
+    expect(f.unchanged).toBe(1);
+    expect(f.restarts).toEqual(['ru-01']);
+    expect(f.blocked).toBe(false);
   });
 
-  it('4. удаление экран НЕ запрещает: кто держит набор, знает сервер', () => {
-    // Запрет по неполному знанию это отказ по вычисленной величине. Сервер
-    // ответит 409 и назовёт политики поимённо.
-    expect(geoSetActions(set({ status: 'ready' })).canDelete).toBe(true);
-    expect(geoSetActions(set({ status: 'invalid' })).canDelete).toBe(true);
+  it('непустой breaks запрещает кнопку', () => {
+    expect(
+      geoRolloutFacts({ ...plan, breaks: [{ entry: 'ext:ru-blocked:gone', uses: [{ kind: 'node-policy', id: 'p', name: 'RU' }] }] })
+        .blocked,
+    ).toBe(true);
+  });
+});
+
+describe('проверки ввода до отправки', () => {
+  it('файл больше 64 МБ не уходит', () => {
+    expect(uploadProblem(null)).toBe('none');
+    expect(uploadProblem({ size: 64 * 1024 * 1024 })).toBeNull();
+    expect(uploadProblem({ size: 64 * 1024 * 1024 + 1 })).toBe('too-large');
+  });
+
+  it('имя как у сервера: строчные, цифры, дефис, до 32; geosite и geoip заняты', () => {
+    expect(geoNameProblem('')).toBe('empty');
+    expect(geoNameProblem('RU list')).toBe('shape');
+    expect(geoNameProblem('geoip')).toBe('reserved');
+    expect(geoNameProblem('ru-blocked')).toBeNull();
   });
 });

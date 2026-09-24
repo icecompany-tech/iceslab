@@ -1,5 +1,6 @@
 import type { CoreComponent, EngineName, NodeCoreInfo, NodeCores, NodeCoreVersions } from '@iceslab/shared';
 import type { AwgProtocol, AwgRuntime } from '@/lib/domain/awg';
+import type { NodeGeoFact, NodeGeoIntended } from '@/lib/domain/geoSets';
 import { api } from '@/lib/net/client';
 
 export type NodeProtocol =
@@ -176,13 +177,15 @@ export interface Node {
   /** Когда панель последний раз послала этой ноде блок цепи. */
   chainSentAt?: string | null;
   /**
-   * Версия гео-набора, которая лежит НА ЭТОЙ МАШИНЕ, фаза 9.
-   *
-   * ⚠ Те же три значения: поля нет = сервер его не отдаёт и карточка молчит;
-   * `null` = отдаёт, а нода не сообщала, и это уже факт про ноду. См.
-   * `geoVersionFacts`.
+   * Гео-файлы, которые лежат НА ЭТОЙ МАШИНЕ, с heartbeat (фаза 9,
+   * geo-contract §4). Три значения: ключа нет = сервер его не отдаёт (смотреть
+   * `fields`), `null` = нода не сообщила, объект = факт с диска. См.
+   * `nodeGeoFacts`.
    */
-  geoVersion?: string | null;
+  geo?: NodeGeoFact | null;
+  /** Какие гео-файлы нода ДОЛЖНА нести по пинам и правилам; `null` = правила
+   *  ни на один набор не ссылаются. */
+  geoIntended?: NodeGeoIntended | null;
   /**
    * Нода стоит в каскаде не входом: хост на ней подписка не выдаёт, пока каскад
    * включён. Те же три значения, что у хоста: ключа нет (бэкенд старше поля или

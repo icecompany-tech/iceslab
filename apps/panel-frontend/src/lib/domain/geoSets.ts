@@ -2,74 +2,118 @@ import { api } from '@/lib/net/client';
 
 /**
  * Гео-наборы: списки доменов и адресов, по которым правила решают, куда пустить
- * трафик (фаза 9, кусок C, issue #42).
+ * трафик (фаза 9, кусок C, issue #42). Форма по контракту BACK
+ * `docs/plan/geo-contract.md` §4, §5, §7 (24.09).
  *
  * ⚠ Все запросы идут ТОЛЬКО отсюда. До бэкенда фазы 9 сервер отвечает 404, и
- * экран показывает заглушку «появится с фазой 9», а не ошибку: замена заглушки
- * на живые данные должна быть одной точкой.
+ * экран показывает заглушку «появится с фазой 9», а не ошибку.
  */
 export type GeoSetKind = 'geosite' | 'geoip';
+export type GeoSetStatus = 'checking' | 'verified' | 'broken';
+export type GeoSetFormat = 'dat' | 'rule-set-json' | 'mmdb';
 
 export type GeoSetSource =
   | { type: 'builtin'; tag: string }
-  | { type: 'url'; url: string }
+  | { type: 'url'; url: string; sha256Source: 'sidecar' | 'manual'; refreshHours: number }
   | { type: 'upload'; filename: string };
+
+/** Последняя ПРОВЕРЕННАЯ версия, та, что можно разослать. */
+export interface GeoSetCurrent {
+  /** builtin: тег релиза; url и upload: первые 12 hex sha256. */
+  version: string;
+  sha256: string;
+  sizeBytes: number;
+  fetchedAt: string;
+  tagCount: number;
+}
 
 export interface GeoSet {
   id: string;
   name: string;
   kind: GeoSetKind;
   source: GeoSetSource;
-  /** Тег выпуска или первые 12 знаков sha256: человеку это «какой файл». */
+  format: GeoSetFormat;
+  /** Статус ПОСЛЕДНЕЙ попытки (скачать, загрузить, проверить). */
+  status: GeoSetStatus;
+  checkedAt: string | null;
+  error: string | null;
+  /** null = ни одной проверенной версии. broken при непустом current значит
+   *  «последнее обновление битое, на нодах по-прежнему current». */
+  current: GeoSetCurrent | null;
+  /** Записей правил, ссылающихся на набор (политики ноды, route-политики, DNS ноды). */
+  usedByRules: number;
+  /** Ноды, чьи правила ссылаются на набор, и сколько из них на пине старше current. */
+  nodes: { total: number; behind: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GeoUseKind = 'node-policy' | 'route-policy' | 'node-dns';
+export interface GeoUse {
+  kind: GeoUseKind | string;
+  id: string;
+  name: string;
+}
+
+export interface GeoRolloutPlan {
+  /** current, то, что уедет. */
   version: string;
-  sha256: string;
-  /** Когда файл забрала ПАНЕЛЬ. С раскладкой по нодам читается парой. */
-  fetchedAt: string;
-  status: 'ready' | 'fetching' | 'invalid';
-  /** Почему `invalid`, словами ядра. */
-  error?: string;
+  nodes: {
+    id: string;
+    name: string;
+    /** Версия пина сейчас; null = пина нет. */
+    from: string | null;
+    filesToSend: string[];
+    restartsXray: boolean;
+  }[];
+  /** Ссылки правил на теги, которых в новой версии нет: rollout запрещён. */
+  breaks: { entry: string; uses: GeoUse[] }[];
 }
 
-/** Что реально лежит на каждой ноде, по словам самих нод. */
-export interface GeoRolloutNode {
-  nodeId: string;
-  /** `null` = нода про гео-набор ничего не сообщила. */
-  version: string | null;
-  /** Когда нода применила то, что у неё лежит. `null` = не сообщала. */
-  appliedAt: string | null;
+export interface GeoTags {
+  version: string;
+  total: number;
+  tags: { name: string; entries: number }[];
 }
 
-export async function listGeoSets(): Promise<{ sets: GeoSet[] }> {
-  const { data } = await api.get<{ sets: GeoSet[] }>('/api/geo-sets');
+export async function listGeoSets(): Promise<{ geoSets: GeoSet[] }> {
+  const { data } = await api.get<{ geoSets: GeoSet[] }>('/api/geo-sets');
   return data;
 }
 
+/** Свой набор по ссылке. 202, статус `checking` до итога проверки. */
 export async function createGeoSet(input: {
   name: string;
   kind: GeoSetKind;
-  source: GeoSetSource;
+  source: { type: 'url'; url: string; sha256Source: 'sidecar' | 'manual'; sha256?: string; refreshHours?: number };
 }): Promise<GeoSet> {
   const { data } = await api.post<GeoSet>('/api/geo-sets', input);
   return data;
 }
 
-/** Перечитать источник. Есть смысл только у `url` и `builtin`: загруженный
- *  файл обновляют новой загрузкой. */
-export async function refreshGeoSet(id: string): Promise<GeoSet> {
-  const { data } = await api.post<GeoSet>(`/api/geo-sets/${id}/refresh`);
+/** Потолок файла, как у агента (geo-contract §2, 413 ASSET_TOO_LARGE). */
+export const GEO_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
+
+export async function uploadGeoSet(input: { file: File; name: string; kind: GeoSetKind }): Promise<GeoSet> {
+  const form = new FormData();
+  form.append('name', input.name);
+  form.append('kind', input.kind);
+  form.append('file', input.file);
+  const { data } = await api.post<GeoSet>('/api/geo-sets/upload', form);
   return data;
 }
 
-export async function uploadGeoSet(input: {
-  file: File;
-  name: string;
-  kind: GeoSetKind;
-}): Promise<GeoSet> {
+/** Новый файл для набора, загруженного файлом. */
+export async function replaceGeoSetFile(id: string, file: File): Promise<GeoSet> {
   const form = new FormData();
-  form.append('file', input.file);
-  form.append('name', input.name);
-  form.append('kind', input.kind);
-  const { data } = await api.post<GeoSet>('/api/geo-sets/upload', form);
+  form.append('file', file);
+  const { data } = await api.put<GeoSet>(`/api/geo-sets/${id}/file`, form);
+  return data;
+}
+
+/** «Обновить сейчас»: тянет и проверяет новую версию на панели, на ноды не шлёт. */
+export async function refreshGeoSet(id: string): Promise<GeoSet> {
+  const { data } = await api.post<GeoSet>(`/api/geo-sets/${id}/refresh`);
   return data;
 }
 
@@ -77,60 +121,133 @@ export async function deleteGeoSet(id: string): Promise<void> {
   await api.delete(`/api/geo-sets/${id}`);
 }
 
-export async function getGeoRollout(): Promise<{ nodes: GeoRolloutNode[] }> {
-  const { data } = await api.get<{ nodes: GeoRolloutNode[] }>('/api/geo-sets/rollout');
+export async function getGeoTags(id: string, q: string, limit = 20): Promise<GeoTags> {
+  const { data } = await api.get<GeoTags>(`/api/geo-sets/${id}/tags`, { params: { q, limit } });
+  return data;
+}
+
+export async function getGeoRolloutPlan(id: string): Promise<GeoRolloutPlan> {
+  const { data } = await api.get<GeoRolloutPlan>(`/api/geo-sets/${id}/rollout-plan`);
+  return data;
+}
+
+/** «Разослать на ноды»: двигает пины набора на `version` (= current плана). */
+export async function rolloutGeoSet(id: string, version: string): Promise<{ nodes: number }> {
+  const { data } = await api.post<{ nodes: number }>(`/api/geo-sets/${id}/rollout`, { version });
   return data;
 }
 
 /**
- * Отказы сервера, у которых на экране свои слова.
- *
- * `GEO_SET_IN_USE` несёт имена политик: без них оператору сказано «нельзя», но
- * не сказано, где отцепить, и он идёт искать сам по всем правилам.
+ * Отказы сервера, у которых на экране свои слова (geo-contract §5).
+ * Вход проверяется первым: `null` это «ошибки нет» у react-query, и читать у
+ * него поле нельзя (так экран шаблонов падал белой страницей 2026-09-22).
  */
-export interface GeoSetRefusal {
-  code: 'GEO_SET_INVALID' | 'GEO_SET_NAME_TAKEN' | 'GEO_SET_IN_USE';
-  message?: string;
-  /** Политики, которые держат набор. Только у `GEO_SET_IN_USE`. */
-  policies?: string[];
+export type GeoSetRefusal =
+  | { code: 'GEO_SET_INVALID'; reason: string | null; message: string | null }
+  | { code: 'GEO_SET_NAME_TAKEN' | 'GEO_SET_BUILTIN' | 'GEO_SET_NOT_VERIFIED'; message: string | null }
+  | { code: 'GEO_SET_IN_USE'; uses: GeoUse[]; message: string | null }
+  | { code: 'GEO_ROLLOUT_STALE'; current: string | null; message: string | null }
+  | { code: 'GEO_ROLLOUT_BREAKS'; breaks: GeoRolloutPlan['breaks']; message: string | null };
+
+function readUses(raw: unknown): GeoUse[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((u) => {
+    if (!u || typeof u !== 'object') return [];
+    const { kind, id, name } = u as { kind?: unknown; id?: unknown; name?: unknown };
+    return typeof kind === 'string' && typeof id === 'string' && typeof name === 'string' ? [{ kind, id, name }] : [];
+  });
 }
 
 export function geoSetRefusal(err: unknown): GeoSetRefusal | null {
-  // `null` это «ошибки нет» у react-query, и читать у него поле нельзя: ровно
-  // так экран шаблонов падал белой страницей 2026-09-22.
   if (!err || typeof err !== 'object') return null;
-  const res = (err as {
-    response?: { data?: { error?: string; message?: string; policies?: string[] } };
-  }).response;
-  const code = res?.data?.error;
-  if (code !== 'GEO_SET_INVALID' && code !== 'GEO_SET_NAME_TAKEN' && code !== 'GEO_SET_IN_USE') {
-    return null;
+  const res = (err as { response?: unknown }).response;
+  if (!res || typeof res !== 'object') return null;
+  const data = (res as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const message = typeof d.message === 'string' ? d.message : null;
+  switch (d.error) {
+    case 'GEO_SET_INVALID':
+      return { code: 'GEO_SET_INVALID', reason: typeof d.reason === 'string' ? d.reason : null, message };
+    case 'GEO_SET_NAME_TAKEN':
+    case 'GEO_SET_BUILTIN':
+    case 'GEO_SET_NOT_VERIFIED':
+      return { code: d.error, message };
+    case 'GEO_SET_IN_USE':
+      return { code: 'GEO_SET_IN_USE', uses: readUses(d.uses), message };
+    case 'GEO_ROLLOUT_STALE':
+      return { code: 'GEO_ROLLOUT_STALE', current: typeof d.current === 'string' ? d.current : null, message };
+    case 'GEO_ROLLOUT_BREAKS':
+      return {
+        code: 'GEO_ROLLOUT_BREAKS',
+        breaks: Array.isArray(d.breaks)
+          ? d.breaks.flatMap((b) =>
+              b && typeof b === 'object' && typeof (b as { entry?: unknown }).entry === 'string'
+                ? [{ entry: (b as { entry: string }).entry, uses: readUses((b as { uses?: unknown }).uses) }]
+                : [],
+            )
+          : [],
+        message,
+      };
+    default:
+      return null;
   }
-  return { code, message: res?.data?.message, policies: res?.data?.policies };
-}
-
-/**
- * Что за гео-набор лежит на ЭТОЙ ноде, для её карточки.
- *
- * ⚠ Три значения, и первые два разные. `undefined` это «сервер поля ещё не
- * отдаёт» (фаза 9 не доехала): карточка молчит, потому что сказать нечего и
- * ничего не сломано. `null` это «сервер поле отдаёт, а нода про свой набор не
- * сообщала»: это уже факт про ноду, и он стоит строки «нет данных». Строка это
- * версия, которую нода несёт.
- *
- * Разница дорогая: «нет данных» на каждой ноде парка в день, когда поле
- * завели, выглядит как поломка раскладки, хотя поломки нет.
- */
-export type GeoVersionFacts = { state: 'known'; version: string } | { state: 'unknown' } | null;
-
-export function geoVersionFacts(node: { geoVersion?: string | null }): GeoVersionFacts {
-  if (node.geoVersion === undefined) return null;
-  if (node.geoVersion === null || node.geoVersion.trim() === '') return { state: 'unknown' };
-  return { state: 'known', version: node.geoVersion };
 }
 
 /** Ответил ли сервер «такого маршрута нет», то есть фаза 9 не доехала. */
 export function isNotImplemented(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
-  return (err as { response?: { status?: number } }).response?.status === 404;
+  const res = (err as { response?: unknown }).response;
+  return !!res && typeof res === 'object' && (res as { status?: unknown }).status === 404;
+}
+
+/* ───── Гео на ноде: намерение против факта (geo-contract §4) ───── */
+
+/** Факт с heartbeat. `null` = нода не сообщила. */
+export interface NodeGeoFact {
+  version: string | null;
+  files: { name: string; sha256: string }[];
+  observedAt: string;
+}
+
+/** Намерение из пинов ноды и её правил. `null` = правила не ссылаются ни на один набор. */
+export interface NodeGeoIntended {
+  version: string;
+  files: { name: string; sha256: string; setId: string; setName: string; setVersion: string }[];
+}
+
+/**
+ * Строка «гео» на карточке ноды. Предупреждение из намерения против факта,
+ * отказом не становится.
+ *
+ *   null         сервер поля `geo` не отдаёт (нет в `fields`): строка молчит;
+ *   unreported   `geo: null`, нода не сообщила (старый агент, нет опроса);
+ *   unused       правила ноды ни на один набор не ссылаются, сравнивать не с чем;
+ *   same         sha каждого нужного файла совпал с тем, что на диске;
+ *   behind       каких наборов файлы не совпали или их нет, по именам наборов.
+ *
+ * Сравнение по sha файла, не по `version`: версия это подпись, файл на диске
+ * это факт (агент отдаёт фактический sha, а не эхо пуша).
+ */
+export type NodeGeoFacts =
+  | { state: 'unreported' }
+  | { state: 'unused'; version: string | null }
+  | { state: 'same'; version: string }
+  | { state: 'behind'; sets: string[] }
+  | null;
+
+export function nodeGeoFacts(
+  node: { geo?: NodeGeoFact | null; geoIntended?: NodeGeoIntended | null },
+  geoKnown: boolean,
+): NodeGeoFacts {
+  if (!geoKnown || node.geo === undefined) return null;
+  if (node.geo === null) return { state: 'unreported' };
+  const intended = node.geoIntended;
+  if (!intended || intended.files.length === 0) return { state: 'unused', version: node.geo.version };
+  const onDisk = new Map((node.geo.files ?? []).map((f) => [f.name, f.sha256] as const));
+  const behind = [
+    ...new Set(intended.files.filter((f) => onDisk.get(f.name) !== f.sha256).map((f) => f.setName)),
+  ];
+  if (behind.length > 0) return { state: 'behind', sets: behind };
+  return { state: 'same', version: intended.version };
 }

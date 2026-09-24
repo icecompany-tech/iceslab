@@ -5,7 +5,7 @@ import type { NodesListResponse } from '@/lib/domain/nodes';
  * решает сервер (NODE_DTO_FIELDS в nodes.mapper.ts); `awgProtocol` он сегодня
  * не рендерит вовсе, и мастер честно остаётся без выбора поколения AWG.
  */
-export type OptionalNodeField = 'awgProtocol' | 'coreVersions' | 'intendedEngines' | 'cascadeNeedsEngines';
+export type OptionalNodeField = 'awgProtocol' | 'coreVersions' | 'intendedEngines' | 'cascadeNeedsEngines' | 'geo';
 
 /**
  * Отдаёт ли сервер ключ `field` у нод (E29, стенд 24.09).

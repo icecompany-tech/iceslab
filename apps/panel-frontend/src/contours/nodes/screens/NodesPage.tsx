@@ -35,7 +35,8 @@ import { apiErrorMessage } from '@/lib/net/client';
 import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
-import { geoVersionFacts } from '@/lib/domain/geoSets';
+import { nodeGeoFacts } from '@/lib/domain/geoSets';
+import { nodeFieldKnown } from '@/contours/nodes/lib/nodeFields';
 import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
   deleteNode,
@@ -467,6 +468,9 @@ export function NodesPage() {
     // a faster tick would only re-read the same row.
     refetchInterval: 30_000,
   });
+  // Отдаёт ли сервер `geo` у нод (фаза 9): из `fields` конверта, по нодам
+  // только у сервера старше поля (E29).
+  const geoKnown = nodeFieldKnown(nodesQuery.data, 'geo');
   const regionsQuery = useQuery({ queryKey: ['regions'], queryFn: listRegions });
   const regionsById = useMemo(() => {
     const m = new Map<string, { code: string; name: string }>();
@@ -1001,9 +1005,10 @@ export function NodesPage() {
                   // Цепь читается парой полей ноды, и эта же пара молчит у
                   // всех, кому блок цепи не посылали.
                   chain: chainFacts(n),
-                  // Гео-набор: та же тройка значений, что у цепи. Поля нет -
-                  // карточка молчит, а не пишет «нет данных» всему парку.
-                  geo: geoVersionFacts(n),
+                  // Гео: намерение против факта. Знает ли сервер поле, говорит
+                  // `fields` конверта (или ключ у ноды у сервера старше); не
+                  // знает - карточка молчит, а не пишет «нет данных» всему парку.
+                  geo: nodeGeoFacts(n, geoKnown),
                   // `null` значит «карточке сказать нечего», и решает это одна
                   // функция: «политики нет» и «политика не работает» слишком
                   // легко спутать, чтобы разбирать их в разметке.

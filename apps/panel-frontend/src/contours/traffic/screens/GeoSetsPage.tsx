@@ -1,48 +1,61 @@
-import { useMemo, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { Box, NumberInput, SegmentedControl, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/lib/net/client';
-import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { relativeTime } from '@/lib/ui/relativeTime';
 import {
+  createGeoSet,
   deleteGeoSet,
   geoSetRefusal,
-  getGeoRollout,
   isNotImplemented,
   listGeoSets,
   refreshGeoSet,
+  replaceGeoSetFile,
   uploadGeoSet,
-  type GeoRolloutNode,
   type GeoSet,
   type GeoSetKind,
 } from '@/lib/domain/geoSets';
 import {
+  geoNameProblem,
   geoScreenFacts,
   geoSetActions,
-  rolloutFacts,
-  rolloutSummary,
+  geoSetState,
+  uploadProblem,
+  usesWords,
 } from '@/contours/traffic/lib/geoFacts';
-import { AMBER, CARD, DIM, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/traffic/lib/colors';
+import { GeoRolloutModal } from '@/contours/traffic/components/GeoRolloutModal';
+import {
+  AMBER,
+  CARD,
+  DIM,
+  DISPLAY,
+  FAINT,
+  HAIRLINE,
+  MIST,
+  MONO,
+  MOSS,
+  RED,
+  SNOW,
+  WELL,
+} from '@/contours/traffic/lib/colors';
 
 /**
- * Гео-наборы: списки доменов и адресов, которыми правила решают судьбу трафика.
+ * Гео-наборы (Ф9.5, контракт `docs/plan/geo-contract.md`): списки доменов и
+ * адресов, которыми правила нод решают судьбу трафика.
  *
- * Строка отвечает на три вопроса сразу, потому что поодиночке они бесполезны:
- * ЧТО это (имя, вид, источник), КАКОЙ версии файл у панели, и СКОЛЬКО нод
- * реально несут эту версию. Набор, обновлённый в панели и не доехавший до нод,
- * выглядит свежим и работает по-старому, и увидеть это можно только рядом.
+ * Строка отвечает сразу на три вопроса: ЧТО это (имя, вид, формат, источник),
+ * КАКАЯ проверенная версия у панели и чем кончилась последняя попытка, и
+ * СКОЛЬКО нод и правил на набор завязано. Два действия разведены намеренно:
+ * «Обновить сейчас» тянет и проверяет новую версию на панели, «Разослать на
+ * ноды» двигает пины нод и перезапускает xray. Совместить их значило бы рвать
+ * сессии при каждом обновлении списка.
  *
- * ⚠ До бэкенда фазы 9 запросы отвечают 404: экран говорит «появится с фазой 9»,
- * а не рисует ошибку и не притворяется пустым.
+ * ⚠ До бэкенда фазы 9 запросы отвечают 404: экран говорит «появится с фазой 9».
  */
-
-const DISPLAY = "'Inter Variable', Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
-
 export function GeoSetsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -52,93 +65,63 @@ export function GeoSetsPage() {
     queryKey: ['geo-sets'],
     queryFn: listGeoSets,
     retry: (count, err) => !isNotImplemented(err) && count < 2,
+    // Скачивание и проверка идут фоном (ответ 202): пока хоть один набор в
+    // проверке, список переспрашивается, иначе «проверяется» висело бы вечно.
+    refetchInterval: (q) => (q.state.data?.geoSets.some((s) => s.status === 'checking') ? 3000 : false),
   });
-
-  // Раскладка спрашивается отдельным запросом и отдельно же может отсутствовать:
-  // набор известен, а что лежит на нодах, ещё нет, и это разные незнания.
-  const rolloutQuery = useQuery({
-    queryKey: ['geo-rollout'],
-    queryFn: getGeoRollout,
-    enabled: setsQuery.isSuccess,
-    retry: (count, err) => !isNotImplemented(err) && count < 2,
-  });
-
-  // Имена нод берутся из своего списка: раскладка приходит по id, а человеку
-  // «n7f3a» не говорит ничего. Нет ответа - покажем id, это хотя бы зацепка.
-  const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
-  const nodeNames = useMemo(
-    () => new Map((nodesQuery.data?.nodes ?? []).map((n) => [n.id, n.name] as const)),
-    [nodesQuery.data],
-  );
-
   const facts = geoScreenFacts({
-    sets: setsQuery.data?.sets,
+    sets: setsQuery.data?.geoSets,
     notImplemented: isNotImplemented(setsQuery.error),
   });
-  const rollout = rolloutQuery.data?.nodes ?? null;
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [upload, setUpload] = useState<UploadState>({
-    open: false,
-    name: '',
-    kind: 'geosite',
-    file: null,
-  });
+  const [adding, setAdding] = useState<'url' | 'upload' | null>(null);
+  const [rolloutFor, setRolloutFor] = useState<GeoSet | null>(null);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['geo-sets'] });
+
+  function showRefusal(err: unknown, title: string) {
+    if (isNotImplemented(err)) {
+      notifications.show({ color: 'yellow', title, message: t('geoSets.soonBody') });
+      return;
+    }
+    const r = geoSetRefusal(err);
+    const message =
+      r?.code === 'GEO_SET_IN_USE'
+        ? t('geoSets.inUse', { uses: usesWords(r.uses, t) })
+        : r?.code === 'GEO_SET_INVALID' && r.reason
+          ? t(`geoSets.invalid.${r.reason}`, { defaultValue: r.message ?? r.reason })
+          : r?.code === 'GEO_SET_NAME_TAKEN'
+            ? t('geoSets.nameTaken')
+            : r?.code === 'GEO_SET_BUILTIN'
+              ? t('geoSets.builtinNoDelete')
+              : (r?.message ?? apiErrorMessage(err));
+    notifications.show({ color: 'red', title, message, autoClose: 12000 });
+  }
 
   const refresh = useMutation({
     mutationFn: (id: string) => refreshGeoSet(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['geo-sets'] });
-      qc.invalidateQueries({ queryKey: ['geo-rollout'] });
-    },
+    onSuccess: invalidate,
     onError: (err) => showRefusal(err, t('geoSets.refreshFailed')),
   });
-
-  const uploadMutation = useMutation({
-    mutationFn: () => {
-      if (!upload.file) throw new Error('no file');
-      return uploadGeoSet({ file: upload.file, name: upload.name.trim(), kind: upload.kind });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['geo-sets'] });
-      qc.invalidateQueries({ queryKey: ['geo-rollout'] });
-      setUpload({ open: false, name: '', kind: 'geosite', file: null });
-      notifications.show({ color: 'green', message: t('geoSets.uploaded') });
-    },
+  const replace = useMutation({
+    mutationFn: (p: { id: string; file: File }) => replaceGeoSetFile(p.id, p.file),
+    onSuccess: invalidate,
     onError: (err) => showRefusal(err, t('geoSets.uploadFailed')),
   });
-
   const remove = useMutation({
     mutationFn: (id: string) => deleteGeoSet(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['geo-sets'] });
+      invalidate();
       notifications.show({ color: 'green', message: t('geoSets.deleted') });
     },
     onError: (err) => showRefusal(err, t('common.deleteError')),
   });
-
-  /**
-   * Отказы сервера словами, и один из них особенный.
-   *
-   * `GEO_SET_IN_USE` называет политики поимённо: без этого списка «нельзя»
-   * отправляет оператора искать по всем правилам вручную.
-   */
-  function showRefusal(err: unknown, title: string) {
-    const r = geoSetRefusal(err);
-    const message = isNotImplemented(err)
-      ? t('geoSets.soonBody')
-      : r?.code === 'GEO_SET_IN_USE'
-        ? t('geoSets.inUse', { policies: (r.policies ?? []).join(', ') || t('geoSets.inUseUnnamed') })
-        : (r?.message ?? apiErrorMessage(err));
-    notifications.show({ color: isNotImplemented(err) ? 'yellow' : 'red', title, message });
-  }
 
   function confirmDelete(set: GeoSet) {
     modals.openConfirmModal({
       title: t('geoSets.deleteTitle', { name: set.name }),
       children: (
         <Text style={{ fontFamily: DISPLAY, fontSize: 13, lineHeight: '19px', color: SNOW }}>
-          {t('geoSets.deleteBody')}
+          {set.usedByRules > 0 ? t('geoSets.deleteBodyUsed', { count: set.usedByRules }) : t('geoSets.deleteBody')}
         </Text>
       ),
       labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
@@ -160,34 +143,48 @@ export function GeoSetsPage() {
           border: `1px solid ${HAIRLINE}`,
         }}
       >
-        <Text style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 500, color: SNOW }}>
-          {t('geoSets.title')}
-        </Text>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 500, color: SNOW }}>{t('geoSets.title')}</Text>
         <Text style={{ fontFamily: MONO, fontSize: 11, color: MIST }}>
           {facts.state === 'list' ? t('geoSets.count', { n: facts.total }) : ''}
         </Text>
         <Box style={{ flex: 1 }} />
+        <GhostButton disabled={facts.state === 'unavailable'} onClick={() => setAdding(adding === 'url' ? null : 'url')}>
+          {t('geoSets.addUrl')}
+        </GhostButton>
         <GhostButton
-          disabled={facts.state === 'unavailable' || uploadMutation.isPending}
-          onClick={() => setUpload((u) => ({ ...u, open: !u.open }))}
+          disabled={facts.state === 'unavailable'}
+          onClick={() => setAdding(adding === 'upload' ? null : 'upload')}
         >
           {t('geoSets.upload')}
         </GhostButton>
       </Box>
 
       {facts.state === 'unavailable' && (
-        <Placeholder title={t('geoSets.soonTitle')} body={t('geoSets.soonBody')} />
+        <Placeholder
+          title={setsQuery.isLoading ? t('common.loading') : t('geoSets.soonTitle')}
+          body={setsQuery.isLoading ? '' : t('geoSets.soonBody')}
+        />
       )}
-      {facts.state === 'empty' && (
-        <Placeholder title={t('geoSets.emptyTitle')} body={t('geoSets.emptyBody')} />
+      {facts.state === 'empty' && <Placeholder title={t('geoSets.emptyTitle')} body={t('geoSets.emptyBody')} />}
+
+      {adding === 'url' && (
+        <AddUrlPanel
+          onDone={() => {
+            setAdding(null);
+            invalidate();
+          }}
+          onCancel={() => setAdding(null)}
+          onRefusal={(err) => showRefusal(err, t('geoSets.addFailed'))}
+        />
       )}
-      {upload.open && (
+      {adding === 'upload' && (
         <UploadPanel
-          busy={uploadMutation.isPending}
-          onCancel={() => setUpload({ open: false, name: '', kind: 'geosite', file: null })}
-          state={upload}
-          onState={setUpload}
-          onSubmit={() => uploadMutation.mutate()}
+          onDone={() => {
+            setAdding(null);
+            invalidate();
+          }}
+          onCancel={() => setAdding(null)}
+          onRefusal={(err) => showRefusal(err, t('geoSets.uploadFailed'))}
         />
       )}
 
@@ -196,34 +193,27 @@ export function GeoSetsPage() {
           <GeoSetRow
             key={s.id}
             set={s}
-            rollout={rollout}
-            nodeNames={nodeNames}
-            expanded={expandedId === s.id}
-            busy={refresh.isPending && refresh.variables === s.id}
-            onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
+            refreshing={refresh.isPending && refresh.variables === s.id}
             onRefresh={() => refresh.mutate(s.id)}
+            onReplace={(file) => replace.mutate({ id: s.id, file })}
+            onRollout={() => setRolloutFor(s)}
             onDelete={() => confirmDelete(s)}
           />
         ))}
+
+      <GeoRolloutModal set={rolloutFor} onClose={() => setRolloutFor(null)} />
     </Stack>
   );
 }
 
 function Placeholder({ title, body }: { title: string; body: string }) {
   return (
-    <Box
-      style={{
-        padding: '28px 22px',
-        borderRadius: 12,
-        backgroundColor: CARD,
-        border: `1px dashed ${HAIRLINE}`,
-      }}
-    >
+    <Box style={{ padding: '28px 22px', borderRadius: 12, backgroundColor: CARD, border: `1px dashed ${HAIRLINE}` }}>
       <Stack gap={8}>
         <Text style={{ fontFamily: DISPLAY, fontSize: 14, color: SNOW }}>{title}</Text>
-        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: MIST, maxWidth: 680 }}>
-          {body}
-        </Text>
+        {body && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: MIST, maxWidth: 680 }}>{body}</Text>
+        )}
       </Stack>
     </Box>
   );
@@ -231,278 +221,303 @@ function Placeholder({ title, body }: { title: string; body: string }) {
 
 function GeoSetRow({
   set,
-  rollout,
-  nodeNames,
-  expanded,
-  busy,
-  onToggle,
+  refreshing,
   onRefresh,
+  onReplace,
+  onRollout,
   onDelete,
 }: {
   set: GeoSet;
-  rollout: GeoRolloutNode[] | null;
-  nodeNames: Map<string, string>;
-  expanded: boolean;
-  busy: boolean;
-  onToggle: () => void;
+  refreshing: boolean;
   onRefresh: () => void;
+  onReplace: (file: File) => void;
+  onRollout: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
-  const sum = rollout ? rolloutSummary(set, rollout) : null;
+  const state = geoSetState(set);
   const actions = geoSetActions(set);
-  const tone = set.status === 'invalid' ? RED : set.status === 'fetching' ? AMBER : MOSS;
+  const fileInput = useRef<HTMLInputElement>(null);
+  const tone = state === 'verified' ? MOSS : state === 'checking' ? AMBER : RED;
 
   return (
-    <Stack gap={0}>
-    <Box
+    <Stack
+      gap={8}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
         padding: '12px 16px',
         borderRadius: 10,
         backgroundColor: WELL,
-        border: `1px solid ${set.status === 'invalid' ? `${RED}44` : HAIRLINE}`,
+        border: `1px solid ${state.startsWith('broken') ? `${RED}44` : HAIRLINE}`,
       }}
     >
-      <Box style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: tone, flexShrink: 0 }} />
-      <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Text style={{ fontFamily: DISPLAY, fontSize: 13, color: SNOW }}>{set.name}</Text>
-          <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', color: MIST }}>
-            {set.kind}
-          </Text>
-        </Box>
-        {/* Источник словами: «откуда файл» это первое, что спрашивают, когда
-            версия на ноде не та, которую ждали. */}
-        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '14px', color: DIM }}>
-          {sourceWords(set, t)}
-        </Text>
-      </Stack>
-
-      <Stack gap={2} style={{ flexShrink: 0, alignItems: 'flex-end' }}>
-        <Text style={{ fontFamily: MONO, fontSize: 11, color: SNOW }}>{set.version}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 10, color: FAINT }}>
-          {t('geoSets.fetched', { when: relativeTime(set.fetchedAt, t).text })}
-        </Text>
-      </Stack>
-
-      {/* Сколько нод несут ИМЕННО эту версию. Пока раскладки нет, тут молчание,
-          а не «0 из 0»: ноль сказал бы, что не несёт никто. */}
-      <Box style={{ width: 150, flexShrink: 0, textAlign: 'right' }}>
-        {sum ? (
-          <Stack gap={2} style={{ alignItems: 'flex-end' }}>
-            <Text
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                color: sum.same === sum.total && sum.total > 0 ? MOSS : AMBER,
-              }}
-            >
-              {t('geoSets.onNodes', { same: sum.same, total: sum.total })}
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <Box style={{ width: 6, height: 6, borderRadius: 999, backgroundColor: tone, flexShrink: 0 }} />
+        <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+          <Box style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Text style={{ fontFamily: DISPLAY, fontSize: 13, color: SNOW }}>{set.name}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', color: MIST }}>
+              {set.kind} · {set.format}
             </Text>
-            {sum.hasDiverged && (
-              <Text style={{ fontFamily: MONO, fontSize: 10, color: AMBER }}>
-                {t('geoSets.diverged', { n: sum.diverged })}
-              </Text>
-            )}
-          </Stack>
-        ) : (
-          <Text style={{ fontFamily: MONO, fontSize: 10, color: DIM }}>{t('geoSets.rolloutUnknown')}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, color: tone }}>{t(`geoSets.status.${state}`)}</Text>
+          </Box>
+          <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '14px', color: DIM }}>{sourceWords(set, t)}</Text>
+        </Stack>
+
+        {/* Проверенная версия: то, что можно разослать. Нет её - так и сказано. */}
+        <Stack gap={2} style={{ flexShrink: 0, alignItems: 'flex-end', width: 170 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 11, color: set.current ? SNOW : DIM }}>
+            {set.current ? set.current.version : t('geoSets.noCurrent')}
+          </Text>
+          {set.current && (
+            <Text style={{ fontFamily: MONO, fontSize: 10, color: FAINT }}>
+              {t('geoSets.fetched', { when: relativeTime(set.current.fetchedAt, t).text })} ·{' '}
+              {t('geoSets.tags', { count: set.current.tagCount })}
+            </Text>
+          )}
+        </Stack>
+
+        {/* Что на набор завязано: правила и ноды, и сколько нод на старом пине. */}
+        <Stack gap={2} style={{ flexShrink: 0, alignItems: 'flex-end', width: 150 }}>
+          <Text style={{ fontFamily: MONO, fontSize: 11, color: set.usedByRules ? SNOW : DIM }}>
+            {t('geoSets.usedByRules', { count: set.usedByRules })}
+          </Text>
+          <Text style={{ fontFamily: MONO, fontSize: 10, color: set.nodes.behind > 0 ? AMBER : FAINT }}>
+            {set.nodes.behind > 0
+              ? t('geoSets.nodesBehind', { behind: set.nodes.behind, total: set.nodes.total })
+              : t('geoSets.nodesTotal', { count: set.nodes.total })}
+          </Text>
+        </Stack>
+
+        {actions.refresh && (
+          <GhostButton disabled={refreshing} onClick={onRefresh}>
+            {refreshing ? t('geoSets.refreshing') : t('geoSets.refresh')}
+          </GhostButton>
         )}
+        {actions.replaceFile && (
+          <>
+            <GhostButton onClick={() => fileInput.current?.click()}>{t('geoSets.replaceFile')}</GhostButton>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                if (file && uploadProblem(file) === 'too-large') {
+                  notifications.show({ color: 'red', title: t('geoSets.uploadFailed'), message: t('geoSets.tooLarge') });
+                } else if (file) {
+                  onReplace(file);
+                }
+                e.currentTarget.value = '';
+              }}
+            />
+          </>
+        )}
+        <GhostButton disabled={!actions.rollout} onClick={onRollout}>
+          {t('geoSets.rolloutAction')}
+        </GhostButton>
+        <GhostButton disabled={!actions.delete} onClick={onDelete}>
+          {t('common.delete')}
+        </GhostButton>
       </Box>
 
-      {set.status === 'invalid' && (
-        <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '14px', color: RED, maxWidth: 260 }}>
-          {set.error ?? t('geoSets.invalidNoMessage')}
+      {/* Битый это два разных текста: нечего слать вовсе, или обновление не
+          прошло, а на нодах по-прежнему проверенная версия. */}
+      {state === 'broken-empty' && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, paddingLeft: 20 }}>
+          {t('geoSets.brokenEmpty', { error: set.error ?? t('geoSets.noError') })}
         </Text>
       )}
-
-      {/* Обновление есть только у ссылки и встроенного: загруженный файл
-          «обновляют» новой загрузкой, и кнопка с тем же словом врала бы. */}
-      {actions.canRefresh && (
-        <GhostButton disabled={busy} onClick={onRefresh}>
-          {busy ? t('geoSets.refreshing') : t('geoSets.refresh')}
-        </GhostButton>
+      {state === 'broken-update' && set.current && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, paddingLeft: 20 }}>
+          {t('geoSets.brokenUpdate', { error: set.error ?? t('geoSets.noError'), version: set.current.version })}
+        </Text>
       )}
-      <GhostButton disabled={!actions.canDelete} onClick={onDelete}>
-        {t('common.delete')}
-      </GhostButton>
-      <GhostButton onClick={onToggle}>
-        {expanded ? t('geoSets.hideNodes') : t('geoSets.showNodes')}
-      </GhostButton>
-    </Box>
-
-    {expanded && (
-      <Box
-        style={{
-          margin: '0 16px',
-          padding: '10px 14px',
-          borderRadius: '0 0 10px 10px',
-          backgroundColor: CARD,
-          border: `1px solid ${HAIRLINE}`,
-          borderTop: 'none',
-        }}
-      >
-        {rollout === null ? (
-          <Text style={{ fontFamily: MONO, fontSize: 11, color: DIM }}>
-            {t('geoSets.rolloutUnknownLong')}
-          </Text>
-        ) : rollout.length === 0 ? (
-          <Text style={{ fontFamily: MONO, fontSize: 11, color: DIM }}>{t('geoSets.noNodes')}</Text>
-        ) : (
-          <Stack gap={4}>
-            {rollout.map((n) => (
-              <RolloutRow key={n.nodeId} set={set} node={n} name={nodeNames.get(n.nodeId) ?? n.nodeId} />
-            ))}
-          </Stack>
-        )}
-      </Box>
-    )}
+      {state === 'checking' && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: FAINT, paddingLeft: 20 }}>
+          {set.current ? t('geoSets.checkingOver', { version: set.current.version }) : t('geoSets.checkingFirst')}
+        </Text>
+      )}
     </Stack>
   );
 }
 
-/** Одна нода в раскладке: что на ней лежит и что это значит. */
-function RolloutRow({
-  set,
-  node,
-  name,
+const KIND_OPTIONS: GeoSetKind[] = ['geosite', 'geoip'];
+
+/** Свой набор по ссылке: sha256 из соседнего файла или руками, интервал в часах. */
+function AddUrlPanel({
+  onDone,
+  onCancel,
+  onRefusal,
 }: {
-  set: GeoSet;
-  node: GeoRolloutNode;
-  name: string;
+  onDone: () => void;
+  onCancel: () => void;
+  onRefusal: (err: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const f = rolloutFacts(set, node);
-  // Янтарное у обоих несовпадений и серое у незнания: «отстаёт» и «ушла
-  // вперёд» это разные новости, но обе требуют внимания, а молчание нет.
-  const tone = f.state === 'same' ? MOSS : f.state === 'unknown' ? DIM : AMBER;
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<GeoSetKind>('geosite');
+  const [url, setUrl] = useState('');
+  const [shaSource, setShaSource] = useState<'sidecar' | 'manual'>('sidecar');
+  const [sha, setSha] = useState('');
+  const [hours, setHours] = useState<number | ''>(24);
+  const nameProblem = geoNameProblem(name.trim());
+  const shaBad = shaSource === 'manual' && !/^[0-9a-f]{64}$/i.test(sha.trim());
+
+  const create = useMutation({
+    mutationFn: () =>
+      createGeoSet({
+        name: name.trim(),
+        kind,
+        source: {
+          type: 'url',
+          url: url.trim(),
+          sha256Source: shaSource,
+          ...(shaSource === 'manual' ? { sha256: sha.trim().toLowerCase() } : {}),
+          ...(hours === '' ? {} : { refreshHours: hours }),
+        },
+      }),
+    onSuccess: onDone,
+    onError: onRefusal,
+  });
 
   return (
-    <Box style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <Box style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: tone, flexShrink: 0 }} />
-      <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: SNOW, width: 200, flexShrink: 0 }}>
-        {name}
-      </Text>
-      <Text style={{ fontFamily: MONO, fontSize: 11, color: f.version ? SNOW : DIM, width: 160 }}>
-        {f.version ?? t('geoSets.noVersion')}
-      </Text>
-      <Text style={{ fontFamily: MONO, fontSize: 10, color: FAINT, width: 150 }}>
-        {f.appliedAt ? t('geoSets.applied', { when: relativeTime(f.appliedAt, t).text }) : ''}
-      </Text>
-      <Text style={{ fontFamily: DISPLAY, fontSize: 11, color: tone }}>
-        {t(`geoSets.state.${f.state}`)}
-      </Text>
-    </Box>
+    <Stack gap={10} style={{ padding: '14px 16px', borderRadius: 10, backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+      <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+        <Stack gap={4} style={{ width: 200 }}>
+          <Label>{t('geoSets.uploadName')}</Label>
+          <TextInput
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            error={name && nameProblem ? t(`geoSets.name.${nameProblem}`) : undefined}
+          />
+        </Stack>
+        <Stack gap={4} style={{ width: 130 }}>
+          <Label>{t('geoSets.uploadKind')}</Label>
+          <Select data={KIND_OPTIONS} value={kind} allowDeselect={false} onChange={(v) => v && setKind(v as GeoSetKind)} />
+        </Stack>
+        <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+          <Label>{t('geoSets.url')}</Label>
+          <TextInput value={url} placeholder="https://…/geosite.dat" onChange={(e) => setUrl(e.currentTarget.value)} />
+        </Stack>
+        <Stack gap={4} style={{ width: 110 }}>
+          <Label>{t('geoSets.refreshHours')}</Label>
+          <NumberInput value={hours} min={1} onChange={(v) => setHours(typeof v === 'number' ? v : '')} />
+        </Stack>
+      </Box>
+      <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+        <Stack gap={4}>
+          <Label>{t('geoSets.shaSource')}</Label>
+          <SegmentedControl
+            size="xs"
+            value={shaSource}
+            onChange={(v) => setShaSource(v as 'sidecar' | 'manual')}
+            data={[
+              { value: 'sidecar', label: t('geoSets.shaSidecar') },
+              { value: 'manual', label: t('geoSets.shaManual') },
+            ]}
+          />
+        </Stack>
+        {shaSource === 'manual' && (
+          <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+            <Label>sha256</Label>
+            <TextInput value={sha} onChange={(e) => setSha(e.currentTarget.value)} error={sha && shaBad ? t('geoSets.shaBad') : undefined} />
+          </Stack>
+        )}
+        <Box style={{ flex: shaSource === 'manual' ? 0 : 1 }} />
+        <GhostButton onClick={onCancel}>{t('common.cancel')}</GhostButton>
+        <GhostButton
+          disabled={nameProblem !== null || url.trim() === '' || shaBad || create.isPending}
+          onClick={() => create.mutate()}
+        >
+          {t('geoSets.addAction')}
+        </GhostButton>
+      </Box>
+      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>{t('geoSets.addHint')}</Text>
+    </Stack>
   );
 }
 
-interface UploadState {
-  open: boolean;
-  name: string;
-  kind: GeoSetKind;
-  file: File | null;
-}
-
 /**
- * Загрузка своего файла.
- *
- * Имя и вид спрашиваются ЗДЕСЬ, а не выводятся из файла: `geoip.dat` может
- * оказаться списком доменов, и угадывать вид значит однажды подсунуть правилу
- * не тот набор. Имя подставляется из имени файла, потому что это хорошая
- * догадка, но её видно и её можно поправить.
+ * Загрузка своего файла. Имя и вид спрашиваются здесь, а не выводятся из
+ * файла: `geoip.dat` может оказаться списком доменов. Имя подставляется из
+ * имени файла как догадка, её видно и её можно поправить.
  */
 function UploadPanel({
-  state,
-  onState,
-  onSubmit,
+  onDone,
   onCancel,
-  busy,
+  onRefusal,
 }: {
-  state: UploadState;
-  onState: (next: UploadState) => void;
-  onSubmit: () => void;
+  onDone: () => void;
   onCancel: () => void;
-  busy: boolean;
+  onRefusal: (err: unknown) => void;
 }) {
   const { t } = useTranslation();
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<GeoSetKind>('geosite');
+  const [file, setFile] = useState<File | null>(null);
+  const nameProblem = geoNameProblem(name.trim());
+  const fileProblem = uploadProblem(file);
+
+  const upload = useMutation({
+    mutationFn: () => uploadGeoSet({ file: file!, name: name.trim(), kind }),
+    onSuccess: onDone,
+    onError: onRefusal,
+  });
+
   return (
-    <Box
-      style={{
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 12,
-        padding: '14px 16px',
-        borderRadius: 10,
-        backgroundColor: CARD,
-        border: `1px solid ${HAIRLINE}`,
-      }}
-    >
-      <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-        <Label>{t('geoSets.uploadName')}</Label>
-        <TextInput value={state.name} onChange={(e) => onState({ ...state, name: e.currentTarget.value })} />
-      </Stack>
-      <Stack gap={4} style={{ width: 160 }}>
-        <Label>{t('geoSets.uploadKind')}</Label>
-        <Select
-          data={['geosite', 'geoip']}
-          value={state.kind}
-          allowDeselect={false}
-          onChange={(v) => v && onState({ ...state, kind: v as GeoSetKind })}
-        />
-      </Stack>
-      <Stack gap={4} style={{ width: 260 }}>
-        <Label>{t('geoSets.uploadFile')}</Label>
-        <input
-          type="file"
-          accept=".dat,.srs,.db,.mmdb"
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0] ?? null;
-            onState({
-              ...state,
-              file,
-              name: state.name || (file ? file.name.replace(/\.[^.]+$/, '') : ''),
-            });
-          }}
-          style={{ fontFamily: MONO, fontSize: 11, color: MIST }}
-        />
-      </Stack>
-      <GhostButton onClick={onCancel}>{t('common.cancel')}</GhostButton>
-      <GhostButton disabled={!state.file || state.name.trim() === '' || busy} onClick={onSubmit}>
-        {busy ? t('geoSets.uploading') : t('geoSets.uploadAction')}
-      </GhostButton>
-    </Box>
+    <Stack gap={8} style={{ padding: '14px 16px', borderRadius: 10, backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+      <Box style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+        <Stack gap={4} style={{ width: 200 }}>
+          <Label>{t('geoSets.uploadName')}</Label>
+          <TextInput
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            error={name && nameProblem ? t(`geoSets.name.${nameProblem}`) : undefined}
+          />
+        </Stack>
+        <Stack gap={4} style={{ width: 130 }}>
+          <Label>{t('geoSets.uploadKind')}</Label>
+          <Select data={KIND_OPTIONS} value={kind} allowDeselect={false} onChange={(v) => v && setKind(v as GeoSetKind)} />
+        </Stack>
+        <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+          <Label>{t('geoSets.uploadFile')}</Label>
+          <input
+            type="file"
+            accept=".dat,.json,.mmdb"
+            onChange={(e) => {
+              const f = e.currentTarget.files?.[0] ?? null;
+              setFile(f);
+              if (f && !name) setName(f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 32));
+            }}
+            style={{ fontFamily: MONO, fontSize: 11, color: MIST }}
+          />
+        </Stack>
+        <GhostButton onClick={onCancel}>{t('common.cancel')}</GhostButton>
+        <GhostButton
+          disabled={fileProblem !== null || nameProblem !== null || upload.isPending}
+          onClick={() => upload.mutate()}
+        >
+          {upload.isPending ? t('geoSets.uploading') : t('geoSets.uploadAction')}
+        </GhostButton>
+      </Box>
+      {fileProblem === 'too-large' && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: RED }}>{t('geoSets.tooLarge')}</Text>
+      )}
+      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>{t('geoSets.uploadHint')}</Text>
+    </Stack>
   );
 }
 
 function Label({ children }: { children: string }) {
   return (
-    <Text
-      style={{
-        fontFamily: MONO,
-        fontSize: 10,
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase',
-        color: MIST,
-      }}
-    >
+    <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: MIST }}>
       {children}
     </Text>
   );
 }
 
 /** Тихая кнопка. Своя, а не из чужого контура: линт это стережёт. */
-function GhostButton({
-  children,
-  disabled,
-  onClick,
-}: {
-  children: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+function GhostButton({ children, disabled, onClick }: { children: string; disabled?: boolean; onClick: () => void }) {
   return (
     <UnstyledButton
       type="button"
@@ -530,6 +545,10 @@ function GhostButton({
 
 function sourceWords(set: GeoSet, t: (k: string, o?: Record<string, unknown>) => string): string {
   if (set.source.type === 'builtin') return t('geoSets.sourceBuiltin', { tag: set.source.tag });
-  if (set.source.type === 'url') return t('geoSets.sourceUrl', { url: set.source.url });
+  if (set.source.type === 'url')
+    return t(set.source.sha256Source === 'manual' ? 'geoSets.sourceUrlManual' : 'geoSets.sourceUrl', {
+      url: set.source.url,
+      hours: set.source.refreshHours,
+    });
   return t('geoSets.sourceUpload', { filename: set.source.filename });
 }

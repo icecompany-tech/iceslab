@@ -1,11 +1,24 @@
-import type { GeoRolloutNode, GeoSet } from '@/lib/domain/geoSets';
+import { GEO_UPLOAD_MAX_BYTES, type GeoRolloutPlan, type GeoSet, type GeoUse } from '@/lib/domain/geoSets';
 
 /**
- * Что показать на экране гео-наборов и что известно про каждую ноду.
- *
- * Разметка отсюда только красит. Три состояния экрана те же, что у шаблонов, и
- * путать их так же дорого: «сервер ещё не умеет» вместо «пусто» зовёт заводить
- * набор там, где его негде сохранить.
+ * Кто ссылается на набор, словами: «политика ноды RU, DNS ноды ru-01». Вид
+ * ссылки обязателен: DNS ноды это не политика, и искать её в политиках
+ * бесполезно (geo-contract §8.5). Незнакомый вид печатается как пришёл.
+ */
+export function usesWords(uses: GeoUse[], t: (k: string, o?: Record<string, unknown>) => string): string {
+  if (uses.length === 0) return t('geoSets.usesUnnamed');
+  return uses
+    .map((u) =>
+      u.kind === 'node-policy' || u.kind === 'route-policy' || u.kind === 'node-dns'
+        ? t(`geoSets.useKind.${u.kind}`, { name: u.name })
+        : `${u.kind} ${u.name}`,
+    )
+    .join(', ');
+}
+
+/**
+ * Что показать на экране гео-наборов (Ф9.5, geo-contract §5, §7). Разметка
+ * отсюда только красит.
  */
 export type GeoScreenState = 'unavailable' | 'empty' | 'list';
 
@@ -13,111 +26,111 @@ export interface GeoScreenFacts {
   state: GeoScreenState;
   sets: GeoSet[];
   total: number;
+  /** Есть наборы в проверке: экран переспрашивает список, пока не будет итога. */
+  anyChecking: boolean;
 }
 
-export function geoScreenFacts(input: {
-  sets?: GeoSet[];
-  notImplemented?: boolean;
-}): GeoScreenFacts {
-  if (input.notImplemented) return { state: 'unavailable', sets: [], total: 0 };
+export function geoScreenFacts(input: { sets?: GeoSet[]; notImplemented?: boolean }): GeoScreenFacts {
+  const none = { sets: [], total: 0, anyChecking: false };
+  if (input.notImplemented) return { state: 'unavailable', ...none };
   const list = input.sets;
-  // Ответа ещё нет: это не «пусто». Сказать «наборов нет» на полсекунды каждому
-  // открытию значит соврать про чужую работу.
-  if (!list) return { state: 'unavailable', sets: [], total: 0 };
-  if (list.length === 0) return { state: 'empty', sets: [], total: 0 };
-  // Сначала сломанные, потом качающиеся, потом готовые: экран открывают, когда
-  // что-то не так, а не чтобы полюбоваться готовыми.
-  const rank = (s: GeoSet) => (s.status === 'invalid' ? 0 : s.status === 'fetching' ? 1 : 2);
+  // Ответа ещё нет: это не «пусто».
+  if (!list) return { state: 'unavailable', ...none };
+  if (list.length === 0) return { state: 'empty', ...none };
+  // Битые, потом в проверке, потом проверенные: экран открывают, когда что-то
+  // не так. Встроенные среди своих по имени.
+  const rank = (s: GeoSet) => (s.status === 'broken' ? 0 : s.status === 'checking' ? 1 : 2);
   const sets = [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  return { state: 'list', sets, total: list.length };
+  return { state: 'list', sets, total: list.length, anyChecking: list.some((s) => s.status === 'checking') };
 }
 
 /**
- * Что лежит на одной ноде против того, что забрала панель.
+ * Статус набора словами. `status` описывает ПОСЛЕДНЮЮ попытку, `current`
+ * последнюю проверенную версию, и «битый» распадается на два разных текста:
  *
- * ЧЕТЫРЕ ответа, и три из них не «всё хорошо»:
- *   `same`      версия совпала с панельной;
- *   `behind`    версия другая, и нода применила её ДО того, как панель забрала
- *               текущую: обычный случай, пуш ещё не дошёл;
- *   `diverged`  версия другая, и нода применила её ПОСЛЕ панельной. Панель
- *               такого не посылала: кто-то положил файл руками. Янтарное;
- *   `unknown`   нода ничего не сообщила ИЛИ сообщила версию без времени, и
- *               тогда сказать, отстаёт она или ушла вперёд, нечем.
- *
- * ⚠ Порядок берётся из ВРЕМЕНИ, а не из текста версии: версия это тег или
- * первые 12 знаков sha256, и sha не сравнивается на «старше». Поэтому при
- * различии версий без отметки времени честный ответ это `unknown`, а не
- * догадка в любую сторону.
+ *   broken-empty    проверенной версии нет вовсе: разослать нечего;
+ *   broken-update   последнее обновление битое, на нодах по-прежнему current;
+ *   checking        идёт скачивание или проверка (фоном, ответ был 202);
+ *   verified        последняя попытка прошла.
  */
-export type RolloutState = 'same' | 'behind' | 'diverged' | 'unknown';
+export type GeoSetState = 'checking' | 'verified' | 'broken-empty' | 'broken-update';
 
-export interface RolloutFacts {
-  nodeId: string;
-  state: RolloutState;
-  /** Что лежит на ноде; `null` = не сообщала. */
-  version: string | null;
-  appliedAt: string | null;
-}
-
-export function rolloutFacts(
-  set: Pick<GeoSet, 'version' | 'fetchedAt'>,
-  node: GeoRolloutNode,
-): RolloutFacts {
-  const base = { nodeId: node.nodeId, version: node.version, appliedAt: node.appliedAt };
-  if (!node.version) return { ...base, state: 'unknown' };
-  if (node.version === set.version) return { ...base, state: 'same' };
-  if (!node.appliedAt || !set.fetchedAt) return { ...base, state: 'unknown' };
-  // Сравнение строк ISO работает как сравнение моментов, пока обе в UTC с
-  // одинаковой точностью, а сервер отдаёт именно такие.
-  return { ...base, state: node.appliedAt > set.fetchedAt ? 'diverged' : 'behind' };
-}
-
-/** Сводка по набору: «на 3 из 4» и есть ли на что смотреть. */
-export interface RolloutSummary {
-  same: number;
-  total: number;
-  behind: number;
-  diverged: number;
-  unknown: number;
-  /** Хоть одна нода ушла вперёд: это руками положенный файл. */
-  hasDiverged: boolean;
-}
-
-export function rolloutSummary(
-  set: Pick<GeoSet, 'version' | 'fetchedAt'>,
-  nodes: GeoRolloutNode[],
-): RolloutSummary {
-  const states = nodes.map((n) => rolloutFacts(set, n).state);
-  const count = (s: RolloutState) => states.filter((x) => x === s).length;
-  return {
-    same: count('same'),
-    total: nodes.length,
-    behind: count('behind'),
-    diverged: count('diverged'),
-    unknown: count('unknown'),
-    hasDiverged: count('diverged') > 0,
-  };
+export function geoSetState(set: Pick<GeoSet, 'status' | 'current'>): GeoSetState {
+  if (set.status === 'checking') return 'checking';
+  if (set.status === 'verified') return 'verified';
+  return set.current ? 'broken-update' : 'broken-empty';
 }
 
 /**
  * Что можно сделать с набором.
  *
- * Обновить источник можно только у `url` и `builtin`: загруженный файл берётся
- * с машины оператора, и «обновить» у него означало бы загрузить заново, то есть
- * другую кнопку.
- *
- * Удаление экран не запрещает: какие политики держат набор, знает сервер, и его
- * 409 называет их поимённо. Запрет по неполному знанию здесь был бы тем же
- * отказом по вычисленной величине, что стоил 23 рабочих пар 2026-09-11.
+ *   refresh      «Обновить сейчас» у ссылки и встроенного: тянет и проверяет
+ *                новую версию НА ПАНЕЛИ, на ноды не шлёт;
+ *   replaceFile  у загруженного файла «обновить» это загрузить новый файл;
+ *   rollout      «Разослать на ноды» есть только при проверенной версии
+ *                (сервер иначе 409 GEO_SET_NOT_VERIFIED);
+ *   delete       встроенные не удаляются (409 GEO_SET_BUILTIN), остальные
+ *                удаляются, а кто держит набор, скажет 409 GEO_SET_IN_USE
+ *                поимённо: запрет по вычисленному здесь был бы отказом по
+ *                неполному знанию.
+ * Пока идёт проверка, трогать источник и удалять нельзя: итог перезапишет.
  */
 export interface GeoSetActions {
-  canRefresh: boolean;
-  canDelete: boolean;
+  refresh: boolean;
+  replaceFile: boolean;
+  rollout: boolean;
+  delete: boolean;
 }
 
-export function geoSetActions(set: Pick<GeoSet, 'source' | 'status'>): GeoSetActions {
+export function geoSetActions(set: Pick<GeoSet, 'source' | 'status' | 'current'>): GeoSetActions {
+  const busy = set.status === 'checking';
   return {
-    canRefresh: set.source.type !== 'upload' && set.status !== 'fetching',
-    canDelete: set.status !== 'fetching',
+    refresh: set.source.type !== 'upload' && !busy,
+    replaceFile: set.source.type === 'upload' && !busy,
+    rollout: set.current !== null,
+    delete: set.source.type !== 'builtin' && !busy,
   };
+}
+
+/**
+ * Окно «Разослать на ноды» по плану сервера.
+ *
+ * Замена `.dat` это рестарт xray с разрывом сессий: окно называет число таких
+ * нод и их имена до кнопки. Непустой `breaks` запрещает кнопку (сервер
+ * отказал бы 409 GEO_ROLLOUT_BREAKS): правила ссылаются на теги, которых в новой
+ * версии нет, и экран называет их.
+ */
+export interface GeoRolloutFacts {
+  version: string;
+  /** Ноды, куда что-то уедет. */
+  sending: GeoRolloutPlan['nodes'];
+  /** Ноды плана, на которых всё уже совпадает. */
+  unchanged: number;
+  restarts: string[];
+  blocked: boolean;
+}
+
+export function geoRolloutFacts(plan: GeoRolloutPlan): GeoRolloutFacts {
+  const sending = plan.nodes.filter((n) => n.filesToSend.length > 0 || n.from !== plan.version);
+  return {
+    version: plan.version,
+    sending,
+    unchanged: plan.nodes.length - sending.length,
+    restarts: plan.nodes.filter((n) => n.restartsXray).map((n) => n.name),
+    blocked: plan.breaks.length > 0,
+  };
+}
+
+/** Проверка файла до отправки: потолок как у сервера и агента, 64 МБ. */
+export function uploadProblem(file: { size: number } | null): 'none' | 'too-large' | null {
+  if (!file) return 'none';
+  return file.size > GEO_UPLOAD_MAX_BYTES ? 'too-large' : null;
+}
+
+/** Имя набора, как его примет сервер: ^[a-z0-9-]{1,32}$, geosite и geoip заняты. */
+export function geoNameProblem(name: string): 'empty' | 'shape' | 'reserved' | null {
+  if (name === '') return 'empty';
+  if (!/^[a-z0-9-]{1,32}$/.test(name)) return 'shape';
+  if (name === 'geosite' || name === 'geoip') return 'reserved';
+  return null;
 }
