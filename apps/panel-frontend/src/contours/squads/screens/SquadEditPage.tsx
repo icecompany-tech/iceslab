@@ -37,6 +37,12 @@ import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
+import {
+  squadCascades,
+  toggleCascadeExit,
+  type SquadCascade,
+  type SquadCascadeExit,
+} from '@/contours/squads/lib/squadCascades';
 import { AMBER, CARD, CYAN, CYAN_HI, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, ROW, SNOW, VIOLET, WELL } from '@/contours/squads/lib/colors';
 
 /**
@@ -418,46 +424,59 @@ export function SquadEditPage() {
     );
   }
 
-  const balancers = (cascadesQuery.data?.cascades ?? []).filter((c) => c.mode === 'balancer');
   const policies = policiesQuery.data?.policies ?? [];
   const allProfiles = profilesQuery.data?.profiles ?? [];
 
   /**
-   * Cascades whose entry this squad actually hands out.
+   * The squad's cascades, each as one thing: entry, exits, policies, and
+   * whether it is handed out as a fact (squadCascades). Read from positions and
+   * directions; the block before this read `hops`, which a v4 cascade sends
+   * empty, and showed every cascade empty and amber.
    *
    * A direction is not a server of its own, it is a route tag riding in the
-   * UUID bytes of an ordinary connection to the ENTRY host. The subscription
-   * builder cuts hosts by the squad first and hangs directions off whatever
-   * survived, so with no entry host there is no line to carry a tag and not one
-   * direction leaves. Granting directions on a cascade whose entry is not
-   * handed out promises something that cannot happen.
+   * UUID bytes of an ordinary connection to the ENTRY host, so with no entry
+   * host not one direction leaves. The system squad grants every profile.
    */
-  const entryOpen = useMemo(() => {
-    const bindingById = new Map((bindingsQuery.data?.bindings ?? []).map((b) => [b.id, b]));
-    const granted = new Set(profileIds);
-    const hosts = hostsQuery.data?.hosts ?? [];
-    const open = new Set<string>();
-    for (const c of cascadesQuery.data?.cascades ?? []) {
-      const entryNodeId = c.hops[0]?.nodeId;
-      if (!entryNodeId) continue;
-      const reaches = hosts.some((h) => {
-        if (!h.enabled) return false;
-        const binding = bindingById.get(h.bindingId);
-        if (!binding || binding.nodeId !== entryNodeId) return false;
-        if (!granted.has(binding.profileId)) return false;
-        return restricted ? hostIds.includes(h.id) : true;
-      });
-      if (reaches) open.add(c.id);
-    }
-    return open;
-  }, [
-    cascadesQuery.data,
-    hostsQuery.data,
-    bindingsQuery.data,
-    profileIds,
-    hostIds,
-    restricted,
-  ]);
+  const cascadeRows = useMemo(
+    () =>
+      squadCascades(
+        isNew ? null : (id ?? null),
+        {
+          profileIds: isAll ? (profilesQuery.data?.profiles ?? []).map((p) => p.id) : profileIds,
+          hostIds,
+          restricted: isAll ? false : restricted,
+          exitAcl,
+          policyIds,
+        },
+        {
+          cascades: cascadesQuery.data?.cascades ?? [],
+          hosts: hostsQuery.data?.hosts ?? [],
+          bindings: bindingsQuery.data?.bindings ?? [],
+          nodes: nodesQuery.data?.nodes ?? [],
+          squads: squadsQuery.data?.squads ?? [],
+          policies: policiesQuery.data?.policies ?? [],
+        },
+      ),
+    [
+      isNew,
+      id,
+      isAll,
+      profilesQuery.data,
+      profileIds,
+      hostIds,
+      restricted,
+      exitAcl,
+      policyIds,
+      cascadesQuery.data,
+      hostsQuery.data,
+      bindingsQuery.data,
+      nodesQuery.data,
+      squadsQuery.data,
+      policiesQuery.data,
+    ],
+  );
+  /** A direction that would be the last one taken off: said instead of done. */
+  const [lastExitRefused, setLastExitRefused] = useState<string | null>(null);
 
   // The crumb reads "/ SQUADS · basic · 12 members": the section comes from the
   // route, the squad's own name has to come from here.
@@ -494,21 +513,28 @@ export function SquadEditPage() {
     );
   }
 
-  function toggleExit(cascadeId: string, nodeId: string) {
+  /**
+   * Narrow or widen one direction of a cascade (toggleCascadeExit): the server
+   * reads no rows as every direction, so the last one cannot be taken off, and
+   * the screen says so instead.
+   */
+  function toggleExit(c: SquadCascade, exit: SquadCascadeExit) {
+    const next = toggleCascadeExit(exitAcl, c.id, c.exits, exit);
+    if (next === null) {
+      setLastExitRefused(c.id);
+      return;
+    }
+    setLastExitRefused(null);
     setDirty(true);
-    setExitAcl((prev) => {
-      const entry = prev.find((e) => e.cascadeId === cascadeId);
-      if (!entry) return [...prev, { cascadeId, exitNodeIds: [nodeId] }];
-      const has = entry.exitNodeIds.includes(nodeId);
-      const nextIds = has
-        ? entry.exitNodeIds.filter((x) => x !== nodeId)
-        : [...entry.exitNodeIds, nodeId];
-      // No rows left means "no restriction", which is how the backend reads a
-      // missing entry, so drop it rather than storing an empty list.
-      return nextIds.length === 0
-        ? prev.filter((e) => e.cascadeId !== cascadeId)
-        : prev.map((e) => (e.cascadeId === cascadeId ? { ...e, exitNodeIds: nextIds } : e));
-    });
+    setExitAcl(next);
+  }
+
+  /** «Выдать вход»: the entry host joins the restriction. Without a restriction
+   *  it already goes out, and the link is not offered. */
+  function giveEntry(hostId: string) {
+    if (isAll || !restricted) return;
+    setDirty(true);
+    setHostIds((prev) => (prev.includes(hostId) ? prev : [...prev, hostId]));
   }
 
   function togglePolicy(policyId: string) {
@@ -1129,16 +1155,15 @@ export function SquadEditPage() {
               {isNew && <Chip accent={FAINT}>{t('squadEdit.optional')}</Chip>}
             </Box>
             <Hint>{isAll ? t('squadEdit.cascadeDirectionsAll') : t('squadEdit.cascadeDirectionsHint')}</Hint>
-            {balancers.length === 0 && (
+            {cascadeRows.length === 0 && (
               <Text style={{ fontSize: 12, color: MIST }}>{t('squadEdit.noDirections')}</Text>
             )}
-            {balancers.map((c) => {
-              const entry = exitAcl.find((e) => e.cascadeId === c.id);
-              const exits = c.hops.slice(1);
-              // The grants stay exactly as they are; only the showing goes
-              // quiet. Put the entry host back and the whole card lights up
-              // again without re-ticking a single direction.
-              const live = isAll || entryOpen.has(c.id);
+            {cascadeRows.map((c) => {
+              // The grants stay exactly as they are when the entry is not
+              // handed out; only the showing goes quiet. Put the entry host
+              // back and the whole card lights up again.
+              const live = c.handedOut;
+              const allowedCount = c.exits.filter((e) => e.allowed).length;
               return (
                 <Box
                   key={c.id}
@@ -1147,67 +1172,76 @@ export function SquadEditPage() {
                     overflow: 'clip',
                     backgroundColor: WELL,
                     border: `1px solid ${HAIRLINE}`,
-                    borderLeft: `3px solid ${live && entry ? VIOLET : '#2C3A4E'}`,
+                    borderLeft: `3px solid ${live ? VIOLET : AMBER}`,
                   }}
                 >
-                  <Box
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '10px 14px',
-                    }}
-                  >
-                    <Box style={{ color: live ? VIOLET : FAINT, display: 'flex' }}>
+                  <Box style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                    <Box style={{ color: live ? VIOLET : AMBER, display: 'flex' }}>
                       <IconFilter size={13} stroke={1.8} />
                     </Box>
                     <Text
-                      style={{
-                        flex: 1,
-                        fontFamily: DISPLAY,
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: live ? SNOW : MIST,
-                      }}
+                      style={{ flex: 1, fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, color: live ? SNOW : MIST }}
                     >
                       {c.name}
                     </Text>
-                    <Chip accent={isAll ? MOSS : live && entry ? VIOLET : FAINT}>
-                      {isAll
-                        ? t('squadEdit.allDirections')
-                        : `${entry ? entry.exitNodeIds.length : exits.length}/${exits.length}`}
+                    <Chip accent={live ? MOSS : AMBER}>
+                      {live ? t('squadEdit.cascadeHandedOut') : t('squadEdit.cascadeNotHandedOut')}
+                    </Chip>
+                    <Chip accent={c.exitsNarrowed ? VIOLET : FAINT}>
+                      {c.exitsNarrowed ? `${allowedCount}/${c.exits.length}` : t('squadEdit.cascadeExitsAll')}
                     </Chip>
                   </Box>
+
+                  {/* Вход: ноды позиции 0 и порты их хостов, выданные ярче. */}
+                  <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0 14px 10px' }}>
+                    <Text style={{ ...LABEL, fontSize: 9 }}>{t('squadEdit.cascadeEntry')}</Text>
+                    {c.entry.map((n) => (
+                      <Text key={n.id} style={{ fontFamily: MONO, fontSize: 11, color: SNOW }}>
+                        {n.name}
+                        {n.ports.length === 0 ? (
+                          <span style={{ color: FAINT }}> · {t('squadEdit.cascadeEntryNoHosts')}</span>
+                        ) : (
+                          n.ports.map((p, i) => (
+                            <span key={`${p.port}-${i}`} style={{ color: p.handedOut ? CYAN_HI : FAINT }}>
+                              {' '}:{p.port}
+                            </span>
+                          ))
+                        )}
+                      </Text>
+                    ))}
+                  </Box>
+
                   {!live && (
-                    <Text
-                      style={{
-                        padding: '0 14px 10px',
-                        fontFamily: DISPLAY,
-                        fontSize: 11,
-                        lineHeight: '15px',
-                        color: AMBER,
-                      }}
-                    >
-                      {t('squadEdit.entryNotHandedOut')}
-                    </Text>
+                    <Box style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 10px' }}>
+                      <Text style={{ flex: 1, fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: AMBER }}>
+                        {c.notHandedOut === 'host-not-picked'
+                          ? t('squadEdit.cascadeWhyNotPicked')
+                          : c.notHandedOut === 'no-entry'
+                            ? t('squadEdit.cascadeWhyNoEntry')
+                            : t('squadEdit.cascadeWhyNoHost')}
+                      </Text>
+                      {c.entryHostToAdd && !isAll && (
+                        <SmallButton onClick={() => giveEntry(c.entryHostToAdd!)}>
+                          <IconPlus size={12} stroke={2.2} color={MIST} />
+                          {t('squadEdit.cascadeGiveEntry')}
+                        </SmallButton>
+                      )}
+                    </Box>
                   )}
-                  {exits.map((hop, i) => {
-                    // The system squad never restricts anything, so every
-                    // direction reads as granted and the row is not clickable.
-                    const checked = isAll || (entry ? entry.exitNodeIds.includes(hop.nodeId) : false);
-                    const node = nodesQuery.data?.nodes.find((n) => n.id === hop.nodeId);
-                    // The direction is what a squad grants, and it is named by
-                    // its country and identified by its tag. The node under it
-                    // is a detail that can be swapped without the tag moving.
-                    // Tags: plain first, then one per granted policy.
-                    const tags = [i + 1, ...policyIds.map((id) => {
-                      const ordinal = policies.find((p) => p.id === id)?.ordinal ?? 0;
-                      return ordinal * 256 + i + 1;
-                    })];
+
+                  {c.exits.map((exit) => {
+                    // The direction is what a squad grants, named by its country
+                    // and identified by its tag; the nodes under it can change
+                    // without the tag moving. Tags: plain first, then one per
+                    // granted policy.
+                    const tags = [
+                      exit.tag,
+                      ...policyIds.map((pid) => (policies.find((p) => p.id === pid)?.ordinal ?? 0) * 256 + exit.tag),
+                    ];
                     return (
                       <UnstyledButton
-                        key={hop.nodeId}
-                        onClick={() => live && !isAll && toggleExit(c.id, hop.nodeId)}
+                        key={exit.key}
+                        onClick={() => !isAll && toggleExit(c, exit)}
                         style={{
                           width: '100%',
                           display: 'flex',
@@ -1217,21 +1251,17 @@ export function SquadEditPage() {
                           backgroundColor: ROW,
                           borderTop: `1px solid ${HAIRLINE}`,
                           opacity: live ? 1 : 0.45,
-                          cursor: live && !isAll ? 'pointer' : 'default',
+                          cursor: isAll ? 'default' : 'pointer',
                         }}
                       >
-                        <CheckBox checked={checked} accent={VIOLET} />
-                        <Text
-                          style={{
-                            flex: 1,
-                            fontFamily: DISPLAY,
-                            fontSize: 13,
-                            color: live ? SNOW : MIST,
-                          }}
-                        >
-                          {node?.countryCode
-                            ? `${node.countryCode.toUpperCase()} · ${countryName(node.countryCode)}`
-                            : (node?.name ?? hop.nodeId.slice(0, 8))}
+                        <CheckBox checked={isAll || exit.allowed} accent={VIOLET} />
+                        <Text style={{ flex: 1, fontFamily: DISPLAY, fontSize: 13, color: live ? SNOW : MIST }}>
+                          {exit.countryCode
+                            ? `${exit.countryCode.toUpperCase()} · ${countryName(exit.countryCode)}`
+                            : (exit.nodeNames[0] ?? '-')}
+                          <span style={{ fontFamily: MONO, fontSize: 11, color: FAINT }}>
+                            {exit.nodeNames.length > 0 ? `  ${exit.nodeNames.join(', ')}` : ''}
+                          </span>
                         </Text>
                         <Text style={{ fontFamily: MONO, fontSize: 11, color: MIST }}>
                           {tags.map((n) => n.toString(16).padStart(4, '0')).join(' · ')}
@@ -1239,9 +1269,45 @@ export function SquadEditPage() {
                       </UnstyledButton>
                     );
                   })}
+                  {lastExitRefused === c.id && (
+                    <Text style={{ padding: '8px 14px', fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: AMBER }}>
+                      {t('squadEdit.cascadeLastExit')}
+                    </Text>
+                  )}
+
+                  {/* Политики, которые на этом каскаде выдают другие сквады:
+                      одним кликом в выдачу этого. */}
+                  {!isAll && c.policiesToOffer.length > 0 && (
+                    <Box
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        padding: '10px 14px',
+                        borderTop: `1px solid ${HAIRLINE}`,
+                      }}
+                    >
+                      {c.policiesToOffer.map((p) => (
+                        <SmallButton key={p.id} onClick={() => togglePolicy(p.id)}>
+                          <IconPlus size={12} stroke={2.2} color={MIST} />
+                          {t('squadEdit.cascadeOfferPolicy', { name: p.name })}
+                        </SmallButton>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               );
             })}
+            {cascadeRows.length > 0 && (
+              <Stack gap={4}>
+                <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: MIST }}>
+                  {t('squadEdit.cascadeWorksOnlyWithEntry')}
+                </Text>
+                <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+                  {t('squadEdit.cascadeNoSwitchYet')}
+                </Text>
+              </Stack>
+            )}
           </Card>
 
           <Card>

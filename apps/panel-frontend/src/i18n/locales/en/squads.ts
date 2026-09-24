@@ -133,9 +133,6 @@ export const squads = {
     nothingPicked:
       'This squad hands out no hosts. Tick the ones it should reach, or press Hand out all.',
     hostOff: 'OFF',
-    entryNotHandedOut:
-      'The entry is not handed out, so no direction rides out. Directions travel on the entry line itself.',
-    allDirections: 'ALL DIRECTIONS',
     cascadeDirectionsAll:
       'The system squad never restricts directions. Members reach every direction its cascades carry.',
     routePoliciesAll:
@@ -152,10 +149,23 @@ export const squads = {
       'Click a country row to fold it away. Ticked hosts are the ones this squad hands out; hosts added later stay out until you tick them.',
     // A squad is narrowed by direction, and a direction is identified by its
     // tag. The node under it can be swapped without any of this changing.
-    cascadeDirections: 'Cascade directions',
+    cascadeDirections: 'Cascades',
     cascadeDirectionsHint:
-      'Restrict which cascade directions this squad sees. None checked means every direction. Tags run plain first, then one per granted policy.',
-    noDirections: 'No cascade carries more than one direction yet.',
+      'Each cascade whole: entry, exits, policies. Exits can be narrowed; with none unticked the squad gets all of them. Tags run plain first, then one per granted policy.',
+    noDirections: 'No enabled cascades.',
+    cascadeHandedOut: 'HANDED OUT',
+    cascadeNotHandedOut: 'NOT HANDED OUT',
+    cascadeEntry: 'entry',
+    cascadeEntryNoHosts: 'no hosts on the entry',
+    cascadeWhyNotPicked: 'The squad does not hand out the entry: the entry node host is not ticked in the restriction.',
+    cascadeWhyNoHost: 'The squad does not hand out the entry: no granted profile is deployed on the entry node.',
+    cascadeWhyNoEntry: 'The cascade has no entry.',
+    cascadeGiveEntry: 'hand out the entry',
+    cascadeExitsAll: 'all exits',
+    cascadeLastExit: 'The last exit cannot be unticked: an empty list reads as all exits on the server.',
+    cascadeOfferPolicy: 'grant "{{name}}" to this squad',
+    cascadeWorksOnlyWithEntry: 'A cascade works for the squad members only if the squad hands out an entry host.',
+    cascadeNoSwitchYet: 'Switching a cascade off for a squad comes with a contract: today its exits can only be narrowed.',
     exit: 'exit',
     routePolicies: 'Route policies',
     routePoliciesHint:
