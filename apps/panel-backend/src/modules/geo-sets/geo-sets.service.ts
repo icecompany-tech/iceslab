@@ -7,6 +7,7 @@ import {
   type GeoSetSource,
   type GeoSetTag,
   type GeoSetUse,
+  type NodeGeoFact,
 } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
@@ -356,11 +357,18 @@ export async function deleteSet(id: string): Promise<void> {
 
 /**
  * What "send to the nodes" would do, before it is confirmed. Every node whose
- * rules name the set is listed; one already on current has nothing to send.
+ * rules name the set is listed.
  *
- * `restartsXray` is true where the node runs xray, or where it has not said
- * what it runs: this is a warning in a confirmation, and an unknown is shown
- * as the worse case rather than hidden.
+ * `filesToSend` is read off what the node SAID it holds (its healthcheck's
+ * geo, file by file by sha256), not off its pin (ARCH 24.09, after a dev
+ * frame: a pin moved, the node never reported, and the plan said "nothing to
+ * send" about a machine nobody had looked at). The pin is the intent, the file
+ * on disk the fact, and the plan speaks of the fact. A node that has not
+ * reported gets the whole version. `from` stays the pin.
+ *
+ * `restartsXray` is true where a `.dat` is to be sent to a node that runs
+ * xray, or that has not said what it runs: this is a warning in a
+ * confirmation, and an unknown is shown as the worse case rather than hidden.
  */
 export async function rolloutPlan(id: string): Promise<GeoRolloutPlan> {
   const s = await mustFind(id);
@@ -369,25 +377,30 @@ export async function rolloutPlan(id: string): Promise<GeoRolloutPlan> {
   const nodes = await nodesOf(s, sites);
   const rows = await prisma.node.findMany({
     where: { id: { in: nodes.map((n) => n.id) } },
-    select: { id: true, name: true, cores: true },
+    select: { id: true, name: true, cores: true, geo: true },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const file = nodeFileName(s);
+  // What the node must hold for this set at current. The chain's rule-sets
+  // join this list with phase 9.3.
+  const wanted = [{ name: nodeFileName(s), sha256: s.current.sha256 }];
 
   const planNodes = nodes
     .flatMap((n) => {
       const row = byId.get(n.id);
       if (!row) return [];
-      const changes = n.pin?.versionId !== s.currentVersionId;
+      const fact = (row.geo as NodeGeoFact | null) ?? null;
+      const onDisk = new Map((fact?.files ?? []).map((f) => [f.name, f.sha256]));
+      const filesToSend = wanted.filter((f) => fact === null || onDisk.get(f.name) !== f.sha256).map((f) => f.name);
       const engines = reportedEngines(row);
       return [
         {
           id: row.id,
           name: row.name,
           from: n.pin?.version.version ?? null,
-          // The chain's rule-set files join this list with phase 9.3.
-          filesToSend: changes ? [file] : [],
-          restartsXray: changes && (engines === undefined || engines.includes('xray')),
+          filesToSend,
+          restartsXray:
+            filesToSend.some((f) => f.endsWith('.dat')) && (engines === undefined || engines.includes('xray')),
+          pinMoves: n.pin?.versionId !== s.currentVersionId,
         },
       ];
     })
@@ -402,29 +415,40 @@ export async function rolloutPlan(id: string): Promise<GeoRolloutPlan> {
     missing.set(site.ref.entry, list);
   }
   const breaks = [...missing].map(([entry, uses]) => ({ entry, uses })).sort((a, b) => a.entry.localeCompare(b.entry));
-  return { version: s.current.version, nodes: planNodes, breaks };
+  return {
+    version: s.current.version,
+    nodes: planNodes.map(({ pinMoves: _, ...n }) => n),
+    breaks,
+  };
 }
 
-/** Moves the pins of every node in the plan to current. `version` is the one
- *  the operator confirmed; a set that moved since is refused, not guessed. */
+/**
+ * Moves every pin of the set to current and pushes the nodes the plan names:
+ * those with a file to send, and those whose pin moved. `version` is the one
+ * the operator confirmed; a set that moved since is refused, not guessed.
+ * Answers how many nodes were pushed.
+ */
 export async function rollout(id: string, version: string): Promise<{ nodes: number }> {
   const s = await mustFind(id);
   if (!s.current || !s.currentVersionId) throw new GeoSetNotVerifiedError(s.name);
   if (s.current.version !== version) throw new GeoRolloutStaleError(s.current.version, version);
   const plan = await rolloutPlan(id);
   if (plan.breaks.length > 0) throw new GeoRolloutBreaksError(plan.breaks);
-  const moving = plan.nodes.filter((n) => n.filesToSend.length > 0);
+  const nodes = await nodesOf(s, await collectGeoUses());
+  const moving = new Set(nodes.filter((n) => n.pin?.versionId !== s.currentVersionId).map((n) => n.id));
   const versionId = s.currentVersionId;
   await prisma.$transaction(
-    moving.map((n) =>
+    [...moving].map((nodeId) =>
       prisma.nodeGeoPin.upsert({
-        where: { nodeId_geoSetId: { nodeId: n.id, geoSetId: id } },
-        create: { nodeId: n.id, geoSetId: id, versionId },
+        where: { nodeId_geoSetId: { nodeId, geoSetId: id } },
+        create: { nodeId, geoSetId: id, versionId },
         update: { versionId },
       }),
     ),
   );
-  // Each moved node gets a push, which lays the file out and names it.
-  if (moving.length > 0) eventBus.emit('geo.rolledOut', { geoSetId: id, nodeIds: moving.map((n) => n.id) });
-  return { nodes: moving.length };
+  // A push lays the files out and names them: every moved pin, and every
+  // node that by its own report does not hold what its pin says.
+  const pushed = plan.nodes.filter((n) => moving.has(n.id) || n.filesToSend.length > 0).map((n) => n.id);
+  if (pushed.length > 0) eventBus.emit('geo.rolledOut', { geoSetId: id, nodeIds: pushed });
+  return { nodes: pushed.length };
 }

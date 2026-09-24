@@ -255,11 +255,54 @@ describe('rollout: the plan, then the pins', () => {
     expect(emitted).toHaveBeenCalledWith('geo.rolledOut', { geoSetId: id, nodeIds: [ru] });
     emitted.mockClear();
 
+    // ARCH 24.09: the pin moved, the node has not reported. The plan speaks
+    // of the machine, so the file is still to be sent, and a second rollout
+    // pushes it again without moving anything.
+    const unreported = (await call('GET', `/api/geo-sets/${id}/rollout-plan`)).body;
+    expect(unreported.nodes[0]).toMatchObject({ from: version, filesToSend: ['iceslab-mylist.dat'], restartsXray: true });
+    expect((await call('POST', `/api/geo-sets/${id}/rollout`, { version })).body).toEqual({ nodes: 1 });
+    expect(emitted).toHaveBeenCalledWith('geo.rolledOut', { geoSetId: id, nodeIds: [ru] });
+    emitted.mockClear();
+
+    // The node reports the file with the version's sha: nothing left to do.
+    const { current } = (await call('GET', `/api/geo-sets/${id}`)).body;
+    await prisma.node.update({
+      where: { id: ru },
+      data: {
+        geo: {
+          version: 'x',
+          files: [{ name: 'iceslab-mylist.dat', sha256: current.sha256, size: current.sizeBytes }],
+          observedAt: new Date().toISOString(),
+        },
+      },
+    });
     const again = (await call('GET', `/api/geo-sets/${id}/rollout-plan`)).body;
     expect(again.nodes[0]).toMatchObject({ from: version, filesToSend: [], restartsXray: false });
     expect((await call('GET', `/api/geo-sets/${id}`)).body.nodes).toEqual({ total: 1, behind: 0 });
     expect((await call('POST', `/api/geo-sets/${id}/rollout`, { version })).body).toEqual({ nodes: 0 });
     expect(emitted).not.toHaveBeenCalledWith('geo.rolledOut', expect.anything());
+  });
+
+  it('a node that reports another sha for the file gets it again, pin or no pin', async () => {
+    const id = await verifiedSet();
+    const p = await policy('no-ads', ['ext:mylist:ads']);
+    await node('ru-01', {
+      policyId: p,
+      cores: { observedAt: new Date().toISOString(), cores: [{ name: 'vless', engine: 'xray', installed: true }] },
+    });
+    const ru = (await prisma.node.findFirstOrThrow({ where: { name: 'ru-01' }, select: { id: true } })).id;
+    await prisma.node.update({
+      where: { id: ru },
+      data: {
+        geo: {
+          version: 'x',
+          files: [{ name: 'iceslab-mylist.dat', sha256: 'ab'.repeat(32), size: 1 }],
+          observedAt: new Date().toISOString(),
+        },
+      },
+    });
+    const plan = (await call('GET', `/api/geo-sets/${id}/rollout-plan`)).body;
+    expect(plan.nodes[0]).toMatchObject({ filesToSend: ['iceslab-mylist.dat'], restartsXray: true });
   });
 
   it('a version that lacks a tag a rule names is not rolled out, and the rule is named', async () => {
