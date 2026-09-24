@@ -199,6 +199,89 @@ export function topologyTunnelPairs(
   return out;
 }
 
+/**
+ * What ONE leg rides on, by the same fallback as topologyTunnelPairs: the last
+ * leg (last position into a direction's pool) by the direction, else by the
+ * last position; a leg between two positions by the position it leaves.
+ */
+export function legUnderlay(
+  positions: { position: number; nodeIds: string[]; linkParams?: LegParams | null }[],
+  directions: { tag: number; nodeIds: string[]; linkParams?: LegParams | null }[],
+  from: string,
+  to: string,
+  tag: number,
+): LinkUnderlay {
+  const ordered = [...positions].sort((a, b) => a.position - b.position);
+  const last = ordered[ordered.length - 1];
+  const direction = directions.find((d) => d.tag === tag);
+  if (last && direction && last.nodeIds.includes(from) && direction.nodeIds.includes(to)) {
+    return direction.linkParams?.underlay ?? last.linkParams?.underlay ?? 'direct';
+  }
+  for (let step = 0; step < ordered.length - 1; step++) {
+    if (ordered[step]!.nodeIds.includes(from) && ordered[step + 1]!.nodeIds.includes(to)) {
+      return ordered[step]!.linkParams?.underlay ?? 'direct';
+    }
+  }
+  return 'direct';
+}
+
+/** A stored tunnel as the renderers take it. */
+export interface TopologyTunnel {
+  fromNodeId: string;
+  toNodeId: string;
+  index: number;
+  port: number;
+  cred: TunnelCred;
+}
+
+/**
+ * The awg-quick config of one END of a tunnel, verbatim as the agent writes it.
+ *
+ *   dialling end   Address .1/30, one [Peer] with the receiving end's public
+ *                  host and the tunnel's port, keepalive so the NAT on a
+ *                  hosting provider does not forget it;
+ *   receiving end  Address .2/30, ListenPort, one [Peer] without an endpoint
+ *                  (it learns it from the first handshake).
+ *
+ * `Table = off`: awg-quick adds no routes and no policy rules. The /30 on
+ * the interface is all the routing a leg needs, since it dials the other
+ * end's inner address and nothing else. No PostUp and no PostDown: nothing is
+ * forwarded or NATed through the tunnel, and the agent refuses them anyway.
+ */
+export function renderTunnelConf(t: TopologyTunnel, end: 'from' | 'to', peerHost?: string): string {
+  const addr = tunnelAddresses(t.index);
+  const me = end === 'from' ? t.cred.from : t.cred.to;
+  const peer = end === 'from' ? t.cred.to : t.cred.from;
+  const o = t.cred.obfuscation;
+  const lines = [
+    '[Interface]',
+    `PrivateKey = ${me.privateKey}`,
+    `Address = ${end === 'from' ? addr.from : addr.to}/30`,
+    ...(end === 'to' ? [`ListenPort = ${t.port}`] : []),
+    'Table = off',
+    `Jc = ${o.jc}`,
+    `Jmin = ${o.jmin}`,
+    `Jmax = ${o.jmax}`,
+    `S1 = ${o.s1}`,
+    `S2 = ${o.s2}`,
+    `S3 = ${o.s3}`,
+    `S4 = ${o.s4}`,
+    `H1 = ${o.h1}`,
+    `H2 = ${o.h2}`,
+    `H3 = ${o.h3}`,
+    `H4 = ${o.h4}`,
+    '',
+    '[Peer]',
+    `PublicKey = ${peer.publicKey}`,
+    `AllowedIPs = ${end === 'from' ? addr.to : addr.from}/32`,
+    ...(end === 'from' && peerHost
+      ? [`Endpoint = ${peerHost.includes(':') ? `[${peerHost}]` : peerHost}:${t.port}`, 'PersistentKeepalive = 25']
+      : []),
+    '',
+  ];
+  return lines.join('\n');
+}
+
 /** The smallest indexes not in `used`, as many as asked for. */
 export function freeTunnelIndexes(used: ReadonlySet<number>, count: number): number[] {
   const out: number[] = [];

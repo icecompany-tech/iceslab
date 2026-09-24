@@ -1,0 +1,48 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "link-in",
+      "listen": "10.67.0.2",
+      "listen_port": 24000,
+      "users": [
+        {
+          "uuid": "00000000-0000-4000-8000-000000000001",
+          "name": "lnk-d1"
+        }
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      }
+    ]
+  }
+}

@@ -7,12 +7,14 @@ import {
   LINK_CONGESTIONS,
   type LinkCell,
   type LinkCongestion,
+  type LinkUnderlay,
   type Transport,
 } from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
 import type { LegParams } from './direction-merge.js';
+import type { TopologyTunnel } from './cascade-tunnel.js';
 
 /**
  * C2/C3b - cascade config generation for the native inter-hop link cells the
@@ -1078,6 +1080,9 @@ export interface TopologyLinkRow {
   toNodeId: string;
   directionTag: number;
   cred: LinkCred;
+  /** Phase 8: what this leg rides on (legUnderlay). Absent is `direct`. Only
+   *  the chain renderer reads it: the legacy xray drawing has no tunnels. */
+  underlay?: LinkUnderlay;
 }
 
 export interface TopologyNodeInput {
@@ -1124,6 +1129,9 @@ export interface TopologyInput {
    * as xray, which is what every cascade stored before phase 6 has.
    */
   entryProtocol?: string;
+  /** Phase 8: the AWG tunnels under this cascade's `awg` legs, one per node
+   *  pair. Only the chain renderer reads them. */
+  tunnels?: TopologyTunnel[];
 }
 
 /**

@@ -50,9 +50,17 @@ export const CHAIN_PROBE_TOLERANCE_MS = 50;
 export interface ChainLegOut {
   /** Direction this leg serves. 0 = the Auto line. */
   tag: number;
-  /** Public host of the node on the other end. */
+  /** Public host of the node on the other end, or, for a leg riding an AWG
+   *  tunnel, the tunnel's inner address on that end. */
   host: string;
   cred: LinkCred;
+  /**
+   * Phase 8: the tunnel interface this leg is bound to (`awg-l<n>`), or absent
+   * for a leg over the internet. Rendered as `bind_interface`, which is what
+   * makes the leg fail CLOSED: with the tunnel down the dial fails, instead of
+   * finding the default route and leaving from this node's own country.
+   */
+  via?: string;
 }
 
 /** The leg this node RECEIVES on, with one credential per direction. */
@@ -68,6 +76,13 @@ export interface ChainLegIn {
    * string, which is exactly this shape.
    */
   clients: { tag: number; uuid?: string; shortId?: string }[];
+  /**
+   * Phase 8: the addresses the listener binds, one listener per address.
+   * Absent is `0.0.0.0`, one listener, as every leg had. When every leg into
+   * this node rides an AWG tunnel, these are the tunnels' inner addresses on
+   * this end, so the leg's port is not open to the internet at all.
+   */
+  listen?: string[];
 }
 
 export interface ChainRenderInput {
@@ -473,7 +488,14 @@ export function renderChainConfig(input: ChainRenderInput): Json {
       });
     }
   } else if (input.in) {
-    inbounds.push(linkInbound(input.in));
+    // One listener per address, the same listener each time. The first keeps
+    // `link-in` so a node without tunnels renders byte for byte as before; the
+    // routing rules below match by link USER, which works on any of them.
+    const base = linkInbound(input.in);
+    const addrs = input.in.listen && input.in.listen.length > 0 ? input.in.listen : ['0.0.0.0'];
+    addrs.forEach((listen, i) => {
+      inbounds.push(i === 0 && listen === '0.0.0.0' ? base : { ...base, tag: i === 0 ? 'link-in' : `link-in-${i}`, listen });
+    });
   }
 
   /**
@@ -496,6 +518,10 @@ export function renderChainConfig(input: ChainRenderInput): Json {
   /** One leg out, one branch per CELL. Same switch as the inbound side, for the
    *  same reason: a new cell must not fall through into vless. */
   const renderLeg = (tag: string, leg: ChainLegOut): Json => {
+    const rendered = renderLegCell(tag, leg);
+    return leg.via ? { ...rendered, bind_interface: leg.via } : rendered;
+  };
+  const renderLegCell = (tag: string, leg: ChainLegOut): Json => {
     switch (cellOf(leg.cred)) {
       case 'shadowsocks':
         return {

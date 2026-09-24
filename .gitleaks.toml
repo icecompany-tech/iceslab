@@ -109,4 +109,10 @@ regexes = [
   '''aWNlc2xhYi1zcy1maXgxNg''',
   '''516QKhKOpDWSBfCyLZ2XH''',
   '''7KsmJ\+rK\+b2uqf9K4gZOD''',
+  # The phase-8 leg tunnel goldens (cascades/__testdata__/tunnel8-*.conf,
+  # chain.tunnel.test.ts): four WireGuard-shaped keys that say what they are,
+  # base64 of "iceslab-tunnel-fixture-priv-from" and its three siblings. One
+  # prefix covers them, and only them: a real key pasted beside them does not
+  # start with it.
+  '''aWNlc2xhYi10dW5uZWwtZml4dHVyZS1''',
 ]

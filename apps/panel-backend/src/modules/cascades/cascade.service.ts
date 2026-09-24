@@ -1,5 +1,6 @@
 import {
   LINK_CELL_TRANSPORT,
+  type ChainTunnel,
   type ChainUserCore,
   type LinkCongestion,
   type NodeChain,
@@ -63,11 +64,15 @@ import {
 import { isConfigApplied } from '../nodes/nodes.sync-status.js';
 import {
   freeTunnelIndexes,
+  legUnderlay,
   newTunnelCred,
   parseTunnelCred,
+  renderTunnelConf,
   topologyTunnelPairs,
+  tunnelAddresses,
   tunnelIface,
   tunnelPort,
+  type TopologyTunnel,
 } from './cascade-tunnel.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
 
@@ -2039,12 +2044,23 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
   // any: a transit and an exit receive on a link and hand nothing over.
   const socks = (input.directionTags ?? []).map((tag) => ({ tag, port: chainSocksPort(tag) }));
 
+  // Phase 8: this node's end of every tunnel under its legs, both directions.
+  const tunnels: ChainTunnel[] = (topology.tunnels ?? [])
+    .filter((x) => x.fromNodeId === nodeId || x.toNodeId === nodeId)
+    .sort((a, b) => a.index - b.index)
+    .map((x) =>
+      x.fromNodeId === nodeId
+        ? { iface: tunnelIface(x.index), conf: renderTunnelConf(x, 'from', topology.hosts.get(x.toNodeId)) }
+        : { iface: tunnelIface(x.index), conf: renderTunnelConf(x, 'to'), listenPort: x.port },
+    );
+
   return {
     engine: 'singbox',
     config: config as Record<string, unknown>,
     socks,
     socksPassword: secret,
     ...userCoreFor(nodeId, topology, role, secret),
+    ...(tunnels.length > 0 ? { tunnels } : {}),
   };
 }
 
@@ -2109,11 +2125,22 @@ function chainInputFor(
   role: ChainRole,
   socksPassword: string,
 ): ChainRenderInput | null {
+  // Phase 8: the tunnel under a pair, when its leg rides one.
+  const tunnelUnder = (l: TopologyLinkRow): TopologyTunnel | undefined =>
+    l.underlay === 'awg'
+      ? t.tunnels?.find((x) => x.fromNodeId === l.fromNodeId && x.toNodeId === l.toNodeId)
+      : undefined;
   const out = t.links
     .filter((l) => l.fromNodeId === nodeId)
     .map((l) => {
       const host = t.hosts.get(l.toNodeId);
-      return host ? { tag: l.directionTag, host, cred: l.cred } : null;
+      if (!host) return null;
+      const tun = tunnelUnder(l);
+      // Inside the tunnel the leg dials the far end's inner address, bound to
+      // the interface, so it cannot leave any other way.
+      return tun
+        ? { tag: l.directionTag, host: tunnelAddresses(tun.index).to, cred: l.cred, via: tunnelIface(tun.index) }
+        : { tag: l.directionTag, host, cred: l.cred };
     })
     .filter((l): l is NonNullable<typeof l> => l !== null);
   // A leg pointing at a node whose address we no longer have is the case the
@@ -2123,8 +2150,23 @@ function chainInputFor(
   if (out.length !== t.links.filter((l) => l.fromNodeId === nodeId).length) return null;
 
   const incoming = t.links.filter((l) => l.toNodeId === nodeId);
+  /**
+   * Where the listener binds, phase 8. Only when EVERY leg into this node rides
+   * a tunnel does it bind the tunnels' inner addresses and nothing else, which
+   * is what closes the leg's port to the internet. One leg over the internet
+   * (a direction reaching this node directly beside one reaching it through a
+   * tunnel) keeps the single 0.0.0.0 listener for all of them: a wildcard and
+   * a specific address cannot share a port, and the tunnelled leg still
+   * arrives through the tunnel, at the inner address the wildcard includes.
+   */
+  const incomingTunnels = incoming.map(tunnelUnder);
+  const listen =
+    incoming.length > 0 && incomingTunnels.every((x) => x !== undefined)
+      ? [...new Set(incomingTunnels.map((x) => tunnelAddresses(x!.index).to))]
+      : undefined;
   const inLeg = incoming[0]
     ? {
+        ...(listen ? { listen } : {}),
         cred: incoming[0].cred,
         clients: incoming.map((l) => ({
           tag: l.directionTag,
@@ -2344,7 +2386,7 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
   });
   if (!link) return null;
 
-  const [cascadeRow, positions, directions, links, policyRows] = await Promise.all([
+  const [cascadeRow, positions, directions, links, policyRows, tunnelRows] = await Promise.all([
     prisma.cascade.findUnique({
       where: { id: link.cascadeId },
       select: { autoProfile: true },
@@ -2355,12 +2397,18 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
       // entryProtocol since phase 6: it decides WHICH core of the entry is told
       // to hand its users to the chain, and the two answers are different
       // payloads (xray fragments, or one socks hand-off for hysteria).
-      select: { position: true, entryProtocol: true, nodes: { select: { nodeId: true } } },
+      // linkParams since phase 8: the underlay of each leg is read off them.
+      select: {
+        position: true,
+        entryProtocol: true,
+        linkParams: true,
+        nodes: { select: { nodeId: true } },
+      },
     }),
     prisma.cascadeDirection.findMany({
       where: { cascadeId: link.cascadeId },
       orderBy: { tag: 'asc' },
-      select: { tag: true, nodes: { select: { nodeId: true } } },
+      select: { tag: true, linkParams: true, nodes: { select: { nodeId: true } } },
     }),
     prisma.cascadeLink.findMany({
       where: { cascadeId: link.cascadeId },
@@ -2369,7 +2417,29 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     prisma.routePolicy.findMany({
       select: { ordinal: true, directDomains: true, blockDomains: true },
     }),
+    prisma.cascadeTunnel.findMany({
+      where: { cascadeId: link.cascadeId },
+      select: { fromNodeId: true, toNodeId: true, index: true, port: true, config: true },
+    }),
   ]);
+  const positionParams = positions.map((p) => ({
+    position: p.position,
+    nodeIds: p.nodes.map((n) => n.nodeId),
+    linkParams: storedLinkParams(p.linkParams),
+  }));
+  const directionParams = directions.map((d) => ({
+    tag: d.tag,
+    nodeIds: d.nodes.map((n) => n.nodeId),
+    linkParams: storedLinkParams(d.linkParams),
+  }));
+  const tunnels: TopologyTunnel[] = [];
+  for (const t of tunnelRows) {
+    const cred = parseTunnelCred(t.config);
+    // A tunnel nobody can parse is no tunnel: the legs over its pair render
+    // direct below (their underlay says awg and there is nothing under them),
+    // which the agent's bind would otherwise turn into a leg that never dials.
+    if (cred) tunnels.push({ fromNodeId: t.fromNodeId, toNodeId: t.toNodeId, index: t.index, port: t.port, cred });
+  }
 
   // Public host per node, for dialling and for the firewall allow-list. The
   // stored address is host[:agentPort]; the link binds its own port.
@@ -2402,6 +2472,7 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
       toNodeId: l.toNodeId,
       directionTag: l.directionTag,
       cred,
+      underlay: legUnderlay(positionParams, directionParams, l.fromNodeId, l.toNodeId, l.directionTag),
     });
   }
 
@@ -2423,6 +2494,7 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     // country instead of failing, which is the one outcome worth preventing.
     auto: cascadeRow?.autoProfile ?? false,
     entryProtocol: positions.find((p) => p.position === 0)?.entryProtocol ?? undefined,
+    tunnels,
   };
 }
 

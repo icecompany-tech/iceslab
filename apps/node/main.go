@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/chain"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/amneziawg"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/hysteria"
@@ -93,6 +94,14 @@ func main() {
 		// The agent's lifetime: the chain process must not die with the push
 		// request that started it (E21).
 		Lifetime: ctx,
+		// Phase 8: a leg tunnel's UDP port on its receiving end, and what
+		// arrives on the interface (the leg's link-in on the inner address).
+		OpenTunnel: func(c context.Context, iface string, listenPort int) {
+			if listenPort > 0 {
+				firewall.Allow(c, logger, listenPort, "udp")
+			}
+			firewall.AllowInOn(c, logger, iface)
+		},
 	})
 
 	srv, err := server.New(server.Config{

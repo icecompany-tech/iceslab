@@ -112,6 +112,42 @@ func Allow(ctx context.Context, logger *slog.Logger, port int, proto string) {
 	logger.Info("firewall.Allow: rule ensured", "spec", spec)
 }
 
+// ifaceNameRe is what AllowInOn accepts as an interface name: the characters
+// Linux allows, and nothing a shell or ufw could read as anything else.
+var ifaceNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,15}$`)
+
+// AllowInOn opens everything arriving on one interface: `ufw allow in on
+// <iface>`. Phase 8, for the AWG tunnel under a cascade leg: its only peer is
+// our other hop, authenticated by the tunnel's own keys, and the leg's link-in
+// listens on the tunnel's inner address. Without it ufw's default-deny drops
+// the leg on the inner side of a tunnel that is up and handshaking.
+func AllowInOn(ctx context.Context, logger *slog.Logger, iface string) {
+	if !ifaceNameRe.MatchString(iface) {
+		logger.Warn("firewall.AllowInOn: invalid interface name, skipping", "iface", iface)
+		return
+	}
+	spec := "in-on:" + iface
+	allowedMu.Lock()
+	_, cached := allowedSpecs[spec]
+	allowedMu.Unlock()
+	if cached {
+		return
+	}
+	if _, err := exec.LookPath("ufw"); err != nil {
+		logger.Debug("firewall.AllowInOn: ufw not installed, skipping", "iface", iface)
+		return
+	}
+	out, err := runUfw(ctx, "allow", "in", "on", iface)
+	if err != nil {
+		logger.Warn("firewall.AllowInOn: ufw allow failed", "iface", iface, "err", err, "out", string(out))
+		return
+	}
+	allowedMu.Lock()
+	allowedSpecs[spec] = struct{}{}
+	allowedMu.Unlock()
+	logger.Info("firewall.AllowInOn: rule ensured", "iface", iface)
+}
+
 // isLiteralSource reports whether s is a bare IP or a CIDR block - something
 // `ufw allow from <s>` accepts verbatim (a hostname is not). Pure + unit-tested.
 func isLiteralSource(s string) bool {

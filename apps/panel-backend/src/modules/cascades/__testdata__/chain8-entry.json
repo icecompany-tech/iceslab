@@ -1,0 +1,63 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "socks",
+      "tag": "in-d1",
+      "listen": "127.0.0.1",
+      "listen_port": 26001,
+      "users": [
+        {
+          "username": "chain",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "out-d1",
+      "server": "10.67.0.2",
+      "server_port": 24000,
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "bind_interface": "awg-l0"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "inbound": [
+          "in-d1"
+        ],
+        "action": "route",
+        "outbound": "out-d1"
+      }
+    ]
+  }
+}

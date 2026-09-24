@@ -78,6 +78,21 @@ type Config struct {
 	// "chain subprocess exited: signal: killed" 0.4 s later, every time, while
 	// `sing-box check` was clean and a manual run lived.
 	Lifetime context.Context
+
+	// Phase 8, the AWG tunnels under the legs. Each has a working default and
+	// is a field only so the tests can stand in for the machine.
+	//
+	// AwgQuickBin raises and takes down a tunnel (default "awg-quick").
+	AwgQuickBin string
+	// IPBin deletes a tunnel interface that has no config left (default "ip").
+	IPBin string
+	// ListLinks names the machine's interfaces (default /sys/class/net).
+	ListLinks func() ([]string, error)
+	// LinkExists says whether one interface is there (default /sys/class/net).
+	LinkExists func(iface string) bool
+	// OpenTunnel opens the firewall for a tunnel: its UDP port when
+	// listenPort > 0, and what arrives on the interface. Nil opens nothing.
+	OpenTunnel func(ctx context.Context, iface string, listenPort int)
 }
 
 type Manager struct {
@@ -115,6 +130,18 @@ func New(cfg Config) *Manager {
 	}
 	if cfg.Lifetime == nil {
 		cfg.Lifetime = context.Background()
+	}
+	if cfg.AwgQuickBin == "" {
+		cfg.AwgQuickBin = "awg-quick"
+	}
+	if cfg.IPBin == "" {
+		cfg.IPBin = "ip"
+	}
+	if cfg.ListLinks == nil {
+		cfg.ListLinks = defaultListLinks
+	}
+	if cfg.LinkExists == nil {
+		cfg.LinkExists = defaultLinkExists
 	}
 	return &Manager{cfg: cfg}
 }
@@ -232,6 +259,13 @@ func (m *Manager) Apply(ctx context.Context, block *dto.NodeChain) error {
 	if len(block.Config) == 0 {
 		return m.fail(fmt.Errorf("chain block carries no config"))
 	}
+	// The tunnels are checked with the rest of the block, before anything is
+	// touched: a tunnel this agent will not raise is a refusal, not half a chain.
+	for _, t := range block.Tunnels {
+		if err := validateTunnel(t); err != nil {
+			return m.fail(err)
+		}
+	}
 	if m.cfg.BinaryPath == "" {
 		// The sentence an operator reads on the node's card, so it says what to
 		// DO rather than what is missing. Without the command they get a fact
@@ -269,6 +303,14 @@ func (m *Manager) Apply(ctx context.Context, block *dto.NodeChain) error {
 	m.mu.Unlock()
 	if old != nil {
 		_ = old.Stop(context.Background())
+	}
+
+	// The tunnels BEFORE the process: its legs are bound to their interfaces
+	// (bind_interface), and a leg dialled before its tunnel exists fails rather
+	// than leaving by the default route. That is also why a tunnel that will
+	// not come up stops the chain here instead of being worked around.
+	if err := m.applyTunnels(ctx, block.Tunnels); err != nil {
+		return m.fail(fmt.Errorf("raise the leg tunnels: %w", err))
 	}
 
 	proc := subprocess.New(subprocess.Config{
@@ -316,6 +358,10 @@ func (m *Manager) stop(why string) error {
 
 	if proc != nil {
 		_ = proc.Stop(context.Background())
+	}
+	// No chain, no legs, no tunnels under them.
+	if err := m.sweepTunnels(context.Background(), nil); err != nil {
+		m.cfg.Logger.Warn("taking the leg tunnels down with the chain", "err", err)
 	}
 	if was {
 		m.cfg.Logger.Info("chain withdrawn, the node is back to drawing the cascade in its core",
