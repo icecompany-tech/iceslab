@@ -850,8 +850,10 @@ export async function getRouteProfilesByEntryNode(
   // squad that granted it (see policiesForDirection).
   const allowByGroupCascade = new Map<string, Set<string>>(); // `${groupId}|${cascadeId}`
   const policiesByGroup = new Map<string, { ordinal: number; name: string }[]>();
+  // cascadeId -> squads that switched it OFF (an exitAcl entry with no exits).
+  const offByCascade = new Map<string, Set<string>>();
   if (groupIds.length > 0) {
-    const [exitRows, grants] = await Promise.all([
+    const [allExitRows, grants, offRows] = await Promise.all([
       prisma.groupCascadeExit.findMany({
         where: { groupId: { in: groupIds }, cascadeId: { in: cascades.map((c) => c.id) } },
         select: { groupId: true, cascadeId: true, exitNodeId: true },
@@ -860,7 +862,19 @@ export async function getRouteProfilesByEntryNode(
         where: { groupId: { in: groupIds } },
         select: { groupId: true, policy: { select: { ordinal: true, name: true } } },
       }),
+      prisma.groupCascadeOff.findMany({
+        where: { groupId: { in: groupIds }, cascadeId: { in: cascades.map((c) => c.id) } },
+        select: { groupId: true, cascadeId: true },
+      }),
     ]);
+    for (const r of offRows) {
+      const s = offByCascade.get(r.cascadeId) ?? new Set<string>();
+      s.add(r.groupId);
+      offByCascade.set(r.cascadeId, s);
+    }
+    // A squad that switched a cascade off grants none of its exits, whatever
+    // else is stored: off wins, it is the smaller access.
+    const exitRows = allExitRows.filter((r) => !offByCascade.get(r.cascadeId)?.has(r.groupId));
     for (const r of exitRows) {
       const k = `${r.groupId}|${r.cascadeId}`;
       const s = allowByGroupCascade.get(k) ?? new Set<string>();
@@ -929,7 +943,11 @@ export async function getRouteProfilesByEntryNode(
       }
       // Per entry, because the granted policies depend on which squads hand out
       // THAT entry: two entries of one pool can legitimately differ.
+      const offGroups = offByCascade.get(c.id);
       for (const entryNodeId of entryNodeIds) {
+        // Switched off by every squad that hands this entry out: no line of the
+        // cascade here, and the entry stays whatever else it is to the user.
+        if (cascadeIsOffAt({ groupIds, entryNodeId, entryReach, offGroups })) continue;
         const policiesForDirection = (directionNodeIds: string[]): RoutePolicyRef[] =>
           policiesForEntry({
             groupIds,
@@ -938,6 +956,7 @@ export async function getRouteProfilesByEntryNode(
             entryReach,
             directionNodeIds,
             exitAllowByGroup,
+            offGroups,
           });
         const profiles: CascadeRouteProfile[] = [];
         /**
@@ -996,6 +1015,8 @@ export async function getRouteProfilesByEntryNode(
 
     const entry = c.hops.find((h) => h.position === 0);
     if (!entry || !nodeIds.includes(entry.nodeId)) continue;
+    const offGroups = offByCascade.get(c.id);
+    if (cascadeIsOffAt({ groupIds, entryNodeId: entry.nodeId, entryReach, offGroups })) continue;
     const isBalancer = c.mode === 'balancer';
     // Same entry gate as the v4 path above: only squads that hand out THIS
     // entry add their policy variants to it. Exits are filtered separately here
@@ -1005,6 +1026,7 @@ export async function getRouteProfilesByEntryNode(
       entryNodeId: entry.nodeId,
       policiesByGroup,
       entryReach,
+      offGroups,
     });
     // A chain with no granted policy emits NOTHING, deliberately. Its only
     // profile would be the plain one, which resolves to the same single exit an
@@ -1096,6 +1118,8 @@ export function policiesForEntry(args: {
   directionNodeIds?: string[];
   /** groupId -> allowed exit nodes for THIS cascade. */
   exitAllowByGroup?: Map<string, Set<string>>;
+  /** Squads that switched THIS cascade off: they grant nothing on it. */
+  offGroups?: Set<string>;
 }): RoutePolicyRef[] {
   const { groupIds, entryNodeId, policiesByGroup, entryReach, directionNodeIds } = args;
   const reach = entryReach?.get(entryNodeId);
@@ -1103,6 +1127,7 @@ export function policiesForEntry(args: {
   const out: RoutePolicyRef[] = [];
   for (const groupId of groupIds) {
     if (entryReach && !reach?.has(groupId)) continue;
+    if (args.offGroups?.has(groupId)) continue;
     if (directionNodeIds) {
       const allows = args.exitAllowByGroup?.get(groupId);
       if (allows && !directionNodeIds.some((id) => allows.has(id))) continue;
@@ -1114,6 +1139,32 @@ export function policiesForEntry(args: {
     }
   }
   return out;
+}
+
+/**
+ * Whether a cascade is switched OFF at one entry for this user: every squad of
+ * theirs that hands the entry out has an exitAcl entry with no exits for it.
+ *
+ * Only the squads that SPEAK at the entry count, the same gate the policies
+ * use: a squad that does not hand the entry out has no say about what is built
+ * there, neither to switch the cascade off nor to keep it on. One speaking squad
+ * without the switch is enough to keep it, because squads grant, they do not
+ * take away from each other.
+ *
+ * No squad speaking means no squad said "off", and the cascade is built as it
+ * was before the switch existed.
+ */
+export function cascadeIsOffAt(args: {
+  groupIds: string[];
+  entryNodeId: string;
+  entryReach?: Map<string, Set<string>>;
+  offGroups?: Set<string>;
+}): boolean {
+  const { groupIds, entryNodeId, entryReach, offGroups } = args;
+  if (!offGroups || offGroups.size === 0) return false;
+  const reach = entryReach?.get(entryNodeId);
+  const speaking = groupIds.filter((g) => !entryReach || reach?.has(g));
+  return speaking.length > 0 && speaking.every((g) => offGroups.has(g));
 }
 
 /** A4 increment 2: apply a squad exit allow-set to a cascade's full exit list.

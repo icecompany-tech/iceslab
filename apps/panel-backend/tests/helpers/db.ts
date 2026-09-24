@@ -17,6 +17,7 @@ export const TABLES = [
   'node_policy_rules',
   'node_policies',
   'group_cascade_exits',
+  'group_cascades_off',
   'cascade_hops',
   // v4 topology. These hang off `cascades` and were being cleared implicitly by
   // the CASCADE on the truncate; listed now because "implicitly handled" is

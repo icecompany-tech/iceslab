@@ -36,6 +36,7 @@ const includeRelations = {
   groupProfiles: { select: { profileId: true } },
   groupHosts: { select: { hostId: true } },
   cascadeExits: { select: { cascadeId: true, exitNodeId: true } },
+  cascadesOff: { select: { cascadeId: true } },
   routePolicies: { select: { policyId: true } },
   _count: {
     select: {
@@ -44,8 +45,9 @@ const includeRelations = {
   },
 } as const;
 
-// A4 increment 2: flatten the grouped exit ACL into join rows, dropping entries
-// with no chosen exits (an empty list = "no restriction", so it stores nothing).
+// A4 increment 2: flatten the grouped exit ACL into join rows. An entry with no
+// exits is not "no rows" any more: it is the cascade switched OFF, stored in its
+// own table (offRows), because an allow row cannot exist without an exit.
 function exitAclRows(
   groupId: string,
   exitAcl: { cascadeId: string; exitNodeIds: string[] }[],
@@ -53,6 +55,13 @@ function exitAclRows(
   return exitAcl.flatMap((e) =>
     e.exitNodeIds.map((exitNodeId) => ({ groupId, cascadeId: e.cascadeId, exitNodeId })),
   );
+}
+
+function offRows(
+  groupId: string,
+  exitAcl: { cascadeId: string; exitNodeIds: string[] }[],
+): { groupId: string; cascadeId: string }[] {
+  return exitAcl.filter((e) => e.exitNodeIds.length === 0).map((e) => ({ groupId, cascadeId: e.cascadeId }));
 }
 
 export async function listSquads(): Promise<PublicSquadDto[]> {
@@ -97,6 +106,11 @@ export async function createSquad(input: CreateSquadInput): Promise<PublicSquadD
             node: { connect: { id: exitNodeId } },
           })),
         ),
+      },
+      cascadesOff: {
+        create: input.exitAcl
+          .filter((e) => e.exitNodeIds.length === 0)
+          .map((e) => ({ cascade: { connect: { id: e.cascadeId } } })),
       },
       routePolicies: {
         create: input.policyIds.map((policyId) => ({ policy: { connect: { id: policyId } } })),
@@ -149,12 +163,19 @@ export async function updateSquad(
         });
       }
     }
-    // A4 increment 2: replace the exit allow-list (set semantics), same as profiles.
+    // A4 increment 2: replace the exit allow-list (set semantics), same as
+    // profiles. Both tables together: they are one list on the API, and a
+    // cascade moving from "off" to "these exits" must not end up as both.
     if (input.exitAcl !== undefined) {
       await tx.groupCascadeExit.deleteMany({ where: { groupId: id } });
+      await tx.groupCascadeOff.deleteMany({ where: { groupId: id } });
       const rows = exitAclRows(id, input.exitAcl);
       if (rows.length > 0) {
         await tx.groupCascadeExit.createMany({ data: rows });
+      }
+      const off = offRows(id, input.exitAcl);
+      if (off.length > 0) {
+        await tx.groupCascadeOff.createMany({ data: off });
       }
     }
     // A4 ad-split: replace the route-policy grant set (set semantics).

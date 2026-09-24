@@ -65,6 +65,8 @@ model Group {
   members       GroupMember[]
   // A4 increment 2: per-cascade exit allow-list. See GroupCascadeExit.
   cascadeExits  GroupCascadeExit[]
+  // Cascades this squad does not hand out at all. See GroupCascadeOff.
+  cascadesOff   GroupCascadeOff[]
   // A4 ad-split: per-squad grant of extra route-policies. See GroupRoutePolicy.
   routePolicies GroupRoutePolicy[]
 
@@ -117,6 +119,30 @@ model GroupCascadeExit {
   @@index([cascadeId])
   @@index([exitNodeId])
   @@map("group_cascade_exits")
+}
+
+/// A cascade this squad does NOT hand out at all: the third state of the exit
+/// allow-list, which rows of GroupCascadeExit cannot express (no rows already
+/// means "every exit").
+///
+/// On the API it is an `exitAcl` entry with `exitNodeIds: []`. The subscription
+/// builds no line of this cascade for the squad, even where the squad hands out
+/// the entry's host: the entry is then an ordinary server to it. Another squad
+/// of the same user that does hand the cascade out still does.
+///
+/// A separate table rather than a nullable exit column: the exit is part of the
+/// key of the allow rows, and "off" is a fact about the pair, not about a node.
+model GroupCascadeOff {
+  groupId   String   @map("group_id") @db.Uuid
+  cascadeId String   @map("cascade_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  cascade Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, cascadeId])
+  @@index([cascadeId])
+  @@map("group_cascades_off")
 }
 
 // A4 ad-split: per-squad GRANT of an extra route-policy (opt-in, unlike the exit

@@ -46,6 +46,7 @@ model Cascade {
   links      CascadeLink[]
   tunnels    CascadeTunnel[]
   groupExits GroupCascadeExit[]
+  groupsOff  GroupCascadeOff[]
 
   @@map("cascades")
 }

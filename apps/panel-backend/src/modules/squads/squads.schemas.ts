@@ -11,14 +11,24 @@ const NameSchema = z
 // R3-a - optional per-squad routing-preset override (null = inherit panel default).
 const RoutingPresetField = z.enum(ROUTING_PRESET_IDS).nullish();
 
-// A4 increment 2 - per-cascade exit allow-list. Each entry names a balancer
-// cascade and the exit nodes this squad grants for it. OPT-IN: a cascade absent
-// here (or an empty list) means no restriction from this squad. An empty
-// `exitNodeIds` is treated as "no rows" (omitted at persist time).
+// A4 increment 2 - per-cascade exit allow-list. Each entry names a cascade and
+// the exit nodes this squad grants for it. Three states per cascade:
+//   - absent            -> no restriction from this squad, every exit;
+//   - exitNodeIds: [x]  -> only those exits;
+//   - exitNodeIds: []   -> the cascade is OFF for this squad, no line of it is
+//                          built. Stored (GroupCascadeOff); until 2026-09-24 an
+//                          empty list was dropped and read as "absent".
 const ExitAclEntry = z.object({
   cascadeId: z.uuid(),
   exitNodeIds: z.array(z.uuid()),
 });
+
+// One entry per cascade. Two entries for one cascade would have to be merged by
+// a rule nobody asked for ([] and [x]: off or restricted?), so they are refused.
+const ExitAcl = z.array(ExitAclEntry).refine(
+  (list) => new Set(list.map((e) => e.cascadeId)).size === list.length,
+  { message: 'One exitAcl entry per cascade' },
+);
 
 export const CreateSquadSchema = z.object({
   name: NameSchema,
@@ -33,7 +43,7 @@ export const CreateSquadSchema = z.object({
    *  same rule as `exitAcl`: empty = every host of every granted profile. */
   hostIds: z.array(z.uuid()).default([]),
   /** A4 increment 2: per-cascade exit allow-list. Empty = no exit restriction. */
-  exitAcl: z.array(ExitAclEntry).default([]),
+  exitAcl: ExitAcl.default([]),
   /** A4 ad-split: extra route-policies this squad grants its members. Empty =
    *  only the plain profile. */
   policyIds: z.array(z.uuid()).default([]),
@@ -52,7 +62,7 @@ export const UpdateSquadSchema = z.object({
    *  host of its profiles. */
   hostIds: z.array(z.uuid()).optional(),
   /** When provided, replaces the full exit allow-list (set semantics). */
-  exitAcl: z.array(ExitAclEntry).optional(),
+  exitAcl: ExitAcl.optional(),
   /** When provided, replaces the full route-policy grant set (set semantics). */
   policyIds: z.array(z.uuid()).optional(),
 });

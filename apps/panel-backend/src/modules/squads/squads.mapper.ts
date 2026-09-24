@@ -3,6 +3,7 @@ import type {
   GroupProfile,
   GroupHost,
   GroupCascadeExit,
+  GroupCascadeOff,
   GroupRoutePolicy,
 } from '../../generated/prisma/client.js';
 
@@ -21,7 +22,8 @@ export interface PublicSquadDto {
   /** Which HOSTS of those profiles this squad hands out. EMPTY MEANS ALL, not
    *  none: the list is an opt-in restriction, like `exitAcl`. */
   hostIds: string[];
-  /** A4 increment 2: per-cascade allowed exits. Empty = no exit restriction. */
+  /** A4 increment 2: per-cascade allowed exits. A cascade absent = every exit;
+   *  an entry with `exitNodeIds: []` = the cascade is off for this squad. */
   exitAcl: SquadExitAclEntry[];
   /** A4 ad-split: extra route-policies granted to this squad. Empty = plain only. */
   policyIds: string[];
@@ -38,13 +40,16 @@ type SquadWithRelations = Group & {
   groupProfiles: Pick<GroupProfile, 'profileId'>[];
   groupHosts?: Pick<GroupHost, 'hostId'>[];
   cascadeExits?: Pick<GroupCascadeExit, 'cascadeId' | 'exitNodeId'>[];
+  cascadesOff?: Pick<GroupCascadeOff, 'cascadeId'>[];
   routePolicies?: Pick<GroupRoutePolicy, 'policyId'>[];
   _count?: { members: number };
 };
 
-/** Group flat (cascadeId, exitNodeId) rows into one entry per cascade. */
+/** Group flat (cascadeId, exitNodeId) rows into one entry per cascade, and add
+ *  an empty entry for every cascade switched off. */
 function groupExitAcl(
   rows: Pick<GroupCascadeExit, 'cascadeId' | 'exitNodeId'>[],
+  off: Pick<GroupCascadeOff, 'cascadeId'>[],
 ): SquadExitAclEntry[] {
   const byCascade = new Map<string, string[]>();
   for (const r of rows) {
@@ -52,6 +57,9 @@ function groupExitAcl(
     if (list) list.push(r.exitNodeId);
     else byCascade.set(r.cascadeId, [r.exitNodeId]);
   }
+  // Written together and replaced together, so a cascade cannot be in both;
+  // were it ever, "off" wins here as it does in the subscription: less access.
+  for (const o of off) byCascade.set(o.cascadeId, []);
   return [...byCascade.entries()].map(([cascadeId, exitNodeIds]) => ({ cascadeId, exitNodeIds }));
 }
 
@@ -62,7 +70,7 @@ export function mapSquadToPublic(squad: SquadWithRelations): PublicSquadDto {
     description: squad.description,
     profileIds: squad.groupProfiles.map((gp) => gp.profileId),
     hostIds: (squad.groupHosts ?? []).map((gh) => gh.hostId),
-    exitAcl: groupExitAcl(squad.cascadeExits ?? []),
+    exitAcl: groupExitAcl(squad.cascadeExits ?? [], squad.cascadesOff ?? []),
     policyIds: (squad.routePolicies ?? []).map((rp) => rp.policyId),
     routingPreset: squad.routingPreset,
     hwidDeviceLimit: squad.hwidDeviceLimit,
