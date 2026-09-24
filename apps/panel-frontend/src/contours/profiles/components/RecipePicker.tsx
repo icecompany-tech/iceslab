@@ -29,7 +29,6 @@ import {
   IconStarFilled,
   IconWorld,
 } from '@tabler/icons-react';
-import type { ProtocolName } from '@/lib/domain/protocols';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
 import {
@@ -37,6 +36,7 @@ import {
   recipesForKind,
   registryProblems,
   type Recipe,
+  type RecipeProtocol,
   type RegistryProblem,
 } from '@/contours/profiles/lib/recipes';
 
@@ -45,7 +45,7 @@ interface Props {
   kindKey: string;
   /** How the tile is called on screen, for the empty state. */
   kindLabel: string;
-  protocol: ProtocolName;
+  protocol: RecipeProtocol;
   onPick: (recipe: Recipe) => void;
 }
 
@@ -268,7 +268,7 @@ function RecipeImportModal({
 }: {
   opened: boolean;
   onClose: () => void;
-  protocol: ProtocolName;
+  protocol: RecipeProtocol;
   onPick: (r: Recipe) => void;
 }) {
   const { t } = useTranslation();

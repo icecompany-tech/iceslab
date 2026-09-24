@@ -24,6 +24,47 @@ export const EMPTY_TELEGRAM_DRAFT: TelegramDraft = {
   web: { host: '', secret: '', path: '', carrier: 'https' },
 };
 
+/**
+ * The WEB draft as recipe fields, and back. A recipe is JSON from anywhere
+ * (the rail's import takes a URL or a paste), so reading one takes only these
+ * four keys, only strings, and a carrier only from WEB_CARRIERS: anything
+ * else is dropped, the way the profile form drops keys it does not have.
+ */
+export const WEB_RECIPE_FIELDS = {
+  webHostname: 'host',
+  webSecret: 'secret',
+  webBasePath: 'path',
+  webCarrier: 'carrier',
+} as const satisfies Record<string, keyof TelegramDraft['web']>;
+
+export function webDraftFromRecipe(
+  current: TelegramDraft['web'],
+  fields: Record<string, unknown>,
+): TelegramDraft['web'] {
+  const next = { ...current };
+  for (const [key, draftKey] of Object.entries(WEB_RECIPE_FIELDS)) {
+    if (!(key in fields)) continue;
+    const v = fields[key];
+    if (typeof v !== 'string') continue;
+    if (draftKey === 'carrier') {
+      if ((WEB_CARRIERS as readonly string[]).includes(v)) next.carrier = v as WebCarrier;
+      continue;
+    }
+    next[draftKey] = v;
+  }
+  return next;
+}
+
+/**
+ * The draft as the export reads it, under the recipe keys. The secret is
+ * left out: a recipe is written to be shared, and the secret is what lets a
+ * client in (the built-in recipe has none either, so the export allowlist,
+ * derived from the built-ins, would not take it anyway).
+ */
+export function webDraftRecipeValues(web: TelegramDraft['web']): Record<string, string> {
+  return { webHostname: web.host, webBasePath: web.path, webCarrier: web.carrier };
+}
+
 const SECRET_BYTES = 16;
 const HEX_SECRET = /^[0-9a-f]{32}$/i;
 // A domain with at least one dot. A scheme, port, path or query is exactly what

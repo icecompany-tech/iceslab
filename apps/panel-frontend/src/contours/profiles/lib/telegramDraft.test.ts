@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { generateWebSecret, webLinkFacts } from '@/contours/profiles/lib/telegramDraft';
+import {
+  EMPTY_TELEGRAM_DRAFT,
+  generateWebSecret,
+  webDraftFromRecipe,
+  webLinkFacts,
+} from '@/contours/profiles/lib/telegramDraft';
 
 // Both links are the reference relay's own examples (tproxy-server README):
 // the page must print what Telegram documents, not what we assume it accepts.
@@ -56,5 +61,25 @@ describe('generateWebSecret', () => {
     const a = generateWebSecret();
     expect(a).toMatch(/^[0-9a-f]{32}$/);
     expect(generateWebSecret()).not.toBe(a);
+  });
+});
+
+describe('webDraftFromRecipe: a recipe from anywhere fills only the four fields', () => {
+  it('only strings, only known keys, a carrier only from the list', () => {
+    const base = { ...EMPTY_TELEGRAM_DRAFT.web, host: 'keep.example.com' };
+    expect(
+      webDraftFromRecipe(base, {
+        webHostname: 7,
+        webSecret: 'cd'.repeat(16),
+        webBasePath: 'p',
+        webCarrier: 'carrier-pigeon',
+        xrayNetwork: 'ws',
+        host: 'x',
+      }),
+    ).toEqual({ host: 'keep.example.com', secret: 'cd'.repeat(16), path: 'p', carrier: 'https' });
+  });
+
+  it('an empty recipe changes nothing', () => {
+    expect(webDraftFromRecipe(EMPTY_TELEGRAM_DRAFT.web, {})).toEqual(EMPTY_TELEGRAM_DRAFT.web);
   });
 });

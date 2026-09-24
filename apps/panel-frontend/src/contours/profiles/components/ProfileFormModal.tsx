@@ -30,10 +30,17 @@ import { useProfileForm } from '@/contours/profiles/components/ProfileForm/usePr
 import type { FormValues, Mode } from '@/contours/profiles/lib/profileFormValues';
 import { PROTOCOL_ACCENT, PROTOCOL_TILE_LABEL } from '@/contours/profiles/lib/protocolTiles';
 import {
+  PREVIEW_KINDS,
   PROFILE_KIND_BY_KEY,
   profileKindKey,
   type PreviewKindKey,
 } from '@/contours/profiles/lib/profileKinds';
+import {
+  EMPTY_TELEGRAM_DRAFT,
+  webDraftFromRecipe,
+  webDraftRecipeValues,
+  type TelegramDraft,
+} from '@/contours/profiles/lib/telegramDraft';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { SINGBOX_XRAY_FORM_FIELD, singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
 import { singboxXrayMessage, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
@@ -128,6 +135,27 @@ export function ProfileFormModal({
   }, [refused, setFieldError, t]);
   // The tile the form is on: recipes are chosen by it, not by the protocol.
   const kindKey = profileKindKey(form.values.protocol, form.values.engine, form.values.xraySubprotocol);
+  // The WEB card's draft: beside the form, never in it (TelegramPreviewCard).
+  const [webDraft, setWebDraft] = useState<TelegramDraft>(EMPTY_TELEGRAM_DRAFT);
+  const exportButton = (
+    <UnstyledButton
+      type="button"
+      onClick={exportCtl.open}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        height: 26,
+        padding: '0 10px',
+        borderRadius: 6,
+        backgroundColor: '#0B1420',
+        border: '1px solid #1C2A3D',
+      }}
+    >
+      <IconDownload size={12} color="#7A8BA3" />
+      <Text style={{ fontSize: 11, lineHeight: '14px', color: '#7A8BA3' }}>{t('recipes.export.button')}</Text>
+    </UnstyledButton>
+  );
   return (
     <FormShell
       inline={inline}
@@ -217,25 +245,40 @@ export function ProfileFormModal({
 
           <IdentitySection form={form} isEdit={isEdit} inline={inline} />
 
+          {/* A WEB draft exports from the draft, under its recipe keys and
+              without the secret; every other tile from the form. */}
           <RecipeExportModal
             opened={exportOpen}
             onClose={exportCtl.close}
-            protocol={form.values.protocol}
-            values={form.values as unknown as Record<string, unknown>}
+            protocol={preview ?? form.values.protocol}
+            values={
+              preview
+                ? webDraftRecipeValues(webDraft.web)
+                : (form.values as unknown as Record<string, unknown>)
+            }
           />
 
           {/* Recipes ride the right rail on the page (see index.css): they are
               a shortcut into the fields, not a step before them, so they sit
               alongside the form instead of pushing it down.
 
-              A preview view has no recipes and no protocol the registry would
-              answer for, so the rail steps aside rather than showing the ones
-              belonging to whatever was selected before. Every other tile has
-              its rail, and the built-ins are chosen by the TILE, not the
-              protocol: SOCKS5 does not get the REALITY recipes of vless, and
-              hysteria on sing-box does not get its own daemon's. */}
-          {!preview && (
+              Every tile has its rail, the WEB preview included (owner, 24.09).
+              The built-ins are chosen by the TILE, not the protocol: SOCKS5
+              does not get the REALITY recipes of vless, and hysteria on
+              sing-box does not get its own daemon's. A WEB recipe fills the
+              card's draft and never the form, so it cannot reach a save. */}
           <Box className="recipes-slot">
+          {preview ? (
+            <RecipePicker
+              key={preview}
+              kindKey={preview}
+              kindLabel={PREVIEW_KINDS.find((p) => p.key === preview)?.label ?? preview}
+              protocol={preview}
+              onPick={(recipe) =>
+                setWebDraft((d) => ({ ...d, web: webDraftFromRecipe(d.web, resolveRecipeApply(recipe)) }))
+              }
+            />
+          ) : (
           <RecipePicker
             key={kindKey}
             kindKey={kindKey}
@@ -311,11 +354,11 @@ export function ProfileFormModal({
               }
             }}
           />
-          </Box>
           )}
+          </Box>
 
           {preview ? (
-            <TelegramPreviewCard kind={preview} />
+            <TelegramPreviewCard kind={preview} draft={webDraft} onDraft={setWebDraft} action={exportButton} />
           ) : (
           <SectionCard
             title={t('profiles.form.cfg.configTitle', {
@@ -329,27 +372,7 @@ export function ProfileFormModal({
                 stroke={1.8}
               />
             }
-            action={
-              <UnstyledButton
-                type="button"
-                onClick={exportCtl.open}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  height: 26,
-                  padding: '0 10px',
-                  borderRadius: 6,
-                  backgroundColor: '#0B1420',
-                  border: '1px solid #1C2A3D',
-                }}
-              >
-                <IconDownload size={12} color="#7A8BA3" />
-                <Text style={{ fontSize: 11, lineHeight: '14px', color: '#7A8BA3' }}>
-                  {t('recipes.export.button')}
-                </Text>
-              </UnstyledButton>
-            }
+            action={exportButton}
           >
           {/* The warnings are about Vision, REALITY and transports, none of
               which a SOCKS5 or HTTP profile has. */}

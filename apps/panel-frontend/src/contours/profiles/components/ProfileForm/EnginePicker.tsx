@@ -78,9 +78,10 @@ export function EnginePicker({
   const plain = protocol === 'xray' && isPlainSubprotocol(subprotocol) ? subprotocol : undefined;
 
   // Which binary the selected tile runs on the node: its version is what the
-  // strip below talks about. A preview (WEB) runs nothing the panel builds.
-  const selectedEngine: EngineName | null = preview
-    ? null
+  // strip below talks about. A preview (WEB) runs nothing the panel builds,
+  // and the strip says exactly that instead of disappearing (owner, 24.09).
+  const selectedEngine: EngineName | PreviewKindKey = preview
+    ? preview
     : engine === 'singbox'
       ? 'singbox'
       : nativeEngineOfIntent(protocol);
@@ -250,7 +251,7 @@ export function EnginePicker({
       {/* The binary's version belongs to the node, not to this template: the
           strip names the manifest's pin for the selected tile's core and how
           the fleet stands against it, on every tab. */}
-      {selectedEngine && <CoreVersionStrip engine={selectedEngine} nodes={nodesQuery.data?.nodes ?? []} />}
+      <CoreVersionStrip engine={selectedEngine} nodes={nodesQuery.data?.nodes ?? []} />
 
       {/* Tiles, not a list: each one says what the protocol actually speaks,
           which is the thing an operator is choosing between. Every protocol

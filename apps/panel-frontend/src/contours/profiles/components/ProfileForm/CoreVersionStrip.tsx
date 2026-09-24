@@ -5,8 +5,9 @@ import { Box, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconChevronDown } from '@tabler/icons-react';
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
-import { componentsOfEngine } from '@iceslab/shared';
 import { coreVersionFleet, type CoreVersionFleet } from '@/lib/domain/coreVersions';
+import { coreVersionScope } from '@/contours/profiles/lib/coreVersionScope';
+import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { AMBER, CYAN, FAINT, HAIRLINE, MIST, MOSS, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -24,10 +25,40 @@ const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
  * Numbers from the manifest and cores[].version through judgeCoreVersion
  * (coreVersionFleet), never node.coreVersion, which is xray's alone.
  */
-export function CoreVersionStrip({ engine, nodes }: { engine: EngineName; nodes: readonly Node[] }) {
+export function CoreVersionStrip({
+  engine,
+  nodes,
+}: {
+  /** The tile's engine, or a preview view (WEB) whose core is not built yet. */
+  engine: EngineName | PreviewKindKey;
+  nodes: readonly Node[];
+}) {
   const { t } = useTranslation();
-  const fleets = componentsOfEngine(engine).map((c) => coreVersionFleet(c, nodes));
-  if (fleets.length === 0) return null;
+  const scope = coreVersionScope(engine);
+  if (scope.kind === 'none') return null;
+  if (scope.kind === 'unbuilt') {
+    return (
+      <Stack
+        gap={6}
+        style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: '#0B1420', border: `1px solid ${HAIRLINE}` }}
+      >
+        <Text
+          style={{
+            fontFamily: MONO,
+            fontSize: 10,
+            fontWeight: 500,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: MIST,
+          }}
+        >
+          {t('profiles.engine.coreVersion')}
+        </Text>
+        <Text style={{ fontSize: 11, lineHeight: '16px', color: MIST }}>{t(scope.textKey)}</Text>
+      </Stack>
+    );
+  }
+  const fleets = scope.components.map((c) => coreVersionFleet(c, nodes));
 
   return (
     <Stack

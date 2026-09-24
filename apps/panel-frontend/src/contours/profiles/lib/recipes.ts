@@ -16,6 +16,7 @@
  */
 
 import type { ProtocolName } from '@/lib/domain/protocols';
+import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { LINK_CONGESTIONS, RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
 import type {
   Recipe as WireRecipe,
@@ -25,9 +26,13 @@ import type {
   RecipeSourceStatus,
 } from '@iceslab/shared';
 
+/** What a recipe configures: a protocol, or a view the panel draws ahead of
+ *  its backend (WEB), whose recipe fills the view's draft and nothing else. */
+export type RecipeProtocol = ProtocolName | PreviewKindKey;
+
 export interface Recipe {
   id: string;
-  protocol: ProtocolName;
+  protocol: RecipeProtocol;
   /**
    * The protocol tile this recipe belongs to (a PROFILE_KINDS key: `xray`,
    * `xray#singbox`, `socks5`, `tuic`...). Absent means the protocol's native
@@ -598,6 +603,27 @@ export const RECIPES: Recipe[] = [
     apply: { xraySubprotocol: 'http' },
     notes: ['Порт задаётся при развёртывании на ноду, по умолчанию 3128'],
   },
+
+  // ───── Telegram WEB (preview: the panel draws it, cannot save it yet) ─────
+  // Fills the WEB card's draft, never the profile form (webDraftFromRecipe).
+  // The carrier and the empty hostname follow the reference relay,
+  // https://github.com/telegramdesktop/tproxy-server (README, read 2026-09-23):
+  // websocket is the carrier that passes a CDN, the hostname is the operator's
+  // own domain and has no sensible default.
+  {
+    id: 'telegram-web-tproxy-websocket',
+    kind: 'telegramweb',
+    protocol: 'telegramweb',
+    emoji: '🌐',
+    name: 'WEB (tproxy-server, websocket)',
+    description: 'Носитель websocket, домен свой',
+    details:
+      'Ссылка t.me/webproxy для Telegram Web: Caddy на 443, за ним tproxy-server, за ним MTProxy. Носитель websocket проходит через CDN. Домен не подставляется: это ваш домен с A-записью на ноду. Сохранить профиль WEB панель пока не может.',
+    dpiResistance: 3,
+    speed: 3,
+    apply: { webHostname: '', webBasePath: '', webCarrier: 'websocket' },
+    notes: ['Впишите свой домен и сгенерируйте ключ: рецепт их не задаёт'],
+  },
 ];
 
 /**
@@ -696,7 +722,7 @@ export function resolveRecipeApply(
  * badge it as community/official.
  */
 export function fromWireRecipe(w: WireRecipe): Recipe {
-  return { ...w, protocol: w.protocol as ProtocolName, source: 'registry' };
+  return { ...w, protocol: w.protocol as RecipeProtocol, source: 'registry' };
 }
 
 // ───── Export (author your own recipe from the current form) ─────
@@ -753,7 +779,7 @@ export function buildExportRecipe(
   return {
     schemaVersion: RECIPE_SCHEMA_VERSION,
     id: meta.id,
-    protocol: protocol as ProtocolName,
+    protocol: protocol as RecipeProtocol,
     emoji: meta.emoji || '⭐',
     name: meta.name,
     description: meta.description,

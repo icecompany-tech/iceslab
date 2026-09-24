@@ -12,8 +12,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
-import type { ProtocolName } from '@/lib/domain/protocols';
-import { buildExportRecipe, downloadRecipeJson } from '@/contours/profiles/lib/recipes';
+import { buildExportRecipe, downloadRecipeJson, type RecipeProtocol } from '@/contours/profiles/lib/recipes';
 
 /**
  * Export the current ProfileForm config as a shareable recipe JSON. The
@@ -29,7 +28,7 @@ export function RecipeExportModal({
 }: {
   opened: boolean;
   onClose: () => void;
-  protocol: ProtocolName;
+  protocol: RecipeProtocol;
   values: Record<string, unknown>;
 }) {
   const { t } = useTranslation();

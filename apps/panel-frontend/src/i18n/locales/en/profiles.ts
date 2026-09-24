@@ -101,6 +101,7 @@ export const profiles = {
       coreVersionHint:
         'The core version belongs to the node: one process serves every profile of this core. It is changed on the node page, in the Cores section.',
       toNodes: 'To nodes',
+      webNoCore: 'The panel does not install or pin the WEB core (tproxy-server, MTProxy, Caddy) yet; it comes with the WEB phase.',
     },
     title: 'Profiles',
     subtitle: 'Inbound templates - one profile can be deployed to multiple nodes',
@@ -538,6 +539,13 @@ export const profiles = {
         details:
           'HTTP CONNECT on the xray core, login with the user\'s own username and password. Telegram Desktop only, no link to add it. No obfuscation. Port 3128 is offered when deploying to a node.',
         notes: ['The port is set when deploying to a node, 3128 by default'],
+      },
+      'telegram-web-tproxy-websocket': {
+        name: 'WEB (tproxy-server, websocket)',
+        description: 'Websocket carrier, your own domain',
+        details:
+          'A t.me/webproxy link for Telegram Web: Caddy on 443, tproxy-server behind it, MTProxy behind that. The websocket carrier passes a CDN. No domain is filled in: it is your domain with an A record to the node. The panel cannot save a WEB profile yet.',
+        notes: ['Type your domain and generate a key: the recipe sets neither'],
       },
     },
   },

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -12,7 +12,6 @@ import {
 import { IconBolt, IconEye, IconRefresh } from '@tabler/icons-react';
 import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import {
-  EMPTY_TELEGRAM_DRAFT,
   WEB_CARRIERS,
   generateWebSecret,
   webLinkFacts,
@@ -31,8 +30,9 @@ import { SectionCard } from '@/contours/profiles/components/ProfileForm/SectionC
  * button on the page is off while this view is open. The banner says so
  * first, before anyone types.
  *
- * The draft lives here, not in the profile form: a preview view has no name
- * the API would accept, so it must not be able to reach a request body.
+ * The draft lives beside the profile form, never in it: a preview view has no
+ * name the API would accept, so it must not be able to reach a request body.
+ * It is held one level up only so the recipe rail can fill it as well.
  */
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
@@ -60,21 +60,33 @@ const COPY_KEY: Record<PreviewKindKey, string> = {
   telegramweb: 'web',
 };
 
-export function TelegramPreviewCard({ kind }: { kind: PreviewKindKey }) {
+export function TelegramPreviewCard({
+  kind,
+  draft,
+  onDraft,
+  action,
+}: {
+  kind: PreviewKindKey;
+  /** Held by the form beside it, not in it: the recipe rail fills it too. */
+  draft: TelegramDraft;
+  onDraft: (update: (d: TelegramDraft) => TelegramDraft) => void;
+  /** The card's header action (export as a recipe), as on every other tile. */
+  action?: ReactNode;
+}) {
   const { t } = useTranslation();
   const accent = CARD_ACCENT[kind];
-  const [draft, setDraft] = useState<TelegramDraft>(EMPTY_TELEGRAM_DRAFT);
 
   return (
     <SectionCard
       title={t(`profiles.telegramPreview.${COPY_KEY[kind]}.title`)}
       accent={accent}
       icon={<IconBolt size={15} color={accent} stroke={1.8} />}
+      action={action}
     >
       <NotBuiltBanner />
       <WebFields
         value={draft.web}
-        onChange={(patch) => setDraft((d) => ({ ...d, web: { ...d.web, ...patch } }))}
+        onChange={(patch) => onDraft((d) => ({ ...d, web: { ...d.web, ...patch } }))}
       />
     </SectionCard>
   );
