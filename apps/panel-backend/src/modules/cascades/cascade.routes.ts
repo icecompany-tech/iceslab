@@ -6,6 +6,7 @@ import {
   CascadeIdParamSchema,
   RotateTunnelsSchema,
 } from './cascade.schemas.js';
+import { CASCADE_DTO_FIELDS } from './cascade.mapper.js';
 import * as svc from './cascade.service.js';
 import { CascadeEntryNotChainableError, CascadeValidationError } from './cascade.validation.js';
 
@@ -108,7 +109,8 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
   const auth = { onRequest: [requireAuth] };
 
   app.get('/api/cascades', auth, async (_req, reply) => {
-    return reply.send({ cascades: await svc.listCascades() });
+    // `fields`: what this server renders, answered with no cascade too.
+    return reply.send({ cascades: await svc.listCascades(), fields: CASCADE_DTO_FIELDS });
   });
 
   app.get('/api/cascades/:id', auth, async (req, reply) => {

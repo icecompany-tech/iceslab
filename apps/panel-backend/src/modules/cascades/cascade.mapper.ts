@@ -102,6 +102,30 @@ export interface CascadeDirectionDto {
   linkPort: number | null;
 }
 
+/**
+ * The keys of the cascade DTO a screen cannot take for granted, named by the
+ * server that renders them, and served as `fields` beside the list (GET
+ * /api/cascades) so the answer does not depend on having a cascade. The same
+ * trap as E29 on nodes, found again by FRONT 24.09: the entry policy selector
+ * was hidden on the create screen of a panel with no cascade yet, because
+ * "does the server know entryPolicy" was read off the cascades standing.
+ *
+ * The DTO has no optional key today; every name here is one an older server
+ * did not render at all. A key inside the per-position or per-direction rows
+ * is spelled as its path. Should an optional key (`?:`) ever appear on the DTO
+ * or its rows, cascade.fields.test.ts wants it named here.
+ */
+export const CASCADE_DTO_FIELDS = [
+  'autoProfile',
+  'entryPolicy',
+  'nextDirectionTag',
+  'tunnels',
+  'positions[].linkParams',
+  'directions[].linkProtocol',
+  'directions[].linkParams',
+  'directions[].linkPort',
+] as const;
+
 export interface CascadeDto {
   id: string;
   name: string;
