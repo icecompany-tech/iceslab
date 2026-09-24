@@ -279,6 +279,7 @@ export const common = {
     fanHint: 'One entry, {{n}} directions. The client picks one by picking a server',
     offHint: 'Nothing is pushed while it is off. Nodes keep serving their own hosts.',
     offShort: 'nothing pushed while off',
+    entryPolicy: 'entry policy "{{name}}"',
     // The client picks the direction, so there is nothing to probe.
     clientPicks: 'client picks',
     directionTag: 'direction {{tag}}',

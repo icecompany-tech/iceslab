@@ -105,6 +105,43 @@ export async function deleteRoutePolicy(id: string): Promise<void> {
 }
 
 /**
+ * 409 ROUTE_POLICY_IN_USE (Ф9.3, 794441c): политика стоит входом у каскадов, и
+ * удалить её нельзя, пока там её не снимут. Вход проверяется первым; `null`
+ * значит «отказ не этот». Записи без имени пропускаются.
+ */
+export function routePolicyInUse(err: unknown): { cascades: { id: string; name: string }[] } | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: unknown }).response;
+  if (!res || typeof res !== 'object') return null;
+  const { status, data } = res as { status?: unknown; data?: unknown };
+  if (status !== 409 || !data || typeof data !== 'object') return null;
+  const d = data as { error?: unknown; cascades?: unknown };
+  if (d.error !== 'ROUTE_POLICY_IN_USE') return null;
+  const cascades = Array.isArray(d.cascades)
+    ? d.cascades.flatMap((c) => {
+        if (!c || typeof c !== 'object') return [];
+        const { id, name } = c as { id?: unknown; name?: unknown };
+        return typeof id === 'string' && typeof name === 'string' ? [{ id, name }] : [];
+      })
+    : [];
+  return { cascades };
+}
+
+/**
+ * Каскады, у которых эта политика стоит входом, по факту списка каскадов (у
+ * route-политики своего счётчика нет). `null`: у кого-то из каскадов нет ключа
+ * `entryPolicy` (сервер старше Ф9.3) или списка ещё нет, и тогда экран не
+ * запрещает заранее, а полагается на 409: неполный факт фактом не считается.
+ */
+export function policyEntryOf(
+  policyId: string,
+  cascades: { name: string; entryPolicy?: { id: string } | null }[] | undefined,
+): string[] | null {
+  if (!cascades || cascades.some((c) => c.entryPolicy === undefined)) return null;
+  return cascades.filter((c) => c.entryPolicy?.id === policyId).map((c) => c.name);
+}
+
+/**
  * A routing preset: the rule set written into the client's own config.
  *
  * ⚠ NOTHING is behind this on the backend. Not the writes, not the list: there

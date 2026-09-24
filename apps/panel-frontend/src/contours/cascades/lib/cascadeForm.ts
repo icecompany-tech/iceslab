@@ -731,6 +731,52 @@ export type UnderlayChoice = LinkUnderlay | 'inherit';
  */
 export type UnderlayPlace = 'position' | 'direction' | 'one-leg';
 
+/**
+ * Политика входа (Ф9.3, решение владельца 24.09): одна route-политика для всех
+ * пользователей входа, которые политику не выбирают сами.
+ *
+ *   select     протокол входа hysteria или amneziawg: у их пользователей
+ *              варианта UUID нет, политику за них ставит каскад;
+ *   xray-self  xray: пользователь выбирает политику сам вариантом UUID, и
+ *              селектор был бы обещанием, которое вход не исполнит;
+ *   hidden     сервер поля не знает (ключа `entryPolicy` в ответе нет), или
+ *              протокол входа другой: говорить не о чем.
+ */
+export type EntryPolicyPlace = 'select' | 'xray-self' | 'hidden';
+
+export function entryPolicyPlace(entryProtocol: string | undefined, serverKnows: boolean): EntryPolicyPlace {
+  if (!serverKnows) return 'hidden';
+  if (entryProtocol === 'hysteria' || entryProtocol === 'amneziawg') return 'select';
+  if (entryProtocol === 'xray') return 'xray-self';
+  return 'hidden';
+}
+
+/**
+ * Что из политики входа уходит в PUT: ничего, если сервер поля не знает или
+ * значение не менялось (у сервера отсутствие = не трогать); `null` снимает,
+ * id ставит.
+ */
+export function entryPolicyPatch(
+  draft: string | null | undefined,
+  stored: string | null | undefined,
+): { entryPolicyId?: string | null } {
+  if (draft === undefined || stored === undefined || draft === stored) return {};
+  return { entryPolicyId: draft };
+}
+
+/** 400 ENTRY_POLICY_NOT_FOUND: выбранной политики уже нет (удалили, пока форма
+ *  была открыта). Вход проверяется первым; `null` значит «отказ не этот». */
+export function entryPolicyRefusal(err: unknown): { policyId: string | null } | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: unknown }).response;
+  if (!res || typeof res !== 'object') return null;
+  const { status, data } = res as { status?: unknown; data?: unknown };
+  if (status !== 400 || !data || typeof data !== 'object') return null;
+  const d = data as { error?: unknown; policyId?: unknown };
+  if (d.error !== 'ENTRY_POLICY_NOT_FOUND') return null;
+  return { policyId: typeof d.policyId === 'string' ? d.policyId : null };
+}
+
 /** Одна позиция и одно направление за ней: нога в каскаде одна. */
 export function isOneLegCascade(poolCount: number, directionCount: number): boolean {
   return poolCount === 1 && directionCount === 1;

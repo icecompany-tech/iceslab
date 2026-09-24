@@ -224,6 +224,7 @@ function CascadeCard({
             hop={entry}
             role="entry"
             legs={{ entryProtocol: entry.entryProtocol, outLeg: entry.outCell, outUnderlay: entry.outUnderlay }}
+            entryPolicy={cascade.entryPolicy?.name ?? null}
           />
         )}
         {transits.map((h, i) => {
@@ -360,7 +361,18 @@ function CascadeCard({
 }
 
 /** One hop, as a tile: who it is, whether it answers, and what it is here for. */
-function HopTile({ hop, role, legs }: { hop: HopView; role: 'entry' | 'transit' | 'exit'; legs: CascadeLegs }) {
+function HopTile({
+  hop,
+  role,
+  legs,
+  entryPolicy,
+}: {
+  hop: HopView;
+  role: 'entry' | 'transit' | 'exit';
+  legs: CascadeLegs;
+  /** Политика входа (Ф9.3), имя; только у входа и только когда задана. */
+  entryPolicy?: string | null;
+}) {
   const { t } = useTranslation();
   const tone = statusTone(hop.status);
   const roleTone = role === 'entry' ? CYAN : role === 'exit' ? MOSS : MIST;
@@ -420,6 +432,11 @@ function HopTile({ hop, role, legs }: { hop: HopView; role: 'entry' | 'transit' 
           and the bytes the second chip had no room. Never `protocol`, never
           coreVersion beside a core that is not xray. */}
       {hop.node && <CoreChips {...cascadeNodeChips(hop.node, role, legs)} />}
+      {entryPolicy && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: MIST }}>
+          {t('cascades.entryPolicy', { name: entryPolicy })}
+        </Text>
+      )}
     </Stack>
   );
 }

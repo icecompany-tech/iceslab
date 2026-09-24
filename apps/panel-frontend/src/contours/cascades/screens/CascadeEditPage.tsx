@@ -17,6 +17,7 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes, type Node } from '@/lib/domain/nodes';
+import { listRoutePolicies } from '@/lib/domain/routePolicies';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
@@ -42,6 +43,7 @@ import {
   DirectionRow,
   EntryBystandersNote,
   EntryChainNote,
+  EntryPolicyRow,
   EyeIcon,
   FieldLabel,
   Hint,
@@ -107,6 +109,9 @@ import {
   withEntryConfirm,
   withUnderlay,
   isOneLegCascade,
+  entryPolicyPatch,
+  entryPolicyPlace,
+  entryPolicyRefusal,
   type CellRefusal,
   type EntryChainConflict,
   type EntryChangeRefusal,
@@ -175,6 +180,10 @@ export function CascadeEditPage() {
   /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`).
    *  Рисуются у карточки входа по нодам. */
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
+  /** 400 ENTRY_POLICY_NOT_FOUND: выбранную политику входа удалили. */
+  const [entryPolicyGone, setEntryPolicyGone] = useState(false);
+  // Route-политики для селектора входа: тот же ключ кэша, что у экрана правил.
+  const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
   // Хук стоит ДО раннего выхода страницы: иначе число хуков меняется между
   // рендерами, пока черновик не засеян. Пока черновика нет, запросов нет.
   const bystanders = useEntryBystanders(
@@ -297,6 +306,9 @@ export function CascadeEditPage() {
             autoProfile: draft.autoProfile,
             positions: toPositionInputs(draft.pools),
             directions: toDirectionInputs(draft.directions),
+            // Политика входа только при правке: отсутствие ключа у сервера
+            // значит «не трогать», null снимает её.
+            ...entryPolicyPatch(draft.entryPolicyId, entryPolicyOf(cascade!)),
           },
           confirmed === true,
         ),
@@ -359,6 +371,13 @@ export function CascadeEditPage() {
       if (noAwg) {
         setUnderlayRefused(noAwg);
         if (noAwg.length === 0) setSaveRefusal(apiErrorMessage(err));
+        return;
+      }
+      // Выбранной политики входа уже нет: строка у селектора, список политик
+      // перечитывается.
+      if (entryPolicyRefusal(err)) {
+        setEntryPolicyGone(true);
+        qc.invalidateQueries({ queryKey: ['route-policies'] });
         return;
       }
       // The form blocks both unstorable shapes, so a 400 means the API saw
@@ -761,6 +780,20 @@ export function CascadeEditPage() {
                 {/* Отказ сервера по входным нодам: sing-box на них нет. Факт
                     сервера по отчёту ноды, поэтому показывается только после
                     отказа, а не предсказанием заранее. */}
+                {/* Политика входа (Ф9.3): для тех, кто входит не xray-ом и
+                    политику сам не выбирает. */}
+                {i === 0 && (
+                  <EntryPolicyRow
+                    place={entryPolicyPlace(pool.entryProtocol, draft.entryPolicyId !== undefined)}
+                    value={draft.entryPolicyId ?? null}
+                    policies={policiesQuery.data?.policies ?? []}
+                    gone={entryPolicyGone}
+                    onChange={(v) => {
+                      setEntryPolicyGone(false);
+                      patch({ entryPolicyId: v });
+                    }}
+                  />
+                )}
                 {i === 0 && <EntryBystandersNote items={bystanders} />}
                 {i === 0 &&
                   entryChainRefusals.map((c) => (
@@ -1298,6 +1331,17 @@ interface Draft {
    *  guessing: a guess drifts as soon as a direction is deleted, because spent
    *  tags are never handed out again. */
   nextTag: number;
+  /**
+   * Политика входа (Ф9.3). Три значения, как в ответе: `undefined` = сервер
+   * поля не знает (селектора нет), `null` = не задана, строка = id политики.
+   * Уходит в PUT, только если отличается от сохранённого.
+   */
+  entryPolicyId?: string | null;
+}
+
+/** Политика входа каскада в черновике: те же три значения, что в ответе. */
+function entryPolicyOf(c: Cascade): string | null | undefined {
+  return c.entryPolicy === undefined ? undefined : (c.entryPolicy?.id ?? null);
 }
 
 /**
@@ -1364,6 +1408,7 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
         linkPort: d.linkPort,
       })),
       nextTag: c.nextDirectionTag,
+      entryPolicyId: entryPolicyOf(c),
     };
   }
   const head = sorted[0];
@@ -1405,6 +1450,7 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
     // hops, so a direction added here gets the number the server will actually
     // issue rather than one derived from the rows on screen.
     nextTag: c.nextDirectionTag,
+    entryPolicyId: entryPolicyOf(c),
   };
 }
 

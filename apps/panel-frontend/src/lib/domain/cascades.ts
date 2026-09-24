@@ -157,6 +157,12 @@ export interface Cascade {
   /** AmneziaWG tunnels under the legs (phase 8.3). Absent on a server older
    *  than the field; empty when no leg rides a tunnel. */
   tunnels?: CascadeTunnel[];
+  /**
+   * Политика входа (Ф9.3, 794441c): одна route-политика для всех, кто входит
+   * не xray-ом и политику сам не выбирает (hysteria, позже AWG). Три значения:
+   * ключа нет = сервер старше поля, `null` = не задана, объект = задана.
+   */
+  entryPolicy?: { id: string; name: string; ordinal: number } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -275,6 +281,11 @@ export interface CreateCascadeV4Input {
   autoProfile?: boolean;
   positions: CascadePositionInput[];
   directions: CascadeDirectionInput[];
+  /**
+   * Политика входа. Create: отсутствие = нет. Update: отсутствие = не править,
+   * `null` = снять, id = поставить. Уходит только если оператор её правил.
+   */
+  entryPolicyId?: string | null;
 }
 
 /**

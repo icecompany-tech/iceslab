@@ -112,6 +112,9 @@ export const traffic = {
     policyDeleteGranted_other:
       '{{count}} squads have it granted. Their users fall back to the plain profile.',
     policyDeleteSafe: 'Nobody has it granted, so nothing changes for any user.',
+    policyEntryOf_one: 'Cannot delete: the policy is the entry policy of cascade {{names}}. Clear it there.',
+    policyEntryOf_other: 'Cannot delete: the policy is the entry policy of cascades {{names}}. Clear it there.',
+    policyEntryOfHint: 'The policy is a cascade entry policy',
     addRule: 'Add rule',
     dragHint: 'Drag to reorder',
     matchPlaceholder: 'geosite:google  geoip:private',

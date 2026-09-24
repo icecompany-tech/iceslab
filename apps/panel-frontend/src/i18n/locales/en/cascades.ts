@@ -111,6 +111,11 @@ export const cascades = {
     // missing. A server FACT from the node's report, so the button is not
     // disabled ahead of it.
     entryCannotChain: '{{name}} reported {{engines}}, sing-box is not on it.',
+    entryPolicyLabel: 'entry policy',
+    entryPolicyNone: 'none',
+    entryPolicyHint: 'for every user of this entry',
+    entryPolicyXray: 'xray users pick their policy themselves.',
+    entryPolicyGone: 'The chosen policy is gone: it was deleted while the form was open. Pick another or "none".',
     // A fact of the one-entry-per-cascade model, not a fault: a quiet line.
     // It belongs next to the entry picker, not in a user's call about a foreign IP.
     entryBystanders:

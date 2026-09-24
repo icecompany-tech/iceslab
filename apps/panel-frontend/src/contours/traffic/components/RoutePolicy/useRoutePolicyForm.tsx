@@ -1,12 +1,21 @@
-import { Text } from '@mantine/core';
+import { Stack, Text } from '@mantine/core';
+import { listCascades } from '@/lib/domain/cascades';
 import type { DraftRule } from '@/contours/traffic/lib/routeRules';
 import { NEW_POLICY_ID, findShadows, strip, toRules } from '@/contours/traffic/lib/routeRules';
 import { apiErrorMessage } from '@/lib/net/client';
-import { createRoutePolicy, deleteRoutePolicy, policyConflict, toPolicyInput, updateRoutePolicy } from '@/lib/domain/routePolicies';
+import {
+  createRoutePolicy,
+  deleteRoutePolicy,
+  policyConflict,
+  policyEntryOf,
+  routePolicyInUse,
+  toPolicyInput,
+  updateRoutePolicy,
+} from '@/lib/domain/routePolicies';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { RoutePolicy } from '@/lib/domain/routePolicies';
 import type { Squad } from '@/lib/domain/squads';
@@ -80,9 +89,25 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
       notifications.show({ color: 'green', message: t('routes.policyDeleted') });
       onCreated?.();
     },
-    onError: (err) =>
-      notifications.show({ color: 'red', title: t('common.deleteError'), message: apiErrorMessage(err) }),
+    onError: (err) => {
+      // Политика стоит входом у каскадов (409 ROUTE_POLICY_IN_USE): имена, а
+      // не общая строка, как у E28. Заранее это ловит policyEntryOf ниже.
+      const inUse = routePolicyInUse(err);
+      if (inUse) qc.invalidateQueries({ queryKey: ['cascades'] });
+      notifications.show({
+        color: 'red',
+        title: t('common.deleteError'),
+        message: inUse
+          ? t('routes.policyEntryOf', { count: inUse.cascades.length, names: inUse.cascades.map((c) => `«${c.name}»`).join(', ') })
+          : apiErrorMessage(err),
+      });
+    },
   });
+
+  // Каскады, у которых политика стоит входом: факт из списка каскадов. Есть
+  // такие, удаление недоступно заранее; факта нет (сервер старше), только 409.
+  const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
+  const entryOf = policyEntryOf(policy.id, cascadesQuery.data?.cascades);
 
   function setRule(i: number, patch: Partial<DraftRule>) {
     setRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -108,17 +133,25 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   }
 
   function confirmDelete() {
+    const blocked = (entryOf?.length ?? 0) > 0;
     modals.openConfirmModal({
       title: t('routes.policyDeleteTitle', { name: policy.name }),
       children: (
-        <Text size="sm">
-          {granted.length > 0
-            ? t('routes.policyDeleteGranted', { count: granted.length })
-            : t('routes.policyDeleteSafe')}
-        </Text>
+        <Stack gap="sm">
+          {blocked && (
+            <Text size="sm" c="red">
+              {t('routes.policyEntryOf', { count: entryOf!.length, names: entryOf!.map((n) => `«${n}»`).join(', ') })}
+            </Text>
+          )}
+          <Text size="sm">
+            {granted.length > 0
+              ? t('routes.policyDeleteGranted', { count: granted.length })
+              : t('routes.policyDeleteSafe')}
+          </Text>
+        </Stack>
       ),
       labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
-      confirmProps: { color: 'red' },
+      confirmProps: { color: 'red', disabled: blocked, title: blocked ? t('routes.policyEntryOfHint') : undefined },
       onConfirm: () => deleteMutation.mutate(),
     });
   }

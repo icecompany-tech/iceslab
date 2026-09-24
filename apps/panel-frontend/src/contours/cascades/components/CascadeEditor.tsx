@@ -41,6 +41,7 @@ import {
   type LinkPortConflict,
   type LegUnderlay,
   type UnderlayChoice,
+  type EntryPolicyPlace,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
 import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
@@ -1962,6 +1963,67 @@ export function EyeIcon({ size, color }: { size: number; color: string }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/** Значение «нет» в селекторе политики входа: у Select значение строка, id политики uuid. */
+const NO_POLICY = '__none__';
+
+/**
+ * Политика входа (Ф9.3). Где стоять, решает `entryPolicyPlace`: селектор при
+ * hysteria и amneziawg (их пользователи политику не выбирают, её ставит
+ * каскад), подпись при xray (там выбор за пользователем, вариантом UUID),
+ * ничего, если сервер поля не знает.
+ */
+export function EntryPolicyRow({
+  place,
+  value,
+  policies,
+  gone,
+  onChange,
+}: {
+  place: EntryPolicyPlace;
+  value: string | null;
+  policies: { id: string; name: string }[];
+  /** 400 ENTRY_POLICY_NOT_FOUND после сохранения: выбранную удалили. */
+  gone: boolean;
+  onChange: (id: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  if (place === 'hidden') return null;
+  if (place === 'xray-self') {
+    return (
+      <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+        {t('cascadeCreate.entryPolicyXray')}
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={4}>
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <FieldLabel>{t('cascadeCreate.entryPolicyLabel')}</FieldLabel>
+        <Box style={{ width: 240 }}>
+          <Select
+            size="xs"
+            value={value ?? NO_POLICY}
+            allowDeselect={false}
+            data={[
+              { value: NO_POLICY, label: t('cascadeCreate.entryPolicyNone') },
+              ...policies.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+            onChange={(v) => v && onChange(v === NO_POLICY ? null : v)}
+          />
+        </Box>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+          {t('cascadeCreate.entryPolicyHint')}
+        </Text>
+      </Box>
+      {gone && (
+        <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t('cascadeCreate.entryPolicyGone')}
+        </Note>
+      )}
+    </Stack>
   );
 }
 
