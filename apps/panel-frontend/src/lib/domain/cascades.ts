@@ -323,8 +323,13 @@ export async function updateCascadeV4(id: string, input: UpdateCascadeV4Input): 
   return data;
 }
 
-export async function listCascades(): Promise<{ cascades: Cascade[] }> {
-  const { data } = await api.get<{ cascades: Cascade[] }>('/api/cascades');
+/**
+ * Список каскадов. `fields`: имена необязательных ключей DTO, которые сервер
+ * отдаёт (CASCADE_DTO_FIELDS, Ф9.3), по образцу нод (E29). Отвечает на «знает
+ * ли сервер поле» и при пустом списке каскадов.
+ */
+export async function listCascades(): Promise<{ cascades: Cascade[]; fields?: string[] }> {
+  const { data } = await api.get<{ cascades: Cascade[]; fields?: string[] }>('/api/cascades');
   return data;
 }
 

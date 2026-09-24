@@ -13,6 +13,8 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
+import { listFieldKnown } from '@/lib/domain/nodeFields';
+import { listRoutePolicies } from '@/lib/domain/routePolicies';
 import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
 import { useEntryBystanders } from '@/contours/cascades/lib/useEntryBystanders';
@@ -27,6 +29,7 @@ import {
   DirectionRow,
   EntryBystandersNote,
   EntryChainNote,
+  EntryPolicyRow,
   EyeIcon,
   FieldLabel,
   Hint,
@@ -76,6 +79,8 @@ import {
   legPortNotes,
   legUnderlay,
   withUnderlay,
+  entryPolicyPlace,
+  entryPolicyRefusal,
   poolRoleAt,
   refusedCells,
   refusedEntryChain,
@@ -141,6 +146,13 @@ export function CascadeCreatePage() {
 
   const nodesQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
+  // Политика входа (Ф9.3). Знает ли сервер поле, говорит `fields` конверта
+  // каскадов (и на пустом списке); по стоящим каскадам только у сервера старше.
+  const entryPolicyKnown = listFieldKnown(cascadesQuery.data?.fields, cascadesQuery.data?.cascades, 'entryPolicy');
+  const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
+  /** Выбранная политика входа; `null` = нет (у create это то же, что отсутствие). */
+  const [entryPolicyId, setEntryPolicyId] = useState<string | null>(null);
+  const [entryPolicyGone, setEntryPolicyGone] = useState(false);
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n] as const)), [nodes]);
   // Входная нода, взятая в новый каскад, может уже держать профили другого
@@ -290,6 +302,11 @@ export function CascadeCreatePage() {
         hideHopsFromSub: hideHops,
         positions: toPositionInputs(pools),
         directions: toDirectionInputs(directions),
+        // Только выбранная и только туда, где она действует: при xray-входе
+        // селектора нет, и политика не уходит. Отсутствие у create = нет.
+        ...(entryPolicyKnown && entryPolicyId && entryPolicyPlace(pools[0]?.entryProtocol, true) === 'select'
+          ? { entryPolicyId }
+          : {}),
       }),
     onSuccess: (cascade) => {
       qc.invalidateQueries({ queryKey: ['cascades'] });
@@ -322,6 +339,12 @@ export function CascadeCreatePage() {
       const noAwg = refusedUnderlay(err);
       if (noAwg && noAwg.length > 0) {
         setUnderlayRefused(noAwg);
+        return;
+      }
+      // Выбранной политики входа уже нет: строка у селектора, список перечитан.
+      if (entryPolicyRefusal(err)) {
+        setEntryPolicyGone(true);
+        qc.invalidateQueries({ queryKey: ['route-policies'] });
         return;
       }
       // The form blocks both unstorable shapes, so a 400 here means the API saw
@@ -525,6 +548,18 @@ export function CascadeCreatePage() {
                 onDown={() => movePool(i, 1)}
                 onDelete={() => setPools((prev) => prev.filter((_, j) => j !== i))}
               >
+                {i === 0 && (
+                  <EntryPolicyRow
+                    place={entryPolicyPlace(pool.entryProtocol, entryPolicyKnown)}
+                    value={entryPolicyId}
+                    policies={policiesQuery.data?.policies ?? []}
+                    gone={entryPolicyGone}
+                    onChange={(v) => {
+                      setEntryPolicyGone(false);
+                      setEntryPolicyId(v);
+                    }}
+                  />
+                )}
                 {i === 0 && <EntryBystandersNote items={bystanders} />}
                 {i === 0 &&
                   entryChainRefusals.map((c) => (

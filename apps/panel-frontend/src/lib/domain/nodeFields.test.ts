@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeFieldKnown } from '@/lib/domain/nodeFields';
+import { listFieldKnown, nodeFieldKnown } from '@/lib/domain/nodeFields';
 import type { Node } from '@/lib/domain/nodes';
 
 const node = (n: Partial<Node>) => n as Node;
@@ -22,6 +22,13 @@ describe('nodeFieldKnown: знает ли сервер ключ, E29', () => {
     expect(nodeFieldKnown({ nodes: [node({ awgProtocol: 1 })], fields: ['coreVersions'] }, 'awgProtocol')).toBe(true);
     expect(nodeFieldKnown({ nodes: [], fields: 'intendedEngines' }, 'intendedEngines')).toBe(false);
     expect(nodeFieldKnown({ nodes: [], fields: [1, 'intendedEngines'] }, 'intendedEngines')).toBe(false);
+  });
+
+  it('то же правило у каскадов (listFieldKnown): fields первым, по элементам только без fields', () => {
+    expect(listFieldKnown(['entryPolicy'], [], 'entryPolicy')).toBe(true);
+    expect(listFieldKnown(undefined, [], 'entryPolicy')).toBe(false);
+    expect(listFieldKnown(undefined, [{ entryPolicy: null }], 'entryPolicy')).toBe(true);
+    expect(listFieldKnown(['tunnels'], [{}], 'entryPolicy')).toBe(false);
   });
 
   it('ответа ещё нет: не знает', () => {

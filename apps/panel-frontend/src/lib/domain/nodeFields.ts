@@ -24,8 +24,15 @@ export function nodeFieldKnown(
   list: Pick<NodesListResponse, 'nodes'> & { fields?: unknown } | undefined,
   field: OptionalNodeField,
 ): boolean {
-  if (!list) return false;
-  const fields = list.fields;
+  return listFieldKnown(list?.fields, list?.nodes, field);
+}
+
+/**
+ * То же правило для любого списка с конвертом `fields` (у каскадов с Ф9.3,
+ * CASCADE_DTO_FIELDS): сперва слово сервера, по элементам только у сервера
+ * старше поля. Ответа ещё нет: не знает.
+ */
+export function listFieldKnown(fields: unknown, items: readonly object[] | undefined, field: string): boolean {
   if (Array.isArray(fields) && fields.every((f) => typeof f === 'string') && fields.includes(field)) return true;
-  return list.nodes.some((n) => (n as Partial<Record<OptionalNodeField, unknown>>)[field] !== undefined);
+  return (items ?? []).some((it) => (it as Record<string, unknown>)[field] !== undefined);
 }
