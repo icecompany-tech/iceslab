@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { appendHardeningFlags, enginesFlagLine } from './nodes.service.js';
+import { appendHardeningFlags, buildInstallCommand, enginesFlag } from './nodes.service.js';
 import { HardeningSchema } from './nodes.schemas.js';
 
 // The render functions build the install command as an array of lines and join
@@ -105,32 +105,80 @@ describe('appendHardeningFlags (install-command generation)', () => {
   });
 });
 
-describe('enginesFlagLine (the cores of Node.intendedEngines)', () => {
+describe('enginesFlag (the cores of Node.intendedEngines)', () => {
   it('says nothing for one core: --protocol already names it', () => {
-    expect(enginesFlagLine(['xray'])).toBeNull();
-    expect(enginesFlagLine([])).toBeNull();
+    expect(enginesFlag(['xray'])).toBeNull();
+    expect(enginesFlag([])).toBeNull();
   });
 
   it('uses --with-singbox for the main core plus singbox, which every installer knows', () => {
     for (const main of ['xray', 'hysteria', 'amneziawg']) {
-      expect(enginesFlagLine([main, 'singbox'])).toBe('  --with-singbox \\');
+      expect(enginesFlag([main, 'singbox'])).toBe('--with-singbox');
     }
   });
 
   it('names every core with --engines otherwise, the main one first', () => {
-    expect(enginesFlagLine(['xray', 'hysteria', 'singbox'])).toBe('  --engines xray,hysteria,singbox \\');
-    expect(enginesFlagLine(['hysteria', 'amneziawg'])).toBe('  --engines hysteria,amneziawg \\');
+    expect(enginesFlag(['xray', 'hysteria', 'singbox'])).toBe('--engines xray,hysteria,singbox');
+    expect(enginesFlag(['hysteria', 'amneziawg'])).toBe('--engines hysteria,amneziawg');
+  });
+});
+
+describe('buildInstallCommand: no # inside the command, whatever the placeholders', () => {
+  /**
+   * The bug this closes. The placeholders used to carry their note on the same
+   * line, "--panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed", and the next
+   * flag was appended with a " \" that landed INSIDE that comment. Bash ended
+   * the command there: every hardening flag after it was silently dropped, on
+   * exactly the panel whose IP probe had failed.
+   *
+   * So: every combination of the two placeholders, hysteria or not, hardening
+   * or not, one core or three. The notes may only be comment lines ABOVE the
+   * command; inside it no line has a "#", and every line but the last ends in
+   * " \".
+   */
+  const full = { ufwLockdown: true, fail2ban: true, realisticFallback: true, sshAllowlist: ['203.0.113.4'] };
+  const cases = [];
+  for (const panelIp of [null, '198.51.100.7'])
+    for (const acmeEmail of ['', 'ops@example.com'])
+      for (const protocol of ['hysteria', 'xray'])
+        for (const hardening of [null, full])
+          for (const engines of [['x'], ['hysteria', 'xray', 'singbox']])
+            cases.push({ panelIp, acmeEmail, protocol, hardening, engines });
+
+  it.each(cases)('%o', (c) => {
+    const cmd = buildInstallCommand({
+      panelUrl: 'https://panel.example.com',
+      token: 'bs_token',
+      nodeAddress: 'node.example.com:1337',
+      ...c,
+    });
+    const lines = cmd.split('\n');
+    const start = lines.findIndex((l) => l.startsWith('bash <('));
+    expect(start, cmd).toBeGreaterThanOrEqual(0);
+    for (const note of lines.slice(0, start)) expect(note, cmd).toMatch(/^# /);
+    const body = lines.slice(start);
+    for (const l of body) expect(l, cmd).not.toContain('#');
+    for (const l of body.slice(0, -1)) expect(l, cmd).toMatch(/ \\$/);
+    expect(body[body.length - 1], cmd).not.toMatch(/\\$/);
+    // And what the bug used to lose is there.
+    if (c.hardening) {
+      expect(cmd).toContain('--harden-ufw');
+      expect(cmd).toContain('--ssh-allowlist 203.0.113.4');
+    }
+    if (!c.panelIp) expect(cmd).toMatch(/^# panel IP auto-detect failed/m);
+    if (c.protocol === 'hysteria' && !c.acmeEmail) expect(cmd).toMatch(/^# set ACME_DEFAULT_EMAIL/m);
   });
 
-  it('goes right after --protocol, so a # note on the last line cannot swallow it', () => {
-    // The last line of a real command can be "--panel-ip X  # auto-detect
-    // failed": a " \" appended after that is part of the comment, and the
-    // command ends there. The line carries its own continuation instead.
-    const lines = baseLines();
-    lines.splice(4, 0, enginesFlagLine(['xray', 'hysteria', 'singbox'])!);
-    lines[5] = '  --panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed, replace with panel IP';
-    const joined = lines.join('\n');
-    expect(joined).toContain('--protocol xray \\\n  --engines xray,hysteria,singbox \\\n  --panel-ip');
+  it('puts the cores right after --protocol', () => {
+    const cmd = buildInstallCommand({
+      panelUrl: 'https://p',
+      token: 't',
+      protocol: 'xray',
+      engines: ['xray', 'hysteria', 'singbox'],
+      panelIp: '198.51.100.7',
+      acmeEmail: '',
+    });
+    expect(cmd).toContain('  --protocol xray \\\n  --engines xray,hysteria,singbox \\\n  --panel-ip 198.51.100.7');
   });
 });
 describe('HardeningSchema (validation contract)', () => {

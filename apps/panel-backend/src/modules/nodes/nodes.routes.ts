@@ -11,7 +11,7 @@ import {
   type HardeningInput,
 } from './nodes.schemas.js';
 import * as nodesService from './nodes.service.js';
-import { appendHardeningFlags, enginesFlagLine } from './nodes.service.js';
+import { buildInstallCommand } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import { getNodeSyncStatus } from './nodes.sync-status.js';
 import { portClaimsOnNode } from './node-ports.js';
@@ -39,9 +39,9 @@ function publicUrlFromRequest(request: FastifyRequest): string {
 const BootstrapTokenParam = z.object({ token: z.string().regex(/^bs_[A-Za-z0-9_-]+$/).max(64) });
 const auth = { onRequest: [requireAuth] };
 
-// Mirror of nodes.service.ts:renderBootstrapCommand, kept here because the
-// /api/nodes/:id/bootstrap endpoint generates the command without going
-// through the service path. Should produce byte-identical output.
+// The /api/nodes/:id/bootstrap endpoint renders the command without going
+// through the service path; the renderer itself is the service's, so the two
+// commands cannot drift.
 async function renderRefreshBootstrapCommand(
   panelUrl: string,
   token: string,
@@ -50,40 +50,16 @@ async function renderRefreshBootstrapCommand(
   hardening?: HardeningInput | null,
   engines: readonly string[] = [],
 ): Promise<string> {
-  const panelIp = await getPanelPublicIp();
-  const lines = [
-    'bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \\',
-    `  --panel-url ${panelUrl} \\`,
-    `  --bootstrap ${token} \\`,
-    `  --protocol ${protocol} \\`,
-  ];
-  const enginesLine = enginesFlagLine(engines);
-  if (enginesLine) lines.push(enginesLine);
-  if (panelIp) {
-    lines.push(`  --panel-ip ${panelIp}`);
-  } else {
-    lines.push('  --panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed, replace with panel IP');
-  }
-  // Auto-inject ACME flags for protocols that need a real cert.
-  const acmeDomain = nodeAddress.split(':')[0] ?? '';
-  const acmeEmail = (process.env.ACME_DEFAULT_EMAIL ?? '').trim();
-  if (protocol === 'hysteria' && acmeDomain) {
-    lines[lines.length - 1] += ' \\';
-    lines.push(`  --hysteria-domain ${acmeDomain} \\`);
-    lines.push(
-      acmeEmail
-        ? `  --hysteria-email ${acmeEmail}`
-        : '  --hysteria-email admin@example.com  # set ACME_DEFAULT_EMAIL env to inject automatically',
-    );
-  }
-  // Naive / SS2022 / MTProto / Mieru: no install-time flags. Profile-side
-  // config flows over mTLS from panel via applyInbound after bootstrap.
-
-  // G - node hardening flags. Shared helper keeps this byte-identical with
-  // renderBootstrapCommand in nodes.service.ts.
-  appendHardeningFlags(lines, hardening);
-
-  return lines.join('\n');
+  return buildInstallCommand({
+    panelUrl,
+    token,
+    protocol,
+    nodeAddress,
+    hardening,
+    engines,
+    panelIp: await getPanelPublicIp(),
+    acmeEmail: (process.env.ACME_DEFAULT_EMAIL ?? '').trim(),
+  });
 }
 
 export async function nodesRoutes(app: FastifyInstance): Promise<void> {

@@ -190,21 +190,12 @@ export async function createNode(
 }
 
 /**
- * G - append node-hardening flags to the install command. Each key maps 1:1
- * to a flag in scripts/install-iceslab-node.sh. SHARED by both renderers
- * (service create-path + routes refresh-path) so the two stay byte-identical;
- * the install-command test asserts this contract.
- *
- * Mutates `lines` in place. If `hardening` is null/empty, emits nothing and
- * the command is byte-identical to the pre-hardening output. Honours the
- * existing line-continuation quirk: the previous last line has no trailing
- * `\`, so we add one before pushing more (same as the hysteria block).
+ * G - the node-hardening flags of the install command, in a fixed order. Each
+ * maps 1:1 to a flag in scripts/install-iceslab-node.sh. Empty for null or an
+ * empty object, so a node without hardening gets the command it always got.
  */
-export function appendHardeningFlags(
-  lines: string[],
-  hardening?: HardeningInput | null,
-): void {
-  if (!hardening) return;
+export function hardeningFlags(hardening?: HardeningInput | null): string[] {
+  if (!hardening) return [];
   const flags: string[] = [];
   // ufwLockdown: tighten the firewall beyond the default per-protocol allows
   // (rate-limit SSH, deny-by-default already on). Boolean flag.
@@ -218,17 +209,24 @@ export function appendHardeningFlags(
   if (hardening.sshAllowlist && hardening.sshAllowlist.length > 0) {
     flags.push(`--ssh-allowlist ${hardening.sshAllowlist.join(',')}`);
   }
+  return flags;
+}
+
+/**
+ * Append the hardening flags to a command built as lines. The previous last
+ * line gets its continuation, the last flag has none. Kept for callers that
+ * assemble lines themselves; buildInstallCommand is the one that renders.
+ */
+export function appendHardeningFlags(lines: string[], hardening?: HardeningInput | null): void {
+  const flags = hardeningFlags(hardening);
   if (flags.length === 0) return;
   lines[lines.length - 1] += ' \\';
-  for (let i = 0; i < flags.length; i++) {
-    lines.push(`  ${flags[i]}${i < flags.length - 1 ? ' \\' : ''}`);
-  }
+  flags.forEach((f, i) => lines.push(`  ${f}${i < flags.length - 1 ? ' \\' : ''}`));
 }
 
 /**
  * The cores the node is installed with, from Node.intendedEngines (the main one
- * first, the one --protocol runs on). Shared by both renderers so they stay
- * byte-identical.
+ * first, the one --protocol runs on).
  *
  *   one core            nothing: --protocol already says it;
  *   main core + singbox `--with-singbox`, the spelling EVERY installer knows;
@@ -238,15 +236,74 @@ export function appendHardeningFlags(
  * from `main`, which can be older than this panel, and an installer that does
  * not know --engines stops at "Unknown arg". The one shape it cannot express
  * (a third core) is also the one it could never install.
- *
- * Returned as a line for right after `--protocol`, not appended at the end:
- * the last line can carry a `# ...` note (panel IP, ACME e-mail), and a ` \`
- * after a comment is part of the comment, which ends the command there.
  */
-export function enginesFlagLine(engines: readonly string[]): string | null {
+export function enginesFlag(engines: readonly string[]): string | null {
   const extra = engines.slice(1);
   if (extra.length === 0) return null;
-  return extra.length === 1 && extra[0] === 'singbox' ? '  --with-singbox \\' : `  --engines ${engines.join(',')} \\`;
+  return extra.length === 1 && extra[0] === 'singbox' ? '--with-singbox' : `--engines ${engines.join(',')}`;
+}
+
+export interface InstallCommandInput {
+  panelUrl: string;
+  token: string;
+  protocol: string;
+  nodeAddress?: string;
+  hardening?: HardeningInput | null;
+  engines?: readonly string[];
+  /** The panel's public IP, or null when every probe failed. */
+  panelIp: string | null;
+  /** ACME_DEFAULT_EMAIL, trimmed; empty when unset. */
+  acmeEmail: string;
+}
+
+/**
+ * The install command the panel shows, for node create and for a refreshed
+ * bootstrap alike: one function, so the two cannot drift.
+ *
+ * ⚠ No `#` inside the command, ever. The placeholders used to carry their note
+ * on the same line ("--panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed"),
+ * and every flag after them was appended with a ` \` that landed INSIDE that
+ * comment: the command ended there and the hardening flags behind it were
+ * silently dropped. The notes are now comment lines above the command, and
+ * every command line but the last ends in ` \`.
+ */
+export function buildInstallCommand(input: InstallCommandInput): string {
+  const notes: string[] = [];
+  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`, `--protocol ${input.protocol}`];
+
+  const engines = enginesFlag(input.engines ?? []);
+  if (engines) flags.push(engines);
+
+  // Slice S7: the panel's egress IP locks the agent's UFW to it. When every
+  // probe failed (offline egress?) the operator substitutes it by hand.
+  if (input.panelIp) {
+    flags.push(`--panel-ip ${input.panelIp}`);
+  } else {
+    flags.push('--panel-ip YOUR_PANEL_PUBLIC_IP');
+    notes.push('# panel IP auto-detect failed: replace YOUR_PANEL_PUBLIC_IP below with the panel public IP');
+  }
+
+  // Hysteria is the only protocol that takes install-time ACME flags: the
+  // domain and e-mail pre-baked here let its first config come up with a real
+  // name. Naive / SS2022 / MTProto / Mieru take theirs from the panel's push.
+  const acmeDomain = input.nodeAddress?.split(':')[0] ?? '';
+  if (input.protocol === 'hysteria' && acmeDomain) {
+    flags.push(`--hysteria-domain ${acmeDomain}`);
+    if (input.acmeEmail) {
+      flags.push(`--hysteria-email ${input.acmeEmail}`);
+    } else {
+      flags.push('--hysteria-email admin@example.com');
+      notes.push('# set ACME_DEFAULT_EMAIL on the panel to inject the address automatically; replace admin@example.com below');
+    }
+  }
+
+  flags.push(...hardeningFlags(input.hardening));
+
+  return [
+    ...notes,
+    'bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \\',
+    ...flags.map((f, i) => `  ${f}${i < flags.length - 1 ? ' \\' : ''}`),
+  ].join('\n');
 }
 
 async function renderBootstrapCommand(
@@ -257,55 +314,17 @@ async function renderBootstrapCommand(
   hardening?: HardeningInput | null,
   engines: readonly string[] = [],
 ): Promise<string> {
-  // Slice S7: auto-detect or accept env-override of the panel's egress
-  // IP so the install command can lock the agent's UFW to it. See
-  // panel-ip.ts for resolution order. When all probes fail (offline
-  // egress?) we still emit a non-shell-breaking placeholder; admin
-  // substitutes manually.
-  const panelIp = await getPanelPublicIp();
-  const lines = [
-    'bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \\',
-    `  --panel-url ${panelUrl} \\`,
-    `  --bootstrap ${token} \\`,
-    `  --protocol ${protocol} \\`,
-  ];
-  const enginesLine = enginesFlagLine(engines);
-  if (enginesLine) lines.push(enginesLine);
-  if (panelIp) {
-    lines.push(`  --panel-ip ${panelIp}`);
-  } else {
-    lines.push('  --panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed, replace with panel IP');
-  }
-
-  // Hysteria is the only protocol that takes install-time ACME flags.
-  // It fights a chicken-and-egg with `hysteria-server.service` from
-  // `get.hy2.sh` upstream that starts before the panel can push config;
-  // pre-baking the domain + email into the install command lets that
-  // service come up cleanly.
-  //
-  // Naive / SS2022 / MTProto / Mieru stay idle after bootstrap and
-  // wait for the panel's applyInbound payload. Domain, email,
-  // masquerade etc. live on the Profile, no install-time flags exist
-  // for them in install-iceslab-node.sh, so don't emit any here.
-  const acmeDomain = nodeAddress?.split(':')[0] ?? '';
-  const acmeEmail = (process.env.ACME_DEFAULT_EMAIL ?? '').trim();
-  if (protocol === 'hysteria' && acmeDomain) {
-    lines[lines.length - 1] += ' \\';
-    lines.push(`  --hysteria-domain ${acmeDomain} \\`);
-    if (acmeEmail) {
-      lines.push(`  --hysteria-email ${acmeEmail}`);
-    } else {
-      lines.push('  --hysteria-email admin@example.com  # set ACME_DEFAULT_EMAIL env to inject automatically');
-    }
-  }
-
-  // G - node hardening flags. Shared helper keeps this byte-identical with
-  // renderRefreshBootstrapCommand in nodes.routes.ts.
-  appendHardeningFlags(lines, hardening);
-
-  return lines.join('\n');
+  return buildInstallCommand({
+    panelUrl,
+    token,
+    protocol,
+    nodeAddress,
+    hardening,
+    engines,
+    panelIp: await getPanelPublicIp(),
+    acmeEmail: (process.env.ACME_DEFAULT_EMAIL ?? '').trim(),
+  });
 }
-
 function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === 'object' &&
