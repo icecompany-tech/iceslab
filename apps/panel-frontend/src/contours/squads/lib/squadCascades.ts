@@ -13,12 +13,16 @@ import type { Squad, SquadExitAclEntry } from '@/lib/domain/squads';
  * positions. The previous block read hops and showed every v4 cascade empty
  * and amber.
  *
- * STATUS IS A FACT, not a switch. A cascade works for a squad exactly when the
- * squad hands out a host on one of its entry nodes: the subscription builder
- * hangs the direction profiles off the entry host, and with no entry host there
- * is no line to carry a tag. `exitAcl` only NARROWS the directions of a cascade
- * (a cascade with no rows gives all of them, and an empty list is not stored),
- * it cannot switch one off; that needs a contract from BACK.
+ * HANDED OUT IS A FACT. A cascade works for a squad exactly when the squad
+ * hands out a host on one of its entry nodes: the subscription builder hangs
+ * the direction profiles off the entry host, and with no entry host there is no
+ * line to carry a tag.
+ *
+ * ON OR OFF IS THE SQUAD'S CHOICE, one `exitAcl` entry per cascade, three
+ * states (BACK 24.09, squads.schemas.ts):
+ *   no entry            every direction;
+ *   exitNodeIds [x, …]  only those exits;
+ *   exitNodeIds []      off: no line of the cascade is built for the squad.
  */
 
 export interface SquadCascadeExit {
@@ -27,7 +31,7 @@ export interface SquadCascadeExit {
   countryCode: string | null;
   nodeIds: string[];
   nodeNames: string[];
-  /** Handed out: every direction when the cascade has no acl rows. */
+  /** Handed out: every direction when the cascade has no acl entry, none when it is off. */
   allowed: boolean;
 }
 
@@ -50,8 +54,16 @@ export interface SquadCascade {
   id: string;
   name: string;
   entry: SquadCascadeEntryNode[];
+  /**
+   * Countries of the entry nodes, where a squad's users come out when the
+   * cascade is off and the entry host stays a plain server. Null when any entry
+   * node has no country: part of the answer is not the answer.
+   */
+  entryCountries: string[] | null;
   exits: SquadCascadeExit[];
-  /** The cascade has acl rows for this squad: only `allowed` exits go out. */
+  /** Switched off for this squad (`exitNodeIds: []`): nothing of it is built. */
+  off: boolean;
+  /** On, with an acl entry: only `allowed` exits go out. */
   exitsNarrowed: boolean;
   handedOut: boolean;
   notHandedOut: NotHandedOut | null;
@@ -164,6 +176,8 @@ export function squadCascades(squadId: string | null, state: SquadState, world: 
             : 'no-granted-host';
 
       const acl = state.exitAcl.find((e) => e.cascadeId === c.id);
+      const off = acl !== undefined && acl.exitNodeIds.length === 0;
+      const entryCodes = shape.entryNodeIds.map((id) => nodeById.get(id)?.countryCode ?? null);
       const exits = shape.directions.map((d) => ({
         key: d.key,
         tag: d.tag,
@@ -191,8 +205,13 @@ export function squadCascades(squadId: string | null, state: SquadState, world: 
         id: c.id,
         name: c.name,
         entry,
+        entryCountries:
+          entryCodes.length > 0 && entryCodes.every((cc): cc is string => Boolean(cc))
+            ? [...new Set(entryCodes.map((cc) => cc.toUpperCase()))]
+            : null,
         exits,
-        exitsNarrowed: acl !== undefined,
+        off,
+        exitsNarrowed: acl !== undefined && !off,
         handedOut,
         notHandedOut,
         entryHostToAdd: notHandedOut === 'host-not-picked' ? (pickable?.id ?? null) : null,
@@ -206,14 +225,17 @@ export function squadCascades(squadId: string | null, state: SquadState, world: 
 
 /**
  * Narrow or widen a cascade's directions in `exitAcl`, the way the server
- * reads it: no rows = every direction; rows = only those exit nodes.
+ * reads it: no entry = every direction; a list = only those exit nodes.
  *
- *   - a direction of a cascade with no rows is switched off by writing every
+ *   - a direction of a cascade with no entry is switched off by writing every
  *     OTHER direction's nodes;
  *   - switching a direction back on adds its nodes; when that makes every
- *     direction allowed, the rows go (the unrestricted form, not a full list);
- *   - the last allowed direction cannot be switched off: an empty list is not
- *     stored and would read as «all» (null = refused, the caller says why).
+ *     direction allowed, the entry goes (the unrestricted form, not a full list);
+ *   - the last allowed direction cannot be taken off: an empty list means the
+ *     whole cascade is off, and that is the switch's job (null = refused, the
+ *     caller says why);
+ *   - a cascade that is off keeps its exits as they are: narrowing happens
+ *     inside a cascade that is on.
  */
 export function toggleCascadeExit(
   acl: SquadExitAclEntry[],
@@ -223,6 +245,7 @@ export function toggleCascadeExit(
 ): SquadExitAclEntry[] | null {
   const allNodes = [...new Set(exits.flatMap((e) => e.nodeIds))];
   const current = acl.find((e) => e.cascadeId === cascadeId);
+  if (current && current.exitNodeIds.length === 0) return acl;
   const allowedNodes = new Set(current ? current.exitNodeIds : allNodes);
   if (target.allowed) target.nodeIds.forEach((id) => allowedNodes.delete(id));
   else target.nodeIds.forEach((id) => allowedNodes.add(id));
@@ -230,4 +253,65 @@ export function toggleCascadeExit(
   const rest = acl.filter((e) => e.cascadeId !== cascadeId);
   if (allNodes.every((id) => allowedNodes.has(id))) return rest;
   return [...rest, { cascadeId, exitNodeIds: allNodes.filter((id) => allowedNodes.has(id)) }];
+}
+
+/**
+ * Switch a cascade on or off for a squad: one `exitAcl` entry per cascade,
+ * the server refuses two (400 «One exitAcl entry per cascade»).
+ *
+ *   - off writes `{ cascadeId, exitNodeIds: [] }` in place of whatever was
+ *     there, and hands back the narrowed list it replaced as `parked`, so the
+ *     form can put it back;
+ *   - on drops the entry (every exit), or returns the parked list when there
+ *     is one. The parked list is read against today's exits: nodes that left
+ *     the cascade are dropped, and a list that covers every exit, or none, is
+ *     no narrowing at all.
+ *
+ * Asking for the state the cascade is already in changes nothing.
+ */
+export function setCascadeOn(
+  acl: SquadExitAclEntry[],
+  cascadeId: string,
+  on: boolean,
+  exitNodeIds: string[],
+  parked?: string[],
+): { acl: SquadExitAclEntry[]; parked?: string[] } {
+  const current = acl.find((e) => e.cascadeId === cascadeId);
+  const isOff = current !== undefined && current.exitNodeIds.length === 0;
+  const rest = acl.filter((e) => e.cascadeId !== cascadeId);
+  if (!on) {
+    if (isOff) return { acl, parked };
+    return { acl: [...rest, { cascadeId, exitNodeIds: [] }], parked: current?.exitNodeIds };
+  }
+  if (!isOff) return { acl };
+  const all = new Set(exitNodeIds);
+  const back = [...new Set(parked ?? [])].filter((id) => all.has(id));
+  if (back.length === 0 || back.length === all.size) return { acl: rest };
+  return { acl: [...rest, { cascadeId, exitNodeIds: back }] };
+}
+
+/**
+ * What a squad's `exitAcl` says, for the squad list: every exit, or how many
+ * cascades it switches off and how many it narrows. Entries of cascades that
+ * are gone say nothing and are not counted.
+ */
+export function squadExitsSummary(
+  acl: SquadExitAclEntry[],
+  cascadeIds: ReadonlySet<string>,
+): { off: number; narrowed: number } | 'all' {
+  const known = acl.filter((e) => cascadeIds.has(e.cascadeId));
+  if (known.length === 0) return 'all';
+  const off = known.filter((e) => e.exitNodeIds.length === 0).length;
+  return { off, narrowed: known.length - off };
+}
+
+/** Is this the 400 the server gives for two exitAcl entries of one cascade.
+ *  The screen writes one entry per cascade and should never see it. */
+export function isDuplicateExitAcl(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const res = (err as { response?: unknown }).response;
+  if (typeof res !== 'object' || res === null) return false;
+  const { status, data } = res as { status?: unknown; data?: unknown };
+  if (status !== 400) return false;
+  return JSON.stringify(data ?? '').includes('One exitAcl entry per cascade');
 }

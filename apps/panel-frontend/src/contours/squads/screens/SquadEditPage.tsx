@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, NumberInput, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { Box, NumberInput, Select, Stack, Switch, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import {
@@ -38,6 +38,8 @@ import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
 import { ROUTING_PRESET_IDS, presetKey } from '@/lib/domain/routingPresets';
 import {
+  isDuplicateExitAcl,
+  setCascadeOn,
   squadCascades,
   toggleCascadeExit,
   type SquadCascade,
@@ -115,6 +117,9 @@ export function SquadEditPage() {
   const [routingPreset, setRoutingPreset] = useState<string>('');
   const [hwidLimit, setHwidLimit] = useState<number | ''>('');
   const [exitAcl, setExitAcl] = useState<SquadExitAclEntry[]>([]);
+  /** Narrowed exits a cascade had when the switch turned it off, per cascade:
+   *  switching it back on in this form returns them (setCascadeOn). */
+  const [parkedExits, setParkedExits] = useState<Record<string, string[]>>({});
   const [policyIds, setPolicyIds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [hostSearch, setHostSearch] = useState('');
@@ -217,6 +222,9 @@ export function SquadEditPage() {
     // A stored list means the restriction is on. It cannot be stored empty, so
     // this is the one direction where the value does decide the mode.
     setRestricted((squad.hostIds ?? []).length > 0);
+    // A narrowing parked by the switch belongs to this squad's form; a save of
+    // the same squad keeps it, another squad starts clean.
+    if (squad.id !== seededId) setParkedExits({});
     setDirty(false);
     setSeededId(squad.id);
   }
@@ -272,12 +280,17 @@ export function SquadEditPage() {
       // sees is the thing they made rather than the list they came from.
       if (isNew && saved) navigate(`/squads/${saved.id}`, { replace: true });
     },
-    onError: (err) =>
+    onError: (err) => {
+      // One entry per cascade is what setCascadeOn writes, so this 400 means
+      // the form and the server disagree: read the squad again and say so.
+      const duplicate = isDuplicateExitAcl(err);
+      if (duplicate) qc.invalidateQueries({ queryKey: ['squads'] });
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
-        message: err instanceof Error ? err.message : String(err),
-      }),
+        message: duplicate ? t('squadEdit.exitAclDuplicate') : err instanceof Error ? err.message : String(err),
+      });
+    },
   });
 
   /** Hosts grouped by the country of the node they run on. */
@@ -519,6 +532,7 @@ export function SquadEditPage() {
    * the screen says so instead.
    */
   function toggleExit(c: SquadCascade, exit: SquadCascadeExit) {
+    if (c.off) return;
     const next = toggleCascadeExit(exitAcl, c.id, c.exits, exit);
     if (next === null) {
       setLastExitRefused(c.id);
@@ -527,6 +541,23 @@ export function SquadEditPage() {
     setLastExitRefused(null);
     setDirty(true);
     setExitAcl(next);
+  }
+
+  /**
+   * «Выдавать каскад»: off is `exitNodeIds: []`, on drops the entry or puts
+   * back the narrowing the switch parked (setCascadeOn). One entry per cascade
+   * either way.
+   */
+  function switchCascade(c: SquadCascade, on: boolean) {
+    const next = setCascadeOn(exitAcl, c.id, on, c.exits.flatMap((e) => e.nodeIds), parkedExits[c.id]);
+    setParkedExits((prev) => {
+      const rest = { ...prev };
+      delete rest[c.id];
+      return next.parked ? { ...rest, [c.id]: next.parked } : rest;
+    });
+    setLastExitRefused(null);
+    setDirty(true);
+    setExitAcl(next.acl);
   }
 
   /** «Выдать вход»: the entry host joins the restriction. Without a restriction
@@ -1162,7 +1193,10 @@ export function SquadEditPage() {
               // The grants stay exactly as they are when the entry is not
               // handed out; only the showing goes quiet. Put the entry host
               // back and the whole card lights up again.
-              const live = c.handedOut;
+              // Off is the squad's choice and reads grey; not handed out is a
+              // fact the squad may not mean and reads amber.
+              const live = c.handedOut && !c.off;
+              const tone = c.off ? FAINT : live ? VIOLET : AMBER;
               const allowedCount = c.exits.filter((e) => e.allowed).length;
               return (
                 <Box
@@ -1172,11 +1206,20 @@ export function SquadEditPage() {
                     overflow: 'clip',
                     backgroundColor: WELL,
                     border: `1px solid ${HAIRLINE}`,
-                    borderLeft: `3px solid ${live ? VIOLET : AMBER}`,
+                    borderLeft: `3px solid ${tone}`,
                   }}
                 >
                   <Box style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
-                    <Box style={{ color: live ? VIOLET : AMBER, display: 'flex' }}>
+                    {!isAll && (
+                      <Switch
+                        size="xs"
+                        checked={!c.off}
+                        onChange={(e) => switchCascade(c, e.currentTarget.checked)}
+                        aria-label={t('squadEdit.cascadeSwitch', { name: c.name })}
+                        style={{ flexShrink: 0 }}
+                      />
+                    )}
+                    <Box style={{ color: tone, display: 'flex' }}>
                       <IconFilter size={13} stroke={1.8} />
                     </Box>
                     <Text
@@ -1184,12 +1227,18 @@ export function SquadEditPage() {
                     >
                       {c.name}
                     </Text>
-                    <Chip accent={live ? MOSS : AMBER}>
-                      {live ? t('squadEdit.cascadeHandedOut') : t('squadEdit.cascadeNotHandedOut')}
+                    <Chip accent={c.off ? FAINT : live ? MOSS : AMBER}>
+                      {c.off
+                        ? t('squadEdit.cascadeOff')
+                        : live
+                          ? t('squadEdit.cascadeHandedOut')
+                          : t('squadEdit.cascadeNotHandedOut')}
                     </Chip>
-                    <Chip accent={c.exitsNarrowed ? VIOLET : FAINT}>
-                      {c.exitsNarrowed ? `${allowedCount}/${c.exits.length}` : t('squadEdit.cascadeExitsAll')}
-                    </Chip>
+                    {!c.off && (
+                      <Chip accent={c.exitsNarrowed ? VIOLET : FAINT}>
+                        {c.exitsNarrowed ? `${allowedCount}/${c.exits.length}` : t('squadEdit.cascadeExitsAll')}
+                      </Chip>
+                    )}
                   </Box>
 
                   {/* Вход: ноды позиции 0 и порты их хостов, выданные ярче. */}
@@ -1211,7 +1260,18 @@ export function SquadEditPage() {
                     ))}
                   </Box>
 
-                  {!live && (
+                  {c.off && (
+                    <Text style={{ padding: '0 14px 10px', fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: MIST }}>
+                      {c.entryCountries
+                        ? t('squadEdit.cascadeOffMeans', {
+                            nodes: c.entry.map((n) => n.name).join(', '),
+                            countries: c.entryCountries.map((cc) => `${cc} · ${countryName(cc)}`).join(', '),
+                          })
+                        : t('squadEdit.cascadeOffMeansNoCountry', { nodes: c.entry.map((n) => n.name).join(', ') })}
+                    </Text>
+                  )}
+
+                  {!c.off && !live && (
                     <Box style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 10px' }}>
                       <Text style={{ flex: 1, fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: AMBER }}>
                         {c.notHandedOut === 'host-not-picked'
@@ -1242,6 +1302,7 @@ export function SquadEditPage() {
                       <UnstyledButton
                         key={exit.key}
                         onClick={() => !isAll && toggleExit(c, exit)}
+                        disabled={c.off}
                         style={{
                           width: '100%',
                           display: 'flex',
@@ -1251,7 +1312,7 @@ export function SquadEditPage() {
                           backgroundColor: ROW,
                           borderTop: `1px solid ${HAIRLINE}`,
                           opacity: live ? 1 : 0.45,
-                          cursor: isAll ? 'default' : 'pointer',
+                          cursor: isAll || c.off ? 'default' : 'pointer',
                         }}
                       >
                         <CheckBox checked={isAll || exit.allowed} accent={VIOLET} />
@@ -1277,7 +1338,7 @@ export function SquadEditPage() {
 
                   {/* Политики, которые на этом каскаде выдают другие сквады:
                       одним кликом в выдачу этого. */}
-                  {!isAll && c.policiesToOffer.length > 0 && (
+                  {!isAll && !c.off && c.policiesToOffer.length > 0 && (
                     <Box
                       style={{
                         display: 'flex',
@@ -1303,9 +1364,11 @@ export function SquadEditPage() {
                 <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: MIST }}>
                   {t('squadEdit.cascadeWorksOnlyWithEntry')}
                 </Text>
-                <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
-                  {t('squadEdit.cascadeNoSwitchYet')}
-                </Text>
+                {!isAll && (
+                  <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+                    {t('squadEdit.cascadeOffOtherSquads')}
+                  </Text>
+                )}
               </Stack>
             )}
           </Card>

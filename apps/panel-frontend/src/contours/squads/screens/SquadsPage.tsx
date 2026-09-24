@@ -25,6 +25,7 @@ import { listBindings } from '@/lib/domain/profiles';
 import { listCascades } from '@/lib/domain/cascades';
 import { listNodes } from '@/lib/domain/nodes';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
+import { squadExitsSummary } from '@/contours/squads/lib/squadCascades';
 import { AMBER, CARD, CYAN, DIM, FAINT, HAIRLINE, MIST, MOSS, SNOW, VIOLET, WELL } from '@/contours/squads/lib/colors';
 
 /**
@@ -113,17 +114,9 @@ export function SquadsPage() {
     return [...out].sort();
   }
 
-  // Denominator in "1 of 2". Only balancer cascades have selectable exits: in
-  // a chain the path is fixed, so every hop after the entry is a link, not a
-  // choice.
-  const totalExits = useMemo(
-    () =>
-      cascades.reduce(
-        (sum, c) => sum + (c.mode === 'balancer' ? Math.max(0, c.hops.length - 1) : 0),
-        0,
-      ),
-    [cascades],
-  );
+  // What a squad's exitAcl says is counted per cascade (squadExitsSummary). The
+  // count of exits it used to show read `hops`, which a v4 cascade sends empty.
+  const cascadeIds = useMemo(() => new Set(cascades.map((c) => c.id)), [cascades]);
 
   const filteredSquads = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -262,7 +255,7 @@ export function SquadsPage() {
               key={squad.id}
               squad={squad}
               countries={countriesOf(squad)}
-              totalExits={totalExits}
+              cascadeIds={cascadeIds}
               onEdit={() => navigate(`/squads/${squad.id}`)}
               onDelete={() => handleDelete(squad)}
             />
@@ -334,13 +327,13 @@ function BarButton({
 function SquadCard({
   squad,
   countries,
-  totalExits,
+  cascadeIds,
   onEdit,
   onDelete,
 }: {
   squad: Squad;
   countries: string[];
-  totalExits: number;
+  cascadeIds: ReadonlySet<string>;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -356,9 +349,16 @@ function SquadCard({
   const displayName = isAll ? t('squads.allDefaultName') : squad.name;
   const displayDescription = isAll ? t('squads.allDefaultDescription') : squad.description;
 
-  const allowedExits = squad.exitAcl.reduce((sum, e) => sum + e.exitNodeIds.length, 0);
+  const exits = squadExitsSummary(squad.exitAcl, cascadeIds);
   const exitsLabel =
-    allowedExits === 0 ? t('squads.card.allExits') : `${allowedExits} ${t('squads.card.of')} ${totalExits}`;
+    exits === 'all'
+      ? t('squads.card.allExits')
+      : [
+          exits.off > 0 ? t('squads.card.cascadesOff', { count: exits.off }) : null,
+          exits.narrowed > 0 ? t('squads.card.cascadesNarrowed', { count: exits.narrowed }) : null,
+        ]
+          .filter(Boolean)
+          .join(', ');
   const policiesLabel =
     squad.policyIds.length === 0 ? t('squads.card.noPolicies') : String(squad.policyIds.length);
 
@@ -523,7 +523,7 @@ function SquadCard({
             {t('squads.card.exitsPolicies')}
           </Text>
           <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 12, color: allowedExits ? CYAN : MIST }}>
+            <Text style={{ fontFamily: MONO, fontSize: 12, color: exits === 'all' ? MIST : CYAN }}>
               {exitsLabel}
             </Text>
             <Text style={{ fontFamily: MONO, fontSize: 12, color: DIM }}>·</Text>

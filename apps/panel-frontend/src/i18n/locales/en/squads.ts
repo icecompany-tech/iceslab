@@ -17,7 +17,8 @@ export const squads = {
       exitsPolicies: 'DIRECTIONS · POLICIES',
       noneGranted: 'none granted',
       allExits: 'all',
-      of: 'of',
+      cascadesOff: '{{count}} off',
+      cascadesNarrowed: '{{count}} narrowed',
       noPolicies: 'none',
       grantHosts: 'Grant hosts',
     },
@@ -151,10 +152,19 @@ export const squads = {
     // tag. The node under it can be swapped without any of this changing.
     cascadeDirections: 'Cascades',
     cascadeDirectionsHint:
-      'Each cascade whole: entry, exits, policies. Exits can be narrowed; with none unticked the squad gets all of them. Tags run plain first, then one per granted policy.',
+      'Each cascade whole: entry, exits, policies. The switch turns a cascade off for the squad; the exits of one that is on can be narrowed, with none unticked the squad gets all of them. Tags run plain first, then one per granted policy.',
     noDirections: 'No enabled cascades.',
     cascadeHandedOut: 'HANDED OUT',
     cascadeNotHandedOut: 'NOT HANDED OUT',
+    cascadeOff: 'OFF FOR THIS SQUAD',
+    cascadeSwitch: 'Hand out cascade "{{name}}"',
+    cascadeOffMeans:
+      'The entry host {{nodes}}, if handed out, stays a plain server: the squad members come out in the entry country, {{countries}}.',
+    cascadeOffMeansNoCountry:
+      'The entry host {{nodes}}, if handed out, stays a plain server: the squad members come out where the entry node is, which has no country set.',
+    cascadeOffOtherSquads:
+      'A cascade switched off is not built for the squad members. A member who is also in a squad that hands out the same entry and did not switch the cascade off keeps it.',
+    exitAclDuplicate: 'The server got two exit entries for one cascade and refused. The squad was read again, repeat the change.',
     cascadeEntry: 'entry',
     cascadeEntryNoHosts: 'no hosts on the entry',
     cascadeWhyNotPicked: 'The squad does not hand out the entry: the entry node host is not ticked in the restriction.',
@@ -162,10 +172,9 @@ export const squads = {
     cascadeWhyNoEntry: 'The cascade has no entry.',
     cascadeGiveEntry: 'hand out the entry',
     cascadeExitsAll: 'all exits',
-    cascadeLastExit: 'The last exit cannot be unticked: an empty list reads as all exits on the server.',
+    cascadeLastExit: 'The last exit cannot be unticked: with no exits the cascade is off, and that is the switch by its name.',
     cascadeOfferPolicy: 'grant "{{name}}" to this squad',
     cascadeWorksOnlyWithEntry: 'A cascade works for the squad members only if the squad hands out an entry host.',
-    cascadeNoSwitchYet: 'Switching a cascade off for a squad comes with a contract: today its exits can only be narrowed.',
     exit: 'exit',
     routePolicies: 'Route policies',
     routePoliciesHint:
