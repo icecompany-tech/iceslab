@@ -2,9 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:tls';
 import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { REALITY_RECORD_LIMIT, REALITY_TARGET_SUGGESTIONS } from '@iceslab/shared';
 import {
-  REALITY_RECORD_LIMIT,
-  REALITY_TARGET_SUGGESTIONS,
   buildClientHello,
   measureRealityFlight,
   parseServerFlight,

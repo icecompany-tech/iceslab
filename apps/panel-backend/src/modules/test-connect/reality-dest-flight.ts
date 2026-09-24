@@ -1,5 +1,6 @@
 import { connect as netConnect } from 'node:net';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { REALITY_RECORD_LIMIT, REALITY_TARGET_SUGGESTIONS } from '@iceslab/shared';
 
 /**
  * What a REALITY target sends back to one ClientHello, measured record by
@@ -26,18 +27,11 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
  * certificate compression, which is the conservative case: a client
  * fingerprint that does not offer it (firefox, the panel's default) gets the
  * uncompressed chain, and that is the size the listener has to relay.
+ *
+ * The limit and the targets named in a refusal live in @iceslab/shared
+ * (reality.ts), with the anchors on both engines, so the screen reads the same
+ * number the probe judges by.
  */
-
-/** The listener's limit, per record, header included. */
-export const REALITY_RECORD_LIMIT = 8192;
-
-/**
- * Targets measured with this very probe to pass with room to spare, named in
- * the refusal. Measured 2026-09-24: www.apple.com 4738, www.samsung.com 4700,
- * www.cloudflare.com about 2.7K (one record). A list rather than one name, so
- * an operator who cannot use one of them still has a choice.
- */
-export const REALITY_TARGET_SUGGESTIONS = ['www.apple.com', 'www.samsung.com', 'www.cloudflare.com'] as const;
 
 const X25519 = 0x001d;
 const X25519MLKEM768 = 0x11ec;
