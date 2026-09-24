@@ -268,6 +268,7 @@ export const common = {
       transit: 'transit',
       exit: 'exit',
     },
+    coresAlso: 'also on the node: {{list}}',
     layoutRows: 'Rows',
     enabled: 'Enabled',
     disabled: 'Disabled',

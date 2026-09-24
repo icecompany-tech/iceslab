@@ -2,10 +2,11 @@
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { getCascadeStatus, type Cascade } from '@/lib/domain/cascades';
-import { engineCoreWord, engineVersionWords } from '@/lib/domain/engines';
+import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
+import { CoreChips } from '@/ui/CoreChips';
 import { countryFlag } from '@/lib/domain/countries';
 import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/cascadeRows';
-import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET, WELL } from '@/contours/nodes/lib/colors';
+import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 
 /**
  * The cascade inventory, in two densities. Cards draw the path as a path, which
@@ -107,6 +108,7 @@ function CascadeCard({
   const { cascade, entry, transits, directions } = row;
   const fan = directions.length > 1;
   const accent = !cascade.enabled ? DIM : fan ? CYAN : MOSS;
+  const entryLegs: CascadeLegs = { entryProtocol: entry?.hop.entryProtocol, outLeg: entry?.hop.linkProtocol };
 
   // A cascade that is off pushes nothing, so it collapses to one line: the
   // shape of a path nobody is walking is not worth the vertical space.
@@ -206,7 +208,7 @@ function CascadeCard({
           probe to report under the arrow. */}
       {fan ? (
         <Box style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '0 20px 18px' }}>
-          {entry && <HopTile hop={entry} role="entry" />}
+          {entry && <HopTile hop={entry} role="entry" legs={entryLegs} />}
           <LinkColumn
             protocol={entry?.hop.linkProtocol ?? null}
             fan
@@ -214,19 +216,26 @@ function CascadeCard({
           />
           <Stack gap={8} style={{ flex: 1, minWidth: 0 }}>
             {directions.map((d) => (
-              <DirectionLine key={d.key} direction={d} />
+              <DirectionLine key={d.key} direction={d} inLeg={entry?.hop.linkProtocol ?? null} />
             ))}
           </Stack>
         </Box>
       ) : (
         <Box style={{ display: 'flex', alignItems: 'stretch', width: '100%', padding: '0 20px 18px' }}>
-          {entry && <HopTile hop={entry} role="entry" />}
+          {entry && <HopTile hop={entry} role="entry" legs={entryLegs} />}
           {transits.map((h, i) => (
             <Box key={h.hop.id} style={{ display: 'flex', alignItems: 'stretch' }}>
               <LinkColumn
                 protocol={(i === 0 ? entry?.hop.linkProtocol : transits[i - 1]?.hop.linkProtocol) ?? null}
               />
-              <HopTile hop={h} role="transit" />
+              <HopTile
+                hop={h}
+                role="transit"
+                legs={{
+                  inLeg: (i === 0 ? entry?.hop.linkProtocol : transits[i - 1]?.hop.linkProtocol) ?? null,
+                  outLeg: h.hop.linkProtocol,
+                }}
+              />
             </Box>
           ))}
           {directions.map((d) => (
@@ -237,7 +246,12 @@ function CascadeCard({
                   null
                 }
               />
-              <DirectionTile direction={d} />
+              <DirectionTile
+                direction={d}
+                inLeg={
+                  (transits.length ? transits[transits.length - 1]?.hop.linkProtocol : entry?.hop.linkProtocol) ?? null
+                }
+              />
             </Box>
           ))}
           <Box style={{ flex: 1, minWidth: 0 }} />
@@ -331,7 +345,7 @@ function CascadeCard({
 }
 
 /** One hop, as a tile: who it is, whether it answers, and what it is here for. */
-function HopTile({ hop, role }: { hop: HopView; role: 'entry' | 'transit' | 'exit' }) {
+function HopTile({ hop, role, legs }: { hop: HopView; role: 'entry' | 'transit' | 'exit'; legs: CascadeLegs }) {
   const { t } = useTranslation();
   const tone = statusTone(hop.status);
   const roleTone = role === 'entry' ? CYAN : role === 'exit' ? MOSS : MIST;
@@ -374,28 +388,20 @@ function HopTile({ hop, role }: { hop: HopView; role: 'entry' | 'transit' | 'exi
       <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>
         {hop.node?.address ?? '-'}
       </Text>
-      <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Chip tone={roleTone} small>
           {t(`cascades.role.${role}`)}
         </Chip>
-        {/* The entry's core version, and the cores it reported when it has.
-            Never `protocol`: that is the label of the primary adapter, and
-            printing it next to a version reads as «this is the core running
-            here», which the panel does not know until the node says so. */}
-        {/* Each engine with its own version: coreVersion is xray's, and after a
-            list ending in sing-box it used to read as sing-box's. */}
-        {role === 'entry' && hop.node?.coreVersion && (
-          <Chip tone={VIOLET} small>
-            {hop.node.engines
-              ? engineVersionWords(hop.node, t)
-              : `${engineCoreWord('xray', t)} ${hop.node.coreVersion}`}
-          </Chip>
-        )}
         <Box style={{ flex: 1 }} />
-        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: MIST }}>
+        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: MIST, flexShrink: 0 }}>
           {hop.todayBytes === null ? '-' : formatBytes(hop.todayBytes)}
         </Text>
       </Box>
+      {/* The cores this cascade uses on the node, a chip each with its own
+          version (cascadeNodeChips), on a line of their own: beside the role
+          and the bytes the second chip had no room. Never `protocol`, never
+          coreVersion beside a core that is not xray. */}
+      {hop.node && <CoreChips {...cascadeNodeChips(hop.node, role, legs)} />}
     </Stack>
   );
 }
@@ -459,7 +465,7 @@ function ShapeChip({ row }: { row: CascadeRow }) {
  * country and the tag lead; the node under it is a detail that can change
  * without the tag ever moving.
  */
-function DirectionLine({ direction }: { direction: DirectionView }) {
+function DirectionLine({ direction, inLeg }: { direction: DirectionView; inLeg: string | null }) {
   const { t } = useTranslation();
   const tone = statusTone(direction.status);
   const dead = direction.status !== 'online';
@@ -518,7 +524,9 @@ function DirectionLine({ direction }: { direction: DirectionView }) {
         {direction.nodeName ?? t('cascades.directionNoNode')}
         {dead && direction.nodeName ? ` · ${direction.status}` : ''}
       </Text>
-      <Box style={{ flex: 1, minWidth: 0 }} />
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        {direction.node && <CoreChips {...cascadeNodeChips(direction.node, 'exit', { inLeg })} />}
+      </Box>
       <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: dead ? DIM : MIST }}>
         {direction.todayBytes === null ? '-' : formatBytes(direction.todayBytes)}
       </Text>
@@ -527,7 +535,7 @@ function DirectionLine({ direction }: { direction: DirectionView }) {
 }
 
 /** The same direction as a tile, for a cascade with a single way out. */
-function DirectionTile({ direction }: { direction: DirectionView }) {
+function DirectionTile({ direction, inLeg }: { direction: DirectionView; inLeg: string | null }) {
   const { t } = useTranslation();
   const tone = statusTone(direction.status);
   return (
@@ -570,15 +578,16 @@ function DirectionTile({ direction }: { direction: DirectionView }) {
         {direction.nodeName ?? t('cascades.directionNoNode')}
         {direction.node?.address ? ` · ${direction.node.address}` : ''}
       </Text>
-      <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Chip tone={MOSS} small>
           {t('cascades.directionTag', { tag: tagLabel(direction.tag) })}
         </Chip>
         <Box style={{ flex: 1 }} />
-        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: MIST }}>
+        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: MIST, flexShrink: 0 }}>
           {direction.todayBytes === null ? '-' : formatBytes(direction.todayBytes)}
         </Text>
       </Box>
+      {direction.node && <CoreChips {...cascadeNodeChips(direction.node, 'exit', { inLeg })} />}
     </Stack>
   );
 }

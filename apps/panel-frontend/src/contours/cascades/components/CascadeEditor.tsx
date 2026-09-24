@@ -40,10 +40,10 @@ import {
   type LinkPortConflict,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
+import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
+import { CoreChips } from '@/ui/CoreChips';
 import {
-  engineCoreWord,
   engineListWords,
-  engineVersionWords,
   isRealisedLinkCell,
   linkCellOptions,
   nodeCarriesCascadeLink,
@@ -159,6 +159,7 @@ export function HopRow({
           meta={role === 'entry' ? 'core' : 'status'}
           // A hop with a link protocol is a hop that has to build one.
           needsLink={linkProtocol !== null}
+          legs={{ entryProtocol, outLeg: linkProtocol }}
           onChange={onPickNode}
         />
       </Stack>
@@ -228,6 +229,7 @@ export function NodeSelect({
   usedElsewhere,
   meta = 'status',
   needsLink = false,
+  legs,
   onChange,
 }: {
   value: string | null;
@@ -238,6 +240,8 @@ export function NodeSelect({
   /** This slot carries a leg to the next hop, so a machine that cannot build
    *  one is a trap here. Off for the ways out: an exit needs no leg. */
   needsLink?: boolean;
+  /** The entry's protocol and outgoing leg, for its core chips (meta 'core'). */
+  legs?: CascadeLegs;
   onChange: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -253,26 +257,15 @@ export function NodeSelect({
     [nodes, taken],
   );
 
-  // A node that has not reported a core version yet falls back to its status,
-  // rather than leaving the slot blank on the one hop where the version matters.
-  const trailing =
-    selected && meta === 'core' && selected.coreVersion
-      ? {
-          // The core version only, and the cores beside it once the node has
-          // reported them. Never the protocol label: naming an engine this
-          // machine may not be running is the mistake this row just stopped
-          // making. Each engine carries its own version: coreVersion is xray's,
-          // and after «…, движок sing-box» it read as sing-box's.
-          text: selected.engines
-            ? engineVersionWords(selected, t)
-            : `${engineCoreWord('xray', t)} ${selected.coreVersion}`,
-          tone: FAINT,
-        }
-      : selected
-        ? { text: selected.status, tone: statusTone(selected.status) }
-        : null;
+  // The status sits in the field; the cores the cascade uses on this node sit
+  // under it as chips, the same widget as the cascade card (CoreChips), so the
+  // two places cannot drift. The versions used to ride the field's right edge
+  // as one line and were cut at 150px once a node reported three cores.
+  const trailing = selected ? { text: selected.status, tone: statusTone(selected.status) } : null;
+  const chips = selected && meta === 'core' ? cascadeNodeChips(selected, 'entry', legs ?? {}) : null;
 
   return (
+    <Stack gap={6} style={{ minWidth: 0 }}>
     <Select
       data={data}
       value={value}
@@ -393,6 +386,8 @@ export function NodeSelect({
         );
       }}
     />
+    {chips && <CoreChips {...chips} />}
+    </Stack>
   );
 }
 
@@ -410,6 +405,7 @@ export function PoolField({
   usedElsewhere,
   meta = 'status',
   needsLink = false,
+  legs,
   addLabel,
   onChange,
 }: {
@@ -419,6 +415,7 @@ export function PoolField({
   usedElsewhere: string[];
   meta?: 'status' | 'core';
   needsLink?: boolean;
+  legs?: CascadeLegs;
   addLabel: string;
   onChange: (ids: string[]) => void;
 }) {
@@ -444,6 +441,7 @@ export function PoolField({
                   usedElsewhere={[...usedElsewhere, ...rows.filter((_, j) => j !== i)]}
                   meta={meta}
                   needsLink={needsLink}
+                  legs={legs}
                   onChange={(v) => onChange(rows.map((r, j) => (j === i ? v : r)))}
                 />
               )}
@@ -532,6 +530,9 @@ export function PositionRow({
           claimedBy={claimedBy}
           usedElsewhere={usedElsewhere}
           meta={role === 'entry' ? 'core' : 'status'}
+          // The leg's cell is picked under the pool, not here: only the
+          // entry protocol is known to this row, the leg is left unsaid.
+          legs={{ entryProtocol }}
           // Every position links onward, to the next position or to the
           // directions, so every machine in a pool has to be able to build one.
           needsLink

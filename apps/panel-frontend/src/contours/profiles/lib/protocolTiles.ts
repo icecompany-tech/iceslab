@@ -61,22 +61,7 @@ export const PROTOCOL_TILE_LABEL: Record<string, string> = {
 };
 
 /** Each protocol keeps one accent across every screen it appears on. */
-export const PROTOCOL_ACCENT: Record<string, string> = {
-  xray: '#A78BFA',
-  shadowsocks: '#F5A3B8',
-  hysteria: '#7DD3FC',
-  amneziawg: '#A7D8B9',
-  naive: '#F5B14C',
-  mtproto: '#67E8F9',
-  socks5: '#67E8F9',
-  http: '#F5B14C',
-  // Telegram's own blue, and the only place the panel uses it.
-  telegramweb: '#3AABEE',
-  mieru: '#C78BFA',
-  tuic: '#7DD3FC',
-  anytls: '#7A8BA3',
-  shadowtls: '#7A8BA3',
-};
+export { PROTOCOL_ACCENT } from '@/lib/ui/protocolAccent';
 
 /** Third line of a protocol tile: the caveat, not the pitch. */
 export const PROTOCOL_TILE_NOTE: Record<string, string> = {
