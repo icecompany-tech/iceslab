@@ -13,6 +13,7 @@ import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-n
 import {
   mapNodeToPublic,
   mapNodeWithPayload,
+  NODE_DTO_FIELDS,
   type PublicNodeDto,
   type CreateNodeResponseDto,
   type BootstrapInfo,
@@ -340,6 +341,8 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   total: number;
   page: number;
   limit: number;
+  /** NODE_DTO_FIELDS: what this server renders, answered with no node too. */
+  fields: readonly string[];
 }> {
   const [{ nodes, total }, hidden] = await Promise.all([repo.list(query), getHiddenCascadeNodes()]);
   // One query each for the whole page, not one per node.
@@ -352,6 +355,7 @@ export async function listNodes(query: ListNodesQuery): Promise<{
     total,
     page: query.page,
     limit: query.limit,
+    fields: NODE_DTO_FIELDS,
   };
 }
 

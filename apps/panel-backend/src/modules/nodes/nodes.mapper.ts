@@ -167,6 +167,32 @@ export interface PublicNodeDto {
 }
 
 /**
+ * The keys of the node DTO a screen cannot take for granted, named by the
+ * server that renders them. Served as `fields` beside the list (GET
+ * /api/nodes), so the answer does not depend on having a node: E29, 24.09, an
+ * empty fleet read as "this server knows none of them" and the first node of a
+ * fresh panel went out on the old form without --engines.
+ *
+ * Two kinds. Keys that are optional on the DTO, where absence is itself a
+ * state (`engines` absent = never reported); with the name listed, absence
+ * means that state and not an older server. And keys an older server did not
+ * render at all (`intendedEngines`, `coreVersions`). A key inside the per-core
+ * rows is spelled as its path, `cores[].reason`.
+ *
+ * Only what this server renders: `awgProtocol` is not here, because nothing on
+ * this side writes or reads it yet. nodes.fields.test.ts holds the list to the
+ * DTO both ways.
+ */
+export const NODE_DTO_FIELDS = [
+  'intendedEngines',
+  'coreVersions',
+  'engines',
+  'hiddenByCascade',
+  'cascadeNeedsEngines',
+  'cores[].reason',
+] as const;
+
+/**
  * Public DTO for a node, strips internal cert/key material and lifecycle
  * fields (deletedAt, publicKey blob).
  */
