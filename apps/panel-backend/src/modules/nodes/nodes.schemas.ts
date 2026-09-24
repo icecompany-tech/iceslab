@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CORE_COMPONENTS } from '@iceslab/shared';
+import { CORE_COMPONENTS, ENGINE_NAMES } from '@iceslab/shared';
 
 const NameSchema = z
   .string()
@@ -126,10 +126,24 @@ const ProtocolSchema = z.enum([
   'shadowtls',
 ]);
 
+/**
+ * Which engines the node is set up to carry, first = primary (core-lifecycle.md
+ * section 7). At least one, no repeats. How it combines with `protocol` and
+ * `singboxEngine` is resolveNodeEngines (node-intended-engines.ts).
+ */
+const IntendedEnginesSchema = z
+  .array(z.enum(ENGINE_NAMES))
+  .min(1, 'at least one engine')
+  .max(ENGINE_NAMES.length)
+  .refine((a) => new Set(a).size === a.length, 'an engine is listed twice');
+
 export const CreateNodeSchema = z.object({
   name: NameSchema,
   address: AddressSchema,
-  protocol: ProtocolSchema.default('xray'),
+  // Optional now: `intendedEngines` can name the primary instead. Neither sent
+  // is the old default, xray.
+  protocol: ProtocolSchema.optional(),
+  intendedEngines: IntendedEnginesSchema.optional(),
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().default(1),
   // Slice 27.5
@@ -138,8 +152,9 @@ export const CreateNodeSchema = z.object({
   // B3/G
   domain: DomainSchema,
   hardening: HardeningSchema,
-  // Engine-choice: also install the sing-box engine (--with-singbox).
-  singboxEngine: z.boolean().default(false),
+  // Engine-choice: also install the sing-box engine (--with-singbox). The old
+  // form of "singbox is in intendedEngines"; no default, absent is no edit.
+  singboxEngine: z.boolean().optional(),
   // Э3 F: the resolver this node's users get. Absent = the host's own.
   dns: DnsSchema,
   // Which core versions to install; absent components get the pin.
@@ -151,6 +166,9 @@ export const UpdateNodeSchema = z.object({
   name: NameSchema.optional(),
   address: AddressSchema.optional(),
   protocol: ProtocolSchema.optional(),
+  // Absent = untouched; a list replaces the list. No null: a node carries at
+  // least its primary engine.
+  intendedEngines: IntendedEnginesSchema.optional(),
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().optional(),
   regionId: z.uuid().nullable().optional(),

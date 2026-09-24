@@ -26,7 +26,10 @@ import type {
 import { resolveCoreVersions, type EngineName } from '@iceslab/shared';
 import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
+import { resolveNodeEngines } from './node-intended-engines.js';
+import { intendedEngines } from './node-engines.js';
 export { CoreVersionIntentError } from './node-core-versions.js';
+export { NodeEnginesError } from './node-intended-engines.js';
 
 // ───── Domain errors ─────
 
@@ -106,13 +109,16 @@ export async function createNode(
 
   // Checked before the row exists: a refused version creates nothing.
   const coreVersions = applyCoreVersionsPatch({}, input.coreVersions ?? {});
+  // The engines, the primary's label and the sing-box flag, in step.
+  const engines = resolveNodeEngines(input);
 
   let node;
   try {
     node = await repo.create({
       name: input.name,
       address: input.address,
-      protocol: input.protocol,
+      protocol: engines.protocol,
+      intendedEngines: engines.intendedEngines,
       countryCode: input.countryCode ?? null,
       consumptionMultiplier: BigInt(input.consumptionMultiplier),
       regionId: input.regionId ?? null,
@@ -125,8 +131,8 @@ export async function createNode(
       hardening: (input.hardening as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
       // Э3 F: the resolver this node's users get. Same jsonb-write pattern.
       dns: (input.dns as Prisma.InputJsonValue | undefined) ?? Prisma.JsonNull,
-      // Engine-choice: install sing-box alongside the native core when opted in.
-      singboxEngine: input.singboxEngine,
+      // Engine-choice: "singbox is in intendedEngines", kept as its own column.
+      singboxEngine: engines.singboxEngine,
       // Which core versions to install; '{}' (every pin) when none were chosen.
       coreVersions,
       // Slice 38: heartbeat-self-destruct secret. 32 bytes of entropy is
@@ -381,7 +387,22 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   const data: Parameters<typeof repo.updateById>[1] = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.address !== undefined) data.address = input.address;
-  if (input.protocol !== undefined) data.protocol = input.protocol;
+  // The engines, the primary's label and the sing-box flag move together, and
+  // only when the body touches one of them.
+  if (
+    input.intendedEngines !== undefined ||
+    input.protocol !== undefined ||
+    input.singboxEngine !== undefined
+  ) {
+    const engines = resolveNodeEngines(input, {
+      intendedEngines: intendedEngines(existing),
+      protocol: existing.protocol,
+      singboxEngine: existing.singboxEngine,
+    });
+    data.intendedEngines = engines.intendedEngines;
+    data.protocol = engines.protocol;
+    data.singboxEngine = engines.singboxEngine;
+  }
   if (input.countryCode !== undefined) data.countryCode = input.countryCode;
   if (input.consumptionMultiplier !== undefined) {
     data.consumptionMultiplier = BigInt(input.consumptionMultiplier);
@@ -395,7 +416,6 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
     data.hardening =
       (input.hardening as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
   }
-  if (input.singboxEngine !== undefined) data.singboxEngine = input.singboxEngine;
   // Э3 F: the node's resolver. Prisma.JsonNull for the same reason as hardening
   // above: clearing a jsonb column needs JsonNull, not raw null.
   if (input.dns !== undefined) {

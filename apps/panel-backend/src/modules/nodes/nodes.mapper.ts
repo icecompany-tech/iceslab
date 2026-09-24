@@ -6,7 +6,7 @@ import type {
   NodeCores,
   NodeCoreVersions,
 } from '@iceslab/shared';
-import { reportedEngines } from './node-engines.js';
+import { intendedEngines, reportedEngines } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
@@ -97,8 +97,16 @@ export interface PublicNodeDto {
   hardening: HardeningDto | null;
   // WARP egress on/off (per-node). Creds (secretKey/token) are never exposed.
   warpEnabled: boolean;
-  // Engine-choice: sing-box engine installed alongside the native core.
+  // Engine-choice: sing-box engine installed alongside the native core. Read
+  // off intendedEngines ("singbox" in the list); kept for the older screens.
   singboxEngine: boolean;
+  /**
+   * Which engines the node is SET UP to carry, first = primary, the engine
+   * `protocol` names (core-lifecycle.md section 7). An intent: the installer
+   * and the node card read it, no gate does. Not `engines` below, which is
+   * what the node REPORTED.
+   */
+  intendedEngines: EngineName[];
   /** Э3: node-level routing policy this node runs, null = none. The rules
    *  themselves come from /api/node-policies; the node carries only which one. */
   policyId: string | null;
@@ -155,6 +163,7 @@ export interface PublicNodeDto {
  */
 export function mapNodeToPublic(node: Node): PublicNodeDto {
   const engines = reportedEngines(node);
+  const intended = intendedEngines(node);
   return {
     id: node.id,
     name: node.name,
@@ -177,7 +186,8 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     domain: node.domain,
     hardening: (node.hardening as HardeningDto | null) ?? null,
     warpEnabled: node.warpEnabled,
-    singboxEngine: node.singboxEngine,
+    singboxEngine: intended.includes('singbox'),
+    intendedEngines: intended,
     policyId: node.policyId,
     dns: (node.dns as DnsCfg | null) ?? null,
     cores: (node.cores as NodeCores | null) ?? null,

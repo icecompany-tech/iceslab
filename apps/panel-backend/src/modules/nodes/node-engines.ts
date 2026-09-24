@@ -107,7 +107,14 @@ export function reportedEngines(node: { cores: unknown }): EngineName[] | undefi
 export function intendedEngines(node: {
   protocol: string;
   singboxEngine: boolean;
+  /** Node.intendedEngines (core-lifecycle.md section 7). Empty or absent: the
+   *  row predates the column or was inserted without it, and the list is
+   *  derived the way the migration backfilled it. */
+  intendedEngines?: string[] | null;
 }): EngineName[] {
+  if (node.intendedEngines && node.intendedEngines.length > 0) {
+    return [...new Set(node.intendedEngines as EngineName[])];
+  }
   const out = new Set<EngineName>([nativeEngineFor(node.protocol)]);
   if (node.singboxEngine) out.add('singbox');
   return [...out];
@@ -150,7 +157,7 @@ export function nodeRendersProfile(
  * Returns the engines it judged against, so the caller can name them.
  */
 export function renderableAtSave(
-  node: { cores: unknown; protocol: string; singboxEngine: boolean },
+  node: { cores: unknown; protocol: string; singboxEngine: boolean; intendedEngines?: string[] | null },
   profile: { protocol: string; engine: string | null },
 ): { ok: boolean; engines: EngineName[]; wanted: EngineName; justEnabled: boolean } {
   const engines = reportedEngines(node);

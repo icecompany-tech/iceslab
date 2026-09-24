@@ -150,6 +150,13 @@ model Node {
   // stays primary; tuic/anytls/shadowtls already run on sing-box (flag no-op).
   singboxEngine Boolean @default(false) @map("singbox_engine")
 
+  // Which engines the node is SET UP to carry (core-lifecycle.md section 7):
+  // an intent, never a gate. First = primary, the engine `protocol` names;
+  // `singboxEngine` is kept equal to "singbox is in the list" on every write.
+  // '{}' (a row inserted without it) reads as derived from protocol and
+  // singboxEngine, see readIntendedEngines in nodes/node-intended-engines.ts.
+  intendedEngines String[] @default([]) @map("intended_engines")
+
   // Slice 38: heartbeat self-destruct. Random 32-byte secret, generated
   // at node creation. The bootstrap payload bundles a stateless HMAC token
   // (nodeId + sig over heartbeatSecret) that the agent presents on every

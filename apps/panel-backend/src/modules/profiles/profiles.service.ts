@@ -415,7 +415,9 @@ export async function updateProfile(
       const deployed = await prisma.profileNodeBinding.findMany({
         where: { profileId: id, node: { deletedAt: null } },
         select: {
-          node: { select: { name: true, cores: true, protocol: true, singboxEngine: true } },
+          node: {
+            select: { name: true, cores: true, protocol: true, singboxEngine: true, intendedEngines: true },
+          },
         },
       });
       for (const b of deployed) {
@@ -630,7 +632,13 @@ export class ProfileDoesNotRunOnNodeError extends Error {
  * the comment on PublicBindingDto.rendersProfile.
  */
 function assertNodeRendersProfile(
-  node: { name: string; cores: unknown; protocol: string; singboxEngine: boolean },
+  node: {
+    name: string;
+    cores: unknown;
+    protocol: string;
+    singboxEngine: boolean;
+    intendedEngines?: string[] | null;
+  },
   profile: { protocol: string; engine: string | null },
 ): void {
   const { ok, engines, wanted, justEnabled } = renderableAtSave(node, profile);
