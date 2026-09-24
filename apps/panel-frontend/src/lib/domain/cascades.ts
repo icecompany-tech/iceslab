@@ -1,4 +1,11 @@
-import { DEFAULT_LINK_CONGESTION, LINK_CONGESTIONS, type LinkCongestion } from '@iceslab/shared';
+import {
+  DEFAULT_LINK_CONGESTION,
+  DEFAULT_LINK_UNDERLAY,
+  LINK_CONGESTIONS,
+  LINK_UNDERLAYS,
+  type LinkCongestion,
+  type LinkUnderlay,
+} from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 export type CascadeProtocol =
@@ -51,7 +58,19 @@ export type { LinkCongestion };
  */
 export interface LinkParams {
   congestion?: LinkCongestion;
+  /**
+   * На чём едет нога, фаза 8 (d94b2b2): `direct` через интернет, `awg` внутри
+   * туннеля AmneziaWG между двумя нодами. Нет ключа = direct; у направления
+   * без ключа берётся значение последней позиции, как у ячейки.
+   *
+   * ⚠ `linkParams` одна колонка и заменяется ЦЕЛИКОМ: правка congestion без
+   * underlay его сотрёт. Поэтому экран мёржит правку в хранимый объект и шлёт
+   * его целиком.
+   */
+  underlay?: LinkUnderlay;
 }
+export { DEFAULT_LINK_UNDERLAY, LINK_UNDERLAYS };
+export type { LinkUnderlay };
 
 export interface CascadeHop {
   id: string;

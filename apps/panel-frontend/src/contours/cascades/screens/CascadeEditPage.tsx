@@ -7,6 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/lib/net/client';
 import {
+  DEFAULT_LINK_UNDERLAY,
   deleteCascade,
   cascadeShapeError,
   getCascadeStatus,
@@ -90,6 +91,7 @@ import {
   legCellNotes,
   legFacts,
   legPortNotes,
+  legUnderlay,
   poolRoleAt,
   refusedCells,
   entryQuestionRepeats,
@@ -97,6 +99,7 @@ import {
   refusedEntryChange,
   refusedEntryNodes,
   refusedLinkPorts,
+  refusedUnderlay,
   statusTone,
   toDirectionInputs,
   toPositionInputs,
@@ -163,6 +166,9 @@ export function CascadeEditPage() {
   /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). Рисуются у
    *  своих ног: порт назначает сервер, и искать его в общем тексте негде. */
   const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
+  /** Ноды без AmneziaWG под ногой `awg` (409 `LINK_UNDERLAY_NOT_ON_NODE`).
+   *  Рисуются у тех ног, в которых эти ноды стоят. */
+  const [underlayRefused, setUnderlayRefused] = useState<string[]>([]);
   /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`).
    *  Рисуются у карточки входа по нодам. */
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
@@ -345,6 +351,13 @@ export function CascadeEditPage() {
         setPortConflicts(ports);
         return;
       }
+      // Туннель под ногой просят у ноды без AmneziaWG: имена встают у ног.
+      const noAwg = refusedUnderlay(err);
+      if (noAwg) {
+        setUnderlayRefused(noAwg);
+        if (noAwg.length === 0) setSaveRefusal(apiErrorMessage(err));
+        return;
+      }
       // The form blocks both unstorable shapes, so a 400 means the API saw
       // something this page did not. Its sentence is the useful one, and it
       // stays ON SCREEN rather than in a toast: the server names the place
@@ -391,6 +404,7 @@ export function CascadeEditPage() {
     setSaveRefusal(null);
     setCellRefusals([]);
     setPortConflicts([]);
+    setUnderlayRefused([]);
     setEntryChainRefusals([]);
     setDraft((d) => (d ? { ...d, ...p } : d));
   };
@@ -814,6 +828,16 @@ export function CascadeEditPage() {
                   nodeById,
                   portConflicts,
                 )}
+                // Туннель поднимают обе стороны ноги: эта позиция и та, что её
+                // принимает (у последней это ноды всех направлений).
+                underlay={legUnderlay(
+                  [...pool.nodeIds, ...(pools[i + 1]?.nodeIds ?? directions.flatMap((d) => d.nodeIds))],
+                  nodeById,
+                  pool.linkParams?.underlay,
+                  undefined,
+                  underlayRefused,
+                  (u) => setPool(i, { linkParams: { ...(pool.linkParams ?? {}), underlay: u }, linkTouched: true }),
+                )}
               />
               </Fragment>
             ))}
@@ -893,6 +917,16 @@ export function CascadeEditPage() {
                   onParams={(p) =>
                     setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), ...p }, linkTouched: true })
                   }
+                  // Нога до выхода: последняя позиция и ноды этого направления.
+                  // Без своего ключа направление идёт как последняя позиция.
+                  underlay={legUnderlay(
+                    [...(pools[pools.length - 1]?.nodeIds ?? []), ...dir.nodeIds],
+                    nodeById,
+                    dir.linkParams?.underlay,
+                    pools[pools.length - 1]?.linkParams?.underlay ?? DEFAULT_LINK_UNDERLAY,
+                    underlayRefused,
+                    (u) => setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), underlay: u }, linkTouched: true }),
+                  )}
                 />
                 </Fragment>
               ))}

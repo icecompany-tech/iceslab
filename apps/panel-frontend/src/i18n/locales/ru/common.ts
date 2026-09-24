@@ -301,6 +301,8 @@ export const common = {
     },
     // Фишки ядер на карточке: остальные ядра ноды, которые каскад не трогает.
     coresAlso: 'ещё на ноде: {{list}}',
+    // Нога внутри туннеля AmneziaWG (фаза 8).
+    legInAwg: '{{cell}} в AWG',
     layoutRows: 'Строки',
     enabled: 'Включён',
     disabled: 'Выключен',

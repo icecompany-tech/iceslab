@@ -8,8 +8,10 @@ import {
   coreInstallCommand,
   ENGINE_BOOTSTRAP,
   judgeCoreVersion,
+  DEFAULT_LINK_UNDERLAY,
   LINK_CELLS,
   LINK_CONGESTIONS,
+  LINK_UNDERLAYS,
   TEMPLATE_TYPES,
   XRAY_PLAIN_SUBPROTOCOLS,
   XRAY_SUBPROTOCOLS,
@@ -35,6 +37,9 @@ const GUARDED = [
   'LINK_CELLS',
   'LINK_CONGESTIONS',
   'DEFAULT_LINK_CONGESTION',
+  // На чём едет нога (фаза 8): direct | awg, дефолт из контракта.
+  'LINK_UNDERLAYS',
+  'DEFAULT_LINK_UNDERLAY',
   'TEMPLATE_TYPES',
   'FORMAT_NAMES',
   'XRAY_SUBPROTOCOLS',
@@ -91,6 +96,7 @@ describe('копии перечислений контракта', () => {
     // Иначе сторож переживёт переименование в контракте и замолчит навсегда.
     expect(LINK_CELLS.length).toBeGreaterThan(0);
     expect(LINK_CONGESTIONS.length).toBeGreaterThan(0);
+    expect(LINK_UNDERLAYS).toContain(DEFAULT_LINK_UNDERLAY);
     expect(TEMPLATE_TYPES.length).toBeGreaterThan(0);
     expect(XRAY_SUBPROTOCOLS.length).toBeGreaterThan(0);
     expect(XRAY_PLAIN_SUBPROTOCOLS.length).toBeGreaterThan(0);

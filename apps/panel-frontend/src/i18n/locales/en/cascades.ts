@@ -129,6 +129,14 @@ export const cascades = {
     // control is a bandwidth pair nobody has decided how to ask for yet.
     legObfsMinted: 'The Salamander salt is minted by the panel, like every other link credential.',
     legCongestion: 'congestion control',
+    underlayLabel: 'transport under the leg',
+    underlayDirect: 'direct',
+    underlayAwg: 'inside AmneziaWG',
+    underlayInherited: 'as the last position',
+    underlayAwgHint: 'Between the nodes only AWG packets are on the wire, the leg runs inside the tunnel; the panel picks port 27000+n/udp itself.',
+    underlayMissing: '{{name}} has no AmneziaWG: the tunnel under the leg cannot be raised there.',
+    underlaySilent: '{{names}}: the node has not reported its cores, AmneziaWG cannot be checked. It can be chosen, the server checks the fact.',
+    underlayRefused: 'The server refused: AmneziaWG is not installed on {{names}}. Install it there or keep the leg direct.',
     legCongestionDefault: 'default {{value}}',
     legNodeGap: '{{name}} does not carry {{cell}}: it reported {{engines}}.',
     // The transport belongs in the sentence: 24001/udp and 24001/tcp are

@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS,
   DEFAULT_LINK_CONGESTION,
@@ -28,6 +28,8 @@ import {
   toPositionInputs,
   withEntryConfirm,
 } from '@/contours/cascades/lib/cascadeForm';
+import { legUnderlay, refusedUnderlay, underlayFacts } from '@/contours/cascades/lib/cascadeForm';
+import type { Node } from '@/lib/domain/nodes';
 
 /**
  * Что стоит в строке пула на месте выбора ноды.
@@ -846,5 +848,44 @@ describe('entryNoteKind', () => {
 
   it('5. протокол не выбран: сказать нечего', () => {
     expect(entryNoteKind(null)).toBeNull();
+  });
+});
+
+describe('подложка ноги (фаза 8): underlayFacts, legUnderlay, refusedUnderlay', () => {
+  const n = (id: string, cores: unknown) => ({ id, name: id, cores }) as unknown as Node;
+  const byId = new Map<string, Node>([
+    ['a', n('a', { cores: [{ name: 'amneziawg', engine: 'amneziawg', version: '1.0.20260611' }] })],
+    ['b', n('b', { cores: [{ name: 'amneziawg', engine: 'amneziawg', installed: false }] })],
+    ['c', n('c', null)],
+  ]);
+
+  it('обе стороны ноги: AWG не установлен закрывает awg, без отчёта только говорит', () => {
+    const f = underlayFacts(['a', 'b', 'c', 'b'], byId, undefined);
+    expect(f.value).toBe('direct');
+    expect(f.missing).toEqual([{ id: 'b', name: 'b' }]);
+    expect(f.silent).toEqual(['c']);
+    expect(underlayFacts(['a'], byId, 'awg')).toMatchObject({ value: 'awg', missing: [], silent: [] });
+  });
+
+  it('направление без своего ключа идёт как последняя позиция, и говорит это', () => {
+    expect(underlayFacts(['a'], byId, undefined, 'awg')).toMatchObject({ value: 'awg', inherited: true });
+    expect(underlayFacts(['a'], byId, 'direct', 'awg')).toMatchObject({ value: 'direct', inherited: false });
+  });
+
+  it('отказ сервера встаёт только у ноги с этими нодами', () => {
+    const leg = legUnderlay(['a', 'c'], byId, 'awg', undefined, ['b', 'c'], () => undefined);
+    expect(leg.refused).toEqual(['c']);
+  });
+
+  it('409 LINK_UNDERLAY_NOT_ON_NODE: имена; мусор и чужие отказы: null', () => {
+    const res = (data: unknown, status = 409) => ({ response: { status, data } });
+    expect(refusedUnderlay(res({ error: 'LINK_UNDERLAY_NOT_ON_NODE', nodeNames: ['ru-01', 7, '', 'se-01'] }))).toEqual([
+      'ru-01',
+      'se-01',
+    ]);
+    expect(refusedUnderlay(res({ error: 'LINK_UNDERLAY_NOT_ON_NODE' }))).toEqual([]);
+    for (const e of [null, 'x', new Error('x'), res({ error: 'LINK_PORT_IN_USE' }), res({ error: 'LINK_UNDERLAY_NOT_ON_NODE' }, 400)]) {
+      expect(refusedUnderlay(e)).toBeNull();
+    }
   });
 });

@@ -1,8 +1,10 @@
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
 import { linkCellPair, type EnginePair, type EngineName } from '@/lib/domain/engines';
-import { DEFAULT_LINK_CONGESTION, LINK_CONGESTIONS } from '@/lib/domain/cascades';
-import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
+import { DEFAULT_LINK_CONGESTION, DEFAULT_LINK_UNDERLAY, LINK_CONGESTIONS } from '@/lib/domain/cascades';
+import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
+import type { Node } from '@/lib/domain/nodes';
+import { nodeCoreFit } from '@/lib/domain/nodeCoreFit';
 import { AMBER, CYAN, DIM, MIST, MOSS, RED, VIOLET } from '@/contours/cascades/lib/colors';
 
 /**
@@ -665,6 +667,91 @@ export function refusedLinkPorts(err: unknown): LinkPortConflict[] | null {
     });
   }
   return out;
+}
+
+/**
+ * На чём едет нога (фаза 8, d94b2b2): `direct` или внутри туннеля AmneziaWG.
+ *
+ * Туннель поднимают ОБЕ стороны ноги, поэтому смотрятся ноды обоих концов
+ * через `nodeCoreFit(node, 'amneziawg')`, тем же чтением, что у гейта BACK:
+ *
+ *   missing  нода сообщила AWG как не установленный. `awg` не предлагается,
+ *            причина и ссылка на «Ядра» этой ноды; уже выбранный `awg`
+ *            снимается (напрямую доступно всегда);
+ *   silent   нода AWG не сообщала вовсе: не отказ, неполный факт фактом не
+ *            считается, но экран говорит словами, что проверить нечем.
+ *
+ * `own` это ключ этой ноги; нет ключа = direct у позиции, у направления
+ * значение последней позиции (`inherited`), как у ячейки.
+ */
+export interface UnderlayFacts {
+  value: LinkUnderlay;
+  /** Направление без своего ключа идёт как последняя позиция. */
+  inherited: boolean;
+  missing: { id: string; name: string }[];
+  silent: string[];
+}
+
+export function underlayFacts(
+  nodeIds: readonly string[],
+  nodeById: ReadonlyMap<string, Node>,
+  own: LinkUnderlay | undefined,
+  inherited?: LinkUnderlay,
+): UnderlayFacts {
+  const missing: { id: string; name: string }[] = [];
+  const silent: string[] = [];
+  for (const id of new Set(nodeIds.filter(Boolean))) {
+    const n = nodeById.get(id);
+    if (!n) continue;
+    const fit = nodeCoreFit(n, 'amneziawg');
+    if (fit.kind === 'missing') missing.push({ id: n.id, name: n.name });
+    else if (fit.kind === 'silent') silent.push(n.name);
+  }
+  const value = own ?? inherited ?? DEFAULT_LINK_UNDERLAY;
+  return { value, inherited: own === undefined && inherited !== undefined, missing, silent };
+}
+
+/** Что строке ноги нужно про подложку: факты и отказ сервера по её нодам. */
+export interface LegUnderlay {
+  facts: UnderlayFacts;
+  /** Имена нод ЭТОЙ ноги из 409 LINK_UNDERLAY_NOT_ON_NODE. */
+  refused: string[];
+  onChange: (value: LinkUnderlay) => void;
+}
+
+/**
+ * Подложка одной ноги для строки: факты по нодам обоих концов и та часть
+ * отказа сервера, что называет эти ноды (у ног отказ общий на весь каскад).
+ */
+export function legUnderlay(
+  nodeIds: readonly string[],
+  nodeById: ReadonlyMap<string, Node>,
+  own: LinkUnderlay | undefined,
+  inherited: LinkUnderlay | undefined,
+  refusedNames: readonly string[],
+  onChange: (value: LinkUnderlay) => void,
+): LegUnderlay {
+  const names = new Set(nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)));
+  return {
+    facts: underlayFacts(nodeIds, nodeById, own, inherited),
+    refused: refusedNames.filter((n) => names.has(n)),
+    onChange,
+  };
+}
+
+/**
+ * 409 `LINK_UNDERLAY_NOT_ON_NODE`: ноды, у которых AWG не установлен, а нога
+ * над ними просит туннель. Вход проверяется первым, `null` значит «отказ не
+ * этот»; нечитаемые имена пропускаются.
+ */
+export function refusedUnderlay(err: unknown): string[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; nodeNames?: unknown } | undefined;
+  if (!data || data.error !== 'LINK_UNDERLAY_NOT_ON_NODE') return null;
+  if (!Array.isArray(data.nodeNames)) return [];
+  return data.nodeNames.filter((n): n is string => typeof n === 'string' && n !== '');
 }
 
 /**

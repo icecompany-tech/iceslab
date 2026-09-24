@@ -1,5 +1,6 @@
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
+import type { Cascade } from '@/lib/domain/cascades';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
 import { linkCellPair, nativeEngineOfIntent } from '@/lib/domain/engines';
 
@@ -32,6 +33,10 @@ export interface CascadeLegs {
   inLeg?: string | null;
   /** The cell of the leg this node dials (entry, transit). */
   outLeg?: string | null;
+  /** What the incoming / outgoing leg rides on (phase 8): `awg` raises an
+   *  AmneziaWG tunnel on both ends, so the node uses AWG for the cascade too. */
+  inUnderlay?: string | null;
+  outUnderlay?: string | null;
 }
 
 export interface CoreChip {
@@ -73,6 +78,10 @@ export function cascadeNodeChips(
   // is an unset cell, i.e. the default vless leg on xray.
   if (role !== 'entry' && legs.inLeg !== undefined) add(legEngine(legs.inLeg));
   if (role !== 'exit' && legs.outLeg !== undefined) add(legEngine(legs.outLeg));
+  // A leg inside an AmneziaWG tunnel: both ends raise it.
+  if ((role !== 'entry' && legs.inUnderlay === 'awg') || (role !== 'exit' && legs.outUnderlay === 'awg')) {
+    add('amneziawg');
+  }
 
   // «Also on the node»: engines it reported as installed, beyond the used ones.
   const others: EngineName[] = [];
@@ -81,6 +90,25 @@ export function cascadeNodeChips(
     if (!used.includes(c.engine) && !others.includes(c.engine)) others.push(c.engine);
   }
   return { shown: used.map((e) => chip(node, e)), others: others.map((e) => chip(node, e)) };
+}
+
+/**
+ * What each leg of a cascade rides on (phase 8), read off the v4 shape: a
+ * position's own `linkParams.underlay`, and for a direction its own or else
+ * the last position's, the same inheritance as the cell. `undefined` = direct
+ * (no key), or a cascade still described by `hops` alone.
+ */
+export function cascadeUnderlays(c: Pick<Cascade, 'positions' | 'directions'>): {
+  position: (index: number) => string | undefined;
+  direction: (tag: number) => string | undefined;
+} {
+  const at = (i: number) => c.positions.find((p) => p.position === i)?.linkParams?.underlay;
+  const lastIndex = c.positions.length > 0 ? Math.max(...c.positions.map((p) => p.position)) : undefined;
+  return {
+    position: at,
+    direction: (tag) =>
+      c.directions.find((d) => d.tag === tag)?.linkParams?.underlay ?? (lastIndex !== undefined ? at(lastIndex) : undefined),
+  };
 }
 
 /** One chip as text: `xray 26.3.27`, `AWG`. */

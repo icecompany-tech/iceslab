@@ -10,9 +10,9 @@ const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
  * The cores a cascade uses on a node, one chip each (cascadeNodeChips), for
  * the cascade card and the cascade editor alike, so the two cannot drift.
  *
- * One line and never more: the row wraps inside a one-chip-high box and what
- * does not fit is clipped, not pushed out of the card. The full list, with
- * «also on the node» for the cores the cascade does not use, rides the title.
+ * At most two lines: the row wraps inside a two-chip-high box and what does
+ * not fit is clipped, not pushed out of the card. The full list, with «also on
+ * the node» for the cores the cascade does not use, rides the title.
  */
 export function CoreChips({ shown, others }: { shown: CoreChip[]; others: CoreChip[] }) {
   const { t } = useTranslation();
@@ -31,7 +31,11 @@ export function CoreChips({ shown, others }: { shown: CoreChip[]; others: CoreCh
         flexWrap: 'wrap',
         gap: 6,
         minWidth: 0,
-        maxHeight: 22,
+        // Two lines, not one: with a leg inside AmneziaWG a tile carries three
+        // used cores, and on one line of a 300px tile the third was cut off
+        // with no trace but the title. A used core must be seen; beyond two
+        // lines it is clipped as before, the title still has it.
+        maxHeight: 50,
         overflow: 'hidden',
       }}
     >

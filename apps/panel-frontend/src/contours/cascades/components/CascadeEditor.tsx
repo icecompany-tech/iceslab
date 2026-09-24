@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
+import { Box, SegmentedControl, Select, Stack, Switch, Text, UnstyledButton } from '@mantine/core';
+import { Link } from 'react-router-dom';
 import type { CascadeProtocol } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
 import { COUNTRIES, countryFlag, countryName } from '@/lib/domain/countries';
@@ -38,8 +39,9 @@ import {
   type HopRole,
   type LegFacts,
   type LinkPortConflict,
+  type LegUnderlay,
 } from '@/contours/cascades/lib/cascadeForm';
-import type { LinkCell, LinkCongestion, LinkParams } from '@/lib/domain/cascades';
+import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
 import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
 import { CoreChips } from '@/ui/CoreChips';
 import {
@@ -598,7 +600,10 @@ export function LegRow({
   caption,
   gaps = [],
   portTaken = [],
+  underlay,
 }: {
+  /** Подложка ноги (фаза 8); нет, пока экрану нечем её сохранить. */
+  underlay?: LegUnderlay;
   facts: LegFacts;
   /** Настройки этой ноги сверх ячейки. Поле у позиции появилось с Ф5.9
    *  (`2cfa08b`): до него нога между шагами молча брала дефолт движка. */
@@ -687,6 +692,7 @@ export function LegRow({
         </Stack>
       </Box>
     )}
+    {underlay && <UnderlayRow underlay={underlay} indent={38} />}
 
     {/* Те же слова, что у ноги направления: источник факта разный
         (предсказание по движкам и отказ сервера), повод для оператора один. */}
@@ -745,7 +751,10 @@ export function DirectionLegRow({
   portTaken = [],
   onCell,
   onParams,
+  underlay,
 }: {
+  /** Подложка ноги до этого выхода (фаза 8). */
+  underlay?: LegUnderlay;
   facts: LegFacts;
   cell: LinkCell | null;
   params: LinkParams | null;
@@ -828,6 +837,7 @@ export function DirectionLegRow({
           </Stack>
         </Box>
       )}
+      {available && underlay && <UnderlayRow underlay={underlay} indent={24} />}
 
       {/* Только доказанное «нет»: нода отчиталась о движках, и ни один из них
           эту ячейку не поднимает. Молчащая нода сюда не попадает. */}
@@ -852,6 +862,63 @@ export function DirectionLegRow({
           })}
         </Note>
       ))}
+    </Stack>
+  );
+}
+
+/**
+ * «Транспорт под ногой: напрямую / внутри AmneziaWG» (фаза 8). Всё решено в
+ * `underlayFacts`: `awg` закрыт, если у ноды пары AWG сообщён не
+ * установленным, со ссылкой туда, где он ставится; нода без отчёта не
+ * закрывает, но строка говорит, что проверить нечем. Порт туннеля панель
+ * выбирает сама, поля под него нет.
+ */
+function UnderlayRow({ underlay, indent }: { underlay: LegUnderlay; indent: number }) {
+  const { t } = useTranslation();
+  const { facts, refused, onChange } = underlay;
+  const blocked = facts.missing.length > 0;
+  return (
+    <Stack gap={6} style={{ paddingLeft: indent }}>
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <FieldLabel>{t('cascadeCreate.underlayLabel')}</FieldLabel>
+        <SegmentedControl
+          size="xs"
+          value={facts.value}
+          onChange={(v) => onChange(v as LinkUnderlay)}
+          data={[
+            { value: 'direct', label: t('cascadeCreate.underlayDirect') },
+            { value: 'awg', label: t('cascadeCreate.underlayAwg'), disabled: blocked && facts.value !== 'awg' },
+          ]}
+        />
+        {facts.inherited && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+            {t('cascadeCreate.underlayInherited')}
+          </Text>
+        )}
+      </Box>
+      {facts.value === 'awg' && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>
+          {t('cascadeCreate.underlayAwgHint')}
+        </Text>
+      )}
+      {facts.missing.map((n) => (
+        <Note key={n.id} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t('cascadeCreate.underlayMissing', { name: n.name })}{' '}
+          <Link to={`/nodes/${n.id}#cores`} style={{ color: RED, textDecoration: 'underline', textUnderlineOffset: 2 }}>
+            {t('nodeCore.installLink')}
+          </Link>
+        </Note>
+      ))}
+      {facts.silent.length > 0 && (
+        <Note tone={MIST} icon={<WarnIcon size={13} color={MIST} />}>
+          {t('cascadeCreate.underlaySilent', { names: facts.silent.join(', ') })}
+        </Note>
+      )}
+      {refused.length > 0 && (
+        <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {t('cascadeCreate.underlayRefused', { names: refused.join(', ') })}
+        </Note>
+      )}
     </Stack>
   );
 }

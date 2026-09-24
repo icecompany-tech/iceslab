@@ -132,6 +132,15 @@ export const cascades = {
     legObfsMinted: 'Соль обфускации Salamander панель генерирует сама, как и остальные креды линка.',
     legCongestion: 'контроль перегрузки',
     legCongestionDefault: 'по умолчанию {{value}}',
+    // Подложка ноги, фаза 8 (d94b2b2).
+    underlayLabel: 'транспорт под ногой',
+    underlayDirect: 'напрямую',
+    underlayAwg: 'внутри AmneziaWG',
+    underlayInherited: 'как у последней позиции',
+    underlayAwgHint: 'На проводе между нодами видны только AWG-пакеты, нога идёт внутри туннеля; порт 27000+n/udp панель выберет сама.',
+    underlayMissing: 'На {{name}} нет AmneziaWG: туннель под ногой там не поднять.',
+    underlaySilent: '{{names}}: нода не сообщила ядра, проверить AmneziaWG нечем. Выбрать можно, сервер проверит по факту.',
+    underlayRefused: 'Сервер отказал: AmneziaWG не установлен на {{names}}. Поставьте его там или оставьте ногу напрямую.',
     legNodeGap: '{{name}} не несёт {{cell}}: сообщила {{engines}}.',
     // Транспорт в строке обязателен: 24001/udp и 24001/tcp это разные сокеты,
     // и занятость одного ничего не говорит про другой.

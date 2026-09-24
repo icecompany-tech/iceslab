@@ -269,6 +269,7 @@ export const common = {
       exit: 'exit',
     },
     coresAlso: 'also on the node: {{list}}',
+    legInAwg: '{{cell}} in AWG',
     layoutRows: 'Rows',
     enabled: 'Enabled',
     disabled: 'Disabled',

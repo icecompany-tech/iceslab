@@ -74,10 +74,12 @@ import {
   legCellNotes,
   legFacts,
   legPortNotes,
+  legUnderlay,
   poolRoleAt,
   refusedCells,
   refusedEntryChain,
   refusedLinkPorts,
+  refusedUnderlay,
   toDirectionInputs,
   toPositionInputs,
   type CellRefusal,
@@ -117,6 +119,8 @@ export function CascadeCreatePage() {
   const [cellRefusals, setCellRefusals] = useState<CellRefusal[]>([]);
   /** Порты ног, занятые чужими профилями (409 `LINK_PORT_IN_USE`). */
   const [portConflicts, setPortConflicts] = useState<LinkPortConflict[]>([]);
+  /** Ноды без AmneziaWG под ногой `awg` (409 `LINK_UNDERLAY_NOT_ON_NODE`). */
+  const [underlayRefused, setUnderlayRefused] = useState<string[]>([]);
   /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`). */
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
 
@@ -311,6 +315,12 @@ export function CascadeCreatePage() {
       const ports = refusedLinkPorts(err);
       if (ports) {
         setPortConflicts(ports);
+        return;
+      }
+      // Туннель под ногой просят у ноды без AmneziaWG: имена встают у ног.
+      const noAwg = refusedUnderlay(err);
+      if (noAwg && noAwg.length > 0) {
+        setUnderlayRefused(noAwg);
         return;
       }
       // The form blocks both unstorable shapes, so a 400 here means the API saw
@@ -561,6 +571,16 @@ export function CascadeCreatePage() {
                   LEG_PORT_BASE + i,
                   nodeById,
                   portConflicts,
+                )}
+                // Туннель поднимают обе стороны ноги: эта позиция и та, что её
+                // принимает (у последней это ноды всех направлений).
+                underlay={legUnderlay(
+                  [...pool.nodeIds, ...(pools[i + 1]?.nodeIds ?? directions.flatMap((d) => d.nodeIds))],
+                  nodeById,
+                  pool.linkParams?.underlay,
+                  undefined,
+                  underlayRefused,
+                  (u) => setPool(i, { linkParams: { ...(pool.linkParams ?? {}), underlay: u }, linkTouched: true }),
                 )}
               />
               </Fragment>
