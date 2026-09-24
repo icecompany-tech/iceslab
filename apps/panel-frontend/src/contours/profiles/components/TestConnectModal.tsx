@@ -22,6 +22,7 @@ import {
   IconShieldLock,
 } from '@tabler/icons-react';
 import { testConnectProfile, type TestConnectResult, type Profile } from '@/lib/domain/profiles';
+import { handshakeRecordFacts } from '@/contours/profiles/lib/handshakeRecord';
 
 interface Props {
   profile: Profile | null;
@@ -150,6 +151,7 @@ function ResultRow({ result }: { result: TestConnectResult }) {
   const { t } = useTranslation();
   const okColor = result.ok ? 'teal' : 'red';
   const Icon = result.ok ? IconCircleCheck : IconCircleX;
+  const record = handshakeRecordFacts(result);
   return (
     <Paper
       withBorder
@@ -196,6 +198,13 @@ function ResultRow({ result }: { result: TestConnectResult }) {
                   c={result.tlsVersion !== 'TLSv1.3' && result.kind === 'dest' ? 'red' : undefined}
                 >
                   {result.tlsVersion}
+                </Code>
+              </Tooltip>
+            )}
+            {record && (
+              <Tooltip label={t('testConnect.recordHint', { limit: record.limit })}>
+                <Code style={{ fontSize: 11 }} c={record.over ? 'red' : undefined}>
+                  {t('testConnect.record', { bytes: record.bytes, limit: record.limit })}
                 </Code>
               </Tooltip>
             )}

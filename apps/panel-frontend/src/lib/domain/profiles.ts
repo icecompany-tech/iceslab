@@ -210,6 +210,10 @@ export interface TestConnectResult {
   tlsVersion?: string;
   // H1 (dest) - negotiated ALPN (e.g. "h2"); a CDN-grade dest speaks HTTP/2.
   alpn?: string;
+  // Dest only: the longest record of the target's first flight, header
+  // included. Over 8192 the REALITY listener gives up on every handshake
+  // (E23), and the row comes back ok:false with the reason in `error`.
+  handshakeRecordMax?: number;
   error?: string;
   notes?: string;
 }

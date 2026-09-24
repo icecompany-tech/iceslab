@@ -300,6 +300,9 @@ export const profiles = {
     sniHint: 'The SNI we sent',
     certHint: 'The peer certificate CN: for REALITY this should be the masquerade site, not your domain',
     tlsHint: 'The negotiated TLS version: a REALITY masquerade target needs TLSv1.3',
+    record: 'handshake record {{bytes}} of {{limit}} bytes',
+    recordHint:
+      'The longest record of the target\'s first answer, header included. The REALITY listener relays it and gives up on a record over {{limit}} bytes: no handshake ever completes.',
   },
 
   profileForm: {
