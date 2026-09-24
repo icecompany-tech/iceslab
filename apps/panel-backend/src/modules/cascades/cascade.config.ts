@@ -11,7 +11,8 @@ import {
   type Transport,
 } from '@iceslab/shared';
 import { getLogger } from '../../lib/infra/logger.js';
-import { chainSocksPort } from './chain.ports.js';
+import { chainSocksPort, chainSocksUser } from './chain.ports.js';
+import { xrayGeoEntry } from '../geo-sets/geo-names.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
 import type { LegParams } from './direction-merge.js';
 import type { TopologyTunnel } from './cascade-tunnel.js';
@@ -1168,6 +1169,9 @@ export interface TopologyInput {
   /** Phase 8: the AWG tunnels under this cascade's `awg` legs, one per node
    *  pair. Only the chain renderer reads them. */
   tunnels?: TopologyTunnel[];
+  /** Phase 9.3: the ordinal of the cascade's entry policy, the route policy
+   *  for the entry's users who cannot pick one. Absent = none (plain). */
+  entryPolicyOrdinal?: number;
 }
 
 /**
@@ -1217,8 +1221,12 @@ export class CascadeTopologyBrokenError extends Error {
  *  give Auto a port of its own without anything else claiming it. */
 const CHAIN_AUTO_TAG = 0;
 
-function chainOutTag(directionTag: number): string {
-  return `${LINK_OUT_TAG}-chain-d${directionTag}`;
+/** Per (direction, route-policy ordinal) since phase 9.3: the ordinal is the
+ *  socks user the connection is handed over as. The plain profile keeps the
+ *  name it always had. */
+function chainOutTag(directionTag: number, ordinal = 0): string {
+  const base = `${LINK_OUT_TAG}-chain-d${directionTag}`;
+  return ordinal === 0 ? base : `${base}-p${ordinal}`;
 }
 
 /**
@@ -1229,20 +1237,27 @@ function chainOutTag(directionTag: number): string {
  * `chainSocksPort`, never stored, so the two processes cannot disagree about
  * which port carries which way out.
  */
-function chainSocksOutbound(directionTag: number, password: string): Record<string, unknown> {
+function chainSocksOutbound(directionTag: number, password: string, ordinal = 0): Record<string, unknown> {
   return {
-    tag: chainOutTag(directionTag),
+    tag: chainOutTag(directionTag, ordinal),
     protocol: 'socks',
     settings: {
       servers: [
         {
           address: '127.0.0.1',
           port: chainSocksPort(directionTag),
-          users: [{ user: 'chain', pass: password }],
+          // The user carries the route policy the client's UUID asked for
+          // (chain.ports.ts): the chain gates the policy's rules on it.
+          users: [{ user: chainSocksUser(ordinal), pass: password }],
         },
       ],
     },
   };
+}
+
+/** The profiles an entry hands over: plain, then each route policy. */
+function handoverOrdinals(policies: CascadePolicy[] | undefined): number[] {
+  return [0, ...new Set((policies ?? []).map((p) => p.ordinal).sort((a, b) => a - b))];
 }
 
 /** Per-direction outbound tag. Unlike the old index-based `-0/-1` suffix this
@@ -1338,14 +1353,16 @@ export function buildTopologyFragmentsForNode(
       );
     }
     if (handover) {
-      // One socks outbound per direction however many legs it has: the host and
-      // the credential belong to the chain process now, and the entry only has
-      // to know which loopback port carries this way out. A direction already
-      // handed over is not written twice.
+      // One socks outbound per direction and profile however many legs it
+      // has: the host and the credential belong to the chain process now, and
+      // the entry only has to know which loopback port carries this way out
+      // and as which user. A direction already handed over is not written
+      // twice.
       if (byDirection.has(l.directionTag)) continue;
-      const tag = chainOutTag(l.directionTag);
-      outbounds.push(chainSocksOutbound(l.directionTag, input.chainSocksPassword!));
-      byDirection.set(l.directionTag, [tag]);
+      for (const o of handoverOrdinals(input.policies)) {
+        outbounds.push(chainSocksOutbound(l.directionTag, input.chainSocksPassword!, o));
+      }
+      byDirection.set(l.directionTag, [chainOutTag(l.directionTag)]);
       continue;
     }
     const idx = perDirCounter.get(l.directionTag) ?? 0;
@@ -1405,7 +1422,12 @@ export function buildTopologyFragmentsForNode(
    * entry offers it), never on the plain profile's tag: the grant belongs to the
    * squad it was sold to.
    */
-  if (isEntry) {
+  // Phase 9.3: under handover the chain process carries the policies out
+  // (chain-policy.ts), gated on the socks user each profile is handed over
+  // as, so the xray entry draws none of them. Drawn here too, the same domain
+  // would be decided in two places, the first one silently winning. The legacy
+  // drawing (no handover, for an agent without a chain) keeps them.
+  if (isEntry && !handover) {
     for (const p of input.policies ?? []) {
       const tags = input.directions.map((d) => routeTag(p.ordinal, d.tag - 1));
       // Mirrors the condition the Auto rule below is emitted under: a tag with
@@ -1415,11 +1437,13 @@ export function buildTopologyFragmentsForNode(
       // with its port-list parser, and an array fails the WHOLE config so the
       // core refuses to start. Caught in the field 2026-08-08.
       const vlessRoute = tags.join(',');
+      // Spelled for xray on the node: an operator's geo set is the file it
+      // was laid out as (phase 9.2).
       if (p.blockDomains.length) {
         routingRules.push({
           type: 'field',
           vlessRoute,
-          domain: p.blockDomains,
+          domain: p.blockDomains.map(xrayGeoEntry),
           outboundTag: 'blocked',
         });
       }
@@ -1431,7 +1455,7 @@ export function buildTopologyFragmentsForNode(
         routingRules.push({
           type: 'field',
           vlessRoute,
-          domain: p.directDomains,
+          domain: p.directDomains.map(xrayGeoEntry),
           outboundTag: DIRECT_TAG,
         });
       }
@@ -1455,7 +1479,17 @@ export function buildTopologyFragmentsForNode(
     } else {
       target = { outboundTag: tags[0]! };
     }
-    if (isEntry) {
+    if (isEntry && handover) {
+      // One rule per profile: the client's UUID variant decides which user
+      // the connection reaches the chain as, and so which policy it gets.
+      for (const o of handoverOrdinals(input.policies)) {
+        routingRules.push({
+          type: 'field',
+          vlessRoute: String(routeTag(o, directionTag - 1)),
+          outboundTag: chainOutTag(directionTag, o),
+        });
+      }
+    } else if (isEntry) {
       // The client encodes (policy, direction) in its UUID; xray surfaces it as
       // vlessRoute. Plain profile is ordinal 0.
       const routeTags = [routeTag(0, directionTag - 1)];
@@ -1504,9 +1538,16 @@ export function buildTopologyFragmentsForNode(
       // Under handover the measuring moved to the chain process, which offers
       // Auto on its own loopback port like any other way out. So the entry has
       // nothing left to choose between: no balancer, no observatory, one more
-      // socks outbound.
-      outbounds.push(chainSocksOutbound(CHAIN_AUTO_TAG, input.chainSocksPassword!));
-      routingRules.push({ ...gate, outboundTag: chainOutTag(CHAIN_AUTO_TAG) });
+      // socks outbound per profile.
+      for (const o of handoverOrdinals(input.policies)) {
+        outbounds.push(chainSocksOutbound(CHAIN_AUTO_TAG, input.chainSocksPassword!, o));
+        routingRules.push({
+          type: 'field',
+          vlessRoute: String(autoRouteTag(o)),
+          network: 'tcp,udp',
+          outboundTag: chainOutTag(CHAIN_AUTO_TAG, o),
+        });
+      }
     } else {
       balancers.push({
         tag: AUTO_BALANCER_TAG,

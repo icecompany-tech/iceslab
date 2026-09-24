@@ -4,21 +4,21 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildTopologyFragmentsForNode, type TopologyInput } from './cascade.config.js';
+import { autoRouteTag, buildTopologyFragmentsForNode, type TopologyInput } from './cascade.config.js';
 import { chainSocksPort } from './chain.ports.js';
 
 /**
  * K3: the entry stops dialling the next hop and hands each direction to the
  * chain process instead.
  *
- * The claim being tested is a NEGATIVE one, and it is the whole point: nothing
- * about how the entry decides where traffic goes may change. The client still
- * encodes its choice in the UUID, xray still surfaces it as `vlessRoute`, the
- * policy rules still sit above the direction rules. Only what sits at the end
- * of each rule changes, from a leg dialled across the internet to a loopback
- * socks port. So the goldens are taken BEFORE and AFTER from the same topology
- * and the diff between them is read: anything in it besides the outbounds is a
- * defect, not a detail.
+ * The claim being tested is that no choice a client can make is lost. The
+ * client still encodes it in the UUID and xray still surfaces it as
+ * `vlessRoute`; what sits at the end of each rule changes, from a leg dialled
+ * across the internet to a loopback socks port. Since phase 9.3 the route
+ * policies moved too: the entry hands each (direction, profile) over as the
+ * profile's socks user (`p<ordinal>`) and the chain process draws the policy,
+ * so xray keeps no domain rule of its own. The goldens are taken BEFORE and
+ * AFTER from the same topology and the diff between them is read.
  *
  * The topology is the stand's: a POOL OF TWO on the entry step, two directions,
  * one policy. The pool matters twice over, because two entries are two separate
@@ -92,46 +92,59 @@ describe('the entry handing its directions to the chain process', () => {
     golden('xray-entry-after', buildTopologyFragmentsForNode(RU1, handedOver));
   });
 
-  it('changes the outbounds and NOTHING else', () => {
-    // The semantic half of the golden pair, said in one place so a reader does
-    // not have to diff two files to learn the rule.
+  it('keeps every choice a client can make, one rule per profile, and draws no policy', () => {
+    // Phase 9.3. Before the handover one rule per direction accepted the plain
+    // tag and every policy's tag, and the policy's domain rules sat above it.
+    // After it, each (direction, profile) has a rule of its own that hands the
+    // connection to the chain AS that profile's user, and the chain draws the
+    // policy. So: the same inbounds and firewall, QUIC still dropped first, no
+    // domain rule left on xray, and every tag accepted before still accepted.
     const before = buildTopologyFragmentsForNode(RU1, STAND)!;
     const after = buildTopologyFragmentsForNode(RU1, handedOver)!;
     expect(after.inbounds).toEqual(before.inbounds);
     expect(after.linkIngressPort).toEqual(before.linkIngressPort);
     expect(after.linkAllowFrom).toEqual(before.linkAllowFrom);
-    // Rules keep their order, their gating and their targets. The outbound TAG
-    // a direction rule points at is the one thing allowed to move, so compare
-    // the rules with the tags normalised away.
-    const shape = (rules: Record<string, unknown>[]) =>
-      rules.map((r) => ({ ...r, outboundTag: typeof r.outboundTag === 'string' ? 'OUT' : r.outboundTag }));
-    expect(shape(after.routingRules)).toEqual(shape(before.routingRules));
-    expect(after.routingRules.length).toBe(before.routingRules.length);
+    expect(after.routingRules[0]).toEqual(before.routingRules[0]);
+    expect(before.routingRules.some((r) => 'domain' in r)).toBe(true);
+    expect(after.routingRules.some((r) => 'domain' in r)).toBe(false);
+
+    const tags = (rules: Record<string, unknown>[]) =>
+      rules
+        .filter((r) => typeof r.vlessRoute === 'string' && !('domain' in r))
+        .flatMap((r) => (r.vlessRoute as string).split(','))
+        .sort();
+    expect(tags(after.routingRules)).toEqual(tags(before.routingRules));
   });
 
-  it('composes vlessRoute exactly as before', () => {
-    // The field that broke both entries in 2026-08-08 and the one number the
-    // architect asked for: the rules that gate on the client's choice, and the
-    // choices each of them accepts, are untouched by the handover.
-    const routes = (input: TopologyInput) =>
-      buildTopologyFragmentsForNode(RU1, input)!
-        .routingRules.filter((r) => typeof r.vlessRoute === 'string')
-        .map((r) => r.vlessRoute as string);
-    expect(routes(handedOver)).toEqual(routes(STAND));
-    // Still a comma-separated STRING, never an array: an array fails the whole
+  it('hands each profile over as its own socks user', () => {
+    const after = buildTopologyFragmentsForNode(RU1, handedOver)!;
+    const target = (tag: number) =>
+      after.routingRules.find((r) => r.vlessRoute === String(tag))?.outboundTag as string | undefined;
+    const userOf = (outboundTag: string | undefined) => {
+      const o = after.outbounds.find((x) => x.tag === outboundTag)!;
+      const server = (o.settings as { servers: { port: number; users: { user: string }[] }[] }).servers[0]!;
+      return { port: server.port, user: server.users[0]!.user };
+    };
+    // Plain on direction 1 (tag 1), the policy on direction 1 (tag 257), plain
+    // on direction 2 (tag 2): same port per direction, the user names the profile.
+    expect(userOf(target(1))).toEqual({ port: chainSocksPort(1), user: 'p0' });
+    expect(userOf(target(257))).toEqual({ port: chainSocksPort(1), user: 'p1' });
+    expect(userOf(target(2))).toEqual({ port: chainSocksPort(2), user: 'p0' });
+    // Still a single STRING per rule, never an array: an array fails the whole
     // config and the core refuses to start.
-    for (const v of routes(handedOver)) expect(typeof v).toBe('string');
+    for (const r of after.routingRules) if ('vlessRoute' in r) expect(typeof r.vlessRoute).toBe('string');
   });
 
   it('dials the loopback port the formula gives, with a password', () => {
     const after = buildTopologyFragmentsForNode(RU1, handedOver)!;
     const socks = after.outbounds.filter((o) => o.protocol === 'socks');
-    expect(socks.length).toBe(2);
+    // Two directions, two profiles (plain and the one policy).
+    expect(socks.length).toBe(4);
     const dialled = socks.map((o) => {
       const server = (o.settings as { servers: Record<string, unknown>[] }).servers[0]!;
       return { address: server.address, port: server.port, users: server.users };
     });
-    expect(dialled.map((d) => d.port)).toEqual([chainSocksPort(1), chainSocksPort(2)]);
+    expect([...new Set(dialled.map((d) => d.port))]).toEqual([chainSocksPort(1), chainSocksPort(2)]);
     // Loopback only: a socks outbound pointed anywhere else would carry the
     // user's traffic to a machine nobody named.
     expect(dialled.every((d) => d.address === '127.0.0.1')).toBe(true);
@@ -144,7 +157,6 @@ describe('the entry handing its directions to the chain process', () => {
     expect(after.outbounds.some((o) => o.protocol === 'vless')).toBe(false);
     expect(after.outbounds.some((o) => o.protocol === 'shadowsocks')).toBe(false);
   });
-
   it('gives both entries of the pool the same ways out, differing only by address', () => {
     // Two entries are two configs, and the subscriber must not be able to tell
     // which one they landed on. Before the handover they differ in the legs
@@ -167,10 +179,10 @@ describe('the entry handing its directions to the chain process', () => {
     expect(addresses(RU2)).toEqual(addresses(RU1));
   });
 
-  it('hands the Auto line over as one more way out, and stops measuring', () => {
+  it('hands the Auto line over as one more way out per profile, and stops measuring', () => {
     // Auto is "the fastest way out right now", and under handover the measuring
     // belongs to the chain process, which offers it on its own loopback port
-    // like any other direction. So the entry keeps the RULE and loses the
+    // like any other direction. So the entry keeps the RULES and loses the
     // machinery: no balancer to pick with, no observatory to pick by.
     const before = buildTopologyFragmentsForNode(RU1, { ...STAND, auto: true })!;
     const after = buildTopologyFragmentsForNode(RU1, { ...handedOver, auto: true })!;
@@ -179,20 +191,16 @@ describe('the entry handing its directions to the chain process', () => {
     expect(after.balancers).toBeUndefined();
     expect(after.observatory).toBeUndefined();
 
-    const autoOf = (rules: Record<string, unknown>[]) =>
-      rules.find((r) => r.network === 'tcp,udp' && typeof r.vlessRoute === 'string')!;
-    // The gate is untouched: same choices accepted, same place in the order.
-    expect(autoOf(after.routingRules).vlessRoute).toBe(autoOf(before.routingRules).vlessRoute);
-    expect(after.routingRules.length).toBe(before.routingRules.length);
-    // Tag 0 is Auto's port, and it is a port of its own rather than a reuse of
-    // some direction's: reusing one would send every Auto subscriber down the
-    // same fixed way out.
-    const auto = after.outbounds.find((o) => o.tag === 'cascade-link-out-chain-d0')!;
-    expect((auto.settings as { servers: { port: number }[] }).servers[0]!.port).toBe(
-      chainSocksPort(0),
-    );
+    // One Auto rule per profile, each to Auto's own port as that profile's
+    // user. Tag 0 is a port of its own rather than a reuse of some direction's:
+    // reusing one would send every Auto subscriber down the same fixed way out.
+    for (const [ordinal, user] of [[0, 'p0'], [1, 'p1']] as const) {
+      const rule = after.routingRules.find((r) => r.vlessRoute === String(autoRouteTag(ordinal)))!;
+      const o = after.outbounds.find((x) => x.tag === rule.outboundTag)!;
+      const server = (o.settings as { servers: { port: number; users: { user: string }[] }[] }).servers[0]!;
+      expect({ port: server.port, user: server.users[0]!.user }).toEqual({ port: chainSocksPort(0), user });
+    }
   });
-
   it.skipIf(!XRAY_BIN).each([
     ['without the Auto line', handedOver],
     ['with the Auto line', { ...handedOver, auto: true }],

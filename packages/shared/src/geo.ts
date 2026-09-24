@@ -44,6 +44,10 @@ export const GEO_SET_NAME = /^[a-z0-9-]{1,32}$/;
 export const GEO_ASSET_NAME =
   /^(geosite\.dat|geoip\.dat|iceslab-[a-z0-9-]{1,32}\.dat|iceslab-[a-z0-9-]{1,32}\.[a-z0-9@!_-]{1,64}\.json)$/;
 
+/** The agent's geo directory (internal/geo/store.go DefaultDir). The chain
+ *  config names its rule-sets by path, so the panel has to know it. */
+export const GEO_DIR_ON_NODE = '/etc/iceslab-node/geo';
+
 /** The two built-in sets. Their names are taken: `geosite:` and `geoip:` in a
  *  rule mean them, and on a node they are `geosite.dat` and `geoip.dat`. */
 export const GEO_BUILTIN_NAMES = { geosite: 'geosite', geoip: 'geoip' } as const satisfies Record<
@@ -147,7 +151,16 @@ export interface NodeGeoFact {
  *  on the DTO = its rules name no set. */
 export interface NodeGeoIntended {
   version: string;
-  files: { name: string; sha256: string; setId: string; setName: string; setVersion: string }[];
+  files: {
+    name: string;
+    sha256: string;
+    /** Who reads the file on the node: xray a `.dat`, the chain process at a
+     *  cascade entry a rule-set JSON (phase 9.3). */
+    reader: 'xray' | 'chain';
+    setId: string;
+    setName: string;
+    setVersion: string;
+  }[];
 }
 
 export interface GeoSetUse {

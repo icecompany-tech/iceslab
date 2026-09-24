@@ -62,14 +62,12 @@ const entry: ChainRenderInput = {
   socksPassword: 'chain-socks-fixture-password-0000',
   directionTags: [1],
   out: [{ tag: 1, host: '10.67.0.2', cred: LEG, via: 'awg-l0' }],
-  policy: null,
 };
 
 const exit: ChainRenderInput = {
   role: 'exit',
   socksPassword: 'chain-socks-fixture-password-0000',
   in: { cred: LEG, clients: [{ tag: 1, uuid: LEG.uuid }], listen: ['10.67.0.2'] },
-  policy: null,
 };
 
 /** An exit two entries reach through two tunnels: two listeners, two addresses. */

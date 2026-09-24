@@ -1,5 +1,9 @@
-import { GEO_BUILTIN_NAMES, type GeoSetUse } from '@iceslab/shared';
+import type { GeoSetUse } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
+import { parseGeoRef, type GeoRef, type GeoRefField } from './geo-names.js';
+
+export { chainRuleSetFileName, nodeFileName, parseGeoRef, xrayGeoEntry } from './geo-names.js';
+export type { GeoRef, GeoRefField } from './geo-names.js';
 
 /**
  * Where rules name geo sets. Three places and only three (checked by ARCH over
@@ -7,76 +11,6 @@ import { prisma } from '../../prisma.js';
  * domain lists of route policies, and a node's resolver. Nothing the panel or
  * the agent renders carries a hard-coded `geosite:`/`geoip:`.
  */
-
-/** The name the set's file has on a node (geo-contract.md section 1): the
- *  built-in ones under the names xray looks up, an operator's as
- *  `iceslab-<name>.dat`, which the agent's xray translates `ext:<name>:` to. */
-export function nodeFileName(s: { name: string; sourceType: string }): string {
-  return s.sourceType === 'builtin' ? `${s.name}.dat` : `iceslab-${s.name}.dat`;
-}
-
-/**
- * An entry as xray on the node must spell it, for the JSON the PANEL renders
- * (the cascade fragments): `ext:<set>:<tag>` becomes `ext:iceslab-<set>.dat:
- * <tag>`, the file the set is laid out as. The agent does the same for the
- * policy and resolver it renders itself (internal/core/xray/geo.go); whoever
- * writes the core's JSON translates (geo-contract.md section 0). Everything
- * else, `geosite:` and `geoip:` included, passes through.
- */
-export function xrayGeoEntry(entry: string): string {
-  for (const prefix of ['ext:', 'ext-domain:', 'ext-ip:']) {
-    if (!entry.startsWith(prefix)) continue;
-    const rest = entry.slice(prefix.length);
-    const cut = rest.indexOf(':');
-    if (cut <= 0) return entry;
-    const set = rest.slice(0, cut);
-    if (set.endsWith('.dat')) return entry;
-    return `${prefix}iceslab-${set}.dat${rest.slice(cut)}`;
-  }
-  return entry;
-}
-
-/** Which list of a rule an entry sits in: xray reads the two differently. */
-export type GeoRefField = 'domain' | 'ip';
-
-export interface GeoRef {
-  /** The set's name: `geosite`, `geoip` or the `<name>` of `ext:`. */
-  set: string;
-  /** The tag as the rule spells it, attributes and `!` included. */
-  tag: string;
-  /** The tag the set has to contain: lower case, no `@attr`, no leading `!`. */
-  baseTag: string;
-  field: GeoRefField;
-  entry: string;
-}
-
-/**
- * The geo reference in one rule entry, or null for an entry that names none
- * (a domain, a CIDR, `regexp:`, `keyword:`...). Spellings as xray takes them:
- * `geosite:`, `geoip:`, `ext:<file>:<tag>` and its qualified forms
- * `ext-domain:` and `ext-ip:` (infra/conf/router.go:370-402, 440-504).
- */
-export function parseGeoRef(entry: string, field: GeoRefField): GeoRef | null {
-  const e = entry.trim();
-  let set: string;
-  let tag: string;
-  if (e.startsWith('geosite:')) {
-    set = GEO_BUILTIN_NAMES.geosite;
-    tag = e.slice('geosite:'.length);
-  } else if (e.startsWith('geoip:')) {
-    set = GEO_BUILTIN_NAMES.geoip;
-    tag = e.slice('geoip:'.length);
-  } else {
-    const prefix = ['ext:', 'ext-domain:', 'ext-ip:'].find((p) => e.startsWith(p));
-    if (!prefix) return null;
-    const parts = e.slice(prefix.length).split(':');
-    if (parts.length !== 2) return null;
-    [set, tag] = parts as [string, string];
-  }
-  const baseTag = tag.replace(/^!/, '').split('@')[0]!.toLowerCase();
-  if (set === '' || baseTag === '') return null;
-  return { set, tag, baseTag, field, entry: e };
-}
 
 export interface GeoUseSite {
   ref: GeoRef;

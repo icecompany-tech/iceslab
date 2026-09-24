@@ -13,15 +13,27 @@
 export const CHAIN_SOCKS_BASE = 26000;
 
 /**
- * The user every chain socks listener asks for, beside the node's chain secret.
+ * The socks user a hand-off arrives as, one per route-policy ordinal (phase
+ * 9.3): `p0` is the plain profile, `p<k>` the policy with ordinal k. The user
+ * IS how the chain knows which policy a connection carries: xray's entry reads
+ * it off the client's UUID variant (vlessRoute) and dials the chain as that
+ * user, and the chain's policy rules gate on `auth_user`.
  *
  * Here for the same reason as the port formula: two sides must agree on it and
  * neither should import the other. The listeners are rendered in
- * `chain.config.ts`; since phase 6 the hand-off a hysteria entry is told to make
- * is built in the service. A second spelling of this word would be a hand-off
- * the listener refuses on every connection, with both configs loading cleanly.
+ * `chain.config.ts`, the xray outbounds that dial them in `cascade.config.ts`,
+ * the hysteria hand-off in the service. A second spelling would be a hand-off
+ * the listener refuses on every connection, with every config loading cleanly.
+ * The agent never reads the name.
  */
-export const CHAIN_SOCKS_USER = 'chain';
+export function chainSocksUser(ordinal: number): string {
+  return `p${ordinal}`;
+}
+
+/** The plain profile's user, the one every entry has, and the one a hysteria
+ *  entry hands its users over as. Until phase 9.3 the only user, then named
+ *  `chain`. */
+export const CHAIN_SOCKS_USER = chainSocksUser(0);
 
 /**
  * The socks port for a way out.

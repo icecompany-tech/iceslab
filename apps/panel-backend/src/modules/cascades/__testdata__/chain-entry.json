@@ -10,7 +10,11 @@
       "listen_port": 26000,
       "users": [
         {
-          "username": "chain",
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        },
+        {
+          "username": "p1",
           "password": "chain-socks-fixture-password-0000"
         }
       ]
@@ -22,7 +26,11 @@
       "listen_port": 26001,
       "users": [
         {
-          "username": "chain",
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        },
+        {
+          "username": "p1",
           "password": "chain-socks-fixture-password-0000"
         }
       ]
@@ -34,7 +42,11 @@
       "listen_port": 26002,
       "users": [
         {
-          "username": "chain",
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        },
+        {
+          "username": "p1",
           "password": "chain-socks-fixture-password-0000"
         }
       ]
@@ -153,6 +165,9 @@
         "method": "drop"
       },
       {
+        "auth_user": [
+          "p1"
+        ],
         "domain_suffix": [
           "ads.example"
         ],
@@ -160,6 +175,9 @@
         "method": "drop"
       },
       {
+        "auth_user": [
+          "p1"
+        ],
         "domain_suffix": [
           "gosuslugi.ru"
         ],

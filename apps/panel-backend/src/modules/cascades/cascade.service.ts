@@ -14,6 +14,7 @@ import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/cou
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
 import { xrayGeoEntry } from '../geo-sets/geo-refs.js';
+import { chainPoliciesOf } from './chain-policy.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import {
@@ -54,7 +55,7 @@ import type {
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
-import { CHAIN_SOCKS_USER, chainSocksPort } from './chain.ports.js';
+import { chainSocksPort, chainSocksUser } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
 import { canRunChainAtSave, carriesCellAtSave } from './cell-carriage.js';
 import {
@@ -109,6 +110,22 @@ export class CascadeNameTakenError extends Error {
     super(`Cascade name "${name}" is already in use`);
     this.name = 'CascadeNameTakenError';
   }
+}
+/** Phase 9.3: the entry policy names a route policy that is not there (never
+ *  was, or was deleted since the screen loaded). 400 ENTRY_POLICY_NOT_FOUND. */
+export class CascadeEntryPolicyNotFoundError extends Error {
+  readonly code = 'ENTRY_POLICY_NOT_FOUND';
+  constructor(public policyId: string) {
+    super(`Route policy ${policyId} does not exist, so it cannot be this cascade's entry policy`);
+    this.name = 'CascadeEntryPolicyNotFoundError';
+  }
+}
+
+/** A given entry policy must exist; absent and null need no check. */
+async function assertEntryPolicyExists(policyId: string | null | undefined): Promise<void> {
+  if (!policyId) return;
+  const found = await prisma.routePolicy.findUnique({ where: { id: policyId }, select: { id: true } });
+  if (!found) throw new CascadeEntryPolicyNotFoundError(policyId);
 }
 export class CascadeNodeMissingError extends Error {
   constructor(
@@ -626,6 +643,8 @@ const hopInclude = {
   // its open-port answer. Narrow selects: no credential leaves the table here.
   tunnels: { select: { fromNodeId: true, toNodeId: true, index: true, port: true } },
   links: { select: { fromNodeId: true, toNodeId: true, directionTag: true } },
+  // Phase 9.3: named in the DTO, so a card and a selector need no second call.
+  entryPolicy: { select: { id: true, name: true, ordinal: true } },
 };
 
 async function assertNodesExist(nodeIds: string[]): Promise<void> {
@@ -1718,6 +1737,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // Phase 6: a hysteria entry reaches the cascade only through the chain
   // process, so its nodes must be able to run one.
   await assertEntryCanChain(positions);
+  await assertEntryPolicyExists(input.entryPolicyId);
   // v4 topology, validated separately from the fold: the fold answers "can the
   // old storage hold this", these rules answer "is this a sane cascade at all".
   const topology =
@@ -1731,6 +1751,7 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
           mode,
           hideHopsFromSub: input.hideHopsFromSub,
           autoProfile: input.autoProfile,
+          ...(input.entryPolicyId ? { entryPolicy: { connect: { id: input.entryPolicyId } } } : {}),
           hops: {
             create: hops.map((h, idx) => ({
               // Nested create uses the checked input -> connect the relation
@@ -1911,6 +1932,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   await assertEntryCanChain(positions);
   await assertEntryChangeConfirmed(id, positions, input.confirmEntryChange === true);
   await assertEntryNodesDropConfirmed(id, positions, input.confirmEntryChange === true);
+  await assertEntryPolicyExists(input.entryPolicyId);
 
   try {
     const c = await prisma.$transaction(async (tx) => {
@@ -1924,6 +1946,10 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
             ? { hideHopsFromSub: input.hideHopsFromSub }
             : {}),
           ...(input.autoProfile !== undefined ? { autoProfile: input.autoProfile } : {}),
+          // Three values: absent leaves it, null clears it, an id sets it.
+          ...('entryPolicyId' in input && input.entryPolicyId !== undefined
+            ? { entryPolicyId: input.entryPolicyId }
+            : {}),
         },
       });
       if (!hops && positions && directions) {
@@ -2149,10 +2175,16 @@ function userCoreFor(
     // One listener for the whole entry: Auto's, which chainInputFor always
     // renders for a hysteria entry. A port and not an address; the agent
     // writes 127.0.0.1 itself.
+    //
+    // Phase 9.3: every hysteria user is handed over as the user of the
+    // cascade's ENTRY policy (the owner's decision of 24.09: they cannot pick
+    // one), so the chain applies that policy's rules to all of them. None set
+    // is the plain profile, p0, which the chain draws no rules for.
+    const ordinal = topology.entryPolicyOrdinal ?? 0;
     return {
       userCore: {
         engine: 'hysteria',
-        socks: { port: chainSocksPort(0), username: CHAIN_SOCKS_USER, password: secret },
+        socks: { port: chainSocksPort(0), username: chainSocksUser(ordinal), password: secret },
       },
     };
   }
@@ -2258,12 +2290,22 @@ function chainInputFor(
         : t.auto && tags.length > 1
           ? [0, ...tags]
           : tags;
-    return { role, socksPassword, directionTags, out, policy: null };
+    // Phase 9.3: the route policies are carried out HERE, gated on the user
+    // the entry's core hands each connection over as, and no longer on the
+    // xray entry (buildTopologyFragmentsForNode draws none under handover).
+    // Both halves travel in one push, so there is no moment with the policy
+    // drawn twice or nowhere.
+    const { policies, ruleSets } = chainPoliciesOf(t.policies ?? []);
+    return {
+      role,
+      socksPassword,
+      directionTags,
+      out,
+      ...(policies.length > 0 ? { policies, ruleSets: ruleSets.map((r) => ({ tag: r.tag, path: r.path })) } : {}),
+    };
   }
   if (!inLeg) return null;
-  return role === 'exit'
-    ? { role, socksPassword, in: inLeg, policy: null }
-    : { role, socksPassword, in: inLeg, out, policy: null };
+  return role === 'exit' ? { role, socksPassword, in: inLeg } : { role, socksPassword, in: inLeg, out };
 }
 
 /**
@@ -2480,7 +2522,7 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
   const [cascadeRow, positions, directions, links, policyRows, tunnelRows] = await Promise.all([
     prisma.cascade.findUnique({
       where: { id: link.cascadeId },
-      select: { autoProfile: true },
+      select: { autoProfile: true, entryPolicy: { select: { ordinal: true } } },
     }),
     prisma.cascadePosition.findMany({
       where: { cascadeId: link.cascadeId },
@@ -2575,17 +2617,19 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     directions: directions.map((d) => ({ tag: d.tag, nodeIds: d.nodes.map((n) => n.nodeId) })),
     links: rows,
     hosts,
-    // Spelled for xray on the node: an operator's geo set is the file it was
-    // laid out as (phase 9.2, xrayGeoEntry).
+    // As stored, the operator's spelling. Each renderer translates for its own
+    // engine: the xray fragments in cascade.config.ts (xrayGeoEntry), the chain
+    // in chain-policy.ts.
     policies: policyRows.map((p) => ({
       ordinal: p.ordinal,
-      directDomains: p.directDomains.map(xrayGeoEntry),
-      blockDomains: p.blockDomains.map(xrayGeoEntry),
+      directDomains: p.directDomains,
+      blockDomains: p.blockDomains,
     })),
     // The node has to know before the subscription hands the tag out: an Auto
     // profile whose rule is missing at the entry egresses from the entry
     // country instead of failing, which is the one outcome worth preventing.
     auto: cascadeRow?.autoProfile ?? false,
+    ...(cascadeRow?.entryPolicy ? { entryPolicyOrdinal: cascadeRow.entryPolicy.ordinal } : {}),
     entryProtocol: positions.find((p) => p.position === 0)?.entryProtocol ?? undefined,
     tunnels,
   };

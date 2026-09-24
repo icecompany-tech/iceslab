@@ -100,20 +100,44 @@ describe('the list', () => {
     ]);
   });
 
-  it('counts the rule entries naming a set and the nodes they reach, none of them pinned yet', async () => {
+  it('counts the rule entries naming a set and the nodes they reach, behind only by what a node REPORTED', async () => {
     const id = await verifiedSet();
     const p = await policy('no-ads', ['ext:mylist:ads', 'ext:mylist:adult@x', 'example.com']);
-    await node('ru-01', { policyId: p });
+    const ru1 = await node('ru-01', { policyId: p });
     await node('ru-02', { dns: { servers: [{ address: '1.1.1.1', domains: ['ext-domain:mylist:ru'], expectIps: [] }] } });
     const { body } = await call('GET', `/api/geo-sets/${id}`);
+    // ARCH 24.09: behind by fact, the rule of the node card. Neither node has
+    // reported, and the card calls that "did not report", not "behind".
     expect(body).toMatchObject({
       name: 'mylist',
       source: { type: 'upload', filename: 'mylist.dat' },
       status: 'verified',
       current: { tagCount: 4 },
       usedByRules: 3,
-      nodes: { total: 2, behind: 2 },
+      nodes: { total: 2, behind: 0 },
     });
+
+    // ru-01 reports the file with another sha: now it is behind.
+    await prisma.node.update({
+      where: { id: ru1 },
+      data: {
+        geo: { version: 'x', files: [{ name: 'iceslab-mylist.dat', sha256: 'ab'.repeat(32), size: 1 }], observedAt: new Date().toISOString() },
+      },
+    });
+    expect((await call('GET', `/api/geo-sets/${id}`)).body.nodes).toEqual({ total: 2, behind: 1 });
+
+    // And with the right one, it is not.
+    await prisma.node.update({
+      where: { id: ru1 },
+      data: {
+        geo: {
+          version: 'x',
+          files: [{ name: 'iceslab-mylist.dat', sha256: body.current.sha256, size: body.current.sizeBytes }],
+          observedAt: new Date().toISOString(),
+        },
+      },
+    });
+    expect((await call('GET', `/api/geo-sets/${id}`)).body.nodes).toEqual({ total: 2, behind: 0 });
   });
 });
 

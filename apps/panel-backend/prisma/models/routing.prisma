@@ -16,6 +16,8 @@ model RoutePolicy {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   grants GroupRoutePolicy[]
+  // Phase 9.3: cascades whose non-choosing users get this policy.
+  entryOf Cascade[] @relation("CascadeEntryPolicy")
 
   @@map("route_policies")
 }

@@ -113,6 +113,13 @@ export interface CascadeDto {
   /** Offer the Auto line in the subscription: one profile that names no
    *  direction and lets the entry pick the fastest exit by measured RTT. */
   autoProfile: boolean;
+  /**
+   * Phase 9.3: the route policy the entry's users who cannot pick one get
+   * (hysteria, and AmneziaWG once its entry lands); xray users keep choosing
+   * by their UUID. null = none, the plain profile. Written as
+   * `entryPolicyId` on create and update: absent = no edit, null = clear.
+   */
+  entryPolicy: { id: string; name: string; ordinal: number } | null;
   hops: CascadeHopDto[];
   /** v4 shape. Always present (possibly empty): empty means the cascade was
    *  written before the topology tables existed and still describes itself
@@ -139,6 +146,8 @@ interface CascadeRow {
   /** Optional so a caller selecting a narrow row shape still type-checks; a
    *  missing value reads as off, which is the default. */
   autoProfile?: boolean;
+  /** Optional on the ROW like `autoProfile`; absent reads as none. */
+  entryPolicy?: { id: string; name: string; ordinal: number } | null;
   nextDirectionTag?: number;
   createdAt: Date;
   updatedAt: Date;
@@ -230,6 +239,7 @@ export function mapCascade(c: CascadeRow): CascadeDto {
     mode: c.mode,
     hideHopsFromSub: c.hideHopsFromSub,
     autoProfile: c.autoProfile ?? false,
+    entryPolicy: c.entryPolicy ?? null,
     hops: c.hops.map((h) => ({
       id: h.id,
       nodeId: h.nodeId,

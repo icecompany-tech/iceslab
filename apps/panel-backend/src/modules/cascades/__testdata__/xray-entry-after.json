@@ -14,7 +14,25 @@
             "port": 26001,
             "users": [
               {
-                "user": "chain",
+                "user": "p0",
+                "pass": "chain-socks-fixture-password-0000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "cascade-link-out-chain-d1-p1",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 26001,
+            "users": [
+              {
+                "user": "p1",
                 "pass": "chain-socks-fixture-password-0000"
               }
             ]
@@ -32,7 +50,25 @@
             "port": 26002,
             "users": [
               {
-                "user": "chain",
+                "user": "p0",
+                "pass": "chain-socks-fixture-password-0000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "cascade-link-out-chain-d2-p1",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 26002,
+            "users": [
+              {
+                "user": "p1",
                 "pass": "chain-socks-fixture-password-0000"
               }
             ]
@@ -54,29 +90,23 @@
     },
     {
       "type": "field",
-      "vlessRoute": "257,258",
-      "domain": [
-        "tracker.example"
-      ],
-      "outboundTag": "blocked"
-    },
-    {
-      "type": "field",
-      "vlessRoute": "257,258",
-      "domain": [
-        "ads.example"
-      ],
-      "outboundTag": "direct"
-    },
-    {
-      "type": "field",
-      "vlessRoute": "1,257",
+      "vlessRoute": "1",
       "outboundTag": "cascade-link-out-chain-d1"
     },
     {
       "type": "field",
-      "vlessRoute": "2,258",
+      "vlessRoute": "257",
+      "outboundTag": "cascade-link-out-chain-d1-p1"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "2",
       "outboundTag": "cascade-link-out-chain-d2"
+    },
+    {
+      "type": "field",
+      "vlessRoute": "258",
+      "outboundTag": "cascade-link-out-chain-d2-p1"
     }
   ]
 }

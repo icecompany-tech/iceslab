@@ -24,13 +24,11 @@ const ends = (cred: LinkCred) => {
     socksPassword: 'p',
     directionTags: [1],
     out: [{ tag: 1, host: '192.0.2.10', cred }],
-    policy: null,
   }) as { outbounds: { type: string; congestion_control?: string }[] };
   const exit = renderChainConfig({
     role: 'exit',
     socksPassword: 'p',
     in: { cred, clients: [{ tag: 1 }] },
-    policy: null,
   }) as { inbounds: { type: string; congestion_control?: string }[] };
   return {
     dialled: entry.outbounds.find((o) => o.type === 'tuic')?.congestion_control,

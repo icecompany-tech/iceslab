@@ -107,20 +107,6 @@
         "protocol": "bittorrent",
         "action": "reject",
         "method": "drop"
-      },
-      {
-        "domain_suffix": [
-          "ads.example"
-        ],
-        "action": "reject",
-        "method": "drop"
-      },
-      {
-        "domain_suffix": [
-          "gosuslugi.ru"
-        ],
-        "action": "route",
-        "outbound": "direct"
       }
     ]
   }

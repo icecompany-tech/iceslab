@@ -28,6 +28,13 @@ model Cascade {
   // Off by default so an existing operator's client lists do not grow a row
   // they never asked for after an update.
   autoProfile     Boolean  @default(false) @map("auto_profile")
+  // Phase 9.3, the owner's decision of 24.09: the route policy for the users of
+  // this entry who cannot pick one (hysteria, and AmneziaWG once its entry
+  // lands). xray users keep choosing by their UUID. NULL = none, the plain
+  // profile. Restrict: a policy standing as an entry policy is not deleted
+  // under the cascade; the API refuses first, naming it.
+  entryPolicyId   String?      @map("entry_policy_id") @db.Uuid
+  entryPolicy     RoutePolicy? @relation("CascadeEntryPolicy", fields: [entryPolicyId], references: [id], onDelete: Restrict)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -48,6 +55,7 @@ model Cascade {
   groupExits GroupCascadeExit[]
   groupsOff  GroupCascadeOff[]
 
+  @@index([entryPolicyId])
   @@map("cascades")
 }
 

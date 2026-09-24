@@ -222,6 +222,9 @@ const CascadeBaseFields = {
   /** Offer the Auto line: one profile that names no direction and lets the
    *  entry pick the fastest exit. Off by default, see the schema comment. */
   autoProfile: z.boolean().default(false),
+  /** Phase 9.3: the route policy for the entry's users who cannot pick one.
+   *  Absent = none on create; on update absent = no edit, null = clear. */
+  entryPolicyId: z.uuid().nullable().optional(),
 };
 
 export const CreateCascadeSchema = z
@@ -254,6 +257,8 @@ export const UpdateCascadeSchema = z
     mode: CascadeMode.optional(),
     hideHopsFromSub: z.boolean().optional(),
     autoProfile: z.boolean().optional(),
+    // No default: absent is no edit, null clears (the three-value rule).
+    entryPolicyId: z.uuid().nullable().optional(),
     hops: z.array(CascadeHopSchema).min(2).max(MAX_CASCADE_HOPS).optional(),
     positions: z.array(CascadePositionSchema).min(1).max(MAX_CASCADE_HOPS).optional(),
     directions: z.array(CascadeDirectionSchema).min(1).optional(),

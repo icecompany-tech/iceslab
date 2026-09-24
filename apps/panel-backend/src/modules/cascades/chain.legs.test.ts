@@ -8,6 +8,7 @@ import { LINK_CELL_TRANSPORT } from '@iceslab/shared';
 import { renderChainConfig, type ChainRenderInput } from './chain.config.js';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
 import type { LinkTls } from './link-tls.js';
+import { chainPoliciesOf } from './chain-policy.js';
 
 /**
  * The chain of cut 5: four hops and three different cells.
@@ -66,7 +67,10 @@ const SS_LEG: LinkCred = {
   method: '2022-blake3-aes-256-gcm',
 };
 
-const POLICY = { directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] };
+/** One route policy, drawn on the entry only (phase 9.3), under user p1. */
+const { policies: POLICIES } = chainPoliciesOf([
+  { ordinal: 1, directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] },
+]);
 
 /** The entry hands its user core one way out and dials the hy2 leg. */
 const entry: ChainRenderInput = {
@@ -74,7 +78,7 @@ const entry: ChainRenderInput = {
   socksPassword: 'chain-socks-fixture-password-0000',
   directionTags: [1],
   out: [{ tag: 1, host: 'hop-1.example.com', cred: HY2_LEG }],
-  policy: POLICY,
+  policies: POLICIES,
 };
 
 /** First transit: receives hy2, forwards over tuic. */
@@ -83,7 +87,6 @@ const transit1: ChainRenderInput = {
   socksPassword: 'chain-socks-fixture-password-0000',
   in: { cred: HY2_LEG, clients: [{ tag: 1 }] },
   out: [{ tag: 1, host: 'hop-2.example.com', cred: TUIC_LEG }],
-  policy: POLICY,
 };
 
 /** Second transit: receives tuic, forwards over shadowsocks. */
@@ -92,14 +95,12 @@ const transit2: ChainRenderInput = {
   socksPassword: 'chain-socks-fixture-password-0000',
   in: { cred: TUIC_LEG, clients: [{ tag: 1 }] },
   out: [{ tag: 1, host: 'exit.example.com', cred: SS_LEG }],
-  policy: POLICY,
 };
 
 const exit: ChainRenderInput = {
   role: 'exit',
   socksPassword: 'chain-socks-fixture-password-0000',
   in: { cred: SS_LEG, clients: [{ tag: 1 }] },
-  policy: POLICY,
 };
 
 const HOPS: readonly (readonly [string, ChainRenderInput])[] = [

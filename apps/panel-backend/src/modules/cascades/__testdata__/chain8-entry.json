@@ -10,7 +10,7 @@
       "listen_port": 26001,
       "users": [
         {
-          "username": "chain",
+          "username": "p0",
           "password": "chain-socks-fixture-password-0000"
         }
       ]

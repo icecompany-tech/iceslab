@@ -1,6 +1,7 @@
 import type { LinkCell } from '@iceslab/shared';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
-import { CHAIN_SOCKS_USER, chainSocksPort } from './chain.ports.js';
+import { chainSocksPort, chainSocksUser } from './chain.ports.js';
+import { chainMatchIsEmpty, type ChainPolicy } from './chain-policy.js';
 import { LINK_TLS_SERVER_NAME, pemLines, type LinkTls } from './link-tls.js';
 
 /**
@@ -95,8 +96,15 @@ export interface ChainRenderInput {
   out?: ChainLegOut[];
   /** The leg arriving here. Absent on an entry. */
   in?: ChainLegIn;
-  /** The node-level policy, already resolved. */
-  policy?: { directDomains?: string[]; blockDomains?: string[] } | null;
+  /**
+   * The route policies (A4) this ENTRY carries out, phase 9.3, one per
+   * ordinal >= 1. Each hands-off user `p<ordinal>` gets its block and direct
+   * rules; `p0`, the plain profile, gets none. Ignored off an entry: a transit
+   * and an exit see links, not users.
+   */
+  policies?: ChainPolicy[];
+  /** The rule-sets those policies name, local files in the geo directory. */
+  ruleSets?: { tag: string; path: string }[];
 }
 
 type Json = Record<string, unknown>;
@@ -450,15 +458,23 @@ function protectionRules(): Json[] {
  *  made in one place with a reason. */
 export const CHAIN_PROTECTION_RULES = 4;
 
-function policyRules(policy: ChainRenderInput['policy']): Json[] {
+/**
+ * The route policies, gated on the user the entry handed the connection over
+ * as. Block before direct, as xray's entry drew them: what a policy blocks is
+ * blocked for its holder even inside a domain set it otherwise sends direct.
+ * After the protections (an operator's rule must not reopen port 25) and
+ * before the ways out (a door placed first matches everything behind it).
+ */
+function policyRules(policies: ChainPolicy[]): Json[] {
   const rules: Json[] = [];
-  const block = policy?.blockDomains?.filter((d) => d.length > 0) ?? [];
-  const direct = policy?.directDomains?.filter((d) => d.length > 0) ?? [];
-  if (block.length > 0) {
-    rules.push({ domain_suffix: block, action: 'reject', method: 'drop' });
-  }
-  if (direct.length > 0) {
-    rules.push({ domain_suffix: direct, action: 'route', outbound: 'direct' });
+  for (const p of policies) {
+    const user = [chainSocksUser(p.ordinal)];
+    if (!chainMatchIsEmpty(p.block)) {
+      rules.push({ auth_user: user, ...p.block, action: 'reject', method: 'drop' });
+    }
+    if (!chainMatchIsEmpty(p.direct)) {
+      rules.push({ auth_user: user, ...p.direct, action: 'route', outbound: 'direct' });
+    }
   }
   return rules;
 }
@@ -473,9 +489,16 @@ function policyRules(policy: ChainRenderInput['policy']): Json[] {
 export function renderChainConfig(input: ChainRenderInput): Json {
   const inbounds: Json[] = [];
   const outbounds: Json[] = [];
-  const rules: Json[] = [...protectionRules(), ...policyRules(input.policy)];
+  const isEntry = input.role === 'entry';
+  const policies = isEntry ? (input.policies ?? []) : [];
+  const rules: Json[] = [...protectionRules(), ...policyRules(policies)];
 
-  if (input.role === 'entry') {
+  if (isEntry) {
+    // One user per profile the entry can hand over: the plain one and each
+    // route policy. One password for all: the user carries the policy, the
+    // password only says the connection came from this node's own core.
+    const ordinals = [0, ...policies.map((p) => p.ordinal)];
+    const users = [...new Set(ordinals)].map((o) => ({ username: chainSocksUser(o), password: input.socksPassword }));
     for (const tag of input.directionTags ?? []) {
       inbounds.push({
         type: 'socks',
@@ -484,7 +507,7 @@ export function renderChainConfig(input: ChainRenderInput): Json {
         listen_port: chainSocksPort(tag),
         // Authenticated even on loopback: a VPS has other users, and an open
         // proxy on 127.0.0.1 is an open relay for anyone with a shell.
-        users: [{ username: CHAIN_SOCKS_USER, password: input.socksPassword }],
+        users,
       });
     }
   } else if (input.in) {
@@ -601,11 +624,20 @@ export function renderChainConfig(input: ChainRenderInput): Json {
     }
   }
 
+  // Only on an entry that has policies to read them. sing-box opens every
+  // declared rule-set at start and refuses the config for a file it cannot
+  // open, so a declaration nothing reads would be a way to fail for nothing.
+  const ruleSets = isEntry && policies.length > 0 ? (input.ruleSets ?? []) : [];
   return {
     log: { level: 'warn' },
     inbounds,
     outbounds,
-    route: { rules },
+    route: {
+      rules,
+      ...(ruleSets.length > 0
+        ? { rule_set: ruleSets.map((r) => ({ type: 'local', tag: r.tag, format: 'source', path: r.path })) }
+        : {}),
+    },
   };
 }
 

@@ -188,6 +188,21 @@ export async function routePolicyRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/route-policies/:id', auth, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
+    // Phase 9.3: a policy standing as a cascade's ENTRY policy is not deleted
+    // under it. The foreign key would refuse too (RESTRICT), with a message
+    // about a constraint; this one names the cascades to change first.
+    const entryOf = await prisma.cascade.findMany({
+      where: { entryPolicyId: id },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    if (entryOf.length > 0) {
+      return reply.code(409).send({
+        error: 'ROUTE_POLICY_IN_USE',
+        message: `this policy is the entry policy of ${entryOf.map((c) => `"${c.name}"`).join(', ')}: clear it there first`,
+        cascades: entryOf,
+      });
+    }
     try {
       // Grants go with it (GroupRoutePolicy cascades), so squads holding this
       // policy simply stop offering it. Their members fall back to the plain

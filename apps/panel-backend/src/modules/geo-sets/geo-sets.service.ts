@@ -12,7 +12,8 @@ import {
 import { prisma } from '../../prisma.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { reportedEngines } from '../nodes/node-engines.js';
-import { collectGeoUses, nodeFileName, usesOf, type GeoUseSite } from './geo-refs.js';
+import { collectGeoUses, usesOf, type GeoUseSite } from './geo-refs.js';
+import { chainTagsFor, filesOfSet } from './geo-push.js';
 import { enqueueBuiltinFetch, enqueueUrlFetch } from './geo-sets.queue.js';
 import { builtinNeedsFetch, ensureBuiltinSets } from './geo-sets.store.js';
 
@@ -135,19 +136,51 @@ function sourceOf(s: SetRow): GeoSetSource {
 
 const tagsOf = (s: SetRow): GeoSetTag[] => (s.current?.tags as GeoSetTag[] | undefined) ?? [];
 
-/** Nodes whose rules name the set, and where each one is pinned. */
+/** Nodes whose rules name the set, where each is pinned, and what each said
+ *  lies on its disk. */
 async function nodesOf(s: SetRow, sites: GeoUseSite[]) {
   const ids = [...new Set(sites.filter((x) => x.ref.set === s.name).flatMap((x) => x.nodeIds))];
-  const pins = await prisma.nodeGeoPin.findMany({
-    where: { geoSetId: s.id, nodeId: { in: ids } },
-    select: { nodeId: true, versionId: true, version: { select: { version: true } } },
-  });
+  const [pins, rows] = await Promise.all([
+    prisma.nodeGeoPin.findMany({
+      where: { geoSetId: s.id, nodeId: { in: ids } },
+      select: { nodeId: true, versionId: true, version: { select: { version: true, sha256: true, sizeBytes: true } } },
+    }),
+    prisma.node.findMany({ where: { id: { in: ids } }, select: { id: true, geo: true } }),
+  ]);
   const pin = new Map(pins.map((p) => [p.nodeId, p]));
-  return ids.map((id) => ({ id, pin: pin.get(id) ?? null }));
+  const fact = new Map(rows.map((r) => [r.id, (r.geo as NodeGeoFact | null) ?? null]));
+  return ids.map((id) => ({ id, pin: pin.get(id) ?? null, fact: fact.get(id) ?? null }));
+}
+
+/** The files of this set a node is to hold at version `v`: the `.dat`, and
+ *  the chain's rule-sets when the node is a cascade entry whose route
+ *  policies name tags of the set. */
+function wantedOn(s: SetRow, v: { version: string; sha256: string; sizeBytes: number }, nodeId: string, sites: GeoUseSite[]) {
+  return filesOfSet(s, v, chainTagsFor(nodeId, sites).get(s.name) ?? []);
+}
+
+/** The names of `wanted` the node's own report does not show with that sha;
+ *  everything when it has not reported. */
+function missingOnDisk(wanted: { name: string; sha256: string }[], fact: NodeGeoFact | null): string[] {
+  const onDisk = new Map((fact?.files ?? []).map((f) => [f.name, f.sha256]));
+  return wanted.filter((f) => fact === null || onDisk.get(f.name) !== f.sha256).map((f) => f.name);
 }
 
 async function toDto(s: SetRow, sites: GeoUseSite[]): Promise<GeoSetDto> {
   const nodes = await nodesOf(s, sites);
+  /**
+   * Behind by FACT, the same rule as the node card (ARCH 24.09): what the
+   * node should hold of this set (its pin, or current where it has none yet,
+   * which is what nodeGeoFor lays out) against what it reported, by sha. A
+   * node that has not reported is not counted: the card calls it "did not
+   * report", not "behind", and the two lists must say the same thing.
+   */
+  let behind = 0;
+  for (const n of nodes) {
+    const v = n.pin?.version ?? s.current;
+    if (!v || n.fact === null) continue;
+    if (missingOnDisk(await wantedOn(s, v, n.id, sites), n.fact).length > 0) behind++;
+  }
   return {
     id: s.id,
     name: s.name,
@@ -167,8 +200,7 @@ async function toDto(s: SetRow, sites: GeoUseSite[]): Promise<GeoSetDto> {
         }
       : null,
     usedByRules: sites.filter((x) => x.ref.set === s.name).length,
-    // No pin counts as behind: nothing of this set was laid out there yet.
-    nodes: { total: nodes.length, behind: nodes.filter((n) => n.pin?.versionId !== s.currentVersionId).length },
+    nodes: { total: nodes.length, behind },
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -377,34 +409,30 @@ export async function rolloutPlan(id: string): Promise<GeoRolloutPlan> {
   const nodes = await nodesOf(s, sites);
   const rows = await prisma.node.findMany({
     where: { id: { in: nodes.map((n) => n.id) } },
-    select: { id: true, name: true, cores: true, geo: true },
+    select: { id: true, name: true, cores: true },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
-  // What the node must hold for this set at current. The chain's rule-sets
-  // join this list with phase 9.3.
-  const wanted = [{ name: nodeFileName(s), sha256: s.current.sha256 }];
+  const current = s.current;
 
-  const planNodes = nodes
-    .flatMap((n) => {
-      const row = byId.get(n.id);
-      if (!row) return [];
-      const fact = (row.geo as NodeGeoFact | null) ?? null;
-      const onDisk = new Map((fact?.files ?? []).map((f) => [f.name, f.sha256]));
-      const filesToSend = wanted.filter((f) => fact === null || onDisk.get(f.name) !== f.sha256).map((f) => f.name);
-      const engines = reportedEngines(row);
-      return [
-        {
-          id: row.id,
-          name: row.name,
-          from: n.pin?.version.version ?? null,
-          filesToSend,
-          restartsXray:
-            filesToSend.some((f) => f.endsWith('.dat')) && (engines === undefined || engines.includes('xray')),
-          pinMoves: n.pin?.versionId !== s.currentVersionId,
-        },
-      ];
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const planNodes: GeoRolloutPlan['nodes'] = [];
+  for (const n of nodes) {
+    const row = byId.get(n.id);
+    if (!row) continue;
+    // What the node must hold of this set at current: the `.dat`, and at a
+    // cascade entry the chain's rule-sets (phase 9.3).
+    const filesToSend = missingOnDisk(await wantedOn(s, current, n.id, sites), n.fact);
+    const engines = reportedEngines(row);
+    planNodes.push({
+      id: row.id,
+      name: row.name,
+      from: n.pin?.version.version ?? null,
+      filesToSend,
+      // A rule-set reaches the running chain without a restart; only a
+      // `.dat` restarts xray.
+      restartsXray: filesToSend.some((f) => f.endsWith('.dat')) && (engines === undefined || engines.includes('xray')),
+    });
+  }
+  planNodes.sort((a, b) => a.name.localeCompare(b.name));
 
   const have = new Set(tagsOf(s).map((t) => t.name));
   const missing = new Map<string, GeoSetUse[]>();
@@ -415,11 +443,7 @@ export async function rolloutPlan(id: string): Promise<GeoRolloutPlan> {
     missing.set(site.ref.entry, list);
   }
   const breaks = [...missing].map(([entry, uses]) => ({ entry, uses })).sort((a, b) => a.entry.localeCompare(b.entry));
-  return {
-    version: s.current.version,
-    nodes: planNodes.map(({ pinMoves: _, ...n }) => n),
-    breaks,
-  };
+  return { version: s.current.version, nodes: planNodes, breaks };
 }
 
 /**

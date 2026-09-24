@@ -11,6 +11,7 @@ import {
   type ChainRenderInput,
 } from './chain.config.js';
 import { LINK_PORT_BASE } from './cascade.config.js';
+import { chainPoliciesOf } from './chain-policy.js';
 
 /**
  * The chain config, three roles, asked of the engine that has to load it.
@@ -67,7 +68,10 @@ const FIXTURE_SS_PSK = 'aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA=';
 
 const uuidFor = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-const POLICY = { directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] };
+/** One route policy on the entry (phase 9.3): it draws under user p1. */
+const { policies: POLICIES } = chainPoliciesOf([
+  { ordinal: 1, directDomains: ['gosuslugi.ru'], blockDomains: ['ads.example'] },
+]);
 
 /** The entry: two ways out and the Auto line beside them. */
 export const entryInput: ChainRenderInput = {
@@ -96,7 +100,7 @@ export const entryInput: ChainRenderInput = {
       cred: { protocol: 'vless', port: LINK_PORT_BASE, uuid: uuidFor(3), reality: REALITY },
     },
   ],
-  policy: POLICY,
+  policies: POLICIES,
 };
 
 /** A transit carrying both ways out, one leg per direction, and deliberately
@@ -128,7 +132,6 @@ export const transitInput: ChainRenderInput = {
       },
     },
   ],
-  policy: POLICY,
 };
 
 export const exitInput: ChainRenderInput = {
@@ -138,7 +141,6 @@ export const exitInput: ChainRenderInput = {
     cred: { protocol: 'vless', port: LINK_PORT_BASE + 1, uuid: uuidFor(4), reality: REALITY },
     clients: [{ tag: 1, uuid: uuidFor(4) }],
   },
-  policy: POLICY,
 };
 
 const ROLES: readonly (readonly [string, ChainRenderInput])[] = [
@@ -199,9 +201,11 @@ describe('the chain config', () => {
       // or a protocol has nothing to match on until it has run.
       expect(rules.findIndex((r) => r.action === 'sniff')).toBe(0);
       // And the protections come before the operator's policy, so no rule of
-      // theirs can route port 25 out of an exit.
-      const firstPolicy = rules.findIndex((r) => Array.isArray(r.domain_suffix));
-      expect(firstPolicy).toBeGreaterThanOrEqual(CHAIN_PROTECTION_RULES);
+      // theirs can route port 25 out of an exit. Policies live on the entry
+      // only (phase 9.3), gated on the hand-off user.
+      const firstPolicy = rules.findIndex((r) => Array.isArray(r.auth_user));
+      if (role === 'entry') expect(firstPolicy).toBeGreaterThanOrEqual(CHAIN_PROTECTION_RULES);
+      else expect(firstPolicy).toBe(-1);
     });
 
     it(`writes no block and no dns outbound on the ${role}`, () => {

@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { LINK_CELLS, type LinkCell } from '@iceslab/shared';
-import { renderChainConfig } from './chain.config.js';
+import { renderChainConfig, type ChainRenderInput } from './chain.config.js';
+import { chainPoliciesOf } from './chain-policy.js';
 import { CHAIN_SOCKS_USER } from './chain.ports.js';
 import { generateTopologyLinks, newLinkCred, topologyLinkKey, type LinkCred } from './cascade.config.js';
 
@@ -82,7 +83,12 @@ function run(name: string, config: unknown): { log: () => string } {
  * request does not depend on any resolver. Node has no socks client and this
  * is the whole protocol the test needs.
  */
-function getThroughSocks(socksPort: number, password: string, target: number): Promise<string> {
+function getThroughSocks(
+  socksPort: number,
+  password: string,
+  target: number,
+  opts: { user?: string; host?: string } = {},
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const sock: Socket = connect(socksPort, '127.0.0.1');
     sock.setTimeout(8000, () => sock.destroy(new Error('socks timeout')));
@@ -94,7 +100,7 @@ function getThroughSocks(socksPort: number, password: string, target: number): P
       buf = Buffer.concat([buf, d]);
       if (stage === 0 && buf.length >= 2) {
         if (buf[1] !== 2) return sock.destroy(new Error(`socks method ${buf[1]}`));
-        const u = Buffer.from(CHAIN_SOCKS_USER);
+        const u = Buffer.from(opts.user ?? CHAIN_SOCKS_USER);
         const p = Buffer.from(password);
         sock.write(Buffer.concat([Buffer.from([1, u.length]), u, Buffer.from([p.length]), p]));
         buf = buf.subarray(2);
@@ -104,13 +110,18 @@ function getThroughSocks(socksPort: number, password: string, target: number): P
         if (buf[1] !== 0) return sock.destroy(new Error('socks auth refused'));
         const port = Buffer.alloc(2);
         port.writeUInt16BE(target);
-        sock.write(Buffer.concat([Buffer.from([5, 1, 0, 1, 127, 0, 0, 1]), port]));
+        // By name when asked (ATYP 3), so a domain rule has a name to match;
+        // by IP otherwise, so nothing depends on a resolver.
+        const addr = opts.host
+          ? Buffer.concat([Buffer.from([3, opts.host.length]), Buffer.from(opts.host)])
+          : Buffer.from([1, 127, 0, 0, 1]);
+        sock.write(Buffer.concat([Buffer.from([5, 1, 0]), addr, port]));
         buf = buf.subarray(2);
         stage = 2;
       }
       if (stage === 2 && buf.length >= 10) {
         if (buf[1] !== 0) return sock.destroy(new Error(`socks connect refused, code ${buf[1]}`));
-        sock.write(`GET / HTTP/1.1\r\nHost: 127.0.0.1:${target}\r\nConnection: close\r\n\r\n`);
+        sock.write(`GET / HTTP/1.1\r\nHost: ${opts.host ?? '127.0.0.1'}:${target}\r\nConnection: close\r\n\r\n`);
         buf = buf.subarray(10);
         stage = 3;
       }
@@ -147,13 +158,13 @@ describe('a leg carries a request between two engines', () => {
 
   /** Both ends of one leg, as the panel renders them for this credential. */
   function renderPair(cred: LinkCred, socksPort: number, password: string) {
-    const entry = renderChainConfig({
+    const entryInput: ChainRenderInput = {
       role: 'entry',
       socksPassword: password,
       directionTags: [1],
       out: [{ tag: 1, host: '127.0.0.1', cred }],
-      policy: null,
-    }) as { inbounds: { type: string; listen_port: number }[] };
+    };
+    const entry = renderChainConfig(entryInput) as { inbounds: { type: string; listen_port: number }[] };
     for (const i of entry.inbounds) if (i.type === 'socks') i.listen_port = socksPort;
     const exit = renderChainConfig({
       role: 'exit',
@@ -168,9 +179,8 @@ describe('a leg carries a request between two engines', () => {
           },
         ],
       },
-      policy: null,
     });
-    return { entry, exit };
+    return { entry, exit, entryInput };
   }
 
   /** Stops every running engine and waits until each has let go of its ports. */
@@ -260,6 +270,54 @@ describe('a leg carries a request between two engines', () => {
       expect(await through('hy2', fresh.entry, fresh.exit, socksPort, password)).toContain(nonce);
     },
     60000,
+  );
+
+  /**
+   * Phase 9.3: a route policy carried out by the chain at the entry, for real.
+   * The entry's socks listener takes the profile as its user: `p1` is the
+   * policy (for a hysteria entry, the cascade's entry policy), `p0` plain. A
+   * name from the policy's rule-set is dropped for p1 and goes through for p0;
+   * a neighbour the set does not name goes through for p1 as well.
+   */
+  it.skipIf(!SINGBOX_BIN)(
+    'drops a name of the policy for its user, and lets the plain user and a neighbour through',
+    async () => {
+      const socksPort = await freePort();
+      const password = randomBytes(12).toString('hex');
+      const cred = await newLinkCred('shadowsocks', await freePort());
+      const dir = mkdtempSync(join(tmpdir(), 'iceslab-live-policy-'));
+      const ruleSetFile = join(dir, 'iceslab-geosite.category-ads-all.json');
+      writeFileSync(ruleSetFile, JSON.stringify({ version: 2, rules: [{ domain: ['localhost'] }] }));
+      const { policies, ruleSets } = chainPoliciesOf([
+        { ordinal: 1, blockDomains: ['geosite:category-ads-all'], directDomains: [] },
+      ]);
+      const pair = renderPair(cred, socksPort, password);
+      const entry = renderChainConfig({
+        ...pair.entryInput,
+        policies,
+        ruleSets: ruleSets.map((r) => ({ tag: r.tag, path: ruleSetFile })),
+      }) as { inbounds: { type: string; listen_port: number }[] };
+      for (const i of entry.inbounds) if (i.type === 'socks') i.listen_port = socksPort;
+
+      const exitRun = run('policy-exit', pair.exit);
+      const entryRun = run('policy-entry', entry);
+      const through = (user: string, host?: string) =>
+        getThroughSocks(socksPort, password, httpPort, { user, ...(host ? { host } : {}) });
+      try {
+        // The neighbour first, which also waits for both engines to be up.
+        expect(await eventually(() => through('p1'), 15000)).toContain(nonce);
+        expect(await eventually(() => through('p0', 'localhost'), 5000)).toContain(nonce);
+        // Dropped: the socks handshake completes and nothing comes back, or it
+        // fails outright. Either way the page never arrives.
+        const dropped = await through('p1', 'localhost').catch(() => '');
+        expect(dropped).not.toContain(nonce);
+      } catch (err) {
+        throw new Error(`${(err as Error).message}\n${exitRun.log()}\n${entryRun.log()}`);
+      } finally {
+        await stopAll();
+      }
+    },
+    40000,
   );
 
   afterAll(() => http?.close());

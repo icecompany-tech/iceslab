@@ -30,7 +30,7 @@ import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
 import { resolveNodeEngines } from './node-intended-engines.js';
 import { collectGeoUses } from '../geo-sets/geo-refs.js';
-import { nodeGeoFor } from '../geo-sets/geo-push.js';
+import { nodeGeoFor, publicIntended } from '../geo-sets/geo-push.js';
 import { intendedEngines } from './node-engines.js';
 export { CoreVersionIntentError } from './node-core-versions.js';
 export { NodeEnginesError } from './node-intended-engines.js';
@@ -358,7 +358,7 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   return {
     nodes: nodes.map((n, i) => ({
       ...withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id), cascadeNeeds.get(n.id) ?? []),
-      geoIntended: geoIntended[i] ?? null,
+      geoIntended: publicIntended(geoIntended[i] ?? null),
     })),
     total,
     page: query.page,
@@ -378,7 +378,7 @@ export async function getNodeById(id: string): Promise<PublicNodeDto> {
   ]);
   return {
     ...withHostCounts(node, hidden.get(id) ?? null, needed.get(id), cascadeNeeds.get(id) ?? []),
-    geoIntended,
+    geoIntended: publicIntended(geoIntended),
   };
 }
 
