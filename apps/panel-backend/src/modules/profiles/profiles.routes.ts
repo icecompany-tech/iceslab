@@ -18,6 +18,7 @@ import {
 import { resolveHostFields } from './host-fields.js';
 import { profileFormats } from './profile-formats.js';
 import { getProfileKeyImpact } from './profiles.key-impact.js';
+import { coreGateReply } from '../nodes/node-core-gate.js';
 import * as svc from './profiles.service.js';
 
 const KeypairQuery = z.object({
@@ -213,6 +214,10 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.NodeAlreadyBoundError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
+      // The node's core for this profile is not installed, or runs a version
+      // this panel refuses: CORE_NOT_ON_NODE / CORE_VERSION_REFUSED.
+      const core = coreGateReply(err);
+      if (core) return reply.code(core.status).send(core.body);
       if (err instanceof svc.ProfileEngineNotForTransportError) {
         return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
       }

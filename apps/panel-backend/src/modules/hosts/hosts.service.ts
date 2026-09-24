@@ -18,6 +18,7 @@ import {
 import { mapHost, type HostReach, type PublicHostDto } from './hosts.mapper.js';
 import { hostConfigChangedAt } from './hosts.freshness.js';
 import { getHiddenCascadeNodes, type HidingCascade } from '../cascades/cascade.service.js';
+import { assertCoreOnNode } from '../nodes/node-core-gate.js';
 import type {
   CreateHostInput,
   ListHostsQuery,
@@ -325,7 +326,7 @@ async function planHostCreate(input: CreateHostInput): Promise<{
 
   const node = await prisma.node.findFirst({
     where: { id: nodeId, deletedAt: null },
-    select: { id: true, name: true },
+    select: { id: true, name: true, cores: true, coreVersions: true },
   });
   if (!node) throw new NodeNotFoundError(nodeId);
 
@@ -333,7 +334,12 @@ async function planHostCreate(input: CreateHostInput): Promise<{
     where: { profileId_nodeId: { profileId, nodeId } },
     select: { id: true },
   });
-  if (existing) return { bindingId: existing.id, profile };
+  // A second host on a binding that already exists is still a host put on this
+  // node, and the node's core is what serves it.
+  if (existing) {
+    assertCoreOnNode(node, profile);
+    return { bindingId: existing.id, profile };
+  }
 
   // A port is taken per TRANSPORT across all profiles on that node, so a clash
   // names the profile squatting on the same socket rather than saying "taken"
@@ -350,6 +356,8 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   // creates the binding under it, so this route reaches the same socket the
   // bindings route does and has to ask the same question.
   await assertPortFreeOfOthers(nodeId, port, transport, node.name);
+  // After the ports, before anything is written (docs/plan/core-lifecycle.md 6).
+  assertCoreOnNode(node, profile);
 
   return { bindingId: null, profile, nodeId, port };
 }

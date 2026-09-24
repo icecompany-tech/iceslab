@@ -23,8 +23,9 @@ import type {
   ListNodesQuery,
   HardeningInput,
 } from './nodes.schemas.js';
-import { resolveCoreVersions } from '@iceslab/shared';
+import { resolveCoreVersions, type EngineName } from '@iceslab/shared';
 import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
+import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 export { CoreVersionIntentError } from './node-core-versions.js';
 
 // ───── Domain errors ─────
@@ -308,8 +309,10 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   limit: number;
 }> {
   const [{ nodes, total }, hidden] = await Promise.all([repo.list(query), getHiddenCascadeNodes()]);
+  // One query for the whole page, not one per node.
+  const needed = await hostsByEngine(nodes.map((n) => n.id));
   return {
-    nodes: nodes.map((n) => ({ ...mapNodeToPublic(n), hiddenByCascade: hidden.get(n.id) ?? null })),
+    nodes: nodes.map((n) => withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id))),
     total,
     page: query.page,
     limit: query.limit,
@@ -319,7 +322,19 @@ export async function listNodes(query: ListNodesQuery): Promise<{
 export async function getNodeById(id: string): Promise<PublicNodeDto> {
   const node = await repo.findActiveById(id);
   if (!node) throw new NodeNotFoundError(id);
-  return { ...mapNodeToPublic(node), hiddenByCascade: (await getHiddenCascadeNodes()).get(id) ?? null };
+  const [hidden, needed] = await Promise.all([getHiddenCascadeNodes(), hostsByEngine([id])]);
+  return withHostCounts(node, hidden.get(id) ?? null, needed.get(id));
+}
+
+/** The DTO as the list and GET by id serve it: the hiding cascade, and
+ *  `neededBy` on every core row that names its engine. */
+function withHostCounts(
+  node: Parameters<typeof mapNodeToPublic>[0],
+  hiddenByCascade: PublicNodeDto['hiddenByCascade'],
+  counts: Map<EngineName, number> | undefined,
+): PublicNodeDto {
+  const dto = mapNodeToPublic(node);
+  return { ...dto, cores: withNeededBy(dto.cores, counts), hiddenByCascade };
 }
 
 /**

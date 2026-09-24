@@ -9,6 +9,7 @@ import {
 } from './hosts.schemas.js';
 import * as svc from './hosts.service.js';
 import { getHostFreshness } from './hosts.freshness.js';
+import { coreGateReply } from '../nodes/node-core-gate.js';
 
 export async function hostsRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth (see users.routes.ts header comment).
@@ -69,6 +70,10 @@ export async function hostsRoutes(app: FastifyInstance): Promise<void> {
           .code(409)
           .send({ error: err.code, message: err.message, conflicts: err.conflicts });
       }
+      // The node's core for this profile is not installed, or runs a version
+      // this panel refuses. Same body as the bindings route.
+      const core = coreGateReply(err);
+      if (core) return reply.code(core.status).send(core.body);
       // The new binding would put an xray-family profile on sing-box with a
       // field sing-box cannot serve: the bindings route's answer, word for word.
       if (err instanceof svc.ProfileEngineNotForTransportError) {

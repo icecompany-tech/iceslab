@@ -1650,6 +1650,15 @@ export interface NodeCoreInfo {
    * tick, and the port check has to answer between two healthchecks.
    */
   reservedPorts?: ReservedPort[];
+  /**
+   * How many enabled hosts on this node this core's engine serves (host and
+   * binding both enabled). Computed by the panel on GET /api/nodes and GET
+   * /api/nodes/:id, never stored and never sent by the agent: a hint for the
+   * "Cores" section, not a source of actions. 0 = no host needs it. Absent on
+   * a row without `engine` (its engine cannot be told) and on any other
+   * response.
+   */
+  neededBy?: number;
 }
 
 // ───── GET /metrics ─────

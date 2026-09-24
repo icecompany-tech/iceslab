@@ -24,6 +24,7 @@ import {
   nodeRendersProfile,
   renderableAtSave,
 } from '../nodes/node-engines.js';
+import { assertCoreOnNode } from '../nodes/node-core-gate.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
 import { portOwnersOnNode, type PortOwner } from '../nodes/node-ports.js';
@@ -732,6 +733,10 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
     },
   });
   if (dupBinding) throw new NodeAlreadyBoundError(input.profileId, input.nodeId);
+  // The core, by the node's own report: explicitly not installed, or a
+  // version this panel refuses. First, because it is the specific answer and
+  // it carries the command; the engine-list gate below is the general one.
+  assertCoreOnNode(node, profile);
   assertNodeRendersProfile(node, profile);
   assertSingboxServesBinding(profile, input.overrides);
 

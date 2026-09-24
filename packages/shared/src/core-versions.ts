@@ -505,6 +505,81 @@ export function judgeCoreVersion(
   return { kind: 'drift', intended };
 }
 
+/** Where the installer keeps the node repository (`ICESLAB_NODE_DIR`). */
+export const CORE_NODE_DIR = '/opt/iceslab-node';
+
+/** The bootstrap that puts an engine on a machine, under apps/node/scripts. */
+export const ENGINE_BOOTSTRAP: Record<EngineName, string> = {
+  xray: 'bootstrap-xray.sh',
+  singbox: 'bootstrap-singbox.sh',
+  hysteria: 'bootstrap-hysteria.sh',
+  amneziawg: 'bootstrap-amneziawg.sh',
+  mtproto: 'bootstrap-mtg.sh',
+  mieru: 'bootstrap-mieru.sh',
+  naive: 'bootstrap-naive.sh',
+};
+
+/** The components an engine reports (AmneziaWG: module and tools). */
+export function componentsOfEngine(engine: string): CoreComponent[] {
+  return CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].reportedBy.engine === engine);
+}
+
+/**
+ * The ssh line that installs an engine on a node, at the version the node is
+ * meant to run (its intent, else the pin).
+ *
+ *   pinned  every component of the engine goes with its pair of variables, so
+ *           the node's checkout of the scripts, which can be older than the
+ *           panel's manifest, cannot install something else;
+ *   why     set when the pair could not be written for at least one component:
+ *             no-arch   the node never reported its arch, and every file and
+ *                       sha256 is per arch;
+ *             no-asset  upstream ships nothing for this arch;
+ *             unpinned  nothing to pin (caddy-naive is built from a branch).
+ *           The command then runs the script on its own defaults.
+ *
+ * `sudo env X=…`, not `X=… sudo`: sudo resets the environment. `bash`: the
+ * scripts carry no executable bit. The restart is what makes the agent see the
+ * new binary.
+ */
+export function coreInstallCommand(
+  engine: EngineName,
+  intent: NodeCoreVersions = {},
+  arch?: CoreArch,
+): { command: string; pinned: boolean; why?: 'no-arch' | 'no-asset' | 'unpinned' } {
+  const vars: string[] = [];
+  let why: 'no-arch' | 'no-asset' | 'unpinned' | undefined;
+  for (const component of componentsOfEngine(engine)) {
+    const version = intent[component] ?? CORE_VERSIONS[component].pinned;
+    const release = version === null ? undefined : coreReleaseOf(component, version);
+    const pair = coreEnvPair(component);
+    if (!release || !pair) {
+      why ??= 'unpinned';
+      continue;
+    }
+    if (release.commit) {
+      vars.push(`${pair[0]}=${release.tag}`, `${pair[1]}=${release.commit}`);
+      continue;
+    }
+    if (!arch) {
+      why ??= 'no-arch';
+      continue;
+    }
+    const asset = release.assets?.[arch];
+    if (!asset) {
+      why ??= 'no-asset';
+      continue;
+    }
+    vars.push(`${pair[0]}=${release.version}`, `${pair[1]}=${asset.sha256}`);
+  }
+  const script = `bash ${CORE_NODE_DIR}/apps/node/scripts/${ENGINE_BOOTSTRAP[engine]}`;
+  return {
+    command: `${vars.length ? `sudo env ${vars.join(' ')} ` : 'sudo '}${script} && sudo systemctl restart iceslab-node`,
+    pinned: why === undefined,
+    ...(why ? { why } : {}),
+  };
+}
+
 function isAtLeast(v: string, bound: string): boolean {
   const c = compareCoreVersions(v, bound);
   return c === 0 || c === 1;
