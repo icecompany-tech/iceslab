@@ -8,9 +8,9 @@ import (
 )
 
 // Which hysteria a node runs is the version manifest's
-// (packages/shared/src/core-versions.ts): both installers and CI carry it as a
-// generated block or a checked line, and core-pins.test.ts in the backend holds
-// all three to it. From phase 6 on this adapter renders a config shape that was
+// (packages/shared/src/core-versions.ts): bootstrap-hysteria.sh and CI carry it
+// as a generated block or a checked line, and core-pins.test.ts in the backend
+// holds both to it. From phase 6 on this adapter renders a config shape that was
 // MEASURED against that release (the socks5 outbound that hands users to the
 // chain, with no acl); the manifest's `why` says so, and moving the pin means
 // adding a release there with the measurement run again.
@@ -57,21 +57,22 @@ func TestBootstrapInstallsThePinnedCheckedRelease(t *testing.T) {
 	}
 }
 
-// The OTHER road to the same binary: a node built with --protocol hysteria
-// never runs bootstrap-hysteria.sh. The main installer hands upstream's
-// install_server.sh a file it downloaded and checked itself, with --local;
-// given --version instead, the script downloads on its own and checks nothing.
-func TestNodeInstallerHandsUpstreamTheCheckedBinary(t *testing.T) {
+// One road: until --engines the main installer had its own, a pin block and
+// upstream's install_server.sh fed a file it checked itself. Now a node built
+// with --protocol hysteria goes through bootstrap-hysteria.sh like a node that
+// adds hysteria later, and the installer downloads no hysteria at all.
+func TestNodeInstallerTakesTheBootstrapRoad(t *testing.T) {
 	script := readScript(t, "..", "..", "..", "..", "..", "scripts", "install-iceslab-node.sh")
 
-	if !strings.Contains(script, "# >>> core-pins:hysteria >>>") {
-		t.Fatal("install-iceslab-node.sh carries no generated hysteria block")
+	if strings.Contains(script, "core-pins:hysteria") {
+		t.Error("install-iceslab-node.sh carries its own hysteria pin block again")
 	}
-	if !strings.Contains(script, `fetch_hysteria "$HY_BIN"`) ||
-		!strings.Contains(script, `bash "$HY_TMP" --local "$HY_BIN"`) {
-		t.Error("the installer must download and check hysteria itself, then install it with --local")
+	if !strings.Contains(script, "hysteria)  echo bootstrap-hysteria.sh ;;") {
+		t.Error("the installer no longer maps hysteria to bootstrap-hysteria.sh")
 	}
-	if strings.Contains(script, `bash "$HY_TMP" --version`) {
-		t.Error("the installer still lets upstream's script download hysteria unchecked")
+	for _, gone := range []string{"install_server.sh\" --local", "apernet/hysteria/releases/download", "get.hy2.sh)"} {
+		if strings.Contains(script, gone) {
+			t.Errorf("the installer still installs hysteria itself (%q)", gone)
+		}
 	}
 }

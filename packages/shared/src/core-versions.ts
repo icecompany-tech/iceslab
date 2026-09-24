@@ -539,8 +539,10 @@ export function componentsOfEngine(engine: string): CoreComponent[] {
  *           The command then runs the script on its own defaults.
  *
  * `sudo env X=…`, not `X=… sudo`: sudo resets the environment. `bash`: the
- * scripts carry no executable bit. The restart is what makes the agent see the
- * new binary.
+ * scripts carry no executable bit. `--restart-agent`: the bootstrap writes its
+ * core into the agent's env and restarts the agent itself, which is what makes
+ * the agent see the new core (a `&& systemctl restart` after it would be a
+ * second restart).
  */
 export function coreInstallCommand(
   engine: EngineName,
@@ -574,7 +576,7 @@ export function coreInstallCommand(
   }
   const script = `bash ${CORE_NODE_DIR}/apps/node/scripts/${ENGINE_BOOTSTRAP[engine]}`;
   return {
-    command: `${vars.length ? `sudo env ${vars.join(' ')} ` : 'sudo '}${script} && sudo systemctl restart iceslab-node`,
+    command: `${vars.length ? `sudo env ${vars.join(' ')} ` : 'sudo '}${script} --restart-agent`,
     pinned: why === undefined,
     ...(why ? { why } : {}),
   };

@@ -5,17 +5,26 @@
 #   1. Verifies Go + git (installs them on Ubuntu/Debian if missing)
 #   2. Clones repo into $ICESLAB_NODE_DIR (default /opt/iceslab-node)
 #   3. Builds the static node-agent binary -> /usr/local/bin/iceslab-node
-#   4. (per --protocol) chains the protocol-specific bootstrap:
-#        hysteria     -> installs official hysteria via get.hy2.sh
-#        xray         -> installs official xray via XTLS install-script
-#        amneziawg    -> runs apps/node/scripts/bootstrap-amneziawg.sh
-#        naive        -> runs apps/node/scripts/bootstrap-naive.sh (xcaddy + plugin)
-#        shadowsocks  -> reuses xray-core (SS2022 multi-user runs inside xray)
-#        mtproto      -> runs apps/node/scripts/bootstrap-mtg.sh (9seconds/mtg)
-#        mieru        -> runs apps/node/scripts/bootstrap-mieru.sh (enfein/mieru)
-#   5. Drops a systemd unit at /etc/systemd/system/iceslab-node.service
-#   6. Writes /etc/iceslab-node/env with NODE_PAYLOAD + protocol env
-#   7. Enables + starts the service, waits for /healthz
+#   4. Writes /etc/iceslab-node/env with NODE_PAYLOAD and the install flags
+#   5. Runs the bootstrap of every core the node gets (--engines, else the
+#      core of --protocol), the same apps/node/scripts/bootstrap-<core>.sh the
+#      panel's "how to install" runs on a live node. Each one installs its core
+#      and writes its own block of the env (and its unit, where it has one), so
+#      the installer keeps no copy of any of that:
+#        xray, shadowsocks            -> bootstrap-xray.sh (SS2022 runs in xray)
+#        tuic, anytls, shadowtls      -> bootstrap-singbox.sh
+#        hysteria                     -> bootstrap-hysteria.sh (+ hysteria.service)
+#        amneziawg                    -> bootstrap-amneziawg.sh (DKMS module + tools)
+#        naive                        -> bootstrap-naive.sh (xcaddy + plugin)
+#        mtproto                      -> bootstrap-mtg.sh (9seconds/mtg)
+#        mieru                        -> bootstrap-mieru.sh (enfein/mieru, mita.service)
+#   6. Drops a systemd unit at /etc/systemd/system/iceslab-node.service
+#   7. Enables + starts the service, waits for it to be active
+#
+# Several cores at once (what the panel's node wizard emits):
+#   --protocol xray --engines xray,hysteria,singbox
+# The first engine is the node's main one and must be the core --protocol runs
+# on; --with-singbox is kept as the old spelling of adding singbox.
 #
 # Usage (as root). Recommended: bootstrap-token flow (single command, no
 # manual file transfer needed):
@@ -225,89 +234,14 @@ ICESLAB_NODE_DIR=${ICESLAB_NODE_DIR:-/opt/iceslab-node}
 ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
 ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.0}
 
-# ───── Third-party installer pinning (supply-chain) ─────
+# ───── Cores ─────
 #
-# Hysteria and Xray installers previously ran as `bash <(curl get.hy2.sh)`
-# and `XTLS/Xray-install/raw/main/...`, both unpinned, executing whatever
-# the upstream `main`/HTTP host serves at the moment of install. A
-# compromise of either upstream (or a DNS hijack on the box) gave the
-# attacker root.
-#
-# Pinning: fetch the installer from a specific tag/commit, optionally
-# verify a sha256, then run. Operators who want full supply-chain
-# hardening set the *_SHA env var; default is tag-pin only (still better
-# than `main`). To bump: pick a new tag, run the installer once with
-# --dry-pin to print the sha, paste it back here.
-# Hysteria: apernet/hysteria releases the server/client under the `app/v*`
-# tag prefix (their `v*` tags are for the legacy hysteria-v1 lineage and
-# do NOT have the server install script). Bump to a later app/* tag as
-# upstream releases.
-HYSTERIA_INSTALLER_REF=${HYSTERIA_INSTALLER_REF:-app/v2.9.1}
-HYSTERIA_INSTALLER_SHA=${HYSTERIA_INSTALLER_SHA:-}
-# The installer SCRIPT is pinned above; the BINARY it installs is pinned by the
-# version manifest (packages/shared/src/core-versions.ts), written into the
-# block below. We download that binary ourselves, check it against the sha256
-# upstream published, and hand the checked file to install_server.sh with
-# --local: left to itself the script downloads whatever --version names and
-# checks nothing. Why this release is the pin is written in the manifest.
-# >>> core-pins:hysteria >>>
-# Generated from packages/shared/src/core-versions.ts, do not edit by hand:
-# change the manifest, then run core-pins.test.ts with UPDATE_CORE_PINS=1.
-HYSTERIA_PINNED_VERSION="2.12.3"
-HYSTERIA_PINNED_TAG="app/v2.12.3"
-declare -A HYSTERIA_PINNED_FILE=(
-  [amd64]="hysteria-linux-amd64"
-  [arm64]="hysteria-linux-arm64"
-  [armv7]="hysteria-linux-arm"
-)
-declare -A HYSTERIA_PINNED_SHA256=(
-  [amd64]="8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e"
-  [arm64]="c8dc653c3ba0a28d29a26b8fa52d2086f27c0927afddce95c09965e7174e78b0"
-  [armv7]="cc4bc596c2db473dd7ec1bbcc3cd10e0cb60302759facd95e0be73bc8751e110"
-)
-# <<< core-pins:hysteria <<<
-
-# Overrides go in pairs: a version nobody checked has no checksum. The same
-# rule as the bootstrap scripts.
-if [[ -n "${HYSTERIA_VERSION:-}" && -z "${HYSTERIA_SHA256:-}" ]] || [[ -z "${HYSTERIA_VERSION:-}" && -n "${HYSTERIA_SHA256:-}" ]]; then
-  fail "HYSTERIA_VERSION and HYSTERIA_SHA256 go together: a version without its checksum is not installed"
-fi
-# The default (the pin) is filled in at download time, not here: the panel's
-# choice for this node arrives with the payload later on, and an operator's
-# own pair has to stay distinguishable from both until then.
-
-# fetch_hysteria <out-path>
-# Downloads the wanted hysteria for this machine and refuses it unless it
-# matches the sha256: the pinned one from the block above, or HYSTERIA_SHA256
-# with an override. Redirects are followed (GitHub hands release assets out from
-# another host) but only over https; the checksum is what makes the file
-# trustworthy, not the route it took.
-fetch_hysteria() {
-  local out="$1" arch file tag sha url got
-  HYSTERIA_VERSION="${HYSTERIA_VERSION:-$HYSTERIA_PINNED_VERSION}"
-  HYSTERIA_VERSION="${HYSTERIA_VERSION#v}"
-  case "$(uname -m)" in
-    x86_64|amd64)  arch=amd64 ;;
-    aarch64|arm64) arch=arm64 ;;
-    armv7l)        arch=armv7 ;;
-    *)             fail "unsupported architecture: $(uname -m)" ;;
-  esac
-  file="${HYSTERIA_PINNED_FILE[$arch]:-}"
-  [[ -n "$file" ]] || fail "upstream ships no hysteria for $arch"
-  tag="${HYSTERIA_PINNED_TAG//"$HYSTERIA_PINNED_VERSION"/$HYSTERIA_VERSION}"
-  sha="${HYSTERIA_SHA256:-${HYSTERIA_PINNED_SHA256[$arch]:-}}"
-  [[ -n "$sha" ]] || fail "no pinned checksum for hysteria $HYSTERIA_VERSION on $arch"
-  url="https://github.com/apernet/hysteria/releases/download/${tag//\//%2F}/${file}"
-  log "Downloading $url"
-  curl --proto '=https' --proto-redir '=https' -fsSL "$url" -o "$out" \
-    || fail "download failed: $url"
-  got=$(sha256sum "$out" | awk '{print $1}')
-  if [[ "$got" != "$sha" ]]; then
-    rm -f "$out"
-    fail "sha256 mismatch for $file (expected $sha, got $got)"
-  fi
-  log "sha256 verified for $file"
-}
+# Every core, its pin, its checksum and its download live in its bootstrap
+# (apps/node/scripts/bootstrap-<core>.sh), generated from the version manifest
+# (packages/shared/src/core-versions.ts). This installer carries no pin block
+# and downloads no core itself: the hysteria copy it kept here (upstream's
+# install_server.sh plus its own pin) went with --engines, and hysteria now goes
+# on through bootstrap-hysteria.sh like every other core.
 
 # apply_core_versions_from_payload <agent binary>
 # The panel resolves the node's intent (Node.coreVersions) into the payload's
@@ -358,34 +292,6 @@ apply_core_versions_from_payload() {
   done
 }
 
-# xray is installed by apps/node/scripts/bootstrap-xray.sh, for the xray and the
-# shadowsocks protocol alike: its pin, the pinned XTLS/Xray-install commit and
-# both checksums live there, and the panel's update command runs the same
-# script on a live node. XRAY_VERSION/XRAY_SHA256 and
-# XRAY_INSTALLER_REF/XRAY_INSTALLER_SHA set here reach it through the
-# environment.
-
-# pinned_fetch <url> <out-path> [<expected-sha256>]
-# Fetches a URL over HTTPS with no redirects, optionally verifying the
-# sha256. --proto =https blocks accidental http:// downgrade; --max-redirs 0
-# closes the MITM-via-302 vector. Refuses to write if sha mismatches.
-pinned_fetch() {
-  local url="$1" out="$2" expect_sha="${3:-}"
-  curl --proto '=https' --max-redirs 0 -fsSL "$url" -o "$out" || {
-    fail "pinned_fetch: download failed: $url"
-  }
-  if [[ -n "$expect_sha" ]]; then
-    local actual_sha
-    actual_sha=$(sha256sum "$out" | awk '{print $1}')
-    if [[ "$actual_sha" != "$expect_sha" ]]; then
-      rm -f "$out"
-      fail "pinned_fetch: sha256 mismatch for $url (expected $expect_sha, got $actual_sha): upstream tampered or you need to bump the pin"
-    fi
-    log "pinned_fetch: sha256 verified for $(basename "$out")"
-  else
-    log "pinned_fetch: $(basename "$out") fetched (tag-pinned, sha256 NOT verified; set the *_SHA env to harden)"
-  fi
-}
 NODE_HOST=${NODE_HOST:-0.0.0.0}
 # Default moved to 1337 (2026-05-21). The old 8443 is the canonical
 # HTTPS-alt port and the first thing every bot probes after 443. 1337
@@ -398,6 +304,8 @@ NODE_HOST=${NODE_HOST:-0.0.0.0}
 NODE_PORT=${NODE_PORT:-1337}
 
 PROTOCOL=""
+ENGINES_ARG=""
+WITH_SINGBOX=0
 PAYLOAD=""
 PANEL_URL=""
 BOOTSTRAP_TOKEN=""
@@ -543,6 +451,129 @@ resolve_bootstrap() {
   tr -d '\n\r \t' < "$value"
 }
 
+# ───── Cores: which, and how each goes on ─────
+
+KNOWN_ENGINES="xray singbox hysteria amneziawg mtproto mieru naive"
+
+# native_engine_of <protocol>: the core a --protocol runs on. The protocol is
+# a label of the install, not a core: shadowsocks runs inside xray, and tuic,
+# anytls and shadowtls run on sing-box.
+native_engine_of() {
+  case "$1" in
+    xray|shadowsocks)                       echo xray ;;
+    tuic|anytls|shadowtls)                  echo singbox ;;
+    hysteria|amneziawg|naive|mtproto|mieru) echo "$1" ;;
+    *) return 1 ;;
+  esac
+}
+
+# bootstrap_of <engine>: its script under apps/node/scripts. The same table as
+# ENGINE_BOOTSTRAP in packages/shared/src/core-versions.ts, which the panel's
+# "how to install" reads; bootstrap_env_test.go holds the two together.
+bootstrap_of() {
+  case "$1" in
+    xray)      echo bootstrap-xray.sh ;;
+    singbox)   echo bootstrap-singbox.sh ;;
+    hysteria)  echo bootstrap-hysteria.sh ;;
+    amneziawg) echo bootstrap-amneziawg.sh ;;
+    mtproto)   echo bootstrap-mtg.sh ;;
+    mieru)     echo bootstrap-mieru.sh ;;
+    naive)     echo bootstrap-naive.sh ;;
+    *) return 1 ;;
+  esac
+}
+
+# resolve_engines: ENGINES, the cores this node gets, the main one first.
+# --engines when given (the main one must be the core --protocol runs on),
+# else the core of --protocol; --with-singbox adds singbox either way.
+resolve_engines() {
+  local native e seen=" "
+  native="$(native_engine_of "$PROTOCOL")" || fail "Unknown protocol: $PROTOCOL"
+  ENGINES=()
+  if [[ -n "$ENGINES_ARG" ]]; then
+    local -a named
+    IFS=',' read -ra named <<<"${ENGINES_ARG// /}"
+    for e in "${named[@]}"; do
+      [[ -n "$e" ]] || continue
+      [[ " $KNOWN_ENGINES " == *" $e "* ]] || fail "--engines: unknown core '$e' (known: ${KNOWN_ENGINES// /, })"
+      [[ "$seen" != *" $e "* ]] || fail "--engines: '$e' is named twice"
+      seen+="$e "
+      ENGINES+=("$e")
+    done
+    [[ ${#ENGINES[@]} -gt 0 ]] || fail "--engines names no core"
+    [[ "${ENGINES[0]}" == "$native" ]] \
+      || fail "--engines starts with ${ENGINES[0]}, but --protocol $PROTOCOL runs on $native: the main core goes first"
+  else
+    ENGINES=("$native")
+    seen+="$native "
+  fi
+  if [[ "$WITH_SINGBOX" == 1 && "$seen" != *" singbox "* ]]; then
+    ENGINES+=(singbox)
+  fi
+}
+
+has_engine() { [[ " ${ENGINES[*]} " == *" $1 "* ]]; }
+
+# install_engines <scripts dir>: the bootstrap of every core in ENGINES, in
+# order. Each installs its core and writes its own block of the env (see
+# lib/node-env.sh there), so nothing about a core is repeated in this file.
+#
+# A checkout from before that (no lib/node-env.sh) has bootstraps that only
+# install: it gets the main core alone, wired by legacy_primary_env below, and
+# a warning that says what fixes it.
+install_engines() {
+  local dir="$1" e
+  if [[ ! -f "$dir/lib/node-env.sh" ]]; then
+    warn "the checkout at $ICESLAB_NODE_DIR ($ICESLAB_NODE_REF) predates --engines: its bootstraps do not wire their core into the agent"
+    warn "installing only the main core, ${ENGINES[0]}, wired by this installer"
+    if [[ ${#ENGINES[@]} -gt 1 ]]; then
+      warn "NOT installed: ${ENGINES[*]:1}"
+    fi
+    warn "to fix: rerun this installer with ICESLAB_NODE_REF=main, or on this node"
+    warn "  git -C $ICESLAB_NODE_DIR fetch --depth 1 origin main && git -C $ICESLAB_NODE_DIR reset --hard FETCH_HEAD"
+    warn "  and then for each missing core: sudo bash $dir/bootstrap-<core>.sh --restart-agent"
+    LEGACY_CHECKOUT=1
+    bash "$dir/$(bootstrap_of "${ENGINES[0]}")"
+    legacy_primary_env
+    return 0
+  fi
+  for e in "${ENGINES[@]}"; do
+    log "Core $e: $(bootstrap_of "$e")"
+    bash "$dir/$(bootstrap_of "$e")"
+  done
+}
+
+# legacy_primary_env: what this installer wrote for the main core before the
+# bootstraps wrote it themselves. For an old checkout ONLY (install_engines);
+# delete once no supported release lacks lib/node-env.sh.
+legacy_primary_env() {
+  case "$PROTOCOL" in
+    hysteria)
+      {
+        echo "HYSTERIA_BINARY=/usr/local/bin/hysteria"
+        echo "HYSTERIA_CONFIG=/etc/hysteria/config.yaml"
+        echo "HYSTERIA_AUTH_PORT=9000"
+        echo "HYSTERIA_STATS_LISTEN=127.0.0.1:9999"
+        echo "HYSTERIA_STATS_SECRET=$(openssl rand -hex 24 2>/dev/null || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        # The unit exists only where the ACME branch below writes it.
+        if [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then echo "HYSTERIA_SERVICE_UNIT=hysteria"; fi
+      } >>"$ENV_FILE" ;;
+    xray)
+      printf 'XRAY_BINARY=/usr/local/bin/xray\nXRAY_CONFIG=/usr/local/etc/xray/config.json\n' >>"$ENV_FILE" ;;
+    shadowsocks)
+      printf 'XRAY_BINARY=/usr/local/bin/xray\nSHADOWSOCKS_CONFIG=/etc/xray/shadowsocks.json\n' >>"$ENV_FILE" ;;
+    naive)
+      printf 'CADDY_NAIVE_BIN=/usr/local/bin/caddy-naive\nNAIVE_CONFIG=/etc/caddy/Caddyfile\n' >>"$ENV_FILE" ;;
+    mtproto)
+      printf 'MTG_BINARY=/usr/local/bin/mtg\nMTG_CONFIG=/etc/mtg/config.toml\n' >>"$ENV_FILE" ;;
+    mieru)
+      printf 'MITA_BINARY=/usr/local/bin/mita\nMITA_CONFIG=/etc/mita/server.json\n' >>"$ENV_FILE" ;;
+    tuic|anytls|shadowtls)
+      printf 'SINGBOX_BINARY=/usr/local/bin/sing-box\nSINGBOX_CERT=/etc/sing-box/cert.pem\nSINGBOX_KEY=/etc/sing-box/key.pem\n' >>"$ENV_FILE" ;;
+    amneziawg) ;; # the agent finds awg on its own
+  esac
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --protocol)      PROTOCOL="$2"; shift 2 ;;
@@ -583,8 +614,10 @@ while [[ $# -gt 0 ]]; do
     --fail2ban)           FAIL2BAN=1; shift ;;
     --realistic-fallback) REALISTIC_FALLBACK=1; shift ;;
     --ssh-allowlist)      SSH_ALLOWLIST="$2"; shift 2 ;;
-    # Install the sing-box engine on top of the primary protocol, so this node
-    # can also serve engine=singbox inbounds (vless/vmess/trojan/ss/hy2).
+    # The cores this node gets, comma-separated, the main one first:
+    # xray,singbox,hysteria,amneziawg,mtproto,mieru,naive. See resolve_engines.
+    --engines)            ENGINES_ARG="$2"; shift 2 ;;
+    # The old spelling of adding singbox to the main core, still accepted.
     --with-singbox)       WITH_SINGBOX=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \?//'
@@ -758,6 +791,15 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
   fi
 fi
 
+# --engines without --protocol: the main core names it, except sing-box, which
+# serves three protocols and so cannot say which one this node is.
+if [[ -z "$PROTOCOL" && -n "$ENGINES_ARG" ]]; then
+  _FIRST="${ENGINES_ARG%%,*}"
+  _FIRST="${_FIRST// /}"
+  [[ "$_FIRST" != singbox ]] || fail "--engines starting with singbox needs --protocol tuic|anytls|shadowtls"
+  PROTOCOL="$_FIRST"
+fi
+
 case "$PROTOCOL" in
   hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
   "")
@@ -769,6 +811,8 @@ case "$PROTOCOL" in
     ;;
   *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls)" ;;
 esac
+resolve_engines
+LEGACY_CHECKOUT=0
 
 step "Prerequisites"
 . /etc/os-release
@@ -776,7 +820,7 @@ case "${ID:-}" in
   ubuntu|debian) ;;
   *) fail "Only Ubuntu/Debian supported here" ;;
 esac
-ok "$PRETTY_NAME · protocol=$PROTOCOL"
+ok "$PRETTY_NAME · protocol=$PROTOCOL · cores: ${ENGINES[*]}"
 
 # RAM / swap check, same insurance as install-iceslab.sh. Go build itself is
 # light, but the protocol bootstrap scripts (xcaddy compile for Naive, DKMS
@@ -932,99 +976,6 @@ ok "built /usr/local/bin/iceslab-node ($(stat -c %s /usr/local/bin/iceslab-node)
 # bootstrap scripts below; an explicit env pair still wins.
 apply_core_versions_from_payload /usr/local/bin/iceslab-node
 
-step "Protocol bootstrap (${PROTOCOL})"
-case "$PROTOCOL" in
-  hysteria)
-    if ! command -v hysteria >/dev/null; then
-      log "Installing hysteria via pinned apernet/hysteria@$HYSTERIA_INSTALLER_REF"
-      HY_TMP=$(mktemp)
-      pinned_fetch \
-        "https://raw.githubusercontent.com/apernet/hysteria/${HYSTERIA_INSTALLER_REF}/scripts/install_server.sh" \
-        "$HY_TMP" \
-        "$HYSTERIA_INSTALLER_SHA"
-      HY_BIN=$(mktemp)
-      fetch_hysteria "$HY_BIN"
-      # --local installs the file we checked; upstream's script still lays
-      # down its user, config and units around it.
-      bash "$HY_TMP" --local "$HY_BIN"
-      rm -f "$HY_TMP" "$HY_BIN"
-    else
-      log "hysteria already present: $(hysteria version | head -1)"
-    fi
-    PROTO_BINARY=$(command -v hysteria)
-    PROTO_CONFIG=/etc/hysteria/config.yaml
-    ;;
-  xray)
-    # Installs the pinned, checked xray, or moves an existing one onto it, and
-    # disables upstream's xray.service: iceslab-node owns xray.
-    log "Chaining bootstrap-xray.sh"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"
-    PROTO_BINARY=$(command -v xray)
-    PROTO_CONFIG=/usr/local/etc/xray/config.json
-    ;;
-  amneziawg)
-    log "Chaining bootstrap-amneziawg.sh"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-amneziawg.sh"
-    PROTO_BINARY=""
-    PROTO_CONFIG=""
-    ;;
-  naive)
-    log "Chaining bootstrap-naive.sh"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-naive.sh"
-    PROTO_BINARY=/usr/local/bin/caddy-naive
-    PROTO_CONFIG=/etc/caddy/Caddyfile
-    ;;
-  shadowsocks)
-    # SS2022 multi-user runs inside xray-core. No separate binary.
-    # Reuse the xray install path; the SS adapter on the node-agent shells out
-    # to its own xray-api inbound on 127.0.0.1:8081 (one above the VLESS
-    # adapter's :8080 to avoid collision when both adapters live on one node).
-    # Same script as the xray protocol: one road for xray onto a node.
-    log "Chaining bootstrap-xray.sh (SS2022 runs inside xray-core)"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"
-    PROTO_BINARY=$(command -v xray)
-    PROTO_CONFIG=/etc/xray/shadowsocks.json
-    ;;
-  mtproto)
-    log "Chaining bootstrap-mtg.sh"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-mtg.sh"
-    PROTO_BINARY=/usr/local/bin/mtg
-    PROTO_CONFIG=/etc/mtg/config.toml
-    ;;
-  mieru)
-    log "Chaining bootstrap-mieru.sh"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-mieru.sh"
-    PROTO_BINARY=/usr/local/bin/mita
-    PROTO_CONFIG=/etc/mita/server.json
-    ;;
-  tuic)
-    log "Chaining bootstrap-singbox.sh (TUIC via sing-box engine)"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
-    PROTO_BINARY=/usr/local/bin/sing-box
-    PROTO_CONFIG=/etc/sing-box/config.json
-    ;;
-  anytls)
-    log "Chaining bootstrap-singbox.sh (AnyTLS via sing-box engine)"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
-    PROTO_BINARY=/usr/local/bin/sing-box
-    PROTO_CONFIG=/etc/sing-box/anytls.json
-    ;;
-  shadowtls)
-    log "Chaining bootstrap-singbox.sh (ShadowTLS via sing-box engine)"
-    bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
-    PROTO_BINARY=/usr/local/bin/sing-box
-    PROTO_CONFIG=/etc/sing-box/shadowtls.json
-    ;;
-esac
-
-# --with-singbox: chain the sing-box engine install on top of the primary
-# protocol so an xray/hysteria/shadowsocks node can also serve engine=singbox
-# inbounds. No-op when the primary IS a sing-box protocol (already installed).
-if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
-  log "Chaining bootstrap-singbox.sh (--with-singbox: engine-choice enabled)"
-  bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-singbox.sh"
-fi
-
 step "Environment file (/etc/iceslab-node/env)"
 ENV_DIR=/etc/iceslab-node
 mkdir -p "$ENV_DIR"
@@ -1036,6 +987,11 @@ mkdir -p "$ENV_DIR"
 mkdir -p /etc/xray /etc/hysteria /etc/amnezia/amneziawg /etc/caddy /etc/mtg /etc/mita /etc/sing-box
 ENV_FILE="$ENV_DIR/env"
 
+# The file is written BEFORE the cores go on: every bootstrap writes its own
+# block into it, and a bootstrap that finds no env file takes the machine for
+# one without an agent and writes nothing. What is written here is only what
+# belongs to this install: the payload, the agent's address, and the flags.
+#
 # Honour --payload only if the env file doesn't exist OR the user passed one.
 if [[ -n "$PAYLOAD" || ! -f "$ENV_FILE" ]]; then
   if [[ -z "$PAYLOAD" ]]; then
@@ -1054,176 +1010,35 @@ EOF
   # Zashchita (hardening): record realistic-fallback intent for the agent.
   # The agent reads REALISTIC_FALLBACK when generating the REALITY/Caddy
   # fallback so an active probe hits a real-looking site instead of a bare
-  # reset. The flag is recorded here; the protocol-specific fallback wiring is
-  # the agent's job (it already owns config generation). Default 0 = off.
+  # reset. Default 0 = off.
   if [[ "$REALISTIC_FALLBACK" == "1" ]]; then
     echo "REALISTIC_FALLBACK=1" >> "$ENV_FILE"
   fi
-  case "$PROTOCOL" in
-    hysteria)
-      cat >> "$ENV_FILE" <<EOF
-HYSTERIA_BINARY=${PROTO_BINARY}
-HYSTERIA_CONFIG=${PROTO_CONFIG}
-HYSTERIA_AUTH_HOST=127.0.0.1
-HYSTERIA_AUTH_PORT=9000
-EOF
-      # Pass domain + email through to the agent so subsequent ApplyInbound
-      # pushes can rewrite the Hysteria config without losing identity.
-      # Without these, the agent's hysteria adapter falls back to defaults
-      # ("your.domain.net") on the next config write; caught live on the
-      # first ice-hys2-test install.
-      if [[ -n "$HY_DOMAIN" ]]; then
-        echo "HYSTERIA_HOSTNAME=${HY_DOMAIN}" >> "$ENV_FILE"
-      fi
-      if [[ -n "$HY_EMAIL" ]]; then
-        echo "HYSTERIA_ACME_EMAIL=${HY_EMAIL}" >> "$ENV_FILE"
-      fi
-      # Tell the agent we're delegating hysteria's lifecycle to systemd
-      # (the install just wrote /etc/systemd/system/hysteria.service).
-      # Without this, the agent's adapter assumes "spawn-mode" and tries
-      # to fork its own hysteria process, which then fights the systemd-
-      # managed copy for :443/udp and dies with "address already in use".
-      echo "HYSTERIA_SERVICE_UNIT=hysteria" >> "$ENV_FILE"
-      # Traffic API endpoint. Without this hysteria-server doesn't expose
-      # per-user uplink/downlink and the panel UI is stuck on "0 B today" for
-      # every Hysteria node even under multi-MiB load. Generate a random
-      # secret here so adapter (poller) and hysteria-server (validator) share
-      # the same value; bind loopback-only so the endpoint is unreachable
-      # from outside.
-      HYSTERIA_STATS_SECRET=$(openssl rand -hex 24 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 48)
-      {
-        echo "HYSTERIA_STATS_LISTEN=127.0.0.1:9999"
-        echo "HYSTERIA_STATS_SECRET=${HYSTERIA_STATS_SECRET}"
-      } >> "$ENV_FILE"
-      ;;
-    xray)
-      cat >> "$ENV_FILE" <<EOF
-XRAY_BINARY=${PROTO_BINARY}
-XRAY_CONFIG=${PROTO_CONFIG}
-EOF
-      if [[ -n "$XR_PRIVATE_KEY" && -n "$XR_SHORT_IDS" ]]; then
-        cat >> "$ENV_FILE" <<EOF
+  # Hysteria's identity from --hysteria-domain / --hysteria-email, so the
+  # agent's rewrites of the hysteria config keep it (without these it fell back
+  # to "your.domain.net" on the next write; caught live on the first install).
+  if has_engine hysteria; then
+    if [[ -n "$HY_DOMAIN" ]]; then echo "HYSTERIA_HOSTNAME=${HY_DOMAIN}" >> "$ENV_FILE"; fi
+    if [[ -n "$HY_EMAIL" ]]; then echo "HYSTERIA_ACME_EMAIL=${HY_EMAIL}" >> "$ENV_FILE"; fi
+  fi
+  # Xray REALITY pre-filled from --xray-reality-*, so the adapter starts at once.
+  if has_engine xray && [[ -n "$XR_PRIVATE_KEY" && -n "$XR_SHORT_IDS" ]]; then
+    cat >> "$ENV_FILE" <<EOF
 XRAY_REALITY_PRIVATE_KEY=${XR_PRIVATE_KEY}
 XRAY_REALITY_SHORT_IDS=${XR_SHORT_IDS}
 XRAY_REALITY_SERVER_NAMES=${XR_SERVER_NAMES}
 XRAY_REALITY_DEST=${XR_DEST}
 XRAY_PORT=${XR_PORT}
 EOF
-        log "Xray REALITY env populated (port=${XR_PORT}, sni=${XR_SERVER_NAMES})"
-      else
-        cat >> "$ENV_FILE" <<EOF
-# Fill in once you create an Xray inbound in the panel:
-# XRAY_REALITY_PRIVATE_KEY=
-# XRAY_REALITY_SHORT_IDS=
-# XRAY_REALITY_SERVER_NAMES=
-# XRAY_REALITY_DEST=www.cloudflare.com:443
-# XRAY_PORT=443
-EOF
-      fi
-      ;;
-    naive)
-      cat >> "$ENV_FILE" <<EOF
-NAIVE_BINARY=${PROTO_BINARY}
-NAIVE_CONFIG=${PROTO_CONFIG}
-EOF
-      ;;
-    shadowsocks)
-      # SS2022 multi-user is driven by xray-core; the SS adapter spawns its own
-      # api-inbound at :8081 separate from the VLESS adapter at :8080.
-      cat >> "$ENV_FILE" <<EOF
-XRAY_BINARY=${PROTO_BINARY}
-SHADOWSOCKS_CONFIG=${PROTO_CONFIG}
-# Cipher (default 2022-blake3-aes-256-gcm). Override only if you have a
-# legacy-client compatibility need.
-# SHADOWSOCKS_METHOD=2022-blake3-aes-256-gcm
-EOF
-      ;;
-    mtproto)
-      cat >> "$ENV_FILE" <<EOF
-MTG_BINARY=${PROTO_BINARY}
-MTG_CONFIG=${PROTO_CONFIG}
-MTG_PORT=443
-MTG_STATS_PORT=3129
-# Fake-TLS masquerade domain: must be a real, popular HTTPS host. Filled
-# in via panel UI when you create the MTProto inbound; safe default below.
-# MTG_DOMAIN=www.cloudflare.com
-EOF
-      ;;
-    mieru)
-      cat >> "$ENV_FILE" <<EOF
-MITA_BINARY=${PROTO_BINARY}
-MITA_CONFIG=${PROTO_CONFIG}
-EOF
-      ;;
-    tuic)
-      cat >> "$ENV_FILE" <<EOF
-SINGBOX_BINARY=${PROTO_BINARY}
-SINGBOX_CONFIG=${PROTO_CONFIG}
-SINGBOX_CERT=/etc/sing-box/cert.pem
-SINGBOX_KEY=/etc/sing-box/key.pem
-SINGBOX_API_LISTEN=127.0.0.1:8082
-# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
-# Point SINGBOX_STATS_BIN at an xray binary to enable traffic counters; without
-# it TUIC still works but counters stay at zero. e.g.:
-# SINGBOX_STATS_BIN=/usr/local/bin/xray
-EOF
-      ;;
-    anytls)
-      cat >> "$ENV_FILE" <<EOF
-SINGBOX_BINARY=${PROTO_BINARY}
-SINGBOX_ANYTLS_CONFIG=${PROTO_CONFIG}
-SINGBOX_CERT=/etc/sing-box/cert.pem
-SINGBOX_KEY=/etc/sing-box/key.pem
-SINGBOX_ANYTLS_API_LISTEN=127.0.0.1:8083
-# Per-user stats need a v2ray-stats gRPC client (sing-box ships no stats CLI).
-# Point SINGBOX_STATS_BIN at an xray binary to enable; without it counters stay
-# at zero (AnyTLS still works). e.g.:
-# SINGBOX_STATS_BIN=/usr/local/bin/xray
-EOF
-      ;;
-    shadowtls)
-      cat >> "$ENV_FILE" <<EOF
-SINGBOX_BINARY=${PROTO_BINARY}
-SINGBOX_SHADOWTLS_CONFIG=${PROTO_CONFIG}
-SINGBOX_SHADOWTLS_API_LISTEN=127.0.0.1:8087
-# ShadowTLS needs no local TLS cert - it fronts a real handshake to the
-# camouflage host. Per-user stats need a v2ray-stats gRPC client; point
-# SINGBOX_STATS_BIN at an xray binary to enable (counters stay at zero without
-# it; ShadowTLS still works). e.g.:
-# SINGBOX_STATS_BIN=/usr/local/bin/xray
-EOF
-      ;;
-  esac
-
-  # --with-singbox: add the sing-box engine env on top of the primary protocol's
-  # (skipped when the primary IS a sing-box protocol, which already wrote it).
-  # No cert/key needed for the engine-choice protocols (vless uses REALITY, ss
-  # its own AEAD, hy2 its own cert flow); we still write the shared self-signed
-  # cert paths so a tuic/anytls/shadowtls inbound later on this node works too.
-  if [ "${WITH_SINGBOX:-0}" = "1" ] && [ "$PROTOCOL" != "tuic" ] && [ "$PROTOCOL" != "anytls" ] && [ "$PROTOCOL" != "shadowtls" ]; then
-    cat >> "$ENV_FILE" <<EOF
-SINGBOX_BINARY=/usr/local/bin/sing-box
-SINGBOX_CERT=/etc/sing-box/cert.pem
-SINGBOX_KEY=/etc/sing-box/key.pem
-EOF
+    log "Xray REALITY env populated (port=${XR_PORT}, sni=${XR_SERVER_NAMES})"
   fi
-
-  # Auto-wire sing-box per-user stats to the xray binary when both are present
-  # (sing-box ships no stats CLI; it reads v2ray-stats via an xray gRPC client).
-  # The agent also falls back to XRAY_BINARY, so this is belt-and-suspenders.
-  if grep -q '^SINGBOX_BINARY=' "$ENV_FILE" && ! grep -q '^SINGBOX_STATS_BIN=' "$ENV_FILE"; then
-    _sb_xray="$(command -v xray || true)"
-    if [ -n "$_sb_xray" ]; then
-      echo "SINGBOX_STATS_BIN=${_sb_xray}" >> "$ENV_FILE"
-      log "Auto-wired SINGBOX_STATS_BIN=${_sb_xray} (per-user sing-box stats)"
-    fi
-  fi
-
   chmod 600 "$ENV_FILE"
 else
   log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"
 fi
 
+step "Cores (${ENGINES[*]})"
+install_engines "$ICESLAB_NODE_DIR/apps/node/scripts"
 step "Firewall (ufw)"
 # Allow SSH FIRST so enabling ufw can't lock us out, then per-protocol ports,
 # then flip defaults to deny + enable. Skip with SKIP_FIREWALL=1.
@@ -1288,7 +1103,11 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
     warn "  ufw delete allow ${NODE_PORT}/tcp; ufw allow from <panel-ip> to any port ${NODE_PORT} proto tcp"
     ufw allow "${NODE_PORT}/tcp"           >/dev/null 2>&1 || true
   fi
-  case "$PROTOCOL" in
+  # The main protocol's ports, then each added core's: a core added with
+  # --engines needs the same (AmneziaWG above all: without the FORWARD policy
+  # flip below its clients connect and no packet gets through).
+  for _FW in "$PROTOCOL" "${ENGINES[@]:1}"; do
+  case "$_FW" in
     hysteria)
       ufw allow 443/udp                  >/dev/null 2>&1 || true
       ufw allow 80/tcp                   >/dev/null 2>&1 || true  # ACME HTTP-01 (one-time)
@@ -1337,6 +1156,7 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
       ufw allow 443/udp                  >/dev/null 2>&1 || true
       ;;
   esac
+  done
   ufw default deny incoming  >/dev/null
   ufw default allow outgoing >/dev/null
   ufw --force enable         >/dev/null
@@ -1437,7 +1257,10 @@ ProtectHome=true
 # dropped, so the entry node can't reach the exit and it shows dead in the
 # observatory/balancer. Invisible on a single-node install (ports already open).
 # Caught live on a production node after fresh install.
-ReadWritePaths=-/var/log -/etc/iceslab-node -/etc/hysteria -/etc/xray -/usr/local/etc/xray -/etc/amnezia/amneziawg -/etc/caddy -/etc/mtg -/etc/mita -/var/lib/mita -/run -/etc/iptables -/etc/ufw
+# /etc/sing-box: the sing-box adapters write their configs there (tuic,
+# anytls, shadowtls, and the xray-family, hy2 and ss engines); it was missing
+# from this list while every other core's directory was on it.
+ReadWritePaths=-/var/log -/etc/iceslab-node -/etc/hysteria -/etc/xray -/usr/local/etc/xray -/etc/amnezia/amneziawg -/etc/caddy -/etc/mtg -/etc/mita -/var/lib/mita -/etc/sing-box -/run -/etc/iptables -/etc/ufw
 PrivateTmp=true
 
 # Journald log limits; without these a node running for months can balloon
@@ -1475,25 +1298,26 @@ systemctl restart iceslab-node.service
 # install-iceslab-node.sh, a friction point caught during a VPS test.
 # Skipped silently if either flag is missing or if the protocol isn't
 # hysteria.
-if [[ "$PROTOCOL" == "hysteria" && -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
+if has_engine hysteria && [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
   HY_CONFIG=/etc/hysteria/config.yaml
+  # The secret the agent polls the stats with, as the hysteria block (or, on an
+  # old checkout, legacy_primary_env) wrote it: the config must carry the same.
+  HYSTERIA_STATS_SECRET="$(awk -F= '$1 == "HYSTERIA_STATS_SECRET" { v = substr($0, index($0, "=") + 1) } END { print v }' "$ENV_FILE")"
+  [[ -n "$HYSTERIA_STATS_SECRET" ]] || fail "no HYSTERIA_STATS_SECRET in $ENV_FILE after the hysteria bootstrap"
 
-  # The official get.hy2.sh script that runs earlier in this installer
-  # writes a placeholder config.yaml with `your.domain.net` /
-  # `your@email.com` before we get here. The old "skip if file exists"
-  # behaviour kept that placeholder and silently ignored the admin's
-  # --hysteria-domain / --hysteria-email flags, so hysteria came up trying
-  # to obtain a cert for `your.domain.net` and crashlooped. Detect the
-  # placeholder and overwrite when we have real values to write; only skip
-  # when the existing config already mentions our domain (genuine
-  # admin-customized state).
+  # Upstream's install_server.sh, which older versions of this installer ran,
+  # left a placeholder config.yaml with `your.domain.net` / `your@email.com`,
+  # and the old "skip if file exists" kept it: hysteria came up asking a cert
+  # for `your.domain.net` and crashlooped. A node carrying that leftover is
+  # still overwritten when we have real values; only a config that already
+  # mentions our domain (genuine admin-customized state) is kept.
   SHOULD_WRITE_CFG=1
   if [[ -f "$HY_CONFIG" ]]; then
     if grep -q "${HY_DOMAIN}" "$HY_CONFIG"; then
       SHOULD_WRITE_CFG=0
       log "Hysteria config already mentions ${HY_DOMAIN}; keeping admin-customized state"
     else
-      log "Hysteria config at $HY_CONFIG exists but doesn't reference ${HY_DOMAIN} (likely placeholder from get.hy2.sh); overwriting"
+      log "Hysteria config at $HY_CONFIG exists but doesn't reference ${HY_DOMAIN} (likely an older install's placeholder); overwriting"
     fi
   fi
   if [[ $SHOULD_WRITE_CFG -eq 1 ]]; then
@@ -1553,14 +1377,16 @@ EOF
     chmod 600 "$HY_CONFIG"
   fi
 
-  # Also disable get.hy2.sh's own systemd unit so its placeholder config
-  # never gets picked up by a parallel service. Our hysteria.service
-  # below owns the runtime.
+  # Upstream's own units, if an older install left them, so a placeholder
+  # config is never picked up by a parallel service. hysteria.service owns the
+  # runtime; bootstrap-hysteria.sh wrote it.
   systemctl disable --now hysteria-server.service 2>/dev/null || true
   systemctl disable --now hysteria-server@.service 2>/dev/null || true
 
+  # ⚠ Old checkout ONLY: its bootstrap-hysteria.sh installs the binary and
+  # nothing else. Delete with legacy_primary_env.
   HY_UNIT=/etc/systemd/system/hysteria.service
-  if [[ ! -f "$HY_UNIT" ]]; then
+  if [[ "$LEGACY_CHECKOUT" == 1 && ! -f "$HY_UNIT" ]]; then
     log "Installing Hysteria 2 systemd unit at $HY_UNIT"
     cat > "$HY_UNIT" <<EOF
 [Unit]
@@ -1689,9 +1515,9 @@ EOF
     [[ -z "$HY_PORT_RANGE" ]] && log "Port-hopping disabled by --hysteria-port-range ''"
     command -v iptables >/dev/null 2>&1 || warn "iptables not installed; skipping port-hopping setup"
   fi
-elif [[ "$PROTOCOL" == "hysteria" ]]; then
-  warn "Hysteria server NOT auto-configured; pass --hysteria-domain <fqdn> --hysteria-email <addr> next time"
-  warn "Or manually write /etc/hysteria/config.yaml + systemd unit (see Hysteria 2 upstream docs at v2.hysteria.network)"
+elif has_engine hysteria; then
+  warn "Hysteria server NOT pre-configured (no --hysteria-domain/--hysteria-email): hysteria.service"
+  warn "waits for its config, which the agent writes on the panel's first push"
 fi
 
 step "Wait for node-agent ready"
@@ -1727,6 +1553,7 @@ printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m  \033[2m(total %s)\033[0
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
 printf '  Protocol     %s\n' "$PROTOCOL"
+printf '  Cores        %s\n' "${ENGINES[*]}"
 printf '  Public IP    %s\n' "$PUBLIC_IP"
 printf '  mTLS port    %s/tcp  (panel connects here)\n' "$NODE_PORT"
 printf '  Env file     %s  (chmod 600)\n' "$ENV_FILE"

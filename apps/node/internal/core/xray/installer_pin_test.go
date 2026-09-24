@@ -108,13 +108,18 @@ func TestBootstrapIsSafeOnALiveNode(t *testing.T) {
 	}
 }
 
-// One road: both sites in the main installer (the xray protocol, and
-// shadowsocks, which runs inside xray-core) chain the bootstrap, and nothing in
-// the installer installs xray by itself any more.
+// One road: the main installer puts xray on through the bootstrap, for the
+// xray protocol and for shadowsocks, which runs inside xray-core, and nothing
+// in the installer installs xray by itself.
 func TestInstallerChainsTheBootstrapAtBothSites(t *testing.T) {
 	script := readFile(t, installerRelPath)
-	if n := strings.Count(script, `bash "$ICESLAB_NODE_DIR/apps/node/scripts/bootstrap-xray.sh"`); n != 2 {
-		t.Errorf("expected both xray sites to chain bootstrap-xray.sh, found %d", n)
+	for _, want := range []string{
+		"xray|shadowsocks)                       echo xray ;;",
+		"xray)      echo bootstrap-xray.sh ;;",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the installer lost %q: xray and shadowsocks go through bootstrap-xray.sh", want)
+		}
 	}
 	if strings.Contains(script, "install-release.sh") && regexp.MustCompile(`bash "\$XR_TMP"`).MatchString(script) {
 		t.Error("the installer still runs install-release.sh itself")

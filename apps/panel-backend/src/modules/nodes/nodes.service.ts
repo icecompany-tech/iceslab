@@ -176,7 +176,7 @@ export async function createNode(
       node.protocol,
       node.address,
       input.hardening,
-      node.singboxEngine,
+      intendedEngines(node),
     ),
   };
 
@@ -226,21 +226,27 @@ export function appendHardeningFlags(
 }
 
 /**
- * Engine-choice: append `--with-singbox` when the node opts into the sing-box
- * engine alongside its native core (vless/vmess/trojan/hy2/ss served via
- * sing-box). Only the shared native protocols take it; tuic/anytls/shadowtls
- * already run on sing-box, so the installer ignores the flag and we skip it.
- * Shared by both renderers so they stay byte-identical.
+ * The cores the node is installed with, from Node.intendedEngines (the main one
+ * first, the one --protocol runs on). Shared by both renderers so they stay
+ * byte-identical.
+ *
+ *   one core            nothing: --protocol already says it;
+ *   main core + singbox `--with-singbox`, the spelling EVERY installer knows;
+ *   anything else       `--engines a,b,c`.
+ *
+ * Why the old spelling where it is enough: the command fetches the installer
+ * from `main`, which can be older than this panel, and an installer that does
+ * not know --engines stops at "Unknown arg". The one shape it cannot express
+ * (a third core) is also the one it could never install.
+ *
+ * Returned as a line for right after `--protocol`, not appended at the end:
+ * the last line can carry a `# ...` note (panel IP, ACME e-mail), and a ` \`
+ * after a comment is part of the comment, which ends the command there.
  */
-export function appendSingboxFlag(
-  lines: string[],
-  singboxEngine: boolean | undefined,
-  protocol: string,
-): void {
-  if (!singboxEngine) return;
-  if (!['xray', 'hysteria', 'shadowsocks'].includes(protocol)) return;
-  lines[lines.length - 1] += ' \\';
-  lines.push('  --with-singbox');
+export function enginesFlagLine(engines: readonly string[]): string | null {
+  const extra = engines.slice(1);
+  if (extra.length === 0) return null;
+  return extra.length === 1 && extra[0] === 'singbox' ? '  --with-singbox \\' : `  --engines ${engines.join(',')} \\`;
 }
 
 async function renderBootstrapCommand(
@@ -249,7 +255,7 @@ async function renderBootstrapCommand(
   protocol: string,
   nodeAddress?: string,
   hardening?: HardeningInput | null,
-  singboxEngine?: boolean,
+  engines: readonly string[] = [],
 ): Promise<string> {
   // Slice S7: auto-detect or accept env-override of the panel's egress
   // IP so the install command can lock the agent's UFW to it. See
@@ -263,6 +269,8 @@ async function renderBootstrapCommand(
     `  --bootstrap ${token} \\`,
     `  --protocol ${protocol} \\`,
   ];
+  const enginesLine = enginesFlagLine(engines);
+  if (enginesLine) lines.push(enginesLine);
   if (panelIp) {
     lines.push(`  --panel-ip ${panelIp}`);
   } else {
@@ -294,7 +302,6 @@ async function renderBootstrapCommand(
   // G - node hardening flags. Shared helper keeps this byte-identical with
   // renderRefreshBootstrapCommand in nodes.routes.ts.
   appendHardeningFlags(lines, hardening);
-  appendSingboxFlag(lines, singboxEngine, protocol);
 
   return lines.join('\n');
 }

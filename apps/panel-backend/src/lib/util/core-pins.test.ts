@@ -61,6 +61,12 @@ describe('every installer carries the manifest, byte for byte', () => {
     const pinned = CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].pinned !== null);
     expect(pinned.filter((c) => !reached.has(c))).toEqual([]);
   });
+
+  it('the main installer carries no pin block: every core goes on through its bootstrap', () => {
+    // A block here would be a second pin for a core its bootstrap already pins,
+    // which is the copy --engines removed (hysteria had one until then).
+    expect(read('scripts/install-iceslab-node.sh')).not.toContain('# >>> core-pins:');
+  });
 });
 
 describe('no hand-written copy of a pin is left beside its block', () => {

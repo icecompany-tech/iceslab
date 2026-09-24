@@ -11,9 +11,10 @@ import { CORE_ARCHES, CORE_ENV_PREFIX, CORE_VERSIONS, type CoreComponent } from 
  */
 
 
-/** Which script carries which components' blocks, paths from the repo root. */
+/** Which script carries which components' blocks, paths from the repo root.
+ *  Bootstraps only: since --engines the main installer runs them for every core
+ *  and carries no pin block of its own (it had one for hysteria). */
 export const PIN_SITES: { file: string; components: CoreComponent[] }[] = [
-  { file: 'scripts/install-iceslab-node.sh', components: ['hysteria'] },
   { file: 'apps/node/scripts/bootstrap-xray.sh', components: ['xray'] },
   { file: 'apps/node/scripts/bootstrap-hysteria.sh', components: ['hysteria'] },
   { file: 'apps/node/scripts/bootstrap-singbox.sh', components: ['singbox'] },

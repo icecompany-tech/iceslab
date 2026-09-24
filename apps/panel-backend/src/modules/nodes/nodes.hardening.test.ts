@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { appendHardeningFlags, appendSingboxFlag } from './nodes.service.js';
+import { appendHardeningFlags, enginesFlagLine } from './nodes.service.js';
 import { HardeningSchema } from './nodes.schemas.js';
 
 // The render functions build the install command as an array of lines and join
@@ -105,55 +105,34 @@ describe('appendHardeningFlags (install-command generation)', () => {
   });
 });
 
-describe('appendSingboxFlag (--with-singbox install flag)', () => {
-  it('appends --with-singbox for a shared native protocol when enabled', () => {
-    for (const protocol of ['xray', 'hysteria', 'shadowsocks']) {
-      const lines = baseLines();
-      appendSingboxFlag(lines, true, protocol);
-      expect(lines.join('\n')).toContain('--with-singbox');
-      // Previous last line gets the continuation; the flag itself has none.
-      expect(lines[4].endsWith(' \\')).toBe(true);
-      expect(lines[lines.length - 1]).toBe('  --with-singbox');
+describe('enginesFlagLine (the cores of Node.intendedEngines)', () => {
+  it('says nothing for one core: --protocol already names it', () => {
+    expect(enginesFlagLine(['xray'])).toBeNull();
+    expect(enginesFlagLine([])).toBeNull();
+  });
+
+  it('uses --with-singbox for the main core plus singbox, which every installer knows', () => {
+    for (const main of ['xray', 'hysteria', 'amneziawg']) {
+      expect(enginesFlagLine([main, 'singbox'])).toBe('  --with-singbox \\');
     }
   });
 
-  it('appends nothing when disabled (byte-identical to today)', () => {
-    const before = baseLines().join('\n');
-    const a = baseLines();
-    appendSingboxFlag(a, false, 'xray');
-    expect(a.join('\n')).toBe(before);
-    const b = baseLines();
-    appendSingboxFlag(b, undefined, 'xray');
-    expect(b.join('\n')).toBe(before);
+  it('names every core with --engines otherwise, the main one first', () => {
+    expect(enginesFlagLine(['xray', 'hysteria', 'singbox'])).toBe('  --engines xray,hysteria,singbox \\');
+    expect(enginesFlagLine(['hysteria', 'amneziawg'])).toBe('  --engines hysteria,amneziawg \\');
   });
 
-  it('skips sing-box-only protocols (already on sing-box) even when enabled', () => {
-    for (const protocol of ['tuic', 'anytls', 'shadowtls']) {
-      const before = baseLines().join('\n');
-      const lines = baseLines();
-      appendSingboxFlag(lines, true, protocol);
-      expect(lines.join('\n')).toBe(before);
-    }
-  });
-
-  it('skips native protocols with no sing-box engine (awg/naive/mtproto/mieru)', () => {
-    for (const protocol of ['amneziawg', 'naive', 'mtproto', 'mieru']) {
-      const before = baseLines().join('\n');
-      const lines = baseLines();
-      appendSingboxFlag(lines, true, protocol);
-      expect(lines.join('\n')).toBe(before);
-    }
-  });
-
-  it('produces identical output regardless of which renderer assembles the head', () => {
-    const fromService = baseLines();
-    const fromRoutes = baseLines();
-    appendSingboxFlag(fromService, true, 'hysteria');
-    appendSingboxFlag(fromRoutes, true, 'hysteria');
-    expect(fromService.join('\n')).toBe(fromRoutes.join('\n'));
+  it('goes right after --protocol, so a # note on the last line cannot swallow it', () => {
+    // The last line of a real command can be "--panel-ip X  # auto-detect
+    // failed": a " \" appended after that is part of the comment, and the
+    // command ends there. The line carries its own continuation instead.
+    const lines = baseLines();
+    lines.splice(4, 0, enginesFlagLine(['xray', 'hysteria', 'singbox'])!);
+    lines[5] = '  --panel-ip YOUR_PANEL_PUBLIC_IP  # auto-detect failed, replace with panel IP';
+    const joined = lines.join('\n');
+    expect(joined).toContain('--protocol xray \\\n  --engines xray,hysteria,singbox \\\n  --panel-ip');
   });
 });
-
 describe('HardeningSchema (validation contract)', () => {
   it('accepts a valid blob', () => {
     const parsed = HardeningSchema.parse({

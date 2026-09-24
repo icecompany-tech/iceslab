@@ -249,6 +249,31 @@ describe('node hardening (Zashchita) → install command', () => {
     expect(cmd).not.toContain('--ssh-allowlist');
   });
 
+  it('installs every intended core: --engines in the create and the refresh command alike', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth(),
+      payload: {
+        name: 'engines-1',
+        address: '10.0.0.8:1337',
+        intendedEngines: ['xray', 'hysteria', 'singbox'],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const body = JSON.parse(created.body);
+    const refreshed = await app.inject({
+      method: 'POST',
+      url: `/api/nodes/${body.id}/bootstrap`,
+      headers: auth(),
+    });
+    const enginesLine = (s: string) => s.split('\n').filter((l) => l.includes('--engines'));
+    expect(enginesLine(body.bootstrap.command)).toEqual(['  --engines xray,hysteria,singbox \\']);
+    expect(enginesLine(JSON.parse(refreshed.body).command)).toEqual(enginesLine(body.bootstrap.command));
+    // Right after --protocol, carrying its own continuation.
+    expect(body.bootstrap.command).toContain('--protocol xray \\\n  --engines xray,hysteria,singbox \\\n');
+  });
+
   it('create and refresh commands carry the same hardening flags (mirror contract)', async () => {
     const created = await app.inject({
       method: 'POST',

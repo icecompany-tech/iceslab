@@ -114,7 +114,7 @@ describe('the core gate on putting a host on a node', () => {
       expect(body.howToInstall).toEqual({
         command:
           `sudo env XRAY_VERSION=${xrayPin.version} XRAY_SHA256=${xrayPin.assets!.arm64!.sha256} ` +
-          'bash /opt/iceslab-node/apps/node/scripts/bootstrap-xray.sh && sudo systemctl restart iceslab-node',
+          'bash /opt/iceslab-node/apps/node/scripts/bootstrap-xray.sh --restart-agent',
         pinned: true,
       });
     }
@@ -128,7 +128,7 @@ describe('the core gate on putting a host on a node', () => {
     const body = JSON.parse((await bind(profileId, nodeId)).body);
     expect(body.howToInstall).toEqual({
       command:
-        'sudo bash /opt/iceslab-node/apps/node/scripts/bootstrap-xray.sh && sudo systemctl restart iceslab-node',
+        'sudo bash /opt/iceslab-node/apps/node/scripts/bootstrap-xray.sh --restart-agent',
       pinned: false,
       why: 'no-arch',
     });
