@@ -139,6 +139,13 @@ type Adapter struct {
 	// the node's. nil = no section at all, the state every node is in today.
 	dns *dto.DnsCfg
 
+	// geo is the fingerprint of the geo files xray reads, as the last push
+	// named them; geoRunning is the one the running process started with.
+	// They differ when a push replaced a `.dat` under an unchanged config,
+	// and FlushGeo is what closes the gap (core.GeoReceiver).
+	geo        string
+	geoRunning string
+
 	// restartMu serializes regenerateAndRestart so concurrent config changes
 	// can't race the subprocess swap. Never held together with mu across IO.
 	restartMu sync.Mutex
@@ -261,6 +268,29 @@ func (a *Adapter) ApplyCascade(fragments json.RawMessage) error {
 
 	a.logger.Info("xray ApplyCascade: cascade changed, regenerating")
 	return a.regenerateAndRestart(context.Background())
+}
+
+// NoteGeo implements core.GeoReceiver: remember what the files are now. No
+// restart here; see FlushGeo.
+func (a *Adapter) NoteGeo(fingerprint string) {
+	a.mu.Lock()
+	a.geo = fingerprint
+	a.mu.Unlock()
+}
+
+// FlushGeo implements core.GeoReceiver: restart a running xray whose process
+// started before the files it reads were replaced. A push that restarted it
+// anyway already closed the gap, and an xray that runs nothing has nothing to
+// reload; its next start reads what is there.
+func (a *Adapter) FlushGeo(ctx context.Context) error {
+	a.mu.Lock()
+	stale := a.proc != nil && a.geo != a.geoRunning
+	a.mu.Unlock()
+	if !stale {
+		return nil
+	}
+	a.logger.Info("xray: geo files changed under a running config, restarting")
+	return a.regenerateAndRestart(ctx)
 }
 
 func policyEqual(a, b []dto.NodePolicyRule) bool {
@@ -1396,6 +1426,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	cascade := a.cascade
 	policy := a.policy
 	dns := a.dns
+	geo := a.geo
 	cfgPath := a.cfg.ConfigPath
 	binPath := a.cfg.BinaryPath
 	run := a.cfg.RunCmd
@@ -1453,6 +1484,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 		// Config-only mode: nothing more to do.
 		a.mu.Lock()
 		a.started = true
+		a.geoRunning = geo
 		a.mu.Unlock()
 		a.logger.Info("xray config written (config-only mode)", "users", len(clients))
 		return nil
@@ -1521,6 +1553,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 	a.mu.Lock()
 	a.proc = proc
 	a.started = true
+	a.geoRunning = geo
 	a.mu.Unlock()
 	a.logger.Info("xray (re)started", "users", len(clients))
 	return nil

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/chain"
-	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/amneziawg"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/hysteria"
@@ -21,6 +20,8 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/shadowsocks"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/singbox"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core/xray"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/geo"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/heartbeat"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/metrics"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
@@ -62,6 +63,18 @@ func main() {
 	pld, err := payload.Decode(payloadEnv)
 	if err != nil {
 		logger.Error("decode payload", "err", err)
+		os.Exit(1)
+	}
+
+	// Phase 9: xray finds its geo lists in the directory the panel lays out,
+	// and every xray this agent starts (the cores, `xray run -test`) inherits
+	// the variable from here. Always set, with or without a geo push: an empty
+	// directory makes xray look where it did before, its install directory
+	// (common/platform/others.go:16-34 of xray 26.3.27). Set before any
+	// adapter can start a process.
+	geoDir := getenv("NODE_GEO_DIR", geo.DefaultDir)
+	if err := os.Setenv("XRAY_LOCATION_ASSET", geoDir); err != nil {
+		logger.Error("set XRAY_LOCATION_ASSET", "err", err)
 		os.Exit(1)
 	}
 
@@ -112,6 +125,7 @@ func main() {
 		Adapters:          adapters,
 		InboundsStorePath: getenv("NODE_INBOUNDS_STORE", defaultInboundsStorePath),
 		Chain:             chainMgr,
+		Geo:               geo.NewStore(geoDir),
 	})
 	if err != nil {
 		logger.Error("build server", "err", err)

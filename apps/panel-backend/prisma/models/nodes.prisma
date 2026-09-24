@@ -97,6 +97,10 @@ model Node {
   // field ships every node on the fleet reports no chain and the panel would
   // have to guess whether that is normal (it is) or a dead process.
   chainSentAt           DateTime? @map("chain_sent_at") @db.Timestamptz(6)
+  // Phase 9.2: the geo directory as the agent's healthcheck reported it,
+  // NodeGeoFact in shared. NULL = the node has not said (an agent older than
+  // geo, or not polled yet).
+  geo                   Json?
   consumptionMultiplier BigInt    @default(1) @map("consumption_multiplier")
 
   // Slice 27.5: region grouping + capacity hint. Both NULL by default

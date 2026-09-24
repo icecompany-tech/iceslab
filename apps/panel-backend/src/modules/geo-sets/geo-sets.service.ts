@@ -9,8 +9,9 @@ import {
   type GeoSetUse,
 } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 import { reportedEngines } from '../nodes/node-engines.js';
-import { collectGeoUses, usesOf, type GeoUseSite } from './geo-refs.js';
+import { collectGeoUses, nodeFileName, usesOf, type GeoUseSite } from './geo-refs.js';
 import { enqueueBuiltinFetch, enqueueUrlFetch } from './geo-sets.queue.js';
 import { builtinNeedsFetch, ensureBuiltinSets } from './geo-sets.store.js';
 
@@ -132,11 +133,6 @@ function sourceOf(s: SetRow): GeoSetSource {
 }
 
 const tagsOf = (s: SetRow): GeoSetTag[] => (s.current?.tags as GeoSetTag[] | undefined) ?? [];
-
-/** The name the set's file has on a node (geo-contract.md section 1). */
-export function nodeFileName(s: { name: string; sourceType: string }): string {
-  return s.sourceType === 'builtin' ? `${s.name}.dat` : `iceslab-${s.name}.dat`;
-}
 
 /** Nodes whose rules name the set, and where each one is pinned. */
 async function nodesOf(s: SetRow, sites: GeoUseSite[]) {
@@ -428,5 +424,7 @@ export async function rollout(id: string, version: string): Promise<{ nodes: num
       }),
     ),
   );
+  // Each moved node gets a push, which lays the file out and names it.
+  if (moving.length > 0) eventBus.emit('geo.rolledOut', { geoSetId: id, nodeIds: moving.map((n) => n.id) });
   return { nodes: moving.length };
 }

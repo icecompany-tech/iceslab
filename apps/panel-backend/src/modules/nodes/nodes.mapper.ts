@@ -5,6 +5,8 @@ import type {
   NodeCoreRestarts,
   NodeCores,
   NodeCoreVersions,
+  NodeGeoFact,
+  NodeGeoIntended,
 } from '@iceslab/shared';
 import { intendedEngines, reportedEngines } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
@@ -162,6 +164,18 @@ export interface PublicNodeDto {
    * Present on the list and on GET by id.
    */
   cascadeNeedsEngines?: CascadeEngineNeed[];
+  /**
+   * Phase 9.2: what the agent says lies in its geo directory. null = it has
+   * not said (an agent older than geo, or not polled yet), which the card
+   * shows as "the node did not report" and never as "behind".
+   */
+  geo: NodeGeoFact | null;
+  /**
+   * The files the node's pins and rules call for; null = its rules name no
+   * set. The card compares them with `geo` file by file, by sha256. Present
+   * on the list and on GET by id.
+   */
+  geoIntended?: NodeGeoIntended | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -190,6 +204,8 @@ export const NODE_DTO_FIELDS = [
   'hiddenByCascade',
   'cascadeNeedsEngines',
   'cores[].reason',
+  'geo',
+  'geoIntended',
 ] as const;
 
 /**
@@ -228,6 +244,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     cores: (node.cores as NodeCores | null) ?? null,
     coreVersions: readCoreVersions(node.coreVersions),
     ...(engines !== undefined ? { engines } : {}),
+    geo: (node.geo as NodeGeoFact | null) ?? null,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

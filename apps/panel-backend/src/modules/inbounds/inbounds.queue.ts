@@ -17,6 +17,7 @@ import { inboundSyncJobs } from '../../lib/infra/metrics.js';
 import { allocatePeer, preallocatePeers } from '../amneziawg/amneziawg.service.js';
 import { getCascadeFragmentsForNode, getChainForNode } from '../cascades/cascade.service.js';
 import { resolvePolicyForNode } from '../node-policies/node-policies.service.js';
+import { layOutGeo } from '../geo-sets/geo-push.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
 import { getLogger } from '../../lib/infra/logger.js';
 
@@ -481,6 +482,11 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   try {
     req = await buildApplyInboundsRequest(node);
     inbounds = req.inbounds;
+    // Phase 9.2: the geo files go out before the push that names them, since
+    // the agent refuses a push whose files it does not hold (GEO_MISSING). An
+    // agent older than geo gets no `geo` and the push it always got.
+    const geo = await layOutGeo(transport, node.id);
+    if (geo) req = { ...req, geo };
 
     getLogger().info(
       `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,

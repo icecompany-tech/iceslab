@@ -29,7 +29,18 @@ beforeEach(async () => {
   app = await buildApp();
   await cleanDatabase();
   token = await registerAndLogin(app);
+  olderThanGeo();
 });
+
+/**
+ * The push asks the agent for its geo files first (phase 9.2). These agents
+ * are stand-ins with no address behind them: they answer as an agent older
+ * than geo, which gets its push exactly as before. Set again by the two
+ * helpers below, since a test that restores its mocks takes this one too.
+ */
+function olderThanGeo(): void {
+  vi.spyOn(NodeTransport.prototype, 'listAssets').mockRejectedValue(new NodeRequestError('404', 404, null));
+}
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -70,6 +81,7 @@ const CORE_REFUSAL =
   "infra/conf: unknown field 'realityNoSuchField')";
 
 function failApply(): void {
+  olderThanGeo();
   vi.spyOn(NodeTransport.prototype, 'applyInbounds').mockRejectedValue(
     new NodeRequestError(`Node 10.0.0.1:8443 returned 500: ${CORE_REFUSAL}`, 500, {
       error: 'ADAPTER_FAILED',
@@ -79,6 +91,7 @@ function failApply(): void {
 }
 
 function succeedApply(): void {
+  olderThanGeo();
   vi.spyOn(NodeTransport.prototype, 'applyInbounds').mockResolvedValue({
     ok: true,
     applied: 0,

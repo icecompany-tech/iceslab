@@ -86,6 +86,10 @@ export interface DomainEventMap {
   // DB and never reached the nodes until an unrelated profile/binding edit
   // fired a re-push. Caught live during the first cascade field test 2026-06-17.
   'cascade.changed':      { nodeIds: string[] };
+  // geo.rolledOut → a rollout moved these nodes' pins of one geo set (phase
+  // 9.2). Their next push lays out the new file and names it, so they need
+  // one now; nobody else's push carries a new list.
+  'geo.rolledOut':        { geoSetId: string; nodeIds: string[] };
 }
 
 type EventHandler<K extends keyof DomainEventMap> = (

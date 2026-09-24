@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_NAMES, LINK_TUNNEL_IFACE_PREFIX, PROTOCOL_NAMES, XRAY_SUBPROTOCOLS } from '@iceslab/shared';
+import {
+  ENGINE_NAMES,
+  GEO_ASSET_NAME,
+  LINK_TUNNEL_IFACE_PREFIX,
+  PROTOCOL_NAMES,
+  XRAY_SUBPROTOCOLS,
+} from '@iceslab/shared';
 
 /**
  * The hand-written mirror between `packages/shared/src/transport.ts` and the
@@ -219,6 +225,44 @@ describe('the chain block against the agent that will decode it', () => {
     const req = /type ApplyInboundsRequest struct \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
     expect(req).toContain('`json:"chain,omitempty"`');
     expect(req).toContain('`json:"cascade,omitempty"`');
+  });
+});
+
+/**
+ * The geo block (phase 9.2), key by key. It ships with its agent, but a rename
+ * on one side would decode into a push with no files, which the agent applies
+ * without a single list: every `ext:` rule then fails on the node, and every
+ * built-in one quietly reads what the xray installer left behind.
+ */
+describe('the geo block against the agent that decodes it', () => {
+  it('carries the same keys on both sides', () => {
+    const geo = jsonKeysOf('NodeGeo');
+    expect(geo.length, 'NodeGeo was not found in dto.go, so this test is checking nothing').toBe(2);
+    expect(geo).toEqual(['version', 'files']);
+    expect(jsonKeysOf('NodeGeoFile')).toEqual(['name', 'sha256', 'size', 'reader']);
+    expect(jsonKeysOf('GeoFileDto')).toEqual(['name', 'sha256', 'size']);
+    expect(jsonKeysOf('GeoStatusDto')).toEqual(['version', 'files']);
+    expect(jsonKeysOf('GeoMissingResponse')).toEqual(['error', 'message', 'files']);
+  });
+
+  it('keeps the block optional on the request and on the healthcheck', () => {
+    const src = readFileSync(DTO_GO, 'utf8');
+    const req = /type ApplyInboundsRequest struct \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
+    expect(req).toContain('`json:"geo,omitempty"`');
+    const health = /type HealthcheckResponse struct \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '';
+    expect(health).toContain('`json:"geo,omitempty"`');
+  });
+
+  it('allows the same file names on both sides', () => {
+    // The agent refuses a name the panel sends, or accepts a path the panel
+    // never would, the day the two patterns part.
+    const store = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../../../../apps/node/internal/geo/store.go'),
+      'utf8',
+    );
+    const go = /^var assetName = regexp\.MustCompile\(`([^`]+)`\)/m.exec(store)?.[1];
+    expect(go, 'assetName was not found in internal/geo/store.go').toBeDefined();
+    expect(go).toBe(GEO_ASSET_NAME.source);
   });
 });
 

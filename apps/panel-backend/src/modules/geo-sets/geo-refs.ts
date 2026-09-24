@@ -8,6 +8,34 @@ import { prisma } from '../../prisma.js';
  * the agent renders carries a hard-coded `geosite:`/`geoip:`.
  */
 
+/** The name the set's file has on a node (geo-contract.md section 1): the
+ *  built-in ones under the names xray looks up, an operator's as
+ *  `iceslab-<name>.dat`, which the agent's xray translates `ext:<name>:` to. */
+export function nodeFileName(s: { name: string; sourceType: string }): string {
+  return s.sourceType === 'builtin' ? `${s.name}.dat` : `iceslab-${s.name}.dat`;
+}
+
+/**
+ * An entry as xray on the node must spell it, for the JSON the PANEL renders
+ * (the cascade fragments): `ext:<set>:<tag>` becomes `ext:iceslab-<set>.dat:
+ * <tag>`, the file the set is laid out as. The agent does the same for the
+ * policy and resolver it renders itself (internal/core/xray/geo.go); whoever
+ * writes the core's JSON translates (geo-contract.md section 0). Everything
+ * else, `geosite:` and `geoip:` included, passes through.
+ */
+export function xrayGeoEntry(entry: string): string {
+  for (const prefix of ['ext:', 'ext-domain:', 'ext-ip:']) {
+    if (!entry.startsWith(prefix)) continue;
+    const rest = entry.slice(prefix.length);
+    const cut = rest.indexOf(':');
+    if (cut <= 0) return entry;
+    const set = rest.slice(0, cut);
+    if (set.endsWith('.dat')) return entry;
+    return `${prefix}iceslab-${set}.dat${rest.slice(cut)}`;
+  }
+  return entry;
+}
+
 /** Which list of a rule an entry sits in: xray reads the two differently. */
 export type GeoRefField = 'domain' | 'ip';
 

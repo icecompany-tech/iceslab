@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/geo"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/metrics"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
 )
@@ -68,6 +70,9 @@ type Config struct {
 	// refused out loud rather than dropped: the panel would otherwise believe
 	// a chain is up that nothing is running.
 	Chain *chain.Manager
+	// Geo is the geo directory (phase 9). Nil means this agent keeps none:
+	// /assets answers 404 and a push carrying geo is refused.
+	Geo *geo.Store
 }
 
 type Server struct {
@@ -82,6 +87,11 @@ type Server struct {
 	// until a push lands; a push the agent refused changes nothing in it.
 	idleMu sync.Mutex
 	idle   map[core.CoreAdapter]bool
+
+	// geoVersion is the geo version of the last applied push that carried
+	// one, for /healthz. Nil until then.
+	geoMu      sync.Mutex
+	geoVersion *string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -231,7 +241,89 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/stats", s.handleStats)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/ufwPorts", s.handleUfwPorts)
+	mux.HandleFunc("/assets", s.handleAssetsList)
+	mux.HandleFunc("/assets/", s.handleAssetPut)
 	return mux
+}
+
+// handleAssetsList answers GET /assets: the geo files on disk with their
+// sha256, which is what the panel compares before sending only what differs.
+func (s *Server) handleAssetsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "GET only")
+		return
+	}
+	if s.cfg.Geo == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "this agent keeps no geo directory")
+		return
+	}
+	files, err := s.cfg.Geo.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "ASSETS_READ_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.GeoAssetsResponse{Files: files})
+}
+
+// handleAssetPut answers PUT /assets/<name>: one geo file, its body the
+// bytes, X-Content-Sha256 what they must hash to. Nothing on disk changes
+// unless they do. The only route whose body may exceed maxRequestBodyBytes;
+// its own ceiling is geo.MaxFileBytes.
+func (s *Server) handleAssetPut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "PUT only")
+		return
+	}
+	if s.cfg.Geo == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "this agent keeps no geo directory")
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/assets/")
+	if !geo.ValidName(name) {
+		writeError(w, http.StatusBadRequest, "ASSET_NAME_INVALID",
+			fmt.Sprintf("%q is not a geo file name (geosite.dat, geoip.dat, iceslab-<set>.dat, iceslab-<set>.<tag>.json)", name))
+		return
+	}
+	want := strings.TrimSpace(r.Header.Get("X-Content-Sha256"))
+	if len(want) != 64 {
+		writeError(w, http.StatusBadRequest, "ASSET_SHA_REQUIRED", "X-Content-Sha256 must carry the file's sha256, 64 hex characters")
+		return
+	}
+	if r.ContentLength > geo.MaxFileBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "ASSET_TOO_LARGE",
+			fmt.Sprintf("%d bytes, the ceiling is %d", r.ContentLength, geo.MaxFileBytes))
+		return
+	}
+	file, err := s.cfg.Geo.Put(name, r.Body, want)
+	var mismatch *geo.ShaMismatchError
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, file)
+	case errors.Is(err, geo.ErrTooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, "ASSET_TOO_LARGE", fmt.Sprintf("the ceiling is %d bytes", geo.MaxFileBytes))
+	case errors.As(err, &mismatch):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+			"error": "ASSET_SHA_MISMATCH", "message": mismatch.Error(),
+			"expected": mismatch.Expected, "got": mismatch.Got,
+		})
+	case geo.IsNoSpace(err):
+		writeError(w, http.StatusInsufficientStorage, "ASSET_NO_SPACE", err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, "ASSET_WRITE_FAILED", err.Error())
+	}
+}
+
+// geoFingerprint is what an adapter that reads files at start compares: the
+// files of one reader, by name and sha256, in a stable order.
+func geoFingerprint(g *dto.NodeGeo, reader string) string {
+	parts := []string{}
+	for _, f := range g.Files {
+		if f.Reader == reader {
+			parts = append(parts, f.Name+"="+strings.ToLower(f.Sha256))
+		}
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }
 
 // ───── Handlers ─────
@@ -399,7 +491,27 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Cores:  cores,
 		Chain:  chainStatus,
 		Arch:   core.MachineArch(),
+		Geo:    s.geoStatus(),
 	})
+}
+
+// geoStatus is the healthcheck's geo: the files on disk (sha256 from the
+// store's size+mtime cache, not read every 30 seconds) and the version of the
+// last push that carried geo. Nil only when this agent keeps no directory; a
+// directory that cannot be read says so with no files rather than vanishing.
+func (s *Server) geoStatus() *dto.GeoStatusDto {
+	if s.cfg.Geo == nil {
+		return nil
+	}
+	files, err := s.cfg.Geo.List()
+	if err != nil {
+		s.logger.Warn("geo: cannot list the directory for /healthz", "err", err)
+		files = []dto.GeoFileDto{}
+	}
+	s.geoMu.Lock()
+	v := s.geoVersion
+	s.geoMu.Unlock()
+	return &dto.GeoStatusDto{Version: v, Files: files}
 }
 
 // handleUfwPorts (G4 probe-exposure) reports the ufw-allowed inbound ports so
@@ -529,6 +641,32 @@ func (s *Server) handleApplyInbounds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Geo files first, and before the push is even written down: a push whose
+	// lists are not all here is not a fact about this node yet. Applying it
+	// would hand xray an `ext:` it cannot open, or, for the built-in names,
+	// let it quietly read the copy its installer left in /usr/local/share/xray
+	// (common/platform/others.go:19-24). The panel lays the files out and
+	// pushes again.
+	if req.Geo != nil {
+		if s.cfg.Geo == nil {
+			writeError(w, http.StatusConflict, "GEO_UNSUPPORTED", "this agent keeps no geo directory")
+			return
+		}
+		missing, err := s.cfg.Geo.Missing(req.Geo.Files)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ASSETS_READ_FAILED", err.Error())
+			return
+		}
+		if len(missing) > 0 {
+			writeJSON(w, http.StatusConflict, dto.GeoMissingResponse{
+				Error:   "GEO_MISSING",
+				Message: fmt.Sprintf("geo files not here with the expected sha256: %s", strings.Join(missing, ", ")),
+				Files:   missing,
+			})
+			return
+		}
+	}
+
 	if s.cfg.InboundsStorePath != "" {
 		// The WHOLE push, not only the inbounds: this file is what a restart
 		// restores from, and inbounds without the node-level policy and
@@ -568,6 +706,18 @@ func (s *Server) applyPush(
 	ctx context.Context,
 	req dto.ApplyInboundsRequest,
 ) (applied int, failed int, reasons []string) {
+	// The geo files this push stands on, noted before anything renders, so a
+	// restart the push causes anyway picks them up and FlushGeo below has
+	// nothing left to do. Absent geo leaves every adapter where it was.
+	if req.Geo != nil {
+		fp := geoFingerprint(req.Geo, "xray")
+		for _, adapter := range s.cfg.Adapters {
+			if gr, ok := adapter.(core.GeoReceiver); ok {
+				gr.NoteGeo(fp)
+			}
+		}
+	}
+
 	// The node-level policy goes out BEFORE the inbounds, so the render that
 	// each inbound triggers already carries it. The other order would restart
 	// the core twice for one push: once without the policy, once with it.
@@ -805,7 +955,39 @@ func (s *Server) applyPush(
 		s.idleUnnamed(ctx, named)
 	}
 
+	if req.Geo != nil {
+		s.settleGeo(ctx, req.Geo, failed == 0)
+	}
+
 	return applied, failed, reasons
+}
+
+// settleGeo finishes a push that carried geo: a core still running on files
+// the push replaced restarts, and, when the push applied whole, the files it
+// did not name leave the directory (a push refused in part is not a fact
+// about what this node needs, the same rule as idleUnnamed).
+func (s *Server) settleGeo(ctx context.Context, g *dto.NodeGeo, whole bool) {
+	for _, adapter := range s.cfg.Adapters {
+		if gr, ok := adapter.(core.GeoReceiver); ok {
+			if err := gr.FlushGeo(ctx); err != nil {
+				s.logger.Error("adapter FlushGeo failed", "core", adapter.Name(), "err", err)
+			}
+		}
+	}
+	if !whole || s.cfg.Geo == nil {
+		return
+	}
+	names := make([]string, 0, len(g.Files))
+	for _, f := range g.Files {
+		names = append(names, f.Name)
+	}
+	if err := s.cfg.Geo.Retain(names); err != nil {
+		s.logger.Error("geo: removing files the push no longer names failed", "err", err)
+	}
+	v := g.Version
+	s.geoMu.Lock()
+	s.geoVersion = &v
+	s.geoMu.Unlock()
 }
 
 // idleUnnamed stops every registered core the applied push did not name and
@@ -954,6 +1136,14 @@ func (s *Server) restoreFromStore(ctx context.Context) {
 	}
 	if len(req.Inbounds) == 0 {
 		return
+	}
+	// The files were checked when this push landed; a file gone since is said
+	// out loud and the push still restored, because the alternative is a node
+	// that stays dark until the panel speaks.
+	if req.Geo != nil && s.cfg.Geo != nil {
+		if missing, err := s.cfg.Geo.Missing(req.Geo.Files); err == nil && len(missing) > 0 {
+			s.logger.Error("restore from disk: geo files of the last push are gone or changed", "files", missing)
+		}
 	}
 
 	applied, failed, reasons := s.applyPush(ctx, req)

@@ -235,6 +235,21 @@ type Idler interface {
 // name. The node is not degraded by it: nothing is meant to run there.
 const IdleReason = "no inbounds in the last push"
 
+// GeoReceiver is implemented by a core that reads geo files at start and
+// never again (xray: infra/conf/router.go reads a `.dat` while building the
+// config). A new file under an unchanged config reaches it only through a
+// restart, and a config that did not change is exactly when an adapter skips
+// one.
+//
+// Two steps so a push restarts the core once: NoteGeo, before anything else
+// in the push, records the fingerprint of the files the core reads; any
+// restart the rest of the push causes picks them up; FlushGeo, after the
+// push, restarts only if none did and the fingerprint moved.
+type GeoReceiver interface {
+	NoteGeo(fingerprint string)
+	FlushGeo(ctx context.Context) error
+}
+
 // RestartReporter is an OPTIONAL interface an adapter may implement to report
 // the above. /healthz type-asserts each adapter against it, exactly like
 // Versioner below; adapters that don't implement it simply report nothing.

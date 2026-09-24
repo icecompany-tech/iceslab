@@ -33,6 +33,17 @@ export type GeoSetSource =
  */
 export const GEO_SET_NAME = /^[a-z0-9-]{1,32}$/;
 
+/**
+ * A file name in the agent's geo directory: the built-in `geosite.dat` and
+ * `geoip.dat` under the names xray looks up, an operator's set as
+ * `iceslab-<name>.dat`, a rule-set of the chain as `iceslab-<name>.<tag>.json`.
+ * The agent holds the same pattern (internal/geo/store.go), and
+ * contract-mirror.test.ts holds the two equal. Nothing with a slash, a leading
+ * dot or `..` can match.
+ */
+export const GEO_ASSET_NAME =
+  /^(geosite\.dat|geoip\.dat|iceslab-[a-z0-9-]{1,32}\.dat|iceslab-[a-z0-9-]{1,32}\.[a-z0-9@!_-]{1,64}\.json)$/;
+
 /** The two built-in sets. Their names are taken: `geosite:` and `geoip:` in a
  *  rule mean them, and on a node they are `geosite.dat` and `geoip.dat`. */
 export const GEO_BUILTIN_NAMES = { geosite: 'geosite', geoip: 'geoip' } as const satisfies Record<
@@ -121,6 +132,22 @@ export interface GeoSetTag {
   entries: number;
   /** geosite only: the attributes its domains carry, for `<tag>@<attr>`. */
   attrs?: string[];
+}
+
+/** The node DTO's `geo`: what the agent's healthcheck said lies on its disk,
+ *  with when this content was first seen. null on the DTO = the node has not
+ *  said (an agent older than geo, or not polled yet). */
+export interface NodeGeoFact {
+  version: string | null;
+  files: { name: string; sha256: string; size: number }[];
+  observedAt: string;
+}
+
+/** The node DTO's `geoIntended`: the files its pins and rules call for. null
+ *  on the DTO = its rules name no set. */
+export interface NodeGeoIntended {
+  version: string;
+  files: { name: string; sha256: string; setId: string; setName: string; setVersion: string }[];
 }
 
 export interface GeoSetUse {

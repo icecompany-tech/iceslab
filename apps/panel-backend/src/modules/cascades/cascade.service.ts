@@ -13,6 +13,7 @@ import {
 import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/country-flag.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
+import { xrayGeoEntry } from '../geo-sets/geo-refs.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import {
@@ -2408,8 +2409,10 @@ async function buildCascadeFragmentsForNode(
     })
   ).map((p) => ({
     ordinal: p.ordinal,
-    directDomains: p.directDomains,
-    blockDomains: p.blockDomains,
+    // Spelled for xray on the node: an operator's geo set is the file it was
+    // laid out as (phase 9.2, xrayGeoEntry).
+    directDomains: p.directDomains.map(xrayGeoEntry),
+    blockDomains: p.blockDomains.map(xrayGeoEntry),
   }));
 
   // C3-auto: a `balancer` cascade fans one entry out to N parallel exits. The
@@ -2572,10 +2575,12 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     directions: directions.map((d) => ({ tag: d.tag, nodeIds: d.nodes.map((n) => n.nodeId) })),
     links: rows,
     hosts,
+    // Spelled for xray on the node: an operator's geo set is the file it was
+    // laid out as (phase 9.2, xrayGeoEntry).
     policies: policyRows.map((p) => ({
       ordinal: p.ordinal,
-      directDomains: p.directDomains,
-      blockDomains: p.blockDomains,
+      directDomains: p.directDomains.map(xrayGeoEntry),
+      blockDomains: p.blockDomains.map(xrayGeoEntry),
     })),
     // The node has to know before the subscription hands the tag out: an Auto
     // profile whose rule is missing at the entry egresses from the entry

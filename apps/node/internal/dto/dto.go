@@ -232,6 +232,61 @@ type ApplyInboundsRequest struct {
 	// chain would fight over the link port. An older agent never sees this
 	// field and keeps reading Cascade, so a half-updated fleet keeps serving.
 	Chain *NodeChain `json:"chain,omitempty"`
+	// The geo files this push stands on (phase 9), each already laid out in
+	// the geo directory through PUT /assets. Absent = the directory is not
+	// touched, the state of every push from an older panel. A named file this
+	// agent does not hold with that sha256 refuses the WHOLE push before
+	// anything is applied: 409 GEO_MISSING.
+	Geo *NodeGeo `json:"geo,omitempty"`
+}
+
+// NodeGeo mirrors NodeGeo in shared/transport.ts. Contract:
+// docs/plan/geo-contract.md section 1.
+type NodeGeo struct {
+	// A label for the set of files; comparison is by each file's sha256.
+	Version string        `json:"version"`
+	Files   []NodeGeoFile `json:"files"`
+}
+
+// NodeGeoFile is one file in the geo directory.
+type NodeGeoFile struct {
+	// Name matches geo.ValidName: geosite.dat, geoip.dat, iceslab-<set>.dat
+	// or iceslab-<set>.<tag>.json.
+	Name   string `json:"name"`
+	Sha256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+	// Reader is who reads it: "xray" (a .dat, so a change restarts xray) or
+	// "chain" (a rule-set the chain reloads by itself).
+	Reader string `json:"reader"`
+}
+
+// GeoFileDto is one file as the agent finds it on disk: GET /assets, the
+// answer to PUT /assets/<name>, and the files of the healthcheck's geo.
+type GeoFileDto struct {
+	Name   string `json:"name"`
+	Sha256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+// GeoAssetsResponse answers GET /assets.
+type GeoAssetsResponse struct {
+	Files []GeoFileDto `json:"files"`
+}
+
+// GeoMissingResponse is the 409 refusing a push whose geo names files this
+// agent does not hold: the ErrorResponse shape plus the names.
+type GeoMissingResponse struct {
+	Error   string   `json:"error"`
+	Message string   `json:"message"`
+	Files   []string `json:"files"`
+}
+
+// GeoStatusDto is what the healthcheck says about the geo directory. Version
+// is that of the last applied push that carried geo, null before one; Files
+// is what lies on disk with its actual sha256, not an echo of the push.
+type GeoStatusDto struct {
+	Version *string      `json:"version"`
+	Files   []GeoFileDto `json:"files"`
 }
 
 // NodeChain mirrors NodeChain in shared/transport.ts: the chain drawn by a
@@ -619,6 +674,9 @@ type HealthcheckResponse struct {
 	// operator an update command: every release file and its sha256 is per
 	// arch, and a bootstrap takes no version without its checksum.
 	Arch string `json:"arch,omitempty"`
+	// The geo directory. Absent only from an agent older than the field (or
+	// one built without a geo directory); an agent that has one always says.
+	Geo *GeoStatusDto `json:"geo,omitempty"`
 }
 
 // ───── GET /metrics ─────

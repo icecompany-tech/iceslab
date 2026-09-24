@@ -114,4 +114,8 @@ export function registerInboundEventHandlers(): void {
       enqueue(nodeId, `cascade.changed`);
     }
   });
+
+  eventBus.on('geo.rolledOut', ({ geoSetId, nodeIds }) => {
+    for (const nodeId of nodeIds) enqueue(nodeId, `geo.rolledOut ${geoSetId}`);
+  });
 }

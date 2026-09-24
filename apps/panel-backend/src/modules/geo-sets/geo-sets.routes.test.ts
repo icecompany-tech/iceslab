@@ -10,6 +10,7 @@ import { ROOT, datFile, domain, site } from '../../../tests/helpers/geo-dat.js';
 import { GEO_BUILTIN } from '@iceslab/shared';
 import { ingestGeoFile } from './geo-sets.store.js';
 import { geoSetsQueue } from './geo-sets.queue.js';
+import { eventBus } from '../../lib/infra/event-bus.js';
 
 /**
  * Phase 9.1v: /api/geo-sets as geo-contract.md section 5 draws it. The push
@@ -237,11 +238,12 @@ describe('rollout: the plan, then the pins', () => {
     });
   });
 
-  it('moves the pins of the confirmed version, and a second rollout has nothing to move', async () => {
+  it('moves the pins of the confirmed version and pushes those nodes; a second rollout has nothing to move', async () => {
     const id = await verifiedSet();
     const p = await policy('no-ads', ['ext:mylist:ads']);
-    await node('ru-01', { policyId: p });
+    const ru = await node('ru-01', { policyId: p });
     const { version } = (await call('GET', `/api/geo-sets/${id}/rollout-plan`)).body;
+    const emitted = vi.spyOn(eventBus, 'emit');
 
     expect((await call('POST', `/api/geo-sets/${id}/rollout`, { version: 'aaaaaaaaaaaa' })).body).toMatchObject({
       error: 'GEO_ROLLOUT_STALE',
@@ -249,11 +251,15 @@ describe('rollout: the plan, then the pins', () => {
     });
     expect((await call('POST', `/api/geo-sets/${id}/rollout`, { version })).body).toEqual({ nodes: 1 });
     expect(await prisma.nodeGeoPin.count()).toBe(1);
+    // Phase 9.2: the moved node gets its push, which lays the file out.
+    expect(emitted).toHaveBeenCalledWith('geo.rolledOut', { geoSetId: id, nodeIds: [ru] });
+    emitted.mockClear();
 
     const again = (await call('GET', `/api/geo-sets/${id}/rollout-plan`)).body;
     expect(again.nodes[0]).toMatchObject({ from: version, filesToSend: [], restartsXray: false });
     expect((await call('GET', `/api/geo-sets/${id}`)).body.nodes).toEqual({ total: 1, behind: 0 });
     expect((await call('POST', `/api/geo-sets/${id}/rollout`, { version })).body).toEqual({ nodes: 0 });
+    expect(emitted).not.toHaveBeenCalledWith('geo.rolledOut', expect.anything());
   });
 
   it('a version that lacks a tag a rule names is not rolled out, and the rule is named', async () => {

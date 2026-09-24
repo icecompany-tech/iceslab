@@ -1,4 +1,4 @@
-import type { ChainStatus, HostMetricsResponse } from '@iceslab/shared';
+import type { ChainStatus, GeoStatus, HostMetricsResponse, NodeGeoFact } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { redis } from '../../lib/infra/redis.js';
 import { NodeTransport, NodeRequestError } from './nodes.transport.js';
@@ -58,6 +58,7 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       cores: true,
       chainStatus: true,
       chainSentAt: true,
+      geo: true,
     },
   });
 
@@ -106,13 +107,22 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       const chainChanged =
         result.chain !== undefined &&
         JSON.stringify(result.chain) !== JSON.stringify(node.chainStatus ?? null);
+      // The geo directory, same rule: undefined keeps what is stored. Compared
+      // without its stamp, so an unchanged directory is not a write a tick;
+      // `observedAt` is therefore when this content was first seen.
+      const storedGeo = (node.geo as NodeGeoFact | null) ?? null;
+      const geoChanged =
+        result.geo !== undefined &&
+        JSON.stringify(result.geo) !==
+          JSON.stringify(storedGeo ? { version: storedGeo.version, files: storedGeo.files } : null);
       if (
         statusChanged ||
         messageChanged ||
         versionChanged ||
         restartsChanged ||
         coresChanged ||
-        chainChanged
+        chainChanged ||
+        geoChanged
       ) {
         await prisma.node.update({
           where: { id: node.id },
@@ -134,6 +144,17 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
                     result.chain === null
                       ? Prisma.DbNull
                       : (result.chain as unknown as Prisma.InputJsonValue),
+                }
+              : {}),
+            ...(geoChanged
+              ? {
+                  geo: result.geo
+                    ? ({
+                        version: result.geo.version,
+                        files: result.geo.files,
+                        observedAt: new Date().toISOString(),
+                      } satisfies NodeGeoFact as unknown as Prisma.InputJsonValue)
+                    : Prisma.DbNull,
                 }
               : {}),
           },
@@ -205,6 +226,12 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
 }
 
 interface PollResult {
+  /**
+   * The geo directory from the same /healthz (phase 9.2). undefined: the node
+   * was unreachable, keep what is stored. null: it answered without the field,
+   * an agent older than geo. Otherwise what lies on its disk.
+   */
+  geo?: GeoStatus | null;
   /**
    * `online`     - the agent answers and every configured core is serving.
    * `degraded`   - the agent answers, a configured core is not running. Still
@@ -453,6 +480,7 @@ async function checkOne(node: {
       // answered and has no chain", undefined never reaches this line because
       // an unreachable node returns from the catch below.
       chain: res.chain ?? null,
+      geo: res.geo ?? null,
     };
   } catch (err) {
     if (err instanceof NodeRequestError) {

@@ -9,6 +9,8 @@ import type {
   ApplyInboundsRequest,
   ApplyInboundsResponse,
   UfwPortsResponse,
+  GeoAssetsResponse,
+  GeoFileDto,
 } from '@iceslab/shared';
 import { bootstrapCa, getPanelClientCert } from '../keygen/keygen.service.js';
 
@@ -238,5 +240,44 @@ export class NodeTransport {
       // limiter. 30 s gives slack without making admin clicks feel hung.
       timeoutMs: 30_000,
     });
+  }
+
+  /** Phase 9: the geo files the agent holds. 404 from an agent older than
+   *  geo, which the caller reads as "send no geo". */
+  async listAssets(): Promise<GeoAssetsResponse> {
+    return this.request<GeoAssetsResponse>('GET', '/assets', undefined, { timeoutMs: 10_000 });
+  }
+
+  /**
+   * Phase 9: lay one geo file out on the agent. The agent keeps nothing
+   * unless the body hashes to `sha256` (422 ASSET_SHA_MISMATCH otherwise).
+   * Raw bytes rather than JSON, so not through request().
+   */
+  async putAsset(name: string, bytes: Uint8Array, sha256: string): Promise<GeoFileDto> {
+    const agent = await getSharedAgent(this.mtlsOverride);
+    const controller = new AbortController();
+    // Megabytes over a slow link: 23 MB at 60 KB/s is six minutes.
+    const timer = setTimeout(() => controller.abort(), 600_000);
+    try {
+      const res = await fetch(this.buildUrl(`/assets/${encodeURIComponent(name)}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Content-Sha256': sha256 },
+        body: bytes,
+        dispatcher: agent,
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => null)) as NodeErrorResponse | null;
+        throw new NodeRequestError(
+          `Node ${this.node.address} refused ${name}: ${res.status} ${errBody?.message ?? res.statusText}`,
+          res.status,
+          errBody,
+        );
+      }
+      return (await res.json()) as GeoFileDto;
+    } finally {
+      clearTimeout(timer);
+      if (this.mtlsOverride) await agent.close();
+    }
   }
 }

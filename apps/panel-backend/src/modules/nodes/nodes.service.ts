@@ -29,6 +29,8 @@ import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.j
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
 import { resolveNodeEngines } from './node-intended-engines.js';
+import { collectGeoUses } from '../geo-sets/geo-refs.js';
+import { nodeGeoFor } from '../geo-sets/geo-push.js';
 import { intendedEngines } from './node-engines.js';
 export { CoreVersionIntentError } from './node-core-versions.js';
 export { NodeEnginesError } from './node-intended-engines.js';
@@ -347,11 +349,17 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   const [{ nodes, total }, hidden] = await Promise.all([repo.list(query), getHiddenCascadeNodes()]);
   // One query each for the whole page, not one per node.
   const ids = nodes.map((n) => n.id);
-  const [needed, cascadeNeeds] = await Promise.all([hostsByEngine(ids), cascadeNeedsByNode(ids)]);
+  const [needed, cascadeNeeds, geoSites] = await Promise.all([
+    hostsByEngine(ids),
+    cascadeNeedsByNode(ids),
+    collectGeoUses(),
+  ]);
+  const geoIntended = await Promise.all(nodes.map((n) => nodeGeoFor(n.id, { pinMissing: false, sites: geoSites })));
   return {
-    nodes: nodes.map((n) =>
-      withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id), cascadeNeeds.get(n.id) ?? []),
-    ),
+    nodes: nodes.map((n, i) => ({
+      ...withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id), cascadeNeeds.get(n.id) ?? []),
+      geoIntended: geoIntended[i] ?? null,
+    })),
     total,
     page: query.page,
     limit: query.limit,
@@ -362,12 +370,16 @@ export async function listNodes(query: ListNodesQuery): Promise<{
 export async function getNodeById(id: string): Promise<PublicNodeDto> {
   const node = await repo.findActiveById(id);
   if (!node) throw new NodeNotFoundError(id);
-  const [hidden, needed, cascadeNeeds] = await Promise.all([
+  const [hidden, needed, cascadeNeeds, geoIntended] = await Promise.all([
     getHiddenCascadeNodes(),
     hostsByEngine([id]),
     cascadeNeedsByNode([id]),
+    nodeGeoFor(id, { pinMissing: false }),
   ]);
-  return withHostCounts(node, hidden.get(id) ?? null, needed.get(id), cascadeNeeds.get(id) ?? []);
+  return {
+    ...withHostCounts(node, hidden.get(id) ?? null, needed.get(id), cascadeNeeds.get(id) ?? []),
+    geoIntended,
+  };
 }
 
 /** The DTO as the list and GET by id serve it: the hiding cascade, `neededBy`

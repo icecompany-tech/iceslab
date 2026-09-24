@@ -41,10 +41,10 @@ func buildPolicyRules(rules []dto.NodePolicyRule) ([]any, error) {
 		}
 		rule := map[string]any{"type": "field", "outboundTag": tag}
 		if len(r.Match.Domain) > 0 {
-			rule["domain"] = r.Match.Domain
+			rule["domain"] = geoEntries(r.Match.Domain)
 		}
 		if len(r.Match.IP) > 0 {
-			rule["ip"] = r.Match.IP
+			rule["ip"] = geoEntries(r.Match.IP)
 		}
 		if r.Match.Port != "" {
 			rule["port"] = r.Match.Port
@@ -89,10 +89,10 @@ func renderDnsSection(chosen *dto.DnsCfg) map[string]any {
 		}
 		entry := map[string]any{"address": s.Address}
 		if len(s.Domains) > 0 {
-			entry["domains"] = s.Domains
+			entry["domains"] = geoEntries(s.Domains)
 		}
 		if len(s.ExpectIPs) > 0 {
-			entry["expectIPs"] = s.ExpectIPs
+			entry["expectIPs"] = geoEntries(s.ExpectIPs)
 		}
 		if s.SkipFallback {
 			entry["skipFallback"] = true

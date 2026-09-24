@@ -1125,6 +1125,54 @@ export interface ApplyInboundsRequest {
    * of migration as the one that moved the cascade off the inbound.
    */
   chain?: NodeChain;
+  /**
+   * The geo files this push stands on (phase 9), each laid out beforehand with
+   * PUT /assets/<name>. Absent = the agent does not touch its geo directory,
+   * which is every push from a panel older than the field. A named file the
+   * agent does not hold with that sha256 refuses the WHOLE push before
+   * anything is applied: 409 GEO_MISSING { files }. Mirror: dto.go NodeGeo.
+   */
+  geo?: NodeGeo;
+}
+
+/** docs/plan/geo-contract.md section 1. */
+export interface NodeGeo {
+  /** A label for the set of files; comparison is by each file's sha256. */
+  version: string;
+  files: NodeGeoFile[];
+}
+
+export interface NodeGeoFile {
+  /** GEO_ASSET_NAME. */
+  name: string;
+  sha256: string;
+  size: number;
+  /** Who reads it: xray (a `.dat`, a change restarts xray) or the chain (a
+   *  rule-set it reloads by itself). */
+  reader: 'xray' | 'chain';
+}
+
+/** One geo file as the agent finds it on disk: GET /assets, the answer to
+ *  PUT /assets/<name>, and the files of HealthcheckResponse.geo. */
+export interface GeoFileDto {
+  name: string;
+  sha256: string;
+  size: number;
+}
+
+export interface GeoAssetsResponse {
+  files: GeoFileDto[];
+}
+
+/**
+ * What the healthcheck says about the geo directory. `version` is that of the
+ * last applied push carrying geo, null before one; `files` is what lies on
+ * disk with its actual sha256 (from a size+mtime cache on the agent), not an
+ * echo of the push.
+ */
+export interface GeoStatus {
+  version: string | null;
+  files: GeoFileDto[];
 }
 
 /**
@@ -1666,6 +1714,8 @@ export interface HealthcheckResponse {
    * takes no version without its checksum.
    */
   arch?: CoreArch;
+  /** The geo directory. Absent from an agent older than phase 9.2. */
+  geo?: GeoStatus;
 }
 
 /**

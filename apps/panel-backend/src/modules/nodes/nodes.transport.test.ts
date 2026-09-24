@@ -35,10 +35,28 @@ async function startMockMtlsServer(): Promise<ServerHandle> {
     },
     (req, res) => {
       let body = '';
+      const raw: Buffer[] = [];
       req.on('data', (chunk: Buffer) => {
         body += chunk.toString('utf8');
+        raw.push(chunk);
       });
       req.on('end', () => {
+        if (req.method === 'PUT' && req.url?.startsWith('/assets/')) {
+          // Echoes what the agent would look at: the name, the sha header, and
+          // the bytes as bytes.
+          const bytes = Buffer.concat(raw);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              name: decodeURIComponent(req.url.slice('/assets/'.length)),
+              sha256: req.headers['x-content-sha256'],
+              size: bytes.length,
+              contentType: req.headers['content-type'],
+              first: [...bytes.subarray(0, 4)],
+            }),
+          );
+          return;
+        }
         switch (req.url) {
           case '/addUser':
           case '/removeUser': {
@@ -158,5 +176,26 @@ describe('NodeTransport (mTLS)', () => {
       handle.mtls,
     );
     await expect(transport.addUserViaError()).rejects.toBeInstanceOf(NodeRequestError);
+  });
+
+  it('putAsset sends the file as raw bytes with its sha256 in the header (phase 9.2)', async () => {
+    const transport = new NodeTransport({ address: handle.address }, handle.mtls);
+    const bytes = Uint8Array.from([0x0a, 0xff, 0x00, 0x80, 1, 2, 3]);
+    const echoed = (await transport.putAsset('iceslab-mine.dat', bytes, 'ab'.repeat(32))) as unknown as Record<string, unknown>;
+    expect(echoed).toEqual({
+      name: 'iceslab-mine.dat',
+      sha256: 'ab'.repeat(32),
+      size: 7,
+      contentType: 'application/octet-stream',
+      // Not UTF-8 mangled on the way: 0xff and 0x80 arrive as themselves.
+      first: [0x0a, 0xff, 0x00, 0x80],
+    });
+  });
+
+  it('listAssets on an agent older than geo is a 404 the caller can tell apart', async () => {
+    const transport = new NodeTransport({ address: handle.address }, handle.mtls);
+    const err = await transport.listAssets().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NodeRequestError);
+    expect((err as NodeRequestError).status).toBe(404);
   });
 });
