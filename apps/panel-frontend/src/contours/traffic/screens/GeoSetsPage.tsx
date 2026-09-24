@@ -294,7 +294,15 @@ function GeoSetRow({
         {/* Проверенная версия: то, что можно разослать. Нет её - так и сказано. */}
         <Stack gap={2} style={{ flexShrink: 0, alignItems: 'flex-end', width: 170 }}>
           <Text
-            title={set.current ? `sha256 ${set.current.sha256}` : undefined}
+            // Сумма файла, как он пришёл (sourceSha256): её оператор сверяет со
+            // своим файлом. У .dat она та же, что у файла на нодах.
+            title={
+              set.current
+                ? set.current.sourceSha256 && set.current.sourceSha256 !== set.current.sha256
+                  ? `sha256 ${set.current.sourceSha256} (.dat ${set.current.sha256})`
+                  : `sha256 ${set.current.sha256}`
+                : undefined
+            }
             style={{ fontFamily: MONO, fontSize: 11, color: set.current ? SNOW : DIM }}
           >
             {set.current ? set.current.version : t('geoSets.noCurrent')}
@@ -503,12 +511,26 @@ function UploadPanel({
   // файла с суммой, и это единственное место, где оператор может сверить её
   // сам. Считается для текущего файла; сменили файл, старая сумма не видна.
   const [sha, setSha] = useState<{ file: File; hex: string } | null>(null);
+  // Сумма, которую публикует источник (необязательно). Сервер сверит её с
+  // файлом в том же запросе; не совпала, набор будет broken словами.
+  const [expected, setExpected] = useState('');
+  const expectedHex = expected.trim().toLowerCase();
+  const expectedBad = expectedHex !== '' && !/^[0-9a-f]{64}$/.test(expectedHex);
   const nameProblem = geoNameProblem(name.trim());
   const fileProblem = uploadProblem(file);
 
   const upload = useMutation({
-    mutationFn: () => uploadGeoSet({ file: file!, name: name.trim(), kind }),
-    onSuccess: onDone,
+    mutationFn: () =>
+      uploadGeoSet({ file: file!, name: name.trim(), kind, ...(expectedHex ? { sha256: expectedHex } : {}) }),
+    onSuccess: (set) => {
+      // Проверка шла в самом запросе: итог сразу, словами сервера.
+      notifications.show(
+        set.status === 'verified'
+          ? { color: 'green', message: t('geoSets.uploadVerified', { name: set.name }) }
+          : { color: 'red', title: t('geoSets.uploadBroken', { name: set.name }), message: set.error ?? t('geoSets.noError'), autoClose: 15000 },
+      );
+      onDone();
+    },
     onError: onRefusal,
   });
 
@@ -543,9 +565,18 @@ function UploadPanel({
             style={{ fontFamily: MONO, fontSize: 11, color: MIST }}
           />
         </Stack>
+        <Stack gap={4} style={{ width: 260 }}>
+          <Label>{t('geoSets.expectedSha')}</Label>
+          <TextInput
+            value={expected}
+            placeholder={t('geoSets.expectedShaPlaceholder')}
+            onChange={(e) => setExpected(e.currentTarget.value)}
+            error={expectedBad ? t('geoSets.shaBad') : undefined}
+          />
+        </Stack>
         <GhostButton onClick={onCancel}>{t('common.cancel')}</GhostButton>
         <GhostButton
-          disabled={fileProblem !== null || nameProblem !== null || upload.isPending}
+          disabled={fileProblem !== null || nameProblem !== null || expectedBad || upload.isPending}
           onClick={() => upload.mutate()}
         >
           {upload.isPending ? t('geoSets.uploading') : t('geoSets.uploadAction')}
@@ -557,6 +588,13 @@ function UploadPanel({
       {file && sha?.file === file && (
         <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: MIST, overflowWrap: 'anywhere' }}>
           {t('geoSets.fileSha', { sha: sha.hex })}
+        </Text>
+      )}
+      {/* Сверка до отправки: посчитанная сумма против той, что ввели. Решает
+          сервер, это только предупреждение. */}
+      {file && sha?.file === file && expectedHex && !expectedBad && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: expectedHex === sha.hex ? MOSS : AMBER }}>
+          {expectedHex === sha.hex ? t('geoSets.expectedMatch') : t('geoSets.expectedMismatch')}
         </Text>
       )}
       <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>{t('geoSets.uploadHint')}</Text>

@@ -10,7 +10,14 @@ import {
 } from '@/contours/traffic/lib/geoFacts';
 import type { GeoRolloutPlan, GeoSet } from '@/lib/domain/geoSets';
 
-const current = { version: 'a1b2c3d4e5f6', sha256: 'ff', sizeBytes: 10, fetchedAt: '2026-09-24T10:00:00.000Z', tagCount: 3 };
+const current = {
+  version: 'a1b2c3d4e5f6',
+  sha256: 'ff',
+  sourceSha256: 'ff',
+  sizeBytes: 10,
+  fetchedAt: '2026-09-24T10:00:00.000Z',
+  tagCount: 3,
+};
 
 function set(p: Partial<GeoSet> = {}): GeoSet {
   return {

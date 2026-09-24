@@ -51,12 +51,26 @@ export async function createGeoSet(input: {
   return data;
 }
 
-export async function uploadGeoSet(input: { file: File; name: string; kind: GeoSetKind }): Promise<GeoSet> {
+/**
+ * ⚠ У клиента по умолчанию `Content-Type: application/json`, и с ним axios
+ * превращает FormData в JSON: сервер ответил «send the file as
+ * multipart/form-data» (поймано живой загрузкой на dev 24.09). С этим
+ * заголовком axios в браузере снимает его, и браузер ставит свой с boundary.
+ */
+const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } };
+
+/**
+ * Загрузка файлом (Ф9.1г, acb1a00). Проверка идёт в самом запросе, ответ это
+ * набор уже verified или broken словами. `sha256` необязательный: сумма, которую
+ * публикует источник; не совпала, набор broken с обеими суммами в словах.
+ */
+export async function uploadGeoSet(input: { file: File; name: string; kind: GeoSetKind; sha256?: string }): Promise<GeoSet> {
   const form = new FormData();
   form.append('name', input.name);
   form.append('kind', input.kind);
+  if (input.sha256) form.append('sha256', input.sha256);
   form.append('file', input.file);
-  const { data } = await api.post<GeoSet>('/api/geo-sets/upload', form);
+  const { data } = await api.post<GeoSet>('/api/geo-sets/upload', form, MULTIPART);
   return data;
 }
 
@@ -64,7 +78,7 @@ export async function uploadGeoSet(input: { file: File; name: string; kind: GeoS
 export async function replaceGeoSetFile(id: string, file: File): Promise<GeoSet> {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await api.put<GeoSet>(`/api/geo-sets/${id}/file`, form);
+  const { data } = await api.put<GeoSet>(`/api/geo-sets/${id}/file`, form, MULTIPART);
   return data;
 }
 

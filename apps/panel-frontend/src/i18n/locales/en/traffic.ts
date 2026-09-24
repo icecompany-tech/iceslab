@@ -225,6 +225,12 @@ export const traffic = {
     nodesBehindHint:
       'A node with no pin for this set is behind too: until the first rollout every node of the set is behind. "Roll out to nodes" moves the pins.',
     fileSha: 'File sha256: {{sha}}. Compare it with what the source publishes: an upload has no sidecar with the sum.',
+    expectedSha: 'source sha256',
+    expectedShaPlaceholder: 'optional, 64 characters',
+    expectedMatch: 'The source sum matches the file.',
+    expectedMismatch: 'The source sum does NOT match the file: the server will mark the set broken.',
+    uploadVerified: 'Set {{name}} uploaded and verified',
+    uploadBroken: 'Set {{name}} uploaded broken',
     refresh: 'Refresh now',
     refreshing: 'Requested...',
     refreshFailed: 'The refresh did not happen',
@@ -248,7 +254,7 @@ export const traffic = {
     uploadName: 'Set name',
     uploadKind: 'Kind',
     uploadFile: 'File',
-    uploadHint: 'geoip.dat / geosite.dat, a sing-box rule-set JSON or a MaxMind .mmdb, up to 64 MB. Checked in the background.',
+    uploadHint: 'geoip.dat / geosite.dat, a sing-box rule-set JSON or a MaxMind .mmdb, up to 64 MB. The file is checked in the same request: the answer says at once whether the set is verified or broken.',
     tooLarge: 'The file is over 64 MB: neither the server nor the node takes it.',
     name: {
       empty: 'A name is required',

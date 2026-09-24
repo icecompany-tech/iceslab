@@ -249,6 +249,12 @@ export const traffic = {
     nodesBehindHint:
       'Нода без пина этого набора тоже отстаёт: до первой рассылки отстают все ноды набора. «Разослать на ноды» передвинет пины.',
     fileSha: 'sha256 файла: {{sha}}. Сверьте с тем, что публикует источник: у загрузки нет соседнего файла с суммой.',
+    expectedSha: 'sha256 источника',
+    expectedShaPlaceholder: 'необязательно, 64 знака',
+    expectedMatch: 'Сумма источника совпадает с суммой файла.',
+    expectedMismatch: 'Сумма источника НЕ совпадает с суммой файла: сервер пометит набор битым.',
+    uploadVerified: 'Набор {{name}} загружен и проверен',
+    uploadBroken: 'Набор {{name}} загружен битым',
     // Действия над набором.
     refresh: 'Обновить сейчас',
     refreshing: 'Запрос ушёл...',
@@ -273,7 +279,7 @@ export const traffic = {
     uploadName: 'Имя набора',
     uploadKind: 'Вид',
     uploadFile: 'Файл',
-    uploadHint: 'geoip.dat / geosite.dat, rule-set JSON sing-box или MaxMind .mmdb, до 64 МБ. Проверка идёт фоном.',
+    uploadHint: 'geoip.dat / geosite.dat, rule-set JSON sing-box или MaxMind .mmdb, до 64 МБ. Файл проверяется в том же запросе: ответ сразу скажет, проверен набор или битый.',
     tooLarge: 'Файл больше 64 МБ: сервер и нода его не примут.',
     name: {
       empty: 'Имя обязательно',
