@@ -35,7 +35,8 @@ import {
   type PreviewKindKey,
 } from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
-import { singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
+import { SINGBOX_XRAY_FORM_FIELD, singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
+import { singboxXrayMessage, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
 import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
 import { FormShell } from '@/contours/profiles/components/ProfileForm/FormShell';
@@ -76,6 +77,12 @@ interface Props {
    * button that says plainly it cannot.
    */
   onPreviewChange?: (previewing: boolean) => void;
+  /**
+   * The server's sing-box refusal of the last save (singboxXrayRefusal). A
+   * field of the profile itself is marked on its control; one in a binding's
+   * overrides is not on this form, and the page's toast names it.
+   */
+  refused?: SingboxXrayRefusal | null;
 }
 
 export function ProfileFormModal({
@@ -86,6 +93,7 @@ export function ProfileFormModal({
   loading,
   inline,
   onPreviewChange,
+  refused,
 }: Props) {
   const { t } = useTranslation();
   const isEdit = profile !== null;
@@ -110,6 +118,14 @@ export function ProfileFormModal({
     applyAwgPreset,
     handleSubmit,
   } = useProfileForm({ profile, opened, mode, onSubmit, onClose });
+  // Changing the field clears the mark (clearInputErrorOnChange), and the next
+  // submit's validation replaces it: the mark lives until the operator acts.
+  // setFieldError is stable in @mantine/form, so only a new refusal marks.
+  const { setFieldError } = form;
+  useEffect(() => {
+    if (!refused || refused.where !== 'config') return;
+    setFieldError(SINGBOX_XRAY_FORM_FIELD[refused.field], singboxXrayMessage(refused, t));
+  }, [refused, setFieldError, t]);
   // The tile the form is on: recipes are chosen by it, not by the protocol.
   const kindKey = profileKindKey(form.values.protocol, form.values.engine, form.values.xraySubprotocol);
   return (

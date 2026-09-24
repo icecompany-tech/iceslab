@@ -26,6 +26,7 @@ import { confirmGenerate } from '@/contours/profiles/lib/confirmGenerate';
 import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { PlainXraySection } from '@/contours/profiles/components/ProfileForm/PlainXraySection';
+import { RED } from '@/contours/profiles/lib/colors';
 
 export function XraySection({
   generateXrayKeys,
@@ -93,6 +94,7 @@ export function XraySection({
                       );
                     })}
                   </Group>
+                  <PillError error={form.errors.xrayNetwork} />
                 </Stack>
 
                 <Stack gap={8} style={{ flex: 1.2, minWidth: 0 }}>
@@ -120,6 +122,7 @@ export function XraySection({
                       onClick={() => form.setFieldValue('xraySecurity', 'tls')}
                     />
                   </Group>
+                  <PillError error={form.errors.xraySecurity} />
                 </Stack>
               </Group>
 
@@ -326,5 +329,12 @@ export function XraySection({
               <XrayAdvanced form={form} advOpen={advOpen} />
             </Stack>
   );
+}
+
+/** A pill row has no input to carry an error, so the server's refusal of that
+ *  field (singboxXrayRefusal, set as a form error) is a line under it. */
+function PillError({ error }: { error: React.ReactNode }) {
+  if (!error) return null;
+  return <Text style={{ fontSize: 12, lineHeight: '17px', color: RED }}>{error}</Text>;
 }
 

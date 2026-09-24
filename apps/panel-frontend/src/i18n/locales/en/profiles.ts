@@ -264,6 +264,14 @@ export const profiles = {
     newTitle: 'New profile',
     newCrumb: 'NEW',
     engineRefused: 'The server refused: this protocol does not run on the chosen engine. SOCKS5 and HTTP are served by the xray core only.',
+    // The BACK gate (0c7dcc7): an xray-family profile on sing-box, wrong field.
+    singboxXrayRefused: 'On sing-box only REALITY (steal-others) over raw: field "{{field}}".',
+    singboxXrayRefusedBinding: 'On sing-box only REALITY (steal-others) over raw: field "{{field}}" in the binding overrides.',
+    singboxXrayField: {
+      network: 'transport',
+      security: 'security',
+      realityMode: 'REALITY mode',
+    },
     newSubtitle: 'PICK A PROTOCOL AND DEFINE THE TEMPLATE',
     editSubtitle: 'CHANGES REDEPLOY TO EVERY NODE RUNNING THIS PROFILE',
     // The door to POST /api/profiles/:id/test-connect (slice 31): the panel

@@ -18,6 +18,7 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconRocket, IconServer2 } from '@tabler/icons-react';
 import { apiErrorMessage } from '@/lib/net/client';
+import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray';
 import {
   createBinding,
   deleteBinding,
@@ -280,10 +281,13 @@ export function DeployProfileModal({ profile, onClose }: Props) {
         setPortChecks(new Map());
         return;
       }
+      // A profile saved on sing-box before the form locked its tile: the node
+      // would not render it, and the binding is refused naming the field.
+      const sb = singboxXrayRefusal(err);
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
-        message: apiErrorMessage(err),
+        message: sb ? singboxXrayMessage(sb, t) : apiErrorMessage(err),
       });
     },
   });

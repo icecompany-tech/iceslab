@@ -1,4 +1,5 @@
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
+import type { SingboxXrayField } from '@/lib/domain/singboxXray';
 
 // Xray stream transports. The whole stack already handles all six (Zod schema,
 // node config.go renderer, client URI builder) - this is just the operator-
@@ -46,6 +47,14 @@ export function singboxXrayPatch(values: {
     ...(values.xrayRealityMode !== SINGBOX_XRAY.realityMode ? { xrayRealityMode: SINGBOX_XRAY.realityMode } : {}),
   };
 }
+
+/** The form field behind each name the server refuses on, so the refusal
+ *  lands as an error on the control the operator has to change. */
+export const SINGBOX_XRAY_FORM_FIELD: Record<SingboxXrayField, 'xrayNetwork' | 'xraySecurity' | 'xrayRealityMode'> = {
+  network: 'xrayNetwork',
+  security: 'xraySecurity',
+  realityMode: 'xrayRealityMode',
+};
 
 // Vision flow is only valid on raw/xhttp; other transports reject it.
 export const FLOW_COMPATIBLE_TRANSPORTS = ['raw', 'xhttp'];

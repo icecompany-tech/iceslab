@@ -46,6 +46,7 @@ import {
 } from '@/lib/domain/profiles';
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
 import { profileTransport } from '@/lib/domain/profileTransport';
+import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray';
 import {
   checkNodePort,
   portRefusalOf,
@@ -485,6 +486,14 @@ export function HostEditPage() {
         qc.invalidateQueries({ queryKey: ['nodes'] });
         qc.invalidateQueries({ queryKey: ['bindings'] });
         notifications.show({ color: 'red', message: t('hostEdit.goneWhileEditing') });
+        return;
+      }
+      // The profile is xray on sing-box in a shape the node would not render
+      // (saved before its tile was locked). The fix is on the profile, and the
+      // sentence names the field to change there.
+      const sb = singboxXrayRefusal(err);
+      if (sb) {
+        notifications.show({ color: 'red', title: t('common.saveError'), message: singboxXrayMessage(sb, t) });
         return;
       }
       notifications.show({

@@ -19,6 +19,7 @@ import { DeployProfileModal } from '@/contours/profiles/components/DeployProfile
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { apiErrorMessage } from '@/lib/net/client';
 import { engineRefused } from '@/contours/profiles/lib/plainSubprotocol';
+import { singboxXrayMessage, singboxXrayRefusal, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
 /**
@@ -71,6 +72,17 @@ export function ProfileEditPage() {
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const profile = isNew ? null : (profilesQuery.data?.profiles.find((p) => p.id === id) ?? null);
 
+  // The sing-box refusal of the last save: the form marks the field it names.
+  // The form offers only what sing-box serves since 26680a8, so this is for a
+  // profile saved before that, opened and saved again.
+  const [refused, setRefused] = useState<SingboxXrayRefusal | null>(null);
+  const saveError = (err: unknown): string => {
+    const sb = singboxXrayRefusal(err);
+    setRefused(sb);
+    if (sb) return singboxXrayMessage(sb, t);
+    return engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err);
+  };
+
   const createMutation = useMutation({
     mutationFn: createProfile,
     onSuccess: (saved) => {
@@ -79,11 +91,7 @@ export function ProfileEditPage() {
       navigate(`/profiles/${saved.id}`, { replace: true });
     },
     onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.createError'),
-        message: engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err),
-      }),
+      notifications.show({ color: 'red', title: t('common.createError'), message: saveError(err) }),
   });
 
   const updateMutation = useMutation({
@@ -93,11 +101,7 @@ export function ProfileEditPage() {
       notifications.show({ color: 'green', message: t('profiles.notify.updated') });
     },
     onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: t('common.saveError'),
-        message: engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err),
-      }),
+      notifications.show({ color: 'red', title: t('common.saveError'), message: saveError(err) }),
   });
 
   usePageMeta([isNew ? t('profileEdit.newCrumb') : (profile?.name ?? '')]);
@@ -229,6 +233,7 @@ export function ProfileEditPage() {
         opened
         onClose={() => navigate('/profiles')}
         onPreviewChange={handlePreviewChange}
+        refused={refused}
         profile={profile}
         loading={createMutation.isPending || updateMutation.isPending}
         onSubmit={async (input, mode) => {

@@ -268,6 +268,14 @@ export const profiles = {
     newTitle: 'Новый профиль',
     newCrumb: 'НОВЫЙ',
     engineRefused: 'Сервер отказал: этот протокол не работает на выбранном движке. SOCKS5 и HTTP обслуживает только ядро xray.',
+    // Отказ гейта BACK (0c7dcc7): xray-семейство на sing-box, поле не то.
+    singboxXrayRefused: 'На sing-box только REALITY (steal-others) по raw: поле «{{field}}».',
+    singboxXrayRefusedBinding: 'На sing-box только REALITY (steal-others) по raw: поле «{{field}}» в переопределениях привязки.',
+    singboxXrayField: {
+      network: 'транспорт',
+      security: 'защита',
+      realityMode: 'режим REALITY',
+    },
     newSubtitle: 'ВЫБЕРИТЕ ПРОТОКОЛ И ОПИШИТЕ ШАБЛОН',
     editSubtitle: 'ИЗМЕНЕНИЯ УЕДУТ НА КАЖДУЮ НОДУ С ЭТИМ ПРОФИЛЕМ',
     // Дверь к POST /api/profiles/:id/test-connect (slice 31): панель сама
