@@ -1,4 +1,5 @@
-import { GEO_UPLOAD_MAX_BYTES, type GeoRolloutPlan, type GeoSet, type GeoUse } from '@/lib/domain/geoSets';
+import { GEO_BUILTIN_NAMES, GEO_FILE_MAX_BYTES, GEO_SET_NAME } from '@iceslab/shared';
+import type { GeoRolloutPlan, GeoSet, GeoUse } from '@/lib/domain/geoSets';
 
 /**
  * Кто ссылается на набор, словами: «политика ноды RU, DNS ноды ru-01». Вид
@@ -120,6 +121,11 @@ export function geoAttention(
  * нод и их имена до кнопки. Непустой `breaks` запрещает кнопку (сервер
  * отказал бы 409 GEO_ROLLOUT_BREAKS): правила ссылаются на теги, которых в новой
  * версии нет, и экран называет их.
+ *
+ * `restartsXray` у ноды, которая о своих ядрах ничего не сообщила, сервер
+ * ставит в true на всякий случай (решение BACK 24.09). Это не факт рестарта, а
+ * «возможно»: такие ноды (`silent`, по списку нод: `cores` нет) идут отдельной
+ * строкой, чтобы «перезапустит» говорилось только там, где это известно.
  */
 export interface GeoRolloutFacts {
   version: string;
@@ -128,30 +134,33 @@ export interface GeoRolloutFacts {
   /** Ноды плана, на которых всё уже совпадает. */
   unchanged: number;
   restarts: string[];
+  maybeRestarts: string[];
   blocked: boolean;
 }
 
-export function geoRolloutFacts(plan: GeoRolloutPlan): GeoRolloutFacts {
+export function geoRolloutFacts(plan: GeoRolloutPlan, silent: ReadonlySet<string> = new Set()): GeoRolloutFacts {
   const sending = plan.nodes.filter((n) => n.filesToSend.length > 0 || n.from !== plan.version);
+  const xray = plan.nodes.filter((n) => n.restartsXray);
   return {
     version: plan.version,
     sending,
     unchanged: plan.nodes.length - sending.length,
-    restarts: plan.nodes.filter((n) => n.restartsXray).map((n) => n.name),
+    restarts: xray.filter((n) => !silent.has(n.id)).map((n) => n.name),
+    maybeRestarts: xray.filter((n) => silent.has(n.id)).map((n) => n.name),
     blocked: plan.breaks.length > 0,
   };
 }
 
-/** Проверка файла до отправки: потолок как у сервера и агента, 64 МБ. */
+/** Проверка файла до отправки: потолок из контракта (GEO_FILE_MAX_BYTES, 64 МБ). */
 export function uploadProblem(file: { size: number } | null): 'none' | 'too-large' | null {
   if (!file) return 'none';
-  return file.size > GEO_UPLOAD_MAX_BYTES ? 'too-large' : null;
+  return file.size > GEO_FILE_MAX_BYTES ? 'too-large' : null;
 }
 
-/** Имя набора, как его примет сервер: ^[a-z0-9-]{1,32}$, geosite и geoip заняты. */
+/** Имя набора, как его примет сервер: GEO_SET_NAME, имена встроенных заняты. */
 export function geoNameProblem(name: string): 'empty' | 'shape' | 'reserved' | null {
   if (name === '') return 'empty';
-  if (!/^[a-z0-9-]{1,32}$/.test(name)) return 'shape';
-  if (name === 'geosite' || name === 'geoip') return 'reserved';
+  if (!GEO_SET_NAME.test(name)) return 'shape';
+  if ((Object.values(GEO_BUILTIN_NAMES) as string[]).includes(name)) return 'reserved';
   return null;
 }

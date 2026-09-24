@@ -8,6 +8,13 @@ import {
   coreInstallCommand,
   coreRemoveCommand,
   ENGINE_BOOTSTRAP,
+  GEO_BUILTIN,
+  GEO_BUILTIN_NAMES,
+  GEO_FILE_MAX_BYTES,
+  GEO_SET_FORMATS,
+  GEO_SET_KINDS,
+  GEO_SET_NAME,
+  GEO_SET_STATUSES,
   judgeCoreVersion,
   DEFAULT_LINK_UNDERLAY,
   LINK_CELLS,
@@ -71,6 +78,16 @@ const GUARDED = [
   // 8192 во фронте жила до 46f634c.
   'REALITY_RECORD_LIMIT',
   'REALITY_TARGET_SUGGESTIONS',
+  // Гео-наборы (фаза 9, shared/geo.ts с 5c649b0): форма имени, потолок файла,
+  // виды, статусы, форматы и встроенные наборы. До 5c649b0 у экрана были
+  // свои копии имени, 64 МБ и видов.
+  'GEO_SET_KINDS',
+  'GEO_SET_STATUSES',
+  'GEO_SET_FORMATS',
+  'GEO_SET_NAME',
+  'GEO_BUILTIN_NAMES',
+  'GEO_BUILTIN',
+  'GEO_FILE_MAX_BYTES',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -121,6 +138,12 @@ describe('копии перечислений контракта', () => {
     expect(coreRemoveCommand('xray').command).toContain('--remove');
     expect(REALITY_RECORD_LIMIT).toBeGreaterThan(0);
     expect(REALITY_TARGET_SUGGESTIONS.length).toBeGreaterThan(0);
+    expect(GEO_SET_KINDS).toContain('geoip');
+    expect(GEO_SET_STATUSES).toContain('verified');
+    expect(GEO_SET_FORMATS).toContain('dat');
+    expect(GEO_SET_NAME.test('ru-blocked')).toBe(true);
+    expect(Object.keys(GEO_BUILTIN)).toEqual(Object.keys(GEO_BUILTIN_NAMES));
+    expect(GEO_FILE_MAX_BYTES).toBeGreaterThan(0);
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {

@@ -127,6 +127,15 @@ describe('geoRolloutFacts: окно «Разослать»', () => {
     expect(f.blocked).toBe(false);
   });
 
+  it('нода без отчёта о ядрах: рестарт «возможно», отдельно от известного', () => {
+    const f = geoRolloutFacts(
+      { ...plan, nodes: [...plan.nodes, { id: 'd', name: 'kz-01', from: null, filesToSend: ['geosite.dat'], restartsXray: true }] },
+      new Set(['d']),
+    );
+    expect(f.restarts).toEqual(['ru-01']);
+    expect(f.maybeRestarts).toEqual(['kz-01']);
+  });
+
   it('непустой breaks запрещает кнопку', () => {
     expect(
       geoRolloutFacts({ ...plan, breaks: [{ entry: 'ext:ru-blocked:gone', uses: [{ kind: 'node-policy', id: 'p', name: 'RU' }] }] })

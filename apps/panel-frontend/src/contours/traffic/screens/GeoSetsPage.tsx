@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { GEO_SET_KINDS } from '@iceslab/shared';
 import { useTranslation } from 'react-i18next';
 import { Box, NumberInput, SegmentedControl, Select, Stack, Text, TextInput, UnstyledButton } from '@mantine/core';
 import { modals } from '@mantine/modals';
@@ -292,7 +293,10 @@ function GeoSetRow({
 
         {/* Проверенная версия: то, что можно разослать. Нет её - так и сказано. */}
         <Stack gap={2} style={{ flexShrink: 0, alignItems: 'flex-end', width: 170 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 11, color: set.current ? SNOW : DIM }}>
+          <Text
+            title={set.current ? `sha256 ${set.current.sha256}` : undefined}
+            style={{ fontFamily: MONO, fontSize: 11, color: set.current ? SNOW : DIM }}
+          >
             {set.current ? set.current.version : t('geoSets.noCurrent')}
           </Text>
           {set.current && (
@@ -308,7 +312,10 @@ function GeoSetRow({
           <Text style={{ fontFamily: MONO, fontSize: 11, color: set.usedByRules ? SNOW : DIM }}>
             {t('geoSets.usedByRules', { count: set.usedByRules })}
           </Text>
-          <Text style={{ fontFamily: MONO, fontSize: 10, color: set.nodes.behind > 0 ? AMBER : FAINT }}>
+          <Text
+            title={set.nodes.behind > 0 ? t('geoSets.nodesBehindHint') : undefined}
+            style={{ fontFamily: MONO, fontSize: 10, color: set.nodes.behind > 0 ? AMBER : FAINT }}
+          >
             {set.nodes.behind > 0
               ? t('geoSets.nodesBehind', { behind: set.nodes.behind, total: set.nodes.total })
               : t('geoSets.nodesTotal', { count: set.nodes.total })}
@@ -372,7 +379,13 @@ function GeoSetRow({
   );
 }
 
-const KIND_OPTIONS: GeoSetKind[] = ['geosite', 'geoip'];
+const KIND_OPTIONS: GeoSetKind[] = [...GEO_SET_KINDS];
+
+/** sha256 файла в браузере, hex. Для сверки оператором с тем, что он скачал. */
+async function fileSha256(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 /** Свой набор по ссылке: sha256 из соседнего файла или руками, интервал в часах. */
 function AddUrlPanel({
@@ -486,6 +499,10 @@ function UploadPanel({
   const [name, setName] = useState('');
   const [kind, setKind] = useState<GeoSetKind>('geosite');
   const [file, setFile] = useState<File | null>(null);
+  // sha256 выбранного файла, посчитанный здесь же: у загрузки нет соседнего
+  // файла с суммой, и это единственное место, где оператор может сверить её
+  // сам. Считается для текущего файла; сменили файл, старая сумма не видна.
+  const [sha, setSha] = useState<{ file: File; hex: string } | null>(null);
   const nameProblem = geoNameProblem(name.trim());
   const fileProblem = uploadProblem(file);
 
@@ -519,6 +536,9 @@ function UploadPanel({
               const f = e.currentTarget.files?.[0] ?? null;
               setFile(f);
               if (f && !name) setName(f.name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 32));
+              if (f && uploadProblem(f) === null) {
+                fileSha256(f).then((hex) => setSha({ file: f, hex })).catch(() => setSha(null));
+              }
             }}
             style={{ fontFamily: MONO, fontSize: 11, color: MIST }}
           />
@@ -533,6 +553,11 @@ function UploadPanel({
       </Box>
       {fileProblem === 'too-large' && (
         <Text style={{ fontFamily: DISPLAY, fontSize: 12, color: RED }}>{t('geoSets.tooLarge')}</Text>
+      )}
+      {file && sha?.file === file && (
+        <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '16px', color: MIST, overflowWrap: 'anywhere' }}>
+          {t('geoSets.fileSha', { sha: sha.hex })}
+        </Text>
       )}
       <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '16px', color: FAINT }}>{t('geoSets.uploadHint')}</Text>
     </Stack>

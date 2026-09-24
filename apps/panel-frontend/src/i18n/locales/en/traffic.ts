@@ -219,6 +219,9 @@ export const traffic = {
     nodesTotal_one: '{{count}} node',
     nodesTotal_other: '{{count}} nodes',
     nodesBehind: '{{behind}} of {{total}} behind',
+    nodesBehindHint:
+      'A node with no pin for this set is behind too: until the first rollout every node of the set is behind. "Roll out to nodes" moves the pins.',
+    fileSha: 'File sha256: {{sha}}. Compare it with what the source publishes: an upload has no sidecar with the sum.',
     refresh: 'Refresh now',
     refreshing: 'Requested...',
     refreshFailed: 'The refresh did not happen',
@@ -298,11 +301,17 @@ export const traffic = {
       version: 'Version {{version}} goes out. The pins of this set on the nodes move to it.',
       restarts_one: 'Replacing the .dat restarts xray on {{count}} node: {{names}}. User sessions on it drop.',
       restarts_other: 'Replacing the .dat restarts xray on {{count}} nodes: {{names}}. User sessions on them drop.',
+      maybeRestarts_one:
+        'May restart xray on {{count}} node: {{names}}. The node has not reported its cores, so it cannot be said for sure.',
+      maybeRestarts_other:
+        'May restart xray on {{count}} nodes: {{names}}. The nodes have not reported their cores, so it cannot be said for sure.',
+      xrayMaybe: 'maybe xray restart',
       noPin: 'no pin',
       files_one: '{{count}} file',
       files_other: '{{count}} files',
       xray: 'xray restart',
       nothing: 'Nowhere to send: every node of the set is already on this version.',
+      noNodes: 'Nowhere to send: no node rules use this set.',
       unchanged_one: '{{count}} more node is already on this version and is left alone.',
       unchanged_other: '{{count}} more nodes are already on this version and are left alone.',
       breaks: 'The new version lacks tags that rules refer to. It cannot go out until they are fixed:',

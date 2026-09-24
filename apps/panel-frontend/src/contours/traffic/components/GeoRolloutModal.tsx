@@ -3,6 +3,7 @@ import { Box, Button, Group, Modal, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/lib/net/client';
+import { listNodes } from '@/lib/domain/nodes';
 import {
   geoSetRefusal,
   getGeoRolloutPlan,
@@ -29,7 +30,10 @@ export function GeoRolloutModal({ set, onClose }: { set: GeoSet | null; onClose:
     queryFn: () => getGeoRolloutPlan(set!.id),
     enabled: set !== null,
   });
-  const facts = planQuery.data ? geoRolloutFacts(planQuery.data) : null;
+  // Ноды без отчёта о ядрах: рестарт xray у них «возможно», а не факт.
+  const nodesQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }), enabled: set !== null });
+  const silent = new Set((nodesQuery.data?.nodes ?? []).filter((n) => !n.cores).map((n) => n.id));
+  const facts = planQuery.data ? geoRolloutFacts(planQuery.data, silent) : null;
 
   const rollout = useMutation({
     mutationFn: (version: string) => rolloutGeoSet(set!.id, version),
@@ -76,11 +80,21 @@ export function GeoRolloutModal({ set, onClose }: { set: GeoSet | null; onClose:
             </Text>
 
             {/* Что оборвётся: до кнопки, именами. */}
-            {facts.restarts.length > 0 && (
+            {(facts.restarts.length > 0 || facts.maybeRestarts.length > 0) && (
               <Box style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${AMBER}55`, backgroundColor: `${AMBER}12` }}>
-                <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: AMBER }}>
-                  {t('geoSets.rollout.restarts', { count: facts.restarts.length, names: facts.restarts.join(', ') })}
-                </Text>
+                {facts.restarts.length > 0 && (
+                  <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: AMBER }}>
+                    {t('geoSets.rollout.restarts', { count: facts.restarts.length, names: facts.restarts.join(', ') })}
+                  </Text>
+                )}
+                {facts.maybeRestarts.length > 0 && (
+                  <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: AMBER }}>
+                    {t('geoSets.rollout.maybeRestarts', {
+                      count: facts.maybeRestarts.length,
+                      names: facts.maybeRestarts.join(', '),
+                    })}
+                  </Text>
+                )}
               </Box>
             )}
 
@@ -107,14 +121,19 @@ export function GeoRolloutModal({ set, onClose }: { set: GeoSet | null; onClose:
                       {t('geoSets.rollout.files', { count: n.filesToSend.length })}
                     </Text>
                     {n.restartsXray && (
-                      <Text style={{ fontFamily: MONO, fontSize: 10, color: AMBER }}>{t('geoSets.rollout.xray')}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 10, color: AMBER }}>
+                        {silent.has(n.id) ? t('geoSets.rollout.xrayMaybe') : t('geoSets.rollout.xray')}
+                      </Text>
                     )}
                   </Box>
                 ))}
               </Stack>
             ) : (
               <Text size="sm" style={{ color: DIM }}>
-                {t('geoSets.rollout.nothing')}
+                {/* Нод у набора нет вовсе и «все уже на версии» это разные
+                    ответы: первый значит, что ни одно правило ноды набор не
+                    использует. */}
+                {planQuery.data.nodes.length === 0 ? t('geoSets.rollout.noNodes') : t('geoSets.rollout.nothing')}
               </Text>
             )}
             {facts.unchanged > 0 && (

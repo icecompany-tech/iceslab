@@ -1,79 +1,39 @@
+import type {
+  GeoRolloutPlan,
+  GeoSetDto,
+  GeoSetKind,
+  GeoSetSource,
+  GeoSetStatus,
+  GeoSetTag,
+  GeoSetUse,
+  GeoSetVersionDto,
+} from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 
 /**
  * Гео-наборы: списки доменов и адресов, по которым правила решают, куда пустить
- * трафик (фаза 9, кусок C, issue #42). Форма по контракту BACK
- * `docs/plan/geo-contract.md` §4, §5, §7 (24.09).
+ * трафик (фаза 9, кусок C, issue #42). Типы из контракта `@iceslab/shared`
+ * (geo.ts, 5c649b0), описание в `docs/plan/geo-contract.md`.
  *
- * ⚠ Все запросы идут ТОЛЬКО отсюда. До бэкенда фазы 9 сервер отвечает 404, и
- * экран показывает заглушку «появится с фазой 9», а не ошибку.
+ * ⚠ Все запросы идут ТОЛЬКО отсюда. Маршрут, которого сервер ещё не знает,
+ * отвечает 404 (загрузка файлом до Ф9.1г), и экран говорит «появится».
  */
-export type GeoSetKind = 'geosite' | 'geoip';
-export type GeoSetStatus = 'checking' | 'verified' | 'broken';
-export type GeoSetFormat = 'dat' | 'rule-set-json' | 'mmdb';
-
-export type GeoSetSource =
-  | { type: 'builtin'; tag: string }
-  | { type: 'url'; url: string; sha256Source: 'sidecar' | 'manual'; refreshHours: number }
-  | { type: 'upload'; filename: string };
-
+export type { GeoRolloutPlan, GeoSetKind, GeoSetSource, GeoSetStatus };
+/** Набор, как его отдаёт GET /api/geo-sets. */
+export type GeoSet = GeoSetDto;
 /** Последняя ПРОВЕРЕННАЯ версия, та, что можно разослать. */
-export interface GeoSetCurrent {
-  /** builtin: тег релиза; url и upload: первые 12 hex sha256. */
-  version: string;
-  sha256: string;
-  sizeBytes: number;
-  fetchedAt: string;
-  tagCount: number;
-}
-
-export interface GeoSet {
-  id: string;
-  name: string;
-  kind: GeoSetKind;
-  source: GeoSetSource;
-  format: GeoSetFormat;
-  /** Статус ПОСЛЕДНЕЙ попытки (скачать, загрузить, проверить). */
-  status: GeoSetStatus;
-  checkedAt: string | null;
-  error: string | null;
-  /** null = ни одной проверенной версии. broken при непустом current значит
-   *  «последнее обновление битое, на нодах по-прежнему current». */
-  current: GeoSetCurrent | null;
-  /** Записей правил, ссылающихся на набор (политики ноды, route-политики, DNS ноды). */
-  usedByRules: number;
-  /** Ноды, чьи правила ссылаются на набор, и сколько из них на пине старше current. */
-  nodes: { total: number; behind: number };
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type GeoUseKind = 'node-policy' | 'route-policy' | 'node-dns';
-export interface GeoUse {
-  kind: GeoUseKind | string;
-  id: string;
-  name: string;
-}
-
-export interface GeoRolloutPlan {
-  /** current, то, что уедет. */
-  version: string;
-  nodes: {
-    id: string;
-    name: string;
-    /** Версия пина сейчас; null = пина нет. */
-    from: string | null;
-    filesToSend: string[];
-    restartsXray: boolean;
-  }[];
-  /** Ссылки правил на теги, которых в новой версии нет: rollout запрещён. */
-  breaks: { entry: string; uses: GeoUse[] }[];
-}
+export type GeoSetCurrent = GeoSetVersionDto;
+/**
+ * Кто ссылается на набор. Вид в контракте закрытый, но разбор отказа не
+ * выбрасывает запись с незнакомым видом: она печатается как пришла, иначе
+ * оператор не узнал бы, где отцепить.
+ */
+export type GeoUse = Omit<GeoSetUse, 'kind'> & { kind: string };
 
 export interface GeoTags {
   version: string;
   total: number;
-  tags: { name: string; entries: number }[];
+  tags: GeoSetTag[];
 }
 
 export async function listGeoSets(): Promise<{ geoSets: GeoSet[] }> {
@@ -90,9 +50,6 @@ export async function createGeoSet(input: {
   const { data } = await api.post<GeoSet>('/api/geo-sets', input);
   return data;
 }
-
-/** Потолок файла, как у агента (geo-contract §2, 413 ASSET_TOO_LARGE). */
-export const GEO_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
 
 export async function uploadGeoSet(input: { file: File; name: string; kind: GeoSetKind }): Promise<GeoSet> {
   const form = new FormData();
@@ -147,7 +104,7 @@ export type GeoSetRefusal =
   | { code: 'GEO_SET_NAME_TAKEN' | 'GEO_SET_BUILTIN' | 'GEO_SET_NOT_VERIFIED'; message: string | null }
   | { code: 'GEO_SET_IN_USE'; uses: GeoUse[]; message: string | null }
   | { code: 'GEO_ROLLOUT_STALE'; current: string | null; message: string | null }
-  | { code: 'GEO_ROLLOUT_BREAKS'; breaks: GeoRolloutPlan['breaks']; message: string | null };
+  | { code: 'GEO_ROLLOUT_BREAKS'; breaks: { entry: string; uses: GeoUse[] }[]; message: string | null };
 
 function readUses(raw: unknown): GeoUse[] {
   if (!Array.isArray(raw)) return [];
