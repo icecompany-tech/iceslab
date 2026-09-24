@@ -44,6 +44,7 @@ model Cascade {
   positions  CascadePosition[]
   directions CascadeDirection[]
   links      CascadeLink[]
+  tunnels    CascadeTunnel[]
   groupExits GroupCascadeExit[]
 
   @@map("cascades")
@@ -249,4 +250,44 @@ model CascadeLink {
   // occupied there.
   @@index([toNodeId, port])
   @@map("cascade_links")
+}
+
+// Phase 8: the AmneziaWG tunnel a leg rides in when its underlay is `awg`.
+//
+// One per NODE PAIR of a cascade, not per leg: every direction that crosses
+// from A to B rides the same tunnel, the legs inside it are told apart exactly
+// as they are over the internet (per-direction credentials). A pool of two
+// exits is two pairs and two tunnels.
+//
+// `index` is panel-wide and is the whole identity on the machine: the
+// interface is awg-l<index>, the inner /30 and the UDP port both follow from it
+// (cascade-tunnel.ts), so two tunnels on one node can collide on none of the
+// three. Freed indexes are reused, smallest first.
+//
+// Minted by the panel like every leg secret, and kept across saves: a tunnel
+// whose pair is still wanted is not re-keyed. Rotation is an explicit act.
+model CascadeTunnel {
+  id         String   @id @default(uuid()) @db.Uuid
+  cascadeId  String   @map("cascade_id") @db.Uuid
+  // The DIALLING end (the hop the leg leaves) and the RECEIVING end (the hop
+  // that listens, on `port`).
+  fromNodeId String   @map("from_node_id") @db.Uuid
+  toNodeId   String   @map("to_node_id") @db.Uuid
+  index      Int      @unique
+  // UDP, on toNodeId. Lifted out of `config` for the port check, as
+  // CascadeLink.port is.
+  port       Int
+  // Keys of both ends and the obfuscation parameters, see TunnelCred in
+  // cascade-tunnel.ts.
+  config     Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  cascade  Cascade @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
+  fromNode Node    @relation("CascadeTunnelFrom", fields: [fromNodeId], references: [id], onDelete: Restrict)
+  toNode   Node    @relation("CascadeTunnelTo", fields: [toNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([cascadeId, fromNodeId, toNodeId])
+  @@index([fromNodeId])
+  @@index([toNodeId, port])
+  @@map("cascade_tunnels")
 }

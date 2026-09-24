@@ -24,7 +24,7 @@ export interface CascadePositionDto {
    * screen tells "no value" from "the server does not send this field", and the
    * second reading would hide the control for good. `null` is the defaults.
    */
-  linkParams: { congestion?: string } | null;
+  linkParams: { congestion?: string; underlay?: string } | null;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface CascadeDirectionDto {
   linkProtocol: string | null;
   /** What the operator chose about that leg beyond the cell: the congestion
    *  controller of a tuic leg, and nothing else today. Never a secret. */
-  linkParams: { congestion?: string } | null;
+  linkParams: { congestion?: string; underlay?: string } | null;
   /**
    * The port the receiving side of that leg listens on.
    *

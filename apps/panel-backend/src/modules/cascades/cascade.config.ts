@@ -12,6 +12,7 @@ import {
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort } from './chain.ports.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
+import type { LegParams } from './direction-merge.js';
 
 /**
  * C2/C3b - cascade config generation for the native inter-hop link cells the
@@ -371,7 +372,7 @@ export async function generateTopologyLinks(
     linkProtocol?: string | null;
     /** Phase 5: the knobs of the leg OUT of this position, the same field a
      *  direction carries for the leg that reaches it. */
-    linkParams?: { congestion?: LinkCongestion } | null;
+    linkParams?: LegParams | null;
   }[],
   directions: {
     tag: number;
@@ -380,7 +381,7 @@ export async function generateTopologyLinks(
      *  Null or absent means the entry's cell, which is what every direction
      *  did before the field existed. */
     linkProtocol?: string | null;
-    linkParams?: { congestion?: LinkCongestion } | null;
+    linkParams?: LegParams | null;
   }[],
   /**
    * What this cascade's legs are ALREADY configured with, by

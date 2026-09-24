@@ -1,24 +1,49 @@
-import { LINK_CONGESTIONS, type LinkCongestion } from '@iceslab/shared';
+import {
+  LINK_CONGESTIONS,
+  LINK_UNDERLAYS,
+  type LinkCongestion,
+  type LinkUnderlay,
+} from '@iceslab/shared';
 
 /**
- * The leg knobs a stored direction carries, as far as they can be believed.
+ * What the operator chose about a leg beyond its cell (`linkParams`), wherever
+ * a leg is chosen: the leg OUT of a position, and the last leg INTO a
+ * direction. ONE type for both, because it is one column read by one reader.
+ *
+ *   congestion  the tuic leg's controller, phase 5;
+ *   underlay    what the leg rides on, phase 8: `direct` over the internet, or
+ *               `awg` inside an AmneziaWG tunnel between the two hops.
+ */
+export interface LegParams {
+  congestion?: LinkCongestion;
+  underlay?: LinkUnderlay;
+}
+
+/**
+ * The leg knobs a stored position or direction carries, as far as they can be
+ * believed.
  *
  * jsonb is not a type: the column can hold an array, a number, a string or a
  * `congestion` that is itself an object, and Prisma types all of it as
- * JsonValue. Anything that is not a knob this build knows reads as "no knobs",
- * because the alternative is carrying it into a save or onto a screen as
- * though somebody had chosen it.
+ * JsonValue. A knob this build does not know, or a value it does not know,
+ * reads as absent, because the alternative is carrying it into a save or onto
+ * a screen as though somebody had chosen it.
  *
  * ONE reader, used by the merge (which writes the value back) and by the mapper
  * (which sends it to the panel). Two readers of one column is how a value
  * survives a round trip on the screen and disappears on the next save.
  */
-export function storedLinkParams(raw: unknown): { congestion?: LinkCongestion } | null {
+export function storedLinkParams(raw: unknown): LegParams | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-  const congestion = (raw as { congestion?: unknown }).congestion;
-  return (LINK_CONGESTIONS as readonly unknown[]).includes(congestion)
-    ? { congestion: congestion as LinkCongestion }
-    : null;
+  const { congestion, underlay } = raw as { congestion?: unknown; underlay?: unknown };
+  const out: LegParams = {};
+  if ((LINK_CONGESTIONS as readonly unknown[]).includes(congestion)) {
+    out.congestion = congestion as LinkCongestion;
+  }
+  if ((LINK_UNDERLAYS as readonly unknown[]).includes(underlay)) {
+    out.underlay = underlay as LinkUnderlay;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /**
@@ -39,7 +64,7 @@ export interface IncomingDirection {
   nodeIds?: string[];
   countryCode?: string | null;
   linkProtocol?: string | null;
-  linkParams?: { congestion?: LinkCongestion } | null;
+  linkParams?: LegParams | null;
 }
 
 /** The same direction with nothing left unsaid. */
@@ -48,7 +73,7 @@ export interface ResolvedDirection {
   nodeIds: string[];
   countryCode?: string | null;
   linkProtocol?: string | null;
-  linkParams?: { congestion?: LinkCongestion } | null;
+  linkParams?: LegParams | null;
 }
 
 /**

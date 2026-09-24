@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_NAMES, PROTOCOL_NAMES, XRAY_SUBPROTOCOLS } from '@iceslab/shared';
+import { ENGINE_NAMES, LINK_TUNNEL_IFACE_PREFIX, PROTOCOL_NAMES, XRAY_SUBPROTOCOLS } from '@iceslab/shared';
 
 /**
  * The hand-written mirror between `packages/shared/src/transport.ts` and the
@@ -141,7 +141,7 @@ function jsonKeysOf(struct: string): string[] {
 }
 
 describe('the chain block against the agent that will decode it', () => {
-  it('carries the same five keys on both sides', () => {
+  it('carries the same six keys on both sides', () => {
     const keys = jsonKeysOf('NodeChain');
     // Fails rather than passes empty: if the struct is renamed or the file
     // moves, this test has to say so instead of checking nothing.
@@ -149,13 +149,24 @@ describe('the chain block against the agent that will decode it', () => {
       keys.length,
       'NodeChain was not found in dto.go, so this test is checking nothing. ' +
         'Fix the pattern or the struct name, do not delete the test.',
-    ).toBe(5);
+    ).toBe(6);
     // `userCore` joined in К6 and is the reason this guard earns its keep: it
     // carries the drawing the user's core renders while the chain process holds
     // the chain, and it ships before anything reads it, so a rename on either
     // side would sit silent until a push decoded into zeroes and an entry
-    // quietly egressed from its own country.
-    expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword', 'userCore']);
+    // quietly egressed from its own country. `tunnels` joined in Ф8.1 the same
+    // way, ahead of the agent that raises them.
+    expect(keys).toEqual(['engine', 'config', 'socks', 'socksPassword', 'userCore', 'tunnels']);
+  });
+
+  it('carries the three tunnel keys on both sides, and one interface prefix', () => {
+    // Phase 8. A tunnel whose `conf` key decoded into "" on the agent would be
+    // an interface raised with no config and a leg with nothing under it.
+    expect(jsonKeysOf('ChainTunnel')).toEqual(['iface', 'conf', 'listenPort']);
+    // The prefix is the agent's guard against a tunnel named after an
+    // interface that is not ours, so the two copies have to say the same word.
+    const goPrefix = /^const ChainTunnelIfacePrefix = "([^"]+)"/m.exec(readFileSync(DTO_GO, 'utf8'))?.[1];
+    expect(goPrefix, 'ChainTunnelIfacePrefix was not found in dto.go').toBe(LINK_TUNNEL_IFACE_PREFIX);
   });
 
   it('carries every user-core key on both sides', () => {

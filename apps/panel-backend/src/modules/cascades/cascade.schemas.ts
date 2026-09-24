@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LINK_CELLS, LINK_CONGESTIONS } from '@iceslab/shared';
+import { LINK_CELLS, LINK_CONGESTIONS, LINK_UNDERLAYS } from '@iceslab/shared';
 
 // Max hops in a single cascade. Each hop adds latency + an inter-hop link
 // (UFW port LINK_PORT_BASE+i), so the chain is capped. Enforced at the schema
@@ -73,10 +73,17 @@ const LinkCellValue = z.enum([...LINK_CELLS, 'xray']);
  * "unknown congestion control algorithm" on the node, long after the save.
  *
  * No secret is ever accepted here. Every password and salt is minted by the
- * panel and lives in the credential.
+ * panel and lives in the credential, and so are the keys, the inner addresses
+ * and the port of an `awg` underlay's tunnel (CascadeTunnel).
  */
 const LinkParamsValue = z
-  .object({ congestion: z.enum(LINK_CONGESTIONS).optional() })
+  .object({
+    congestion: z.enum(LINK_CONGESTIONS).optional(),
+    // Phase 8: what the leg rides on. Absent is `direct`, which is what every
+    // leg did before the knob; `awg` raises a tunnel between the two hops and
+    // runs the leg inside it (see LINK_UNDERLAYS in shared).
+    underlay: z.enum(LINK_UNDERLAYS).optional(),
+  })
   .strict()
   .nullish();
 export const CascadeHopSchema = z.object({

@@ -22,6 +22,9 @@ export const TABLES = [
   // the CASCADE on the truncate; listed now because "implicitly handled" is
   // invisible, and the day one of them loses its FK nothing would say so.
   'cascade_links',
+  // Phase 8. Its index is unique panel-wide, so a row left behind would shift
+  // every index the next test expects.
+  'cascade_tunnels',
   'cascade_direction_nodes',
   'cascade_directions',
   'cascade_position_nodes',

@@ -948,6 +948,36 @@ export const LINK_CONGESTIONS = ['bbr', 'cubic', 'new_reno'] as const;
 export type LinkCongestion = (typeof LINK_CONGESTIONS)[number];
 
 /**
+ * What a cascade leg rides ON, phase 8: `linkParams.underlay`.
+ *
+ *   direct  the leg's cell goes over the internet to the next hop's public
+ *           address, as every leg did before this field;
+ *   awg     an AmneziaWG tunnel is raised between the two hops, and the leg's
+ *           cell (vless, shadowsocks, hy2, tuic, unchanged) goes INSIDE it, to
+ *           the inner address of the tunnel. The chain process on the far side
+ *           stays in the path, so its protections, policy and DNS still apply;
+ *           the tunnel carries the leg, it does not replace it.
+ *
+ * ⚠ Named `underlay`, not `transport`. `Transport` in this file is already the
+ * socket kind ('tcp' | 'udp', LINK_CELL_TRANSPORT, every port check), and a
+ * leg's transport of 'awg' beside its cell's transport of 'udp' is the one-name
+ * two-meanings trap the cells were split from the protocols to escape.
+ */
+export const LINK_UNDERLAYS = ['direct', 'awg'] as const;
+export type LinkUnderlay = (typeof LINK_UNDERLAYS)[number];
+export const DEFAULT_LINK_UNDERLAY: LinkUnderlay = 'direct';
+
+/**
+ * The interface name prefix of a leg's AWG tunnel: `awg-l<index>`, the index
+ * being the tunnel's panel-wide number. The agent refuses a tunnel whose name
+ * does not start with it, so a panel cannot hand it an interface name that
+ * belongs to something else on the machine (a user AWG interface, eth0).
+ * Mirrored in apps/node/internal/dto/dto.go (ChainTunnelIfacePrefix), held
+ * equal by contract-mirror.test.ts.
+ */
+export const LINK_TUNNEL_IFACE_PREFIX = 'awg-l';
+
+/**
  * What a leg gets when the operator chooses nothing, in the one place both
  * sides read it from.
  *
@@ -1174,6 +1204,35 @@ export interface NodeChain {
    * the other, and the panel says so before it happens.
    */
   userCore?: ChainUserCore;
+  /**
+   * The AWG tunnels this node's legs ride in, phase 8: one per leg whose
+   * underlay is `awg`, on BOTH ends of it. The agent writes each as an
+   * awg-quick config, raises it before the chain process starts and takes it
+   * down when the tunnel is no longer sent.
+   *
+   * ⚠ Shipped in the contract ahead of the renderer (Ф8.1). No panel sends it
+   * until Ф8.2 lands the agent's half in the same commit; absent and empty
+   * mean the same thing, "no tunnels on this node".
+   */
+  tunnels?: ChainTunnel[];
+}
+
+/**
+ * One AWG tunnel under a cascade leg, as its end on THIS node sees it.
+ *
+ * `conf` is the whole awg-quick file: [Interface] with this end's key, inner
+ * address and (on the receiving end) ListenPort, and one [Peer] with the other
+ * end. No PostUp and no PostDown: nothing is forwarded or NATed through it, the
+ * leg goes inside it to the tunnel's inner address and nowhere else.
+ */
+export interface ChainTunnel {
+  /** `awg-l<index>`, always starting with LINK_TUNNEL_IFACE_PREFIX. */
+  iface: string;
+  /** The awg-quick config for this end, verbatim. */
+  conf: string;
+  /** The UDP port this end listens on: set on the receiving end only, so the
+   *  agent can open it in the firewall without parsing `conf`. */
+  listenPort?: number;
 }
 
 /**

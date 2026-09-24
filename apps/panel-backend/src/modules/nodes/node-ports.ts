@@ -101,7 +101,7 @@ export async function portClaimsOnNode(
   if (ports.length === 0) return { owners: [], certainty: 'full' };
   const wanted = [...new Set(ports)];
 
-  const [bindings, links, legacy, node] = await Promise.all([
+  const [bindings, links, tunnels, legacy, node] = await Promise.all([
     prisma.profileNodeBinding.findMany({
       where: {
         nodeId,
@@ -115,6 +115,11 @@ export async function portClaimsOnNode(
       // The cred comes with it since phase 5: the cell inside it is what says
       // whether this leg holds a TCP or a UDP socket.
       select: { port: true, config: true, cascade: { select: { name: true } } },
+    }),
+    // Phase 8: the UDP port a leg's AWG tunnel listens on at its receiving end.
+    prisma.cascadeTunnel.findMany({
+      where: { toNodeId: nodeId, port: { in: wanted } },
+      select: { port: true, cascade: { select: { name: true } } },
     }),
     legacyHopLinkPorts(nodeId, wanted),
     prisma.node.findUnique({ where: { id: nodeId }, select: { cores: true, chainStatus: true } }),
@@ -144,6 +149,8 @@ export async function portClaimsOnNode(
       name: l.cascade.name,
       transport: legTransport(l.config),
     })),
+    // Always UDP: AmneziaWG is.
+    ...tunnels.map((t) => ({ port: t.port, name: t.cascade.name, transport: 'udp' as Transport })),
     ...legacy,
   ]) {
     const key = `${l.name}:${l.port}:${l.transport}`;

@@ -265,6 +265,27 @@ type NodeChain struct {
 	//
 	// Absent on a transit or an exit: they have no user core to hand over from.
 	UserCore *ChainUserCore `json:"userCore,omitempty"`
+	// Tunnels are the AWG tunnels this node's legs ride in, phase 8, on both
+	// ends of each leg. Mirrors NodeChain.tunnels. Shipped in the contract ahead
+	// of the agent's half (Ф8.2); until then no panel sends it.
+	Tunnels []ChainTunnel `json:"tunnels,omitempty"`
+}
+
+// ChainTunnelIfacePrefix starts the name of every leg tunnel: awg-l<index>.
+// The agent refuses a tunnel named otherwise, so a panel cannot point it at an
+// interface that belongs to something else on the machine. Mirrors
+// LINK_TUNNEL_IFACE_PREFIX in shared/transport.ts (contract-mirror.test.ts).
+const ChainTunnelIfacePrefix = "awg-l"
+
+// ChainTunnel mirrors ChainTunnel in shared/transport.ts: one AWG tunnel under
+// a cascade leg, as its end on this node sees it.
+type ChainTunnel struct {
+	// Iface is awg-l<index>.
+	Iface string `json:"iface"`
+	// Conf is the whole awg-quick config for this end, verbatim.
+	Conf string `json:"conf"`
+	// ListenPort is set on the receiving end only: the UDP port to open.
+	ListenPort int `json:"listenPort,omitempty"`
 }
 
 // ChainUserCore mirrors NodeChain.userCore in shared/transport.ts, which is a

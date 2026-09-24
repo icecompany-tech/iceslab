@@ -57,9 +57,18 @@ import {
   matchStoredDirections,
   resolveDirections,
   storedLinkParams,
+  type LegParams,
   type ResolvedDirection,
 } from './direction-merge.js';
 import { isConfigApplied } from '../nodes/nodes.sync-status.js';
+import {
+  freeTunnelIndexes,
+  newTunnelCred,
+  parseTunnelCred,
+  topologyTunnelPairs,
+  tunnelIface,
+  tunnelPort,
+} from './cascade-tunnel.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
 
 export class CascadeNotFoundError extends Error {
@@ -1291,7 +1300,7 @@ async function writeTopologyV4(
     position: number;
     entryProtocol?: string;
     linkProtocol?: string;
-    linkParams?: { congestion?: LinkCongestion } | null;
+    linkParams?: LegParams | null;
   }[],
   directions: {
     id?: string;
@@ -1299,7 +1308,7 @@ async function writeTopologyV4(
     countryCode?: string | null;
     /** Phase 5: the last leg's cell and knobs. Null means the entry's cell. */
     linkProtocol?: string | null;
-    linkParams?: { congestion?: LinkCongestion } | null;
+    linkParams?: LegParams | null;
   }[],
 ): Promise<void> {
   const stored = await tx.cascadeDirection.findMany({
@@ -1461,11 +1470,118 @@ async function writeTopologyV4(
     });
   }
 
+  await writeTunnels(tx, cascadeId, positions, resolved);
+
   // Advance the counter past every tag handed out. Never `max(tag) + 1`: a
   // direction deleted later must not pass its tag to the next one.
   if (nextTag !== cascade.nextDirectionTag) {
     await tx.cascade.update({ where: { id: cascadeId }, data: { nextDirectionTag: nextTag } });
   }
+}
+
+/**
+ * The AWG tunnels this topology's `awg` legs ride in, phase 8, written inside
+ * the save's transaction.
+ *
+ * A pair still wanted keeps its row, keys, index and port: rotating a tunnel
+ * under live traffic is an explicit act, never a side effect of an unrelated
+ * edit (the lesson of the leg credentials, phase 5). A pair no longer wanted
+ * loses its row, and its index goes back to the pool. A new pair takes the
+ * smallest free index, panel-wide.
+ *
+ * The UDP port follows from the index, so it is known only here, after the
+ * allocation, and the port check against profiles is asked here too: a
+ * refusal throws and the transaction takes the whole save back.
+ */
+async function writeTunnels(
+  tx: Prisma.TransactionClient,
+  cascadeId: string,
+  positions: { position?: number; nodeIds: string[]; linkParams?: LegParams | null }[],
+  directions: { nodeIds: string[]; linkParams?: LegParams | null }[],
+): Promise<void> {
+  const wanted = topologyTunnelPairs(positions, directions);
+  const key = (from: string, to: string) => `${from}|${to}`;
+  const wantedKeys = new Set(wanted.map((p) => key(p.fromNodeId, p.toNodeId)));
+  const stored = await tx.cascadeTunnel.findMany({ where: { cascadeId } });
+  const kept = stored.filter(
+    (t) => wantedKeys.has(key(t.fromNodeId, t.toNodeId)) && parseTunnelCred(t.config) !== null,
+  );
+  const dropped = stored.filter((t) => !kept.includes(t));
+  if (dropped.length > 0) {
+    await tx.cascadeTunnel.deleteMany({ where: { id: { in: dropped.map((t) => t.id) } } });
+    getLogger().info(
+      { cascadeId, tunnels: dropped.map((t) => tunnelIface(t.index)) },
+      '[cascade] leg tunnels no longer wanted are taken down with this save',
+    );
+  }
+  const have = new Set(kept.map((t) => key(t.fromNodeId, t.toNodeId)));
+  const missing = wanted.filter((p) => !have.has(key(p.fromNodeId, p.toNodeId)));
+  if (missing.length === 0) return;
+
+  const used = new Set((await tx.cascadeTunnel.findMany({ select: { index: true } })).map((t) => t.index));
+  const indexes = freeTunnelIndexes(used, missing.length);
+  const created = missing.map((p, i) => ({
+    cascadeId,
+    fromNodeId: p.fromNodeId,
+    toNodeId: p.toNodeId,
+    index: indexes[i]!,
+    port: tunnelPort(indexes[i]!),
+    config: newTunnelCred() as unknown as Prisma.InputJsonValue,
+  }));
+
+  // The receiving end's UDP port against the profiles on it, the same refusal
+  // the legs get (LINK_PORT_IN_USE): a profile holding the port is something
+  // the operator can move, and it has to be moved before the tunnel can bind.
+  const conflicts: { nodeName: string; port: number; transport: Transport; profileName: string }[] = [];
+  for (const t of created) {
+    const owners = await portOwnersOnNode(t.toNodeId, [t.port]);
+    for (const o of owners) {
+      if (o.kind !== 'profile' || o.transport !== 'udp') continue;
+      const node = await tx.node.findUnique({ where: { id: t.toNodeId }, select: { name: true } });
+      conflicts.push({ nodeName: node?.name ?? t.toNodeId, port: t.port, transport: 'udp', profileName: o.name });
+    }
+  }
+  if (conflicts.length > 0) throw new CascadeLinkPortInUseError(conflicts);
+
+  await tx.cascadeTunnel.createMany({ data: created });
+}
+
+/**
+ * A leg with an `awg` underlay would end on a node without AmneziaWG, phase 8.
+ *
+ * Both ends of such a leg raise the tunnel, so both need the module. By FACT
+ * only, the rule every gate here follows: the node reported an `amneziawg`
+ * core and every such row says `installed: false`. A node that reported no
+ * amneziawg row at all, or never reported, is let through.
+ */
+export class LinkUnderlayNotOnNodeError extends Error {
+  readonly code = 'LINK_UNDERLAY_NOT_ON_NODE';
+  constructor(public nodeNames: string[]) {
+    super(
+      `These nodes would raise an AmneziaWG tunnel under a cascade leg and report AmneziaWG as ` +
+        `not installed: ${nodeNames.join(', ')}. Install it on them (bootstrap-amneziawg.sh) or ` +
+        `keep those legs direct.`,
+    );
+    this.name = 'LinkUnderlayNotOnNodeError';
+  }
+}
+
+async function assertUnderlayOnNodes(
+  positions?: { position?: number; nodeIds: string[]; linkParams?: LegParams | null }[],
+  directions?: { nodeIds: string[]; linkParams?: LegParams | null }[],
+): Promise<void> {
+  if (!positions || !directions) return;
+  const pairs = topologyTunnelPairs(positions, directions);
+  if (pairs.length === 0) return;
+  const ids = [...new Set(pairs.flatMap((p) => [p.fromNodeId, p.toNodeId]))];
+  const nodes = await prisma.node.findMany({ where: { id: { in: ids } }, select: { name: true, cores: true } });
+  const missing = nodes
+    .filter((n) => {
+      const rows = ((n.cores as NodeCores | null)?.cores ?? []).filter((c) => c.engine === 'amneziawg');
+      return rows.length > 0 && rows.every((c) => c.installed === false);
+    })
+    .map((n) => n.name);
+  if (missing.length > 0) throw new LinkUnderlayNotOnNodeError(missing);
 }
 
 export async function createCascade(input: CreateCascadeInput): Promise<CascadeDto> {
@@ -1533,6 +1649,8 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // saved") about the same walk, and an operator fixing one wants to hear about
   // the other in the same breath.
   await assertNodesCarryCells(positions, directions);
+  // Phase 8: a leg riding AWG needs AmneziaWG on both of its ends.
+  await assertUnderlayOnNodes(positions, directions);
   // Phase 6: a hysteria entry reaches the cascade only through the chain
   // process, so its nodes must be able to run one.
   await assertEntryCanChain(positions);
@@ -1721,6 +1839,8 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
   // dropdown, and the node it lands on may be an xray-only machine nobody has
   // touched since.
   await assertNodesCarryCells(positions, directions);
+  // Phase 8: a leg riding AWG needs AmneziaWG on both of its ends.
+  await assertUnderlayOnNodes(positions, directions);
   // Phase 6, in this order. First whether the entry CAN chain, because that is
   // a refusal no confirmation lifts; asking the operator to confirm a switch
   // that is then refused anyway would be a question with no useful answer.

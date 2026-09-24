@@ -59,6 +59,11 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       conflicts: err.conflicts,
     });
   }
+  if (err instanceof svc.LinkUnderlayNotOnNodeError) {
+    // 409: an `awg` leg on a node that reports AmneziaWG as not installed.
+    // Every such node is named, like the other gates of this save.
+    return reply.code(409).send({ error: err.code, message: err.message, nodeNames: err.nodeNames });
+  }
   if (err instanceof svc.CascadeEntryCannotChainError) {
     // 409: well-formed, and in conflict with what those nodes have installed.
     return reply.code(409).send({ error: err.code, message: err.message, conflicts: err.conflicts });
