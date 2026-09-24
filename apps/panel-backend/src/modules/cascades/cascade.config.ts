@@ -472,8 +472,14 @@ export async function generateTopologyLinks(
     for (const from of last.nodeIds) {
       for (const d of directions) {
         const proto = d.linkProtocol ? normalizeLinkProtocol(d.linkProtocol) : fallback;
+        // E27, stand 24.09: a direction with no knob of its own takes the last
+        // position's, the same rule the cell above and the underlay
+        // (cascade-tunnel.ts) follow. Without it a one-leg cascade whose
+        // operator chose cubic on the position shipped bbr to both ends, and
+        // nothing on the panel said so.
+        const congestion = d.linkParams?.congestion ?? last.linkParams?.congestion;
         for (const to of d.nodeIds) {
-          add(from, to, d.tag, proto, step, d.linkParams?.congestion);
+          add(from, to, d.tag, proto, step, congestion);
         }
       }
     }
