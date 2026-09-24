@@ -286,6 +286,19 @@ export function linkCellPair(value: string | null | undefined): EnginePair | nul
   return CELL_PAIRS[value] ?? null;
 }
 
+/**
+ * Ячейка ноги словами: только её имя («VLESS», «Shadowsocks», «hy2», «tuic»).
+ *
+ * Без движка, и это не сокращение. С цепью (фаза 4) ногу рисует процесс цепи
+ * sing-box на обеих нодах, а «Shadowsocks · ядро xray» называл движок ячейки
+ * до цепи, то есть говорил неправду о том, что держит ногу. Хранимое `xray`
+ * это та же ячейка vless.
+ */
+export function legCellName(cell: string): string {
+  const pair = linkCellPair(cell);
+  return pair ? protocolLabelCompact(pair.protocol) : cell;
+}
+
 /** Значение, которое сервер примет сегодня. Хранимое `xray` это та же ячейка
  *  vless, поэтому оно законно, хотя в контрактном списке его нет. */
 export function isRealisedLinkCell(value: string | null | undefined): boolean {
@@ -301,9 +314,8 @@ export function isRealisedLinkCell(value: string | null | undefined): boolean {
  * `LinkCellValue`). Пока список был свой и короткий, нога позиции предлагала
  * две ячейки из четырёх.
  *
- * Подпись у ячейки с парой это пара («VLESS · ядро xray»), у остальных имя
- * ячейки как есть: выдумывать им протокол не на чем, а движки пишет рядом сама
- * строка ноги.
+ * Подпись это имя ячейки (`legCellName`): «VLESS», «Shadowsocks», «hy2»,
+ * «tuic». Движок в подписи был до цепи; с ней ногу рисует sing-box цепи.
  *
  * Уже сохранённое значение, которого в списке нет, остаётся в нём: пустой
  * селектор над существующими данными читается как потеря.
@@ -312,12 +324,10 @@ export function linkCellOptions(
   current: string | null,
   t: T,
 ): { value: string; label: string }[] {
-  const options = LINK_CELLS.map((cell) => {
-    const pair = CELL_PAIRS[cell];
-    return { value: cell as string, label: pair ? pairLabel(pair, t) : cell };
-  });
+  // Имя ячейки, не пара с движком: ногу рисует цепь (см. legCellName).
+  const options = LINK_CELLS.map((cell) => ({ value: cell as string, label: legCellName(cell) }));
   if (current === 'xray') {
-    options.push({ value: 'xray', label: pairLabel(CELL_PAIRS.xray, t) });
+    options.push({ value: 'xray', label: legCellName('xray') });
   } else if (current && !LINK_CELL_VALUES.has(current)) {
     options.push({ value: current, label: t('engine.cellUnrealised', { name: current }) });
   }

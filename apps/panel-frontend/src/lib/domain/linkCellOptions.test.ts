@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LINK_CELLS } from '@iceslab/shared';
-import { isRealisedLinkCell, linkCellOptions } from '@/lib/domain/engines';
+import { isRealisedLinkCell, legCellName, linkCellOptions } from '@/lib/domain/engines';
 
 /**
  * Список ячеек у селектора ноги.
@@ -22,14 +22,14 @@ describe('linkCellOptions', () => {
     expect(values).toEqual([...LINK_CELLS]);
   });
 
-  it('2. у ячейки с парой подпись пары, у остальных имя ячейки', () => {
+  it('2. подпись это имя ячейки, без движка: ногу рисует цепь, не xray', () => {
     const byValue = new Map(linkCellOptions(null, label).map((o) => [o.value, o.label]));
-    // `pairLabel` зовёт переводчик, и здесь он отдаёт ключ как есть: проверяем
-    // не текст, а то, что подпись СОБИРАЕТСЯ, а не берётся именем ячейки.
-    expect(byValue.get('vless')).not.toBe('vless');
-    expect(byValue.get('shadowsocks')).not.toBe('shadowsocks');
+    expect(byValue.get('vless')).toBe('VLESS');
+    expect(byValue.get('shadowsocks')).toBe('Shadowsocks');
     expect(byValue.get('hy2')).toBe('hy2');
     expect(byValue.get('tuic')).toBe('tuic');
+    for (const l of byValue.values()) expect(l).not.toMatch(/ядро|engine\./);
+    expect(legCellName('xray')).toBe('VLESS');
   });
 
   it('3. хранимое `xray` это ячейка vless: остаётся в списке, когда оно выбрано', () => {

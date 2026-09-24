@@ -124,7 +124,6 @@ export const cascades = {
     legFromEntry: "the entry's cell",
     legPortServer: 'the server assigns the port',
     legNotReported: 'the server did not report this leg',
-    legCellEngines: '{{cell}} · {{engines}}',
     // Nothing to set on hy2: the salt is minted by the panel, and its rate
     // control is a bandwidth pair nobody has decided how to ask for yet.
     legObfsMinted: 'The Salamander salt is minted by the panel, like every other link credential.',

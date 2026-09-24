@@ -49,8 +49,8 @@ import {
   isRealisedLinkCell,
   linkCellOptions,
   nodeCarriesCascadeLink,
+  legCellName,
   pairCaveats,
-  pairLabel,
 } from '@/lib/domain/engines';
 
 /**
@@ -625,11 +625,10 @@ export function LegRow({
   // протокола в наших именах у них нет, только имя ячейки и список движков.
   // Пока ячеек было две, тут стоял `facts.pair!`, и первая же нога hy2 на
   // позиции роняла страницу целиком (поймано кадром 22.09).
+  // Имя ячейки, без движка: ногу рисует цепь sing-box на обеих нодах.
   const words =
-    facts.state === 'known'
-      ? facts.pair
-        ? pairLabel(facts.pair, t)
-        : t('cascadeCreate.legCellEngines', { cell: facts.cell, engines: facts.engines?.join(', ') })
+    facts.state === 'known' && facts.cell
+      ? legCellName(facts.cell)
       : facts.state === 'unrealised'
         ? t('engine.cellUnrealised', { name: facts.cell })
         : t('cascadeCreate.legUnknown');
@@ -771,10 +770,8 @@ export function DirectionLegRow({
 }) {
   const { t } = useTranslation();
   const words =
-    facts.state === 'known'
-      ? facts.pair
-        ? pairLabel(facts.pair, t)
-        : t('cascadeCreate.legCellEngines', { cell: facts.cell, engines: facts.engines?.join(', ') })
+    facts.state === 'known' && facts.cell
+      ? legCellName(facts.cell)
       : facts.state === 'unrealised'
         ? t('engine.cellUnrealised', { name: facts.cell })
         : t('cascadeCreate.legFromEntry');
