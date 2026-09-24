@@ -27,7 +27,8 @@ import { listNodePolicies, policyFitRefusal as readPolicyRefusal } from '@/lib/d
 import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { defaults, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
+import { defaults, enginesPatch, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
+import { nodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 import { awgPayload } from '@/lib/domain/awg';
@@ -170,6 +171,11 @@ export function useNodeEditForm() {
   // ничего или если сервер поля не знает.
   const coreVersionsDiff = coreVersionsPatch(node?.coreVersions, form.values.coreVersions);
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
+  // Ядра ноды: только изменённый список и только если сервер поле знает.
+  const enginesKnown = node?.intendedEngines !== undefined;
+  const enginesDiff = enginesPatch(node?.intendedEngines, form.values.engines);
+  /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
+  const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -190,11 +196,15 @@ export function useNodeEditForm() {
         // Версии ядер: только изменённые компоненты, и только если сервер поле
         // знает (ключ пришёл в ответе про ноду).
         ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
+        // Ядра ноды: список заменяет список, протокол выше уже идёт с ним в
+        // паре (сервер проверяет, что его обслуживает первое ядро).
+        ...(enginesDiff ? { intendedEngines: enginesDiff } : {}),
       });
     },
     onSuccess: () => {
       setPolicyRefusal(null);
       setCoreRefusal(null);
+      setEnginesRefusal(null);
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['node', id] });
       qc.invalidateQueries({ queryKey: ['node-policies'] });
@@ -214,7 +224,10 @@ export function useNodeEditForm() {
       // Строки встают в секции «Ядра», рядом с выбором, который их вызвал.
       const coreLines = coreVersionRefusal(err);
       setCoreRefusal(coreLines);
-      if (refusal || coreLines) return;
+      // Ядра противоречат протоколу: фраза сервера под чипами.
+      const enginesBad = nodeEnginesRefusal(err);
+      setEnginesRefusal(enginesBad ? enginesBad.message || t('nodes.form.enginesRefused') : null);
+      if (refusal || coreLines || enginesBad) return;
       notifications.show({
         color: 'red',
         title: t('common.saveError'),
@@ -291,6 +304,9 @@ export function useNodeEditForm() {
     saveMutation,
     awgKnown,
     coreRefusal,
+    enginesKnown,
+    enginesRefusal,
+    setEnginesRefusal,
     warpMutation,
     exposureMutation,
     bootstrapMutation,

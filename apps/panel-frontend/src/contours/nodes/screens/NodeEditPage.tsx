@@ -21,6 +21,7 @@ import { chainFacts } from '@/lib/domain/chainStatus';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { ServerIcon } from '@/contours/nodes/components/NodeCreate/icons';
 import { useEffect } from 'react';
+import { intendedEnginesWords } from '@/lib/domain/engines';
 import { useTranslation } from 'react-i18next';
 import { modals } from '@mantine/modals';
 import {
@@ -64,6 +65,9 @@ export function NodeEditPage() {
     policyRefusal,
     awgKnown,
     coreRefusal,
+    enginesKnown,
+    enginesRefusal,
+    setEnginesRefusal,
   } = useNodeEditForm();
 
   // `#cores`: the deploy window and the host form link here for a core the
@@ -126,6 +130,16 @@ export function NodeEditPage() {
           <Text style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, lineHeight: '22px', color: SNOW }}>
             {node.name}
           </Text>
+          {/* Ядра, на которые нода настроена (intendedEngines), основное
+              первым. Намерение, не отчёт: что стоит, говорит секция «Ядра». */}
+          {node.intendedEngines && node.intendedEngines.length > 0 && (
+            <Text
+              title={t('nodeEdit.intendedEnginesHint')}
+              style={{ fontFamily: MONO, fontSize: 12, lineHeight: '16px', color: MIST, whiteSpace: 'nowrap' }}
+            >
+              {intendedEnginesWords(node.intendedEngines)}
+            </Text>
+          )}
         </Box>
         <Box style={{ width: 1, height: 26, backgroundColor: HAIRLINE, flexShrink: 0 }} />
         <Box style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, paddingLeft: 14 }}>
@@ -265,6 +279,9 @@ export function NodeEditPage() {
                 nodePoliciesQuery={nodePoliciesQuery}
                 policyRefusal={policyRefusal}
                 awgKnown={awgKnown}
+                enginesKnown={enginesKnown}
+                enginesRefusal={enginesRefusal}
+                setEnginesRefusal={setEnginesRefusal}
               />
 
               <EgressCard navigate={navigate} cascade={cascade} warpMutation={warpMutation} egress={egress} />

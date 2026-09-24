@@ -8,7 +8,7 @@ import { StepInstall } from '@/contours/nodes/components/NodeCreate/StepInstall'
 import { StepParams } from '@/contours/nodes/components/NodeCreate/StepParams';
 import { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 import { useTranslation } from 'react-i18next';
-import { installIntentLabel } from '@/lib/domain/engines';
+import { installIntentLabel, intendedEnginesWords } from '@/lib/domain/engines';
 import {
   Box,
   Stack,
@@ -47,6 +47,10 @@ export function NodeCreatePage() {
     awgKnown,
     coreVersionsKnown,
     coreRefusal,
+    enginesKnown,
+    engines,
+    enginesRefusal,
+    setEnginesRefusal,
     groups,
     portByProfile,
     toggle,
@@ -181,8 +185,9 @@ export function NodeCreatePage() {
                     color: VIOLET,
                   }}
                 >
-                  {/* The pair being installed, not the protocol alone. */}
-                  {installIntentLabel(form.values, t)}
+                  {/* What is being installed: every core, or on an older
+                      server the pair, not the protocol alone. */}
+                  {enginesKnown ? intendedEnginesWords(engines) : installIntentLabel(form.values, t)}
                 </Text>
               </Box>
             </>
@@ -311,7 +316,16 @@ export function NodeCreatePage() {
       </Box>
 
       {step === 0 && (
-        <StepParams form={form} awgKnown={awgKnown} coreVersionsKnown={coreVersionsKnown} coreRefusal={coreRefusal} />
+        <StepParams
+          form={form}
+          awgKnown={awgKnown}
+          coreVersionsKnown={coreVersionsKnown}
+          coreRefusal={coreRefusal}
+          enginesKnown={enginesKnown}
+          engines={engines}
+          enginesRefusal={enginesRefusal}
+          setEnginesRefusal={setEnginesRefusal}
+        />
       )}
 
       {step === 1 && <StepHosts form={form} selected={selected} groupOpen={groupOpen} setGroupOpen={setGroupOpen} profilesQuery={profilesQuery} groups={groups} portByProfile={portByProfile} toggle={toggle} toggleAllCan={toggleAllCan} />}

@@ -67,6 +67,15 @@
       domainDesc: 'A-запись на IP ноды. Используется как REALITY serverName для self-steal профилей (SNI совпадает с IP, переживает РФ-DPI). Не имя сертификата hysteria - оно берётся из адреса выше.',
       singboxEngine: 'Поставить также движок sing-box',
       coreVersionsTitle: 'Версии ядер',
+      // Движки ноды (intendedEngines, 64d7078): чипы вместо селекта протокола.
+      enginesTitle: 'Ядра ноды',
+      enginesPrimary: 'основное',
+      enginesMakePrimary: 'сделать основным',
+      enginesMakePrimaryHint: 'Основное ядро первое в списке: его протокол становится меткой ноды',
+      enginesLastOne: 'Хотя бы одно ядро обязательно',
+      enginesRefused: 'Сервер не принял ядра ноды: причина под чипами',
+      enginesProtocol: 'Протокол основного ядра ({{engine}})',
+      enginesHint: 'Ставятся все отмеченные ядра. Основное первое: его протокол это метка ноды в списках. Добавить или снять ядро можно и потом, на странице ноды.',
       coreVersionsOthers_one: 'остальные ядра ({{count}})',
       coreVersionsOthers_few: 'остальные ядра ({{count}})',
       coreVersionsOthers_many: 'остальные ядра ({{count}})',
@@ -202,6 +211,7 @@
     tabRoutes: 'Маршруты',
     paramsTitle: 'Параметры',
     protocolDesc: 'Основное ядро ноды.',
+    intendedEnginesHint: 'Ядра, на которые нода настроена, основное первым. Что стоит на машине на самом деле, говорит секция «Ядра».',
     addressDesc:
       'IP или DNS. На это же имя hysteria выпускает сертификат, поэтому направь A-запись сюда до того, как сохранишь домен.',
     portDesc: 'mTLS',

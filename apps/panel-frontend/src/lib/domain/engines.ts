@@ -142,6 +142,15 @@ export function installIntentLabel(
   return values.singboxEngine ? t('engine.plusSingbox', { pair: own }) : own;
 }
 
+/**
+ * The engines a node is SET UP to carry (intendedEngines), as the node header
+ * and the create form say them: «xray + hysteria + sing-box», the primary
+ * first. An intent, not the report: what runs is `engines` / `cores`.
+ */
+export function intendedEnginesWords(engines: readonly EngineName[]): string {
+  return engines.map((e) => (e === 'singbox' ? 'sing-box' : e)).join(' + ');
+}
+
 /** Only for the create form above: which core the installer puts down for this
  *  protocol. The same table exists once in the panel and once in the agent, and
  *  this copy is deliberately confined to a form about a machine that does not

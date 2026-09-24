@@ -12,6 +12,7 @@ import { FAINT, MIST, MONO, MOSS } from '@/contours/nodes/lib/colors';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
 import { awgSelectorShown } from '@/lib/domain/awg';
 import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
+import { EngineChips } from '@/contours/nodes/components/EngineChips';
 
 /**
  * Name, address, region and protocol of the node, plus the save bar.
@@ -23,7 +24,22 @@ export function NodeParamsForm({
   nodePoliciesQuery,
   policyRefusal,
   awgKnown,
-}: Pick<NodeEditor, 'regionsQuery' | 'form' | 'id' | 'node' | 'nodePoliciesQuery' | 'policyRefusal' | 'awgKnown'>) {
+  enginesKnown,
+  enginesRefusal,
+  setEnginesRefusal,
+}: Pick<
+  NodeEditor,
+  | 'regionsQuery'
+  | 'form'
+  | 'id'
+  | 'node'
+  | 'nodePoliciesQuery'
+  | 'policyRefusal'
+  | 'awgKnown'
+  | 'enginesKnown'
+  | 'enginesRefusal'
+  | 'setEnginesRefusal'
+>) {
   const { t } = useTranslation();
   const reach = policyReachFacts(node?.cores?.cores);
   const applicability = reach.state;
@@ -47,21 +63,44 @@ export function NodeParamsForm({
                     required
                     {...form.getInputProps('name')}
                   />
-                  <Select
-                    {...FIELD}
-                    style={{ flex: 1, minWidth: 0 }}
-                    label={t('nodes.form.protocol')}
-                    description={t('nodeEdit.protocolDesc')}
-                    data={PROTOCOL_OPTIONS}
-                    allowDeselect={false}
-                    {...form.getInputProps('protocol')}
-                  />
+                  {/* Сервер старше intendedEngines: прежний селект протокола. */}
+                  {!enginesKnown && (
+                    <Select
+                      {...FIELD}
+                      style={{ flex: 1, minWidth: 0 }}
+                      label={t('nodes.form.protocol')}
+                      description={t('nodeEdit.protocolDesc')}
+                      data={PROTOCOL_OPTIONS}
+                      allowDeselect={false}
+                      {...form.getInputProps('protocol')}
+                    />
+                  )}
                 </Box>
+
+                {/* Ядра, на которые нода настроена: те же чипы, что в мастере.
+                    Уходит только изменённый список (enginesPatch). Что стоит
+                    на машине на самом деле, говорит секция «Ядра». */}
+                {enginesKnown && form.values.engines.length > 0 && (
+                  <EngineChips
+                    engines={form.values.engines}
+                    protocol={form.values.protocol}
+                    error={enginesRefusal}
+                    onChange={({ engines, protocol }) => {
+                      form.setFieldValue('engines', engines);
+                      form.setFieldValue('protocol', protocol);
+                      setEnginesRefusal(null);
+                    }}
+                  />
+                )}
 
                 {/* Поколение AmneziaWG: свойство ноды, и от него зависит, каким
                     клиентом к ней можно подключиться. Подсказка под селектором
                     говорит это словами. Где выбор показывать, решает фабрика. */}
-                {awgSelectorShown(awgKnown, form.values.protocol, node?.cores?.cores) && (
+                {awgSelectorShown(
+                  awgKnown,
+                  form.values.engines.includes('amneziawg') ? 'amneziawg' : form.values.protocol,
+                  node?.cores?.cores,
+                ) && (
                   <AwgProtocolSelect
                     value={form.values.awgProtocol}
                     onChange={(g) => form.setFieldValue('awgProtocol', g)}

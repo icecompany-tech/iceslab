@@ -11,25 +11,24 @@ import { FAINT, HAIRLINE, MIST, MONO, RED, SNOW } from '@/contours/nodes/lib/col
  * «Версии ядер» в мастере создания ноды (решение владельца 24.09: версию ядра
  * выбирают только при создании ноды и в её настройках). Те же строки, что в
  * секции «Ядра» страницы ноды, но без факта: ноды ещё нет. Сначала ядра
- * выбранного протокола и движка, остальные под «остальные ядра». Ничего не
- * выбрано = пины манифеста.
+ * всех выбранных движков, остальные под «остальные ядра». Ничего не выбрано =
+ * пины манифеста.
  */
 export function WizardCoreVersions({
-  protocol,
-  singboxEngine,
+  engines,
   value,
   onChange,
   refusal,
 }: {
-  protocol: string;
-  singboxEngine: boolean;
+  /** The engines the node is set up to carry: their components come first. */
+  engines: readonly string[];
   value: NodeCoreVersions;
   onChange: (next: NodeCoreVersions) => void;
   refusal: string[] | null;
 }) {
   const { t } = useTranslation();
   const [othersOpen, setOthersOpen] = useState(false);
-  const { relevant, others } = wizardCoreComponents(protocol, singboxEngine);
+  const { relevant, others } = wizardCoreComponents(engines);
   // Выбор в свёрнутой группе не прячем: раскрываем, если там что-то выбрано.
   const othersShown = othersOpen || others.some((c) => value[c] !== undefined);
 

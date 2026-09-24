@@ -85,8 +85,16 @@ export interface Node {
   hardening?: NodeHardening | null;
   // WARP egress on/off (per-node). Creds are never sent to the client.
   warpEnabled: boolean;
-  // Engine-choice: sing-box engine installed alongside the native core.
+  // Engine-choice: sing-box engine installed alongside the native core. Since
+  // 64d7078 read off `intendedEngines` by the server ("singbox" in the list).
   singboxEngine: boolean;
+  /**
+   * Which engines the node is SET UP to carry, first = primary, the engine
+   * `protocol` names (64d7078). An intent: the installer and the node card read
+   * it, no gate does; what the node RUNS is `engines` below. Absent = a server
+   * older than the field, and the screens then keep protocol + sing-box switch.
+   */
+  intendedEngines?: EngineName[];
   /**
    * Э3 layer B: the node-level routing policy this node runs, null = none.
    * Only the id: the rules live behind /api/node-policies and are shared, so a
@@ -257,6 +265,9 @@ export interface CreateNodeInput {
   domain?: string | null;
   hardening?: NodeHardening | null;
   singboxEngine?: boolean;
+  /** The engines to install, first = primary; only to a server that knows the
+   *  field (`protocol` must be served by the first). 400 INVALID_ENGINES. */
+  intendedEngines?: EngineName[];
   /** Поколение AmneziaWG (фаза 7). Уходит ТОЛЬКО если оператор его выбирал:
    *  до контракта сервер поля не знает, и ключ, которого он не ждёт, это отказ
    *  сохранения. */
@@ -279,6 +290,8 @@ export interface UpdateNodeInput {
   domain?: string | null;
   hardening?: NodeHardening | null;
   singboxEngine?: boolean;
+  /** Absent = untouched, a list replaces the list; never null (400). */
+  intendedEngines?: EngineName[];
   /**
    * Which node policy this node runs. `null` detaches it, which rewrites the
    * node's config WITHOUT the rules rather than leaving the last policy

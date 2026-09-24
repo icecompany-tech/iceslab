@@ -12,6 +12,7 @@ import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/u
 import { awgSelectorShown } from '@/lib/domain/awg';
 import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
 import { WizardCoreVersions } from '@/contours/nodes/components/NodeCreate/WizardCoreVersions';
+import { EngineChips } from '@/contours/nodes/components/EngineChips';
 
 type Wizard = ReturnType<typeof useNodeCreateForm>;
 
@@ -24,7 +25,21 @@ export function StepParams({
   awgKnown,
   coreVersionsKnown,
   coreRefusal,
-}: Pick<Wizard, 'form' | 'awgKnown' | 'coreVersionsKnown' | 'coreRefusal'>) {
+  enginesKnown,
+  engines,
+  enginesRefusal,
+  setEnginesRefusal,
+}: Pick<
+  Wizard,
+  | 'form'
+  | 'awgKnown'
+  | 'coreVersionsKnown'
+  | 'coreRefusal'
+  | 'enginesKnown'
+  | 'engines'
+  | 'enginesRefusal'
+  | 'setEnginesRefusal'
+>) {
   const { t } = useTranslation();
 
   return (
@@ -41,20 +56,40 @@ export function StepParams({
                   required
                   {...form.getInputProps('name')}
                 />
-                <Select
-                  {...FIELD}
-                  style={{ flex: 1, minWidth: 0 }}
-                  label={t('nodes.form.protocol')}
-                  description={t('nodes.form.protocolDesc')}
-                  data={NODE_PROTOCOL_GROUPED}
-                  allowDeselect={false}
-                  {...form.getInputProps('protocol')}
-                />
+                {/* Сервер старше intendedEngines: прежний селект протокола. */}
+                {!enginesKnown && (
+                  <Select
+                    {...FIELD}
+                    style={{ flex: 1, minWidth: 0 }}
+                    label={t('nodes.form.protocol')}
+                    description={t('nodes.form.protocolDesc')}
+                    data={NODE_PROTOCOL_GROUPED}
+                    allowDeselect={false}
+                    {...form.getInputProps('protocol')}
+                  />
+                )}
               </Box>
 
+              {/* Нода живёт с несколькими ядрами (владелец, 24.09): чип на
+                  ядро, первое отмеченное основное, протокол под ним. */}
+              {enginesKnown && (
+                <EngineChips
+                  engines={form.values.engines}
+                  protocol={form.values.protocol}
+                  error={enginesRefusal}
+                  onChange={({ engines: next, protocol }) => {
+                    form.setFieldValue('engines', next);
+                    form.setFieldValue('protocol', protocol);
+                    setEnginesRefusal(null);
+                  }}
+                />
+              )}
+
               {/* Engine choice is a claim about the machine, not a field: it
-                  changes the install command, so it reads as its own row. */}
-              {SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && (
+                  changes the install command, so it reads as its own row.
+                  Only for a server older than intendedEngines: there sing-box
+                  is a chip. */}
+              {!enginesKnown && SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && (
                 <ToggleRow
                   checked={form.values.singboxEngine}
                   onChange={(v) => form.setFieldValue('singboxEngine', v)}
@@ -64,12 +99,12 @@ export function StepParams({
                 />
               )}
 
-              {/* Версии ядер на установку. Сервер старше поля (ни у одной ноды
-                  парка ключа нет): выбора нет, пины уходят сами. */}
+              {/* Версии ядер на установку, по всем выбранным ядрам. Сервер
+                  старше поля (ни у одной ноды парка ключа нет): выбора нет,
+                  пины уходят сами. */}
               {coreVersionsKnown && (
                 <WizardCoreVersions
-                  protocol={form.values.protocol}
-                  singboxEngine={SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine}
+                  engines={engines}
                   value={form.values.coreVersions}
                   onChange={(next) => form.setFieldValue('coreVersions', next)}
                   refusal={coreRefusal}
@@ -77,8 +112,8 @@ export function StepParams({
               )}
 
               {/* Поколение AmneziaWG. У новой ноды ядер ещё нет, поэтому
-                  решает только основной протокол. */}
-              {awgSelectorShown(awgKnown, form.values.protocol, null) && (
+                  решает выбор: AmneziaWG среди ядер ноды. */}
+              {awgSelectorShown(awgKnown, engines.includes('amneziawg') ? 'amneziawg' : form.values.protocol, null) && (
                 <AwgProtocolSelect
                   value={form.values.awgProtocol}
                   onChange={(g) => form.setFieldValue('awgProtocol', g)}

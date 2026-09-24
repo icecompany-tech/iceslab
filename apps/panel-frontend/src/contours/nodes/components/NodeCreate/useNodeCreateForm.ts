@@ -16,6 +16,9 @@ import {
 import { awgPayload } from '@/lib/domain/awg';
 import {
   createCoreVersions,
+  enginesPayload,
+  legacyEngines,
+  nodeEnginesRefusal,
   pickFreePort,
   type FormValues,
   type Registered,
@@ -52,6 +55,7 @@ export function useNodeCreateForm() {
       consumptionMultiplier: 1,
       domain: '',
       singboxEngine: false,
+      engines: ['xray'],
       hardenUfw: false,
       hardenFail2ban: false,
       hardenRealisticFallback: false,
@@ -136,32 +140,47 @@ export function useNodeCreateForm() {
   const coreVersionsKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.coreVersions !== undefined);
   /** Строки отказа 400 CORE_VERSION_NOT_LISTED после «Зарегистрировать». */
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
+  /**
+   * Знает ли сервер `intendedEngines` (64d7078): тем же способом, по стоящим
+   * нодам. Знает: чипы ядер; нет: прежние селект протокола и переключатель
+   * sing-box, чтобы экран не слал ключ, который сервер отвергнет.
+   */
+  const enginesKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.intendedEngines !== undefined);
+  /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
+  const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
+  // Какие ядра встанут на ноду: чипы, или то же из старой формы.
+  const engines = enginesKnown
+    ? form.values.engines
+    : legacyEngines(
+        form.values.protocol,
+        SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
+      );
 
-  // A host can land here only if this node will run the core its profile needs:
-  // the node's own core, or anything on sing-box when that engine is installed
-  // too. Everything else is listed with the reason it cannot, rather than
-  // hidden, so the operator sees the whole inventory and why it is short.
+  // A host can land here only if one of the engines this node will carry runs
+  // the profile: its effective engine, resolved by the server, among them.
+  // Everything else is listed with the reason it cannot, rather than hidden,
+  // so the operator sees the whole inventory and why it is short.
+  const enginesKey = engines.join(',');
   const groups = useMemo(() => {
     const all = profilesQuery.data?.profiles ?? [];
+    const carried = new Set(enginesKey.split(','));
     const can: Profile[] = [];
     const cannot: { profile: Profile; reason: string }[] = [];
     for (const p of all) {
-      const nativeMatch = p.engine !== 'singbox' && p.protocol === form.values.protocol;
-      const singboxMatch = p.engine === 'singbox' && form.values.singboxEngine;
-      if (nativeMatch || singboxMatch) {
+      if (carried.has(p.effectiveEngine)) {
         can.push(p);
       } else {
         cannot.push({
           profile: p,
           reason:
-            p.engine === 'singbox'
+            p.effectiveEngine === 'singbox'
               ? t('nodeCreate.reasonNoSingbox')
               : t('nodeCreate.reasonNoCore', { protocol: p.protocol }),
         });
       }
     }
     return { can, cannot };
-  }, [profilesQuery.data, form.values.protocol, form.values.singboxEngine, t]);
+  }, [profilesQuery.data, enginesKey, t]);
 
   // Ports are assigned in selection order, so the chip on a row is the port
   // that row will actually listen on once the node registers.
@@ -208,14 +227,14 @@ export function useNodeCreateForm() {
       const node: NodeWithPayload = await createNode({
         name: form.values.name.trim(),
         address: `${form.values.host.trim()}:${port}`,
-        protocol: form.values.protocol,
         countryCode: form.values.countryCode || null,
         consumptionMultiplier:
           form.values.consumptionMultiplier === '' ? 1 : Number(form.values.consumptionMultiplier),
         domain: form.values.domain.trim() || null,
         hardening: buildHardening(form.values),
-        singboxEngine:
-          SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
+        // Ядра: intendedEngines с протоколом основного, или прежние поля у
+        // сервера старше контракта.
+        ...enginesPayload(enginesKnown, engines, form.values.protocol),
         // Только выбранное оператором и только если сервер поле знает.
         ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
         // Версии ядер: только выбранные компоненты; ничего не выбрано = ключа
@@ -223,6 +242,7 @@ export function useNodeCreateForm() {
         ...(coreVersions ? { coreVersions } : {}),
       });
       setCoreRefusal(null);
+      setEnginesRefusal(null);
 
       // Bindings go one at a time; there is no batch endpoint. A host that
       // fails is reported by name rather than swallowed, because the node is
@@ -272,11 +292,18 @@ export function useNodeCreateForm() {
       // на шаге параметров, туда же возвращаем оператора.
       const coreLines = coreVersionRefusal(err);
       setCoreRefusal(coreLines);
-      if (coreLines) setStep(0);
+      // Ядра противоречат протоколу: фраза сервера под чипами, туда же назад.
+      const enginesBad = nodeEnginesRefusal(err);
+      setEnginesRefusal(enginesBad ? enginesBad.message || t('nodes.form.enginesRefused') : null);
+      if (coreLines || enginesBad) setStep(0);
       notifications.show({
         color: 'red',
         title: t('common.createError'),
-        message: coreLines ? t('nodeEdit.coreVer.refused') : apiErrorMessage(err),
+        message: coreLines
+          ? t('nodeEdit.coreVer.refused')
+          : enginesBad
+            ? t('nodes.form.enginesRefused')
+            : apiErrorMessage(err),
       });
     } finally {
       setCreating(false);
@@ -324,6 +351,10 @@ export function useNodeCreateForm() {
     awgKnown,
     coreVersionsKnown,
     coreRefusal,
+    enginesKnown,
+    engines,
+    enginesRefusal,
+    setEnginesRefusal,
     groups,
     portByProfile,
     toggle,

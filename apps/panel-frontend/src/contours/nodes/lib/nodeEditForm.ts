@@ -1,4 +1,4 @@
-import type { NodeCoreVersions } from '@iceslab/shared';
+import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
@@ -20,6 +20,22 @@ export interface FormValues {
   /** Намерение по версиям ядер, как в `Node.coreVersions`: нет компонента =
    *  пин. На сервер уходит только разница с сохранённым (`coreVersionsPatch`). */
   coreVersions: NodeCoreVersions;
+  /** Ядра ноды (intendedEngines), первое основное. Пусто, если сервер поля не
+   *  знает: тогда на экране прежний селект протокола. На сервер уходит только
+   *  изменённым (`enginesPatch`). */
+  engines: EngineName[];
+}
+
+/**
+ * The `intendedEngines` of a PUT, by the three-value rule: absent = untouched,
+ * a list replaces the list, and null is never sent (the server refuses it). Only
+ * a changed list goes, and only to a server that has the field (`stored`
+ * present). Order matters: the first is the primary.
+ */
+export function enginesPatch(stored: EngineName[] | undefined, edited: EngineName[]): EngineName[] | undefined {
+  if (stored === undefined || edited.length === 0) return undefined;
+  const same = stored.length === edited.length && stored.every((e, i) => e === edited[i]);
+  return same ? undefined : [...edited];
 }
 
 export function splitAddress(address: string): { host: string; port: number } {
@@ -46,5 +62,6 @@ export function defaults(node: Node | null): FormValues {
     policyId: node?.policyId ?? '',
     awgProtocol: node?.awgProtocol ?? null,
     coreVersions: { ...(node?.coreVersions ?? {}) },
+    engines: [...(node?.intendedEngines ?? [])],
   };
 }
