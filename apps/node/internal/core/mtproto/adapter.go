@@ -117,6 +117,30 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndRestart(ctx)
 }
 
+// Idle implements core.Idler: no MTProto inbound in the last push. Stops mtg
+// and forgets the domain and secret (what Provisioned reads), so the same
+// inbound pushed again brings it back.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.mu.Lock()
+	if a.cfg.Inbound.Domain == "" && a.cfg.Inbound.Secret == "" && a.proc == nil {
+		a.mu.Unlock()
+		return nil
+	}
+	a.cfg.Inbound.Domain = ""
+	a.cfg.Inbound.Secret = ""
+	a.started = false
+	proc := a.proc
+	a.proc = nil
+	a.mu.Unlock()
+	a.logger.Info("mtproto: no inbound in the last push, stopped")
+	if proc == nil {
+		return nil
+	}
+	return proc.Stop(ctx)
+}
+
 // Stop terminates mtg. Reads + clears the shared fields under a.mu, then does
 // the slow proc.Stop with the lock released so Healthy()/GetStats never block
 // behind it (Bug #1).

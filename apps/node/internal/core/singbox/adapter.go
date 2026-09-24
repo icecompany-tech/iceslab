@@ -114,6 +114,31 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return nil
 }
 
+// Idle implements core.Idler: no inbound of this protocol on sing-box in the
+// last push. Stops the process and forgets the applied inbound (the one
+// ApplyInbound diffs against), so the same inbound pushed again brings it back.
+// The adapter stays started: it is the process that goes, not the agent's
+// readiness for the next push. The chain process is not this adapter's and is
+// not touched.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.mu.Lock()
+	if a.inbound == (InboundConfig{}) && a.proc == nil {
+		a.mu.Unlock()
+		return nil
+	}
+	a.inbound = InboundConfig{}
+	proc := a.proc
+	a.proc = nil
+	a.mu.Unlock()
+	a.logger.Info("singbox: no inbound in the last push, stopped", "protocol", a.protocol)
+	if proc == nil {
+		return nil
+	}
+	return proc.Stop(ctx)
+}
+
 func (a *Adapter) Stop(ctx context.Context) error {
 	a.mu.Lock()
 	a.started = false

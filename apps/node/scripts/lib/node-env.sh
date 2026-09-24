@@ -58,18 +58,17 @@ node_env_flags() {
 # live sessions would drop them, and the agent would keep trying to start it
 # again. No --force: the way out is to stop the core through the panel.
 #
-# ⚠ The agent does not stop a core when a push stops naming it: it applies the
-# inbounds it is given and leaves the others running on their last config
-# (internal/server/server.go, applyPush). It starts, at boot, only the cores
-# its last push named. So the way to a stopped core is: take its hosts and
-# cascade legs off this node in the panel, then restart the agent. A core run
-# by its own unit (hysteria.service) is stopped by that unit.
+# The way to a stopped core is the panel: take its hosts and cascade legs off
+# this node, and the next push, which no longer names the core, makes the
+# agent stop it (core.Idler, internal/server/server.go idleUnnamed). An agent
+# older than that leaves the core running on its last config; restarting the
+# agent then brings back only what the last push names.
 node_env_refuse_if_running() {
-  local name="$1" running="$2" how="${3:-systemctl restart iceslab-node}"
+  local name="$1" running="$2"
   [[ -z "$running" ]] && return 0
   printf '[node-env] %s is running with the agent'"'"'s config (%s): not removed.\n' "$name" "$running" >&2
-  printf '[node-env] Stop it first: take its hosts and cascade legs off this node in the panel, then: %s\n' "$how" >&2
-  printf '[node-env] and run this again.\n' >&2
+  printf '[node-env] Stop it first: take its hosts and cascade legs off this node in the panel; the next push stops it.\n' >&2
+  printf '[node-env] Then run this again. (An agent older than that stops it only on: systemctl restart iceslab-node)\n' >&2
   exit 1
 }
 

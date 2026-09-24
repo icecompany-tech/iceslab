@@ -75,7 +75,7 @@ remove_core() {
   if systemctl is-active --quiet mita.service 2>/dev/null && grep -Eq '"protocol": *"mieru"' "$store" 2>/dev/null; then
     running="mita.service is active and the agent's last push names a mieru inbound"
   fi
-  node_env_refuse_if_running mita "$running" "nothing more: once the push no longer names mieru, this goes through"
+  node_env_refuse_if_running mita "$running"
   systemctl disable --now mita.service >/dev/null 2>&1 || true
   if dpkg -s mita >/dev/null 2>&1; then
     dpkg -P mita >/dev/null || warn "dpkg -P mita failed; check: dpkg -s mita"

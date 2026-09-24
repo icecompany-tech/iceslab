@@ -1571,6 +1571,11 @@ export interface CoreStatus {
    *  distinction a healthy node reported `degraded` forever (every node of the
    *  field fleet did), so the status stopped changing when something broke. */
   provisioned?: boolean;
+  /** Why the core is not running when that is by design. Today only
+   *  "no inbounds in the last push": the agent stopped a core its last applied
+   *  push did not name, and such a core does not degrade the node. Absent
+   *  otherwise, and from agents older than the field. */
+  reason?: string;
   /**
    * Whether the core's BINARY is on the machine.
    *
@@ -1700,6 +1705,8 @@ export interface NodeCoreInfo {
   /** See CoreStatus.toolsVersion. */
   toolsVersion?: string;
   provisioned?: boolean;
+  /** See CoreStatus.reason. Inventory: it changes with a push, not a tick. */
+  reason?: string;
   installed?: boolean;
   rendersPolicy?: boolean;
   rendersDns?: boolean;

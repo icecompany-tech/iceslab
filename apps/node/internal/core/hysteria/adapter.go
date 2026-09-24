@@ -138,6 +138,10 @@ type Adapter struct {
 	unitCheckedAt time.Time
 	unitHealthy   bool
 	unitProbing   bool
+
+	// idled: Idle stopped the unit and nothing has been applied since, so a
+	// second push naming no hysteria does not stop it again.
+	idled bool
 }
 
 type userEntry struct {
@@ -274,6 +278,34 @@ func (a *Adapter) Start(ctx context.Context) error {
 	a.mu.Lock()
 	a.proc = proc
 	a.mu.Unlock()
+	return nil
+}
+
+// Idle implements core.Idler: no hysteria inbound in the last push.
+//
+// Only where systemd runs hysteria (ServiceUnit set, what every bootstrap
+// writes now): the unit is stopped, not killed, and the applied inbound is
+// forgotten, so the same inbound pushed again rewrites the config and
+// `systemctl restart`s the unit back up. The auth callback stays: the agent
+// holds it, not hysteria. In spawn mode nothing is done, because ApplyInbound
+// there never spawns again, and a stopped hysteria would stay stopped.
+func (a *Adapter) Idle(ctx context.Context) error {
+	if a.cfg.ServiceUnit == "" || a.cfg.BinaryPath == "" {
+		return nil
+	}
+	a.mu.Lock()
+	if a.inbound == (InboundConfig{}) && a.idled {
+		a.mu.Unlock()
+		return nil
+	}
+	a.inbound = InboundConfig{}
+	a.idled = true
+	a.unitCheckedAt = time.Time{}
+	a.mu.Unlock()
+	if err := a.cfg.RunCmd(ctx, "systemctl", "stop", a.cfg.ServiceUnit); err != nil {
+		return fmt.Errorf("hysteria idle: stop %s: %w", a.cfg.ServiceUnit, err)
+	}
+	a.logger.Info("hysteria: no inbound in the last push, unit stopped", "unit", a.cfg.ServiceUnit)
 	return nil
 }
 
@@ -532,6 +564,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		return err
 	}
 	a.inbound = newInbound
+	a.idled = false
 	a.logger.Info("hysteria ApplyInbound: config rewritten",
 		"path", a.cfg.ConfigPath,
 		"obfs", newInbound.ObfsPassword != "",

@@ -434,6 +434,20 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndRestart(ctx)
 }
 
+// Idle implements core.Idler. By the time the server calls it, RetainInbounds
+// of the same push has already dropped every inbound this core held, so the
+// render finds nothing to serve and stops the process (regenerateAndRestart).
+// A no-op when nothing runs.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.mu.Lock()
+	running := a.proc != nil
+	a.mu.Unlock()
+	if !running {
+		return nil
+	}
+	return a.regenerateAndRestart(ctx)
+}
+
 // Stop terminates the subprocess and the K9-B self-steal fallback. The on-disk
 // config is left in place. Reads+clears the shared fields under a.mu, then does
 // the slow Shutdown/Stop with the lock released (a.mu is never held across IO).
@@ -1441,6 +1455,31 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) error {
 		a.started = true
 		a.mu.Unlock()
 		a.logger.Info("xray config written (config-only mode)", "users", len(clients))
+		return nil
+	}
+
+	// Nothing to serve at all, no inbound and no cascade leg: the config above
+	// is on disk (so it says what is true), and no process runs it. It used to
+	// run on the management inbound alone, so a node whose xray hosts were all
+	// removed kept an xray alive that served nobody, and a --remove of xray was
+	// refused for a core that had nothing to do. The next inbound or cascade
+	// brings it back through this same function.
+	if len(pushed) == 0 && cascade == nil {
+		a.mu.Lock()
+		old, ss := a.proc, a.selfSteal
+		a.proc, a.selfSteal, a.started = nil, nil, false
+		a.mu.Unlock()
+		if ss != nil {
+			if err := ss.stop(ctx); err != nil {
+				a.logger.Warn("xray self-steal stop failed", "err", err)
+			}
+		}
+		if old != nil {
+			if err := old.Stop(ctx); err != nil {
+				a.logger.Warn("xray stop failed", "err", err)
+			}
+			a.logger.Info("xray: nothing to serve (no inbound, no cascade), stopped")
+		}
 		return nil
 	}
 

@@ -125,6 +125,30 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndReload(ctx)
 }
 
+// Idle implements core.Idler: no NaiveProxy inbound in the last push. Stops
+// caddy and forgets the applied inbound (the hostname is what Provisioned
+// reads), so the same inbound pushed again brings it back. The listen port
+// from the install is kept: it is the fallback a push without one uses.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.mu.Lock()
+	if a.cfg.Inbound.Hostname == "" && a.proc == nil {
+		a.mu.Unlock()
+		return nil
+	}
+	a.cfg.Inbound = InboundConfig{ListenPort: a.cfg.Inbound.ListenPort}
+	a.started = false
+	proc := a.proc
+	a.proc = nil
+	a.mu.Unlock()
+	a.logger.Info("naive: no inbound in the last push, stopped")
+	if proc == nil {
+		return nil
+	}
+	return proc.Stop(ctx)
+}
+
 // Stop gracefully terminates caddy. The on-disk Caddyfile is left in place.
 func (a *Adapter) Stop(ctx context.Context) error {
 	a.mu.Lock()

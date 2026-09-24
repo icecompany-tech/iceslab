@@ -212,6 +212,29 @@ type Provisionable interface {
 	Provisioned() bool
 }
 
+// Idler is an OPTIONAL interface: the last applied push named no inbound for
+// this core, so it stops serving.
+//
+// Before it, a core the panel stopped naming ran on forever with its last
+// config: applyPush only APPLIES what a push carries, and a core without a
+// reconcile never heard that its last inbound was gone. A host deleted in the
+// panel kept serving on the node, and a core could not be removed because it
+// was still running.
+//
+// Idle must leave the adapter able to come back: the next ApplyInbound, even
+// with a config identical to the one it had, brings it up again. So it stops
+// the process and forgets the applied config, and nothing else (no auth
+// callback, no API listener the agent itself holds). It must be cheap and
+// idempotent: it is called on every applied push for every core that push does
+// not name.
+type Idler interface {
+	Idle(ctx context.Context) error
+}
+
+// IdleReason is what /healthz says about a core the last applied push did not
+// name. The node is not degraded by it: nothing is meant to run there.
+const IdleReason = "no inbounds in the last push"
+
 // RestartReporter is an OPTIONAL interface an adapter may implement to report
 // the above. /healthz type-asserts each adapter against it, exactly like
 // Versioner below; adapters that don't implement it simply report nothing.

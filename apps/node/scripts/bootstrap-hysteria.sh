@@ -116,7 +116,7 @@ remove_core() {
   local running=""
   systemctl is-active --quiet hysteria.service 2>/dev/null && running="hysteria.service is active"
   [[ -n "$running" ]] || running="$(node_env_pids hysteria)"
-  node_env_refuse_if_running hysteria "$running" "systemctl stop hysteria (and systemctl restart iceslab-node)"
+  node_env_refuse_if_running hysteria "$running"
   systemctl disable hysteria.service >/dev/null 2>&1 || true
   systemctl disable --now hysteria-server.service iceslab-hyhop.service >/dev/null 2>&1 || true
   rm -f "$HYSTERIA_UNIT" /etc/systemd/system/iceslab-hyhop.service /usr/local/bin/iceslab-hyhop

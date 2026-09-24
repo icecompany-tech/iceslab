@@ -101,6 +101,32 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return a.regenerateAndRestart(ctx)
 }
 
+// Idle implements core.Idler: no shadowsocks inbound in the last push. Stops
+// the process and forgets the cipher, which is what Provisioned reads, so the
+// next ApplyInbound, even with the same cipher and key, brings it back up.
+// Until this a deleted shadowsocks inbound served on: this adapter has no
+// reconcile, and nothing else told it the inbound was gone.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.mu.Lock()
+	if a.cfg.Inbound.Method == "" && a.proc == nil {
+		a.mu.Unlock()
+		return nil
+	}
+	a.cfg.Inbound.Method = ""
+	a.cfg.Inbound.ServerPSK = ""
+	a.started = false
+	proc := a.proc
+	a.proc = nil
+	a.mu.Unlock()
+	a.logger.Info("shadowsocks: no inbound in the last push, stopped")
+	if proc == nil {
+		return nil
+	}
+	return proc.Stop(ctx)
+}
+
 // Stop terminates the subprocess. The on-disk config is left in place. Reads +
 // clears the shared fields under a.mu, then does the slow proc.Stop with the
 // lock released so Healthy()/GetStats never block behind it (Bug #1).

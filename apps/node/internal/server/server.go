@@ -75,6 +75,13 @@ type Server struct {
 	logger    *slog.Logger
 	startedAt time.Time
 	collector *metrics.Collector
+
+	// idle holds the cores the last APPLIED push did not name (keyed by
+	// adapter). /healthz reports them running:false with core.IdleReason and
+	// does not let them degrade the node: nothing is meant to run there. Empty
+	// until a push lands; a push the agent refused changes nothing in it.
+	idleMu sync.Mutex
+	idle   map[core.CoreAdapter]bool
 }
 
 func New(cfg Config) (*Server, error) {
@@ -248,6 +255,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 				Running: adapter.Healthy(),
 				Engine:  adapter.Engine(),
 			}
+			idle := s.isIdle(adapter)
 			// Which node-level settings this core actually carries out. Both are
 			// optional interfaces, and today only one adapter implements either,
 			// so on a node whose cores do not the operator's policy and resolver
@@ -276,6 +284,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			if p, ok := adapter.(core.Provisionable); ok {
 				provisioned := p.Provisioned()
 				cs.Provisioned = &provisioned
+			}
+			// E26, stand 24.09: a node whose push names no hysteria read as
+			// DEGRADED, "not running: hysteria", right after the hysteria
+			// bootstrap: the unit waits for a config nobody sends, which is
+			// exactly right. A core the last push did not name is idle BY THAT
+			// PUSH, whatever its own Provisioned says, and says so.
+			if idle {
+				f := false
+				cs.Running = false
+				cs.Provisioned = &f
+				cs.Reason = core.IdleReason
 			}
 			// And whether it is even on the machine, which is a different
 			// question: a core can be configured perfectly and absent from
@@ -656,6 +675,10 @@ func (s *Server) applyPush(
 		router = string(req.Cascade.Engine)
 	}
 	deliveredCascade := false
+	// The cores this push names: every one an inbound matches below, and the
+	// one handed a non-empty cascade drawing here (xray on the exit of a legacy
+	// cascade has no inbound and must keep running for the leg).
+	named := make(map[core.CoreAdapter]bool, len(s.cfg.Adapters))
 	for _, adapter := range s.cfg.Adapters {
 		if userCoreRefused {
 			break
@@ -668,6 +691,9 @@ func (s *Server) applyPush(
 		if router != "" && adapter.Engine() == router {
 			mine = cascadeFragments
 			deliveredCascade = true
+			if len(mine) > 0 && string(mine) != "null" {
+				named[adapter] = true
+			}
 		}
 		if err := cr.ApplyCascade(mine); err != nil {
 			s.logger.Error("adapter ApplyCascade failed", "core", adapter.Name(), "err", err)
@@ -725,6 +751,7 @@ func (s *Server) applyPush(
 				"protocol", ib.Protocol, "engine", wantEngine)
 			continue
 		}
+		named[matched] = true
 		if err := matched.ApplyInbound(ib.Port, ib.Config); err != nil {
 			s.logger.Error("adapter ApplyInbound failed",
 				"core", matched.Name(), "inboundId", ib.ID, "err", err)
@@ -770,7 +797,43 @@ func (s *Server) applyPush(
 		}
 	}
 
+	// And the cores this push does not name at all stop serving. Only after a
+	// push that applied WHOLE: a push the node refused in part is not a fact
+	// about what should run here, and stopping a core on it would turn one bad
+	// inbound into an outage of another core.
+	if failed == 0 {
+		s.idleUnnamed(ctx, named)
+	}
+
 	return applied, failed, reasons
+}
+
+// idleUnnamed stops every registered core the applied push did not name and
+// remembers which, for /healthz. A stand-in for a core that is not installed
+// is skipped: it runs nothing and reports its own state.
+func (s *Server) idleUnnamed(ctx context.Context, named map[core.CoreAdapter]bool) {
+	idle := make(map[core.CoreAdapter]bool, len(s.cfg.Adapters))
+	for _, adapter := range s.cfg.Adapters {
+		if named[adapter] || core.IsAbsent(adapter) {
+			continue
+		}
+		idle[adapter] = true
+		if id, ok := adapter.(core.Idler); ok {
+			if err := id.Idle(ctx); err != nil {
+				s.logger.Error("adapter Idle failed", "core", adapter.Name(), "engine", adapter.Engine(), "err", err)
+			}
+		}
+	}
+	s.idleMu.Lock()
+	s.idle = idle
+	s.idleMu.Unlock()
+}
+
+// isIdle: the last applied push did not name this core.
+func (s *Server) isIdle(adapter core.CoreAdapter) bool {
+	s.idleMu.Lock()
+	defer s.idleMu.Unlock()
+	return s.idle[adapter]
 }
 
 // ensureInboundFirewall opens UFW for one inbound's port. Per-protocol UDP vs

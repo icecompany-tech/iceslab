@@ -185,6 +185,34 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return nil
 }
 
+// Idle implements core.Idler: no AmneziaWG inbound in the last push. Takes the
+// users' interface down and forgets the server key (what Provisioned reads),
+// so the same inbound pushed again is a key change and brings the interface
+// back up. Peers stay in memory for that moment. A cascade leg's awg-l<n>
+// tunnel is the chain's, not this adapter's, and is not touched.
+func (a *Adapter) Idle(ctx context.Context) error {
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+	a.mu.Lock()
+	if a.cfg.Inbound.PrivateKey == "" && !a.started {
+		a.mu.Unlock()
+		return nil
+	}
+	a.cfg.Inbound.PrivateKey = ""
+	a.started = false
+	managed := a.cfg.AwgQuickBin != ""
+	iface := a.cfg.Inbound.Interface
+	a.mu.Unlock()
+	a.logger.Info("amneziawg: no inbound in the last push, interface down", "interface", iface)
+	if !managed {
+		return nil
+	}
+	if _, err := a.cfg.runCmd(ctx, a.cfg.AwgQuickBin, "down", iface); err != nil {
+		a.logger.Warn("awg-quick down returned non-zero (often safe)", "err", err)
+	}
+	return nil
+}
+
 // Stop tears the interface down. Safe to call multiple times.
 func (a *Adapter) Stop(ctx context.Context) error {
 	a.restartMu.Lock()

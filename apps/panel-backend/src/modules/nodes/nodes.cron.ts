@@ -316,6 +316,7 @@ export function observedCores(
       ...(c.version ? { version: c.version } : {}),
       ...(c.toolsVersion ? { toolsVersion: c.toolsVersion } : {}),
       ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
+      ...(c.reason ? { reason: c.reason } : {}),
       ...(c.installed !== undefined ? { installed: c.installed } : {}),
       ...(c.rendersPolicy !== undefined ? { rendersPolicy: c.rendersPolicy } : {}),
       ...(c.rendersDns !== undefined ? { rendersDns: c.rendersDns } : {}),
