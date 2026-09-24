@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { LINK_CELLS, type LinkCell } from '@iceslab/shared';
 import { renderChainConfig } from './chain.config.js';
 import { CHAIN_SOCKS_USER } from './chain.ports.js';
-import { newLinkCred } from './cascade.config.js';
+import { generateTopologyLinks, newLinkCred, topologyLinkKey, type LinkCred } from './cascade.config.js';
 
 /**
  * Every leg cell, carrying a real request between two real sing-box processes.
@@ -145,47 +145,122 @@ describe('a leg carries a request between two engines', () => {
     expect(httpPort).toBeGreaterThan(0);
   });
 
+  /** Both ends of one leg, as the panel renders them for this credential. */
+  function renderPair(cred: LinkCred, socksPort: number, password: string) {
+    const entry = renderChainConfig({
+      role: 'entry',
+      socksPassword: password,
+      directionTags: [1],
+      out: [{ tag: 1, host: '127.0.0.1', cred }],
+      policy: null,
+    }) as { inbounds: { type: string; listen_port: number }[] };
+    for (const i of entry.inbounds) if (i.type === 'socks') i.listen_port = socksPort;
+    const exit = renderChainConfig({
+      role: 'exit',
+      socksPassword: password,
+      in: {
+        cred,
+        clients: [
+          {
+            tag: 1,
+            uuid: cred.protocol === 'vless' ? cred.uuid : undefined,
+            shortId: cred.protocol === 'vless' ? cred.reality?.shortId : undefined,
+          },
+        ],
+      },
+      policy: null,
+    });
+    return { entry, exit };
+  }
+
+  /** Stops every running engine and waits until each has let go of its ports. */
+  async function stopAll(): Promise<void> {
+    await Promise.all(
+      children.splice(0).map(
+        (c) =>
+          new Promise<void>((resolve) => {
+            if (c.exitCode !== null || c.signalCode !== null) return resolve();
+            c.once('exit', () => resolve());
+            c.kill('SIGKILL');
+          }),
+      ),
+    );
+  }
+
+  /** Runs one pair and sends the request; resolves with the body or rejects
+   *  with the reason and both engines' last words. Leaves nothing running. */
+  async function through(name: string, entry: unknown, exit: unknown, socksPort: number, password: string, ms = 15000) {
+    const exitRun = run(`${name}-exit`, exit);
+    const entryRun = run(`${name}-entry`, entry);
+    try {
+      return await eventually(async () => {
+        // A reply without the nonce is a failure too: a socks listener can
+        // accept, then close with nothing, and that is not a working leg.
+        const body = await getThroughSocks(socksPort, password, httpPort);
+        if (!body.includes(nonce)) throw new Error(`reply without the nonce: ${JSON.stringify(body.slice(0, 80))}`);
+        return body;
+      }, ms);
+    } catch (err) {
+      throw new Error(`${name}: ${(err as Error).message}\n${exitRun.log()}\n${entryRun.log()}`);
+    } finally {
+      await stopAll();
+    }
+  }
+
   for (const cell of LINK_CELLS as readonly LinkCell[]) {
     it.skipIf(!SINGBOX_BIN)(
       `through ${cell}`,
       async () => {
-        const linkPort = await freePort();
         const socksPort = await freePort();
         const password = randomBytes(12).toString('hex');
-        const cred = await newLinkCred(cell, linkPort);
-        const shortId = cred.protocol === 'vless' ? cred.reality?.shortId : undefined;
-        const uuid = cred.protocol === 'vless' ? cred.uuid : undefined;
-
-        const entry = renderChainConfig({
-          role: 'entry',
-          socksPassword: password,
-          directionTags: [1],
-          out: [{ tag: 1, host: '127.0.0.1', cred }],
-          policy: null,
-        }) as { inbounds: { type: string; listen_port: number }[] };
-        for (const i of entry.inbounds) if (i.type === 'socks') i.listen_port = socksPort;
-
-        const exit = renderChainConfig({
-          role: 'exit',
-          socksPassword: password,
-          in: { cred, clients: [{ tag: 1, uuid, shortId }] },
-          policy: null,
-        });
-
-        const exitRun = run(`${cell}-exit`, exit);
-        const entryRun = run(`${cell}-entry`, entry);
-        try {
-          const body = await eventually(() => getThroughSocks(socksPort, password, httpPort), 15000);
-          expect(body, `${exitRun.log()}\n${entryRun.log()}`).toContain(nonce);
-        } catch (err) {
-          throw new Error(`${cell}: ${(err as Error).message}\n${exitRun.log()}\n${entryRun.log()}`);
-        } finally {
-          for (const c of children.splice(0)) c.kill('SIGKILL');
-        }
+        const cred = await newLinkCred(cell, await freePort());
+        const { entry, exit } = renderPair(cred, socksPort, password);
+        expect(await through(cell, entry, exit, socksPort, password)).toContain(nonce);
       },
       30000,
     );
   }
+
+  /**
+   * E24, the half the engines can check: a cell switch redraws BOTH ends so
+   * that they agree, and one end left behind is exactly the outage the stand
+   * had.
+   *
+   * The credentials come from generateTopologyLinks with the old leg as
+   * `existing`, which is the call a save makes; only the port is moved to a free
+   * one. The stale pair is run first on purpose: it proves the new pair works
+   * because both ends moved, not because anything would have.
+   */
+  it.skipIf(!SINGBOX_BIN)(
+    'survives a cell switch when both ends are redrawn, and not when one is left behind',
+    async () => {
+      const socksPort = await freePort();
+      const linkPort = await freePort();
+      const password = randomBytes(12).toString('hex');
+      const legOf = async (cell: string, existing?: Map<string, LinkCred>) => {
+        const [link] = await generateTopologyLinks(
+          [{ nodeIds: ['entry'], linkProtocol: cell }],
+          [{ tag: 1, nodeIds: ['exit'] }],
+          existing,
+        );
+        return { ...link!.cred, port: linkPort } as LinkCred;
+      };
+
+      const before = await legOf('vless');
+      const after = await legOf('hy2', new Map([[topologyLinkKey('entry', 'exit', 1), before]]));
+      expect(after.protocol).toBe('hy2');
+
+      const old = renderPair(before, socksPort, password);
+      const fresh = renderPair(after, socksPort, password);
+      expect(await through('vless', old.entry, old.exit, socksPort, password)).toContain(nonce);
+
+      // The stand: the exit took the new leg, the entry kept dialling the old.
+      await expect(through('stale-entry', old.entry, fresh.exit, socksPort, password, 4000)).rejects.toThrow();
+
+      expect(await through('hy2', fresh.entry, fresh.exit, socksPort, password)).toContain(nonce);
+    },
+    60000,
+  );
 
   afterAll(() => http?.close());
 });

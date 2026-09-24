@@ -1,5 +1,7 @@
 import {
+  LINK_CELL_ENGINES,
   LINK_CELL_TRANSPORT,
+  type ChainStatus,
   type ChainTunnel,
   type ChainUserCore,
   type LinkCongestion,
@@ -2050,7 +2052,7 @@ export async function getCascadeFragmentsForNode(
 ): Promise<XrayCascadeFragments | null> {
   const fragments = await buildCascadeFragmentsForNode(nodeId);
   // Nothing to draw by design, and nothing to warn about either.
-  if (fragments === NOT_AN_XRAY_ENTRY) return null;
+  if (fragments === NO_LEGACY_DRAWING) return null;
   if (fragments) return fragments;
   // Only on the null path, so a node in no cascade at all pays nothing on the
   // way through, and the ordinary case stays one query lighter.
@@ -2288,13 +2290,46 @@ async function enabledCascadesTouching(nodeId: string): Promise<string[]> {
 /**
  * "This node's xray draws nothing of the cascade, and that is the design."
  *
- * Returned for the ENTRY of a cascade whose users enter on another core
- * (hysteria, phase 6). Distinct from null on purpose: null is logged as a
- * cascade that builds no fragments, and on a hysteria entry that line would
- * fire on every push until an operator learned to ignore it, which is the one
- * line that matters when something is really missing.
+ * Returned in three cases, all of them "the legacy block has nobody to serve":
+ *   - the ENTRY of a cascade whose users enter on another core (hysteria,
+ *     phase 6);
+ *   - a node whose chain process is running by its last report: an agent that
+ *     runs a chain ignores the legacy block entirely (E24);
+ *   - a node with a leg in a cell xray cannot carry (hy2, tuic): there is no
+ *     legacy drawing of it to send (E24).
+ *
+ * Distinct from null on purpose: null is logged as a cascade that builds no
+ * fragments, and on these nodes that line would fire on every push until an
+ * operator learned to ignore it, which is the one line that matters when
+ * something is really missing.
  */
-const NOT_AN_XRAY_ENTRY = Symbol('not-an-xray-entry');
+const NO_LEGACY_DRAWING = Symbol('no-legacy-drawing');
+
+/**
+ * Whether the legacy xray block of this node is moot, E24.
+ *
+ * On the stand, 2026-09-24: an operator switched a leg to hy2. The exit was
+ * redrawn, and the push to the entry died building the LEGACY block, which has
+ * no drawing of an hy2 leg and refused it. The whole push went with it, chain
+ * block included, so the entry's chain kept dialling the old vless leg into a
+ * port the exit no longer listened on: "connection refused", on a cascade whose
+ * new shape was fine and whose chain block rendered without a fault.
+ *
+ * The legacy block exists for ONE reader, an agent too old to run the chain,
+ * and a leg of a QUIC cell cannot reach such a node at all: the save refuses it
+ * where the node reported its engines without sing-box (carriesCellAtSave). So
+ * at push time there is nothing to refuse, only nothing to draw. Same for a
+ * node whose chain is running: that agent does not read the block.
+ */
+async function legacyDrawingIsMoot(
+  nodeId: string,
+  links: { fromNodeId: string; toNodeId: string; cred: LinkCred }[],
+): Promise<boolean> {
+  const mine = links.filter((l) => l.fromNodeId === nodeId || l.toNodeId === nodeId);
+  if (mine.some((l) => !LINK_CELL_ENGINES[l.cred.protocol].includes('xray'))) return true;
+  const node = await prisma.node.findUnique({ where: { id: nodeId }, select: { chainStatus: true } });
+  return (node?.chainStatus as ChainStatus | null)?.running === true;
+}
 
 /**
  * Is this node the entry of a cascade whose users do NOT enter on xray?
@@ -2313,7 +2348,7 @@ function entersOnAnotherCore(nodeId: string, entryProtocol: string | null | unde
 
 async function buildCascadeFragmentsForNode(
   nodeId: string,
-): Promise<XrayCascadeFragments | null | typeof NOT_AN_XRAY_ENTRY> {
+): Promise<XrayCascadeFragments | null | typeof NO_LEGACY_DRAWING> {
   // v4 first. Falls through to the hop path for cascades written before the
   // topology tables existed, so a half-migrated fleet keeps serving.
   const v4 = await readTopologyForNode(nodeId);
@@ -2321,8 +2356,9 @@ async function buildCascadeFragmentsForNode(
     // Before the fall-through, not after it: the hop path would draw the same
     // entry from the legacy rows and put the xray drawing right back.
     if (entersOnAnotherCore(nodeId, v4.entryProtocol, v4.positions[0]?.nodeIds ?? [])) {
-      return NOT_AN_XRAY_ENTRY;
+      return NO_LEGACY_DRAWING;
     }
+    if (await legacyDrawingIsMoot(nodeId, v4.links)) return NO_LEGACY_DRAWING;
     const mine = buildTopologyFragmentsForNode(nodeId, v4);
     if (mine) return toWireFragments(mine);
   }
@@ -2348,7 +2384,7 @@ async function buildCascadeFragmentsForNode(
   // The same rule on the legacy rows, for a cascade that only has them.
   const entryHop = cascade.hops.find((h) => h.position === 0);
   if (entryHop && entersOnAnotherCore(nodeId, entryHop.entryProtocol, [entryHop.nodeId])) {
-    return NOT_AN_XRAY_ENTRY;
+    return NO_LEGACY_DRAWING;
   }
 
   const hopInputs: CascadeConfigHopInput[] = cascade.hops.map((h) => ({
