@@ -105,6 +105,8 @@ import {
   toDirectionInputs,
   toPositionInputs,
   withEntryConfirm,
+  withUnderlay,
+  isOneLegCascade,
   type CellRefusal,
   type EntryChainConflict,
   type EntryChangeRefusal,
@@ -399,6 +401,8 @@ export function CascadeEditPage() {
   }
 
   const { name, enabled, hideHops, autoProfile, pools, directions } = draft;
+  // Одна позиция и одно направление: нога одна, подложку спрашиваем один раз.
+  const oneLeg = isOneLegCascade(pools.length, directions.length);
   const patch = (p: Partial<Draft>) => {
     // Отказ был про прошлую форму: любая правка делает его неверным быстрее,
     // чем человек успеет её сохранить.
@@ -830,15 +834,23 @@ export function CascadeEditPage() {
                   portConflicts,
                 )}
                 // Туннель поднимают обе стороны ноги: эта позиция и та, что её
-                // принимает (у последней это ноды всех направлений).
-                underlay={legUnderlay(
-                  [...pool.nodeIds, ...(pools[i + 1]?.nodeIds ?? directions.flatMap((d) => d.nodeIds))],
-                  nodeById,
-                  pool.linkParams?.underlay,
-                  undefined,
-                  underlayRefused,
-                  (u) => setPool(i, { linkParams: { ...(pool.linkParams ?? {}), underlay: u }, linkTouched: true }),
-                )}
+                // принимает (у последней это ноды всех направлений). В каскаде
+                // из одной ноги переключатель один, у направления (E25): два
+                // переключателя одной ноги и есть то, почему на стенде щёлкнули
+                // не там.
+                underlay={
+                  oneLeg
+                    ? undefined
+                    : legUnderlay(
+                        [...pool.nodeIds, ...(pools[i + 1]?.nodeIds ?? directions.flatMap((d) => d.nodeIds))],
+                        nodeById,
+                        pool.linkParams?.underlay,
+                        undefined,
+                        underlayRefused,
+                        (u) => setPool(i, { linkParams: withUnderlay(pool.linkParams, u), linkTouched: true }),
+                      )
+                }
+                underlayNote={oneLeg ? t('cascadeCreate.underlayAtDirection') : undefined}
               />
               </Fragment>
             ))}
@@ -919,14 +931,16 @@ export function CascadeEditPage() {
                     setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), ...p }, linkTouched: true })
                   }
                   // Нога до выхода: последняя позиция и ноды этого направления.
-                  // Без своего ключа направление идёт как последняя позиция.
+                  // Без своего ключа направление идёт как последняя позиция, и
+                  // это третье положение переключателя, а не `direct`.
                   underlay={legUnderlay(
                     [...(pools[pools.length - 1]?.nodeIds ?? []), ...dir.nodeIds],
                     nodeById,
                     dir.linkParams?.underlay,
                     pools[pools.length - 1]?.linkParams?.underlay ?? DEFAULT_LINK_UNDERLAY,
                     underlayRefused,
-                    (u) => setDirection(i, { linkParams: { ...(dir.linkParams ?? {}), underlay: u }, linkTouched: true }),
+                    (u) => setDirection(i, { linkParams: withUnderlay(dir.linkParams, u), linkTouched: true }),
+                    oneLeg ? 'one-leg' : 'direction',
                   )}
                 />
                 </Fragment>

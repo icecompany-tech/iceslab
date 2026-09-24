@@ -131,7 +131,11 @@ export const cascades = {
     underlayLabel: 'transport under the leg',
     underlayDirect: 'direct',
     underlayAwg: 'inside AmneziaWG',
-    underlayInherited: 'as the last position',
+    // The direction's third setting: no key, the leg rides as the last position
+    // (E25: a click on the direction used to write an explicit direct).
+    underlayInheritOption: 'as the position: {{value}}',
+    underlayOneLeg: 'the cascade has one leg, this is the leg to the exit',
+    underlayAtDirection: 'set on the direction below: the cascade has one leg, and this is it',
     underlayAwgHint: 'Between the nodes only AWG packets are on the wire, the leg runs inside the tunnel; the panel picks port 27000+n/udp itself.',
     underlayMissing: '{{name}} has no AmneziaWG: the tunnel under the leg cannot be raised there.',
     underlaySilent: '{{names}}: the node has not reported its cores, AmneziaWG cannot be checked. It can be chosen, the server checks the fact.',

@@ -75,6 +75,7 @@ import {
   legFacts,
   legPortNotes,
   legUnderlay,
+  withUnderlay,
   poolRoleAt,
   refusedCells,
   refusedEntryChain,
@@ -580,7 +581,8 @@ export function CascadeCreatePage() {
                   pool.linkParams?.underlay,
                   undefined,
                   underlayRefused,
-                  (u) => setPool(i, { linkParams: { ...(pool.linkParams ?? {}), underlay: u }, linkTouched: true }),
+                  // У позиции два положения, `inherit` сюда не приходит.
+                  (u) => setPool(i, { linkParams: withUnderlay(pool.linkParams, u), linkTouched: true }),
                 )}
               />
               </Fragment>

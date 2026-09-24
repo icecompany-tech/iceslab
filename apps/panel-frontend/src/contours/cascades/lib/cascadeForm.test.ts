@@ -28,7 +28,13 @@ import {
   toPositionInputs,
   withEntryConfirm,
 } from '@/contours/cascades/lib/cascadeForm';
-import { legUnderlay, refusedUnderlay, underlayFacts } from '@/contours/cascades/lib/cascadeForm';
+import {
+  isOneLegCascade,
+  legUnderlay,
+  refusedUnderlay,
+  underlayFacts,
+  withUnderlay,
+} from '@/contours/cascades/lib/cascadeForm';
 import type { Node } from '@/lib/domain/nodes';
 
 /**
@@ -875,6 +881,48 @@ describe('подложка ноги (фаза 8): underlayFacts, legUnderlay, re
   it('отказ сервера встаёт только у ноги с этими нодами', () => {
     const leg = legUnderlay(['a', 'c'], byId, 'awg', undefined, ['b', 'c'], () => undefined);
     expect(leg.refused).toEqual(['c']);
+  });
+
+  it('E25: у направления третье положение, без ключа это «как у позиции», а не direct', () => {
+    const noop = () => undefined;
+    expect(legUnderlay(['a'], byId, undefined, 'awg', [], noop, 'direction')).toMatchObject({
+      place: 'direction',
+      choice: 'inherit',
+      facts: { value: 'awg' },
+    });
+    expect(legUnderlay(['a'], byId, 'direct', 'awg', [], noop, 'direction').choice).toBe('direct');
+    // У позиции и у ноги каскада из одной ноги положения два, по действующему значению.
+    expect(legUnderlay(['a'], byId, undefined, undefined, [], noop).choice).toBe('direct');
+    expect(legUnderlay(['a'], byId, undefined, 'awg', [], noop, 'one-leg').choice).toBe('awg');
+  });
+
+  it('E25: withUnderlay убирает ключ на «как у позиции» и не трогает congestion', () => {
+    const cc = LINK_CONGESTIONS[0]!;
+    expect(withUnderlay({ underlay: 'direct', congestion: cc }, 'inherit')).toEqual({ congestion: cc });
+    expect(withUnderlay({ underlay: 'direct' }, 'inherit')).toBeNull();
+    expect(withUnderlay(undefined, 'awg')).toEqual({ underlay: 'awg' });
+    expect(withUnderlay({ congestion: cc }, 'direct')).toEqual({ congestion: cc, underlay: 'direct' });
+  });
+
+  it('E25: позиция в awg при нетронутом направлении, направление в пейлоаде без underlay', () => {
+    const pos = { key: 0, nodeIds: ['a'], entryProtocol: 'xray' as const, linkProtocol: 'xray' };
+    const [p] = toPositionInputs([{ ...pos, linkParams: withUnderlay(null, 'awg'), linkTouched: true }]);
+    expect(p).toMatchObject({ linkParams: { underlay: 'awg' } });
+    // Направление, которое оператор не трогал, ногу не шлёт вовсе: сервер
+    // оставит хранимое, и без ключа underlay оно наследует awg позиции.
+    const [d] = toDirectionInputs([{ key: 1, id: 'd1', countryCode: 'DE', nodeIds: ['b'], tag: 1, linkParams: null }]);
+    expect('linkParams' in d!).toBe(false);
+    // Тронули и вернули «как у позиции»: linkParams уходит, underlay в нём нет.
+    const [back] = toDirectionInputs([
+      { key: 1, id: 'd1', countryCode: 'DE', nodeIds: ['b'], tag: 1, linkProtocol: null, linkParams: withUnderlay({ underlay: 'direct' }, 'inherit'), linkTouched: true },
+    ]);
+    expect(back!.linkParams).toBeNull();
+  });
+
+  it('E25: каскад из одной ноги это одна позиция и одно направление', () => {
+    expect(isOneLegCascade(1, 1)).toBe(true);
+    expect(isOneLegCascade(1, 2)).toBe(false);
+    expect(isOneLegCascade(2, 1)).toBe(false);
   });
 
   it('409 LINK_UNDERLAY_NOT_ON_NODE: имена; мусор и чужие отказы: null', () => {

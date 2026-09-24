@@ -711,12 +711,41 @@ export function underlayFacts(
   return { value, inherited: own === undefined && inherited !== undefined, missing, silent };
 }
 
+/**
+ * Положение переключателя подложки. `inherit` есть только у направления в
+ * каскаде с несколькими ногами: «как у последней позиции», то есть ключа
+ * `underlay` у направления НЕТ. До E25 (стенд 24.09) третьего положения не
+ * было: щелчок по строке направления писал ему явный `underlay`, и вернуть
+ * «как у позиции» было нечем, а явный `direct` у направления побеждает `awg`
+ * позиции.
+ */
+export type UnderlayChoice = LinkUnderlay | 'inherit';
+
+/**
+ * Где стоит переключатель:
+ *   position   нога позиции, два положения, нет ключа = direct;
+ *   direction  нога до выхода в каскаде из нескольких ног, три положения;
+ *   one-leg    каскад из одной ноги (одна позиция, одно направление): нога
+ *              одна, и спрашивается она один раз, у направления, два
+ *              положения по действующему значению.
+ */
+export type UnderlayPlace = 'position' | 'direction' | 'one-leg';
+
+/** Одна позиция и одно направление за ней: нога в каскаде одна. */
+export function isOneLegCascade(poolCount: number, directionCount: number): boolean {
+  return poolCount === 1 && directionCount === 1;
+}
+
 /** Что строке ноги нужно про подложку: факты и отказ сервера по её нодам. */
 export interface LegUnderlay {
   facts: UnderlayFacts;
   /** Имена нод ЭТОЙ ноги из 409 LINK_UNDERLAY_NOT_ON_NODE. */
   refused: string[];
-  onChange: (value: LinkUnderlay) => void;
+  place: UnderlayPlace;
+  /** Что показывает переключатель: у направления без ключа `inherit`, у
+   *  остальных действующее значение. */
+  choice: UnderlayChoice;
+  onChange: (value: UnderlayChoice) => void;
 }
 
 /**
@@ -729,14 +758,31 @@ export function legUnderlay(
   own: LinkUnderlay | undefined,
   inherited: LinkUnderlay | undefined,
   refusedNames: readonly string[],
-  onChange: (value: LinkUnderlay) => void,
+  onChange: (value: UnderlayChoice) => void,
+  place: UnderlayPlace = 'position',
 ): LegUnderlay {
   const names = new Set(nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)));
+  const facts = underlayFacts(nodeIds, nodeById, own, inherited);
   return {
-    facts: underlayFacts(nodeIds, nodeById, own, inherited),
+    facts,
     refused: refusedNames.filter((n) => names.has(n)),
+    place,
+    choice: place === 'direction' ? (own ?? 'inherit') : facts.value,
     onChange,
   };
+}
+
+/**
+ * `linkParams` ноги после выбора подложки. Колонка одна и заменяется целиком,
+ * поэтому остальные ключи (congestion) переносятся; `inherit` УБИРАЕТ ключ
+ * `underlay`, а не пишет `direct`. Пустой объект уходит как `null`: сервер
+ * читает их одинаково, а `null` честно говорит «ничего не выбрано».
+ */
+export function withUnderlay(params: LinkParams | null | undefined, choice: UnderlayChoice): LinkParams | null {
+  const next: LinkParams = { ...(params ?? {}) };
+  if (choice === 'inherit') delete next.underlay;
+  else next.underlay = choice;
+  return Object.keys(next).length > 0 ? next : null;
 }
 
 /**

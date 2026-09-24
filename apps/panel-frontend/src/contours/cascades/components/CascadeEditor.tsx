@@ -40,6 +40,7 @@ import {
   type LegFacts,
   type LinkPortConflict,
   type LegUnderlay,
+  type UnderlayChoice,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
 import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
@@ -601,9 +602,13 @@ export function LegRow({
   gaps = [],
   portTaken = [],
   underlay,
+  underlayNote,
 }: {
   /** Подложка ноги (фаза 8); нет, пока экрану нечем её сохранить. */
   underlay?: LegUnderlay;
+  /** Серая строка на месте переключателя, когда подложка этой ноги задаётся
+   *  в другом месте (каскад из одной ноги: у направления). */
+  underlayNote?: string;
   facts: LegFacts;
   /** Настройки этой ноги сверх ячейки. Поле у позиции появилось с Ф5.9
    *  (`2cfa08b`): до него нога между шагами молча брала дефолт движка. */
@@ -692,6 +697,12 @@ export function LegRow({
       </Box>
     )}
     {underlay && <UnderlayRow underlay={underlay} indent={38} />}
+    {!underlay && underlayNote && (
+      <Box style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 38 }}>
+        <FieldLabel>{t('cascadeCreate.underlayLabel')}</FieldLabel>
+        <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>{underlayNote}</Text>
+      </Box>
+    )}
 
     {/* Те же слова, что у ноги направления: источник факта разный
         (предсказание по движкам и отказ сервера), повод для оператора один. */}
@@ -872,24 +883,30 @@ export function DirectionLegRow({
  */
 function UnderlayRow({ underlay, indent }: { underlay: LegUnderlay; indent: number }) {
   const { t } = useTranslation();
-  const { facts, refused, onChange } = underlay;
+  const { facts, refused, place, choice, onChange } = underlay;
   const blocked = facts.missing.length > 0;
+  const named = (u: LinkUnderlay) => (u === 'awg' ? t('cascadeCreate.underlayAwg') : t('cascadeCreate.underlayDirect'));
   return (
     <Stack gap={6} style={{ paddingLeft: indent }}>
       <Box style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <FieldLabel>{t('cascadeCreate.underlayLabel')}</FieldLabel>
         <SegmentedControl
           size="xs"
-          value={facts.value}
-          onChange={(v) => onChange(v as LinkUnderlay)}
+          value={choice}
+          onChange={(v) => onChange(v as UnderlayChoice)}
           data={[
+            // Третье положение только у направления: ключа нет, нога идёт как
+            // последняя позиция, и в подписи сказано, как именно.
+            ...(place === 'direction'
+              ? [{ value: 'inherit', label: t('cascadeCreate.underlayInheritOption', { value: named(facts.value) }) }]
+              : []),
             { value: 'direct', label: t('cascadeCreate.underlayDirect') },
             { value: 'awg', label: t('cascadeCreate.underlayAwg'), disabled: blocked && facts.value !== 'awg' },
           ]}
         />
-        {facts.inherited && (
+        {place === 'one-leg' && (
           <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
-            {t('cascadeCreate.underlayInherited')}
+            {t('cascadeCreate.underlayOneLeg')}
           </Text>
         )}
       </Box>
