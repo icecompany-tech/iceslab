@@ -1,4 +1,6 @@
 import type { PolicyMatch } from '@/lib/domain/nodePolicies';
+import type { GeoSetKind } from '@/lib/domain/geoSets';
+import { extTokenKind } from '@/contours/traffic/lib/geoTagHint';
 
 /**
  * A rule's matchers, between the two shapes they live in.
@@ -13,9 +15,14 @@ import type { PolicyMatch } from '@/lib/domain/nodePolicies';
 const IP_PREFIXES = ['geoip:', 'ip:', 'cidr:'];
 
 /** An address-shaped token: a geoip set, a CIDR, or a bare v4/v6 literal.
- *  Everything else is a domain matcher, including bare hostnames. */
-export function isAddressToken(token: string): boolean {
+ *  Everything else is a domain matcher, including bare hostnames.
+ *
+ *  `ext:<name>:<tag>` (a panel geo set, phase 9) goes by the set's kind when
+ *  the set is known: a geoip set among the domains is a 400 GEO_REF_KIND. */
+export function isAddressToken(token: string, extKinds?: ReadonlyMap<string, GeoSetKind>): boolean {
+  if (extKinds && extTokenKind(token, extKinds) === 'geoip') return true;
   const t = token.trim().toLowerCase();
+  if (t.startsWith('ext:')) return false;
   if (IP_PREFIXES.some((p) => t.startsWith(p))) return true;
   if (/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(t)) return true;
   // A colon plus hex only: an v6 literal. `geosite:x` and `domain:x` carry
@@ -35,15 +42,19 @@ export function matchTokens(match: PolicyMatch): string[] {
  * the screen and edited goes back in unchanged. Whitespace alone is NOT a
  * separator: a matcher never contains a space, but a half-typed one might.
  */
-export function parseTokens(line: string, base: PolicyMatch): PolicyMatch {
+export function parseTokens(
+  line: string,
+  base: PolicyMatch,
+  extKinds?: ReadonlyMap<string, GeoSetKind>,
+): PolicyMatch {
   const tokens = line
     .split(/[,·\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
   return {
     ...base,
-    domain: tokens.filter((t) => !isAddressToken(t)),
-    ip: tokens.filter(isAddressToken),
+    domain: tokens.filter((t) => !isAddressToken(t, extKinds)),
+    ip: tokens.filter((t) => isAddressToken(t, extKinds)),
   };
 }
 

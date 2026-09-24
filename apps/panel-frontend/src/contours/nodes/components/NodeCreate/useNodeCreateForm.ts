@@ -26,7 +26,7 @@ import {
 import { coreVersionRefusal } from '@/lib/domain/coreVersions';
 import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
-import { nodeFieldKnown } from '@/contours/nodes/lib/nodeFields';
+import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 
 /**
  * Everything the create wizard owns that is not markup: the form, the profile

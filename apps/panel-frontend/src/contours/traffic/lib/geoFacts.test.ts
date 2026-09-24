@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  geoAttention,
   geoNameProblem,
   geoRolloutFacts,
   geoScreenFacts,
@@ -80,10 +81,30 @@ describe('geoSetActions', () => {
   });
 
   it('встроенный не удаляется; в проверке не трогаем источник и удаление', () => {
-    expect(geoSetActions(set({ source: { type: 'builtin', tag: 't' } })).delete).toBe(false);
-    expect(geoSetActions(set({ status: 'checking' }))).toMatchObject({ refresh: false, delete: false });
-    // Кто держит набор, скажет сервер: экран удаление не запрещает.
-    expect(geoSetActions(set({ usedByRules: 5 })).delete).toBe(true);
+    expect(geoSetActions(set({ source: { type: 'builtin', tag: 't' } }))).toMatchObject({
+      delete: false,
+      deleteBlocked: 'builtin',
+    });
+    expect(geoSetActions(set({ status: 'checking', usedByRules: 0 }))).toMatchObject({
+      refresh: false,
+      delete: false,
+      deleteBlocked: 'checking',
+    });
+  });
+
+  it('на набор ссылаются правила: удаление недоступно по известному факту (как E28)', () => {
+    expect(geoSetActions(set({ usedByRules: 5 }))).toMatchObject({ delete: false, deleteBlocked: 'used' });
+    expect(geoSetActions(set({ usedByRules: 0 }))).toMatchObject({ delete: true, deleteBlocked: null });
+  });
+});
+
+describe('geoAttention: строка над списком', () => {
+  it('битые по именам и отстающие ноды; тишина, когда нечего сказать', () => {
+    expect(geoAttention([set({ name: 'a', status: 'broken' }), set({ name: 'b' })], 2)).toEqual({
+      broken: ['a'],
+      nodesBehind: 2,
+    });
+    expect(geoAttention([set()], 0)).toBeNull();
   });
 });
 

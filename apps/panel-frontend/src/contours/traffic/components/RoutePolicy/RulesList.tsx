@@ -5,6 +5,8 @@ import { GripIcon, PlusIcon, TrashIcon } from '@/contours/traffic/components/Rou
 import { IconAction } from '@/contours/traffic/components/RoutePolicy/IconAction';
 import { splitMatch } from '@/contours/traffic/lib/routeRules';
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { GeoTagHint } from '@/contours/traffic/components/GeoTagHint';
 import type { RoutePolicyForm } from '@/contours/traffic/components/RoutePolicy/useRoutePolicyForm';
 
 /**
@@ -25,6 +27,8 @@ export function RulesList({
   setDragging,
 }: Pick<RoutePolicyForm, 'shadows' | 'setRule' | 'addRule' | 'removeRule' | 'move' | 'rules' | 'dragging' | 'setDragging'>) {
   const { t } = useTranslation();
+  // Какое поле правила в фокусе: подсказка тегов открыта только у него.
+  const [focused, setFocused] = useState<string | null>(null);
 
   return (
     <>
@@ -67,26 +71,35 @@ export function RulesList({
               <GripIcon size={12} color={DIM} />
             </Box>
 
-            <TextInput
-              className="routes-rule-match"
-              value={rule.match.join(' ')}
-              placeholder={t('routes.matchPlaceholder')}
-              onChange={(e) => setRule(i, { match: splitMatch(e.currentTarget.value) })}
-              styles={{
-                input: {
-                  fontFamily: MONO,
-                  fontSize: 12,
-                  height: 32,
-                  minHeight: 32,
-                  borderRadius: 7,
-                  paddingInline: 10,
-                  backgroundColor: WELL,
-                  borderColor: EDGE,
-                  color: shadowedBy ? SHADOW_INK : SNOW,
-                  textDecoration: shadowedBy ? 'line-through' : undefined,
-                },
-              }}
-            />
+            {/* Поле и подсказка тегов гео-набора под ним (Ф9.5). */}
+            <Box className="routes-rule-match" style={{ position: 'relative' }}>
+              <TextInput
+                value={rule.match.join(' ')}
+                placeholder={t('routes.matchPlaceholder')}
+                onChange={(e) => setRule(i, { match: splitMatch(e.currentTarget.value) })}
+                onFocus={() => setFocused(rule.id)}
+                onBlur={() => setFocused((f) => (f === rule.id ? null : f))}
+                styles={{
+                  input: {
+                    fontFamily: MONO,
+                    fontSize: 12,
+                    height: 32,
+                    minHeight: 32,
+                    borderRadius: 7,
+                    paddingInline: 10,
+                    backgroundColor: WELL,
+                    borderColor: EDGE,
+                    color: shadowedBy ? SHADOW_INK : SNOW,
+                    textDecoration: shadowedBy ? 'line-through' : undefined,
+                  },
+                }}
+              />
+              <GeoTagHint
+                line={rule.match.join(' ')}
+                open={focused === rule.id}
+                onPick={(line) => setRule(i, { match: splitMatch(line) })}
+              />
+            </Box>
 
             <ActionSelect
               value={rule.action}

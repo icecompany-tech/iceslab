@@ -13,13 +13,17 @@ import {
   geoSetRefusal,
   isNotImplemented,
   listGeoSets,
+  nodeGeoFacts,
   refreshGeoSet,
   replaceGeoSetFile,
   uploadGeoSet,
   type GeoSet,
   type GeoSetKind,
 } from '@/lib/domain/geoSets';
+import { listNodes } from '@/lib/domain/nodes';
+import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 import {
+  geoAttention,
   geoNameProblem,
   geoScreenFacts,
   geoSetActions,
@@ -73,6 +77,14 @@ export function GeoSetsPage() {
     sets: setsQuery.data?.geoSets,
     notImplemented: isNotImplemented(setsQuery.error),
   });
+
+  // Что требует внимания: битые наборы и ноды, у которых гео отстаёт. Ноды
+  // считаются по факту карточек (nodeGeoFacts), тем же ключом кэша, что у
+  // списка нод. Отдельного ящика внимания в панели пока нет.
+  const nodesQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
+  const geoKnown = nodeFieldKnown(nodesQuery.data, 'geo');
+  const nodesBehind = (nodesQuery.data?.nodes ?? []).filter((n) => nodeGeoFacts(n, geoKnown)?.state === 'behind').length;
+  const attention = facts.state === 'list' ? geoAttention(facts.sets, nodesBehind) : null;
 
   const [adding, setAdding] = useState<'url' | 'upload' | null>(null);
   const [rolloutFor, setRolloutFor] = useState<GeoSet | null>(null);
@@ -158,6 +170,21 @@ export function GeoSetsPage() {
           {t('geoSets.upload')}
         </GhostButton>
       </Box>
+
+      {attention && (
+        <Box style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${AMBER}55`, backgroundColor: `${AMBER}12` }}>
+          {attention.broken.length > 0 && (
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: RED }}>
+              {t('geoSets.attention.broken', { count: attention.broken.length, names: attention.broken.join(', ') })}
+            </Text>
+          )}
+          {attention.nodesBehind > 0 && (
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '18px', color: AMBER }}>
+              {t('geoSets.attention.behind', { count: attention.nodesBehind })}
+            </Text>
+          )}
+        </Box>
+      )}
 
       {facts.state === 'unavailable' && (
         <Placeholder
@@ -315,7 +342,11 @@ function GeoSetRow({
         <GhostButton disabled={!actions.rollout} onClick={onRollout}>
           {t('geoSets.rolloutAction')}
         </GhostButton>
-        <GhostButton disabled={!actions.delete} onClick={onDelete}>
+        <GhostButton
+          disabled={!actions.delete}
+          title={actions.deleteBlocked ? t(`geoSets.deleteBlocked.${actions.deleteBlocked}`, { count: set.usedByRules }) : undefined}
+          onClick={onDelete}
+        >
           {t('common.delete')}
         </GhostButton>
       </Box>
@@ -517,11 +548,22 @@ function Label({ children }: { children: string }) {
 }
 
 /** Тихая кнопка. Своя, а не из чужого контура: линт это стережёт. */
-function GhostButton({ children, disabled, onClick }: { children: string; disabled?: boolean; onClick: () => void }) {
+function GhostButton({
+  children,
+  disabled,
+  title,
+  onClick,
+}: {
+  children: string;
+  disabled?: boolean;
+  title?: string;
+  onClick: () => void;
+}) {
   return (
     <UnstyledButton
       type="button"
       disabled={disabled}
+      title={title}
       onClick={onClick}
       style={{
         height: 32,

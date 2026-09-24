@@ -36,7 +36,7 @@ import { FleetEmpty } from '@/contours/nodes/components/FleetEmpty';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { nodeGeoFacts } from '@/lib/domain/geoSets';
-import { nodeFieldKnown } from '@/contours/nodes/lib/nodeFields';
+import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 import { policyBadgeFacts } from '@/contours/nodes/lib/policyReach';
 import {
   deleteNode,

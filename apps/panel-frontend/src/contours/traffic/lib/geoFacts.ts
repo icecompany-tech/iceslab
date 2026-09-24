@@ -69,10 +69,12 @@ export function geoSetState(set: Pick<GeoSet, 'status' | 'current'>): GeoSetStat
  *   replaceFile  у загруженного файла «обновить» это загрузить новый файл;
  *   rollout      «Разослать на ноды» есть только при проверенной версии
  *                (сервер иначе 409 GEO_SET_NOT_VERIFIED);
- *   delete       встроенные не удаляются (409 GEO_SET_BUILTIN), остальные
- *                удаляются, а кто держит набор, скажет 409 GEO_SET_IN_USE
- *                поимённо: запрет по вычисленному здесь был бы отказом по
- *                неполному знанию.
+ *   delete       встроенные не удаляются (409 GEO_SET_BUILTIN). На набор
+ *                ссылаются правила (`usedByRules > 0`, факт из списка):
+ *                кнопка недоступна с подписью «в N правилах», по образцу E28.
+ *                Не запрещать по известному факту значило бы делать вид, что
+ *                его нет; 409 GEO_SET_IN_USE остаётся для гонки и называет
+ *                ссылки поимённо.
  * Пока идёт проверка, трогать источник и удалять нельзя: итог перезапишет.
  */
 export interface GeoSetActions {
@@ -80,16 +82,35 @@ export interface GeoSetActions {
   replaceFile: boolean;
   rollout: boolean;
   delete: boolean;
+  /** Почему удалить нельзя, когда нельзя по факту. */
+  deleteBlocked: 'builtin' | 'used' | 'checking' | null;
 }
 
-export function geoSetActions(set: Pick<GeoSet, 'source' | 'status' | 'current'>): GeoSetActions {
+export function geoSetActions(set: Pick<GeoSet, 'source' | 'status' | 'current' | 'usedByRules'>): GeoSetActions {
   const busy = set.status === 'checking';
+  const deleteBlocked =
+    set.source.type === 'builtin' ? 'builtin' : set.usedByRules > 0 ? 'used' : busy ? 'checking' : null;
   return {
     refresh: set.source.type !== 'upload' && !busy,
     replaceFile: set.source.type === 'upload' && !busy,
     rollout: set.current !== null,
-    delete: set.source.type !== 'builtin' && !busy,
+    delete: deleteBlocked === null,
+    deleteBlocked,
   };
+}
+
+/**
+ * Что требует внимания по гео, одной строкой над списком: битые наборы по
+ * именам и сколько нод отстаёт. Ноды считаются по факту карточек
+ * (`nodeGeoFacts` = behind), а не суммой `nodes.behind` наборов: одна нода,
+ * отстающая по двум наборам, это одна нода.
+ */
+export function geoAttention(
+  sets: Pick<GeoSet, 'name' | 'status'>[],
+  nodesBehind: number,
+): { broken: string[]; nodesBehind: number } | null {
+  const broken = sets.filter((s) => s.status === 'broken').map((s) => s.name);
+  return broken.length === 0 && nodesBehind === 0 ? null : { broken, nodesBehind };
 }
 
 /**

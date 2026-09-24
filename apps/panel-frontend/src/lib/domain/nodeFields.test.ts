@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeFieldKnown } from '@/contours/nodes/lib/nodeFields';
+import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 import type { Node } from '@/lib/domain/nodes';
 
 const node = (n: Partial<Node>) => n as Node;

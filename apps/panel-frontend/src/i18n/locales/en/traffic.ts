@@ -266,6 +266,26 @@ export const traffic = {
     deleteBodyUsed_one: '{{count}} rule refers to the set: the server refuses and names it. Detach the set there, then delete.',
     deleteBodyUsed_other: '{{count}} rules refer to the set: the server refuses and names them. Detach the set there, then delete.',
     inUse: 'The set is held by: {{uses}}. Detach it there and the delete goes through.',
+    deleteBlocked: {
+      builtin: 'A built-in set is not deleted',
+      checking: 'A check is running: delete after it finishes',
+      used_one: 'Cannot delete: the set is in {{count}} rule, detach it there first',
+      used_other: 'Cannot delete: the set is in {{count}} rules, detach it there first',
+    },
+    attention: {
+      broken_one: 'Broken set: {{names}}.',
+      broken_other: 'Broken sets: {{names}}.',
+      behind_one: 'Geo is behind the intent on {{count}} node: roll the set out or look at the node card.',
+      behind_other: 'Geo is behind the intent on {{count}} nodes: roll the set out or look at the node cards.',
+    },
+    hint: {
+      unknownSet: 'There is no set "{{name}}": the server will not take this reference.',
+      noCurrent: 'Set "{{name}}" has no verified version: its tags are unknown and the server does not check them.',
+      noTags: 'No tags for "{{q}}".',
+      entries_one: '{{count}} entry',
+      entries_other: '{{count}} entries',
+      more: '{{shown}} of {{total}} shown, type more',
+    },
     usesUnnamed: 'the server did not say who',
     useKind: {
       'node-policy': 'node policy "{{name}}"',

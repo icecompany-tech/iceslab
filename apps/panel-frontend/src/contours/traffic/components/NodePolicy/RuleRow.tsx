@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Menu, Text, TextInput, UnstyledButton } from '@mantine/core';
+import { GeoTagHint } from '@/contours/traffic/components/GeoTagHint';
+import { useGeoSets } from '@/contours/traffic/lib/useGeoSets';
 import type { PolicyActionKind, PolicyRule } from '@/lib/domain/nodePolicies';
 import {
   CYAN,
@@ -57,6 +60,9 @@ export function RuleRow({
   onGrab: (e: React.PointerEvent) => void;
 }) {
   const { t } = useTranslation();
+  const { kinds } = useGeoSets();
+  const [focused, setFocused] = useState(false);
+  const line = matchTokens(rule.match).join(' · ');
   const shadowed = shadowNote !== null;
   const tone = ACTION_TONE[rule.action.kind];
   const extras = extraMatchers(rule.match);
@@ -106,14 +112,19 @@ export function RuleRow({
         <GripIcon size={12} color="#3A4A60" />
       </Box>
 
+      {/* Поле и подсказка тегов гео-набора под ним (Ф9.5). `ext:` своего
+          набора разбирается по его виду: geoip-набор уходит в адреса. */}
+      <Box style={{ position: 'relative', width: MATCH_W, flexShrink: 0 }}>
       <TextInput
-        value={matchTokens(rule.match).join(' · ')}
+        value={line}
         onChange={(e) =>
-          onChange({ ...rule, match: parseTokens(e.currentTarget.value, rule.match) })
+          onChange({ ...rule, match: parseTokens(e.currentTarget.value, rule.match, kinds) })
         }
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder={t('routes.nodeMatchPlaceholder')}
         styles={{
-          root: { width: MATCH_W, flexShrink: 0 },
+          root: { width: '100%' },
           input: {
             height: 32,
             minHeight: 32,
@@ -129,6 +140,12 @@ export function RuleRow({
           },
         }}
       />
+      <GeoTagHint
+        line={line}
+        open={focused}
+        onPick={(next) => onChange({ ...rule, match: parseTokens(next, rule.match, kinds) })}
+      />
+      </Box>
 
       <Menu position="bottom-start" offset={4} withinPortal>
         <Menu.Target>
