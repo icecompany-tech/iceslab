@@ -3,18 +3,20 @@
  * agent renders it only as REALITY steal-others over raw, and the save names
  * the field that is not that.
  *
- * Three shapes, one meaning:
- *   create profile  400 VALIDATION_ERROR, issues[].path = ['config', field];
- *   edit profile    400 { error: 'INVALID', message, path: ['config', field] };
- *   binding POST/PUT the same 400 with path ['overrides', field].
+ * Two shapes, one code (SINGBOX_XRAY_FAMILY, 149968e):
+ *   create profile   400 VALIDATION_ERROR, an issue with params.code and
+ *                    path ['config', field];
+ *   edit profile,    400 { error: 'SINGBOX_XRAY_FAMILY', message, path }, path
+ *   bindings, hosts  ['config' | 'overrides', field].
  *
- * ⚠ The path alone is not enough: the socks/http refinement answers on
- * ['config', 'security'] too. The message is what tells them apart today
- * (it names sing-box); a code of its own from the server would be sturdier.
+ * By the code and never by the path: the socks/http refusal answers on
+ * ['config', 'security'] too, with INVALID.
  *
  * The input is checked first: this reads a network error, and after
  * `as unknown` anything goes. `null` = not this refusal.
  */
+const CODE = 'SINGBOX_XRAY_FAMILY';
+
 export const SINGBOX_XRAY_FIELDS = ['security', 'realityMode', 'network'] as const;
 export type SingboxXrayField = (typeof SINGBOX_XRAY_FIELDS)[number];
 
@@ -23,12 +25,11 @@ export interface SingboxXrayRefusal {
   field: SingboxXrayField;
 }
 
-function fromPath(path: unknown, message: unknown): SingboxXrayRefusal | null {
+function fromPath(path: unknown): SingboxXrayRefusal | null {
   if (!Array.isArray(path) || path.length !== 2) return null;
   const [where, field] = path as unknown[];
   if (where !== 'config' && where !== 'overrides') return null;
   if (!(SINGBOX_XRAY_FIELDS as readonly unknown[]).includes(field)) return null;
-  if (typeof message !== 'string' || !message.includes('sing-box')) return null;
   return { where, field: field as SingboxXrayField };
 }
 
@@ -36,16 +37,18 @@ export function singboxXrayRefusal(err: unknown): SingboxXrayRefusal | null {
   if (!err || typeof err !== 'object') return null;
   const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
   if (!res || res.status !== 400 || !res.data || typeof res.data !== 'object') return null;
-  const data = res.data as { error?: unknown; message?: unknown; path?: unknown; issues?: unknown };
+  const data = res.data as { error?: unknown; path?: unknown; issues?: unknown };
+  if (data.error === CODE) return fromPath(data.path);
   if (Array.isArray(data.issues)) {
     for (const issue of data.issues) {
       if (!issue || typeof issue !== 'object') continue;
-      const i = issue as { path?: unknown; message?: unknown };
-      const hit = fromPath(i.path, i.message);
+      const i = issue as { path?: unknown; params?: unknown };
+      const params = i.params && typeof i.params === 'object' ? (i.params as { code?: unknown }) : null;
+      if (params?.code !== CODE) continue;
+      const hit = fromPath(i.path);
       if (hit) return hit;
     }
   }
-  if (data.error === 'INVALID') return fromPath(data.path, data.message);
   return null;
 }
 

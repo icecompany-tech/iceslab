@@ -4,36 +4,41 @@ import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray
 // The server's own sentence (profiles.schemas.ts SINGBOX_XRAY_FAMILY_MESSAGE).
 const MSG =
   'sing-box serves the xray family only as REALITY over raw; use the xray engine for TLS, none, self-steal and other transports';
+const CODE = 'SINGBOX_XRAY_FAMILY';
 const res = (data: unknown, status = 400) => ({ response: { status, data } });
+const createIssue = (field: string, params: unknown = { code: CODE }) =>
+  res({ error: 'VALIDATION_ERROR', message: 'Invalid input', issues: [{ code: 'custom', message: MSG, path: ['config', field], params }] });
 
 describe('singboxXrayRefusal', () => {
-  it('создание: каждое из трёх полей по issues[].path', () => {
+  it('создание: каждое из трёх полей, issue с params.code', () => {
     for (const field of ['security', 'realityMode', 'network']) {
-      const err = res({ error: 'VALIDATION_ERROR', message: 'Invalid input', issues: [{ code: 'custom', message: MSG, path: ['config', field] }] });
-      expect(singboxXrayRefusal(err)).toEqual({ where: 'config', field });
+      expect(singboxXrayRefusal(createIssue(field))).toEqual({ where: 'config', field });
     }
   });
 
-  it('правка: { error: INVALID, path }', () => {
-    expect(singboxXrayRefusal(res({ error: 'INVALID', message: MSG, path: ['config', 'network'] }))).toEqual({
+  it('правка профиля: { error: SINGBOX_XRAY_FAMILY, path config }', () => {
+    expect(singboxXrayRefusal(res({ error: CODE, message: MSG, path: ['config', 'network'] }))).toEqual({
       where: 'config',
       field: 'network',
     });
   });
 
-  it('привязка: path overrides', () => {
-    expect(singboxXrayRefusal(res({ error: 'INVALID', message: MSG, path: ['overrides', 'network'] }))).toEqual({
+  it('привязка и хост: path overrides', () => {
+    expect(singboxXrayRefusal(res({ error: CODE, message: MSG, path: ['overrides', 'security'] }))).toEqual({
       where: 'overrides',
-      field: 'network',
+      field: 'security',
     });
   });
 
-  it('отказ socks/http на том же пути config.security это не он', () => {
-    const socks = res({
-      error: 'VALIDATION_ERROR',
-      issues: [{ code: 'custom', message: 'subprotocol socks takes security "none" only (got "reality")', path: ['config', 'security'] }],
-    });
-    expect(singboxXrayRefusal(socks)).toBeNull();
+  it('по коду, не по пути и не по тексту: socks/http на config.security это не он', () => {
+    // Тот же путь и даже тот же текст, но код INVALID или его нет.
+    expect(singboxXrayRefusal(res({ error: 'INVALID', message: MSG, path: ['config', 'security'] }))).toBeNull();
+    expect(singboxXrayRefusal(createIssue('security', null))).toBeNull();
+    expect(
+      singboxXrayRefusal(res({ issues: [{ code: 'custom', message: MSG, path: ['config', 'security'] }] })),
+    ).toBeNull();
+    expect(singboxXrayRefusal(createIssue('security', { code: 'OTHER' }))).toBeNull();
+    expect(singboxXrayRefusal(createIssue('security', 'x'))).toBeNull();
   });
 
   it('мусор и чужие ответы: null', () => {
@@ -42,10 +47,12 @@ describe('singboxXrayRefusal', () => {
       undefined,
       'boom',
       new Error('x'),
-      res({ error: 'INVALID', message: MSG, path: ['engine'] }),
-      res({ error: 'INVALID', message: MSG, path: ['config', 'flow'] }),
-      res({ error: 'INVALID', message: MSG, path: ['config', 'network'] }, 409),
+      res({ error: CODE, message: MSG, path: ['engine'] }),
+      res({ error: CODE, message: MSG, path: ['config', 'flow'] }),
+      res({ error: CODE, message: MSG, path: 'config.network' }),
+      res({ error: CODE, message: MSG, path: ['config', 'network'] }, 409),
       res({ issues: 'nope' }),
+      res({ issues: [null, 'x', { params: null }] }),
       res(null),
     ]) {
       expect(singboxXrayRefusal(e)).toBeNull();
