@@ -23,7 +23,7 @@ import type {
   ListNodesQuery,
   HardeningInput,
 } from './nodes.schemas.js';
-import { resolveCoreVersions, type EngineName } from '@iceslab/shared';
+import { resolveCoreVersions } from '@iceslab/shared';
 import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { resolveNodeEngines } from './node-intended-engines.js';
@@ -337,7 +337,7 @@ export async function getNodeById(id: string): Promise<PublicNodeDto> {
 function withHostCounts(
   node: Parameters<typeof mapNodeToPublic>[0],
   hiddenByCascade: PublicNodeDto['hiddenByCascade'],
-  counts: Map<EngineName, number> | undefined,
+  counts: Map<string, number> | undefined,
 ): PublicNodeDto {
   const dto = mapNodeToPublic(node);
   return { ...dto, cores: withNeededBy(dto.cores, counts), hiddenByCascade };

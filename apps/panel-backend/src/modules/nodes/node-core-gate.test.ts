@@ -205,12 +205,14 @@ describe('the core gate on putting a host on a node', () => {
 });
 
 describe('neededBy on the node response', () => {
-  it('counts enabled hosts per engine, zero for an unneeded core, one query for the list', async () => {
+  it('counts enabled hosts per core row, zero for an unneeded core, one query for the list', async () => {
     const nodeId = await makeNode();
     await report(
       nodeId,
       [
         { name: 'xray', engine: 'xray', installed: true },
+        // Same engine, another adapter: an xray host does not need it.
+        { name: 'shadowsocks', engine: 'xray', installed: true },
         { name: 'hysteria', engine: 'hysteria', installed: true },
         { name: 'tuic', engine: 'singbox', installed: false },
         // An agent older than `engine`: no key, not a guess.
@@ -236,6 +238,7 @@ describe('neededBy on the node response', () => {
         node.cores.cores.map((c: { name: string; neededBy?: number }) => [c.name, c]),
       );
       expect(rows.xray.neededBy).toBe(2);
+      expect(rows.shadowsocks.neededBy).toBe(0);
       expect(rows.hysteria.neededBy).toBe(1);
       expect(rows.tuic.neededBy).toBe(0);
       expect('neededBy' in rows.mieru).toBe(false);

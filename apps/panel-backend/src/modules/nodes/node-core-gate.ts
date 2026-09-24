@@ -125,41 +125,52 @@ export function assertCoreOnNode(
 }
 
 /**
- * How many enabled hosts on each node are served by each engine: the hint
- * beside a core in the node's "Cores" section ("this core is needed by N
- * hosts"). A host counts when it and its binding are both enabled, because a
- * disabled binding is not deployed. One query for any number of nodes.
+ * Which core row serves a profile: the row of the profile's protocol on the
+ * engine that renders it. A core row is one ADAPTER (`name` = protocol,
+ * `engine`), not one engine: a node carries xray[xray] and shadowsocks[xray]
+ * side by side, and an xray host needs the first and not the second. Keying
+ * by engine alone put "needed by 1" on both (stand, 24.09).
  */
-export async function hostsByEngine(nodeIds: string[]): Promise<Map<string, Map<EngineName, number>>> {
-  const out = new Map<string, Map<EngineName, number>>();
+function coreRowKey(protocol: string, engine: string): string {
+  return `${protocol}|${engine}`;
+}
+
+/**
+ * How many enabled hosts on each node each core row serves: the hint beside a
+ * core in the node's "Cores" section ("this core is needed by N hosts"). A
+ * host counts when it and its binding are both enabled, because a disabled
+ * binding is not deployed. One query for any number of nodes.
+ */
+export async function hostsByEngine(nodeIds: string[]): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
   if (nodeIds.length === 0) return out;
   const hosts = await prisma.host.findMany({
     where: { enabled: true, binding: { enabled: true, nodeId: { in: nodeIds } } },
     select: { binding: { select: { nodeId: true, profile: { select: { protocol: true, engine: true } } } } },
   });
   for (const h of hosts) {
-    const engine = effectiveEngineOf(h.binding.profile);
-    const perNode = out.get(h.binding.nodeId) ?? new Map<EngineName, number>();
-    perNode.set(engine, (perNode.get(engine) ?? 0) + 1);
+    const key = coreRowKey(h.binding.profile.protocol, effectiveEngineOf(h.binding.profile));
+    const perNode = out.get(h.binding.nodeId) ?? new Map<string, number>();
+    perNode.set(key, (perNode.get(key) ?? 0) + 1);
     out.set(h.binding.nodeId, perNode);
   }
   return out;
 }
 
 /**
- * The report with `neededBy` on every row that names its engine (zero for an
- * engine no host needs). A row without `engine` is an agent older than the
- * field: its engine cannot be told, so it gets no key rather than a guess.
+ * The report with `neededBy` on every row that names its engine (zero for a
+ * core no host needs). A row without `engine` is an agent older than the
+ * field: which adapter it is cannot be told, so it gets no key, not a guess.
  */
 export function withNeededBy(
   cores: NodeCores | null,
-  counts: Map<EngineName, number> | undefined,
+  counts: Map<string, number> | undefined,
 ): NodeCores | null {
   if (!cores) return cores;
   return {
     ...cores,
     cores: cores.cores.map((c): NodeCoreInfo =>
-      c.engine === undefined ? c : { ...c, neededBy: counts?.get(c.engine) ?? 0 },
+      c.engine === undefined ? c : { ...c, neededBy: counts?.get(coreRowKey(c.name, c.engine)) ?? 0 },
     ),
   };
 }
