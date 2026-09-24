@@ -5,7 +5,7 @@ import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { ROOT, cidr, datFile, domain, geoip, site } from '../../../tests/helpers/geo-dat.js';
-import { ensureBuiltinSets, fetchBuiltin, ingestGeoFile, sha256Hex } from './geo-sets.store.js';
+import { ensureBuiltinSets, fetchBuiltin, fetchUrl, ingestGeoFile, sha256Hex } from './geo-sets.store.js';
 
 /**
  * Phase 9.1: how a file becomes a version. The status is the last attempt,
@@ -158,6 +158,46 @@ describe('pins hold a version, a whole set still goes', () => {
     await expect(
       prisma.geoSet.create({ data: { name: '../x', kind: 'geosite', sourceType: 'upload' } }),
     ).rejects.toThrow(/geo_sets_name_check/);
+  });
+});
+
+describe('a set fetched from a URL', () => {
+  const URL_ = 'https://lists.example.com/mine.dat';
+  async function urlSet(sha256Source: 'sidecar' | 'manual', sha256Manual: string | null = null) {
+    return prisma.geoSet.create({
+      data: { name: 'mine', kind: 'geosite', sourceType: 'url', url: URL_, sha256Source, sha256Manual },
+      select: { id: true },
+    });
+  }
+  /** Serves the file and, when given, its sidecar; everything else 404. */
+  const site_ = (sidecar: string | null): typeof fetch =>
+    (async (input: string | URL | Request) => {
+      const u = String(input);
+      if (u === URL_) return new Response(Buffer.from(good));
+      if (u === `${URL_}.sha256sum` && sidecar !== null) return new Response(sidecar);
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+
+  it('takes the sha256 from the sidecar next to the file', async () => {
+    const { id } = await urlSet('sidecar');
+    expect((await fetchUrl(id, site_(`${sha256Hex(good)}  mine.dat\n`))).status).toBe('verified');
+  });
+
+  it('a sidecar that is missing or says nothing is broken, not skipped', async () => {
+    const { id } = await urlSet('sidecar');
+    expect(await fetchUrl(id, site_(null))).toEqual({
+      status: 'broken',
+      error: `sidecar sha256 not read: HTTP 404 from ${URL_}.sha256sum`,
+    });
+    expect(await fetchUrl(id, site_('<html>not found</html>'))).toEqual({
+      status: 'broken',
+      error: `sidecar ${URL_}.sha256sum does not start with a sha256`,
+    });
+  });
+
+  it('a manual sha256 the file does not have', async () => {
+    const { id } = await urlSet('manual', 'cd'.repeat(32));
+    expect(await fetchUrl(id, site_(null))).toMatchObject({ status: 'broken', error: expect.stringMatching(/^sha256 of the file is/) });
   });
 });
 

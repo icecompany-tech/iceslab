@@ -33,6 +33,7 @@ import { settingsRoutes } from './modules/settings/settings.routes.js';
 import { bullBoardRoutes } from './modules/admin/bull-board.routes.js';
 import { systemRoutes } from './modules/system/system.routes.js';
 import { recipesRoutes } from './modules/recipes/recipes.routes.js';
+import { geoSetsRoutes } from './modules/geo-sets/geo-sets.routes.js';
 import { registerSecurityGate } from './lib/auth/security-gate.js';
 import { registry as metricsRegistry, httpRequestDuration, routeLabel } from './lib/infra/metrics.js';
 import { requireAuth } from './modules/auth/auth.hook.js';
@@ -291,6 +292,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(bullBoardRoutes);
   await app.register(systemRoutes);
   await app.register(recipesRoutes);
+  await app.register(geoSetsRoutes);
 
   return app;
 }

@@ -2,7 +2,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import { GEO_BUILTIN, GEO_SET_KINDS, type GeoSetKind } from '@iceslab/shared';
 import { redis } from '../../lib/infra/redis.js';
 import { getLogger } from '../../lib/infra/logger.js';
-import { builtinNeedsFetch, ensureBuiltinSets, fetchBuiltin } from './geo-sets.store.js';
+import { builtinNeedsFetch, ensureBuiltinSets, fetchBuiltin, fetchUrl } from './geo-sets.store.js';
 
 /**
  * Geo files are fetched and checked in the background: a list of tens of
@@ -10,13 +10,11 @@ import { builtinNeedsFetch, ensureBuiltinSets, fetchBuiltin } from './geo-sets.s
  * meanwhile (geo-contract.md section 5).
  */
 
-export interface FetchBuiltinJobData {
-  kind: GeoSetKind;
-}
+export type GeoSetsJobData = { kind: GeoSetKind } | { setId: string };
 
 const QUEUE_NAME = 'geo-sets';
 
-export const geoSetsQueue = new Queue<FetchBuiltinJobData>(QUEUE_NAME, {
+export const geoSetsQueue = new Queue<GeoSetsJobData>(QUEUE_NAME, {
   connection: redis,
   defaultJobOptions: {
     // One attempt: a failure is written on the set as `broken` in words, and
@@ -31,6 +29,16 @@ export const geoSetsQueue = new Queue<FetchBuiltinJobData>(QUEUE_NAME, {
   },
 });
 
+export async function enqueueBuiltinFetch(kind: GeoSetKind): Promise<void> {
+  await geoSetsQueue.add('fetchBuiltin', { kind }, { jobId: `builtin-${kind}-${GEO_BUILTIN[kind].tag}` });
+}
+
+/** One fetch per set at a time: a second press of "refresh now" while the
+ *  first is still downloading joins it instead of starting another. */
+export async function enqueueUrlFetch(setId: string): Promise<void> {
+  await geoSetsQueue.add('fetchUrl', { setId }, { jobId: `url-${setId}` });
+}
+
 /**
  * On start: both built-in sets exist, and the ones not yet on the pinned
  * release get a fetch. The job id names the release, so two starts in a row
@@ -39,18 +47,20 @@ export const geoSetsQueue = new Queue<FetchBuiltinJobData>(QUEUE_NAME, {
 export async function scheduleBuiltinFetch(): Promise<void> {
   await ensureBuiltinSets();
   for (const kind of GEO_SET_KINDS) {
-    if (!(await builtinNeedsFetch(kind))) continue;
-    await geoSetsQueue.add('fetchBuiltin', { kind }, { jobId: `builtin-${kind}-${GEO_BUILTIN[kind].tag}` });
+    if (await builtinNeedsFetch(kind)) await enqueueBuiltinFetch(kind);
   }
 }
 
-export function startGeoSetsWorker(): Worker<FetchBuiltinJobData> {
-  return new Worker<FetchBuiltinJobData>(
+export function startGeoSetsWorker(): Worker<GeoSetsJobData> {
+  return new Worker<GeoSetsJobData>(
     QUEUE_NAME,
-    async (job: Job<FetchBuiltinJobData>) => {
+    async (job: Job<GeoSetsJobData>) => {
       switch (job.name) {
         case 'fetchBuiltin':
-          await fetchBuiltin(job.data.kind);
+          await fetchBuiltin((job.data as { kind: GeoSetKind }).kind);
+          break;
+        case 'fetchUrl':
+          await fetchUrl((job.data as { setId: string }).setId);
           break;
         default:
           throw new Error(`Unknown job name: ${job.name}`);

@@ -144,6 +144,50 @@ export async function ensureBuiltinSets(): Promise<void> {
   });
 }
 
+/**
+ * Downloads an operator's set from its URL and ingests it against the sha256
+ * its source vouches for: the one the operator typed (`manual`), or the first
+ * 64 hex of `<url>.sha256sum` (`sidecar`, the way v2fly and most list
+ * publishers ship them). A sidecar that cannot be read is `broken`: a file
+ * nobody vouched for is not quietly taken on the parse alone.
+ *
+ * The schedule, conditional requests and the other formats are phase 9.4.
+ */
+export async function fetchUrl(setId: string, fetchImpl: typeof fetch = fetch): Promise<IngestOutcome> {
+  const set = await prisma.geoSet.findUniqueOrThrow({
+    where: { id: setId },
+    select: { url: true, sha256Source: true, sha256Manual: true },
+  });
+  if (!set.url) return markBroken(setId, 'the set has no URL');
+  await markChecking(setId);
+
+  const get = async (url: string): Promise<Uint8Array | string> => {
+    try {
+      const res = await fetchImpl(url, { redirect: 'follow', signal: AbortSignal.timeout(600_000) });
+      if (!res.ok) return `HTTP ${res.status} from ${url}`;
+      return new Uint8Array(await res.arrayBuffer());
+    } catch (err) {
+      return `${err instanceof Error ? err.message : String(err)} (${url})`;
+    }
+  };
+
+  let expected: string;
+  if (set.sha256Source === 'manual') {
+    if (!set.sha256Manual) return markBroken(setId, 'sha256 is set to manual and none was given');
+    expected = set.sha256Manual;
+  } else {
+    const side = await get(`${set.url}.sha256sum`);
+    if (typeof side === 'string') return markBroken(setId, `sidecar sha256 not read: ${side}`);
+    const hex = /^\s*([0-9a-fA-F]{64})\b/.exec(new TextDecoder().decode(side.subarray(0, 512)))?.[1];
+    if (!hex) return markBroken(setId, `sidecar ${set.url}.sha256sum does not start with a sha256`);
+    expected = hex.toLowerCase();
+  }
+
+  const bytes = await get(set.url);
+  if (typeof bytes === 'string') return markBroken(setId, `download failed: ${bytes}`);
+  return ingestGeoFile(setId, { bytes, expectedSha256: expected });
+}
+
 /** Whether the built-in set of `kind` still has to fetch its pinned release. */
 export async function builtinNeedsFetch(kind: GeoSetKind, release: GeoBuiltinRelease = GEO_BUILTIN[kind]): Promise<boolean> {
   const set = await prisma.geoSet.findUnique({
