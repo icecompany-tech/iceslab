@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import {
   REALITY_RECORD_LIMIT,
-  REALITY_TARGET_SUGGESTION,
+  REALITY_TARGET_SUGGESTIONS,
   buildClientHello,
   measureRealityFlight,
   parseServerFlight,
@@ -58,7 +58,7 @@ describe('the verdict on a first flight', () => {
     const why = realityFlightRefusal(f);
     expect(why).toContain('8273');
     expect(why).toContain(String(REALITY_RECORD_LIMIT));
-    expect(why).toContain(REALITY_TARGET_SUGGESTION);
+    for (const target of REALITY_TARGET_SUGGESTIONS) expect(why).toContain(target);
   });
 
   it('accepts the flight www.apple.com sends', () => {
@@ -197,7 +197,7 @@ describe('the dest row of test-connect', () => {
     expect(r.ok).toBe(false);
     expect(r.handshakeRecordMax).toBe(8273);
     expect(r.error).toContain('REALITY dest');
-    expect(r.error).toContain(REALITY_TARGET_SUGGESTION);
+    expect(r.error).toContain(REALITY_TARGET_SUGGESTIONS[0]);
   });
 
   it('stays as the TLS probe left it when the flight could not be read', () => {

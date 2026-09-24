@@ -31,8 +31,13 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 /** The listener's limit, per record, header included. */
 export const REALITY_RECORD_LIMIT = 8192;
 
-/** A target measured to pass with room to spare, named in the refusal. */
-export const REALITY_TARGET_SUGGESTION = 'www.apple.com';
+/**
+ * Targets measured with this very probe to pass with room to spare, named in
+ * the refusal. Measured 2026-09-24: www.apple.com 4738, www.samsung.com 4700,
+ * www.cloudflare.com about 2.7K (one record). A list rather than one name, so
+ * an operator who cannot use one of them still has a choice.
+ */
+export const REALITY_TARGET_SUGGESTIONS = ['www.apple.com', 'www.samsung.com', 'www.cloudflare.com'] as const;
 
 const X25519 = 0x001d;
 const X25519MLKEM768 = 0x11ec;
@@ -179,7 +184,7 @@ export function realityFlightRefusal(flight: ServerFlight): string | undefined {
     return (
       `the target sends a handshake record of ${largest} bytes and REALITY gives up above ` +
       `${REALITY_RECORD_LIMIT} (sing-box 1.13.14 and xray 26.3.27 alike): every handshake through it fails. ` +
-      `Pick another target, for example ${REALITY_TARGET_SUGGESTION}.`
+      `Pick another target, for example one of ${REALITY_TARGET_SUGGESTIONS.join(', ')} (measured to pass).`
     );
   }
   return undefined;
