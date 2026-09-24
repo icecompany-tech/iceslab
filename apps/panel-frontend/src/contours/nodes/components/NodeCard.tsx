@@ -281,7 +281,9 @@ export function NodeCard({
         {/* Гео: намерение против факта по sha файлов. «Отстаёт» янтарным и с
             именами наборов, но это предупреждение, а не отказ: пины двигает
             «Разослать на ноды» на экране наборов. */}
-        {node.geo && (() => {
+        {/* Правила ноды наборов не используют (unused): строки нет вовсе,
+            сообщала нода или нет (geo-contract §4, ARCH 24.09). */}
+        {node.geo && node.geo.state !== 'unused' && (() => {
           const g = node.geo;
           const tone = g.state === 'behind' ? AMBER : g.state === 'same' ? MIST : DIM;
           const words =
@@ -289,9 +291,7 @@ export function NodeCard({
               ? t('nodeCard.geoSame', { version: g.version })
               : g.state === 'behind'
                 ? t('nodeCard.geoBehind', { sets: g.sets.join(', ') })
-                : g.state === 'unused'
-                  ? t('nodeCard.geoUnused')
-                  : t('nodeCard.geoUnreported');
+                : t('nodeCard.geoUnreported');
           return (
             <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Box style={{ width: 5, height: 5, borderRadius: 999, backgroundColor: tone, flexShrink: 0 }} />

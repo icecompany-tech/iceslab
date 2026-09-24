@@ -100,10 +100,17 @@ describe('nodeGeoFacts: строка гео на карточке ноды', () 
     ).toEqual({ state: 'behind', sets: ['geosite', 'ru'] });
   });
 
-  it('правила ноды наборов не используют: сравнивать не с чем', () => {
-    expect(nodeGeoFacts({ geo: { version: null, files: [], observedAt: at }, geoIntended: null }, true)).toEqual({
-      state: 'unused',
-      version: null,
-    });
+  it('четвёрка: geo null/есть × geoIntended null/есть', () => {
+    const geo = { version: 'aa11bb22cc33', files: [{ name: 'geosite.dat', sha256: 's1' }, { name: 'iceslab-ru.dat', sha256: 's2' }], observedAt: at };
+    // Намерения нет: молчание (unused), сообщала нода или нет.
+    expect(nodeGeoFacts({ geo: null, geoIntended: null }, true)).toEqual({ state: 'unused', version: null });
+    expect(nodeGeoFacts({ geo, geoIntended: null }, true)).toEqual({ state: 'unused', version: 'aa11bb22cc33' });
+    // Намерение есть: «не сообщила» или сравнение по sha.
+    expect(nodeGeoFacts({ geo: null, geoIntended: intended }, true)).toEqual({ state: 'unreported' });
+    expect(nodeGeoFacts({ geo, geoIntended: intended }, true)).toEqual({ state: 'same', version: 'aa11bb22cc33' });
+  });
+
+  it('пустой список файлов намерения читается как «намерения нет»', () => {
+    expect(nodeGeoFacts({ geo: null, geoIntended: { version: 'x', files: [] } }, true)).toMatchObject({ state: 'unused' });
   });
 });

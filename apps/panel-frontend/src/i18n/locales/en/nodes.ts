@@ -441,7 +441,6 @@
     // server sends the field; "not reported" is already a fact about the node.
     geoSame: 'geo {{version}}, matches',
     geoBehind: 'geo behind: {{sets}}',
-    geoUnused: 'geo: the node rules use no sets',
     geoUnreported: 'geo: the node has not reported',
     coreNoDataTip:
       'This node has never reported its core: an older agent, or it has not checked in. That is not the same as "no restarts" - the panel simply does not know how many there were.',

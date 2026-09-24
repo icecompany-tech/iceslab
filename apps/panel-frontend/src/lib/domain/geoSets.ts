@@ -178,8 +178,11 @@ export interface NodeGeoIntended {
  * отказом не становится.
  *
  *   null         сервер поля `geo` не отдаёт (нет в `fields`): строка молчит;
- *   unreported   `geo: null`, нода не сообщила (старый агент, нет опроса);
- *   unused       правила ноды ни на один набор не ссылаются, сравнивать не с чем;
+ *   unused       правила ноды ни на один набор не ссылаются (`geoIntended`
+ *                пуст): сравнивать не с чем, и карточка МОЛЧИТ, что бы нода ни
+ *                сообщала (geo-contract §4, решение ARCH 24.09: «нода не
+ *                сообщила» на 31 карточке из 32 на dev было шумом);
+ *   unreported   `geo: null` при непустом намерении: нода не сообщила;
  *   same         sha каждого нужного файла совпал с тем, что на диске;
  *   behind       каких наборов файлы не совпали или их нет, по именам наборов.
  *
@@ -198,9 +201,9 @@ export function nodeGeoFacts(
   geoKnown: boolean,
 ): NodeGeoFacts {
   if (!geoKnown || node.geo === undefined) return null;
-  if (node.geo === null) return { state: 'unreported' };
   const intended = node.geoIntended;
-  if (!intended || intended.files.length === 0) return { state: 'unused', version: node.geo.version };
+  if (!intended || intended.files.length === 0) return { state: 'unused', version: node.geo?.version ?? null };
+  if (node.geo === null) return { state: 'unreported' };
   const onDisk = new Map((node.geo.files ?? []).map((f) => [f.name, f.sha256] as const));
   const behind = [
     ...new Set(intended.files.filter((f) => onDisk.get(f.name) !== f.sha256).map((f) => f.setName)),
