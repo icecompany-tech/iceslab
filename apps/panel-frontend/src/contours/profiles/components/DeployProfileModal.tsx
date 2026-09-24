@@ -46,6 +46,8 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
+import { nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import { NodeCoreLine } from '@/ui/NodeCoreLine';
 
 interface Props {
   profile: Profile | null;
@@ -386,23 +388,32 @@ export function DeployProfileModal({ profile, onClose }: Props) {
           </Text>
         ) : (
           <Stack gap="xs">
-            {nodes.map((node) => (
-              <Stack key={node.id} gap={4}>
-                <NodeRow
-                  node={node}
-                  wanted={profile?.effectiveEngine ?? null}
-                  checked={selected.has(node.id)}
-                  onToggle={() => toggle(node.id)}
-                />
-                {/* Нода в каскаде не вход: хост профиля на ней подписка не
-                    отдаст. Под именем ноды, и у ноды без хоста тоже: до
-                    развёртывания это дешевле всего узнать. */}
-                <HostHiddenLine
-                  facts={hostHiddenFacts(hostOfNode.get(node.id), node.name, node)}
-                  compact
-                />
-              </Stack>
-            ))}
+            {nodes.map((node) => {
+              const fit = profile ? nodeCoreFit(node, profile.effectiveEngine) : null;
+              const checked = selected.has(node.id);
+              return (
+                <Stack key={node.id} gap={4}>
+                  <NodeRow
+                    node={node}
+                    wanted={profile?.effectiveEngine ?? null}
+                    checked={checked}
+                    // No core, or a version the panel refuses: the save would be
+                    // refused (CORE_NOT_ON_NODE / CORE_VERSION_REFUSED), so the
+                    // tick is not offered. One already there can be taken off.
+                    blockedWhy={fit && nodeCoreBlocks(fit) && !checked ? nodeCoreFitText(fit, t).blockWhy : null}
+                    onToggle={() => toggle(node.id)}
+                  />
+                  {fit && <NodeCoreLine fit={fit} nodeId={node.id} compact />}
+                  {/* Нода в каскаде не вход: хост профиля на ней подписка не
+                      отдаст. Под именем ноды, и у ноды без хоста тоже: до
+                      развёртывания это дешевле всего узнать. */}
+                  <HostHiddenLine
+                    facts={hostHiddenFacts(hostOfNode.get(node.id), node.name, node)}
+                    compact
+                  />
+                </Stack>
+              );
+            })}
           </Stack>
         )}
 
@@ -428,6 +439,7 @@ function NodeRow({
   node,
   wanted,
   checked,
+  blockedWhy,
   onToggle,
 }: {
   node: PanelNode;
@@ -435,6 +447,8 @@ function NodeRow({
    *  Null only while the profile itself has not loaded. */
   wanted: EngineName | null;
   checked: boolean;
+  /** Why the tick is not offered (nodeCoreFit), or null when it is. */
+  blockedWhy: string | null;
   onToggle: () => void;
 }) {
   const { t } = useTranslation();
@@ -456,20 +470,23 @@ function NodeRow({
    */
   const runs = wanted ? nodeRunsEngine(node, wanted) : undefined;
   const willNotRun = runs === false;
+  const blocked = blockedWhy !== null;
   return (
     <Paper
       withBorder
       p="sm"
       radius="sm"
+      title={blockedWhy ?? undefined}
       style={{
-        cursor: 'pointer',
+        cursor: blocked ? 'not-allowed' : 'pointer',
+        opacity: blocked ? 0.6 : 1,
         borderColor: willNotRun ? 'var(--mantine-color-yellow-6)' : undefined,
       }}
-      onClick={onToggle}
+      onClick={blocked ? undefined : onToggle}
     >
       <Group justify="space-between" wrap="nowrap">
         <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Checkbox checked={checked} onChange={onToggle} tabIndex={-1} />
+          <Checkbox checked={checked} disabled={blocked} onChange={onToggle} tabIndex={-1} />
           <IconServer2 size={16} />
           <Stack gap={0} style={{ minWidth: 0 }}>
             <Text size="sm" fw={500} truncate>

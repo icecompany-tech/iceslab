@@ -117,6 +117,29 @@ export const common = {
         'Обфускация Salamander есть только у собственного демона Hysteria 2, у ядра xray её нет вовсе. В РФ через DPI пробивает именно она, так что эта пара не замена, а другой продукт.',
     },
   },
+  // Ядро профиля на ноде до сохранения (nodeCoreFit): окно «Развернуть» и
+  // форма хоста. Та же граница, что у гейта BACK: нет ядра и плохая версия
+  // закрывают галку, дрейф только говорит.
+  nodeCore: {
+    silent: 'нода не сообщила ядра',
+    missing: 'на ноде нет ядра {{core}}',
+    missingWhy: 'На этой ноде нет ядра {{core}}: поставить на странице ноды, секция «Ядра».',
+    installLink: 'Как поставить',
+    updateLink: 'Как обновить',
+    blockedShort: 'хост сюда не встанет',
+    refused: '{{core}} {{version}}: версия отклонена панелью',
+    refusedWhy: '{{core}} {{version}} отклонена панелью, хост на эту ноду не встанет. Причина из манифеста: {{reason}}',
+    driftPin: '{{core}} {{version}}: версия не пин ({{target}})',
+    driftChosen: '{{core}} {{version}}: не та, что выбрана для ноды ({{target}})',
+    onPin: '{{core}} {{version}}, как в пине',
+    onChosen: '{{core}} {{version}}, как выбрано для ноды',
+    unpinned: '{{core}} {{version}}, у этого ядра пина нет',
+    noVersion: '{{core}} стоит, версию нода не сообщила',
+    part: {
+      module: 'модуль',
+      tools: 'tools',
+    },
+  },
   pageMeta: {
     /** The breadcrumb when the page's own list failed to load: a count would
      *  read as a real number and outlive the error card below it. */

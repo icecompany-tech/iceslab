@@ -20,6 +20,7 @@ import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { ServerIcon } from '@/contours/nodes/components/NodeCreate/icons';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { modals } from '@mantine/modals';
 import {
@@ -64,6 +65,19 @@ export function NodeEditPage() {
     awgKnown,
     coreRefusal,
   } = useNodeEditForm();
+
+  // `#cores`: the deploy window and the host form link here for a core the
+  // node lacks. Scrolled once the node has loaded, since the section is not in
+  // the page before that, and a beat later: the cards above it fill from their
+  // own queries and would push it back down.
+  const loaded = node !== undefined;
+  useEffect(() => {
+    if (!loaded || window.location.hash !== '#cores') return;
+    const timer = setTimeout(() => {
+      document.getElementById('cores')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [loaded]);
 
   // The id in the URL may match nothing: show the fallback rather than an
   // editor bound to a node that is not there.
@@ -258,14 +272,16 @@ export function NodeEditPage() {
               {/* Состав ядер приходит от самой ноды, поэтому секция стоит
                   рядом с параметрами, а не в системной панели справа: это
                   свойство ноды, а не метрика хоста. */}
-              <CoresPanel
-                node={node}
-                // Выбор версии живёт в форме ноды и уходит её «Сохранить».
-                // Сервер старше поля (ключа нет в ответе): выбора нет вовсе.
-                intent={node.coreVersions !== undefined ? form.values.coreVersions : undefined}
-                onIntent={(next) => form.setFieldValue('coreVersions', next)}
-                refusal={coreRefusal}
-              />
+              <Box id="cores" style={{ scrollMarginTop: 16 }}>
+                <CoresPanel
+                  node={node}
+                  // Выбор версии живёт в форме ноды и уходит её «Сохранить».
+                  // Сервер старше поля (ключа нет в ответе): выбора нет вовсе.
+                  intent={node.coreVersions !== undefined ? form.values.coreVersions : undefined}
+                  onIntent={(next) => form.setFieldValue('coreVersions', next)}
+                  refusal={coreRefusal}
+                />
+              </Box>
             </Box>
 
             <SystemPanel hostsQuery={hostsQuery} dashNode={dashNode} metrics={metrics} exposureMutation={exposureMutation} />

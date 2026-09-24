@@ -47,6 +47,8 @@ import {
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
 import { profileTransport } from '@/lib/domain/profileTransport';
 import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray';
+import { nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import { NodeCoreLine } from '@/ui/NodeCoreLine';
 import {
   checkNodePort,
   portRefusalOf,
@@ -365,12 +367,24 @@ export function HostEditPage() {
          * сказать «нет».
          */
         const wrongCore = profile !== undefined && nodeRunsEngine(n, profile.effectiveEngine) === false;
+        /**
+         * The profile's core on this node, read as the BACK gate reads it: no
+         * core or a refused version closes the row with the gate's reason,
+         * drift and "not reported" only speak (nodeCoreFit).
+         */
+        const fit = profile !== undefined ? nodeCoreFit(n, profile.effectiveEngine) : null;
+        const coreBlock = fit && nodeCoreBlocks(fit) ? nodeCoreFitText(fit, t) : null;
         const taken = takenPort.get(n.id);
         return {
           node: n,
+          fit,
           selected: nodeId === n.id,
-          reason:
-            port === ''
+          reason: coreBlock
+            ? // Before the port: a node without the core refuses on any port.
+              // The line under the row says why; this column only says what it
+              // means for the host, so the reason is not printed twice.
+              { kind: 'core' as const, text: t('nodeCore.blockedShort'), why: coreBlock.blockWhy }
+            : port === ''
               ? // Without a port there is nothing to check yet, and "- free"
                 // would be a claim the page cannot make.
                 { kind: 'free' as const, text: t('hostEdit.portUnset') }
@@ -1178,75 +1192,80 @@ export function HostEditPage() {
               {nodeRows.map((r, i) => {
                 const attachable = r.reason.kind === 'free';
                 return (
-                  <UnstyledButton
-                    key={r.node.id}
-                    onClick={() => {
-                      if (!attachable && !r.selected) return;
-                      // Just remember the node. Looking up an existing binding
-                      // here used to select nothing on a fresh install, because
-                      // nothing in this UI creates bindings: the API builds one
-                      // from (profile, node, port) when the host is saved.
-                      setNodeId(r.node.id);
-                      setDirty(true);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: '11px 14px',
-                      backgroundColor: ROW,
-                      borderTop: i === 0 ? 'none' : `1px solid ${HAIRLINE}`,
-                      opacity: attachable || r.selected ? 1 : 0.55,
-                      cursor: attachable || r.selected ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    <Box
+                  <Box key={r.node.id} style={{ backgroundColor: ROW, borderTop: i === 0 ? 'none' : `1px solid ${HAIRLINE}` }}>
+                    <UnstyledButton
+                      title={'why' in r.reason && r.reason.why ? r.reason.why : undefined}
+                      onClick={() => {
+                        if (!attachable && !r.selected) return;
+                        // Just remember the node. Looking up an existing binding
+                        // here used to select nothing on a fresh install, because
+                        // nothing in this UI creates bindings: the API builds one
+                        // from (profile, node, port) when the host is saved.
+                        setNodeId(r.node.id);
+                        setDirty(true);
+                      }}
                       style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: 7,
-                        border: `1px solid ${r.selected ? CYAN : DIM}`,
+                        width: '100%',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
+                        gap: 12,
+                        padding: '11px 14px',
+                        opacity: attachable || r.selected ? 1 : 0.55,
+                        cursor: attachable || r.selected ? 'pointer' : 'not-allowed',
                       }}
                     >
-                      {r.selected && <IconCheck size={8} stroke={3.4} color={CYAN} />}
+                      <Box
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 7,
+                          border: `1px solid ${r.selected ? CYAN : DIM}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {r.selected && <IconCheck size={8} stroke={3.4} color={CYAN} />}
+                      </Box>
+                      <Box
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor: r.node.status === 'online' ? MOSS : AMBER,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Text
+                        style={{ width: 120, fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, color: SNOW }}
+                      >
+                        {r.node.name}
+                      </Text>
+                      <Text style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: MIST }}>
+                        {r.node.address}
+                      </Text>
+                      <Text
+                        style={{
+                          width: 220,
+                          textAlign: 'right',
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: r.reason.kind === 'core' ? RED : port === '' ? FAINT : attachable ? MOSS : RED,
+                        }}
+                      >
+                        {r.reason.text}
+                      </Text>
+                    </UnstyledButton>
+                  {/* The profile's core on this node, with its version. It
+                      replaces the xray-only `coreVersion` column, which named
+                      xray's version beside a sing-box or hysteria profile. */}
+                  {r.fit && (
+                    <Box style={{ padding: '0 14px 10px 46px' }}>
+                      <NodeCoreLine fit={r.fit} nodeId={r.node.id} compact />
                     </Box>
-                    <Box
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: r.node.status === 'online' ? MOSS : AMBER,
-                        flexShrink: 0,
-                      }}
-                    />
-                    <Text
-                      style={{ width: 120, fontFamily: DISPLAY, fontSize: 13, fontWeight: 500, color: SNOW }}
-                    >
-                      {r.node.name}
-                    </Text>
-                    <Text style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: MIST }}>
-                      {r.node.address}
-                    </Text>
-                    <Text style={{ width: 140, fontFamily: MONO, fontSize: 11, color: FAINT }}>
-                      {r.node.coreVersion ?? '-'}
-                    </Text>
-                    <Text
-                      style={{
-                        width: 220,
-                        textAlign: 'right',
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        color: port === '' ? FAINT : attachable ? MOSS : RED,
-                      }}
-                    >
-                      {r.reason.text}
-                    </Text>
-                  </UnstyledButton>
+                  )}
+                  </Box>
                 );
               })}
             </Box>

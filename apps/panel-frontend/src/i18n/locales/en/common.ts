@@ -114,6 +114,27 @@ export const common = {
         'Salamander obfuscation belongs to the Hysteria 2 daemon; the xray core has none at all. In Russia that is the part that gets through the DPI, so this pair is not a swap, it is a different product.',
     },
   },
+  // The profile's core on a node before a save (nodeCoreFit).
+  nodeCore: {
+    silent: 'the node has not reported its cores',
+    missing: 'no {{core}} core on this node',
+    missingWhy: 'This node has no {{core}} core: install it on the node page, section "Cores".',
+    installLink: 'How to install',
+    updateLink: 'How to update',
+    blockedShort: 'a host will not land here',
+    refused: '{{core}} {{version}}: version refused by the panel',
+    refusedWhy: '{{core}} {{version}} is refused by the panel, a host will not land on this node. The manifest says: {{reason}}',
+    driftPin: '{{core}} {{version}}: not the pin ({{target}})',
+    driftChosen: '{{core}} {{version}}: not the version chosen for this node ({{target}})',
+    onPin: '{{core}} {{version}}, on the pin',
+    onChosen: '{{core}} {{version}}, as chosen for this node',
+    unpinned: '{{core}} {{version}}, this core has no pin',
+    noVersion: '{{core}} is installed, the node did not report its version',
+    part: {
+      module: 'module',
+      tools: 'tools',
+    },
+  },
   pageMeta: {
     /** The breadcrumb when the page's own list failed to load: a count would
      *  read as a real number and outlive the error card below it. */
