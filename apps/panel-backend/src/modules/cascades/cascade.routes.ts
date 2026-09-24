@@ -4,6 +4,7 @@ import {
   CreateCascadeSchema,
   UpdateCascadeSchema,
   CascadeIdParamSchema,
+  RotateTunnelsSchema,
 } from './cascade.schemas.js';
 import * as svc from './cascade.service.js';
 import { CascadeEntryNotChainableError, CascadeValidationError } from './cascade.validation.js';
@@ -142,6 +143,22 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
     try {
       return reply.send(await svc.updateCascade(id, input));
     } catch (err) {
+      return handleError(err, reply);
+    }
+  });
+
+  // Phase 8.3: re-key the leg tunnels, all of them or one node pair's. The only
+  // way a tunnel's keys change: a save keeps them.
+  app.post('/api/cascades/:id/tunnels/rotate', auth, async (req, reply) => {
+    const { id } = CascadeIdParamSchema.parse(req.params);
+    const body = RotateTunnelsSchema.parse(req.body ?? {});
+    try {
+      const pair = body.fromNodeId && body.toNodeId ? { fromNodeId: body.fromNodeId, toNodeId: body.toNodeId } : undefined;
+      return reply.send(await svc.rotateCascadeTunnels(id, pair));
+    } catch (err) {
+      if (err instanceof svc.CascadeTunnelNotFoundError) {
+        return reply.code(404).send({ error: 'TUNNEL_NOT_FOUND', message: err.message });
+      }
       return handleError(err, reply);
     }
   });

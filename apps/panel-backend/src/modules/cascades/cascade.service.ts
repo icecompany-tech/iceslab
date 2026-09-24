@@ -65,6 +65,7 @@ import { isConfigApplied } from '../nodes/nodes.sync-status.js';
 import {
   freeTunnelIndexes,
   legUnderlay,
+  linkInListen,
   newTunnelCred,
   parseTunnelCred,
   renderTunnelConf,
@@ -618,6 +619,10 @@ const hopInclude = {
     orderBy: { tag: 'asc' as const },
     include: { nodes: { select: { nodeId: true } } },
   },
+  // Phase 8: the tunnels and the legs they carry, for the DTO's tunnel list and
+  // its open-port answer. Narrow selects: no credential leaves the table here.
+  tunnels: { select: { fromNodeId: true, toNodeId: true, index: true, port: true } },
+  links: { select: { fromNodeId: true, toNodeId: true, directionTag: true } },
 };
 
 async function assertNodesExist(nodeIds: string[]): Promise<void> {
@@ -2159,11 +2164,7 @@ function chainInputFor(
    * a specific address cannot share a port, and the tunnelled leg still
    * arrives through the tunnel, at the inner address the wildcard includes.
    */
-  const incomingTunnels = incoming.map(tunnelUnder);
-  const listen =
-    incoming.length > 0 && incomingTunnels.every((x) => x !== undefined)
-      ? [...new Set(incomingTunnels.map((x) => tunnelAddresses(x!.index).to))]
-      : undefined;
+  const listen = linkInListen(incoming, tunnelUnder);
   const inLeg = incoming[0]
     ? {
         ...(listen ? { listen } : {}),
@@ -2496,6 +2497,53 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     entryProtocol: positions.find((p) => p.position === 0)?.entryProtocol ?? undefined,
     tunnels,
   };
+}
+
+export class CascadeTunnelNotFoundError extends Error {
+  constructor(public fromNodeId: string, public toNodeId: string) {
+    super(`This cascade has no leg tunnel from node ${fromNodeId} to node ${toNodeId}`);
+    this.name = 'CascadeTunnelNotFoundError';
+  }
+}
+
+/**
+ * Re-key the AWG tunnels under a cascade's legs, phase 8.3: all of them, or
+ * the one of a node pair.
+ *
+ * The explicit act that a save never is. Keys and obfuscation are minted
+ * afresh; index, interface, /30 and port stay, so nothing else on either node
+ * moves. Both ends are pushed after, one after the other, and between the two
+ * pushes the tunnel is a pair that no longer agrees: the legs inside it drop
+ * until the second end lands. That is the price of a rotation, and it is paid
+ * only when somebody asks for it.
+ */
+export async function rotateCascadeTunnels(
+  id: string,
+  pair?: { fromNodeId: string; toNodeId: string },
+): Promise<CascadeDto> {
+  const cascade = await prisma.cascade.findUnique({ where: { id }, select: { id: true } });
+  if (!cascade) throw new CascadeNotFoundError(id);
+  const tunnels = await prisma.cascadeTunnel.findMany({
+    where: { cascadeId: id, ...(pair ? { fromNodeId: pair.fromNodeId, toNodeId: pair.toNodeId } : {}) },
+    select: { id: true, index: true, fromNodeId: true, toNodeId: true },
+  });
+  if (pair && tunnels.length === 0) throw new CascadeTunnelNotFoundError(pair.fromNodeId, pair.toNodeId);
+  await prisma.$transaction(
+    tunnels.map((t) =>
+      prisma.cascadeTunnel.update({
+        where: { id: t.id },
+        data: { config: newTunnelCred() as unknown as Prisma.InputJsonValue },
+      }),
+    ),
+  );
+  if (tunnels.length > 0) {
+    getLogger().info(
+      { cascadeId: id, tunnels: tunnels.map((t) => tunnelIface(t.index)) },
+      '[cascade] leg tunnels re-keyed on request; the legs inside drop until both ends are pushed',
+    );
+    emitCascadeChanged(id, [...new Set(tunnels.flatMap((t) => [t.fromNodeId, t.toNodeId]))], 'rotate-tunnels');
+  }
+  return getCascade(id);
 }
 
 export async function deleteCascade(id: string): Promise<void> {

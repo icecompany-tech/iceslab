@@ -1,4 +1,38 @@
 import { storedLinkParams } from './direction-merge.js';
+import { legUnderlay, linkInListen, tunnelAddresses, tunnelIface } from './cascade-tunnel.js';
+
+/**
+ * One AmneziaWG tunnel under this cascade's legs, phase 8. Read-only: the
+ * panel mints it on save from `linkParams.underlay`, and rotates it only by
+ * POST /api/cascades/:id/tunnels/rotate. No key ever travels here.
+ */
+export interface CascadeTunnelDto {
+  /** The dialling end and the receiving end of the leg it carries. */
+  fromNodeId: string;
+  toNodeId: string;
+  /** `awg-l<n>`, the same name on both ends. */
+  iface: string;
+  /** The tunnel's /30 and its two inner addresses. */
+  network: string;
+  fromAddress: string;
+  toAddress: string;
+  /** UDP, on the receiving end. */
+  port: number;
+  /**
+   * Whether the receiving node's link port stays OPEN to the internet.
+   *
+   * False when every leg into that node rides a tunnel: its link-in then listens
+   * on the inner addresses only. True when at least one leg into it has no
+   * tunnel under it (the API builds no such mix today, since a node sits in one
+   * step and every leg into it shares one underlay; it arises when a pool's
+   * tunnel is missing):
+   * the link-in keeps its 0.0.0.0 listener for all of them (a wildcard and an
+   * inner address cannot share a port), and this leg, tunnelled or not, shares
+   * a port the internet can reach. The same rule the renderer uses
+   * (linkInListen), so the screen cannot promise a closed port that is open.
+   */
+  publicLinkPortOpen: boolean;
+}
 
 export interface CascadeHopDto {
   id: string;
@@ -90,6 +124,8 @@ export interface CascadeDto {
    *  delete `max(tag) + 1` guesses wrong (delete 5, add one, the server issues
    *  6 while the form promises 5). */
   nextDirectionTag: number;
+  /** Phase 8. Always present, empty when no leg rides a tunnel. */
+  tunnels: CascadeTunnelDto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -135,6 +171,44 @@ interface CascadeRow {
     linkPort?: number | null;
     nodes: { nodeId: string }[];
   }[];
+  /** Phase 8. Optional on the ROW so a narrow select still type-checks. */
+  tunnels?: { fromNodeId: string; toNodeId: string; index: number; port: number }[];
+  links?: { fromNodeId: string; toNodeId: string; directionTag: number }[];
+}
+
+/** The tunnels as the screen sees them, with the open-port answer the renderer
+ *  would give. */
+function tunnelsOf(c: CascadeRow): CascadeTunnelDto[] {
+  const tunnels = [...(c.tunnels ?? [])].sort((a, b) => a.index - b.index);
+  if (tunnels.length === 0) return [];
+  const positions = (c.positions ?? []).map((p) => ({
+    position: p.position,
+    nodeIds: p.nodes.map((n) => n.nodeId),
+    linkParams: legParams(p.linkParams),
+  }));
+  const directions = (c.directions ?? []).map((d) => ({
+    tag: d.tag,
+    nodeIds: d.nodes.map((n) => n.nodeId),
+    linkParams: legParams(d.linkParams),
+  }));
+  const tunnelUnder = (l: { fromNodeId: string; toNodeId: string; directionTag: number }) =>
+    legUnderlay(positions, directions, l.fromNodeId, l.toNodeId, l.directionTag) === 'awg'
+      ? tunnels.find((t) => t.fromNodeId === l.fromNodeId && t.toNodeId === l.toNodeId)
+      : undefined;
+  return tunnels.map((t) => {
+    const addr = tunnelAddresses(t.index);
+    const incoming = (c.links ?? []).filter((l) => l.toNodeId === t.toNodeId);
+    return {
+      fromNodeId: t.fromNodeId,
+      toNodeId: t.toNodeId,
+      iface: tunnelIface(t.index),
+      network: addr.network,
+      fromAddress: addr.from,
+      toAddress: addr.to,
+      port: t.port,
+      publicLinkPortOpen: linkInListen(incoming, tunnelUnder) === undefined,
+    };
+  });
 }
 
 /**
@@ -191,6 +265,7 @@ export function mapCascade(c: CascadeRow): CascadeDto {
         linkPort: d.linkPort ?? null,
       })),
     nextDirectionTag: c.nextDirectionTag ?? 1,
+    tunnels: tunnelsOf(c),
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };

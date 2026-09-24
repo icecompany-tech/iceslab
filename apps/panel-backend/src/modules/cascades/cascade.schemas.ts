@@ -278,6 +278,15 @@ export const UpdateCascadeSchema = z
 
 export const CascadeIdParamSchema = z.object({ id: z.uuid() });
 
+/** POST /api/cascades/:id/tunnels/rotate: one node pair, or no body for all.
+ *  Both ends or neither: half a pair names no tunnel. */
+export const RotateTunnelsSchema = z
+  .object({ fromNodeId: z.uuid().optional(), toNodeId: z.uuid().optional() })
+  .strict()
+  .refine((b) => (b.fromNodeId === undefined) === (b.toNodeId === undefined), {
+    message: 'fromNodeId and toNodeId go together',
+  });
+
 export type CascadeHopInput = z.infer<typeof CascadeHopSchema>;
 export type CascadePositionInput = z.infer<typeof CascadePositionSchema>;
 export type CascadeDirectionInput = z.infer<typeof CascadeDirectionSchema>;

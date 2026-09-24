@@ -225,6 +225,30 @@ export function legUnderlay(
   return 'direct';
 }
 
+/**
+ * Where a node's link-in listens, given the legs that arrive on it.
+ *
+ * The inner addresses of its tunnels ONLY when every leg into it rides one: then
+ * the leg's port is not open to the internet at all. One leg over the internet
+ * (a direction reaching the node directly beside one reaching it through a
+ * tunnel) keeps the single 0.0.0.0 listener for all of them, because a wildcard
+ * and a specific address cannot share a port; the tunnelled leg still arrives
+ * through its tunnel, at an inner address the wildcard includes.
+ *
+ * `undefined` is that wildcard. ONE rule for the renderer (chainInputFor) and
+ * for the screen (publicLinkPortOpen on the cascade DTO), so the screen cannot
+ * promise a closed port the node keeps open.
+ */
+export function linkInListen<L>(
+  incoming: L[],
+  tunnelUnder: (leg: L) => { index: number } | undefined,
+): string[] | undefined {
+  if (incoming.length === 0) return undefined;
+  const under = incoming.map(tunnelUnder);
+  if (under.some((t) => t === undefined)) return undefined;
+  return [...new Set(under.map((t) => tunnelAddresses(t!.index).to))];
+}
+
 /** A stored tunnel as the renderers take it. */
 export interface TopologyTunnel {
   fromNodeId: string;

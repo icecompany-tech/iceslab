@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
-import { createCascade, updateCascade, LinkUnderlayNotOnNodeError } from './cascade.service.js';
+import {
+  createCascade,
+  updateCascade,
+  rotateCascadeTunnels,
+  CascadeTunnelNotFoundError,
+  LinkUnderlayNotOnNodeError,
+} from './cascade.service.js';
 import {
   freeTunnelIndexes,
   newTunnelObfuscation,
@@ -15,6 +21,7 @@ import {
 } from './cascade-tunnel.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
 import { storedLinkParams } from './direction-merge.js';
+import { mapCascade } from './cascade.mapper.js';
 
 /**
  * Phase 8.1: a leg may ride an AmneziaWG tunnel (`linkParams.underlay: 'awg'`).
@@ -179,6 +186,94 @@ describe('the tunnels a save writes', () => {
     expect(owners).toEqual([expect.objectContaining({ kind: 'cascade', port: 27000, transport: 'udp' })]);
     // The dialling end holds no port for it.
     expect(await portOwnersOnNode(entry, [27000])).toEqual([]);
+  });
+});
+
+describe('the tunnels on the cascade answer (8.3)', () => {
+  it('lists each tunnel without its keys, and says the link port is closed when every leg rides one', async () => {
+    const entry = await makeNode('ru-entry');
+    const nl = await makeNode('nl-1');
+    const c = await createCascade(cascadeInput(entry, [nl], 'awg'));
+    expect(c.tunnels).toEqual([
+      {
+        fromNodeId: entry,
+        toNodeId: nl,
+        iface: 'awg-l0',
+        network: '10.67.0.0/30',
+        fromAddress: '10.67.0.1',
+        toAddress: '10.67.0.2',
+        port: 27000,
+        publicLinkPortOpen: false,
+      },
+    ]);
+    expect(JSON.stringify(c)).not.toContain('privateKey');
+  });
+
+  it('says the link port stays open when another leg into the same node has no tunnel under it', () => {
+    // The API cannot build this mix today (a node sits in one step, so every
+    // leg into it shares one underlay); it arises when one tunnel of a pool is
+    // missing. Built as a row, the way the mapper receives it.
+    const now = new Date();
+    const dto = mapCascade({
+      id: 'c',
+      name: 'mixed',
+      enabled: true,
+      mode: 'chain',
+      hideHopsFromSub: true,
+      createdAt: now,
+      updatedAt: now,
+      hops: [],
+      positions: [
+        { position: 0, entryProtocol: 'xray', linkProtocol: 'vless', linkParams: { underlay: 'awg' }, nodes: [{ nodeId: 'a1' }, { nodeId: 'a2' }] },
+      ],
+      directions: [{ id: 'd', tag: 1, countryCode: 'NL', nodes: [{ nodeId: 'x' }] }],
+      tunnels: [{ fromNodeId: 'a1', toNodeId: 'x', index: 0, port: 27000 }],
+      links: [
+        { fromNodeId: 'a1', toNodeId: 'x', directionTag: 1 },
+        { fromNodeId: 'a2', toNodeId: 'x', directionTag: 1 },
+      ],
+    });
+    expect(dto.tunnels).toHaveLength(1);
+    expect(dto.tunnels[0]!.publicLinkPortOpen).toBe(true);
+  });
+
+  it('is an empty list, always present, when nothing rides a tunnel', async () => {
+    const entry = await makeNode('ru-entry');
+    const nl = await makeNode('nl-1');
+    const c = await createCascade(cascadeInput(entry, [nl]));
+    expect(c.tunnels).toEqual([]);
+  });
+});
+
+describe('rotating the tunnels (8.3)', () => {
+  it('re-keys on request only, keeping index, interface and port', async () => {
+    const entry = await makeNode('ru-entry');
+    const nl1 = await makeNode('nl-1');
+    const nl2 = await makeNode('nl-2');
+    const c = await createCascade(cascadeInput(entry, [nl1, nl2], 'awg'));
+    const before = await prisma.cascadeTunnel.findMany({ where: { cascadeId: c.id }, orderBy: { index: 'asc' } });
+
+    // One pair.
+    await rotateCascadeTunnels(c.id, { fromNodeId: entry, toNodeId: nl1 });
+    const one = await prisma.cascadeTunnel.findMany({ where: { cascadeId: c.id }, orderBy: { index: 'asc' } });
+    expect(one.map((t) => [t.id, t.index, t.port])).toEqual(before.map((t) => [t.id, t.index, t.port]));
+    expect(one[0]!.config).not.toEqual(before[0]!.config);
+    expect(one[1]!.config).toEqual(before[1]!.config);
+
+    // All of them.
+    await rotateCascadeTunnels(c.id);
+    const all = await prisma.cascadeTunnel.findMany({ where: { cascadeId: c.id }, orderBy: { index: 'asc' } });
+    expect(all[1]!.config).not.toEqual(before[1]!.config);
+    for (const t of all) expect(parseTunnelCred(t.config)).not.toBeNull();
+  });
+
+  it('says so when the pair has no tunnel', async () => {
+    const entry = await makeNode('ru-entry');
+    const nl = await makeNode('nl-1');
+    const c = await createCascade(cascadeInput(entry, [nl]));
+    await expect(rotateCascadeTunnels(c.id, { fromNodeId: entry, toNodeId: nl })).rejects.toBeInstanceOf(
+      CascadeTunnelNotFoundError,
+    );
   });
 });
 
