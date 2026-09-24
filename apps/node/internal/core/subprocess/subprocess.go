@@ -538,6 +538,9 @@ func (s *Subprocess) Running() bool {
 // reason is wanted exactly when the process is down again and the panel asks
 // why (E21: the chain died of a cancelled context and the panel was told it
 // "left no reason").
+//
+// A last line saying a port was already in use gets its holder appended, see
+// withPortHolder.
 func (s *Subprocess) ExitReason() string {
 	s.mu.Lock()
 	set, err, stderr := s.lastExitSet, s.lastExit, s.stderr
@@ -551,7 +554,7 @@ func (s *Subprocess) ExitReason() string {
 	}
 	if stderr != nil {
 		if line := stderr.lastLine(); line != "" {
-			reason += "; last stderr line: " + line
+			reason += "; last stderr line: " + withPortHolder(line)
 		}
 	}
 	return reason
