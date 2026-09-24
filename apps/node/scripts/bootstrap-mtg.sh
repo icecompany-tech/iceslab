@@ -151,8 +151,9 @@ VERSION=$(version_of "$BIN" || true)
 log "Smoke-test passed: mtg $VERSION"
 
 # ───── 5. Install ─────
-mv "$BIN" "$INSTALL_PATH"
-chmod +x "$INSTALL_PATH"
+# install, not mv: the tarball's file carries its builder's owner (501:staff
+# on the stand, 24.09), and mv would keep it on a binary root runs.
+install -m 0755 -o root -g root "$BIN" "$INSTALL_PATH"
 log "Installed to $INSTALL_PATH"
 
 # ───── 6. /etc/mtg dir ─────

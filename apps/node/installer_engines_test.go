@@ -159,6 +159,10 @@ func TestAnOldCheckoutGetsTheMainCoreAndAWarningThatSaysWhatFixesIt(t *testing.T
 		"ICESLAB_NODE_REF=main",
 		"fetch --depth 1 origin main",
 		"bootstrap-<core>.sh --restart-agent",
+		// A node whose Go is gone cannot rebuild the agent from any checkout
+		// (ru-02 on the stand, 24.09): the warning says where Go comes from.
+		"needs Go",
+		"rerunning this installer",
 	} {
 		if !strings.Contains(r.out, want) {
 			t.Errorf("the warning lacks %q:\n%s", want, r.out)

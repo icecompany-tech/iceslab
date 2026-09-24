@@ -532,6 +532,9 @@ install_engines() {
     warn "to fix: rerun this installer with ICESLAB_NODE_REF=main, or on this node"
     warn "  git -C $ICESLAB_NODE_DIR fetch --depth 1 origin main && git -C $ICESLAB_NODE_DIR reset --hard FETCH_HEAD"
     warn "  and then for each missing core: sudo bash $dir/bootstrap-<core>.sh --restart-agent"
+    warn "  (rebuilding the agent from that checkout by hand needs Go: this installer put it in /usr/local/go;"
+    warn "  a node where 'go' is missing gets it back by rerunning this installer,"
+    warn "  or by unpacking go${GO_VERSION:-1.23.4} there and linking /usr/local/go/bin/go into /usr/local/bin)"
     LEGACY_CHECKOUT=1
     bash "$dir/$(bootstrap_of "${ENGINES[0]}")"
     legacy_primary_env

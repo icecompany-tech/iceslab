@@ -281,6 +281,27 @@ func TestEveryBootstrapHasARemoveThatRefusesAndUnwires(t *testing.T) {
 	}
 }
 
+// A binary unpacked from a tarball goes in owned by root. mv kept the owner the
+// archive carried: mtg sat on the stand as 501:staff (24.09), a binary root
+// runs that another uid could have replaced.
+func TestTarballBinariesAreInstalledOwnedByRoot(t *testing.T) {
+	for _, name := range []string{"bootstrap-mtg.sh", "bootstrap-singbox.sh"} {
+		script := readScript(t, name)
+		if !strings.Contains(script, "install -m 0755 -o root -g root \"$BIN\"") {
+			t.Errorf("%s does not install its unpacked binary as root:root", name)
+		}
+		if regexp.MustCompile(`(?m)^mv "\$BIN"`).MatchString(script) {
+			t.Errorf("%s still moves the unpacked binary with its archive owner", name)
+		}
+	}
+	// And the sing-box bootstrap opens /etc/sing-box to an agent whose unit
+	// predates it, before it wires sing-box in.
+	sb := readScript(t, "bootstrap-singbox.sh")
+	if !strings.Contains(sb, "agent_may_write_configs\nwire_env\n") {
+		t.Error("bootstrap-singbox.sh does not add the ReadWritePaths drop-in before wiring sing-box in")
+	}
+}
+
 // The refusal and the process probe, run for real.
 func TestTheRemoveRefusalAndTheProcessProbe(t *testing.T) {
 	bash := needBash(t)

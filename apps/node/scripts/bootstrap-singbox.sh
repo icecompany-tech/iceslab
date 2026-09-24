@@ -79,6 +79,24 @@ unwire_env() {
   node_env_unblock singbox SINGBOX_BINARY SINGBOX_CERT SINGBOX_KEY SINGBOX_STATS_BIN
 }
 
+# The agent's unit runs under ProtectSystem=strict and writes only where
+# ReadWritePaths says. /etc/sing-box, where every sing-box adapter writes its
+# config, was missing from that list until ba82fd8, and a node installed before
+# it never gets the new unit (reinstalling wipes the mTLS keys). So the
+# bootstrap that puts sing-box on a node adds the directory itself, as a
+# drop-in, when the unit lacks it. Picked up at the agent's next restart.
+agent_may_write_configs() {
+  local dropin=/etc/systemd/system/iceslab-node.service.d/sing-box.conf
+  systemctl cat iceslab-node.service >/dev/null 2>&1 || return 0
+  if systemctl cat iceslab-node.service 2>/dev/null | grep -Eq '^ReadWritePaths=.*-?/etc/sing-box( |$)'; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$dropin")"
+  printf '[Service]\nReadWritePaths=-%s\n' "$SINGBOX_DIR" >"$dropin"
+  systemctl daemon-reload
+  log "the agent's unit could not write $SINGBOX_DIR: added $dropin"
+}
+
 # --remove: the binary and the configs the agent rendered for its sing-box
 # adapters. Kept: the self-signed cert and key, so a reinstall serves the same
 # certificate its TUIC/AnyTLS clients already accept; the chain's own config,
@@ -139,7 +157,7 @@ log "checksum OK ($GOT_SHA)"
 tar -xzf "$TMP/sb.tar.gz" -C "$TMP"
 BIN="$(find "$TMP" -type f -name sing-box | head -n1)"
 [[ -n "$BIN" ]] || fail "sing-box binary not found in tarball"
-install -m 0755 "$BIN" "$SINGBOX_DEST"
+install -m 0755 -o root -g root "$BIN" "$SINGBOX_DEST"
 log "installed binary -> $SINGBOX_DEST"
 
 # ───── self-signed TLS cert (TUIC requires TLS) ─────
@@ -156,6 +174,7 @@ else
   chmod 644 "$SINGBOX_DIR/cert.pem"
 fi
 
+agent_may_write_configs
 wire_env
 node_env_done singbox
 log "done."
