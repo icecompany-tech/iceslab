@@ -332,12 +332,31 @@ function newLinkReality(): NonNullable<VlessLinkCred['reality']> {
     // shortId is a hex string of even length, up to 16 bytes; 8 is what the
     // panel already uses for user-facing inbounds.
     shortId: randomBytes(8).toString('hex'),
-    serverName: LINK_CAMOUFLAGE_SNI,
-    dest: `${LINK_CAMOUFLAGE_SNI}:443`,
+    ...linkCamouflage(),
   };
 }
 
-const LINK_CAMOUFLAGE_SNI = 'www.microsoft.com';
+/**
+ * The site a REALITY leg pretends to be talking to.
+ *
+ * ⚠ Not any big site will do, and the rule is not visible from outside: the
+ * receiving end relays the target's first flight and gives up on any single
+ * handshake record over 8192 bytes (`realitySize` in metacubex/utls v1.8.4
+ * reality.go:72, checked at :473, which is what sing-box 1.13.14 runs; xray
+ * 26.3.27 pins xtls/reality with the same `size = 8192`, tls.go:140). A target
+ * with a long certificate chain therefore kills every handshake while both
+ * configs load and `check` passes on both. That was E23: www.microsoft.com
+ * sends its Certificate as one 8273-byte record, whatever fingerprint the
+ * client uses. www.apple.com sends 4738, measured 2026-09-24.
+ *
+ * A target can grow its chain any day, which is why the live leg test in
+ * chain.live.test.ts dials this name for real rather than trusting a number.
+ */
+const LINK_CAMOUFLAGE_SNI = 'www.apple.com';
+
+function linkCamouflage(): { serverName: string; dest: string } {
+  return { serverName: LINK_CAMOUFLAGE_SNI, dest: `${LINK_CAMOUFLAGE_SNI}:443` };
+}
 
 /** One node-to-node leg of a v4 cascade, carrying traffic for ONE direction. */
 export interface TopologyLink {
@@ -489,11 +508,15 @@ export async function generateTopologyLinks(
       .filter((q) => q.to === p.to && q.protocol === 'vless')
       .map((q) => keptFor(q))
       .find((c): c is Extract<LinkCred, { protocol: 'vless' }> => c?.protocol === 'vless' && !!c.reality);
-    keyByNode.set(p.to, stored?.reality ?? newLinkReality());
+    // The keys stay, the target is always today's. A leg stored with an older
+    // target keeps pointing at it otherwise, and E23 is exactly such a target:
+    // every leg minted before it was fixed would stay dead until re-created.
+    keyByNode.set(p.to, stored?.reality ? { ...stored.reality, ...linkCamouflage() } : newLinkReality());
   }
 
   const links: TopologyLink[] = [];
   let rotated = 0;
+  let retargeted = 0;
   for (const p of plan) {
     const port = LINK_PORT_BASE + p.step;
     const kept = keptFor(p);
@@ -511,6 +534,7 @@ export async function generateTopologyLinks(
       // cascade, the second save says nothing"), so a false N there is a false
       // alarm on the one line meant to be trusted.
       if (kept && cred.reality?.privateKey !== nodeKey.privateKey) rotated += 1;
+      else if (kept && cred.reality?.serverName !== nodeKey.serverName) retargeted += 1;
       cred = { ...cred, reality: { ...nodeKey, shortId } };
     }
     links.push({
@@ -528,6 +552,12 @@ export async function generateTopologyLinks(
     getLogger().info(
       `[cascade] ${rotated} leg(s) had no REALITY block of this node's and have been given one. ` +
         `This happens once per cascade: from now on a save keeps the same keys.`,
+    );
+  }
+  if (retargeted > 0) {
+    getLogger().info(
+      `[cascade] ${retargeted} leg(s) kept their REALITY keys and moved to the camouflage target ` +
+        `${LINK_CAMOUFLAGE_SNI}, which changed since they were minted.`,
     );
   }
   return links;

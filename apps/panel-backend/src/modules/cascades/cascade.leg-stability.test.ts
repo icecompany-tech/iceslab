@@ -299,6 +299,61 @@ describe('the REALITY block of a vless leg', () => {
     expect(await storedCreds()).toEqual([rotated]);
   });
 
+  it('moves a leg stored with an older camouflage target to today\'s, keys kept, once', async () => {
+    /**
+     * E23. The target is part of the stored block, so changing the constant
+     * alone would have left every existing leg on the old one, and the old one
+     * (www.microsoft.com) is a target no REALITY listener of ours completes a
+     * handshake through. The first save moves the leg; the keys stay, because
+     * they are what the other end holds; the save after it is boring again.
+     */
+    const { getLogger } = await import('../../lib/infra/logger.js');
+    const logger = getLogger();
+    const original = logger.info.bind(logger);
+    const lines: string[] = [];
+    (logger as { info: (m: unknown) => void }).info = (m: unknown) => {
+      lines.push(String(m));
+    };
+    try {
+      const entry = await makeNode('ru-entry');
+      const nl = await makeNode('nl-exit');
+      const c = await create(entry, [nl]);
+
+      type Stored = { reality: { privateKey: string; publicKey: string; shortId: string; serverName: string; dest: string } };
+      const fresh = (await storedCreds())[0] as Stored;
+      const today = fresh.reality.serverName;
+      expect(today).not.toBe('www.microsoft.com');
+
+      const row = await prisma.cascadeLink.findFirstOrThrow({ select: { id: true, config: true } });
+      await prisma.cascadeLink.update({
+        where: { id: row.id },
+        data: {
+          config: {
+            ...(row.config as Record<string, unknown>),
+            reality: { ...fresh.reality, serverName: 'www.microsoft.com', dest: 'www.microsoft.com:443' },
+          },
+        },
+      });
+
+      await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+      const moved = (await storedCreds())[0] as Stored;
+      expect(moved.reality).toEqual(fresh.reality);
+      expect(moved.reality.dest).toBe(`${today}:443`);
+      const said = lines.filter((l) => l.includes('moved to the camouflage target'));
+      expect(said).toHaveLength(1);
+      expect(said[0]).toContain('1 leg(s)');
+      // Moving the target is not a rotation, and must not be announced as one.
+      expect(lines.filter((l) => l.includes('had no REALITY block'))).toEqual([]);
+
+      lines.length = 0;
+      await put(c, entry, [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [nl] }]);
+      expect(await storedCreds()).toEqual([moved]);
+      expect(lines.filter((l) => l.includes('moved to the camouflage target'))).toEqual([]);
+    } finally {
+      (logger as { info: typeof original }).info = original;
+    }
+  });
+
   it('gives every leg landing on one node the same key and its own short id', async () => {
     /**
      * The shape the engine forces: one listener, one `private_key`, a LIST of
