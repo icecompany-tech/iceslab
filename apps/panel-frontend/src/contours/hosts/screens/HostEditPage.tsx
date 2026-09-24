@@ -47,8 +47,15 @@ import {
 import { nodeRunsEngine, profilePairLabel } from '@/lib/domain/engines';
 import { profileTransport } from '@/lib/domain/profileTransport';
 import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray';
-import { nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import {
+  coreGateRefusal,
+  nodeCoreBlocks,
+  nodeCoreFit,
+  nodeCoreFitText,
+  type CoreGateRefusal,
+} from '@/lib/domain/nodeCoreFit';
 import { NodeCoreLine } from '@/ui/NodeCoreLine';
+import { CoreGateRefusalLine } from '@/ui/CoreGateRefusalLine';
 import {
   checkNodePort,
   portRefusalOf,
@@ -166,6 +173,8 @@ export function HostEditPage() {
   const [nodeSearch, setNodeSearch] = useState('');
   const [onlyAttachable, setOnlyAttachable] = useState(false);
   const [dirty, setDirty] = useState(false);
+  /** Отказ гейта ядра после «Сохранить» (409 CORE_NOT_ON_NODE / CORE_VERSION_REFUSED). */
+  const [coreRefusal, setCoreRefusal] = useState<CoreGateRefusal | null>(null);
 
   const currentBinding = bindings.find((b) => b.id === (bindingId ?? host?.bindingId));
   // On create there is no binding yet, so the chosen node is the only source.
@@ -452,6 +461,7 @@ export function HostEditPage() {
       qc.invalidateQueries({ queryKey: ['hosts'] });
       setDirty(false);
       setSniExpected(null);
+      setCoreRefusal(null);
       notifications.show({
         color: 'green',
         message: isNew ? t('hostEdit.created') : t('hostEdit.saved'),
@@ -486,6 +496,13 @@ export function HostEditPage() {
         // только что ответил обратное. Две строки про один порт, зелёная над
         // красной, читаются как спор панели с самой собой.
         setPortCheck(null);
+        return;
+      }
+      // Ядра нет или его версия отклонена: под той нодой, которую назвал
+      // сервер, с его командой установки. Такой ноды в списке нет: тостом.
+      const core = coreGateRefusal(err);
+      if (core && nodes.some((n) => n.name === core.nodeName)) {
+        setCoreRefusal(core);
         return;
       }
       const conflict = portConflict(err);
@@ -1203,6 +1220,8 @@ export function HostEditPage() {
                         // from (profile, node, port) when the host is saved.
                         setNodeId(r.node.id);
                         setDirty(true);
+                        // Отказ был про прежний выбор ноды.
+                        setCoreRefusal(null);
                       }}
                       style={{
                         width: '100%',
@@ -1263,6 +1282,11 @@ export function HostEditPage() {
                   {r.fit && (
                     <Box style={{ padding: '0 14px 10px 46px' }}>
                       <NodeCoreLine fit={r.fit} nodeId={r.node.id} compact />
+                    </Box>
+                  )}
+                  {coreRefusal?.nodeName === r.node.name && (
+                    <Box style={{ padding: '0 14px 12px 46px' }}>
+                      <CoreGateRefusalLine refusal={coreRefusal} nodeId={r.node.id} arch={r.node.cores?.arch} />
                     </Box>
                   )}
                   </Box>

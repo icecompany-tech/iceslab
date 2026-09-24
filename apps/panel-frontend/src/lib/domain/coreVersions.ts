@@ -1,8 +1,10 @@
 import {
   CORE_COMPONENTS,
   CORE_VERSIONS,
-  coreEnvPair,
+  componentsOfEngine,
+  coreInstallCommand,
   judgeCoreVersion,
+  type EngineName,
   type CoreArch,
   type CoreComponent,
   type CoreVersionVerdict,
@@ -23,68 +25,51 @@ import type { Node, NodeCore } from '@/lib/domain/nodes';
  * manifest's own rule, so a node nobody touched follows the pin when it moves.
  */
 
-/** Where the installer keeps the node repository (`ICESLAB_NODE_DIR`). */
-export const NODE_DIR = '/opt/iceslab-node';
-
 /**
- * Which bootstrap moves a component on the machine, or why none can.
- *
- *   script            the bootstrap; its pair of variables is `coreEnvPair`
- *                     from the contract, taken as a pair always;
- *   'skips-installed' the AmneziaWG bootstrap leaves a loaded module and
- *                     installed tools alone, so running it again moves nothing
- *                     (until the reinstall mode of phase 7.2);
- *   'unpinned'        nothing to move to (caddy-naive is built from a branch).
+ * The AmneziaWG bootstrap leaves a loaded module and installed tools alone, so
+ * running it again moves nothing (until the reinstall mode of phase 7.2). To
+ * INSTALL it is fine; to MOVE a version it is not a command.
  */
-type CoreUpdate = { script: string } | 'skips-installed' | 'unpinned';
-
-export const CORE_UPDATE: Record<CoreComponent, CoreUpdate> = {
-  xray: { script: 'bootstrap-xray.sh' },
-  singbox: { script: 'bootstrap-singbox.sh' },
-  hysteria: { script: 'bootstrap-hysteria.sh' },
-  'amneziawg-module': 'skips-installed',
-  'amneziawg-tools': 'skips-installed',
-  mtg: { script: 'bootstrap-mtg.sh' },
-  mita: { script: 'bootstrap-mieru.sh' },
-  'caddy-naive': 'unpinned',
-};
+const SKIPS_INSTALLED: ReadonlySet<CoreComponent> = new Set(['amneziawg-module', 'amneziawg-tools']);
 
 export type CoreCommand =
   | { kind: 'command'; text: string }
   | { kind: 'none'; why: 'skips-installed' | 'unpinned' | 'no-arch' | 'no-asset' };
 
 /**
- * The ssh line that moves `component` to `target` on a machine of `arch`, or
- * why there is none.
+ * The ssh line that moves `component` to the version the node is meant to run
+ * (its intent, else the pin), or why there is none.
  *
- * The pair is sent always, the pin included: the node's checkout of the
- * scripts can be older than the panel's manifest, and its own default would
- * then install something else. No arch, no command: every file and its
- * sha256 is per arch, and a guess would be refused by the script at best.
+ * The line is the contract's coreInstallCommand, the same the server puts in
+ * the howToInstall of CORE_NOT_ON_NODE (dd7a8cd): one source for "install" and
+ * "update", the screen writes no script path or variable of its own. To move a
+ * version the pair has to be there: a line that runs the script on its own
+ * defaults would install whatever the node's checkout pins, so without the
+ * pair (no arch, no asset, nothing pinned) there is no command, only why.
  */
 export function coreUpdateCommand(
   component: CoreComponent,
-  target: string | null,
+  intent: NodeCoreVersions,
   arch: CoreArch | undefined,
 ): CoreCommand {
-  const how = CORE_UPDATE[component];
-  if (typeof how === 'string') return { kind: 'none', why: how };
-  const pair = coreEnvPair(component);
-  const release = target === null ? undefined : CORE_VERSIONS[component].releases.find((r) => r.version === target);
-  if (!pair || !release) return { kind: 'none', why: 'unpinned' };
-  if (!arch) return { kind: 'none', why: 'no-arch' };
-  const asset = release.assets?.[arch];
-  if (!asset) return { kind: 'none', why: 'no-asset' };
-  // `sudo env X=…`, not `X=… sudo`: sudo resets the environment, and the
-  // variables would never reach the script. `bash`: the scripts carry no
-  // executable bit.
-  const [versionVar, shaVar] = pair;
-  return {
-    kind: 'command',
-    text:
-      `sudo env ${versionVar}=${release.version} ${shaVar}=${asset.sha256} ` +
-      `bash ${NODE_DIR}/apps/node/scripts/${how.script} && sudo systemctl restart iceslab-node`,
-  };
+  if (SKIPS_INSTALLED.has(component)) return { kind: 'none', why: 'skips-installed' };
+  const engine = CORE_VERSIONS[component].reportedBy.engine as EngineName;
+  const line = coreInstallCommand(engine, intent, arch);
+  if (!line.pinned) return { kind: 'none', why: line.why ?? 'unpinned' };
+  return { kind: 'command', text: line.command };
+}
+
+/**
+ * How many enabled hosts on the node this core row's engine serves
+ * (`neededBy`, dd7a8cd), as the "Cores" section says it: a hint, never a
+ * source of actions. `needed` is 0 when the key is absent (a row without
+ * `engine`, a server older than the field): silence, which the section draws
+ * the same as zero, i.e. nothing. `brokenForHosts`: no binary on the machine
+ * while hosts wait for it, the one case that stops being inventory.
+ */
+export function coreNeed(core: Pick<NodeCore, 'installed' | 'neededBy'>): { needed: number; brokenForHosts: boolean } {
+  const needed = typeof core.neededBy === 'number' && core.neededBy > 0 ? core.neededBy : 0;
+  return { needed, brokenForHosts: core.installed === false && needed > 0 };
 }
 
 /** A verdict worth a word: `unknown` stays silent. */
@@ -141,7 +126,7 @@ export function coreVersionFacts(
       reported,
       verdict,
       targetIsPin: target === entry.pinned,
-      command: moves ? coreUpdateCommand(component, target, arch) : null,
+      command: moves ? coreUpdateCommand(component, intent, arch) : null,
     });
   }
   return lines;
@@ -169,11 +154,6 @@ export function coreReleaseOptions(component: CoreComponent): CoreReleaseOption[
         v.kind === 'known-bad' || v.kind === 'above-ceiling' ? { kind: v.kind, reason: v.reason } : null,
     };
   });
-}
-
-/** The components an engine reports (AmneziaWG: module and tools). */
-export function componentsOfEngine(engine: string): CoreComponent[] {
-  return CORE_COMPONENTS.filter((c) => CORE_VERSIONS[c].reportedBy.engine === engine);
 }
 
 /**

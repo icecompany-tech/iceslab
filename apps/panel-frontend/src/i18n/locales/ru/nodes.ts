@@ -310,6 +310,11 @@
     },
     coresHowToInstall: 'Как поставить',
     coresAttachProfile: 'Привязать профиль',
+    // neededBy (dd7a8cd): подсказка, ноль молчит.
+    coresNeededBy_one: 'нужно {{count}} хосту',
+    coresNeededBy_few: 'нужно {{count}} хостам',
+    coresNeededBy_many: 'нужно {{count}} хостам',
+    coresNeededBy_other: 'нужно {{count}} хостам',
     coresHideCommand: 'Свернуть',
     coresCopied: 'Команда скопирована',
     coresCopyFailed: 'Скопировать не вышло, выделите строку вручную',

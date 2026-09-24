@@ -1,4 +1,4 @@
-import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
+import { ENGINE_NAMES, type EngineName, type NodeCoreVersions } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { coreVersionFacts, type CoreVersionLine } from '@/lib/domain/coreVersions';
 
@@ -135,4 +135,58 @@ export function nodeCoreFitText(fit: NodeCoreFit, t: T): { tone: NodeCoreTone; t
       };
     }
   }
+}
+
+/**
+ * The 409 of the BACK core gate (dd7a8cd) on POST /api/bindings and POST
+ * /api/hosts, or null for any other error:
+ *
+ *   CORE_NOT_ON_NODE      { nodeName, engine, howToInstall: { command, pinned, why? } }
+ *   CORE_VERSION_REFUSED  { nodeName, engine, component, version, verdict, reason }
+ *
+ * The screen offers neither (nodeCoreFit closes the tick), so this is for a
+ * screen older than the report it saw, or a report that changed under it.
+ * `nodeName` is how the refusal finds its row; without it, or without an engine
+ * the contract knows, it is not read (the toast still shows the server's
+ * message). A command that is not a string is dropped, not guessed.
+ * The input is checked first: this reads a network error.
+ */
+export type CoreGateRefusal =
+  | {
+      kind: 'missing';
+      nodeName: string;
+      engine: EngineName;
+      command: string | null;
+      /** Every component went with its version pair; false: the script's defaults. */
+      pinned: boolean;
+      why: 'no-arch' | 'no-asset' | 'unpinned' | null;
+    }
+  | { kind: 'refused'; nodeName: string; engine: EngineName; version: string; reason: string };
+
+const WHY = new Set(['no-arch', 'no-asset', 'unpinned']);
+
+export function coreGateRefusal(err: unknown): CoreGateRefusal | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
+  if (!res || res.status !== 409 || !res.data || typeof res.data !== 'object') return null;
+  const d = res.data as Record<string, unknown>;
+  if (typeof d.nodeName !== 'string' || !d.nodeName) return null;
+  if (typeof d.engine !== 'string' || !(ENGINE_NAMES as readonly string[]).includes(d.engine)) return null;
+  const engine = d.engine as EngineName;
+  if (d.error === 'CORE_NOT_ON_NODE') {
+    const how = d.howToInstall && typeof d.howToInstall === 'object' ? (d.howToInstall as Record<string, unknown>) : {};
+    const command = typeof how.command === 'string' && how.command.trim() ? how.command : null;
+    const why = typeof how.why === 'string' && WHY.has(how.why) ? (how.why as 'no-arch' | 'no-asset' | 'unpinned') : null;
+    return { kind: 'missing', nodeName: d.nodeName, engine, command, pinned: how.pinned === true, why };
+  }
+  if (d.error === 'CORE_VERSION_REFUSED') {
+    return {
+      kind: 'refused',
+      nodeName: d.nodeName,
+      engine,
+      version: typeof d.version === 'string' ? d.version : '',
+      reason: typeof d.reason === 'string' ? d.reason : '',
+    };
+  }
+  return null;
 }

@@ -302,6 +302,8 @@
     },
     coresHowToInstall: 'How to install',
     coresAttachProfile: 'Attach a profile',
+    coresNeededBy_one: 'needed by {{count}} host',
+    coresNeededBy_other: 'needed by {{count}} hosts',
     coresHideCommand: 'Hide',
     coresCopied: 'Command copied',
     coresCopyFailed: 'Could not copy, select the line by hand',

@@ -2,13 +2,19 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import type { CoreArch, NodeCoreVersions } from '@iceslab/shared';
+import {
+  coreInstallCommand,
+  ENGINE_NAMES,
+  type CoreArch,
+  type EngineName,
+  type NodeCoreVersions,
+} from '@iceslab/shared';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
 import {
   componentsOfCore,
+  coreNeed,
   coreReleaseOptions,
   coreVersionFacts,
   type CoreVersionLine,
@@ -174,22 +180,6 @@ export function CoresPanel({
   );
 }
 
-/** Бутстрапы, которые инсталлятор уже положил на машину. Ключ это ПРОТОКОЛ,
- *  значение это имя скрипта в `apps/node/scripts/`. */
-const BOOTSTRAP: Record<string, string> = {
-  xray: 'bootstrap-xray.sh',
-  hysteria: 'bootstrap-hysteria.sh',
-  amneziawg: 'bootstrap-amneziawg.sh',
-  mtproto: 'bootstrap-mtg.sh',
-  mieru: 'bootstrap-mieru.sh',
-  naive: 'bootstrap-naive.sh',
-  singbox: 'bootstrap-singbox.sh',
-};
-
-/** Где инсталлятор держит репозиторий ноды. Совпадает с `ICESLAB_NODE_DIR`
- *  по умолчанию в `scripts/install-iceslab-node.sh`. */
-const NODE_DIR = '/opt/iceslab-node';
-
 function CoreRow({
   core,
   nodeId,
@@ -220,7 +210,12 @@ function CoreRow({
   // не `false`: молчание читается как «как было раньше».
   const state: CoreState =
     core.installed === false ? 'absent' : core.provisioned === false ? 'idle' : 'configured';
-  const tone = state === 'configured' ? MOSS : state === 'absent' ? AMBER : FAINT;
+  // Сколько включённых хостов на этой ноде обслуживает движок строки
+  // (dd7a8cd). Нет файла, а хосты его ждут: это уже не инвентарь, а поломка,
+  // поэтому красным. Без ключа (строка без engine, сервер старше поля)
+  // считаем молчанием, не нулём.
+  const { needed, brokenForHosts } = coreNeed(core);
+  const tone = state === 'configured' ? MOSS : brokenForHosts ? RED : state === 'absent' ? AMBER : FAINT;
   const version = coreVersionOf(core);
   // Версия против манифеста: вердикт судит judgeCoreVersion из контракта,
   // здесь только слова. Пусто, когда судить нечего (нет файла, нет версии).
@@ -234,9 +229,15 @@ function CoreRow({
   const updateText = update?.kind === 'command' ? update.text : null;
   const [updateShown, setUpdateShown] = useState(false);
 
-  const script = BOOTSTRAP[core.name];
-  // Через bash: у скриптов нет исполняемого бита, и `sudo путь` отказал бы.
-  const command = script ? `sudo bash ${NODE_DIR}/apps/node/scripts/${script} && sudo systemctl restart iceslab-node` : null;
+  // Та же строка, что сервер кладёт в howToInstall отказа CORE_NOT_ON_NODE:
+  // coreInstallCommand контракта, с парой версии под арку ноды. Своя таблица
+  // скриптов здесь была и ставила без пары, то есть ту версию, которую пинит
+  // чекаут скриптов на машине, а не манифест панели.
+  const engine = core.engine ?? core.name;
+  const install = (ENGINE_NAMES as readonly string[]).includes(engine)
+    ? coreInstallCommand(engine as EngineName, storedIntent ?? {}, arch)
+    : null;
+  const command = install?.command ?? null;
   // Строку показываем только там, где она к месту: у ядра, которое стоит и
   // просто не занято, предложение переустановить его сбивает с толку.
   const canShowCommand = state === 'absent' && command !== null;
@@ -293,6 +294,13 @@ function CoreRow({
         )}
 
         <Box style={{ flex: 1 }} />
+
+        {/* Подсказка, не источник действий: ноль молчит. */}
+        {needed > 0 && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: brokenForHosts ? RED : MIST }}>
+            {t('nodeEdit.coresNeededBy', { count: needed })}
+          </Text>
+        )}
 
         <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: tone }}>
           {t(`nodeEdit.coresState.${state}`)}
@@ -461,29 +469,15 @@ function CoreRow({
             >
               {command}
             </Text>
-            <UnstyledButton
-              type="button"
-              onClick={() => {
-                navigator.clipboard?.writeText(command).then(
-                  () => notifications.show({ color: 'green', message: t('nodeEdit.coresCopied') }),
-                  () => notifications.show({ color: 'red', message: t('nodeEdit.coresCopyFailed') }),
-                );
-              }}
-              style={{
-                height: 28,
-                padding: '0 12px',
-                borderRadius: 8,
-                backgroundColor: WELL,
-                border: `1px solid ${HAIRLINE}`,
-                fontFamily: DISPLAY,
-                fontSize: 12,
-                color: MIST,
-                flexShrink: 0,
-              }}
-            >
-              {t('common.copy')}
-            </UnstyledButton>
+            <CopyButton text={command} label={t('common.copy')} />
           </Box>
+          {/* Без пары версий скрипт ставит свою версию по умолчанию: сказать,
+              почему пары нет, а не выдавать строку за закреплённую. */}
+          {install && !install.pinned && (
+            <Text style={{ fontSize: 12, lineHeight: '17px', color: AMBER }}>
+              {t(`nodeCore.unpinnedInstall.${install.why ?? 'unpinned'}`, { arch: arch ?? '' })}
+            </Text>
+          )}
           {/* Дожимать руками нечего: состав ядер приносит тот же поллер, что
               и статус, поэтому нода сама скажет о новом ядре. */}
           <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{t('nodeEdit.coresAfterInstall')}</Text>

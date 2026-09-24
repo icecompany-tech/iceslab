@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   CORE_COMPONENTS,
   CORE_ENV_PREFIX,
+  CORE_NODE_DIR,
+  componentsOfEngine,
   coreEnvPair,
+  coreInstallCommand,
+  ENGINE_BOOTSTRAP,
   judgeCoreVersion,
   LINK_CELLS,
   LINK_CONGESTIONS,
@@ -44,6 +48,14 @@ const GUARDED = [
   // Имена переменных бутстрапов: одна таблица на установщик, агент и экран.
   'CORE_ENV_PREFIX',
   'coreEnvPair',
+  // Какое ядро что сообщает и как его ставят: та же строка, что сервер кладёт
+  // в howToInstall отказа CORE_NOT_ON_NODE (dd7a8cd). Своя копия во фронте уже
+  // была (componentsOfEngine в coreVersions.ts, BOOTSTRAP и NODE_DIR в
+  // «Ядрах», причём последняя ставила без пары версий).
+  'componentsOfEngine',
+  'CORE_NODE_DIR',
+  'ENGINE_BOOTSTRAP',
+  'coreInstallCommand',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -86,6 +98,10 @@ describe('копии перечислений контракта', () => {
     expect(typeof judgeCoreVersion).toBe('function');
     expect(Object.keys(CORE_ENV_PREFIX).length).toBeGreaterThan(0);
     expect(typeof coreEnvPair).toBe('function');
+    expect(componentsOfEngine('amneziawg')).toEqual(['amneziawg-module', 'amneziawg-tools']);
+    expect(CORE_NODE_DIR.length).toBeGreaterThan(0);
+    expect(Object.keys(ENGINE_BOOTSTRAP).length).toBeGreaterThan(0);
+    expect(typeof coreInstallCommand).toBe('function');
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {

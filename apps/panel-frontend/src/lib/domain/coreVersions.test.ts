@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CORE_COMPONENTS, CORE_VERSIONS, coreEnvPair } from '@iceslab/shared';
 import {
-  CORE_UPDATE,
+  CORE_COMPONENTS,
+  CORE_VERSIONS,
   componentsOfEngine,
+  coreEnvPair,
+  coreInstallCommand,
+  ENGINE_BOOTSTRAP,
+} from '@iceslab/shared';
+import {
+  coreNeed,
   coreReleaseOptions,
   coreVersionFleet,
   coreUpdateCommand,
@@ -82,34 +88,54 @@ describe('coreVersionFacts: one line per verdict', () => {
   });
 });
 
+describe('coreNeed: «нужно N хостам» in the Cores section', () => {
+  it('zero and an absent key are both silent; installed or not', () => {
+    expect(coreNeed({ neededBy: 0 })).toEqual({ needed: 0, brokenForHosts: false });
+    expect(coreNeed({})).toEqual({ needed: 0, brokenForHosts: false });
+    expect(coreNeed({ installed: false })).toEqual({ needed: 0, brokenForHosts: false });
+  });
+
+  it('needed and on the machine: a hint; needed and no binary: broken for its hosts', () => {
+    expect(coreNeed({ neededBy: 3 })).toEqual({ needed: 3, brokenForHosts: false });
+    expect(coreNeed({ neededBy: 2, installed: true })).toEqual({ needed: 2, brokenForHosts: false });
+    expect(coreNeed({ neededBy: 1, installed: false })).toEqual({ needed: 1, brokenForHosts: true });
+  });
+});
+
 describe('coreUpdateCommand', () => {
   it('one form for every script: the release version as it is, no tag, no leading v', () => {
-    const c = coreUpdateCommand('hysteria', PIN('hysteria'), 'amd64');
+    const c = coreUpdateCommand('hysteria', {}, 'amd64');
     expect(c).toEqual({ kind: 'command', text: line('HYSTERIA', PIN('hysteria'), SHA('hysteria', 'amd64'), 'bootstrap-hysteria.sh') });
   });
 
   it('mtg and mita get a command now that the arch is known', () => {
-    expect(coreUpdateCommand('mtg', PIN('mtg'), 'armv7')).toEqual({
+    expect(coreUpdateCommand('mtg', {}, 'armv7')).toEqual({
       kind: 'command',
       text: line('MTG', PIN('mtg'), SHA('mtg', 'armv7'), 'bootstrap-mtg.sh'),
     });
   });
 
   it('a release with no build for the arch (mita on armv7) has no command, and says why', () => {
-    expect(coreUpdateCommand('mita', PIN('mita'), 'armv7')).toEqual({ kind: 'none', why: 'no-asset' });
+    expect(coreUpdateCommand('mita', {}, 'armv7')).toEqual({ kind: 'none', why: 'no-asset' });
   });
 
-  it('a version the manifest does not list, and AmneziaWG, have no command', () => {
-    expect(coreUpdateCommand('mtg', '9.9.9', 'amd64')).toEqual({ kind: 'none', why: 'unpinned' });
-    expect(coreUpdateCommand('amneziawg-module', PIN('amneziawg-module'), 'amd64')).toEqual({
+  it('a version the manifest does not list, no pin, and AmneziaWG, have no command', () => {
+    expect(coreUpdateCommand('mtg', { mtg: '9.9.9' }, 'amd64')).toEqual({ kind: 'none', why: 'unpinned' });
+    expect(coreUpdateCommand('caddy-naive', {}, 'amd64')).toEqual({ kind: 'none', why: 'unpinned' });
+    expect(coreUpdateCommand('amneziawg-module', {}, 'amd64')).toEqual({
       kind: 'none',
       why: 'skips-installed',
     });
   });
 
   it('through sudo env and bash: sudo resets the environment, the scripts have no executable bit', () => {
-    const c = coreUpdateCommand('singbox', PIN('singbox'), 'amd64');
+    const c = coreUpdateCommand('singbox', {}, 'amd64');
     expect(c.kind === 'command' && /^sudo env SINGBOX_VERSION=\S+ SINGBOX_SHA256=[0-9a-f]{64} bash \//.test(c.text)).toBe(true);
+  });
+
+  it('the same line the server sends as howToInstall: coreInstallCommand of the contract', () => {
+    const c = coreUpdateCommand('xray', {}, 'amd64');
+    expect(c).toEqual({ kind: 'command', text: coreInstallCommand('xray', {}, 'amd64').command });
   });
 });
 
@@ -121,17 +147,23 @@ const SCRIPTS = import.meta.glob('../../../../node/scripts/bootstrap-*.sh', {
   eager: true,
 }) as Record<string, string>;
 
-describe('CORE_UPDATE against apps/node/scripts', () => {
+describe('ENGINE_BOOTSTRAP against apps/node/scripts', () => {
   it('reads the scripts, not nothing', () => {
     expect(Object.keys(SCRIPTS).length).toBeGreaterThanOrEqual(6);
   });
 
-  it('every script named exists, takes both variables of its contract pair, and defaults to the manifest pin', () => {
+  it('every engine has its script on disk', () => {
+    for (const [engine, script] of Object.entries(ENGINE_BOOTSTRAP)) {
+      expect(Object.keys(SCRIPTS).some((p) => p.endsWith(`/${script}`)), `${engine}: ${script}`).toBe(true);
+    }
+  });
+
+  it('every pinned component: its script takes both variables of its contract pair, and defaults to the manifest pin', () => {
     for (const component of CORE_COMPONENTS) {
-      const how = CORE_UPDATE[component];
-      if (typeof how === 'string') continue;
-      const path = Object.keys(SCRIPTS).find((p) => p.endsWith(`/${how.script}`));
-      expect(path, `${component}: ${how.script}`).toBeDefined();
+      if (CORE_VERSIONS[component].pinned === null) continue;
+      const script = ENGINE_BOOTSTRAP[CORE_VERSIONS[component].reportedBy.engine as keyof typeof ENGINE_BOOTSTRAP];
+      const path = Object.keys(SCRIPTS).find((p) => p.endsWith(`/${script}`));
+      expect(path, `${component}: ${script}`).toBeDefined();
       const src = SCRIPTS[path!]!;
       const pair = coreEnvPair(component);
       expect(pair, `${component}: pair`).not.toBeNull();

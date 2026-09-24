@@ -5,7 +5,8 @@ import { Box, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconChevronDown } from '@tabler/icons-react';
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
-import { componentsOfEngine, coreVersionFleet, type CoreVersionFleet } from '@/lib/domain/coreVersions';
+import { componentsOfEngine } from '@iceslab/shared';
+import { coreVersionFleet, type CoreVersionFleet } from '@/lib/domain/coreVersions';
 import { AMBER, CYAN, FAINT, HAIRLINE, MIST, MOSS, SNOW, WELL } from '@/contours/profiles/lib/colors';
 
 const MONO = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";

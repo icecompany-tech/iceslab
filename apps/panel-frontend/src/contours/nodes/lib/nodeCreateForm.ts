@@ -2,7 +2,8 @@ import { CORE_COMPONENTS, type CoreComponent, type NodeCoreVersions } from '@ice
 import type { NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { nativeEngineOfIntent } from '@/lib/domain/engines';
-import { componentsOfEngine, coreReleaseOptions } from '@/lib/domain/coreVersions';
+import { componentsOfEngine } from '@iceslab/shared';
+import { coreReleaseOptions } from '@/lib/domain/coreVersions';
 
 export interface FormValues {
   /** Выбор версий ядер на установку: нет компонента = пин манифеста. */

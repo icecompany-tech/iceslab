@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
-import { nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import { coreGateRefusal, nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const PIN = (c: CoreComponent) => CORE_VERSIONS[c].pinned as string;
@@ -107,5 +107,72 @@ describe('nodeCoreFit: the four states the deploy window draws', () => {
       'singbox',
     );
     expect(fit.kind).toBe('present');
+  });
+});
+
+describe('coreGateRefusal: the two 409 of the BACK core gate', () => {
+  const res = (data: unknown, status = 409) => ({ response: { status, data } });
+  const cmd = 'sudo env SINGBOX_VERSION=1.13.14 SINGBOX_SHA256=ab bash /opt/iceslab-node/apps/node/scripts/bootstrap-singbox.sh && sudo systemctl restart iceslab-node';
+
+  it('CORE_NOT_ON_NODE: node, engine, the server command and whether it is pinned', () => {
+    expect(
+      coreGateRefusal(
+        res({ error: 'CORE_NOT_ON_NODE', message: 'm', nodeName: 'nl-01', engine: 'singbox', howToInstall: { command: cmd, pinned: true } }),
+      ),
+    ).toEqual({ kind: 'missing', nodeName: 'nl-01', engine: 'singbox', command: cmd, pinned: true, why: null });
+    expect(
+      coreGateRefusal(
+        res({
+          error: 'CORE_NOT_ON_NODE',
+          nodeName: 'nl-01',
+          engine: 'hysteria',
+          howToInstall: { command: 'sudo bash x', pinned: false, why: 'no-arch' },
+        }),
+      ),
+    ).toMatchObject({ kind: 'missing', pinned: false, why: 'no-arch' });
+  });
+
+  it('CORE_NOT_ON_NODE without a usable howToInstall: the refusal stands, the command is not guessed', () => {
+    for (const how of [undefined, null, 'x', { command: 7 }, { command: '  ' }, { command: cmd, why: 'bogus' }]) {
+      const r = coreGateRefusal(res({ error: 'CORE_NOT_ON_NODE', nodeName: 'n', engine: 'xray', howToInstall: how }));
+      expect(r?.kind).toBe('missing');
+      if (r?.kind === 'missing') {
+        expect(r.pinned).toBe(false);
+        expect(r.why).toBeNull();
+      }
+    }
+  });
+
+  it('CORE_VERSION_REFUSED: version and the manifest reason', () => {
+    expect(
+      coreGateRefusal(
+        res({
+          error: 'CORE_VERSION_REFUSED',
+          nodeName: 'ru-01',
+          engine: 'xray',
+          component: 'xray',
+          version: '26.9.8',
+          verdict: 'known-bad',
+          reason: 'ML-KEM',
+        }),
+      ),
+    ).toEqual({ kind: 'refused', nodeName: 'ru-01', engine: 'xray', version: '26.9.8', reason: 'ML-KEM' });
+  });
+
+  it('garbage and other answers: null', () => {
+    for (const e of [
+      null,
+      undefined,
+      'x',
+      new Error('x'),
+      res({ error: 'CORE_NOT_ON_NODE', nodeName: 'n', engine: 'xray' }, 400),
+      res({ error: 'LINK_PORT_IN_USE', nodeName: 'n', engine: 'xray' }),
+      res({ error: 'CORE_NOT_ON_NODE', engine: 'xray' }),
+      res({ error: 'CORE_NOT_ON_NODE', nodeName: '', engine: 'xray' }),
+      res({ error: 'CORE_NOT_ON_NODE', nodeName: 'n', engine: 'warp' }),
+      res(null),
+    ]) {
+      expect(coreGateRefusal(e)).toBeNull();
+    }
   });
 });

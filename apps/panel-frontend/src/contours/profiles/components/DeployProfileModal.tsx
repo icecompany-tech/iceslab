@@ -46,8 +46,15 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
-import { nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import {
+  coreGateRefusal,
+  nodeCoreBlocks,
+  nodeCoreFit,
+  nodeCoreFitText,
+  type CoreGateRefusal,
+} from '@/lib/domain/nodeCoreFit';
 import { NodeCoreLine } from '@/ui/NodeCoreLine';
+import { CoreGateRefusalLine } from '@/ui/CoreGateRefusalLine';
 
 interface Props {
   profile: Profile | null;
@@ -229,9 +236,13 @@ export function DeployProfileModal({ profile, onClose }: Props) {
     return () => window.clearTimeout(timer);
   }, [opened, runPortCheck]);
 
+  /** Отказ гейта ядра (409 CORE_NOT_ON_NODE / CORE_VERSION_REFUSED) по имени ноды. */
+  const [coreRefusal, setCoreRefusal] = useState<CoreGateRefusal | null>(null);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!profile) return;
+      setCoreRefusal(null);
       // Поштучно: POST на новую галку, DELETE на снятую. Снимается только то,
       // что оператор снял сам (`deployDiff`).
       const { create: toCreate, remove: toDelete } = deployDiff(
@@ -283,6 +294,13 @@ export function DeployProfileModal({ profile, onClose }: Props) {
         setPortChecks(new Map());
         return;
       }
+      // Ядра нет или версия отклонена: строкой под той нодой, которую назвал
+      // сервер, с его командой. Ноды с таким именем в окне нет: тостом.
+      const core = coreGateRefusal(err);
+      if (core && nodes.some((n) => n.name === core.nodeName)) {
+        setCoreRefusal(core);
+        return;
+      }
       // A profile saved on sing-box before the form locked its tile: the node
       // would not render it, and the binding is refused naming the field.
       const sb = singboxXrayRefusal(err);
@@ -295,6 +313,8 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   });
 
   function toggle(nodeId: string) {
+    // Отказ был про прежний набор нод.
+    setCoreRefusal(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(nodeId)) next.delete(nodeId);
@@ -404,6 +424,9 @@ export function DeployProfileModal({ profile, onClose }: Props) {
                     onToggle={() => toggle(node.id)}
                   />
                   {fit && <NodeCoreLine fit={fit} nodeId={node.id} compact />}
+                  {coreRefusal?.nodeName === node.name && (
+                    <CoreGateRefusalLine refusal={coreRefusal} nodeId={node.id} arch={node.cores?.arch} />
+                  )}
                   {/* Нода в каскаде не вход: хост профиля на ней подписка не
                       отдаст. Под именем ноды, и у ноды без хоста тоже: до
                       развёртывания это дешевле всего узнать. */}
