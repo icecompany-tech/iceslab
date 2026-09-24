@@ -4,6 +4,7 @@ import { lookup } from 'node:dns/promises';
 import { prisma } from '../../prisma.js';
 import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { isPublicRoutableIp } from '../../lib/util/ip.js';
+import { measureRealityFlight, realityFlightRefusal, type ServerFlight } from './reality-dest-flight.js';
 
 export interface ProbeResult {
   bindingId: string;
@@ -34,6 +35,10 @@ export interface ProbeResult {
   // H1 (dest only) - negotiated ALPN (e.g. "h2"). A CDN-grade REALITY dest
   // speaks HTTP/2; a dest without h2 is a weaker, more detectable masquerade.
   alpn?: string;
+  // Dest only: the longest record of the dest's first flight, header included.
+  // Over REALITY_RECORD_LIMIT the listener gives up on every handshake (E23),
+  // and the probe fails with the reason in `error`.
+  handshakeRecordMax?: number;
   error?: string;
   // Hint for the UI when we couldn't run a real probe (UDP-based
   // protocols fall back to a TCP port reachability check, which is
@@ -347,8 +352,45 @@ export async function testProfileConnect(profileId: string): Promise<ProbeResult
 
   // Run all probes in parallel, each is bounded by PROBE_TIMEOUT_MS so
   // the worst-case latency of the response is ~1× timeout regardless of
-  // how many bindings the profile has.
-  return await Promise.all(targets.map((t) => probe(t)));
+  // how many bindings the profile has. The flight of the dest is measured
+  // beside them, not after, for the same reason.
+  const dest = targets.find((t) => t.kind === 'dest');
+  const [results, flight] = await Promise.all([
+    Promise.all(targets.map((t) => probe(t))),
+    dest ? destFlight(dest.endpoint, dest.port, dest.sni!) : Promise.resolve(undefined),
+  ]);
+  return results.map((r) => (r.kind === 'dest' && flight ? withFlight(r, flight) : r));
+}
+
+/**
+ * The record sizes of the dest's first flight, behind the same SSRF guard as
+ * every probe. Undefined when the guard refused: the TLS probe beside it says
+ * so already, and a second refusal would only repeat it.
+ */
+async function destFlight(
+  host: string,
+  port: number,
+  sni: string,
+): Promise<{ flight?: ServerFlight; error?: string } | undefined> {
+  if (await checkTargetRoutable(host)) return undefined;
+  return measureRealityFlight(host, port, sni, { timeoutMs: PROBE_TIMEOUT_MS });
+}
+
+/**
+ * Fold the flight into the dest row. Only a flight that was READ can fail the
+ * row: one that could not be measured leaves the TLS probe's verdict alone,
+ * because "we could not look" is not "it is broken", and the row already says
+ * whether the dest answered at all. Exported for unit testing.
+ */
+export function withFlight(r: ProbeResult, m: { flight?: ServerFlight; error?: string }): ProbeResult {
+  if (!m.flight) return r;
+  const sizes = [m.flight.helloLength ?? 0, ...m.flight.records.map((x) => x.length)];
+  const refusal = realityFlightRefusal(m.flight);
+  return {
+    ...r,
+    handshakeRecordMax: Math.max(...sizes),
+    ...(refusal ? { ok: false, error: `REALITY dest: ${refusal}` } : {}),
+  };
 }
 
 /**
