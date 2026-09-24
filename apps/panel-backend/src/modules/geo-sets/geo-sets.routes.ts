@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import fastifyMultipart from '@fastify/multipart';
 import { z } from 'zod';
-import { GEO_SET_KINDS } from '@iceslab/shared';
+import { GEO_FILE_MAX_BYTES, GEO_SET_KINDS } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import * as svc from './geo-sets.service.js';
 
@@ -42,6 +43,8 @@ const TagsQuery = z.object({
 
 const RolloutSchema = z.object({ version: z.string().min(1).max(64) });
 
+const UploadKind = z.enum(GEO_SET_KINDS);
+
 function fail(err: unknown, reply: FastifyReply): unknown {
   if (err instanceof svc.GeoSetNotFoundError) {
     return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
@@ -70,8 +73,87 @@ function fail(err: unknown, reply: FastifyReply): unknown {
   throw err;
 }
 
+/**
+ * The multipart body of an upload: its text fields and its one file, read to
+ * the end. The ceiling is the plugin's `fileSize`, so a body past it stops
+ * being read at the ceiling instead of after it.
+ */
+async function readUpload(req: FastifyRequest): Promise<{ fields: Record<string, string>; file: { filename: string; bytes: Buffer } }> {
+  if (!req.isMultipart()) {
+    throw new svc.GeoSetInvalidError('file', 'send the file as multipart/form-data, field "file"');
+  }
+  const fields: Record<string, string> = {};
+  let file: { filename: string; bytes: Buffer } | undefined;
+  for await (const part of req.parts()) {
+    if (part.type === 'file') {
+      const bytes = await part.toBuffer();
+      if (part.fieldname === 'file' && !file) file = { filename: part.filename, bytes };
+    } else {
+      fields[part.fieldname] = String(part.value);
+    }
+  }
+  if (!file) throw new svc.GeoSetInvalidError('file', 'no file in the request (field "file")');
+  return { fields, file };
+}
+
+/** The plugin's refusal of a body past the ceiling, in the contract's words. */
+function tooLarge(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE';
+}
+
 export async function geoSetsRoutes(app: FastifyInstance): Promise<void> {
   const auth = { onRequest: [requireAuth] };
+
+  // Phase 9.1g. Registered in THIS plugin's scope only, so no other route of
+  // the panel starts accepting multipart bodies. One file of at most
+  // GEO_FILE_MAX_BYTES and a few short fields; nothing else is read.
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: GEO_FILE_MAX_BYTES, files: 1, fields: 5, fieldSize: 256 },
+  });
+
+  const uploadFailed = (err: unknown, reply: FastifyReply) =>
+    tooLarge(err)
+      ? reply.code(400).send({
+          error: 'GEO_SET_INVALID',
+          reason: 'too-large',
+          message: `the file is larger than ${GEO_FILE_MAX_BYTES / (1024 * 1024)} MB`,
+        })
+      : fail(err, reply);
+
+  app.post('/api/geo-sets/upload', auth, async (req, reply) => {
+    try {
+      const { fields, file } = await readUpload(req);
+      const kind = UploadKind.safeParse(fields.kind);
+      if (!kind.success) throw new svc.GeoSetInvalidError('kind', 'kind is geosite or geoip');
+      return reply.code(202).send(
+        await svc.createUploadSet({
+          name: fields.name ?? '',
+          kind: kind.data,
+          filename: file.filename,
+          bytes: file.bytes,
+          ...(fields.sha256 ? { sha256: fields.sha256 } : {}),
+        }),
+      );
+    } catch (err) {
+      return uploadFailed(err, reply);
+    }
+  });
+
+  app.put('/api/geo-sets/:id/file', auth, async (req, reply) => {
+    const { id } = IdParam.parse(req.params);
+    try {
+      const { fields, file } = await readUpload(req);
+      return reply.code(202).send(
+        await svc.replaceUploadFile(id, {
+          filename: file.filename,
+          bytes: file.bytes,
+          ...(fields.sha256 ? { sha256: fields.sha256 } : {}),
+        }),
+      );
+    } catch (err) {
+      return uploadFailed(err, reply);
+    }
+  });
 
   app.get('/api/geo-sets', auth, async (_req, reply) => {
     return reply.send({ geoSets: await svc.listGeoSets() });

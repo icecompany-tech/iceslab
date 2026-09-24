@@ -24,6 +24,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@fastify/jwt": "^10.2.1",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.3.0",
     "@iceslab/shared": "workspace:*",
     "@peculiar/x509": "^2.0.0",

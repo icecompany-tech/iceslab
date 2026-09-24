@@ -15,7 +15,7 @@ import { reportedEngines } from '../nodes/node-engines.js';
 import { collectGeoUses, usesOf, type GeoUseSite } from './geo-refs.js';
 import { chainTagsFor, filesOfSet } from './geo-push.js';
 import { enqueueBuiltinFetch, enqueueUrlFetch } from './geo-sets.queue.js';
-import { builtinNeedsFetch, ensureBuiltinSets } from './geo-sets.store.js';
+import { builtinNeedsFetch, ensureBuiltinSets, ingestGeoFile } from './geo-sets.store.js';
 
 /**
  * /api/geo-sets behind the routes. Contract: docs/plan/geo-contract.md
@@ -32,6 +32,7 @@ export type GeoInvalidReason =
   | 'sha256'
   | 'kind'
   | 'too-large'
+  | 'file'
   | 'source-not-editable';
 
 export class GeoSetInvalidError extends Error {
@@ -298,6 +299,58 @@ export async function createUrlSet(input: CreateUrlSetInput): Promise<GeoSetDto>
   });
   await enqueueUrlFetch(row.id);
   return getGeoSet(row.id);
+}
+
+export interface UploadInput {
+  filename: string;
+  bytes: Uint8Array;
+  /** What the operator vouches for, if anything. Without it only the parse
+   *  stands between a file cut exactly on an entry boundary and the nodes
+   *  (geo-contract.md section 5); the DTO then shows the computed sha256 for
+   *  the operator to compare by eye. */
+  sha256?: string;
+}
+
+function uploadSha(sha256: string | undefined): string | undefined {
+  if (sha256 === undefined || sha256 === '') return undefined;
+  if (!/^[0-9a-fA-F]{64}$/.test(sha256)) {
+    throw new GeoSetInvalidError('sha256', "the file's sha256 is 64 hex characters");
+  }
+  return sha256.toLowerCase();
+}
+
+/**
+ * A set from a file the operator uploads (phase 9.1g). Checked in the
+ * request rather than queued: the bytes are already here and in memory, and a
+ * job would have to store them first to hand them over. The answer is the set
+ * as the check left it, verified or broken in words.
+ */
+export async function createUploadSet(input: UploadInput & { name: string; kind: GeoSetKind }): Promise<GeoSetDto> {
+  checkName(input.name);
+  const expected = uploadSha(input.sha256);
+  await nameFree(input.name);
+  const row = await prisma.geoSet.create({
+    data: { name: input.name, kind: input.kind, sourceType: 'upload', filename: input.filename.slice(0, 255) },
+    select: { id: true },
+  });
+  await ingestGeoFile(row.id, { bytes: input.bytes, expectedSha256: expected });
+  return getGeoSet(row.id);
+}
+
+/** A new file for a set that came as an upload. Its nodes move to it only by
+ *  a rollout, like any other new version. */
+export async function replaceUploadFile(id: string, input: UploadInput): Promise<GeoSetDto> {
+  const s = await mustFind(id);
+  if (s.sourceType !== 'upload') {
+    throw new GeoSetInvalidError('source-not-editable', 'only a set that came as an upload takes a new file');
+  }
+  const expected = uploadSha(input.sha256);
+  await prisma.geoSet.update({
+    where: { id },
+    data: { filename: input.filename.slice(0, 255), status: 'checking' },
+  });
+  await ingestGeoFile(id, { bytes: input.bytes, expectedSha256: expected });
+  return getGeoSet(id);
 }
 
 export interface PatchSetInput {
