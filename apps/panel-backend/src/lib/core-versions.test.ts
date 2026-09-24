@@ -7,6 +7,9 @@ import {
   coreEnvPair,
   checkCoreVersionIntent,
   compareCoreVersions,
+  coreInstallCommand,
+  coreRemoveCommand,
+  ENGINE_BOOTSTRAP,
   judgeCoreVersion,
   normalizeCoreVersion,
   resolveCoreVersions,
@@ -83,6 +86,19 @@ describe('the manifest keeps its own rules', () => {
   it('hysteria armv7 names the file upstream actually ships', () => {
     // There is no hysteria-linux-armv7; bootstrap-hysteria.sh asked for it.
     expect(CORE_VERSIONS.hysteria.releases[0]!.assets!.armv7!.file).toBe('hysteria-linux-arm');
+  });
+});
+
+describe('the ssh lines for a core: install and remove, one script each', () => {
+  it.each(ENGINE_NAMES)('%s', (engine) => {
+    const script = `bash /opt/iceslab-node/apps/node/scripts/${ENGINE_BOOTSTRAP[engine]}`;
+    // Remove: the same script, no version pair (nothing is downloaded), and the
+    // agent restarted by the script so it reports the core as gone.
+    expect(coreRemoveCommand(engine)).toEqual({ command: `sudo ${script} --remove --restart-agent` });
+    // Install restarts the agent the same way, never with a second restart after.
+    const install = coreInstallCommand(engine, {}, 'amd64').command;
+    expect(install.endsWith(`${script} --restart-agent`)).toBe(true);
+    expect(install).not.toContain('systemctl');
   });
 });
 

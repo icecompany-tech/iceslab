@@ -16,6 +16,7 @@
 #
 # Flags:
 #   --restart-agent     restart iceslab-node at the end
+#   --remove            take xray off the node instead (refused while it runs)
 #
 # Env overrides:
 #   XRAY_VERSION        release to install instead of the pin, e.g. 26.3.27, and
@@ -106,6 +107,35 @@ disable_upstream_unit() {
   systemctl disable xray.service >/dev/null 2>&1 || true
   log "xray.service disabled; iceslab-node manages xray directly"
 }
+
+unwire_env() {
+  node_env_unblock xray XRAY_BINARY XRAY_CONFIG
+}
+
+# --remove: the binary, the geo files and units upstream's installer laid down,
+# and the configs the agent rendered for xray and for shadowsocks (which runs
+# inside xray). The agent's own identity and env are not touched but for this
+# block.
+remove_core() {
+  node_env_refuse_if_running xray "$(node_env_pids xray)"
+  disable_upstream_unit
+  systemctl disable xray@.service >/dev/null 2>&1 || true
+  rm -f "$INSTALL_PATH" /etc/systemd/system/xray.service /etc/systemd/system/xray@.service
+  rm -rf /etc/systemd/system/xray.service.d /etc/systemd/system/xray@.service.d /usr/local/share/xray
+  rm -f /usr/local/etc/xray/config.json /etc/xray/config.json /etc/xray/shadowsocks.json
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  unwire_env
+  if grep -q '^SINGBOX_BINARY=' "$ICESLAB_NODE_ENV" 2>/dev/null; then
+    warn "sing-box on this node read its traffic counters through xray; they stay at zero until SINGBOX_STATS_BIN names another xray"
+  fi
+  log "xray removed"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done xray
+  exit 0
+fi
 
 # ───── 1. Already on the wanted version? ─────
 if [[ -x "$INSTALL_PATH" ]]; then

@@ -12,6 +12,7 @@
 #
 # Flags:
 #   --restart-agent  restart iceslab-node at the end
+#   --remove         take mtg off the node instead (refused while it runs)
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   MTG_VERSION   release to install instead of the pin, e.g. 2.2.8
@@ -37,6 +38,27 @@ wire_env() {
     "MTG_BINARY=$INSTALL_PATH" \
     "MTG_CONFIG=$(node_env_keep MTG_CONFIG /etc/mtg/config.toml)"
 }
+
+unwire_env() {
+  node_env_unblock mtproto MTG_BINARY MTG_CONFIG MTG_PORT MTG_STATS_PORT MTG_DOMAIN
+}
+
+# --remove: the binary and the config the agent rendered. Kept: /etc/mtg
+# itself, which the agent's unit lists as writable.
+remove_core() {
+  local config
+  config="$(node_env_keep MTG_CONFIG /etc/mtg/config.toml)"
+  node_env_refuse_if_running mtg "$(node_env_pids mtg)"
+  rm -f "$INSTALL_PATH" "$config"
+  unwire_env
+  log "mtg removed"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done mtproto
+  exit 0
+fi
 
 # ───── pinned version ─────
 #

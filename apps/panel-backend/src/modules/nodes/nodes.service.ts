@@ -26,6 +26,7 @@ import type {
 import { resolveCoreVersions } from '@iceslab/shared';
 import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
+import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
 import { resolveNodeEngines } from './node-intended-engines.js';
 import { intendedEngines } from './node-engines.js';
 export { CoreVersionIntentError } from './node-core-versions.js';
@@ -341,10 +342,13 @@ export async function listNodes(query: ListNodesQuery): Promise<{
   limit: number;
 }> {
   const [{ nodes, total }, hidden] = await Promise.all([repo.list(query), getHiddenCascadeNodes()]);
-  // One query for the whole page, not one per node.
-  const needed = await hostsByEngine(nodes.map((n) => n.id));
+  // One query each for the whole page, not one per node.
+  const ids = nodes.map((n) => n.id);
+  const [needed, cascadeNeeds] = await Promise.all([hostsByEngine(ids), cascadeNeedsByNode(ids)]);
   return {
-    nodes: nodes.map((n) => withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id))),
+    nodes: nodes.map((n) =>
+      withHostCounts(n, hidden.get(n.id) ?? null, needed.get(n.id), cascadeNeeds.get(n.id) ?? []),
+    ),
     total,
     page: query.page,
     limit: query.limit,
@@ -354,19 +358,24 @@ export async function listNodes(query: ListNodesQuery): Promise<{
 export async function getNodeById(id: string): Promise<PublicNodeDto> {
   const node = await repo.findActiveById(id);
   if (!node) throw new NodeNotFoundError(id);
-  const [hidden, needed] = await Promise.all([getHiddenCascadeNodes(), hostsByEngine([id])]);
-  return withHostCounts(node, hidden.get(id) ?? null, needed.get(id));
+  const [hidden, needed, cascadeNeeds] = await Promise.all([
+    getHiddenCascadeNodes(),
+    hostsByEngine([id]),
+    cascadeNeedsByNode([id]),
+  ]);
+  return withHostCounts(node, hidden.get(id) ?? null, needed.get(id), cascadeNeeds.get(id) ?? []);
 }
 
-/** The DTO as the list and GET by id serve it: the hiding cascade, and
- *  `neededBy` on every core row that names its engine. */
+/** The DTO as the list and GET by id serve it: the hiding cascade, `neededBy`
+ *  on every core row that names its engine, and what the cascades need. */
 function withHostCounts(
   node: Parameters<typeof mapNodeToPublic>[0],
   hiddenByCascade: PublicNodeDto['hiddenByCascade'],
   counts: Map<string, number> | undefined,
+  cascadeNeedsEngines: CascadeEngineNeed[],
 ): PublicNodeDto {
   const dto = mapNodeToPublic(node);
-  return { ...dto, cores: withNeededBy(dto.cores, counts), hiddenByCascade };
+  return { ...dto, cores: withNeededBy(dto.cores, counts), hiddenByCascade, cascadeNeedsEngines };
 }
 
 /**

@@ -16,6 +16,7 @@
 #
 # Flags:
 #   --restart-agent  restart iceslab-node at the end
+#   --remove         take sing-box off the node instead (refused while it runs)
 #
 # Env overrides:
 #   SINGBOX_VERSION  release to install instead of the pin, e.g. 1.13.14, and
@@ -73,6 +74,30 @@ wire_env() {
     "SINGBOX_CERT=$SINGBOX_DIR/cert.pem" \
     "SINGBOX_KEY=$SINGBOX_DIR/key.pem"
 }
+
+unwire_env() {
+  node_env_unblock singbox SINGBOX_BINARY SINGBOX_CERT SINGBOX_KEY SINGBOX_STATS_BIN
+}
+
+# --remove: the binary and the configs the agent rendered for its sing-box
+# adapters. Kept: the self-signed cert and key, so a reinstall serves the same
+# certificate its TUIC/AnyTLS clients already accept; the chain's own config,
+# which lives with the agent (/etc/iceslab-node/chain).
+remove_core() {
+  node_env_refuse_if_running sing-box "$(node_env_pids sing-box)"
+  rm -f "$SINGBOX_DEST"
+  rm -f "$SINGBOX_DIR"/config.json "$SINGBOX_DIR"/anytls.json "$SINGBOX_DIR"/shadowtls.json \
+    "$SINGBOX_DIR"/xray.json "$SINGBOX_DIR"/hy2.json "$SINGBOX_DIR"/ss.json
+  unwire_env
+  log "sing-box removed (kept $SINGBOX_DIR/cert.pem and key.pem)"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
+  remove_core
+  node_env_done singbox
+  exit 0
+fi
 
 if [[ -n "${SINGBOX_VERSION:-}" && -z "${SINGBOX_SHA256:-}" ]] || [[ -z "${SINGBOX_VERSION:-}" && -n "${SINGBOX_SHA256:-}" ]]; then
   fail "SINGBOX_VERSION and SINGBOX_SHA256 go together: a version without its checksum is not installed"

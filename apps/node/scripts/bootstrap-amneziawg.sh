@@ -15,6 +15,8 @@
 #
 # Flags:
 #   --restart-agent  restart iceslab-node at the end
+#   --remove         take AmneziaWG off the node instead (refused while an
+#                    interface is up)
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -31,7 +33,55 @@ wire_env() {
     "AMNEZIAWG_QUICK_BIN=$(command -v awg-quick 2>/dev/null || echo /usr/bin/awg-quick)"
 }
 
+unwire_env() {
+  node_env_unblock amneziawg AMNEZIAWG_BIN AMNEZIAWG_QUICK_BIN AMNEZIAWG_INTERFACE
+}
+
+# --remove: the tools (awg, awg-quick, their unit template, man pages and
+# completions), the kernel module from DKMS with its sources, the build trees,
+# and the interface configs the agent rendered (the panel pushes them again,
+# keys included, onto a node that gets AWG back). Kept: IP forwarding
+# (99-awg.conf) and ufw's FORWARD policy, which other traffic on the node may
+# rely on.
+#
+# Running = any AmneziaWG interface up, the users' awg0 and a cascade leg's
+# awg-l<n> alike.
+remove_core() {
+  local up="" v
+  up="$(ip -o link show type amneziawg 2>/dev/null | awk -F': ' '{print $2}' | tr '\n' ' ' || true)"
+  if [[ -z "${up// /}" ]] && command -v awg >/dev/null 2>&1; then
+    up="$(awg show interfaces 2>/dev/null || true)"
+  fi
+  up="${up% }"
+  node_env_refuse_if_running amneziawg "${up:+interfaces up: $up}"
+  rm -f "$(command -v awg-quick 2>/dev/null || echo /usr/bin/awg-quick)" "$(command -v awg 2>/dev/null || echo /usr/bin/awg)"
+  rm -f /usr/lib/systemd/system/awg-quick@.service /lib/systemd/system/awg-quick@.service \
+    /usr/share/man/man8/awg.8 /usr/share/man/man8/awg-quick.8 \
+    /usr/share/bash-completion/completions/awg /usr/share/bash-completion/completions/awg-quick
+  modprobe -r amneziawg 2>/dev/null || true
+  if command -v dkms >/dev/null 2>&1; then
+    for v in $(dkms status amneziawg 2>/dev/null | sed -n 's#^amneziawg/\([^,: ]*\).*#\1#p' | sort -u); do
+      dkms remove "amneziawg/$v" --all >/dev/null 2>&1 || warn "dkms remove amneziawg/$v failed"
+      rm -rf "/usr/src/amneziawg-$v"
+    done
+  fi
+  rm -rf /usr/src/amneziawg-src /usr/src/amneziawg-tools-build
+  rm -f /etc/amnezia/amneziawg/*.conf
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  unwire_env
+  if lsmod | grep -q '^amneziawg\b'; then
+    warn "the amneziawg module is still loaded (in use?); it goes with the next reboot"
+  fi
+  log "AmneziaWG removed"
+}
+
 [[ $EUID -eq 0 ]] || fail "Must be run as root (sudo bash $0)"
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done amneziawg
+  exit 0
+fi
 
 # ───── 1. Distro check ─────
 [[ -r /etc/os-release ]] || fail "Cannot read /etc/os-release; unsupported distro"

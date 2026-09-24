@@ -15,7 +15,7 @@
 #   KEY=value
 #   # <<< iceslab-node env:<core> <<<
 #
-# The rules the block keeps, all of them tested (apps/node/scripts_env_test.go):
+# The rules the block keeps, all of them tested (apps/node/bootstrap_env_test.go):
 #   - rewritten whole on every run, so two runs leave the same file;
 #   - a line OUTSIDE any block that sets a key the block owns is dropped: that
 #     is the hand-written copy from before, and the block is now where the key
@@ -31,19 +31,82 @@
 
 ICESLAB_NODE_ENV="${ICESLAB_NODE_ENV:-/etc/iceslab-node/env}"
 NODE_ENV_RESTART_AGENT=0
+NODE_ENV_REMOVE=0
 
 # node_env_flags "$@": the flags every bootstrap takes.
-#   --restart-agent  restart iceslab-node once the core is in place, so the
-#                    agent reads the new block. The installer does not pass it:
-#                    it starts the agent itself, once, at the end.
+#   --restart-agent  restart iceslab-node once the core is in place (or gone),
+#                    so the agent reads the env again. The installer does not
+#                    pass it: it starts the agent itself, once, at the end.
+#   --remove         take the core OFF the machine instead (core-lifecycle.md
+#                    section 8). See node_env_refuse_if_running and
+#                    node_env_unblock below.
 node_env_flags() {
   local arg
   for arg in "$@"; do
     case "$arg" in
       --restart-agent) NODE_ENV_RESTART_AGENT=1 ;;
+      --remove)        NODE_ENV_REMOVE=1 ;;
       *) printf '[node-env] unknown flag: %s\n' "$arg" >&2; return 2 ;;
     esac
   done
+}
+
+# node_env_refuse_if_running <core> <what is running, or empty>: the one fact a
+# --remove refuses on. The script has no panel, so it cannot know which hosts
+# or cascades still need the core, and does not pretend to; what it CAN see is
+# the core still running with the agent's config. Taking the binary away under
+# live sessions would drop them, and the agent would keep trying to start it
+# again. No --force: the way out is to stop the core through the panel.
+#
+# ⚠ The agent does not stop a core when a push stops naming it: it applies the
+# inbounds it is given and leaves the others running on their last config
+# (internal/server/server.go, applyPush). It starts, at boot, only the cores
+# its last push named. So the way to a stopped core is: take its hosts and
+# cascade legs off this node in the panel, then restart the agent. A core run
+# by its own unit (hysteria.service) is stopped by that unit.
+node_env_refuse_if_running() {
+  local name="$1" running="$2" how="${3:-systemctl restart iceslab-node}"
+  [[ -z "$running" ]] && return 0
+  printf '[node-env] %s is running with the agent'"'"'s config (%s): not removed.\n' "$name" "$running" >&2
+  printf '[node-env] Stop it first: take its hosts and cascade legs off this node in the panel, then: %s\n' "$how" >&2
+  printf '[node-env] and run this again.\n' >&2
+  exit 1
+}
+
+# node_env_pids <process name>: "<name> pid 1 2" for every process of exactly
+# that name, empty when there is none.
+node_env_pids() {
+  local pids
+  pids="$(pgrep -x "$1" 2>/dev/null | tr '\n' ' ' || true)"
+  pids="${pids% }"
+  [[ -n "$pids" ]] && printf '%s pid %s' "$1" "$pids"
+  return 0
+}
+
+# node_env_unblock <core> KEY ...: take this core out of the agent's env: its
+# block, and any loose line setting one of KEY (the copies written by hand or
+# by the installer before the blocks existed). Everything else stays.
+node_env_unblock() {
+  local name="$1"
+  shift
+  local begin="# >>> iceslab-node env:${name} >>>"
+  local end="# <<< iceslab-node env:${name} <<<"
+  local file="$ICESLAB_NODE_ENV" tmp
+  [[ -f "$file" ]] || return 0
+  tmp="$(mktemp "${file}.XXXXXX")"
+  awk -v begin="$begin" -v end="$end" -v keys="$*" '
+    BEGIN { n = split(keys, k, " "); for (i = 1; i <= n; i++) own[k[i]] = 1 }
+    $0 == begin { skip = 1; next }
+    $0 == end   { skip = 0; next }
+    skip        { next }
+    /^# >>> iceslab-node env:/ { inother = 1 }
+    /^# <<< iceslab-node env:/ { inother = 0; print; next }
+    !inother && /^[A-Z][A-Z0-9_]*=/ { key = substr($0, 1, index($0, "=") - 1); if (key in own) next }
+    { print }
+  ' "$file" >"$tmp"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$file"
+  printf '[node-env] %s: taken out of %s\n' "$name" "$file"
 }
 
 # node_env_value KEY: the value the env file gives KEY now (its last
@@ -106,11 +169,12 @@ node_env_block() {
 
 # node_env_done <core>: restart the agent if asked, or say that it is needed.
 node_env_done() {
-  local name="$1"
+  local name="$1" what="wired in"
+  [[ "$NODE_ENV_REMOVE" == 1 ]] && what="removed"
   if [[ "$NODE_ENV_RESTART_AGENT" == 1 ]]; then
-    printf '[node-env] restarting iceslab-node so it picks up %s\n' "$name"
+    printf '[node-env] restarting iceslab-node so it sees %s %s\n' "$name" "$what"
     systemctl restart iceslab-node
   elif [[ -f "$ICESLAB_NODE_ENV" ]]; then
-    printf '[node-env] %s is wired in; the agent sees it after: systemctl restart iceslab-node\n' "$name"
+    printf '[node-env] %s is %s; the agent sees it after: systemctl restart iceslab-node\n' "$name" "$what"
   fi
 }

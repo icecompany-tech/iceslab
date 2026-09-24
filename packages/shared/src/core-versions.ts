@@ -582,6 +582,23 @@ export function coreInstallCommand(
   };
 }
 
+/**
+ * The ssh line that takes an engine off a node (core-lifecycle.md section 8):
+ * the same bootstrap as the install, with --remove.
+ *
+ * No version pair: nothing is downloaded. And the command checks nothing the
+ * panel knows. Whether hosts or a cascade still need the core is said on the
+ * screen, before the command is shown, because the panel cannot know what the
+ * operator changes in the minute before running it; the script refuses on the
+ * one fact it can see itself, the core still running with the agent's config.
+ * `--restart-agent`: the agent then reports the engine as not installed.
+ */
+export function coreRemoveCommand(engine: EngineName): { command: string } {
+  return {
+    command: `sudo bash ${CORE_NODE_DIR}/apps/node/scripts/${ENGINE_BOOTSTRAP[engine]} --remove --restart-agent`,
+  };
+}
+
 function isAtLeast(v: string, bound: string): boolean {
   const c = compareCoreVersions(v, bound);
   return c === 0 || c === 1;

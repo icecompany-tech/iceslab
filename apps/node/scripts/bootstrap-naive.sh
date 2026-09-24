@@ -9,7 +9,7 @@
 # The node-agent spawns this Caddy itself, so there is no unit to write; the
 # script ends by writing the naive block of the agent's env (lib/node-env.sh).
 #
-# Usage:  sudo bash bootstrap-naive.sh [--restart-agent]
+# Usage:  sudo bash bootstrap-naive.sh [--restart-agent] [--remove]
 # Idempotent, safe to rerun (re-pulls upstream sources, re-builds binary).
 set -euo pipefail
 
@@ -33,6 +33,28 @@ wire_env() {
     "CADDY_NAIVE_BIN=$CADDY_NAIVE_BIN" \
     "NAIVE_CONFIG=$(node_env_keep NAIVE_CONFIG /etc/caddy/Caddyfile)"
 }
+
+unwire_env() {
+  node_env_unblock naive CADDY_NAIVE_BIN NAIVE_CONFIG NAIVE_BINARY NAIVE_PORT
+}
+
+# --remove: the built Caddy and the Caddyfile the agent rendered. Kept: Go and
+# xcaddy (build tools other things may use), Caddy's data directory with its
+# ACME certificates, /etc/caddy itself.
+remove_core() {
+  local config
+  config="$(node_env_keep NAIVE_CONFIG /etc/caddy/Caddyfile)"
+  node_env_refuse_if_running caddy-naive "$(node_env_pids caddy-naive)"
+  rm -f "$CADDY_NAIVE_BIN" "$config"
+  unwire_env
+  log "caddy-naive removed"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done naive
+  exit 0
+fi
 GO_VERSION=${GO_VERSION:-1.23.4}
 
 # ───── 1. Distro check ─────

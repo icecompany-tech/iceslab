@@ -20,6 +20,7 @@
 #
 # Flags:
 #   --restart-agent  restart iceslab-node at the end
+#   --remove         take hysteria off the node instead (refused while it runs)
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   HYSTERIA_VERSION  release to install instead of the pin, e.g. 2.12.3
@@ -100,6 +101,37 @@ finish() {
   wire_env
   node_env_done hysteria
 }
+
+unwire_env() {
+  node_env_unblock hysteria HYSTERIA_BINARY HYSTERIA_CONFIG HYSTERIA_AUTH_PORT HYSTERIA_SERVICE_UNIT \
+    HYSTERIA_STATS_LISTEN HYSTERIA_STATS_SECRET HYSTERIA_AUTH_HOST HYSTERIA_HOSTNAME HYSTERIA_ACME_EMAIL
+}
+
+# --remove: the binary, hysteria.service, the config the agent rendered, the
+# port-hopping redirect the installer set up for hysteria, and upstream's units
+# if an older install left them. Kept: anything else under /etc/hysteria, and
+# hysteria's ACME storage wherever it put it, so a reinstall need not ask
+# Let's Encrypt again.
+remove_core() {
+  local running=""
+  systemctl is-active --quiet hysteria.service 2>/dev/null && running="hysteria.service is active"
+  [[ -n "$running" ]] || running="$(node_env_pids hysteria)"
+  node_env_refuse_if_running hysteria "$running" "systemctl stop hysteria (and systemctl restart iceslab-node)"
+  systemctl disable hysteria.service >/dev/null 2>&1 || true
+  systemctl disable --now hysteria-server.service iceslab-hyhop.service >/dev/null 2>&1 || true
+  rm -f "$HYSTERIA_UNIT" /etc/systemd/system/iceslab-hyhop.service /usr/local/bin/iceslab-hyhop
+  rm -rf /etc/systemd/system/hysteria.service.d
+  rm -f "$INSTALL_PATH" "$HYSTERIA_CONFIG_PATH"
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  unwire_env
+  log "hysteria removed (the rest of $(dirname "$HYSTERIA_CONFIG_PATH") and its ACME storage kept)"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done hysteria
+  exit 0
+fi
 
 # ───── pinned version ─────
 #

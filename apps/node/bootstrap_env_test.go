@@ -208,6 +208,103 @@ func TestEveryBootstrapKeyIsReadByTheAgent(t *testing.T) {
 	}
 }
 
+// fnBody cuts one function out of a script, the same way wiring does.
+func fnBody(t *testing.T, script, name string) string {
+	t.Helper()
+	start := strings.Index(script, "\n"+name+"() {")
+	if start == -1 {
+		t.Fatalf("no %s", name)
+	}
+	end := strings.Index(script[start:], "\n}\n")
+	return script[start : start+end+3]
+}
+
+// --remove takes out what the install put in, and nothing else: wire, then
+// unwire, and every key the wiring wrote is gone, the block with it, and the
+// payload, other blocks and loose lines nobody's core owns are where they were.
+func TestEveryBootstrapUnwiresWhatItWired(t *testing.T) {
+	bash := needBash(t)
+	key := regexp.MustCompile(`"([A-Z][A-Z0-9_]*)=`)
+	for engine, name := range bootstraps {
+		t.Run(engine, func(t *testing.T) {
+			script := readScript(t, name)
+			wire := wiring(t, script)
+			unwire := fnBody(t, script, "unwire_env")
+			env := filepath.Join(t.TempDir(), "env")
+			if err := os.WriteFile(env, []byte(baseEnv), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			runWiring(t, bash, env, wire)
+			// The unwire runs in place of a second wire_env: name it so.
+			runWiring(t, bash, env, strings.Replace(unwire, "\nunwire_env() {", "\nwire_env() {", 1))
+			got, _ := os.ReadFile(env)
+			if strings.Contains(string(got), "iceslab-node env:"+engine+" ") {
+				t.Errorf("the %s block is still there:\n%s", engine, got)
+			}
+			for _, k := range key.FindAllStringSubmatch(wire[strings.Index(wire, "wire_env() {"):], -1) {
+				if strings.Contains(string(got), "\n"+k[1]+"=") || strings.HasPrefix(string(got), k[1]+"=") {
+					t.Errorf("%s is still set after --remove:\n%s", k[1], got)
+				}
+			}
+			for _, keep := range []string{"NODE_PAYLOAD=cGF5bG9hZA\n", "XRAY_REALITY_SHORT_IDS=abc123\n", "OTHER_KEY=1\n"} {
+				if !strings.Contains(string(got), keep) {
+					t.Errorf("--remove took %q with it:\n%s", keep, got)
+				}
+			}
+		})
+	}
+}
+
+// Every bootstrap has the --remove road, and it goes through the one refusal
+// the script can make and through the env: a remove that forgot either would
+// either pull a binary from under a running core or leave the agent asking for
+// a core that is gone.
+func TestEveryBootstrapHasARemoveThatRefusesAndUnwires(t *testing.T) {
+	for engine, name := range bootstraps {
+		script := readScript(t, name)
+		remove := fnBody(t, script, "remove_core")
+		if !strings.Contains(remove, "node_env_refuse_if_running") {
+			t.Errorf("%s: --remove does not refuse on a running core", name)
+		}
+		if !strings.Contains(remove, "unwire_env") {
+			t.Errorf("%s: --remove leaves the core in the agent's env", name)
+		}
+		if strings.Contains(remove, "/etc/iceslab-node/env") || strings.Contains(remove, "NODE_PAYLOAD") ||
+			strings.Contains(remove, "rm -rf /etc/iceslab-node") {
+			t.Errorf("%s: --remove reaches into the agent's identity", name)
+		}
+		dispatch := "if [[ \"$NODE_ENV_REMOVE\" == 1 ]]; then"
+		i := strings.Index(script, dispatch)
+		if i == -1 || !strings.Contains(script[i:i+200], "remove_core\n  node_env_done "+engine) {
+			t.Errorf("%s: no --remove dispatch that ends through node_env_done %s", name, engine)
+		}
+	}
+}
+
+// The refusal and the process probe, run for real.
+func TestTheRemoveRefusalAndTheProcessProbe(t *testing.T) {
+	bash := needBash(t)
+	lib, _ := filepath.Abs(filepath.Join("scripts", "lib", "node-env.sh"))
+	run := func(body string) (string, error) {
+		cmd := exec.Command(bash, "-c", "set -euo pipefail\n. '"+lib+"'\n"+body)
+		cmd.Env = []string{"PATH=/usr/bin:/bin"}
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	out, err := run(`node_env_refuse_if_running mtg "mtg pid 42"; echo REACHED`)
+	if err == nil || strings.Contains(out, "REACHED") || !strings.Contains(out, "Stop it first") {
+		t.Errorf("a running core was not refused: %v\n%s", err, out)
+	}
+	out, err = run(`node_env_refuse_if_running mtg ""; echo REACHED`)
+	if err != nil || !strings.Contains(out, "REACHED") {
+		t.Errorf("a stopped core was refused: %v\n%s", err, out)
+	}
+	out, err = run(`sleep 30 & p=$!; got="$(node_env_pids sleep)"; kill $p; echo "[$got]"; echo "[$(node_env_pids no-such-core)]"`)
+	if err != nil || !regexp.MustCompile(`\[sleep pid \d+`).MatchString(out) || !strings.Contains(out, "[]") {
+		t.Errorf("node_env_pids: %v\n%s", err, out)
+	}
+}
+
 // Every successful end of a bootstrap goes through the env block: an early
 // "already on the wanted version" exit used to leave the node exactly as
 // unwired as before.

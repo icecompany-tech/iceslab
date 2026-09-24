@@ -8,6 +8,7 @@ import type {
 } from '@iceslab/shared';
 import { intendedEngines, reportedEngines } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
+import type { CascadeEngineNeed } from './node-cascade-needs.js';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -153,6 +154,14 @@ export interface PublicNodeDto {
    * list and on GET by id; other responses leave it out.
    */
   hiddenByCascade?: { cascadeId: string; cascadeName: string } | null;
+  /**
+   * The cores the cascades this node stands in need from it, and which
+   * cascades (disabled ones included, `enabled: false`). Empty outside every
+   * cascade. One of the three facts that keep a core from being removed, beside
+   * `neededBy` on the core row and the main core (intendedEngines[0]).
+   * Present on the list and on GET by id.
+   */
+  cascadeNeedsEngines?: CascadeEngineNeed[];
   createdAt: string;
   updatedAt: string;
 }

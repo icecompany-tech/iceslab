@@ -14,6 +14,7 @@
 #
 # Flags:
 #   --restart-agent  restart iceslab-node at the end
+#   --remove         take mita off the node instead (refused while it serves)
 #
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   MIERU_VERSION   release to install instead of the pin, e.g. 3.37.0
@@ -56,6 +57,39 @@ finish() {
   wire_env
   node_env_done mieru
 }
+
+unwire_env() {
+  node_env_unblock mieru MITA_BINARY MITA_CONFIG MITA_PORT MITA_MTU MITA_LOG_LEVEL
+}
+
+# --remove: the mita package with its unit and its own stored config (purged),
+# and the config the agent rendered. Kept: /etc/mita itself.
+#
+# mita.service runs whether or not the agent gave it anything, and the agent
+# writes its config on every start, so neither says "serving". What does: the
+# service active AND the agent's last push (the store it replays at boot)
+# naming a mieru inbound.
+remove_core() {
+  local config running="" store=/etc/iceslab-node/inbounds.json
+  config="$(node_env_keep MITA_CONFIG /etc/mita/server.json)"
+  if systemctl is-active --quiet mita.service 2>/dev/null && grep -Eq '"protocol": *"mieru"' "$store" 2>/dev/null; then
+    running="mita.service is active and the agent's last push names a mieru inbound"
+  fi
+  node_env_refuse_if_running mita "$running" "nothing more: once the push no longer names mieru, this goes through"
+  systemctl disable --now mita.service >/dev/null 2>&1 || true
+  if dpkg -s mita >/dev/null 2>&1; then
+    dpkg -P mita >/dev/null || warn "dpkg -P mita failed; check: dpkg -s mita"
+  fi
+  rm -f "$INSTALL_DIR/mita" "$config"
+  unwire_env
+  log "mita removed"
+}
+
+if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
+  remove_core
+  node_env_done mieru
+  exit 0
+fi
 
 # ───── pinned version ─────
 #
