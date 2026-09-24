@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entryPolicyPatch, entryPolicyPlace, entryPolicyRefusal } from '@/contours/cascades/lib/cascadeForm';
+import { entryPolicyPatch, entryPolicyPlace, entryPolicyRefusal, storedEntryPolicy } from '@/contours/cascades/lib/cascadeForm';
 import { policyEntryOf, routePolicyInUse } from '@/lib/domain/routePolicies';
 
 describe('entryPolicyPlace: где стоит политика входа (Ф9.3)', () => {
@@ -55,8 +55,28 @@ describe('policyEntryOf: у каких каскадов политика сто�
     expect(policyEntryOf('p1', cascades)).toEqual(['123']);
     expect(policyEntryOf('p2', cascades)).toEqual([]);
   });
-  it('хоть у одного каскада нет ключа или списка нет: не факт', () => {
+  it('без fields (сервер старше): хоть у одного каскада нет ключа или списка нет, не факт', () => {
     expect(policyEntryOf('p1', [{ name: 'a', entryPolicy: { id: 'p1' } }, { name: 'b' }])).toBeNull();
     expect(policyEntryOf('p1', undefined)).toBeNull();
+    expect(policyEntryOf('p1', [{ name: 'a' }], ['tunnels'])).toBeNull();
+    expect(policyEntryOf('p1', [{ name: 'a' }], 'entryPolicy')).toBeNull();
+  });
+  it('fields называет entryPolicy: каскад без ключа это «не задана», факт полный', () => {
+    const cascades = [{ name: '123', entryPolicy: { id: 'p1' } }, { name: 'b' }];
+    expect(policyEntryOf('p1', cascades, ['entryPolicy'])).toEqual(['123']);
+    expect(policyEntryOf('p2', [{ name: 'b' }], ['entryPolicy'])).toEqual([]);
+    expect(policyEntryOf('p1', undefined, ['entryPolicy'])).toBeNull();
+  });
+});
+
+describe('storedEntryPolicy: политика стоящего каскада в черновике', () => {
+  it('ключ есть: id или null, независимо от признака', () => {
+    expect(storedEntryPolicy({ id: 'p1' }, true)).toBe('p1');
+    expect(storedEntryPolicy({ id: 'p1' }, false)).toBe('p1');
+    expect(storedEntryPolicy(null, false)).toBeNull();
+  });
+  it('ключа нет: сервер знает поле, значит «не задана»; не знает, значит селектора нет', () => {
+    expect(storedEntryPolicy(undefined, true)).toBeNull();
+    expect(storedEntryPolicy(undefined, false)).toBeUndefined();
   });
 });

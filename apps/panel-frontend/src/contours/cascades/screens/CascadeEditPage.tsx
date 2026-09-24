@@ -18,6 +18,7 @@ import {
 } from '@/lib/domain/cascades';
 import { listNodes, type Node } from '@/lib/domain/nodes';
 import { listRoutePolicies } from '@/lib/domain/routePolicies';
+import { listFieldKnown } from '@/lib/domain/nodeFields';
 import { refusalOf } from '@/lib/domain/syncRefusal';
 import { chainFacts } from '@/lib/domain/chainStatus';
 import { linkCellEngines, nodeCarriesCell } from '@/lib/domain/linkCells';
@@ -112,6 +113,7 @@ import {
   entryPolicyPatch,
   entryPolicyPlace,
   entryPolicyRefusal,
+  storedEntryPolicy,
   type CellRefusal,
   type EntryChainConflict,
   type EntryChangeRefusal,
@@ -144,6 +146,16 @@ export function CascadeEditPage() {
   const nodesQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
   const overviewQuery = useOverview();
   const cascade = cascadesQuery.data?.cascades.find((c) => c.id === id) ?? null;
+  // Какие поля сервер рендерит, говорит `fields` конверта; по стоящим каскадам
+  // это выводится только у сервера старше (listFieldKnown). Ключ у одного
+  // каскада не факт: сервер, назвавший поле, отсутствие ключа значит «пусто».
+  const entryPolicyKnown = listFieldKnown(cascadesQuery.data?.fields, cascadesQuery.data?.cascades, 'entryPolicy');
+  const legCellKnown = listFieldKnown(
+    cascadesQuery.data?.fields,
+    cascadesQuery.data?.cascades.flatMap((c) => c.directions),
+    'linkProtocol',
+    'directions[].linkProtocol',
+  );
 
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.id, n] as const)), [nodes]);
@@ -197,7 +209,7 @@ export function CascadeEditPage() {
   // on every refetch would throw away an edit the moment the list poll returns.
   if (cascade && nodesQuery.isSuccess && loadedFor !== cascade.id) {
     setLoadedFor(cascade.id);
-    setDraft(toDraft(cascade, nodeById));
+    setDraft(toDraft(cascade, nodeById, entryPolicyKnown));
   }
 
   usePageMeta([t('cascadeCreate.crumbSection'), cascade?.name ?? '']);
@@ -308,7 +320,7 @@ export function CascadeEditPage() {
             directions: toDirectionInputs(draft.directions),
             // Политика входа только при правке: отсутствие ключа у сервера
             // значит «не трогать», null снимает её.
-            ...entryPolicyPatch(draft.entryPolicyId, entryPolicyOf(cascade!)),
+            ...entryPolicyPatch(draft.entryPolicyId, storedEntryPolicy(cascade!.entryPolicy, entryPolicyKnown)),
           },
           confirmed === true,
         ),
@@ -319,7 +331,7 @@ export function CascadeEditPage() {
       qc.invalidateQueries({ queryKey: ['nodes'] });
       qc.invalidateQueries({ queryKey: ['cascade-status', id] });
       // Re-seed from what came back, so the bar stops claiming unsaved changes.
-      setDraft(toDraft(saved, nodeById));
+      setDraft(toDraft(saved, nodeById, entryPolicyKnown));
       watchCascadeProvisioning(id, t);
     },
     onError: (err, confirmed) => {
@@ -532,7 +544,7 @@ export function CascadeEditPage() {
     legacy.length === 0 &&
     (entryChain?.carried ?? true);
   const dirty =
-    JSON.stringify(frozen(draft)) !== JSON.stringify(frozen(toDraft(cascade, nodeById)));
+    JSON.stringify(frozen(draft)) !== JSON.stringify(frozen(toDraft(cascade, nodeById, entryPolicyKnown)));
 
   // T7: below this a node rejects the per-direction UUID at auth, so a client
   // landing on it loses the choice. Any entry node can be that one, and the
@@ -956,7 +968,7 @@ export function CascadeEditPage() {
                   cell={dir.linkProtocol ?? null}
                   params={dir.linkParams ?? null}
                   port={dir.linkPort}
-                  available={dir.linkProtocol !== undefined}
+                  available={legCellKnown}
                   gaps={legCellNotes(dir.nodeIds, dir.linkProtocol, nodeById, nodeCarriesCell, cellRefusals)}
                   portTaken={legPortNotes(dir.nodeIds, dir.linkPort, nodeById, portConflicts)}
                   onCell={(v) => setDirection(i, { linkProtocol: v, linkTouched: true })}
@@ -1339,11 +1351,6 @@ interface Draft {
   entryPolicyId?: string | null;
 }
 
-/** Политика входа каскада в черновике: те же три значения, что в ответе. */
-function entryPolicyOf(c: Cascade): string | null | undefined {
-  return c.entryPolicy === undefined ? undefined : (c.entryPolicy?.id ?? null);
-}
-
 /**
  * The saved cascade as an editable draft, translated from the hop shape the API
  * still answers in:
@@ -1358,7 +1365,7 @@ function entryPolicyOf(c: Cascade): string | null | undefined {
  * `frozenKeys` makes the React keys constant, which is what the dirty
  * comparison needs: a key counter would make every re-seed compare unequal.
  */
-function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
+function toDraft(c: Cascade, byId: Map<string, Node>, entryPolicyKnown: boolean): Draft {
   const sorted = [...c.hops].sort((a, b) => a.position - b.position);
   // Ключ это ПОЗИЦИЯ строки, а не значение счётчика. Счётчик жил в `useRef` и
   // читался посреди рендера, то есть делал его нечистым; позиция даёт то же
@@ -1408,7 +1415,7 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
         linkPort: d.linkPort,
       })),
       nextTag: c.nextDirectionTag,
-      entryPolicyId: entryPolicyOf(c),
+      entryPolicyId: storedEntryPolicy(c.entryPolicy, entryPolicyKnown),
     };
   }
   const head = sorted[0];
@@ -1450,7 +1457,7 @@ function toDraft(c: Cascade, byId: Map<string, Node>): Draft {
     // hops, so a direction added here gets the number the server will actually
     // issue rather than one derived from the rows on screen.
     nextTag: c.nextDirectionTag,
-    entryPolicyId: entryPolicyOf(c),
+    entryPolicyId: storedEntryPolicy(c.entryPolicy, entryPolicyKnown),
   };
 }
 

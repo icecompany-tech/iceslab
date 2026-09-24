@@ -107,7 +107,7 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   // Каскады, у которых политика стоит входом: факт из списка каскадов. Есть
   // такие, удаление недоступно заранее; факта нет (сервер старше), только 409.
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
-  const entryOf = policyEntryOf(policy.id, cascadesQuery.data?.cascades);
+  const entryOf = policyEntryOf(policy.id, cascadesQuery.data?.cascades, cascadesQuery.data?.fields);
 
   function setRule(i: number, patch: Partial<DraftRule>) {
     setRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));

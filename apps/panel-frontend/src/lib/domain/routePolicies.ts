@@ -1,4 +1,5 @@
 import { api } from '@/lib/net/client';
+import { listFieldKnown } from '@/lib/domain/nodeFields';
 
 /** Stable, well-known UUID of the system "All" squad. Mirrored from
  *  apps/panel-backend/src/modules/squads/squads.constants.ts, UI uses it
@@ -129,15 +130,21 @@ export function routePolicyInUse(err: unknown): { cascades: { id: string; name: 
 
 /**
  * Каскады, у которых эта политика стоит входом, по факту списка каскадов (у
- * route-политики своего счётчика нет). `null`: у кого-то из каскадов нет ключа
- * `entryPolicy` (сервер старше Ф9.3) или списка ещё нет, и тогда экран не
- * запрещает заранее, а полагается на 409: неполный факт фактом не считается.
+ * route-политики своего счётчика нет). Что сервер поле знает, первым говорит
+ * `fields` конверта (CASCADE_DTO_FIELDS): тогда каскад без ключа читается как
+ * «не задана». Без `fields` (сервер старше) правило прежнее: `null`, если у
+ * кого-то из каскадов нет ключа `entryPolicy`, и экран не запрещает заранее, а
+ * полагается на 409. Списка ещё нет: тоже `null`. Неполный факт фактом не
+ * считается.
  */
 export function policyEntryOf(
   policyId: string,
   cascades: { name: string; entryPolicy?: { id: string } | null }[] | undefined,
+  fields?: unknown,
 ): string[] | null {
-  if (!cascades || cascades.some((c) => c.entryPolicy === undefined)) return null;
+  if (!cascades) return null;
+  const listed = listFieldKnown(fields, [], 'entryPolicy');
+  if (!listed && cascades.some((c) => c.entryPolicy === undefined)) return null;
   return cascades.filter((c) => c.entryPolicy?.id === policyId).map((c) => c.name);
 }
 

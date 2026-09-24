@@ -31,6 +31,14 @@ describe('nodeFieldKnown: знает ли сервер ключ, E29', () => {
     expect(listFieldKnown(['tunnels'], [{}], 'entryPolicy')).toBe(false);
   });
 
+  it('вложенный ключ: в fields под своим путём, по элементам под своим именем', () => {
+    const path = 'directions[].linkProtocol';
+    expect(listFieldKnown([path], [], 'linkProtocol', path)).toBe(true);
+    expect(listFieldKnown(['linkProtocol'], [], 'linkProtocol', path)).toBe(false);
+    expect(listFieldKnown(undefined, [{ linkProtocol: null }], 'linkProtocol', path)).toBe(true);
+    expect(listFieldKnown(undefined, [{}], 'linkProtocol', path)).toBe(false);
+  });
+
   it('ответа ещё нет: не знает', () => {
     expect(nodeFieldKnown(undefined, 'awgProtocol')).toBe(false);
   });

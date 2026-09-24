@@ -32,7 +32,14 @@ export function nodeFieldKnown(
  * CASCADE_DTO_FIELDS): сперва слово сервера, по элементам только у сервера
  * старше поля. Ответа ещё нет: не знает.
  */
-export function listFieldKnown(fields: unknown, items: readonly object[] | undefined, field: string): boolean {
-  if (Array.isArray(fields) && fields.every((f) => typeof f === 'string') && fields.includes(field)) return true;
+export function listFieldKnown(
+  fields: unknown,
+  items: readonly object[] | undefined,
+  field: string,
+  /** Имя в `fields`, когда ключ вложенный: `directions[].linkProtocol` у
+   *  ключа `linkProtocol` направления. По умолчанию то же, что `field`. */
+  listedAs: string = field,
+): boolean {
+  if (Array.isArray(fields) && fields.every((f) => typeof f === 'string') && fields.includes(listedAs)) return true;
   return (items ?? []).some((it) => (it as Record<string, unknown>)[field] !== undefined);
 }

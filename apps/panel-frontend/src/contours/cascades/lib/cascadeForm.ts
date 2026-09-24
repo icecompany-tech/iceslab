@@ -764,6 +764,21 @@ export function entryPolicyPatch(
   return { entryPolicyId: draft };
 }
 
+/**
+ * Политика входа стоящего каскада в трёх значениях черновика: `undefined` =
+ * сервер поля не знает, `null` = не задана, строка = id. Знает ли сервер,
+ * решает `serverKnows` (listFieldKnown: сперва `fields` конверта, по стоящим
+ * каскадам только у сервера старше), а не ключ у одного каскада: сервер,
+ * назвавший поле, отсутствие ключа значит «не задана», а не «не знаю».
+ */
+export function storedEntryPolicy(
+  stored: { id: string } | null | undefined,
+  serverKnows: boolean,
+): string | null | undefined {
+  if (stored === undefined) return serverKnows ? null : undefined;
+  return stored?.id ?? null;
+}
+
 /** 400 ENTRY_POLICY_NOT_FOUND: выбранной политики уже нет (удалили, пока форма
  *  была открыта). Вход проверяется первым; `null` значит «отказ не этот». */
 export function entryPolicyRefusal(err: unknown): { policyId: string | null } | null {
