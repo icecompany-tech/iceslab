@@ -27,7 +27,7 @@
     empty: 'No nodes yet. Click "Create node".',
     deleteTitle: 'Delete node "{{name}}"?',
     deleteBody:
-      'The node will be soft-deleted. Existing users stop being synced to it. The mTLS payload becomes invalid; provisioning a replacement requires a new node.',
+      'The profile bindings and hosts of this node are removed: users lose this node\'s lines in their subscription. The mTLS payload becomes invalid; a replacement needs a new node.',
     refreshBootstrapTitle: 'Re-issue bootstrap for "{{name}}"?',
     refreshBootstrapBody:
       'The current bootstrap token becomes invalid. Safe on a running agent - it keeps working with the existing cert. The fresh token is for reinstall or after an address change.',
@@ -494,8 +494,18 @@
     bindingsAllOk: 'Node created + {{count}} bindings',
     deleteTitle: 'Delete node "{{name}}"?',
     deleteBody:
-      'The node will be soft-deleted. All bindings to this node are removed (cascade - users lose URLs for those profiles). The agent on the VPS keeps running until you manually stop it.',
+      'The profile bindings and hosts of this node are removed: users lose this node\'s lines in their subscription. The agent on the VPS keeps running until you stop it yourself.',
     deleteCleanupHint: 'After deleting, run this on the node\'s VPS to clean up the agent:',
+    deleteBlocked_one: 'The node is in cascade {{names}}: deleting is refused while the cascade is on.',
+    deleteBlocked_other: 'The node is in cascades {{names}}: deleting is refused while the cascades are on.',
+    deleteBlockedHint: 'Switch the cascade off or move the way out to another node first',
+    deleteDisabledCascades_one: 'The node is in the disabled cascade {{names}}: deleting goes through, the cascade needs fixing before it is switched on.',
+    deleteDisabledCascades_other: 'The node is in the disabled cascades {{names}}: deleting goes through, the cascades need fixing before they are switched on.',
+    deleteFailed: 'Delete failed',
+    inCascadeTitle_one: 'The node is in cascade {{names}}',
+    inCascadeTitle_other: 'The node is in cascades {{names}}',
+    inCascadeTitleUnnamed: 'The node is in an enabled cascade',
+    inCascadeBody: 'Switch the cascade off or move the way out to another node first, then delete.',
   },
 
   fleetEmpty: {

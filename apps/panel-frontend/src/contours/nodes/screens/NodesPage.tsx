@@ -48,6 +48,9 @@ import { listCascades } from '@/lib/domain/cascades';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { NodePayloadModal } from '@/contours/nodes/components/NodePayloadModal';
+import { NodeDeleteCascades } from '@/contours/nodes/components/NodeDelete';
+import { showNodeDeleteFailed } from '@/contours/nodes/components/nodeDeleteToast';
+import { nodeDeleteFacts } from '@/contours/nodes/lib/nodeDelete';
 import { NodeCard } from '@/contours/nodes/components/NodeCard';
 import { CascadesPanel } from '@/contours/nodes/components/CascadesPanel';
 import type { CascadeLayout } from '@/contours/nodes/components/CascadesView';
@@ -586,12 +589,9 @@ export function NodesPage() {
       qc.invalidateQueries({ queryKey: ['nodes'] });
       notifications.show({ color: 'green', message: 'Node deleted' });
     },
-    onError: (err) =>
-      notifications.show({
-        color: 'red',
-        title: 'Delete failed',
-        message: err instanceof Error ? err.message : String(err),
-      }),
+    // Тело отказа, а не строка axios: 409 NODE_IN_USE_BY_CASCADE называет
+    // каскад и что сделать (E28, стенд 24.09 показал «status code 409»).
+    onError: (err) => showNodeDeleteFailed(err, t),
   });
 
   // Re-issue a bootstrap token for an existing node - used when the original
@@ -636,10 +636,15 @@ export function NodesPage() {
     // and an old server cert + CA pair sits around as future drift bait.
     const uninstallCmd =
       'bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) --uninstall';
+    // Включённый каскад держит ноду: сервер откажет, и кнопка говорит это
+    // заранее. Нет поля у ноды: окно как раньше (nodeDeleteFacts).
+    const cascades = nodeDeleteFacts(node);
+    const blocked = (cascades?.blocked.length ?? 0) > 0;
     modals.openConfirmModal({
       title: t('nodeConfirm.deleteTitle', { name: node.name }),
       children: (
         <Stack gap="sm">
+          <NodeDeleteCascades facts={cascades} />
           <Text size="sm">{t('nodeConfirm.deleteBody')}</Text>
           <Text size="sm" fw={600}>
             {t('nodeConfirm.deleteCleanupHint')}
@@ -659,7 +664,7 @@ export function NodesPage() {
         </Stack>
       ),
       labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
-      confirmProps: { color: 'red' },
+      confirmProps: { color: 'red', disabled: blocked, title: blocked ? t('nodeConfirm.deleteBlockedHint') : undefined },
       onConfirm: () => deleteMutation.mutate(node.id),
     });
   }

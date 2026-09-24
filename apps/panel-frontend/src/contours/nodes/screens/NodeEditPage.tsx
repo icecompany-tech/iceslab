@@ -27,6 +27,9 @@ import { modals } from '@mantine/modals';
 import {
   deleteNode,
 } from '@/lib/domain/nodes';
+import { NodeDeleteCascades } from '@/contours/nodes/components/NodeDelete';
+import { showNodeDeleteFailed } from '@/contours/nodes/components/nodeDeleteToast';
+import { nodeDeleteFacts } from '@/contours/nodes/lib/nodeDelete';
 
 /**
  * A registered node, as a page with tabs. Parameters is what the panel stores
@@ -196,20 +199,39 @@ export function NodeEditPage() {
           </PlainButton>
           <UnstyledButton
             type="button"
-            onClick={() =>
+            onClick={() => {
+              // Включённый каскад держит ноду: кнопка недоступна до щелчка, а
+              // отказ, если всё же пришёл, говорит словами (E28). Раньше отказ
+              // здесь терялся вовсе: onConfirm ждал удаления без catch.
+              const cascades = nodeDeleteFacts(node);
+              const blocked = (cascades?.blocked.length ?? 0) > 0;
               modals.openConfirmModal({
                 title: t('nodes.deleteTitle', { name: node.name }),
-                children: <Text size="sm">{t('nodes.deleteBody')}</Text>,
+                children: (
+                  <Stack gap="sm">
+                    <NodeDeleteCascades facts={cascades} />
+                    <Text size="sm">{t('nodes.deleteBody')}</Text>
+                  </Stack>
+                ),
                 labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
-                confirmProps: { color: 'red' },
+                confirmProps: {
+                  color: 'red',
+                  disabled: blocked,
+                  title: blocked ? t('nodeConfirm.deleteBlockedHint') : undefined,
+                },
                 onConfirm: async () => {
-                  await deleteNode(node.id);
+                  try {
+                    await deleteNode(node.id);
+                  } catch (err) {
+                    showNodeDeleteFailed(err, t);
+                    return;
+                  }
                   qc.invalidateQueries({ queryKey: ['nodes'] });
-      qc.invalidateQueries({ queryKey: ['node', id] });
+                  qc.invalidateQueries({ queryKey: ['node', id] });
                   navigate('/nodes');
                 },
-              })
-            }
+              });
+            }}
             style={{
               width: 38,
               height: 38,
