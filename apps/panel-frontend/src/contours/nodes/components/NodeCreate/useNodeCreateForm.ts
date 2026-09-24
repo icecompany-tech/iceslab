@@ -26,6 +26,7 @@ import {
 import { coreVersionRefusal } from '@/lib/domain/coreVersions';
 import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
+import { nodeFieldKnown } from '@/contours/nodes/lib/nodeFields';
 
 /**
  * Everything the create wizard owns that is not markup: the form, the profile
@@ -128,24 +129,24 @@ export function useNodeCreateForm() {
   });
 
   /**
-   * Знает ли сервер поле `awgProtocol`. У новой ноды ответа сервера про неё
-   * нет, поэтому смотрим на уже стоящие: ключ сервер отдаёт у каждой всегда,
-   * так что хватает одной. Пустой парк это «не знаем», и тогда выбора нет,
-   * а не выбор, который сервер может отвергнуть.
+   * Знает ли сервер поля `awgProtocol`, `coreVersions`, `intendedEngines`.
+   * Сперва по `fields` конверта: сервер сам говорит, что отдаёт, и это
+   * работает на пустом парке (E29: после удаления всех нод мастер показал
+   * старую форму). По стоящим нодам только у сервера старше `fields`
+   * (nodeFieldKnown). Не знаем: прежняя форма, а не выбор, который сервер
+   * может отвергнуть.
    */
   const fleetQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
-  const awgKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.awgProtocol !== undefined);
-  // Знает ли сервер намерение по версиям ядер: тем же способом, по уже
-  // стоящим нодам (ключ отдаётся у каждой всегда).
-  const coreVersionsKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.coreVersions !== undefined);
+  const awgKnown = nodeFieldKnown(fleetQuery.data, 'awgProtocol');
+  const coreVersionsKnown = nodeFieldKnown(fleetQuery.data, 'coreVersions');
   /** Строки отказа 400 CORE_VERSION_NOT_LISTED после «Зарегистрировать». */
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
   /**
-   * Знает ли сервер `intendedEngines` (64d7078): тем же способом, по стоящим
-   * нодам. Знает: чипы ядер; нет: прежние селект протокола и переключатель
-   * sing-box, чтобы экран не слал ключ, который сервер отвергнет.
+   * Знает ли сервер `intendedEngines` (64d7078), тем же способом. Знает: чипы
+   * ядер; нет: прежние селект протокола и переключатель sing-box, чтобы экран
+   * не слал ключ, который сервер отвергнет.
    */
-  const enginesKnown = (fleetQuery.data?.nodes ?? []).some((n) => n.intendedEngines !== undefined);
+  const enginesKnown = nodeFieldKnown(fleetQuery.data, 'intendedEngines');
   /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
   const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
   // Какие ядра встанут на ноду: чипы, или то же из старой формы.

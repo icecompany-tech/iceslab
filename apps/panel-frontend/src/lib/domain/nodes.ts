@@ -267,6 +267,12 @@ export interface NodesListResponse {
   total: number;
   page: number;
   limit: number;
+  /**
+   * Имена необязательных ключей DTO ноды, которые этот сервер отдаёт (E29).
+   * Отвечает на «знает ли сервер поле» и на пустом парке. Нет ключа: сервер
+   * старше, и знание выводится по нодам (`nodeFieldKnown`).
+   */
+  fields?: string[];
 }
 
 export interface CreateNodeInput {
