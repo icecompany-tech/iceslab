@@ -444,6 +444,7 @@
   nodeCard: {
     statusPhrase: {
       resolverDown: 'the node cannot resolve names',
+      unnamedDegraded: 'the agent reports degraded without a core reason',
     },
     // The policy badge in the list. Short on purpose: this is a card, and the
     // per-core detail lives on the node page. What travels here is only the

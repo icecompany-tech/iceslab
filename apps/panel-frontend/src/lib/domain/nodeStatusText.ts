@@ -9,6 +9,9 @@
  */
 const PHRASES: readonly (readonly [english: string, key: string])[] = [
   ['system resolver not answering', 'nodeCard.statusPhrase.resolverDown'],
+  // UNNAMED_DEGRADED в nodes.cron.ts (25067c9): агент сказал degraded, а ни
+  // одно ядро не названо упавшим.
+  ['agent reports degraded without a core reason', 'nodeCard.statusPhrase.unnamedDegraded'],
 ];
 
 /**

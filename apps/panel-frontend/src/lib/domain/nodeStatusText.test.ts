@@ -15,7 +15,25 @@ describe('statusRepeatsRefusal: одна беда один раз (E38)', () => 
   });
 });
 
-const t = (k: string) => (k === 'nodeCard.statusPhrase.resolverDown' ? 'нода не резолвит домены' : k);
+const RU: Record<string, string> = {
+  'nodeCard.statusPhrase.resolverDown': 'нода не резолвит домены',
+  'nodeCard.statusPhrase.unnamedDegraded': 'агент назвал ноду degraded без причины по ядрам',
+};
+const t = (k: string) => RU[k] ?? k;
+
+describe('nodeStatusText: фразы 25067c9', () => {
+  it('degraded без причины по ядрам переводится', () => {
+    expect(nodeStatusText('agent reports degraded without a core reason', t)).toBe(
+      'агент назвал ноду degraded без причины по ядрам',
+    );
+  });
+
+  it('обрезанное сервером сообщение с «…» на хвосте: фраза в начале переводится, «…» остаётся', () => {
+    expect(nodeStatusText('system resolver not answering; not running: xray, hysteria, amneziawg…', t)).toBe(
+      'нода не резолвит домены; not running: xray, hysteria, amneziawg…',
+    );
+  });
+});
 
 describe('nodeStatusText: причина статуса ноды по-русски', () => {
   it('фраза о резолвере переводится, хвост сообщения остаётся как есть', () => {
