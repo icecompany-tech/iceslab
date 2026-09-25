@@ -253,13 +253,19 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 	}
 	url := a.cfg.MetricsURL
 	client := a.cfg.metricsClient
+	// E36: asked only of an mtg that is serving. The panel adds its users to
+	// every node, so the N10 guard below let an idle mtproto (no inbound, no
+	// process) scrape a port nobody listens on and WARN every 30 s. Serving is
+	// provisioned (what Idle clears) and, where this agent runs mtg, running.
+	serving := a.cfg.Inbound.Domain != "" && a.cfg.Inbound.Secret != "" &&
+		(a.cfg.BinaryPath == "" || (a.proc != nil && a.proc.Running()))
 	a.mu.Unlock()
 
 	// N10 - parity with the SS/xray guard: no tracked users means nothing to
 	// attribute, so skip the HTTP scrape of the mtg metrics endpoint. On a node
 	// where mtproto is registered defensively but unused, this stops a pointless
 	// GET (and its warn-spam when the endpoint is down) every cron tick.
-	if len(users) == 0 {
+	if len(users) == 0 || !serving {
 		return &core.Stats{Users: users}, nil
 	}
 

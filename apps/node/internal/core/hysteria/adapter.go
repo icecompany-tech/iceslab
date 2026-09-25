@@ -391,8 +391,12 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 
 	// Stats endpoint not configured (older agent OR explicitly disabled),
 	// return the userId list with zero counters so the panel still sees
-	// who's registered even without traffic data.
-	if statsListen == "" || statsSecret == "" {
+	// who's registered even without traffic data. And a hysteria that is not
+	// serving is not asked (E36): every adapter is registered on every node, so
+	// an idle one was asked anyway, answered with a refused connection, and put
+	// a WARN in the journal every 30 s. Nothing is lost by the zeros: hysteria
+	// counts until it is read, and a stopped one has nothing to count.
+	if statsListen == "" || statsSecret == "" || !a.serving() {
 		for _, e := range users {
 			out = append(out, core.UserStats{UserID: e.UserID})
 		}
@@ -421,6 +425,28 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		})
 	}
 	return &core.Stats{Users: out}, nil
+}
+
+// serving: hysteria is up for this adapter to ask. Nothing applied (a fresh
+// node, or Idle forgot the inbound) is not serving whatever systemd says; past
+// that, the same verdict Healthy gives: the unit where systemd runs it, the
+// process in spawn mode. A hysteria this agent does not run (no BinaryPath) is
+// someone else's and is asked, as before.
+func (a *Adapter) serving() bool {
+	if a.cfg.BinaryPath == "" {
+		return true
+	}
+	a.mu.RLock()
+	applied := a.inbound != (InboundConfig{})
+	proc := a.proc
+	a.mu.RUnlock()
+	if !applied {
+		return false
+	}
+	if a.cfg.ServiceUnit != "" {
+		return a.unitActive()
+	}
+	return proc != nil && proc.Running()
 }
 
 // trafficStat mirrors the per-user shape of hysteria's traffic API
