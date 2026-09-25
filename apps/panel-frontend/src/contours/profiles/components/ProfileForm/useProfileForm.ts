@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
@@ -18,7 +18,7 @@ import {
 } from '@/contours/profiles/lib/profileFormValues';
 import { defaults } from '@/contours/profiles/lib/profileDefaults';
 import { MOBILE_PRESET, randomAwgHeaders, TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
-import { FLOW_COMPATIBLE_TRANSPORTS } from '@/contours/profiles/lib/xrayTransports';
+import { settleXrayFields, xrayFieldReactions } from '@/contours/profiles/lib/xrayFieldReactions';
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
 import { saveThen } from '@/contours/profiles/lib/saveThen';
@@ -45,7 +45,14 @@ export function useProfileForm({
   const isEdit = profile !== null;
 
   const form = useForm<FormValues>({
-    initialValues: defaults(profile),
+    initialValues: settleXrayFields(defaults(profile)),
+    // Транспорт и подпротокол xray тянут за собой соседние поля
+    // (xrayFieldReactions): на любую смену значения, правкой поля, рецептом
+    // или засевом, а не эффектом после рендера.
+    onValuesChange: (values, previous) => {
+      const patch = xrayFieldReactions(values, previous);
+      if (patch) form.setValues(patch);
+    },
     validate: {
       name: (v) => {
         if (v.length < 1) return 'Required';
@@ -60,41 +67,14 @@ export function useProfileForm({
     },
   });
 
+  // Засев при открытии и при смене профиля, но не при новом объекте того же
+  // профиля: refetch списка приносит новый объект с тем же id, и пересев
+  // стёр бы несохранённые правки. useEffectEvent читает свежий profile, а
+  // эффект зависит только от того, что должно пересевать.
+  const seed = useEffectEvent(() => form.setValues(settleXrayFields(defaults(profile))));
   useEffect(() => {
-    if (opened) form.setValues(defaults(profile));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (opened) seed();
   }, [opened, profile?.id]);
-
-  // Auto-fill the gRPC serviceName placeholder when the admin switches
-  // transport=grpc - the field is `required`, so without a default the
-  // form refuses to save with a misleading "fill this field" prompt
-  // even though we've shown a placeholder hinting at the canonical
-  // value. `GunService` is the xtls/xray default; admins who want a
-  // less-fingerprintable name can edit it.
-  useEffect(() => {
-    if (form.values.xrayNetwork === 'grpc' && !form.values.xrayServiceName) {
-      form.setFieldValue('xrayServiceName', 'GunService');
-    }
-    // Vision flow is only valid on raw/xhttp; clear it on other transports so
-    // the server account and the client URI don't disagree (xray rejects
-    // "client flow is empty" when the server carries Vision but the transport
-    // can't use it).
-    if (!FLOW_COMPATIBLE_TRANSPORTS.includes(form.values.xrayNetwork) && form.values.xrayFlow) {
-      form.setFieldValue('xrayFlow', '');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.xrayNetwork]);
-
-  useEffect(() => {
-    // VMess share links can't carry REALITY; force a non-reality security.
-    if (
-      form.values.xraySubprotocol === 'vmess' &&
-      form.values.xraySecurity === 'reality'
-    ) {
-      form.setFieldValue('xraySecurity', 'none');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.xraySubprotocol]);
 
   const keypairMutation = useMutation({
     mutationFn: (protocol: 'xray' | 'amneziawg') => generateInboundKeypair(protocol),
