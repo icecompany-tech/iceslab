@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 )
 
@@ -703,7 +704,7 @@ func renderMultiConfig(
 			// the default section's queryStrategy, and also when the panel named
 			// the resolver: named means meant to be used.
 			"settings": map[string]any{
-				"domainStrategy": resolveStrategy(ipv6),
+				"domainStrategy": core.ResolveStrategy(ipv6),
 			},
 			"streamSettings": map[string]any{
 				"sockopt": map[string]any{

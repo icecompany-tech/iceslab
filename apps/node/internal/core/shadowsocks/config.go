@@ -22,6 +22,10 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/core"
 )
 
+// nodeHasIPv6 is read at every render. A variable so tests can pin the answer:
+// the goldens would otherwise depend on the machine that runs them.
+var nodeHasIPv6 = core.HostHasGlobalIPv6
+
 // InboundConfig is the static part of the SS inbound, generated once
 // from admin settings and kept constant across user mutations.
 type InboundConfig struct {
@@ -156,7 +160,23 @@ func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
 	}
 	cfg := inbound.withDefaults()
 
+	// E37: this is a second xray process, and it had the same hole the vless
+	// side closed in b5a1b91. With no `dns` section and freedom on AsIs every
+	// name went to the host's resolver, the stub that died on nl-01. Same
+	// servers and the same family choice as the xray adapter, from one place
+	// (core.DefaultResolvers, core.ResolveStrategy). The panel names no
+	// resolver for this adapter, so the default is the only section it gets.
+	strategy := core.ResolveStrategy(nodeHasIPv6())
+	servers := make([]any, 0, len(core.DefaultResolvers))
+	for _, s := range core.DefaultResolvers {
+		servers = append(servers, s)
+	}
+
 	doc := map[string]any{
+		"dns": map[string]any{
+			"servers":       servers,
+			"queryStrategy": strategy,
+		},
 		// `warning`, for the same reason the vless side of this binary logs at
 		// warning: at info xray writes a line per CONNECTION, journald mirrors
 		// it into syslog, and the journald limits in our installer do not cap
@@ -204,6 +224,8 @@ func renderConfig(inbound InboundConfig, users []ssClient) ([]byte, error) {
 			{
 				"protocol": "freedom",
 				"tag":      "direct",
+				// Names through the section above, not the host (E37).
+				"settings": map[string]any{"domainStrategy": strategy},
 				"streamSettings": map[string]any{
 					"sockopt": map[string]any{
 						"tcpCongestion": "bbr",

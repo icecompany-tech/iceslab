@@ -1,57 +1,23 @@
 package xray
 
-import "net"
+import "github.com/icecompany-tech/iceslab/apps/node/internal/core"
 
 // defaultDnsSection is the `dns` block of a node the panel named no resolver
-// for (E37, 25.09 on nl-01).
-//
-// Without one xray resolves through the host's resolver, which on a systemd
-// host is the stub at 127.0.0.53. On nl-01 that stub stopped answering (an
-// AmneziaWG MASQUERADE rule rewrote loopback queries to the public address and
-// systemd-resolved dropped them), and every vless host on the node went dead
-// with the panel reading ONLINE: one resolver the operator never chose was a
-// single point of failure for every host of the core. Two public resolvers
-// first, the host's own (`localhost`) last, so any one of the three is enough.
-//
-// queryStrategy follows what the node can reach: an AAAA answer on a node with
-// no IPv6 is an address the connection then fails to dial.
+// for (E37, 25.09 on nl-01): core.DefaultResolvers, with queryStrategy from
+// core.ResolveStrategy, the same choice the direct outbound's domainStrategy
+// reads. Why the host's resolver alone is not enough is written beside
+// core.DefaultResolvers.
 func defaultDnsSection(ipv6 bool) map[string]any {
+	servers := make([]any, 0, len(core.DefaultResolvers))
+	for _, s := range core.DefaultResolvers {
+		servers = append(servers, s)
+	}
 	return map[string]any{
-		"servers":       []any{"1.1.1.1", "8.8.8.8", "localhost"},
-		"queryStrategy": resolveStrategy(ipv6),
+		"servers":       servers,
+		"queryStrategy": core.ResolveStrategy(ipv6),
 	}
-}
-
-// resolveStrategy is the one choice of address family, read in two places:
-// the default section's queryStrategy and the direct outbound's
-// domainStrategy. UseIP where the node has global IPv6, UseIPv4 otherwise.
-func resolveStrategy(ipv6 bool) string {
-	if ipv6 {
-		return "UseIP"
-	}
-	return "UseIPv4"
 }
 
 // nodeHasIPv6 is read at every render. A variable so tests can pin the answer:
 // the goldens would otherwise depend on the machine that runs them.
-var nodeHasIPv6 = hostHasGlobalIPv6
-
-// hostHasGlobalIPv6: an interface of this host carries a global IPv6 address.
-// Link-local and unique-local (fc00::/7) do not count: neither reaches the
-// internet.
-func hostHasGlobalIPv6() bool {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return false
-	}
-	for _, a := range addrs {
-		n, ok := a.(*net.IPNet)
-		if !ok || n.IP.To4() != nil {
-			continue
-		}
-		if n.IP.IsGlobalUnicast() && !n.IP.IsPrivate() {
-			return true
-		}
-	}
-	return false
-}
+var nodeHasIPv6 = core.HostHasGlobalIPv6
