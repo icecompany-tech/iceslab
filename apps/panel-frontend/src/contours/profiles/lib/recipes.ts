@@ -668,6 +668,29 @@ export function recipeTile(r: Pick<Recipe, 'protocol' | 'engine' | 'subprotocol'
   return profileKindKey(r.protocol, r.engine ?? 'native', r.subprotocol);
 }
 
+/**
+ * A recipe's words on screen: the panel's translation by id
+ * (`recipes.cards.<id>.{name,description,details,notes}`) where the bundle
+ * has one, else the recipe's own text. The registry ships English; the
+ * Russian of the recipes that used to be built in lives in the panel by id.
+ * A recipe nobody translated shows exactly what its author wrote.
+ */
+export function recipeText(
+  recipe: Pick<Recipe, 'id' | 'name' | 'description' | 'details' | 'notes'>,
+  has: (key: string) => boolean,
+  t: (key: string, opts?: Record<string, unknown>) => unknown,
+): { name: string; description: string; details: string; notes: string[] | undefined } {
+  const base = `recipes.cards.${recipe.id}`;
+  const str = (suffix: string, own: string) => (has(`${base}.${suffix}`) ? String(t(`${base}.${suffix}`)) : own);
+  const notes = has(`${base}.notes`) ? t(`${base}.notes`, { returnObjects: true }) : undefined;
+  return {
+    name: str('name', recipe.name),
+    description: str('description', recipe.description),
+    details: str('details', recipe.details),
+    notes: Array.isArray(notes) ? notes.map(String) : recipe.notes,
+  };
+}
+
 /** The built-in recipes of one protocol tile (a PROFILE_KINDS key). */
 export function recipesForKind(kindKey: string): Recipe[] {
   return RECIPES.filter((r) => recipeTile(r) === kindKey);

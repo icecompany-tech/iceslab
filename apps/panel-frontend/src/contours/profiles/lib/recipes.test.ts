@@ -11,6 +11,7 @@ import {
   RECIPES,
   RECIPE_COMMON_FIELDS,
   recipesForKind,
+  recipeText,
   recipeTile,
   registryProblems,
   resolveRecipeApply,
@@ -18,6 +19,7 @@ import {
 } from '@/contours/profiles/lib/recipes';
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import en from '@/i18n/locales/en';
+import ru from '@/i18n/locales/ru';
 
 describe('рецепты у каждой плитки', () => {
   it('у каждой плитки PROFILE_KINDS не меньше одного встроенного рецепта', () => {
@@ -144,6 +146,43 @@ describe('рецепты у каждой плитки: форма и черно�
     expect(new Set(ids).size).toBe(ids.length);
     const cards = (en as unknown as { recipes: { cards: Record<string, { name?: string }> } }).recipes.cards;
     for (const r of RECIPES) expect(typeof cards[r.id]?.name, r.id).toBe('string');
+  });
+
+  it('русская подпись по id у всех 22: имя и столько же заметок, сколько у рецепта', () => {
+    const cards = (ru as unknown as { recipes: { cards: Record<string, { name?: string; notes?: string[] }> } }).recipes
+      .cards;
+    for (const r of RECIPES) {
+      expect(typeof cards[r.id]?.name, r.id).toBe('string');
+      expect(cards[r.id]?.notes?.length ?? 0, r.id).toBe(r.notes?.length ?? 0);
+    }
+  });
+});
+
+describe('recipeText: перевод по id, иначе текст рецепта', () => {
+  const recipe = { id: 'x', name: 'EN name', description: 'EN desc', details: 'EN details', notes: ['EN note'] };
+  const bundle: Record<string, unknown> = {
+    'recipes.cards.x.name': 'Имя',
+    'recipes.cards.x.notes': ['Заметка'],
+  };
+  const t = (k: string) => bundle[k];
+  const has = (k: string) => k in bundle;
+
+  it('есть перевод: берётся он, поле за полем', () => {
+    expect(recipeText(recipe, has, t)).toEqual({
+      name: 'Имя',
+      description: 'EN desc',
+      details: 'EN details',
+      notes: ['Заметка'],
+    });
+  });
+
+  it('рецепт без перевода (чужой из реестра): как написал автор', () => {
+    expect(recipeText({ ...recipe, id: 'y' }, has, t)).toEqual({
+      name: 'EN name',
+      description: 'EN desc',
+      details: 'EN details',
+      notes: ['EN note'],
+    });
   });
 });
 

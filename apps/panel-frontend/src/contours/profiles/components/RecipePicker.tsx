@@ -34,6 +34,7 @@ import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
 import {
   fromWireRecipe,
   recipesForKind,
+  recipeText,
   recipeTile,
   registryProblems,
   type Recipe,
@@ -84,32 +85,15 @@ function recipeKey(r: Recipe): string {
  */
 function useRecipeText(recipe: Recipe) {
   const { t, i18n } = useTranslation();
-  const base = `recipes.cards.${recipe.id}`;
-  const has = (suffix: string) => i18n.exists(`${base}.${suffix}`);
-  return {
-    name: has('name') ? t(`${base}.name`) : recipe.name,
-    description: has('description')
-      ? t(`${base}.description`)
-      : recipe.description,
-    details: has('details') ? t(`${base}.details`) : recipe.details,
-    notes: has('notes')
-      ? (t(`${base}.notes`, { returnObjects: true }) as unknown as string[])
-      : recipe.notes,
-  };
+  return recipeText(recipe, (k) => i18n.exists(k), t);
 }
 
 export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
   const { t, i18n } = useTranslation();
-  // Same lookup as useRecipeText, but callable inside a map: built-ins carry
-  // translated copy per id, registry recipes ship their own text.
+  // Same lookup as useRecipeText, but callable inside a map.
   const copy = (r: Recipe) => {
-    const base = `recipes.cards.${r.id}`;
-    return {
-      title: i18n.exists(`${base}.name`) ? t(`${base}.name`) : r.name,
-      subtitle: i18n.exists(`${base}.description`)
-        ? t(`${base}.description`)
-        : r.description,
-    };
+    const text = recipeText(r, (k) => i18n.exists(k), t);
+    return { title: text.name, subtitle: text.description };
   };
   const builtins = recipesForKind(kindKey);
   const [picked, setPicked] = useState<Recipe | null>(null);

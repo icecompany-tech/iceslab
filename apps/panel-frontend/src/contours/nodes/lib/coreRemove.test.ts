@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coreRemoveFacts, firstRowOfEngine, readCascadeNeeds } from '@/contours/nodes/lib/coreRemove';
+import { coreRemoveFacts, coreRowsInManifestOrder, firstRowOfEngine, readCascadeNeeds } from '@/contours/nodes/lib/coreRemove';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const core = (c: Partial<NodeCore> & { name: NodeCore['name'] }): NodeCore => c as NodeCore;
@@ -91,6 +91,25 @@ describe('coreRemoveFacts: «Как удалить» по фактам', () => {
     ];
     expect(coreRemoveFacts('singbox', node(rows))).toEqual({ kind: 'refused', reasons: [{ kind: 'hosts', count: 4 }] });
     expect([0, 1].map((i) => firstRowOfEngine(rows, i))).toEqual([true, false]);
+  });
+});
+
+describe('coreRowsInManifestOrder: строки «Ядер» в порядке манифеста', () => {
+  it('отчёт mtg, hysteria, xray, sing-box под двумя протоколами: xray, sing-box, hysteria, mtproto', () => {
+    const rows = [
+      core({ name: 'mtproto', engine: 'mtproto' }),
+      core({ name: 'hysteria', engine: 'hysteria' }),
+      core({ name: 'tuic', engine: 'singbox' }),
+      core({ name: 'xray', engine: 'xray' }),
+      core({ name: 'anytls', engine: 'singbox' }),
+    ];
+    expect(coreRowsInManifestOrder(rows).map((c) => c.name)).toEqual(['xray', 'tuic', 'anytls', 'hysteria', 'mtproto']);
+  });
+
+  it('строка без известного движка в конце; вход не меняется', () => {
+    const rows = [core({ name: 'weird' as NodeCore['name'] }), core({ name: 'xray', engine: 'xray' })];
+    expect(coreRowsInManifestOrder(rows).map((c) => c.name)).toEqual(['xray', 'weird']);
+    expect(rows.map((c) => c.name)).toEqual(['weird', 'xray']);
   });
 });
 

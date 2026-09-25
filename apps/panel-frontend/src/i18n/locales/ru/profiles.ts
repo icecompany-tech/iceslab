@@ -436,6 +436,7 @@ export const profiles = {
         notes: [
           'Obfs password сгенерирован случайно - не теряй его, нужен на клиентах',
           'Brutal CC 100/100 Mbps - настрой под реальную пропускную способность ноды',
+          'Port-hopping 20000-50000 включён, без него RU TSPU режет QUIC. install-iceslab-node.sh уже выставил iptables NAT для этого range',
         ],
       },
       'awg-default': {
@@ -476,6 +477,90 @@ export const profiles = {
         description: 'Специально под Great Firewall - random padding',
         details:
           'Mieru от enfein - современный stealth-протокол с агрессивным паддингом, разработан против Chinese GFW. Трафик выглядит как noise - нет сигнатур. Поддерживается sing-box. Используй когда другие протоколы режутся в CN-mainland.',
+      },
+      // Остальные 11 (25.09): рецепты уходят в реестр с английским текстом,
+      // русские подписи живут здесь по id, тексты из прежнего массива RECIPES.
+      'xray-reality-grpc-ru': {
+        name: 'REALITY + gRPC (RU-маскировка)',
+        description: 'Декой под русский CDN, для РФ где cloudflare-SNI режут',
+        details:
+          'VLESS + REALITY + gRPC, serverName маскируется под крупный русский CDN (Yandex avatars). РФ-ТСПУ фильтрует по SNI и таргетит cloudflare/зарубежные имена, а русский CDN-домен проходит, плюс огромный объём легитимного трафика для маскировки. Fingerprint firefox ("лояльный" для ТСПУ JA3/JA4; chrome помечается подозрительным). gRPC вместо raw: HTTP/2-фрейминг сложнее зафингерпринтить как прокси. Повторяет рабочие РФ-конфиги 2026. ВНИМАНИЕ: одиночная зарубежная нода под whitelist-shutdown всё равно ляжет, для отключений нужен каскад с RU-входом.',
+        notes: [
+          'serverName под русский CDN (avatars.mds.yandex.net); альтернатива ads.x5.ru. Нода должна дотягиваться до dest:443 по TLS 1.3',
+          'fingerprint firefox: chrome помечается РФ-ТСПУ как подозрительный',
+          'serviceName рандомизирован, чтобы не фингерпринтить Iceslab',
+          'Под whitelist-shutdown (отключения) зарубежная нода не спасёт - нужен каскад с RU-входом',
+        ],
+      },
+      'singbox-vless-reality-vision': {
+        name: 'VLESS + REALITY + Vision (sing-box)',
+        description: 'Без тонкой настройки REALITY против проб',
+        details:
+          'VLESS + REALITY + Vision поверх raw на движке sing-box. Та же ссылка vless://, что у ядра xray, но без тонкой настройки REALITY против проб (ограничение fallback, xver): у sing-box этих полей нет.',
+        notes: ['Vision работает только с raw, не меняй транспорт после применения рецепта'],
+      },
+      'singbox-hysteria-clean': {
+        name: 'Hysteria 2 (clean, sing-box)',
+        description: 'UDP, низкая latency, без obfs, для свободных регионов',
+        details:
+          'Hysteria 2 на движке sing-box без обфускации. Тот же протокол и та же ссылка hy2://, что у своего демона, одним процессом меньше.',
+      },
+      'singbox-hysteria-salamander': {
+        name: 'Hysteria 2 + Salamander (sing-box)',
+        description: 'Obfuscation для обхода UDP-DPI на РФ-мобиле',
+        details:
+          'Hysteria 2 на движке sing-box с obfs salamander и маскировкой под сайт при неудачной авторизации. Brutal 100/100 Mbps, port-hopping 20000-50000.',
+        notes: [
+          'Obfs password сгенерирован случайно, не теряй его, нужен на клиентах',
+          'Brutal CC 100/100 Mbps, настрой под реальную пропускную способность ноды',
+        ],
+      },
+      'singbox-ss-2022-blake3': {
+        name: 'SS-2022 (blake3-aes-256, sing-box)',
+        description: 'Современный Shadowsocks на движке sing-box',
+        details:
+          'Shadowsocks 2022 с шифром 2022-blake3-aes-256-gcm на движке sing-box, мультипользовательский. Outline шифры 2022 не понимает.',
+      },
+      'tuic-bbr': {
+        name: 'TUIC (bbr, self-signed)',
+        description: 'QUIC с BBR, для потерь на мобильных сетях',
+        details:
+          'TUIC v5 на sing-box, congestion control bbr (по умолчанию у sing-box cubic). Сертификат нода выпускает сама под SNI из формы, клиентам нужен allow-insecure.',
+        notes: ['Сертификат самоподписанный: в клиенте включи allow-insecure'],
+      },
+      'anytls-default-padding': {
+        name: 'AnyTLS (default padding)',
+        description: 'TLS-in-TLS с паддингом sing-box по умолчанию',
+        details:
+          'AnyTLS на sing-box. Схема паддинга стандартная (sing-box подставляет её при пустом padding_scheme), SNI для самоподписанного сертификата ноды.',
+        notes: ['Сертификат самоподписанный: в клиенте включи allow-insecure'],
+      },
+      'shadowtls-v3-bing': {
+        name: 'ShadowTLS v3 → real site',
+        description: 'Рукопожатие настоящего сайта, strict mode',
+        details:
+          'ShadowTLS v3 в strict mode: TLS-рукопожатие проксируется на www.bing.com:443, внутри Shadowsocks 2022. Ссылки нет, выдаётся только в форматах sing-box и Clash (mihomo).',
+      },
+      'telegram-socks5': {
+        name: 'Telegram SOCKS5 (1080)',
+        description: 'Ссылка tg://socks для всех трёх клиентов Telegram',
+        details:
+          'SOCKS5 на ядре xray, вход по логину и паролю пользователя. Без обфускации: для сетей, где прокси разрешён, не для обхода DPI. Порт 1080 предлагается при развёртывании на ноду.',
+        notes: ['Порт задаётся при развёртывании на ноду, по умолчанию 1080'],
+      },
+      'telegram-http': {
+        name: 'Telegram HTTP (3128)',
+        description: 'Только Telegram Desktop, адрес вводится руками',
+        details:
+          'HTTP CONNECT на ядре xray, вход по логину и паролю пользователя. Только Telegram Desktop, ссылки для добавления нет. Без обфускации. Порт 3128 предлагается при развёртывании на ноду.',
+        notes: ['Порт задаётся при развёртывании на ноду, по умолчанию 3128'],
+      },
+      'telegram-web-tproxy-websocket': {
+        name: 'WEB (tproxy-server, websocket)',
+        description: 'Носитель websocket, домен свой',
+        details:
+          'Ссылка t.me/webproxy для Telegram Web: Caddy на 443, за ним tproxy-server, за ним MTProxy. Носитель websocket проходит через CDN. Домен не подставляется: это ваш домен с A-записью на ноду. Сохранить профиль WEB панель пока не может.',
+        notes: ['Впишите свой домен и сгенерируйте ключ: рецепт их не задаёт'],
       },
     },
   },

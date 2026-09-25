@@ -24,6 +24,7 @@ import { CopyButton } from '@/ui/CopyButton';
 import {
   coreEngine,
   coreRemoveFacts,
+  coreRowsInManifestOrder,
   firstRowOfEngine,
   type CoreRemoveFacts,
 } from '@/contours/nodes/lib/coreRemove';
@@ -99,7 +100,8 @@ export function CoresPanel({
   refusal?: string[] | null;
 }) {
   const { t } = useTranslation();
-  const cores = node.cores?.cores;
+  // Порядок манифеста, как у «Версий ядер» в мастере; отчёт не трогается.
+  const cores = node.cores?.cores ? coreRowsInManifestOrder(node.cores.cores) : undefined;
 
   return (
     <Box style={{ borderRadius: 10, backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>

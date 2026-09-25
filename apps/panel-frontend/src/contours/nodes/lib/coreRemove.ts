@@ -1,4 +1,4 @@
-import { ENGINE_NAMES, type EngineName } from '@iceslab/shared';
+import { CORE_COMPONENTS, ENGINE_NAMES, componentsOfEngine, type EngineName } from '@iceslab/shared';
 import type { CascadeEngineNeed, Node, NodeCore } from '@/lib/domain/nodes';
 
 /**
@@ -97,6 +97,27 @@ export function coreRemoveFacts(
   if (reasons.length > 0) return { kind: 'refused', reasons };
   if (missing.length > 0) return { kind: 'unknown', missing };
   return { kind: 'allowed', dropped: !intended!.includes(engine) };
+}
+
+/**
+ * Строки «Ядер» в порядке манифеста (CORE_COMPONENTS), как строки «Версий
+ * ядер» в мастере: две таблицы про одни ядра не расходятся порядком (ARCH,
+ * 25.09). Сортирует экран, отчёт агента не трогается. Движок встаёт по
+ * своему первому компоненту (mtproto по mtg, naive по caddy-naive); строки
+ * одного движка и строки без известного движка сохраняют порядок отчёта,
+ * вторые в конце.
+ */
+export function coreRowsInManifestOrder<C extends Pick<NodeCore, 'name' | 'engine'>>(cores: readonly C[]): C[] {
+  const rank = (c: C) => {
+    const e = coreEngine(c);
+    const first = e ? componentsOfEngine(e)[0] : undefined;
+    const i = first ? CORE_COMPONENTS.indexOf(first) : -1;
+    return i === -1 ? CORE_COMPONENTS.length : i;
+  };
+  return cores
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.c);
 }
 
 /**
