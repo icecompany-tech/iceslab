@@ -28,8 +28,8 @@
 #   HYSTERIA_VERSION  release to install instead of the pin, e.g. 2.12.3
 #   HYSTERIA_SHA256   sha256 of hysteria-linux-<arch> of that release
 # and, on its own:
-#   HYSTERIA_PORT_RANGE  START-END for port-hopping (default 20000-50000),
-#                        empty to turn it off
+#   HYSTERIA_PORT_RANGE  START-END for port-hopping, empty to turn it off;
+#                        unset keeps the node's last (20000-50000 on a new one)
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -109,15 +109,40 @@ EOF
 # Moved here from install-iceslab-node.sh (E34, 25.09): it sat in the step that
 # also STARTED hysteria before the panel's first push, and a hysteria added to
 # a node later got none. HYSTERIA_PORT_RANGE is START-END (the installer passes
-# its --hysteria-port-range); empty turns it off; unset is 20000-50000. The
-# panel's per-profile range must lie inside it.
-PORT_RANGE="${HYSTERIA_PORT_RANGE-20000-50000}"
+# its --hysteria-port-range); empty turns it off. The panel's per-profile range
+# must lie inside it.
+#
+# Unset keeps what this node was given last, recorded in PORT_RANGE_FILE: the
+# panel's "how to install" reruns this script with no range at all, and reading
+# unset as the default would put an operator's 30000-40000 (or their "off")
+# back to 20000-50000 behind their back. Only a node never given one gets the
+# default. Not in the agent's env block: the agent reads nothing of it, and
+# that block holds only what the agent reads.
+PORT_RANGE_FILE=/etc/hysteria/port-range
 HYHOP_BIN=/usr/local/bin/iceslab-hyhop
 HYHOP_UNIT=/etc/systemd/system/iceslab-hyhop.service
 LISTEN_PORT=443
 
+port_range() {
+  if [[ -v HYSTERIA_PORT_RANGE ]]; then
+    printf '%s' "$HYSTERIA_PORT_RANGE"
+  elif [[ -f "$PORT_RANGE_FILE" ]]; then
+    tr -d '[:space:]' <"$PORT_RANGE_FILE"
+  else
+    printf '20000-50000'
+  fi
+}
+PORT_RANGE="$(port_range)"
+
+# record_port_range: what the next run without HYSTERIA_PORT_RANGE keeps.
+record_port_range() {
+  mkdir -p "$(dirname "$PORT_RANGE_FILE")"
+  printf '%s\n' "$PORT_RANGE" >"$PORT_RANGE_FILE"
+}
+
 port_hopping() {
   if [[ -z "$PORT_RANGE" ]]; then
+    record_port_range
     # Off means off: a redirect an earlier run set up goes too.
     if [[ -f "$HYHOP_UNIT" ]]; then
       systemctl disable --now iceslab-hyhop.service >/dev/null 2>&1 || true
@@ -129,16 +154,17 @@ port_hopping() {
     fi
     return 0
   fi
-  if ! command -v iptables >/dev/null 2>&1; then
-    warn "iptables not installed; no port-hopping redirect"
-    return 0
-  fi
-  # Checked BEFORE it goes into a script root runs.
+  # Checked BEFORE it goes into a script root runs, and before it is recorded.
   [[ "$PORT_RANGE" =~ ^([0-9]{4,5})-([0-9]{4,5})$ ]] \
     || fail "HYSTERIA_PORT_RANGE must be START-END (1024..65535), got: $PORT_RANGE"
   local start="${BASH_REMATCH[1]}" end="${BASH_REMATCH[2]}"
   (( start >= 1024 && end <= 65535 && end > start )) \
     || fail "HYSTERIA_PORT_RANGE out of bounds: $PORT_RANGE (need 1024<=start<end<=65535)"
+  record_port_range
+  if ! command -v iptables >/dev/null 2>&1; then
+    warn "iptables not installed; no port-hopping redirect"
+    return 0
+  fi
   local range_ipt="${start}:${end}"
   # The rule of the range it had, taken down by the helper that knows it: once
   # the helper below is rewritten, its `down` names the NEW range, and the old

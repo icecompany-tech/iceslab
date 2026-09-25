@@ -54,8 +54,8 @@ func TestTheInstallerStartsNoHysteria(t *testing.T) {
 }
 
 type hopRun struct {
-	out, calls, helper, unit string
-	err                      error
+	out, calls, helper, unit, recorded string
+	err                                error
 }
 
 // runHop runs port_hopping from bootstrap-hysteria.sh with iptables and
@@ -69,15 +69,49 @@ func runHop(t *testing.T, dir, portRange string) hopRun {
 	})
 	helper := filepath.Join(dir, "iceslab-hyhop")
 	unit := filepath.Join(dir, "iceslab-hyhop.service")
+	record := filepath.Join(dir, "etc", "port-range")
 	_ = os.Remove(calls)
+	_ = os.Remove(record)
 	prog := "set -euo pipefail\nlog() { echo \"log: $*\"; }\nwarn() { echo \"warn: $*\"; }\nfail() { echo \"fail: $*\"; exit 1; }\n" +
-		"PORT_RANGE='" + portRange + "'\nLISTEN_PORT=443\nHYHOP_BIN='" + helper + "'\nHYHOP_UNIT='" + unit + "'\n" +
+		"PORT_RANGE='" + portRange + "'\nLISTEN_PORT=443\nHYHOP_BIN='" + helper + "'\nHYHOP_UNIT='" + unit + "'\nPORT_RANGE_FILE='" + record + "'\n" +
+		shellFunc(t, "bootstrap-hysteria.sh", "record_port_range") +
 		shellFunc(t, "bootstrap-hysteria.sh", "port_hopping") + "\nport_hopping\n"
 	out, err := runBash(t, bin, prog)
 	c, _ := os.ReadFile(calls)
 	h, _ := os.ReadFile(helper)
 	u, _ := os.ReadFile(unit)
-	return hopRun{out: out, calls: string(c), helper: string(h), unit: string(u), err: err}
+	rec, recErr := os.ReadFile(record)
+	recorded := string(rec)
+	if recErr != nil {
+		recorded = "<none>"
+	}
+	return hopRun{out: out, calls: string(c), helper: string(h), unit: string(u), recorded: recorded, err: err}
+}
+
+// A rerun from the panel passes no range. It keeps the node's last one, "off"
+// included, and only a node never given one gets the default: the operator's
+// --hysteria-port-range is not reset by the panel's "how to install".
+func TestARerunWithNoRangeKeepsTheNodesLast(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "port-range")
+	resolve := shellFunc(t, "bootstrap-hysteria.sh", "port_range")
+	for _, c := range []struct{ name, env, file, want string }{
+		{"a new node", "", "<none>", "20000-50000"},
+		{"the last range", "", "30000-40000\n", "30000-40000"},
+		{"the last off", "", "\n", ""},
+		{"a range given now", "export HYSTERIA_PORT_RANGE=25000-26000\n", "30000-40000\n", "25000-26000"},
+		{"off given now", "export HYSTERIA_PORT_RANGE=\n", "30000-40000\n", ""},
+	} {
+		_ = os.Remove(record)
+		if c.file != "<none>" {
+			if err := os.WriteFile(record, []byte(c.file), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out, err := runBash(t, "", "set -euo pipefail\n"+c.env+"PORT_RANGE_FILE='"+record+"'\n"+resolve+"\nprintf '[%s]' \"$(port_range)\"\n")
+		if err != nil || out != "["+c.want+"]" {
+			t.Errorf("%s: %v %q, want [%s]", c.name, err, out, c.want)
+		}
+	}
 }
 
 func TestHysteriaPortHoppingFollowsItsRange(t *testing.T) {
@@ -92,6 +126,9 @@ func TestHysteriaPortHoppingFollowsItsRange(t *testing.T) {
 	}
 	if !strings.Contains(r.unit, "ExecStop=") || !strings.Contains(r.calls, "systemctl restart iceslab-hyhop.service") {
 		t.Errorf("the redirect is not a unit that is (re)started:\n%s\n%s", r.unit, r.calls)
+	}
+	if r.recorded != "20000-50000\n" {
+		t.Errorf("recorded %q", r.recorded)
 	}
 
 	// A new range takes the old rule down with the helper that knows it.
@@ -114,12 +151,16 @@ func TestHysteriaPortHoppingFollowsItsRange(t *testing.T) {
 	if r.helper != "" || r.unit != "" || !strings.Contains(r.calls, "systemctl disable --now iceslab-hyhop.service") {
 		t.Errorf("port-hopping off left the redirect:\n%s\n%s", r.calls, r.out)
 	}
+	if r.recorded != "\n" {
+		t.Errorf("off was not recorded as off: %q", r.recorded)
+	}
 
-	// A range root would run and that is not one is refused before it is written.
+	// A range root would run and that is not one is refused before it is
+	// written, and before it is recorded.
 	for _, bad := range []string{"80-90", "50000-20000", "1:2; reboot"} {
 		r = runHop(t, t.TempDir(), bad)
-		if r.err == nil || !strings.Contains(r.out, "fail: HYSTERIA_PORT_RANGE") || r.helper != "" {
-			t.Errorf("%q: %v\n%s", bad, r.err, r.out)
+		if r.err == nil || !strings.Contains(r.out, "fail: HYSTERIA_PORT_RANGE") || r.helper != "" || r.recorded != "<none>" {
+			t.Errorf("%q: %v recorded %q\n%s", bad, r.err, r.recorded, r.out)
 		}
 	}
 }
