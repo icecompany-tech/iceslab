@@ -58,7 +58,8 @@ const QR_DRAWER = `
     var text = box.getAttribute('data-qr-text');
     if (!text) continue;
     try {
-      var qr = qrcodegen.QrCode.encodeText(text, qrcodegen.QrCode.Ecc.MEDIUM);
+      var ecc = box.getAttribute('data-qr-ecc') === 'low' ? qrcodegen.QrCode.Ecc.LOW : qrcodegen.QrCode.Ecc.MEDIUM;
+      var qr = qrcodegen.QrCode.encodeText(text, ecc);
       var parts = [];
       for (var y = 0; y < qr.size; y++) {
         for (var x = 0; x < qr.size; x++) {
@@ -98,11 +99,18 @@ export function qrBox(opts: {
   fallback: string;
   note: string;
   cls?: string;
+  /**
+   * Error correction, MEDIUM unless said. `low` only where the reader expects
+   * it: the AmneziaVPN chunk, which the app itself writes at LOW (E39), and
+   * which LOW keeps a version smaller.
+   */
+  ecc?: 'low';
   esc: (s: string) => string;
 }): string {
   const { text, fallback, note, esc } = opts;
+  const ecc = opts.ecc ? ` data-qr-ecc="${opts.ecc}"` : '';
   return (
-    `<div class="${opts.cls ?? 'qbx'}" data-qr-pending data-qr-text="${esc(text)}">` +
+    `<div class="${opts.cls ?? 'qbx'}" data-qr-pending data-qr-text="${esc(text)}"${ecc}>` +
     `<div class="qbx__fallback"><code class="qbx__text">${esc(fallback)}</code>` +
     `<span class="qbx__note">${esc(note)}</span></div>` +
     `</div>`

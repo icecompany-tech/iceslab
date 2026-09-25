@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { amneziaQrChunkFromKey } from '../../core-adapters/amneziawg/vpnlink.js';
 import { buildSubscriptionPage, type SubscriptionPageData } from './subscription.page.js';
 
 function base(overrides: Partial<SubscriptionPageData> = {}): SubscriptionPageData {
@@ -70,8 +71,14 @@ describe('buildSubscriptionPage', () => {
       }),
     );
     // every node's payload is on the page (shown/hidden client-side), which is
-    // what the browser draws its code from...
-    for (const text of ['vpn://nl', '[Interface] nl', 'vpn://de', '[Interface] de']) {
+    // what the browser draws its code from. The AmneziaVPN one in the app's own
+    // chunk format (E39), the .conf as it is...
+    for (const text of [
+      amneziaQrChunkFromKey('vpn://nl'),
+      '[Interface] nl',
+      amneziaQrChunkFromKey('vpn://de'),
+      '[Interface] de',
+    ]) {
       expect(html).toContain(`data-qr-text="${text}"`);
     }
     // ...behind a per-node server selector, which is the same control as the
@@ -419,7 +426,12 @@ describe('buildSubscriptionPage', () => {
     const html = buildSubscriptionPage(
       base({ protocols: ['amneziawg'], awgNodes: [{ nodeName: 'awg', vpnKey: 'vpn://one' }] }),
     );
-    expect(html).toContain('data-qr-text="vpn://one"');
+    // E39: the code is the app's chunk, drawn at LOW like the app's own; the key
+    // itself is what the copy button and the no-JS fallback carry.
+    expect(html).toContain(`data-qr-text="${amneziaQrChunkFromKey('vpn://one')}" data-qr-ecc="low"`);
+    expect(html).not.toContain('data-qr-text="vpn://one"');
+    expect(html).toContain('data-key="vpn://one"');
+    expect(html).toContain('<code class="qbx__text">vpn://one</code>');
     // figure caption is the app name, never a "· awg" node suffix (the node
     // lives in the selector now)
     expect(html).toContain('<figcaption>AmneziaVPN</figcaption>');

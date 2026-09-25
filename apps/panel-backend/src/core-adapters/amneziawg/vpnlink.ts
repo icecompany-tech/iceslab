@@ -4,9 +4,10 @@ import type { AmneziawgClientConfigOpts } from './wgconf.js';
 /**
  * AmneziaVPN "vpn://" connection-key builder for an AmneziaWG tunnel.
  *
- * The AmneziaVPN app (the flagship, NOT the standalone AmneziaWG app) scans a
- * QR that encodes its own connection key starting with `vpn://`, never a raw
- * wg-quick .conf. Generating one lets that QR import directly.
+ * The AmneziaVPN app (the flagship, NOT the standalone AmneziaWG app) imports
+ * its own connection key, `vpn://...`, by paste. Its QR SCANNER takes a
+ * different text, the app's chunk format (encodeAmneziaQrChunk below): the
+ * `vpn://` string in a QR is read by a phone camera and never by the app (E39).
  *
  * Format (verified against amnezia-client exportController.cpp + two working
  * third-party encoders):
@@ -53,11 +54,71 @@ export interface AmneziaVpnLinkOpts extends AmneziawgClientConfigOpts {
  * (no padding) -> "vpn://".
  */
 export function encodeAmneziaVpnKey(config: unknown): string {
+  return VPN_KEY_PREFIX + qCompressJson(config).toString('base64url');
+}
+
+const VPN_KEY_PREFIX = 'vpn://';
+
+/**
+ * Qt qCompress of the minified JSON: 4-byte BIG-ENDIAN uncompressed length,
+ * then zlib level 8. The one body both the key and the QR chunk carry.
+ */
+function qCompressJson(config: unknown): Buffer {
   const json = Buffer.from(JSON.stringify(config), 'utf8');
   const header = Buffer.alloc(4);
   header.writeUInt32BE(json.length, 0); // uncompressed length, big-endian
-  const compressed = deflateSync(json, { level: 8 });
-  return 'vpn://' + Buffer.concat([header, compressed]).toString('base64url');
+  return Buffer.concat([header, deflateSync(json, { level: 8 })]);
+}
+
+/**
+ * The magic the app's QR chunks start with (qrCodeUtils.h, `qrMagicCode`).
+ * 1984 is 07 C0 on the wire.
+ */
+export const AMNEZIA_QR_MAGIC = 1984;
+
+/**
+ * The text of an AmneziaVPN QR code: the app's own chunk format, one chunk.
+ *
+ * E39, stand 25.09: a phone camera read our `vpn://` QR, and the AmneziaVPN
+ * scanner stayed at "0 of 0" forever. Read in amnezia-client (dev = main
+ * 94b51df):
+ *   - the scanner hands every code to parseQrCodeChunk
+ *     (importController.cpp:321-379). A code whose first two bytes after
+ *     base64url are not the magic goes to extractConfigFromQr (:261-311), which
+ *     never strips `vpn://` (only the paste path does, :176-179), so the key
+ *     decodes to garbage and fails SILENTLY: the chunk counters reset and the
+ *     scanner keeps waiting (:363-367, importUiController.cpp:159-172);
+ *   - the app writes its own QR with qrCodeUtils::generateQrCodeImageSeries
+ *     (qrCodeUtils.cpp:9-28) over the qCompress bytes (exportController.cpp:
+ *     45-47): a QDataStream, big-endian by default, of qint16 magic 1984,
+ *     quint8 chunksCount, quint8 chunkId, then the QByteArray (quint32 length
+ *     and the bytes), base64url with no padding, ECC LOW.
+ *
+ * So: 07 C0 | 01 | 00 | uint32 BE length | qCompress bytes, base64url. One
+ * chunk: the app splits at 850 bytes, and a key's qCompress is about 440, so
+ * a single code carries it; a longer one would still parse as count 1 (the
+ * app reads the QByteArray by its length) and only the QR would grow.
+ */
+export function encodeAmneziaQrChunk(config: unknown): string {
+  return qrChunk(qCompressJson(config));
+}
+
+/**
+ * The same chunk from a `vpn://` key: the key's body IS the qCompress bytes, so
+ * the QR and the copy button carry one payload and cannot drift apart.
+ */
+export function amneziaQrChunkFromKey(key: string): string {
+  if (!key.startsWith(VPN_KEY_PREFIX)) throw new Error('not an AmneziaVPN vpn:// key');
+  return qrChunk(Buffer.from(key.slice(VPN_KEY_PREFIX.length), 'base64url'));
+}
+
+function qrChunk(compressed: Buffer): string {
+  const head = Buffer.alloc(8);
+  head.writeInt16BE(AMNEZIA_QR_MAGIC, 0); // qint16 magic
+  head.writeUInt8(1, 2); // quint8 chunksCount
+  head.writeUInt8(0, 3); // quint8 chunkId
+  head.writeUInt32BE(compressed.length, 4); // QByteArray: quint32 length, then bytes
+  return Buffer.concat([head, compressed]).toString('base64url');
 }
 
 export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {

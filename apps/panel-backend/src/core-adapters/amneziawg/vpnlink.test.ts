@@ -3,7 +3,13 @@ import { inflateSync } from 'node:zlib';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildAmneziaVpnLink, encodeAmneziaVpnKey } from './vpnlink.js';
+import {
+  AMNEZIA_QR_MAGIC,
+  amneziaQrChunkFromKey,
+  buildAmneziaVpnLink,
+  encodeAmneziaQrChunk,
+  encodeAmneziaVpnKey,
+} from './vpnlink.js';
 
 const GOLDEN_DIR = join(dirname(fileURLToPath(import.meta.url)), '__testdata__');
 
@@ -174,4 +180,84 @@ describe('the AmneziaVPN key, whole', () => {
   it('awg2-s3s4-set: non-zero S3/S4 travel everywhere the app reads them', () => {
     golden('awg2-s3s4-set', buildAmneziaVpnLink({ ...baseOpts, s1: 15, s2: 18, s3: 24, s4: 20 }));
   });
+});
+
+/**
+ * A model of the app's scanner, amnezia-client importController.cpp
+ * parseQrCodeChunk (:321-379) and extractConfigFromQr (:261-311): base64url,
+ * a QDataStream (big-endian) of qint16 magic, quint8 count, quint8 id and a
+ * QByteArray (quint32 length, bytes), the chunks joined, then qUncompress.
+ * Returns the chunk's header and the JSON the app ends up with.
+ */
+function scanAsTheApp(text: string): { magic: number; count: number; id: number; data: Buffer; json: unknown } {
+  const buf = Buffer.from(text, 'base64url');
+  const magic = buf.readInt16BE(0);
+  const count = buf.readUInt8(2);
+  const id = buf.readUInt8(3);
+  const len = buf.readUInt32BE(4);
+  const data = buf.subarray(8);
+  expect(data.length).toBe(len); // QDataStream reads exactly `len` bytes
+  const inflated = inflateSync(data.subarray(4));
+  expect(inflated.length).toBe(data.readUInt32BE(0)); // qUncompress checks its header
+  return { magic, count, id, data, json: JSON.parse(inflated.toString('utf8')) };
+}
+
+/**
+ * E39, stand 25.09: the phone camera read the vpn:// QR and AmneziaVPN's scanner
+ * sat at "0 of 0". The scanner takes the app's own chunk format; vpn:// is the
+ * PASTE format. The QR carries a chunk now, the copy button keeps the key.
+ */
+describe('the AmneziaVPN QR text', () => {
+  const key = buildAmneziaVpnLink(baseOpts);
+  const qr = amneziaQrChunkFromKey(key);
+
+  it('is not a vpn:// string', () => {
+    expect(qr.startsWith('vpn://')).toBe(false);
+    expect(qr).toMatch(/^[A-Za-z0-9_-]+$/); // base64url, no padding
+  });
+
+  it('reads, the way the app reads it, as one chunk of the same bytes and the same JSON as the key', () => {
+    const got = scanAsTheApp(qr);
+    expect(got.magic).toBe(AMNEZIA_QR_MAGIC);
+    expect(got.magic).toBe(1984);
+    expect(Buffer.from(qr, 'base64url').subarray(0, 2).toString('hex')).toBe('07c0');
+    expect(got.count).toBe(1);
+    expect(got.id).toBe(0);
+    // The key's body IS the qCompress bytes: one payload, two wrappings.
+    expect(got.data.equals(Buffer.from(key.slice('vpn://'.length), 'base64url'))).toBe(true);
+    expect(got.json).toEqual(decodeVpnKey(key));
+    // 8 bytes of chunk header over the key body: 10 or 11 base64 characters
+    // more, depending on where the body's last group ended.
+    expect(qr.length - (key.length - 'vpn://'.length)).toBeGreaterThanOrEqual(10);
+    expect(qr.length - (key.length - 'vpn://'.length)).toBeLessThanOrEqual(11);
+  });
+
+  it('is the same built from the config and from the key', () => {
+    const env = decodeVpnKey(key);
+    expect(encodeAmneziaQrChunk(env)).toBe(qr);
+  });
+
+  it('refuses a string that is not a vpn:// key rather than draw a code the app cannot read', () => {
+    expect(() => amneziaQrChunkFromKey('https://example.com')).toThrow(/vpn:\/\//);
+  });
+
+  // The text, pinned like the key: a change to what the scanner receives is a
+  // diff somebody reads. The key goldens above do not move.
+  for (const [name, opts] of [
+    ['awg1-s3s4-zero', baseOpts],
+    ['awg2-s3s4-set', { ...baseOpts, s1: 15, s2: 18, s3: 24, s4: 20 }],
+  ] as const) {
+    it(`golden ${name}.qr`, () => {
+      const text = amneziaQrChunkFromKey(buildAmneziaVpnLink(opts));
+      const got = `${JSON.stringify({ qrLength: text.length, qrText: text }, null, 2)}\n`;
+      const path = join(GOLDEN_DIR, `vpnlink-${name}.qr.json`);
+      if (process.env.UPDATE_GOLDEN) {
+        writeFileSync(path, got);
+        return;
+      }
+      expect(got, `golden ${name}.qr is out of date; retake with UPDATE_GOLDEN=1 and read the diff`).toBe(
+        readFileSync(path, 'utf8').replace(/\r\n/g, '\n'),
+      );
+    });
+  }
 });

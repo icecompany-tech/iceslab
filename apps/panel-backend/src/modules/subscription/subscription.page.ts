@@ -18,6 +18,7 @@ import {
   type ProtocolName,
   type SubscriptionFormat,
 } from '@iceslab/shared';
+import { amneziaQrChunkFromKey } from '../../core-adapters/amneziawg/vpnlink.js';
 import { PAGE_CSS } from './subscription.page-styles.js';
 import { pageScript } from './subscription.page-script.js';
 import { QR_SCRIPT, qrBox } from './subscription.page-qr.js';
@@ -1125,9 +1126,12 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     const vpnOn = ni === 0 ? ' on' : '';
     if (n.vpnKey) {
       const copyBtn = `<button class="copyk" type="button" data-key="${esc(n.vpnKey)}">${esc(t.copyKey)}</button>`;
+      // The code carries the app's own chunk format, not the vpn:// string:
+      // AmneziaVPN's scanner never took the key (E39, amneziaQrChunkFromKey).
+      // What a person copies or reads without JS stays the key.
       figures.push(
         `<figure class="qrf${vpnOn}" data-target="awg:${esc(n.nodeName)}" data-app="vpn">` +
-          qrBox({ text: n.vpnKey, fallback: n.vpnKey, note: t.qrNeedsJs, esc }) +
+          qrBox({ text: amneziaQrChunkFromKey(n.vpnKey), fallback: n.vpnKey, note: t.qrNeedsJs, ecc: 'low', esc }) +
           `<figcaption>AmneziaVPN</figcaption>${copyBtn}</figure>`,
       );
     }
