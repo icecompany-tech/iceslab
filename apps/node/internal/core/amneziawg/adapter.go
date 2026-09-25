@@ -698,9 +698,10 @@ func (a *Adapter) dropLegacyMasquerade(ctx context.Context, iface string) {
 		}
 		removed++
 	}
+	// One line, the words the stand greps journalctl for: whether the update
+	// took the pre-E37 rule away on this node.
 	if removed > 0 {
-		a.logger.Info("amneziawg: removed the pre-E37 MASQUERADE rule that also caught loopback",
-			"interface", iface, "copies", removed)
+		a.logger.Info("amneziawg: legacy MASQUERADE removed", "interface", iface, "copies", removed)
 	}
 }
 
