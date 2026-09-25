@@ -103,6 +103,7 @@ if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
   if [[ "$CURRENT" == "$MTG_VERSION" ]]; then
     log "mtg $CURRENT is already installed, which is the wanted version"
+    node_env_own_by_root "$INSTALL_PATH"
     wire_env
     node_env_done mtproto
     exit 0

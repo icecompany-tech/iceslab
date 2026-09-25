@@ -55,6 +55,28 @@ if [[ "$NODE_ENV_REMOVE" == 1 ]]; then
   node_env_done naive
   exit 0
 fi
+
+# verify_caddy <binary>: it runs, and the naive forward_proxy handler is linked
+# in. Fails in words otherwise.
+#
+# E33, 25.09 on nl-01: this check failed on one run and passed on the next with
+# the module in the binary all along. It read `list-modules | grep -q` under
+# `set -o pipefail`: grep -q exits at the first match and closes the pipe,
+# caddy, still writing its list, dies of SIGPIPE, and the pipeline answers
+# 141, which `!` read as "no module". Whether caddy had finished writing before
+# grep left was a race. And `2>/dev/null` threw away whatever caddy said. So
+# the output is taken whole first, stderr with it, and searched after; a line
+# is matched with surrounding blanks and a CR allowed.
+verify_caddy() {
+  local bin="$1" out
+  out=$("$bin" version 2>&1) || fail "$bin does not run: ${out:-no output}"
+  log "$bin $(printf '%s\n' "$out" | grep -v '^[[:space:]]*{' | sed -n '1p')"
+  out=$("$bin" list-modules 2>&1) || fail "$bin list-modules failed: ${out:-no output}"
+  # A here-string, not a pipe: nothing upstream to be cut off when grep -q leaves.
+  if ! grep -Eq '^[[:space:]]*http\.handlers\.forward_proxy[[:space:]]*$' <<<"${out//$'\r'/}"; then
+    fail "forward_proxy module not present in the built Caddy; the build was misconfigured"
+  fi
+}
 GO_VERSION=${GO_VERSION:-1.23.4}
 
 # ───── 1. Distro check ─────
@@ -132,26 +154,26 @@ log "Building Caddy + klzgrad/forwardproxy@naive plugin -> $CADDY_NAIVE_BIN"
 rm -rf "${GOPATH:-$HOME/go}/pkg/mod/cache/download/github.com/klzgrad" 2>/dev/null || true
 
 WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+# Built into the work directory, checked THERE, and only then put in place:
+# a build that fails the check never replaces a caddy-naive that works.
+BUILT="$WORKDIR/caddy-naive"
 pushd "$WORKDIR" > /dev/null
 xcaddy build \
   --with 'github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive' \
-  --output "$CADDY_NAIVE_BIN"
+  --output "$BUILT"
 popd > /dev/null
-rm -rf "$WORKDIR"
-chmod +x "$CADDY_NAIVE_BIN"
 
 # ───── 6. Verify ─────
-if ! "$CADDY_NAIVE_BIN" version >/dev/null; then
-  fail "$CADDY_NAIVE_BIN is not executable; build failed."
-fi
-log "$CADDY_NAIVE_BIN $(${CADDY_NAIVE_BIN} version | head -1)"
-
-# Confirm the naive plugin got linked in.
-if ! "$CADDY_NAIVE_BIN" list-modules 2>/dev/null | grep -q '^http\.handlers\.forward_proxy$'; then
-  warn "forward_proxy module not present in built Caddy; build was misconfigured."
-  exit 1
-fi
+verify_caddy "$BUILT"
 log "✓ forward_proxy module is linked"
+
+# install -o root, then rename over the old one: the agent may be running the
+# old binary, and a rename leaves its open file alone where writing into it
+# would not ("text file busy").
+install -m 0755 -o root -g root "$BUILT" "$CADDY_NAIVE_BIN.new"
+mv -f "$CADDY_NAIVE_BIN.new" "$CADDY_NAIVE_BIN"
+log "Installed to $CADDY_NAIVE_BIN"
 
 # ───── 7. Agent env ─────
 mkdir -p /etc/caddy

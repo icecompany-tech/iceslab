@@ -142,6 +142,7 @@ if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
   if [[ "$CURRENT" == "$XRAY_VERSION" ]]; then
     log "xray $CURRENT is already installed, which is the wanted version"
+    node_env_own_by_root "$INSTALL_PATH"
     disable_upstream_unit
     wire_env
     node_env_done xray

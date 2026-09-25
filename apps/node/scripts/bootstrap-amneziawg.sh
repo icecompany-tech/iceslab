@@ -27,6 +27,12 @@ fail() { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 . "$(dirname "${BASH_SOURCE[0]}")/lib/node-env.sh"
 node_env_flags "$@" || fail "usage: $0 [--restart-agent]"
 
+# Whether the module is loaded, read from the file lsmod reads. Not
+# `lsmod | grep -q`: under pipefail grep -q leaving early can kill lsmod with
+# SIGPIPE and turn a loaded module into "not loaded" (E33, the same race in
+# bootstrap-naive.sh).
+amneziawg_loaded() { grep -q '^amneziawg ' /proc/modules 2>/dev/null; }
+
 wire_env() {
   node_env_block amneziawg \
     "AMNEZIAWG_BIN=$(command -v awg 2>/dev/null || echo /usr/bin/awg)" \
@@ -69,7 +75,7 @@ remove_core() {
   rm -f /etc/amnezia/amneziawg/*.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
   unwire_env
-  if lsmod | grep -q '^amneziawg\b'; then
+  if amneziawg_loaded; then
     warn "the amneziawg module is still loaded (in use?); it goes with the next reboot"
   fi
   log "AmneziaWG removed"
@@ -177,7 +183,7 @@ clone_pinned() {
 AWG_MODULE_REPO=https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git
 AWG_MODULE_DIR=/usr/src/amneziawg-src
 
-if lsmod | grep -q '^amneziawg\b'; then
+if amneziawg_loaded; then
   log "amneziawg kernel module already loaded, skipping module install"
 else
   log "Installing amneziawg kernel module via DKMS from $AWG_MODULE_REPO"
@@ -239,7 +245,7 @@ command -v awg     >/dev/null || fail "awg binary not found after install"
 command -v awg-quick >/dev/null || fail "awg-quick binary not found after install"
 
 DKMS_OK=true
-if ! lsmod | grep -q '^amneziawg\b'; then
+if ! amneziawg_loaded; then
   warn "amneziawg module not loaded, DKMS build may have failed or reboot needed"
   DKMS_OK=false
 fi

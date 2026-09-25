@@ -86,9 +86,12 @@ unwire_env() {
 # bootstrap that puts sing-box on a node adds the directory itself, as a
 # drop-in, when the unit lacks it. Picked up at the agent's next restart.
 agent_may_write_configs() {
-  local dropin=/etc/systemd/system/iceslab-node.service.d/sing-box.conf
-  systemctl cat iceslab-node.service >/dev/null 2>&1 || return 0
-  if systemctl cat iceslab-node.service 2>/dev/null | grep -Eq '^ReadWritePaths=.*-?/etc/sing-box( |$)'; then
+  local dropin=/etc/systemd/system/iceslab-node.service.d/sing-box.conf unit
+  unit="$(systemctl cat iceslab-node.service 2>/dev/null)" || return 0
+  # A here-string, not a pipe: under pipefail grep -q leaving early can kill
+  # systemctl with SIGPIPE and read a unit that has the path as one that has not
+  # (E33, the same race in bootstrap-naive.sh).
+  if grep -Eq '^ReadWritePaths=.*-?/etc/sing-box( |$)' <<<"$unit"; then
     return 0
   fi
   mkdir -p "$(dirname "$dropin")"

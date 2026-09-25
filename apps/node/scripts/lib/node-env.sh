@@ -166,6 +166,22 @@ node_env_block() {
   printf '[node-env] %s: %s written to %s\n' "$name" "${keys% }" "$file"
 }
 
+# node_env_own_by_root <path>: a binary root runs belongs to root:root and is
+# writable by nobody else. A fresh install sees to that (`install -o root`);
+# this is for the run that finds the wanted version already there and does not
+# reinstall it: mtg stayed 501:staff on nl-01 and ru-02 after 04a498b, because
+# that path never touched the file.
+node_env_own_by_root() {
+  local path="$1" owner
+  [[ -e "$path" ]] || return 0
+  owner="$(stat -c '%u:%g' "$path")"
+  if [[ "$owner" != "0:0" ]]; then
+    chown root:root "$path"
+    printf '[node-env] %s was owned by %s, now root:root\n' "$path" "$owner"
+  fi
+  chmod go-w "$path"
+}
+
 # node_env_done <core>: restart the agent if asked, or say that it is needed.
 node_env_done() {
   local name="$1" what="wired in"

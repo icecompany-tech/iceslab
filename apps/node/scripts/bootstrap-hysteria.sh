@@ -191,6 +191,7 @@ if [[ -x "$INSTALL_PATH" ]]; then
   CURRENT=$(version_of "$INSTALL_PATH" || true)
   if [[ "${CURRENT#v}" == "$HYSTERIA_VERSION" ]]; then
     log "hysteria $CURRENT is already installed, which is the wanted version"
+    node_env_own_by_root "$INSTALL_PATH"
     finish
     log "hysteria is ready at $INSTALL_PATH"
     exit 0
