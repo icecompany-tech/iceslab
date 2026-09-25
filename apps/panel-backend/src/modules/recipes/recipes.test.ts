@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseRecipe } from './recipes.schemas.js';
+import { parseRecipe, RecipeSchema } from './recipes.schemas.js';
 import { parseRecipes } from './recipes.registry.js';
 import { assertFetchableUrl } from './recipes.ssrf.js';
 
-// A minimal well-formed recipe the validators accept.
+// A minimal well-formed recipe the validators accept (schema v2).
 const valid = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: 'xray-test',
+  engine: 'native',
   protocol: 'xray',
+  subprotocol: 'vless',
   emoji: '🛡',
   name: 'Test',
   description: 'desc',
@@ -17,15 +19,64 @@ const valid = {
   apply: { xrayNetwork: 'grpc', xrayFingerprint: 'firefox' },
 };
 
+const issues = (raw: unknown) => {
+  const res = RecipeSchema.safeParse(raw);
+  return res.success ? [] : res.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+};
+
 describe('parseRecipe', () => {
-  it('accepts a well-formed recipe', () => {
+  it('accepts a well-formed recipe, engine and subprotocol kept', () => {
     const r = parseRecipe(valid);
     expect(r).not.toBeNull();
-    expect(r?.id).toBe('xray-test');
+    expect(r).toMatchObject({ id: 'xray-test', engine: 'native', protocol: 'xray', subprotocol: 'vless' });
   });
 
-  it('rejects an unknown schemaVersion (shape may have changed)', () => {
-    expect(parseRecipe({ ...valid, schemaVersion: 2 })).toBeNull();
+  it('does not read schema v1 any more, nor a version it does not know', () => {
+    expect(parseRecipe({ ...valid, schemaVersion: 1 })).toBeNull();
+    expect(parseRecipe({ ...valid, schemaVersion: 3 })).toBeNull();
+  });
+
+  it('an xray recipe names its subprotocol, one of five', () => {
+    const { subprotocol, ...bare } = valid;
+    void subprotocol;
+    expect(issues(bare)).toEqual([expect.stringMatching(/^subprotocol: an xray recipe names its subprotocol/)]);
+    expect(parseRecipe({ ...valid, subprotocol: 'shadowsocks' })).toBeNull();
+    for (const sub of ['vless', 'vmess', 'trojan', 'socks', 'http']) {
+      expect(parseRecipe({ ...valid, subprotocol: sub }), sub).not.toBeNull();
+    }
+  });
+
+  it('no other protocol takes a subprotocol', () => {
+    const tuic = { ...valid, id: 'tuic-x', engine: 'singbox', protocol: 'tuic', apply: {} };
+    const { subprotocol, ...bare } = tuic;
+    void subprotocol;
+    expect(parseRecipe(bare)).not.toBeNull();
+    expect(issues(tuic)).toEqual([expect.stringMatching(/^subprotocol: only an xray recipe takes a subprotocol/)]);
+  });
+
+  it('apply.xraySubprotocol, when set, equals the subprotocol', () => {
+    expect(parseRecipe({ ...valid, subprotocol: 'socks', apply: { xraySubprotocol: 'socks' } })).not.toBeNull();
+    expect(issues({ ...valid, subprotocol: 'socks', apply: { xraySubprotocol: 'http' } })).toEqual([
+      expect.stringMatching(/^apply\.xraySubprotocol: .*contradicts subprotocol "socks"/),
+    ]);
+  });
+
+  it('engine is native or singbox, and required', () => {
+    expect(parseRecipe({ ...valid, engine: 'xray' })).toBeNull();
+    const { engine, ...bare } = valid;
+    void engine;
+    expect(parseRecipe(bare)).toBeNull();
+  });
+
+  it('takes a protocol the backend does not serve (the screen decides)', () => {
+    expect(parseRecipe({ ...valid, id: 'web', protocol: 'telegramweb', subprotocol: undefined, apply: {} })).not.toBeNull();
+  });
+
+  it('strips an unknown key instead of refusing the recipe', () => {
+    const r = parseRecipe({ ...valid, kind: 'vless-reality', future: 1 });
+    expect(r).not.toBeNull();
+    expect(r).not.toHaveProperty('kind');
+    expect(r).not.toHaveProperty('future');
   });
 
   it('rejects a non-slug id', () => {

@@ -1,0 +1,572 @@
+{
+  "repo": "icecompany-tech/iceslab-recipes",
+  "commit": "41040599a29aae64924e52a2dc0d03cdb3c50173",
+  "indexSha256": "6bb6f6066eafbfe1ac423f8ecf00492f98ec99855f9c25b81446a96a9282a3c4",
+  "recipes": [
+    {
+      "schemaVersion": 2,
+      "id": "awg-default",
+      "engine": "native",
+      "protocol": "amneziawg",
+      "emoji": "🔐",
+      "name": "AmneziaWG (default)",
+      "description": "Default obfuscation parameters, for most ISPs",
+      "details": "AmneziaWG (a WireGuard fork with DPI bypass). The default Jc/Jmin/Jmax and S padding preset hides the WireGuard signature. Works for most providers; on especially strict ISPs try Iran-tuned. S3 and S4 stay zero: the AmneziaVPN 4.8.15.x client drops traffic on non-zero values (upstream #2582). H1-H4 are random on every apply so the preset does not fingerprint every deployment alike.",
+      "dpiResistance": 4,
+      "speed": 5,
+      "apply": {
+        "awgPreset": "tspu",
+        "awgJc": 4,
+        "awgJmin": 64,
+        "awgJmax": 128,
+        "awgS1": 32,
+        "awgS2": 56,
+        "awgS3": 0,
+        "awgS4": 0,
+        "awgSubnet": "10.66.66.0/24"
+      },
+      "randomize": [
+        {
+          "field": "awgH1",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH2",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH3",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH4",
+          "kind": "awgHeader"
+        }
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "awg-iran",
+      "engine": "native",
+      "protocol": "amneziawg",
+      "emoji": "🥷",
+      "name": "AmneziaWG (Iran-tuned)",
+      "description": "Obfuscation tuned for Iranian DPI",
+      "details": "AmneziaWG with the obfuscation parameters the Amnezia team recommends for Iranian ISPs: more junk packets (Jc=6) and a larger Jmax for size variance, S1-S2 near the upper bound. Where the default parameters fail on Iranian DPI these pass, and they often help on corporate firewalls too. S3 and S4 stay zero until the client is fixed (upstream #2582).",
+      "dpiResistance": 5,
+      "speed": 4,
+      "apply": {
+        "awgPreset": "custom",
+        "awgJc": 6,
+        "awgJmin": 64,
+        "awgJmax": 256,
+        "awgS1": 48,
+        "awgS2": 64,
+        "awgS3": 0,
+        "awgS4": 0,
+        "awgSubnet": "10.66.66.0/24"
+      },
+      "randomize": [
+        {
+          "field": "awgH1",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH2",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH3",
+          "kind": "awgHeader"
+        },
+        {
+          "field": "awgH4",
+          "kind": "awgHeader"
+        }
+      ],
+      "region": "IR",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "telegram-http",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "http",
+      "emoji": "🖥",
+      "name": "Telegram HTTP (3128)",
+      "description": "Telegram Desktop only, the address is typed by hand",
+      "details": "HTTP CONNECT on xray-core, login and password of the user. Telegram Desktop only, there is no link format to add it. No obfuscation. Port 3128 is offered when deploying to a node.",
+      "dpiResistance": 1,
+      "speed": 5,
+      "apply": {
+        "xraySubprotocol": "http"
+      },
+      "notes": [
+        "The port is set when deploying to a node, 3128 by default"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "hysteria-default",
+      "engine": "native",
+      "protocol": "hysteria",
+      "emoji": "⚡",
+      "name": "Hysteria 2 (clean)",
+      "description": "UDP, low latency, no obfuscation, for free regions",
+      "details": "Hysteria 2 over QUIC (UDP) without obfuscation. The lowest latency (no TCP handshake) and good throughput through Brutal congestion control. Without obfuscation DPI can detect the QUIC traffic. For regions without active UDP DPI.",
+      "dpiResistance": 2,
+      "speed": 5,
+      "apply": {
+        "hyObfsPassword": "",
+        "hyMasqueradeUrl": "",
+        "hyPortHopStart": "",
+        "hyPortHopEnd": ""
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "hysteria-salamander",
+      "engine": "native",
+      "protocol": "hysteria",
+      "emoji": "🐉",
+      "name": "Hysteria 2 + Salamander (RU mobile)",
+      "description": "Obfuscation against UDP DPI on RU mobile carriers",
+      "details": "Hysteria 2 with a Salamander obfuscation password. Every UDP packet is XOR-ed with a key derived from the password, so DPI sees no QUIC signature. On RU mobile carriers clean Hysteria is often throttled to nothing; Salamander usually passes. Brutal is set for 100 Mbps peaks. Port hopping 20000-50000 is on: without it TSPU cuts the QUIC handshake on :443 within seconds, the node installer sets the NAT redirect for this range.",
+      "dpiResistance": 4,
+      "speed": 5,
+      "apply": {
+        "hyMasqueradeUrl": "https://www.bing.com",
+        "hyBrutalUp": 100,
+        "hyBrutalDown": 100,
+        "hyPortHopStart": 20000,
+        "hyPortHopEnd": 50000
+      },
+      "randomize": [
+        {
+          "field": "hyObfsPassword",
+          "kind": "password16"
+        }
+      ],
+      "notes": [
+        "The obfuscation password is random, keep it: clients need it",
+        "Brutal 100/100 Mbps, tune to the node's real bandwidth",
+        "Port hopping 20000-50000 is on, without it RU TSPU cuts QUIC"
+      ],
+      "region": "RU",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "mieru-default",
+      "engine": "native",
+      "protocol": "mieru",
+      "emoji": "🌸",
+      "name": "Mieru (GFW)",
+      "description": "Built against the Great Firewall, random padding",
+      "details": "Mieru by enfein, a modern stealth protocol with aggressive padding designed against the Chinese GFW. Traffic looks like noise, there are no signatures. Supported by sing-box. Use it when other protocols are cut in mainland CN.",
+      "dpiResistance": 5,
+      "speed": 3,
+      "apply": {
+        "mieruMtu": 1400
+      },
+      "region": "CN",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "mtproto-default",
+      "engine": "native",
+      "protocol": "mtproto",
+      "emoji": "📞",
+      "name": "MTProto (Telegram)",
+      "description": "Telegram client only, a separate use case",
+      "details": "An MTProto proxy for Telegram. Not a general-purpose VPN: Telegram traffic only. One shared secret for all users (an upstream mtg limitation). Useful when Telegram is banned and a fast channel for the messenger alone is wanted.",
+      "dpiResistance": 4,
+      "speed": 5,
+      "apply": {
+        "mtgDomain": "www.cloudflare.com"
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "naive-default",
+      "engine": "native",
+      "protocol": "naive",
+      "emoji": "📡",
+      "name": "NaiveProxy (Caddy)",
+      "description": "HTTP/2 proxy with a Chrome fingerprint, probe-resistant",
+      "details": "NaiveProxy through the Caddy fork. Traffic goes as HTTP/2, an ordinary HTTPS request with a correct Chrome JA3 fingerprint. The ACME certificate from Let's Encrypt is automatic. One of the stealthiest options for regions where xray and hysteria are already banned.",
+      "dpiResistance": 4,
+      "speed": 4,
+      "apply": {
+        "naiveMasquerade": "/var/www/html"
+      },
+      "notes": [
+        "Fill hostname and tlsEmail by hand: a real domain with an A record to the node is required"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "ss-2022-blake3",
+      "engine": "native",
+      "protocol": "shadowsocks",
+      "emoji": "🔒",
+      "name": "SS-2022 (blake3-aes-256)",
+      "description": "Modern Shadowsocks, AEAD-2022",
+      "details": "Shadowsocks 2022 with the 2022-blake3-aes-256-gcm cipher. A modern AEAD, faster and more probe-resistant than legacy chacha20. Supported by current clients (Shadowrocket, sing-box, Clash Meta); Outline does not understand 2022 ciphers.",
+      "dpiResistance": 3,
+      "speed": 5,
+      "apply": {
+        "ssMethod": "2022-blake3-aes-256-gcm"
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "telegram-socks5",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "socks",
+      "emoji": "✈",
+      "name": "Telegram SOCKS5 (1080)",
+      "description": "A tg://socks link for all three Telegram clients",
+      "details": "SOCKS5 on xray-core, login and password of the user. No obfuscation: for networks where a proxy is allowed, not for DPI evasion. Port 1080 is offered when deploying to a node.",
+      "dpiResistance": 1,
+      "speed": 5,
+      "apply": {
+        "xraySubprotocol": "socks"
+      },
+      "notes": [
+        "The port is set when deploying to a node, 1080 by default"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "telegram-web-tproxy-websocket",
+      "engine": "native",
+      "protocol": "telegramweb",
+      "emoji": "🌐",
+      "name": "WEB (tproxy-server, websocket)",
+      "description": "Websocket carrier, your own domain",
+      "details": "A t.me/webproxy link for Telegram Web: Caddy on 443, tproxy-server behind it, MTProxy behind that. The websocket carrier passes through a CDN. No domain is filled in: it is your domain with an A record to the node. The panel cannot save a WEB profile yet.",
+      "dpiResistance": 3,
+      "speed": 3,
+      "apply": {
+        "webHostname": "",
+        "webBasePath": "",
+        "webCarrier": "websocket"
+      },
+      "notes": [
+        "Enter your domain and generate the key: the recipe does not set them"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "xray-trojan-reality",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "trojan",
+      "emoji": "🐎",
+      "name": "Trojan + REALITY",
+      "description": "Password auth instead of UUID, anti-probe defence",
+      "details": "Trojan on xray-core with REALITY. Users authenticate with a password. On a wrong password the server answers with the real HTTPS response of the decoy site, which defeats active probing. No Vision (Trojan does not support it). Useful for legacy clients that cannot do VLESS.",
+      "dpiResistance": 5,
+      "speed": 4,
+      "apply": {
+        "xraySubprotocol": "trojan",
+        "xrayFlow": "",
+        "xrayNetwork": "raw",
+        "xrayDest": "www.cloudflare.com:443",
+        "xrayServerNames": "www.cloudflare.com",
+        "xrayFingerprint": "chrome"
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "xray-reality-grpc-ru",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "vless",
+      "emoji": "🇷🇺",
+      "name": "REALITY + gRPC (RU camouflage)",
+      "description": "Decoy under a Russian CDN, for RU networks that cut cloudflare SNI",
+      "details": "VLESS + REALITY + gRPC with the server name camouflaged as a large Russian CDN (Yandex avatars). The RU TSPU filter targets foreign SNIs and lets a Russian CDN domain through, with a huge volume of legitimate traffic to hide in. Fingerprint firefox (chrome is flagged as suspicious by TSPU JA3/JA4). gRPC instead of raw: HTTP/2 framing is harder to fingerprint as a proxy. WARNING: under a whitelist shutdown a single foreign node still goes down, outages need a cascade with an RU entry.",
+      "dpiResistance": 5,
+      "speed": 4,
+      "apply": {
+        "xraySubprotocol": "vless",
+        "xrayFlow": "",
+        "xrayNetwork": "grpc",
+        "xrayDest": "avatars.mds.yandex.net:443",
+        "xrayServerNames": "avatars.mds.yandex.net",
+        "xrayFingerprint": "firefox"
+      },
+      "randomize": [
+        {
+          "field": "xrayServiceName",
+          "kind": "token8"
+        }
+      ],
+      "notes": [
+        "Server name under a Russian CDN (avatars.mds.yandex.net); ads.x5.ru is an alternative. The node must reach dest:443 over TLS 1.3",
+        "Fingerprint firefox: chrome is flagged by RU TSPU",
+        "The gRPC service name is randomised so the panel is not fingerprinted",
+        "Under a whitelist shutdown a foreign node will not save you, use a cascade with an RU entry"
+      ],
+      "region": "RU",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "xray-reality-vision-raw",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "vless",
+      "emoji": "🛡",
+      "name": "REALITY + Vision (raw)",
+      "description": "The canonical stealth setup, looks like a plain HTTPS site",
+      "details": "VLESS + REALITY + Vision flow over raw TCP. To DPI the traffic looks like an ordinary HTTPS request to a large CDN site. Vision adds a zero-copy splice, the fastest path with no loss of camouflage. The recommended default for most situations.",
+      "dpiResistance": 5,
+      "speed": 5,
+      "apply": {
+        "xraySubprotocol": "vless",
+        "xrayFlow": "xtls-rprx-vision",
+        "xrayNetwork": "raw",
+        "xrayDest": "www.cloudflare.com:443",
+        "xrayServerNames": "www.cloudflare.com",
+        "xrayFingerprint": "chrome"
+      },
+      "notes": [
+        "Vision works with raw only, do not change the transport after applying"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "xray-reality-xhttp",
+      "engine": "native",
+      "protocol": "xray",
+      "subprotocol": "vless",
+      "emoji": "🌐",
+      "name": "REALITY + xhttp (HTTP/2 chunked)",
+      "description": "For hard DPI that cuts VLESS over raw",
+      "details": "VLESS + REALITY + xhttp transport. Traffic rides an HTTP/2 chunked stream and looks like an ordinary HTTP/2 request to a CDN. Slightly slower than raw (10-15% framing overhead) but passes DPI that has started cutting REALITY over raw at some ISPs. No Vision: it does not work with xhttp.",
+      "dpiResistance": 5,
+      "speed": 4,
+      "apply": {
+        "xraySubprotocol": "vless",
+        "xrayFlow": "",
+        "xrayNetwork": "xhttp",
+        "xrayDest": "www.cloudflare.com:443",
+        "xrayServerNames": "www.cloudflare.com",
+        "xrayFingerprint": "chrome"
+      },
+      "randomize": [
+        {
+          "field": "xrayPath",
+          "kind": "path"
+        }
+      ],
+      "notes": [
+        "The path is randomised, keep it private",
+        "If REALITY over raw is blocked on your network, xhttp usually still passes"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "anytls-default-padding",
+      "engine": "singbox",
+      "protocol": "anytls",
+      "emoji": "🧩",
+      "name": "AnyTLS (default padding)",
+      "description": "TLS-in-TLS with sing-box's default padding",
+      "details": "AnyTLS on sing-box. The padding scheme is the standard one (sing-box fills it in when padding_scheme is empty), the SNI is for the node's self-signed certificate.",
+      "dpiResistance": 4,
+      "speed": 4,
+      "apply": {
+        "anytlsServerName": "www.bing.com"
+      },
+      "notes": [
+        "Self-signed certificate: enable allow-insecure in the client"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "singbox-hysteria-clean",
+      "engine": "singbox",
+      "protocol": "hysteria",
+      "emoji": "⚡",
+      "name": "Hysteria 2 (clean, sing-box)",
+      "description": "UDP, low latency, no obfuscation, for free regions",
+      "details": "Hysteria 2 on the sing-box engine without obfuscation. The same protocol and the same hy2:// link as the standalone daemon, one process fewer.",
+      "dpiResistance": 2,
+      "speed": 5,
+      "apply": {
+        "hyObfsPassword": "",
+        "hyMasqueradeUrl": "",
+        "hyPortHopStart": "",
+        "hyPortHopEnd": ""
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "singbox-hysteria-salamander",
+      "engine": "singbox",
+      "protocol": "hysteria",
+      "emoji": "🐉",
+      "name": "Hysteria 2 + Salamander (sing-box)",
+      "description": "Obfuscation against UDP DPI on RU mobile carriers",
+      "details": "Hysteria 2 on the sing-box engine with Salamander obfuscation and a masquerade site on failed auth. Brutal 100/100 Mbps, port hopping 20000-50000.",
+      "dpiResistance": 4,
+      "speed": 5,
+      "apply": {
+        "hyMasqueradeUrl": "https://www.bing.com",
+        "hyBrutalUp": 100,
+        "hyBrutalDown": 100,
+        "hyPortHopStart": 20000,
+        "hyPortHopEnd": 50000
+      },
+      "randomize": [
+        {
+          "field": "hyObfsPassword",
+          "kind": "password16"
+        }
+      ],
+      "notes": [
+        "The obfuscation password is random, keep it: clients need it",
+        "Brutal 100/100 Mbps, tune to the node's real bandwidth"
+      ],
+      "region": "RU",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "singbox-ss-2022-blake3",
+      "engine": "singbox",
+      "protocol": "shadowsocks",
+      "emoji": "🔒",
+      "name": "SS-2022 (blake3-aes-256, sing-box)",
+      "description": "Modern Shadowsocks on the sing-box engine",
+      "details": "Shadowsocks 2022 with the 2022-blake3-aes-256-gcm cipher on the sing-box engine, multi-user. Outline does not understand 2022 ciphers.",
+      "dpiResistance": 3,
+      "speed": 5,
+      "apply": {
+        "ssMethod": "2022-blake3-aes-256-gcm"
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "shadowtls-v3-bing",
+      "engine": "singbox",
+      "protocol": "shadowtls",
+      "emoji": "🎭",
+      "name": "ShadowTLS v3 (real site handshake)",
+      "description": "A real site's handshake, strict mode",
+      "details": "ShadowTLS v3 in strict mode: the TLS handshake is proxied to www.bing.com:443, Shadowsocks 2022 inside. There is no link format, it is delivered in sing-box and Clash (mihomo) formats only.",
+      "dpiResistance": 5,
+      "speed": 4,
+      "apply": {
+        "shadowtlsHandshake": "www.bing.com",
+        "shadowtlsSsMethod": "2022-blake3-aes-128-gcm"
+      },
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "tuic-bbr",
+      "engine": "singbox",
+      "protocol": "tuic",
+      "emoji": "🚀",
+      "name": "TUIC (bbr, self-signed)",
+      "description": "QUIC with BBR, for lossy mobile links",
+      "details": "TUIC v5 on sing-box, congestion control bbr (sing-box defaults to cubic). The node issues its own certificate for the SNI from the form, clients need allow-insecure.",
+      "dpiResistance": 3,
+      "speed": 5,
+      "apply": {
+        "tuicCongestion": "bbr"
+      },
+      "notes": [
+        "Self-signed certificate: enable allow-insecure in the client"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    },
+    {
+      "schemaVersion": 2,
+      "id": "singbox-vless-reality-vision",
+      "engine": "singbox",
+      "protocol": "xray",
+      "subprotocol": "vless",
+      "emoji": "🛡",
+      "name": "VLESS + REALITY + Vision (sing-box)",
+      "description": "Without REALITY's fine anti-probe tuning",
+      "details": "VLESS + REALITY + Vision over raw on the sing-box engine. The same vless:// link as on xray-core, but without REALITY's fine anti-probe tuning (fallback limits, xver): sing-box has no such fields.",
+      "dpiResistance": 4,
+      "speed": 5,
+      "apply": {
+        "xraySubprotocol": "vless",
+        "xraySecurity": "reality",
+        "xrayFlow": "xtls-rprx-vision",
+        "xrayNetwork": "raw",
+        "xrayDest": "www.cloudflare.com:443",
+        "xrayServerNames": "www.cloudflare.com",
+        "xrayFingerprint": "chrome"
+      },
+      "notes": [
+        "Vision works with raw only, do not change the transport after applying"
+      ],
+      "region": "GLOBAL",
+      "author": "Iceslab",
+      "verified": true
+    }
+  ]
+}

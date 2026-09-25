@@ -5,14 +5,18 @@ import type {
   RecipeSourceProblem,
   RecipeSourceStatus,
 } from '@iceslab/shared';
+import { RECIPE_SOURCE_BUILTIN } from '@iceslab/shared';
 import { isNewer, readCurrentVersion } from '../system/system.service.js';
+import { getRecipeSnapshot } from './recipes.snapshot.js';
 import { parseRecipe, RegistryIndexSchema } from './recipes.schemas.js';
 import { getEnabledSources } from './recipes.sources.js';
 import { assertFetchableUrl } from './recipes.ssrf.js';
 
 /**
  * Community transport-recipe registry: recipes merged from every source the
- * operator has enabled (their own GitHub repos plus the curated default).
+ * operator has enabled (their own GitHub repos plus the curated default) over
+ * the pinned snapshot of the public registry the panel ships (25.09: the
+ * panel has no recipes of its own), one recipe per id.
  *
  * Same best-effort contract as the version check: the panel must never break
  * because a source is unreachable. Each source is fetched with a per-URL cache
@@ -250,6 +254,41 @@ export interface RecipeRegistryFilters {
   region?: string;
 }
 
+/**
+ * One recipe per id, the first in `candidates` winning; every later source
+ * that carries the same id is named in the winner's `alsoIn`. Pure: the order
+ * of `candidates` IS the precedence.
+ */
+export function mergeRecipesById(candidates: Recipe[]): Recipe[] {
+  const byId = new Map<string, Recipe>();
+  for (const r of candidates) {
+    const winner = byId.get(r.id);
+    if (!winner) {
+      byId.set(r.id, { ...r });
+      continue;
+    }
+    const name = r.sourceName ?? r.sourceId ?? '';
+    if (name && name !== winner.sourceName && !(winner.alsoIn ?? []).includes(name)) {
+      winner.alsoIn = [...(winner.alsoIn ?? []), name];
+    }
+  }
+  return [...byId.values()];
+}
+
+/** The pinned snapshot's recipes, as the `builtin` source serves them. */
+function snapshotRecipes(): Recipe[] {
+  const current = readCurrentVersion();
+  return getRecipeSnapshot()
+    .recipes.filter((r) => versionAllows(r, current))
+    .map((r) => ({
+      ...r,
+      sourceId: RECIPE_SOURCE_BUILTIN,
+      sourceName: RECIPE_SOURCE_BUILTIN,
+      // The snapshot's own stamp: the registry's build sets it, not the recipe.
+      verified: r.verified === true,
+    }));
+}
+
 export async function getRecipeRegistry(
   filters: RecipeRegistryFilters = {},
 ): Promise<RecipeRegistryResponse> {
@@ -260,9 +299,8 @@ export async function getRecipeRegistry(
 
   let anyFailed = false;
   let latest = 0;
-  const merged: Recipe[] = [];
+  const fromSources: Recipe[] = [];
   const statuses: RecipeSourceStatus[] = [];
-  const seen = new Set<string>(); // dedupe across sources by sourceId:id
   for (const { source, cache: c } of results) {
     if (!c.ok) anyFailed = true;
     statuses.push(
@@ -278,12 +316,9 @@ export async function getRecipeRegistry(
     );
     if (c.fetchedAt > latest) latest = c.fetchedAt;
     for (const r of c.recipes) {
-      const key = `${source.id}:${r.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
       // Provenance + trust are the source's, not self-declared: a community
       // source cannot mark its recipes "official".
-      merged.push({
+      fromSources.push({
         ...r,
         sourceId: source.id,
         sourceName: source.name,
@@ -292,7 +327,11 @@ export async function getRecipeRegistry(
     }
   }
 
-  let recipes = merged;
+  // The operator's sources in the order of their list, then the snapshot: the
+  // registry fetched today is newer than the one the panel was built with.
+  // With every source down the operator has exactly the snapshot, and the
+  // statuses say which source failed.
+  let recipes = mergeRecipesById([...fromSources, ...snapshotRecipes()]);
   if (filters.protocol) {
     recipes = recipes.filter((r) => r.protocol === filters.protocol);
   }

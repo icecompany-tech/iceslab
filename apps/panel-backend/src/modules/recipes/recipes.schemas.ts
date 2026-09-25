@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { RECIPE_SCHEMA_VERSION, type Recipe } from '@iceslab/shared';
+import {
+  RECIPE_ENGINES,
+  RECIPE_SCHEMA_VERSION,
+  RECIPE_XRAY_SUBPROTOCOLS,
+  type Recipe,
+} from '@iceslab/shared';
 
 /**
  * Server-side validation for a recipe pulled from the GitHub registry.
@@ -41,14 +46,29 @@ const APPLY_VALUE = z.union([z.string().max(512), z.number(), z.boolean()]);
 // protocol/engine or silently disable/rename it.
 const RECIPE_COMMON_KEYS = ['protocol', 'engine', 'name', 'description', 'enabled'];
 
-export const RecipeSchema = z.object({
+/**
+ * Schema v2 (25.09): a recipe says the three things a profile has, engine,
+ * protocol and (for xray) subprotocol, and the screen derives its tile from
+ * them. `schemaVersion` stays a plain int here so a v1 recipe PARSES and is
+ * then refused by name (parseRecipe), not lost in a shape error.
+ *
+ * This object is also what recipe.schema.json is generated from
+ * (recipes.json-schema.ts), which the registry validates its files with. The
+ * cross-field rules below (superRefine) have no JSON Schema form and the
+ * registry's own build keeps them.
+ */
+const RecipeObject = z.object({
   schemaVersion: z.number().int(),
   id: z
     .string()
     .min(1)
     .max(64)
     .regex(/^[a-z0-9][a-z0-9-]*$/, 'id must be a lowercase slug'),
+  engine: z.enum(RECIPE_ENGINES),
+  // A string, not ProtocolName: the registry may carry a protocol the screen
+  // draws before the backend serves it (telegramweb).
   protocol: z.string().min(1).max(32),
+  subprotocol: z.enum(RECIPE_XRAY_SUBPROTOCOLS).optional(),
   emoji: z.string().min(1).max(8),
   name: z.string().min(1).max(80),
   description: z.string().min(1).max(200),
@@ -74,6 +94,34 @@ export const RecipeSchema = z.object({
     .string()
     .regex(/^\d+\.\d+\.\d+/, 'minPanelVersion must be semver')
     .optional(),
+});
+
+export { RecipeObject };
+
+export const RecipeSchema = RecipeObject.superRefine((r, ctx) => {
+  if (r.protocol === 'xray') {
+    // The tile of an xray recipe is (xray, engine, subprotocol): without it
+    // the screen cannot tell vless from a Telegram socks proxy.
+    if (r.subprotocol === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['subprotocol'],
+        message: `an xray recipe names its subprotocol: ${RECIPE_XRAY_SUBPROTOCOLS.join(', ')}`,
+      });
+    } else if (r.apply.xraySubprotocol !== undefined && r.apply.xraySubprotocol !== r.subprotocol) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['apply', 'xraySubprotocol'],
+        message: `apply.xraySubprotocol "${String(r.apply.xraySubprotocol)}" contradicts subprotocol "${r.subprotocol}"`,
+      });
+    }
+  } else if (r.subprotocol !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['subprotocol'],
+      message: `only an xray recipe takes a subprotocol, and this one is ${r.protocol}`,
+    });
+  }
 });
 
 /**

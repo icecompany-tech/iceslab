@@ -26,6 +26,7 @@ vi.mock('./recipes.sources.js', () => ({
 }));
 
 const { getRecipeRegistry, bustSourceCache, sourceProblem, RecipeFetchError } = await import('./recipes.registry.js');
+const { getRecipeSnapshot } = await import('./recipes.snapshot.js');
 
 function answer(url: string): Response {
   if (url.includes('/missing/')) return new Response('404: Not Found', { status: 404 });
@@ -74,6 +75,42 @@ describe('recipe registry: why a source failed', () => {
     const res = await getRecipeRegistry();
     expect(res.stale).toBe(false);
     expect(res.sources.every((s) => s.ok && s.reason === undefined)).toBe(true);
+  });
+});
+
+describe('the pinned snapshot under the sources (25.09)', () => {
+  const snapshotIds = () => getRecipeSnapshot().recipes.map((r) => r.id).sort();
+
+  it('with every source down, the operator has exactly the snapshot, and the statuses say why', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('bad gateway', { status: 502 })));
+    const res = await getRecipeRegistry();
+    expect(res.recipes.map((r) => r.id).sort()).toEqual(snapshotIds());
+    expect(res.recipes.every((r) => r.sourceId === 'builtin' && r.sourceName === 'builtin')).toBe(true);
+    expect(res.stale).toBe(true);
+    expect(res.sources.every((s) => !s.ok)).toBe(true);
+  });
+
+  it('one recipe per id: a source wins over the snapshot, which is named in alsoIn', async () => {
+    const snap = getRecipeSnapshot().recipes.find((r) => r.id === 'hysteria-default')!;
+    const fromSource = { ...snap, name: 'Hysteria, as the registry says today' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/good/') || url.includes('/missing/')
+          ? new Response(JSON.stringify([fromSource]), { status: 200 })
+          : new Response('[]', { status: 200 }),
+      ),
+    );
+    const res = await getRecipeRegistry();
+    const hy = res.recipes.filter((r) => r.id === 'hysteria-default');
+    expect(hy).toHaveLength(1);
+    // The first source of the list wins; the later one and the snapshot are named.
+    expect(hy[0]).toMatchObject({
+      name: 'Hysteria, as the registry says today',
+      sourceId: 'default',
+      alsoIn: ['good', 'builtin'],
+    });
+    expect(res.recipes.map((r) => r.id).sort()).toEqual(snapshotIds());
   });
 });
 

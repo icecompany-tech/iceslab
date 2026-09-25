@@ -9,6 +9,8 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./recipes.snapshot.json": "./src/recipes.snapshot.json",
+    "./recipe.schema.json": "./recipe.schema.json"
   }
 }

@@ -8,13 +8,32 @@
  * still goes through the same server-side validation. There is no code
  * execution and no URL the recipe can make the panel fetch.
  *
- * Built-in recipes (frontend lib/recipes.ts) and community recipes pulled
- * from the GitHub registry share this exact shape, so the RecipePicker
- * renders and applies both through one path.
+ * The panel ships no recipes of its own (owner's decision 25.09). The public
+ * registry, icecompany-tech/iceslab-recipes, is the one source: the panel
+ * carries a snapshot of it pinned by commit (RECIPES_REGISTRY in
+ * recipes-registry.ts, the file recipes.snapshot.json beside it), the
+ * operator's sources are fetched over it, and every recipe, from wherever,
+ * has this one shape.
  */
 
-/** Bumped when the recipe shape changes in a non-backward-compatible way. */
-export const RECIPE_SCHEMA_VERSION = 1;
+/**
+ * Bumped when the recipe shape changes in a non-backward-compatible way.
+ * 2 (25.09): a recipe says its engine, protocol and, for xray, subprotocol,
+ * the three a profile has, instead of a panel card. 1 is not read any more.
+ */
+export const RECIPE_SCHEMA_VERSION = 2;
+
+/** The core that runs a recipe's protocol: its own, or sing-box. */
+export const RECIPE_ENGINES = ['native', 'singbox'] as const;
+export type RecipeEngine = (typeof RECIPE_ENGINES)[number];
+
+/**
+ * The wire protocols xray serves, one of which every xray recipe names: the
+ * screen derives the recipe's tile from (protocol, engine, subprotocol), the
+ * same way it does for a profile. No other protocol takes a subprotocol.
+ */
+export const RECIPE_XRAY_SUBPROTOCOLS = ['vless', 'vmess', 'trojan', 'socks', 'http'] as const;
+export type RecipeXraySubprotocol = (typeof RECIPE_XRAY_SUBPROTOCOLS)[number];
 
 /**
  * Field-level randomisation applied at click-time so a static preset does
@@ -50,8 +69,17 @@ export interface Recipe {
   schemaVersion: number;
   /** Stable slug, unique within the registry. Also the i18n override key. */
   id: string;
-  /** Which protocol this recipe configures (a ProtocolName). */
+  /** The core that runs it. */
+  engine: RecipeEngine;
+  /**
+   * Which protocol this recipe configures. A plain string, not ProtocolName:
+   * the registry may carry a protocol the screen draws before the backend
+   * serves it (telegramweb); whether it is known is the screen's check.
+   */
   protocol: string;
+  /** Required on xray, absent on every other protocol. When `apply` sets
+   *  `xraySubprotocol`, it equals this. */
+  subprotocol?: RecipeXraySubprotocol;
   /** Single emoji shown in the card chip. */
   emoji: string;
   /** Card title, short and intent-driven. */
@@ -92,18 +120,45 @@ export interface Recipe {
   minPanelVersion?: string;
   /**
    * Name of the source this recipe was merged from. Stamped by the backend
-   * when it aggregates the operator's enabled sources, so a card can show
-   * where a recipe came from. Absent on built-ins.
+   * when it merges, so a card can show where a recipe came from.
    */
   sourceName?: string;
-  /** Id of the source (backend-stamped) for grouping and filtering. */
+  /**
+   * Id of the source (backend-stamped): an operator source's id, or
+   * RECIPE_SOURCE_BUILTIN for the pinned snapshot.
+   */
   sourceId?: string;
+  /**
+   * The other sources that carry a recipe with this id, by name. The server
+   * serves one recipe per id (the winner: the operator's sources in the order
+   * of their list, then the snapshot) and names the ones it set aside here, so
+   * the screen merges nothing.
+   */
+  alsoIn?: string[];
+}
+
+/** The `sourceId` (and `sourceName`) of a recipe from the pinned snapshot. */
+export const RECIPE_SOURCE_BUILTIN = 'builtin';
+
+/**
+ * The pinned snapshot the panel ships (packages/shared/src/recipes.snapshot.json),
+ * written by `pnpm --filter @iceslab/panel-backend sync:recipes` from
+ * RECIPES_REGISTRY and never by hand.
+ */
+export interface RecipeSnapshot {
+  /** `owner/repo`, commit and the sha256 of its index.json: the pin it was built from. */
+  repo: string;
+  commit: string;
+  indexSha256: string;
+  /** Every recipe of that index, as the recipe schema reads it. */
+  recipes: Recipe[];
 }
 
 /**
- * Response of `GET /api/recipes/registry`. The backend fetches the registry
- * index from GitHub, validates every entry against the recipe schema, drops
- * invalid/too-new ones, caches the result, and returns what survived.
+ * Response of `GET /api/recipes/registry`. The backend serves the pinned
+ * snapshot, fetches the operator's sources over it, validates every entry
+ * against the recipe schema, drops invalid/too-new ones, caches the result,
+ * and returns one recipe per id.
  */
 export interface RecipeRegistryResponse {
   /** ISO timestamp of the backend's last successful registry fetch. */

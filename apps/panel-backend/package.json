@@ -13,6 +13,8 @@
     "db:migrate": "node ./node_modules/prisma/build/index.js migrate deploy",
     "stress:users": "tsx scripts/stress-users.ts",
     "reset:admin": "tsx scripts/reset-admin.ts",
+    "sync:recipes": "tsx scripts/sync-recipes.ts",
+    "gen:recipe-schema": "tsx scripts/recipe-json-schema.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests"
