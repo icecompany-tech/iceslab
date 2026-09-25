@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -27,8 +28,9 @@ kept serving), a --remove of that core was refused because it was running, and
 a node with an installed core nobody used read as DEGRADED, "not running:
 hysteria" (E26, stand 24.09). Three exceptions, each a fact of the push and not
 a name: the core handed a non-empty cascade drawing keeps running, the chain
-process is not an adapter and is never touched, and a push the node refused in
-part stops nothing.
+process is not an adapter and is never touched, and a push whose chain or
+userCore block the node refused stops nothing. Since E34 the idle runs BEFORE
+the inbounds apply, so a core the push drops frees its port for one it names.
 */
 
 // idleCore is a fake core that counts Idle calls and can take a cascade.
@@ -145,12 +147,15 @@ func TestACoreHandedACascadeDrawingIsNotIdled(t *testing.T) {
 	}
 }
 
-func TestAPushTheNodeRefusedInPartStopsNothing(t *testing.T) {
-	xray := &idleCore{fakeAdapter: fakeAdapter{name: "xray", engine: "xray", failOnApply: "core rejected the config"}}
+func TestAPushWhoseChainIsRefusedStopsNothing(t *testing.T) {
+	// A chain block this agent cannot run: the push is refused in a node-level
+	// part, which says nothing about which cores should serve here.
+	xray := &idleCore{fakeAdapter: fakeAdapter{name: "xray", engine: "xray"}}
 	ss := &idleCore{fakeAdapter: fakeAdapter{name: "shadowsocks", engine: "xray"}}
 	s := newServerWith(t, xray, ss)
 	_, failed, _ := s.applyPush(context.Background(), dto.ApplyInboundsRequest{
 		Inbounds: []dto.InboundDto{inboundFor("xray", "xray")},
+		Chain:    chainBlock(),
 	})
 	if failed == 0 {
 		t.Fatal("the fixture push did not fail")
@@ -160,6 +165,80 @@ func TestAPushTheNodeRefusedInPartStopsNothing(t *testing.T) {
 	}
 	if coreOf(healthOf(t, s), "shadowsocks").Reason != "" {
 		t.Error("a refused push marked a core idle")
+	}
+}
+
+func TestAnInboundThatFailsLeavesItsCoreNamed(t *testing.T) {
+	// E34: the idle now runs before the inbounds apply, so an inbound failing
+	// can no longer hold it back. What it must still not do is idle its own
+	// core: the push named it, the apply just did not take.
+	xray := &idleCore{fakeAdapter: fakeAdapter{name: "xray", engine: "xray", failOnApply: "core rejected the config"}}
+	ss := &idleCore{fakeAdapter: fakeAdapter{name: "shadowsocks", engine: "xray"}}
+	s := newServerWith(t, xray, ss)
+	_, failed, _ := s.applyPush(context.Background(), dto.ApplyInboundsRequest{
+		Inbounds: []dto.InboundDto{inboundFor("xray", "xray")},
+	})
+	if failed == 0 {
+		t.Fatal("the fixture push did not fail")
+	}
+	if xray.idles != 0 {
+		t.Fatal("the core whose inbound failed was idled")
+	}
+	if ss.idles != 1 {
+		t.Fatalf("the core the push does not name: %d idles, want 1", ss.idles)
+	}
+}
+
+// portCore holds one port while it serves and gives it up when idled, the
+// way a real core holds its socket.
+type portCore struct {
+	idleCore
+	ports map[int]string
+	holds int
+	order *[]string
+}
+
+func (c *portCore) Idle(ctx context.Context) error {
+	*c.order = append(*c.order, "idle "+c.name)
+	if c.holds != 0 && c.ports[c.holds] == c.name {
+		delete(c.ports, c.holds)
+	}
+	c.holds = 0
+	return c.idleCore.Idle(ctx)
+}
+
+func (c *portCore) ApplyInbound(port int, cfg json.RawMessage) error {
+	*c.order = append(*c.order, "apply "+c.name)
+	if owner, taken := c.ports[port]; taken && owner != c.name {
+		return errors.New("listen udp :443: bind: address already in use")
+	}
+	c.ports[port] = c.name
+	c.holds = port
+	return c.fakeAdapter.ApplyInbound(port, cfg)
+}
+
+func TestACoreThePushDropsFreesItsPortBeforeTheNamedOnesStart(t *testing.T) {
+	// E34, 25.09 on nl-01: hysteria sat on 443/udp with no inbound, the push
+	// put AWG on 443/udp, AWG failed "address already in use" and hysteria was
+	// idled only after that. Now the idle comes first and AWG comes up on the
+	// first push.
+	ports := map[int]string{443: "hysteria"}
+	var order []string
+	hy := &portCore{idleCore: idleCore{fakeAdapter: fakeAdapter{name: "hysteria", engine: "hysteria"}}, ports: ports, holds: 443, order: &order}
+	awg := &portCore{idleCore: idleCore{fakeAdapter: fakeAdapter{name: "amneziawg", engine: "amneziawg"}}, ports: ports, order: &order}
+	s := newServerWith(t, hy, awg)
+
+	applied, failed, reasons := s.applyPush(context.Background(), dto.ApplyInboundsRequest{
+		Inbounds: []dto.InboundDto{inboundFor("amneziawg", "amneziawg")},
+	})
+	if failed != 0 || applied != 1 {
+		t.Fatalf("applied %d failed %d %v, want the AWG inbound up on the first push (order %v)", applied, failed, reasons, order)
+	}
+	if ports[443] != "amneziawg" {
+		t.Fatalf("443 is held by %q", ports[443])
+	}
+	if len(order) != 2 || order[0] != "idle hysteria" || order[1] != "apply amneziawg" {
+		t.Fatalf("order %v, want the unnamed core idled before the named one applies", order)
 	}
 }
 

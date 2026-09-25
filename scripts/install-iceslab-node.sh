@@ -57,17 +57,19 @@
 # + ACME cert) pass per-protocol flags. Otherwise install-iceslab-node.sh installs
 # the binaries and you have to drop config files manually.
 #
-# Hysteria 2, auto-configure server with LE-issued cert + masquerade:
+# Hysteria 2: the agent writes its config and gets its certificate on the
+# panel's first push (ACME for the domain below; a node on an IP gets the
+# panel's self-signed one). Nothing is started here (E34):
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_xxx \
 #     --engines hysteria \
 #     --hysteria-domain hy2-01.example.com \
 #     --hysteria-email admin@example.com
-#   # Optional: --hysteria-masquerade-url https://en.wikipedia.org/
-#   #           --hysteria-obfs-password <salamander-pwd>
-#   #           --hysteria-port-range 20000-50000   (port-hopping;
+#   # Optional: --hysteria-port-range 20000-50000   (port-hopping;
 #   #             defeats RU TSPU UDP/443 throttle. Pass "" to disable.)
+#   # --hysteria-masquerade-url / --hysteria-obfs-password are still accepted
+#   # and do nothing: masquerade and obfuscation come from the panel's profile.
 #
 # Xray, pre-fill REALITY env so adapter starts immediately. Get keypair
 # from the inbound creation form (panel UI: Inbounds > Create > Generate):
@@ -342,13 +344,13 @@ FAIL2BAN=0
 REALISTIC_FALLBACK=0
 SSH_ALLOWLIST=""   # comma-list of IP/CIDR; empty = keep world-open 22/tcp
 
-# Hysteria 2 server config (only used when hysteria is a core). When DOMAIN
-# is given, the script writes /etc/hysteria/config.yaml + a hysteria systemd
-# unit and starts the server, so the admin gets a configured node from one
-# command, no manual SSH editing.
+# Hysteria 2 (only used when hysteria is a core): the domain and e-mail its
+# ACME certificate is asked for, written to the agent's env (core_flags_env);
+# the agent renders the config on the panel's first push (E34). The masquerade
+# and obfs flags are accepted for old commands and unused: the profile says.
 HY_DOMAIN=""
 HY_EMAIL=""
-HY_MASQUERADE_URL="https://www.bing.com/"
+HY_MASQUERADE_URL=""
 HY_OBFS_PASSWORD=""
 # Port-hopping. iptables NAT-REDIRECT for a UDP port range so clients can
 # rotate destination ports per connection (mport=START-END in the URI).
@@ -356,8 +358,8 @@ HY_OBFS_PASSWORD=""
 # is wide enough to give clients room without colliding with common service
 # ports. Admin can narrow or widen via flag. The range here must be a
 # superset of any per-profile range emitted in the panel, otherwise the
-# panel-emitted ports rotate outside the iptables redirect and never reach
-# hysteria.
+# hysteria. Set up by bootstrap-hysteria.sh, which reads it as
+# HYSTERIA_PORT_RANGE.
 HY_PORT_RANGE="20000-50000"
 
 # Xray REALITY inbound params (only used when xray is a core). When the
@@ -691,7 +693,8 @@ while [[ $# -gt 0 ]]; do
     --bootstrap)         BOOTSTRAP_TOKEN="$2"; shift 2 ;;
     --bootstrap-file)    BOOTSTRAP_TOKEN=$(resolve_bootstrap "$2"); shift 2 ;;
     --port)          NODE_PORT="$2"; shift 2 ;;
-    # Hysteria 2: auto-configure server (config.yaml + systemd unit)
+    # Hysteria 2: the ACME name and e-mail for the agent's env (E34: nothing
+    # is configured or started here any more).
     --hysteria-domain)         HY_DOMAIN="$2"; shift 2 ;;
     --hysteria-email)          HY_EMAIL="$2"; shift 2 ;;
     --hysteria-masquerade-url) HY_MASQUERADE_URL="$2"; shift 2 ;;
@@ -1075,6 +1078,8 @@ else
 fi
 
 step "Cores (${ENGINES[*]:-none})"
+# bootstrap-hysteria.sh sets up the port-hopping redirect from this.
+export HYSTERIA_PORT_RANGE="$HY_PORT_RANGE"
 install_engines "$ICESLAB_NODE_DIR/apps/node/scripts"
 step "Firewall (ufw)"
 # Allow SSH FIRST so enabling ufw can't lock us out, then per-protocol ports,
@@ -1329,114 +1334,33 @@ systemctl daemon-reload
 systemctl enable iceslab-node.service
 systemctl restart iceslab-node.service
 
-# ───── 9b. Hysteria server config (auto-configure when domain given) ─────
-# When admin passes --hysteria-domain + --hysteria-email, we lay down a full
-# Hysteria 2 server config and systemd unit. Without this, the admin would
-# have to SSH in and write /etc/hysteria/config.yaml by hand after running
-# install-iceslab-node.sh, a friction point caught during a VPS test.
-# Skipped silently if either flag is missing or if hysteria is not among the
-# cores (it need not be the first: there is no first).
-# core_ok, not has_engine: a hysteria whose bootstrap failed has no binary and
-# no unit to configure, and restarting it would end the install (E32).
-if core_ok hysteria && [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
-  HY_CONFIG=/etc/hysteria/config.yaml
-  # The secret the agent polls the stats with, as the hysteria block (or, on an
-  # old checkout, legacy_primary_env) wrote it: the config must carry the same.
-  HYSTERIA_STATS_SECRET="$(awk -F= '$1 == "HYSTERIA_STATS_SECRET" { v = substr($0, index($0, "=") + 1) } END { print v }' "$ENV_FILE")"
-  [[ -n "$HYSTERIA_STATS_SECRET" ]] || fail "no HYSTERIA_STATS_SECRET in $ENV_FILE after the hysteria bootstrap"
-
-  # Upstream's install_server.sh, which older versions of this installer ran,
-  # left a placeholder config.yaml with `your.domain.net` / `your@email.com`,
-  # and the old "skip if file exists" kept it: hysteria came up asking a cert
-  # for `your.domain.net` and crashlooped. A node carrying that leftover is
-  # still overwritten when we have real values; only a config that already
-  # mentions our domain (genuine admin-customized state) is kept.
-  SHOULD_WRITE_CFG=1
-  if [[ -f "$HY_CONFIG" ]]; then
-    if grep -q "${HY_DOMAIN}" "$HY_CONFIG"; then
-      SHOULD_WRITE_CFG=0
-      log "Hysteria config already mentions ${HY_DOMAIN}; keeping admin-customized state"
-    else
-      log "Hysteria config at $HY_CONFIG exists but doesn't reference ${HY_DOMAIN} (likely an older install's placeholder); overwriting"
-    fi
-  fi
-  if [[ $SHOULD_WRITE_CFG -eq 1 ]]; then
-    log "Writing Hysteria 2 server config at $HY_CONFIG (domain=$HY_DOMAIN)"
-    {
-      cat <<EOF
-listen: :443
-
-acme:
-  domains:
-    - ${HY_DOMAIN}
-  email: ${HY_EMAIL}
-
-auth:
-  type: http
-  http:
-    url: http://127.0.0.1:9000/auth
-    insecure: true
-
-masquerade:
-  type: proxy
-  proxy:
-    url: ${HY_MASQUERADE_URL}
-    rewriteHost: true
-
-bandwidth:
-  up: 1 gbps
-  down: 1 gbps
-
-# Clients (Hiddify iOS, NekoBox, Streisand) often negotiate up=0 with
-# Brutal CC at session start, leading to "tunnel handshakes but tx=0,
-# websites don't load". Forcing BBR here removes the dependency on a sane
-# client-side bandwidth declaration. Clients that do emit valid
-# upmbps/downmbps via subscription URI still benefit from Brutal because
-# we re-render this section on ApplyInbound from the panel.
-ignoreClientBandwidth: true
-
-# Traffic stats endpoint. Bind loopback-only so it isn't reachable from
-# outside; the agent polls it from the same host with the matching secret
-# from /etc/iceslab-node/env (HYSTERIA_STATS_SECRET). Without this block,
-# the agent's GetStats returns zero counters and the panel UI shows
-# "0 B today" for every Hysteria node.
-trafficStats:
-  listen: 127.0.0.1:9999
-  secret: ${HYSTERIA_STATS_SECRET}
-EOF
-      if [[ -n "$HY_OBFS_PASSWORD" ]]; then
-        cat <<EOF
-
-obfs:
-  type: salamander
-  salamander:
-    password: ${HY_OBFS_PASSWORD}
-EOF
-      fi
-    } > "$HY_CONFIG"
-    chmod 600 "$HY_CONFIG"
-  fi
-
-  # Upstream's own units, if an older install left them, so a placeholder
-  # config is never picked up by a parallel service. hysteria.service owns the
-  # runtime; bootstrap-hysteria.sh wrote it.
-  systemctl disable --now hysteria-server.service 2>/dev/null || true
-  systemctl disable --now hysteria-server@.service 2>/dev/null || true
-
+# ───── 9b. Hysteria: nothing to start here ─────
+# E34, 25.09 on nl-01: this step used to write /etc/hysteria/config.yaml and
+# START hysteria on 443/udp before the panel had said anything. The panel did
+# not know that port was taken; its first push put an AmneziaWG host on
+# 443/udp, awg-quick failed with "Address already in use", and the node sat
+# DEGRADED. The config and its certificate (ACME with --hysteria-domain, the
+# panel's self-signed pair on an IP, E30a) are the agent's, on its first push;
+# --hysteria-domain / --hysteria-email only land in the env (core_flags_env).
+# The port-hopping redirect moved to bootstrap-hysteria.sh, which takes
+# --hysteria-port-range as HYSTERIA_PORT_RANGE, so a hysteria added to a node
+# later from the panel gets it too.
+if core_ok hysteria; then
   # ⚠ Old checkout ONLY: its bootstrap-hysteria.sh installs the binary and
-  # nothing else. Delete with legacy_primary_env.
+  # nothing else, so the unit the agent restarts comes from here. Enabled, not
+  # started, and only once a config exists. Delete with legacy_primary_env.
   HY_UNIT=/etc/systemd/system/hysteria.service
   if [[ "$LEGACY_CHECKOUT" == 1 && ! -f "$HY_UNIT" ]]; then
-    log "Installing Hysteria 2 systemd unit at $HY_UNIT"
     cat > "$HY_UNIT" <<EOF
 [Unit]
-Description=Hysteria 2 server
+Description=Hysteria 2 server (run by iceslab-node)
 After=network-online.target iceslab-node.service
-Wants=network-online.target iceslab-node.service
+Wants=network-online.target
+ConditionPathExists=/etc/hysteria/config.yaml
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/hysteria server -c ${HY_CONFIG}
+ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576
@@ -1447,117 +1371,10 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
+    systemctl enable hysteria.service >/dev/null 2>&1 || true
+    log "Wrote $HY_UNIT (old checkout)"
   fi
-  # ───── IPv6 sanity-check for hysteria's outbound resolver ─────
-  # Many VPS providers route IPv4 cleanly but leave IPv6 half-configured
-  # (AAAA records resolve, but the host can't actually reach IPv6
-  # destinations). Hysteria proxies a client-requested DNS name and Go's
-  # net resolver tries IPv6 first by default: when AAAA wins, every request
-  # times out at the v6 hop and the user sees "client connected but YouTube
-  # doesn't load." Force IPv4 preference via gai.conf so the libc resolver
-  # returns A records first; IPv6 still works if it works, this just demotes
-  # it from the default winner.
-  if ! grep -q '^precedence ::ffff:0:0/96  100' /etc/gai.conf 2>/dev/null; then
-    log "Configuring /etc/gai.conf to prefer IPv4 for hysteria's outbound resolver"
-    echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
-  fi
-
-  systemctl enable hysteria.service >/dev/null 2>&1 || true
-  systemctl restart hysteria.service
-  log "Hysteria 2 started; first run will obtain the LE certificate via HTTP-01"
-
-  # ───── Hysteria port-hopping (iptables REDIRECT) ─────
-  # We install a tiny up/down helper + systemd unit that owns a single
-  # NAT-PREROUTING rule redirecting `udp --dport START:END → :443`. The
-  # unit is `Type=oneshot RemainAfterExit=yes` with ExecStart=up and
-  # ExecStop=down so `systemctl stop` cleanly tears the rule down. The
-  # rule is also restored on every boot (WantedBy=multi-user.target).
-  #
-  # We only install when:
-  #   1. hysteria is a core  (port-hopping is hysteria-specific)
-  #   2. HY_PORT_RANGE is non-empty (admin can pass "" to opt out)
-  #   3. iptables is present on the system
-  if [[ -n "$HY_PORT_RANGE" ]] && command -v iptables >/dev/null 2>&1; then
-    # Validate format BEFORE we substitute the value into the generated
-    # helper script: the script runs as root and a careless typo (or a
-    # tampered upstream install pipeline) would otherwise get baked in
-    # verbatim. Format: `START-END` where both are 1024..65535 and END>START.
-    if ! [[ "$HY_PORT_RANGE" =~ ^([0-9]{4,5})-([0-9]{4,5})$ ]]; then
-      fail "--hysteria-port-range must be START-END (1024..65535), got: $HY_PORT_RANGE"
-    fi
-    HY_PR_START="${BASH_REMATCH[1]}"
-    HY_PR_END="${BASH_REMATCH[2]}"
-    if (( HY_PR_START < 1024 || HY_PR_END > 65535 || HY_PR_END <= HY_PR_START )); then
-      fail "--hysteria-port-range out of bounds: $HY_PORT_RANGE (need 1024<start<end<=65535)"
-    fi
-    # iptables takes the range as `START:END` (colon). The flag we accept
-    # is `START-END` (hyphen) so it matches the URI form admins see.
-    HY_RANGE_IPT="${HY_PR_START}:${HY_PR_END}"
-    HY_LISTEN_PORT=443
-    HYHOP_BIN=/usr/local/bin/iceslab-hyhop
-    HYHOP_UNIT=/etc/systemd/system/iceslab-hyhop.service
-
-    log "Installing port-hopping iptables redirect: udp ${HY_PORT_RANGE} → ${HY_LISTEN_PORT}"
-
-    cat > "$HYHOP_BIN" <<EOF
-#!/usr/bin/env bash
-# Iceslab Hysteria 2 port-hopping helper. Managed by systemd unit
-# iceslab-hyhop.service, do not edit by hand. To change the range,
-# re-run install-iceslab-node.sh with --hysteria-port-range START-END.
-set -euo pipefail
-RANGE_IPT='${HY_RANGE_IPT}'
-LISTEN_PORT=${HY_LISTEN_PORT}
-case "\${1:-}" in
-  up)
-    iptables -t nat -C PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null \\
-      || iptables -t nat -A PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT"
-    if command -v ip6tables >/dev/null 2>&1; then
-      ip6tables -t nat -C PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null \\
-        || ip6tables -t nat -A PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" \\
-        || true
-    fi
-    ;;
-  down)
-    iptables -t nat -D PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null || true
-    if command -v ip6tables >/dev/null 2>&1; then
-      ip6tables -t nat -D PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null || true
-    fi
-    ;;
-  *)
-    echo "usage: \$0 up|down" >&2
-    exit 64
-    ;;
-esac
-EOF
-    chmod 755 "$HYHOP_BIN"
-
-    cat > "$HYHOP_UNIT" <<EOF
-[Unit]
-Description=Iceslab Hysteria 2 port-hopping (UDP ${HY_PORT_RANGE} → :${HY_LISTEN_PORT})
-After=network-online.target hysteria.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=${HYHOP_BIN} up
-ExecStop=${HYHOP_BIN} down
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable iceslab-hyhop.service >/dev/null 2>&1 || true
-    systemctl restart iceslab-hyhop.service
-    log "Port-hopping active. Profile-side range MUST be a subset of ${HY_PORT_RANGE}."
-  else
-    [[ -z "$HY_PORT_RANGE" ]] && log "Port-hopping disabled by --hysteria-port-range ''"
-    command -v iptables >/dev/null 2>&1 || warn "iptables not installed; skipping port-hopping setup"
-  fi
-elif core_ok hysteria; then
-  warn "Hysteria server NOT pre-configured (no --hysteria-domain/--hysteria-email): hysteria.service"
-  warn "waits for its config, which the agent writes on the panel's first push"
+  log "hysteria.service waits for its config, which the agent writes on the panel's first push"
 fi
 
 step "Wait for node-agent ready"

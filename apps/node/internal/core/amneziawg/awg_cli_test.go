@@ -255,6 +255,61 @@ func TestCLI_HealthyFalseWhenAwgShowFails(t *testing.T) {
 	}
 }
 
+// E34, 25.09 on nl-01: the first push's `awg-quick up` lost 443/udp to a
+// hysteria the installer had started, a later peer sync's syncconf found no
+// device and its systemctl fallback brought awg0 up with every peer, and the
+// node kept reporting amneziawg as not running for as long as it stayed up:
+// running was the outcome of the last apply, and the fallback never set it.
+// Now it is the interface: whatever brought it up, the next healthcheck asks.
+func TestCLI_HealthyFollowsTheInterfaceAfterAFailedApplyAndAFallback(t *testing.T) {
+	var mu sync.Mutex
+	up := false
+	fake := &fakeCLI{
+		handler: func(name string, args []string) ([]byte, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case name == "awg-quick" && args[0] == "up":
+				return []byte("RTNETLINK answers: Address already in use"), errors.New("exit status 1")
+			case name == "awg" && args[0] == "syncconf":
+				return []byte("Unable to modify interface: No such device"), errors.New("exit status 1")
+			case name == "systemctl" && args[0] == "restart":
+				up = true
+				return nil, nil
+			case name == "awg" && args[0] == "show":
+				if !up {
+					return []byte("Unable to access interface: No such device"), errors.New("exit status 1")
+				}
+			}
+			return nil, nil
+		},
+	}
+	a, _ := newManagedAdapter(t, fake)
+	// A freshly installed node: no server key until the panel's first push.
+	a.cfg.Inbound.PrivateKey = ""
+
+	if err := a.ApplyInbound(443, wirePayload(t, nil)); err == nil {
+		t.Fatalf("the first apply must fail: awg-quick up lost the port")
+	}
+	if a.Healthy() {
+		t.Fatalf("no interface after the failed apply, yet Healthy says running")
+	}
+
+	if err := a.AddUser(core.User{
+		UserID:             "u",
+		AmneziaWGPublicKey: testWGPubKeyA,
+		AmneziaWGAllowedIP: "10.0.0.5/32",
+	}); err != nil {
+		t.Fatalf("AddUser: the systemctl fallback should succeed, got: %v", err)
+	}
+	if seq := strings.Join(fake.sequence(), "\n"); !strings.Contains(seq, "systemctl restart awg-quick@awg0") {
+		t.Fatalf("expected the systemctl fallback, got:\n%s", seq)
+	}
+	if !a.Healthy() {
+		t.Errorf("the fallback brought awg0 up, the next healthcheck must say running")
+	}
+}
+
 func TestCLI_NoCLIInConfigOnlyMode(t *testing.T) {
 	// Sanity check: config-only mode (AwgQuickBin empty) must NOT call any CLI.
 	fake := &fakeCLI{}

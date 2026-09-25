@@ -879,6 +879,33 @@ func (s *Server) applyPush(
 			"engine", router)
 	}
 
+	// Which core each inbound goes to, settled before any of them is applied,
+	// so the cores this push does not name are known up front.
+	matchedBy := make([]core.CoreAdapter, len(req.Inbounds))
+	for i, ib := range req.Inbounds {
+		if m := s.adapterFor(ib); m != nil {
+			matchedBy[i] = m
+			named[m] = true
+		}
+	}
+
+	// And those stop serving BEFORE the named ones start, because they may hold
+	// the very port a named inbound is about to take. E34, 25.09 on nl-01: a
+	// hysteria with no inbound sat on 443/udp, the push's AWG inbound on 443/udp
+	// failed "Address already in use", and hysteria was idled only after that,
+	// so the node needed a second push to come up. Two cores asking for one port
+	// in the SAME push is the panel's refusal to make, not this ordering's.
+	//
+	// Not after a chain or userCore refusal: those are the push being refused in
+	// part, which is not a fact about what should run here, and stopping a core
+	// on it would turn one bad block into an outage of another core. An inbound
+	// that fails below no longer holds the idle back: the push named what it
+	// named whether or not that inbound then applies, and the core it names is
+	// named, so a failure cannot idle it.
+	if failed == 0 {
+		s.idleUnnamed(ctx, named)
+	}
+
 	// Dispatch each inbound to the matching adapter by protocol name. Adapters
 	// that don't recognise the protocol return nil (defensive no-op contract).
 	// Slice 24b: Xray has a real reconfig impl; the others are stubs that
@@ -891,35 +918,16 @@ func (s *Server) applyPush(
 	//
 	// Capped at the first three: a node with forty inbounds and a broken shared
 	// profile would otherwise answer with a wall of the same sentence.
-	for _, ib := range req.Inbounds {
+	for i, ib := range req.Inbounds {
 		s.logger.Info("applyInbounds received",
 			"id", ib.ID, "name", ib.Name, "protocol", ib.Protocol, "port", ib.Port)
 
-		// Engine-choice: route by the (protocol, engine) pair, not protocol
-		// alone. An inbound that pins engine=singbox for a shared protocol
-		// (vless/vmess/trojan/ss/hy2) lands on the sing-box adapter instead of
-		// the native core. Empty engine resolves to the protocol's native core,
-		// so pre-engine-choice inbounds keep matching their original adapter.
-		wantEngine := ib.ResolvedEngine()
-		var matched core.CoreAdapter
-		for _, adapter := range s.cfg.Adapters {
-			// A stand-in for a core that is not installed is reported, never
-			// matched: its inbound takes the "no adapter" path below, as it did
-			// when the stand-in did not exist.
-			if core.IsAbsent(adapter) {
-				continue
-			}
-			if adapter.Name() == string(ib.Protocol) && adapter.Engine() == string(wantEngine) {
-				matched = adapter
-				break
-			}
-		}
+		matched := matchedBy[i]
 		if matched == nil {
 			s.logger.Warn("applyInbounds: no adapter for protocol/engine, config persisted but not applied live",
-				"protocol", ib.Protocol, "engine", wantEngine)
+				"protocol", ib.Protocol, "engine", ib.ResolvedEngine())
 			continue
 		}
-		named[matched] = true
 		if err := matched.ApplyInbound(ib.Port, ib.Config); err != nil {
 			s.logger.Error("adapter ApplyInbound failed",
 				"core", matched.Name(), "inboundId", ib.ID, "err", err)
@@ -965,14 +973,6 @@ func (s *Server) applyPush(
 		}
 	}
 
-	// And the cores this push does not name at all stop serving. Only after a
-	// push that applied WHOLE: a push the node refused in part is not a fact
-	// about what should run here, and stopping a core on it would turn one bad
-	// inbound into an outage of another core.
-	if failed == 0 {
-		s.idleUnnamed(ctx, named)
-	}
-
 	if req.Geo != nil {
 		s.settleGeo(ctx, req.Geo, failed == 0)
 	}
@@ -983,7 +983,7 @@ func (s *Server) applyPush(
 // settleGeo finishes a push that carried geo: a core still running on files
 // the push replaced restarts, and, when the push applied whole, the files it
 // did not name leave the directory (a push refused in part is not a fact
-// about what this node needs, the same rule as idleUnnamed).
+// about what this node needs).
 func (s *Server) settleGeo(ctx context.Context, g *dto.NodeGeo, whole bool) {
 	for _, adapter := range s.cfg.Adapters {
 		if gr, ok := adapter.(core.GeoReceiver); ok {
@@ -1006,6 +1006,28 @@ func (s *Server) settleGeo(ctx context.Context, g *dto.NodeGeo, whole bool) {
 	s.geoMu.Lock()
 	s.geoVersion = &v
 	s.geoMu.Unlock()
+}
+
+// adapterFor is the core an inbound goes to, nil when this node has none.
+// Engine-choice: routed by the (protocol, engine) pair, not protocol alone. An
+// inbound that pins engine=singbox for a shared protocol (vless/vmess/trojan/
+// ss/hy2) lands on the sing-box adapter instead of the native core. Empty
+// engine resolves to the protocol's native core, so pre-engine-choice inbounds
+// keep matching their original adapter.
+func (s *Server) adapterFor(ib dto.InboundDto) core.CoreAdapter {
+	wantEngine := ib.ResolvedEngine()
+	for _, adapter := range s.cfg.Adapters {
+		// A stand-in for a core that is not installed is reported, never
+		// matched: its inbound takes the "no adapter" path, as it did when the
+		// stand-in did not exist.
+		if core.IsAbsent(adapter) {
+			continue
+		}
+		if adapter.Name() == string(ib.Protocol) && adapter.Engine() == string(wantEngine) {
+			return adapter
+		}
+	}
+	return nil
 }
 
 // idleUnnamed stops every registered core the applied push did not name and

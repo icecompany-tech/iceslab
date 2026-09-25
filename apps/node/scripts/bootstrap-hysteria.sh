@@ -8,7 +8,9 @@
 #     node waiting for its first push does not crash-loop;
 #   - writes the hysteria block of the agent's env (lib/node-env.sh): binary,
 #     config, auth callback port, the unit, and the traffic-stats listener and
-#     secret. The secret is kept across runs: the config on disk carries it.
+#     secret. The secret is kept across runs: the config on disk carries it;
+#   - sets up the port-hopping redirect (iceslab-hyhop.service) for the UDP
+#     range in HYSTERIA_PORT_RANGE, and prefers IPv4 in gai.conf.
 #
 # E20, stand 2026-09-24: all of the above but the binary used to be done only
 # by install-iceslab-node.sh for --protocol hysteria, so hysteria added to a
@@ -25,6 +27,9 @@
 # Env overrides (both or neither: a version nobody checked has no checksum):
 #   HYSTERIA_VERSION  release to install instead of the pin, e.g. 2.12.3
 #   HYSTERIA_SHA256   sha256 of hysteria-linux-<arch> of that release
+# and, on its own:
+#   HYSTERIA_PORT_RANGE  START-END for port-hopping (default 20000-50000),
+#                        empty to turn it off
 set -euo pipefail
 
 log()  { printf '\033[1;34m[bootstrap]\033[0m %s\n' "$*"; }
@@ -96,8 +101,118 @@ EOF
   systemctl disable --now hysteria-server.service >/dev/null 2>&1 || true
 }
 
+# Port-hopping: one NAT-PREROUTING rule redirecting `udp START:END` to the
+# listen port, owned by iceslab-hyhop.service (oneshot: ExecStart adds it,
+# ExecStop removes it, restored on boot), so clients can rotate the destination
+# port per connection (`mport=` in the link) past a fixed-port UDP throttle.
+#
+# Moved here from install-iceslab-node.sh (E34, 25.09): it sat in the step that
+# also STARTED hysteria before the panel's first push, and a hysteria added to
+# a node later got none. HYSTERIA_PORT_RANGE is START-END (the installer passes
+# its --hysteria-port-range); empty turns it off; unset is 20000-50000. The
+# panel's per-profile range must lie inside it.
+PORT_RANGE="${HYSTERIA_PORT_RANGE-20000-50000}"
+HYHOP_BIN=/usr/local/bin/iceslab-hyhop
+HYHOP_UNIT=/etc/systemd/system/iceslab-hyhop.service
+LISTEN_PORT=443
+
+port_hopping() {
+  if [[ -z "$PORT_RANGE" ]]; then
+    # Off means off: a redirect an earlier run set up goes too.
+    if [[ -f "$HYHOP_UNIT" ]]; then
+      systemctl disable --now iceslab-hyhop.service >/dev/null 2>&1 || true
+      rm -f "$HYHOP_UNIT" "$HYHOP_BIN"
+      systemctl daemon-reload
+      log "port-hopping off (HYSTERIA_PORT_RANGE is empty): removed the redirect"
+    else
+      log "port-hopping off (HYSTERIA_PORT_RANGE is empty)"
+    fi
+    return 0
+  fi
+  if ! command -v iptables >/dev/null 2>&1; then
+    warn "iptables not installed; no port-hopping redirect"
+    return 0
+  fi
+  # Checked BEFORE it goes into a script root runs.
+  [[ "$PORT_RANGE" =~ ^([0-9]{4,5})-([0-9]{4,5})$ ]] \
+    || fail "HYSTERIA_PORT_RANGE must be START-END (1024..65535), got: $PORT_RANGE"
+  local start="${BASH_REMATCH[1]}" end="${BASH_REMATCH[2]}"
+  (( start >= 1024 && end <= 65535 && end > start )) \
+    || fail "HYSTERIA_PORT_RANGE out of bounds: $PORT_RANGE (need 1024<=start<end<=65535)"
+  local range_ipt="${start}:${end}"
+  # The rule of the range it had, taken down by the helper that knows it: once
+  # the helper below is rewritten, its `down` names the NEW range, and the old
+  # rule would stay in PREROUTING for good.
+  if [[ -x "$HYHOP_BIN" ]]; then
+    "$HYHOP_BIN" down || true
+  fi
+  cat >"$HYHOP_BIN" <<EOF
+#!/usr/bin/env bash
+# Iceslab Hysteria 2 port-hopping helper, run by iceslab-hyhop.service. Do not
+# edit: rerun bootstrap-hysteria.sh with HYSTERIA_PORT_RANGE=START-END.
+set -euo pipefail
+RANGE_IPT='${range_ipt}'
+LISTEN_PORT=${LISTEN_PORT}
+case "\${1:-}" in
+  up)
+    iptables -t nat -C PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null \\
+      || iptables -t nat -A PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT"
+    if command -v ip6tables >/dev/null 2>&1; then
+      ip6tables -t nat -C PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null \\
+        || ip6tables -t nat -A PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" \\
+        || true
+    fi
+    ;;
+  down)
+    iptables -t nat -D PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null || true
+    if command -v ip6tables >/dev/null 2>&1; then
+      ip6tables -t nat -D PREROUTING -p udp --dport "\$RANGE_IPT" -j REDIRECT --to-ports "\$LISTEN_PORT" 2>/dev/null || true
+    fi
+    ;;
+  *)
+    echo "usage: \$0 up|down" >&2
+    exit 64
+    ;;
+esac
+EOF
+  chmod 755 "$HYHOP_BIN"
+  cat >"$HYHOP_UNIT" <<EOF
+[Unit]
+Description=Iceslab Hysteria 2 port-hopping (UDP ${PORT_RANGE} -> :${LISTEN_PORT})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${HYHOP_BIN} up
+ExecStop=${HYHOP_BIN} down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable iceslab-hyhop.service >/dev/null 2>&1 || true
+  # Restart, not start: an active oneshot is not run again by `start`.
+  systemctl restart iceslab-hyhop.service || warn "iceslab-hyhop.service did not start; check: systemctl status iceslab-hyhop"
+  log "port-hopping: udp ${PORT_RANGE} -> :${LISTEN_PORT}"
+}
+
+# Hysteria proxies a name the client asked for, and Go's resolver tries IPv6
+# first: on a VPS with half-configured IPv6 every request dies at the v6 hop
+# ("client connected but nothing loads"). Prefer IPv4 in gai.conf; IPv6 still
+# works where it works. (Moved here with the redirect, E34.)
+prefer_ipv4() {
+  if ! grep -q '^precedence ::ffff:0:0/96  100' /etc/gai.conf 2>/dev/null; then
+    echo 'precedence ::ffff:0:0/96  100' >>/etc/gai.conf
+    log "gai.conf: IPv4 preferred for hysteria's outbound resolver"
+  fi
+}
+
 finish() {
   write_unit
+  port_hopping
+  prefer_ipv4
   wire_env
   node_env_done hysteria
 }
@@ -108,7 +223,7 @@ unwire_env() {
 }
 
 # --remove: the binary, hysteria.service, the config the agent rendered, the
-# port-hopping redirect the installer set up for hysteria, and upstream's units
+# port-hopping redirect set up for hysteria, and upstream's units
 # if an older install left them. Kept: anything else under /etc/hysteria, and
 # hysteria's ACME storage wherever it put it, so a reinstall need not ask
 # Let's Encrypt again.

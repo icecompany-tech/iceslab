@@ -428,18 +428,26 @@ const healthProbeTTL = 20 * time.Second
 // result and refresh it in the BACKGROUND once stale: the request path returns
 // the cached value instantly and never forks inline. The very first call
 // probes synchronously so we don't report a bogus default before any data.
+//
+// E34, 25.09 on nl-01: the first apply's `awg-quick up` failed (hysteria held
+// 443/udp), a later peer sync's systemctl fallback brought awg0 up with its
+// peers, and the node still said "not running: amneziawg", because `started`
+// is flipped by an apply that succeeds and nothing on the fallback path set
+// it. So a CONFIGURED interface is judged by the interface itself, whatever
+// the last apply returned: the probe below, not the flag, is the answer.
 func (a *Adapter) Healthy() bool {
 	a.mu.Lock()
 	started := a.started
+	configured := a.cfg.Inbound.PrivateKey != ""
 	managed := a.cfg.AwgQuickBin != ""
 	iface := a.cfg.Inbound.Interface
-	if !started {
+	if !started && !configured {
 		a.mu.Unlock()
 		return false
 	}
 	if !managed {
 		a.mu.Unlock()
-		return true
+		return started
 	}
 
 	if a.healthCheckedAt.IsZero() {
@@ -591,8 +599,9 @@ func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundCo
 	}
 	// Mark started so Healthy() returns true and main.go's heartbeat sees
 	// a ready adapter after the first ApplyInbound on a freshly-bootstrapped
-	// node (Start() returned early because PrivateKey was empty).
-	a.setStarted(true)
+	// node (Start() returned early because PrivateKey was empty), and drop the
+	// cached probe so it is asked afresh.
+	a.interfaceChanged()
 	a.logger.Info("amneziawg interface bounced", "iface", inbound.Interface)
 	return nil
 }
@@ -629,10 +638,27 @@ func (a *Adapter) syncFromSnapshot(ctx context.Context, inbound InboundConfig, p
 
 	if err := a.syncconf(ctx, inbound.Interface); err != nil {
 		a.logger.Warn("awg syncconf failed; falling back to systemctl restart", "err", err)
-		return a.restartViaSystemctl(ctx, inbound.Interface)
+		if err := a.restartViaSystemctl(ctx, inbound.Interface); err != nil {
+			return err
+		}
+		// The fallback brought the interface up: that is a running core, and
+		// the next healthcheck asks the interface afresh (E34).
+		a.interfaceChanged()
+		return nil
 	}
+	a.interfaceChanged()
 	a.logger.Info("amneziawg synced", "peers", len(peers))
 	return nil
+}
+
+// interfaceChanged: the interface was just brought up or reloaded. Marks the
+// adapter started and drops the cached probe, so the next Healthy asks
+// `awg show` now instead of repeating what it saw before the change.
+func (a *Adapter) interfaceChanged() {
+	a.mu.Lock()
+	a.started = true
+	a.healthCheckedAt = time.Time{}
+	a.mu.Unlock()
 }
 
 func (a *Adapter) syncconf(parent context.Context, iface string) error {
