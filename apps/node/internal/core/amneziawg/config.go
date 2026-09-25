@@ -152,20 +152,54 @@ func (c *InboundConfig) withDefaults() InboundConfig {
 		//     traffic, so RX/TX was massively asymmetric (server forwarded
 		//     decrypted requests with private src 10.x, responses never routed
 		//     back). `! -o %i` works regardless of WAN iface name.
+		//
+		//     And ONLY for the peers' network (`-s`). E37, 25.09 on nl-01: `! -o
+		//     %i` alone also matches loopback, and MASQUERADE on lo rewrites the
+		//     source to the machine's first universe address. A `dig @127.0.0.53`
+		//     left with src 85.192.41.157, systemd-resolved dropped it ("Got
+		//     packet on unexpected (i.e. non-localhost) IP range"), xray resolved
+		//     through that stub, and every vless host on the node was dead while
+		//     the panel read ONLINE. Without a network to name (no Address) there
+		//     is no MASQUERADE at all: the wide rule is the bug, not a fallback.
 		out.PostUp = []string{
 			"iptables -I FORWARD 1 -i %i -j ACCEPT",
 			"iptables -I FORWARD 1 -o %i -j ACCEPT",
-			"iptables -t nat -A POSTROUTING ! -o %i -j MASQUERADE",
+		}
+		if peers := peerNetwork(out.Address); peers != "" {
+			out.PostUp = append(out.PostUp, "iptables -t nat -A POSTROUTING -s "+peers+" ! -o %i -j MASQUERADE")
 		}
 	}
 	if len(out.PostDown) == 0 {
 		out.PostDown = []string{
 			"iptables -D FORWARD -i %i -j ACCEPT",
 			"iptables -D FORWARD -o %i -j ACCEPT",
-			"iptables -t nat -D POSTROUTING ! -o %i -j MASQUERADE",
+		}
+		if peers := peerNetwork(out.Address); peers != "" {
+			out.PostDown = append(out.PostDown, "iptables -t nat -D POSTROUTING -s "+peers+" ! -o %i -j MASQUERADE")
 		}
 	}
 	return out
+}
+
+// peerNetwork is the IPv4 network of the interface Address, the one the peers
+// are handed addresses from: 10.66.66.1/24 -> 10.66.66.0/24. Empty when the
+// Address does not parse or is not IPv4 (the rule is iptables, not ip6tables).
+func peerNetwork(address string) string {
+	first, _, _ := strings.Cut(address, ",")
+	p, err := netip.ParsePrefix(strings.TrimSpace(first))
+	if err != nil || !p.Addr().Is4() {
+		return ""
+	}
+	return p.Masked().String()
+}
+
+// legacyMasqueradeDelete: the iptables arguments that delete the default
+// MASQUERADE rule from before E37, `! -o <iface>` with no source, which also
+// caught loopback. A node updated from before E37 still has it in POSTROUTING from
+// the last `awg-quick up`, and the new PostDown names the narrow rule, so
+// nothing takes the old one away but the adapter, explicitly.
+func legacyMasqueradeDelete(iface string) []string {
+	return []string{"-t", "nat", "-D", "POSTROUTING", "!", "-o", iface, "-j", "MASQUERADE"}
 }
 
 // validateWGKey enforces "looks like a WireGuard key": exactly 44 chars

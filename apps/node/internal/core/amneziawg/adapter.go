@@ -78,6 +78,9 @@ type Adapter struct {
 	healthResult    bool
 	healthProbing   bool
 
+	// legacyDropped: dropLegacyMasquerade has run in this process (E37).
+	legacyDropped bool
+
 	// What `awg --version` answered, remembered until the binary on disk
 	// changes. Installed() runs on every healthcheck poll, so it cannot fork
 	// each time; and "once per agent" was wrong, because bootstrap-amneziawg.sh
@@ -176,6 +179,10 @@ func (a *Adapter) Start(ctx context.Context) error {
 				return fmt.Errorf("awg-quick up %s failed: %w (%s)", inbound.Interface, err, strings.TrimSpace(string(out)))
 			}
 		}
+		// An agent restart after the update is where an interface still up from
+		// the old config meets the new agent first: "already exists" above, no
+		// hooks run, the wide rule stays unless taken here.
+		a.dropLegacyMasquerade(ctx, inbound.Interface)
 	}
 
 	a.setStarted(true)
@@ -602,6 +609,7 @@ func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundCo
 	// node (Start() returned early because PrivateKey was empty), and drop the
 	// cached probe so it is asked afresh.
 	a.interfaceChanged()
+	a.dropLegacyMasquerade(ctx, inbound.Interface)
 	a.logger.Info("amneziawg interface bounced", "iface", inbound.Interface)
 	return nil
 }
@@ -644,9 +652,11 @@ func (a *Adapter) syncFromSnapshot(ctx context.Context, inbound InboundConfig, p
 		// The fallback brought the interface up: that is a running core, and
 		// the next healthcheck asks the interface afresh (E34).
 		a.interfaceChanged()
+		a.dropLegacyMasquerade(ctx, inbound.Interface)
 		return nil
 	}
 	a.interfaceChanged()
+	a.dropLegacyMasquerade(ctx, inbound.Interface)
 	a.logger.Info("amneziawg synced", "peers", len(peers))
 	return nil
 }
@@ -659,6 +669,39 @@ func (a *Adapter) interfaceChanged() {
 	a.started = true
 	a.healthCheckedAt = time.Time{}
 	a.mu.Unlock()
+}
+
+// legacyDropAttempts bounds the loop below: each `iptables -D` removes one
+// copy, and an interface bounced with a failing PostDown can have left more.
+const legacyDropAttempts = 8
+
+// dropLegacyMasquerade takes the pre-E37 MASQUERADE rule (`! -o <iface>`, no
+// source, which also caught loopback and broke the node's stub resolver) out of
+// POSTROUTING. A node updated from before E37 keeps it from its last `awg-quick
+// up`: the config on disk now carries the narrow rule in both PostUp and
+// PostDown, so no bounce and no syncconf would ever take the wide one away.
+// Deleted until iptables says there is none; that refusal is the normal end,
+// not an error. Once per agent process: nothing adds the old rule any more.
+// Caller holds restartMu.
+func (a *Adapter) dropLegacyMasquerade(ctx context.Context, iface string) {
+	a.mu.Lock()
+	done := a.legacyDropped
+	a.legacyDropped = true
+	a.mu.Unlock()
+	if done || a.cfg.AwgQuickBin == "" {
+		return
+	}
+	removed := 0
+	for i := 0; i < legacyDropAttempts; i++ {
+		if _, err := a.cfg.runCmd(ctx, "iptables", legacyMasqueradeDelete(iface)...); err != nil {
+			break
+		}
+		removed++
+	}
+	if removed > 0 {
+		a.logger.Info("amneziawg: removed the pre-E37 MASQUERADE rule that also caught loopback",
+			"interface", iface, "copies", removed)
+	}
 }
 
 func (a *Adapter) syncconf(parent context.Context, iface string) error {

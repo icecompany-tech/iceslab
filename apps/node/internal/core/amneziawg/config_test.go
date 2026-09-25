@@ -53,8 +53,10 @@ func TestInboundDefaults(t *testing.T) {
 	}
 	up := strings.Join(cfg.PostUp, "\n")
 	down := strings.Join(cfg.PostDown, "\n")
-	if !strings.Contains(up, "MASQUERADE") {
-		t.Errorf("PostUp default missing MASQUERADE: %q", cfg.PostUp)
+	// No Address, no network to name, no MASQUERADE: the wide rule is what
+	// broke the node's resolver (E37), it is not a fallback.
+	if strings.Contains(up+down, "MASQUERADE") {
+		t.Errorf("a MASQUERADE rule without a peer network: %q / %q", cfg.PostUp, cfg.PostDown)
 	}
 	// FORWARD ACCEPT is required on DROP-policy hosts (Docker/ufw) or the
 	// client connects but has no internet. Inserted (not appended) so it
@@ -65,6 +67,44 @@ func TestInboundDefaults(t *testing.T) {
 	}
 	if !strings.Contains(down, "-D FORWARD -i %i -j ACCEPT") {
 		t.Errorf("PostDown default missing FORWARD cleanup: %q", cfg.PostDown)
+	}
+}
+
+// E37, 25.09 on nl-01: `! -o %i` with no source also matched loopback, and
+// MASQUERADE on lo gave a query to 127.0.0.53 the machine's public address as
+// its source; systemd-resolved dropped it and every xray host on the node lost
+// its resolver. The rule names the peers' network now, and the old form is
+// gone from both ends.
+func TestTheMasqueradeRuleCoversOnlyThePeers(t *testing.T) {
+	out, err := renderConfig(validInbound(), nil) // Address 10.66.66.1/24
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	for _, want := range []string{
+		"PostUp = iptables -t nat -A POSTROUTING -s 10.66.66.0/24 ! -o %i -j MASQUERADE\n",
+		"PostDown = iptables -t nat -D POSTROUTING -s 10.66.66.0/24 ! -o %i -j MASQUERADE\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	for _, old := range []string{"POSTROUTING ! -o %i -j MASQUERADE", "-A POSTROUTING ! -o", "-D POSTROUTING ! -o"} {
+		if strings.Contains(out, old) {
+			t.Errorf("the pre-E37 wide rule is still rendered (%q):\n%s", old, out)
+		}
+	}
+
+	for addr, want := range map[string]string{
+		"10.66.66.1/24":             "10.66.66.0/24",
+		"10.8.0.1/16":               "10.8.0.0/16",
+		"10.66.66.1/24, fd00::1/64": "10.66.66.0/24",
+		"fd00::1/64":                "",
+		"":                          "",
+		"not-an-address":            "",
+	} {
+		if got := peerNetwork(addr); got != want {
+			t.Errorf("peerNetwork(%q) = %q, want %q", addr, got, want)
+		}
 	}
 }
 

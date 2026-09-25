@@ -310,6 +310,74 @@ func TestCLI_HealthyFollowsTheInterfaceAfterAFailedApplyAndAFallback(t *testing.
 	}
 }
 
+// E37: a node updated from before E37 has the wide `! -o awg0` MASQUERADE rule
+// in POSTROUTING from its last `awg-quick up`, and the new PostDown names the
+// narrow rule, so no hook would ever take the old one away. The adapter does,
+// on the first apply that meets the interface: every copy, and only that rule.
+func TestCLI_TheFirstApplyRemovesThePreE37MasqueradeRule(t *testing.T) {
+	const wide = "iptables -t nat -D POSTROUTING ! -o awg0 -j MASQUERADE"
+	for _, c := range []struct {
+		name  string
+		apply func(a *Adapter) error
+	}{
+		// Agent restart after the update: the interface is up from the old config.
+		{"start on a live interface", func(a *Adapter) error { return a.Start(context.Background()) }},
+		// A peer change reaching an interface this agent did not bring up.
+		{"peer sync", func(a *Adapter) error {
+			return a.AddUser(core.User{UserID: "u", AmneziaWGPublicKey: testWGPubKeyA, AmneziaWGAllowedIP: "10.66.66.5/32"})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var mu sync.Mutex
+			copies := 2 // an interface bounced once with a failing PostDown
+			fake := &fakeCLI{
+				handler: func(name string, args []string) ([]byte, error) {
+					mu.Lock()
+					defer mu.Unlock()
+					switch {
+					case name == "awg-quick" && args[0] == "up":
+						return []byte("awg-quick: `awg0' already exists"), errors.New("exit status 1")
+					case name == "iptables":
+						if name+" "+strings.Join(args, " ") != wide {
+							t.Errorf("iptables was asked for something else: %v", args)
+						}
+						if copies == 0 {
+							return []byte("iptables: Bad rule (does a matching rule exist in that chain?)."), errors.New("exit status 1")
+						}
+						copies--
+					}
+					return nil, nil
+				},
+			}
+			a, _ := newManagedAdapter(t, fake)
+			if err := c.apply(a); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+			if copies != 0 {
+				t.Fatalf("%d copies of the wide rule are left", copies)
+			}
+			count := func() int {
+				n := 0
+				for _, s := range fake.sequence() {
+					if s == wide {
+						n++
+					}
+				}
+				return n
+			}
+			// Two that removed, one refusal that ended the loop.
+			if got := count(); got != 3 {
+				t.Errorf("iptables -D ran %d times, want 3", got)
+			}
+			// Once per process: the next change does not ask again.
+			_ = a.AddUser(core.User{UserID: "v", AmneziaWGPublicKey: testWGPubKeyB, AmneziaWGAllowedIP: "10.66.66.6/32"})
+			if got := count(); got != 3 {
+				t.Errorf("the next change asked iptables again: %d", got)
+			}
+		})
+	}
+}
+
 func TestCLI_NoCLIInConfigOnlyMode(t *testing.T) {
 	// Sanity check: config-only mode (AwgQuickBin empty) must NOT call any CLI.
 	fake := &fakeCLI{}
