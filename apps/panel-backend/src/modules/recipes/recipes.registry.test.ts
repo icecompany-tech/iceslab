@@ -24,6 +24,12 @@ const SOURCES: RecipeSource[] = [
 vi.mock('./recipes.sources.js', () => ({
   getEnabledSources: async () => SOURCES,
 }));
+// The operator's own and hidden live in the database; none here, so this file
+// stays about the sources whatever an earlier file left behind.
+vi.mock('./recipes.mine.js', () => ({
+  listOperatorRecipes: async () => [],
+  getHiddenIds: async () => [],
+}));
 
 const { getRecipeRegistry, bustSourceCache, sourceProblem, RecipeFetchError } = await import('./recipes.registry.js');
 const { getRecipeSnapshot } = await import('./recipes.snapshot.js');

@@ -130,15 +130,22 @@ export interface Recipe {
   sourceId?: string;
   /**
    * The other sources that carry a recipe with this id, by name. The server
-   * serves one recipe per id (the winner: the operator's sources in the order
-   * of their list, then the snapshot) and names the ones it set aside here, so
-   * the screen merges nothing.
+   * serves one recipe per id (the winner: the operator's own, then their
+   * sources in the order of their list, then the snapshot) and names the ones
+   * it set aside here, so the screen merges nothing.
    */
   alsoIn?: string[];
 }
 
 /** The `sourceId` (and `sourceName`) of a recipe from the pinned snapshot. */
 export const RECIPE_SOURCE_BUILTIN = 'builtin';
+
+/**
+ * The `sourceId` (and `sourceName`) of a recipe the operator saved on import
+ * (`save: true`). It wins over every source with the same id and is the only
+ * kind DELETE /api/recipes/mine/:id removes.
+ */
+export const RECIPE_SOURCE_MINE = 'mine';
 
 /**
  * The pinned snapshot the panel ships (packages/shared/src/recipes.snapshot.json),
@@ -177,6 +184,29 @@ export interface RecipeRegistryResponse {
    * WHICH source failed and WHY instead of one "offline" for all of them.
    */
   sources: RecipeSourceStatus[];
+  /**
+   * The ids the operator hid, only those a recipe in `recipes` has. Hidden
+   * recipes are NOT cut from `recipes`: the screen hides them, so "show
+   * hidden" needs no second request.
+   */
+  hidden: string[];
+}
+
+/** Body of PUT /api/recipes/hidden: the whole list, replacing the stored one. */
+export interface RecipeHiddenRequest {
+  ids: string[];
+}
+
+/** Answer of PUT /api/recipes/hidden: the list as stored, ids no recipe has dropped. */
+export interface RecipeHiddenResponse {
+  hidden: string[];
+}
+
+/** What an import with `save: true` stored. */
+export interface RecipeSaved {
+  id: string;
+  /** A recipe with this id was already saved and has been replaced. */
+  replaced: boolean;
 }
 
 /**
@@ -199,6 +229,12 @@ export interface RecipeSourceStatus {
   reason?: RecipeSourceProblem;
   /** The HTTP status the source answered with, when it answered at all. */
   httpStatus?: number;
+  /**
+   * The entries the source carries that the panel skipped, each with why
+   * ("recipe x: recipe schemaVersion 1 is not read any more, ..."). Absent
+   * when nothing was skipped.
+   */
+  problems?: string[];
 }
 
 /**
@@ -232,9 +268,17 @@ export interface RecipeSourceInput {
 export interface RecipeImportRequest {
   url?: string;
   json?: string;
+  /**
+   * Keep the recipe as the operator's own (source RECIPE_SOURCE_MINE). Takes
+   * exactly one recipe: an import of several with `save: true` is refused in
+   * words. Absent or false: the old behaviour, nothing is stored.
+   */
+  save?: boolean;
 }
 
 /** Result of an ad-hoc import: the recipes that passed validation. */
 export interface RecipeImportResponse {
   recipes: Recipe[];
+  /** What `save: true` stored; null when nothing was saved. */
+  saved: RecipeSaved | null;
 }

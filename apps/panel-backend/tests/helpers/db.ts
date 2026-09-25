@@ -67,6 +67,10 @@ export const TABLES = [
   'geo_blobs',
   'nodes',
   'regions',
+  // Recipes the operator saved and hid (25.09). Keyed by recipe id, so a row
+  // left behind would make the next test's save read "replaced".
+  'operator_recipes',
+  'recipe_hidden',
   'api_tokens',
   'keygen_ca',
   'admin_users',

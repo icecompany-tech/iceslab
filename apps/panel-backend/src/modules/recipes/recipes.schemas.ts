@@ -165,4 +165,15 @@ export const SourceUpdateSchema = SourceInputSchema.partial();
 export const ImportRequestSchema = z.object({
   url: z.string().max(500).optional(),
   json: z.string().max(1_000_000).optional(),
+  // Keep the one imported recipe as the operator's own. Absent = the old
+  // behaviour, nothing stored.
+  save: z.boolean().optional(),
 });
+
+/** PUT /api/recipes/hidden: the whole list. Non-strings are a 400. */
+export const HiddenRequestSchema = z.object({
+  ids: z.array(z.string().min(1).max(64)).max(1000),
+});
+
+/** GET /api/profiles/:id/recipe and DELETE /api/recipes/mine/:id. */
+export const RecipeIdParamSchema = z.object({ id: z.string().min(1).max(64) });

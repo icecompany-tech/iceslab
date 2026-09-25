@@ -5,10 +5,11 @@ import type {
   RecipeSourceProblem,
   RecipeSourceStatus,
 } from '@iceslab/shared';
-import { RECIPE_SOURCE_BUILTIN } from '@iceslab/shared';
+import { RECIPE_SCHEMA_VERSION, RECIPE_SOURCE_BUILTIN } from '@iceslab/shared';
 import { isNewer, readCurrentVersion } from '../system/system.service.js';
 import { getRecipeSnapshot } from './recipes.snapshot.js';
-import { parseRecipe, RegistryIndexSchema } from './recipes.schemas.js';
+import { getHiddenIds, listOperatorRecipes } from './recipes.mine.js';
+import { parseRecipe, RecipeSchema, RegistryIndexSchema } from './recipes.schemas.js';
 import { getEnabledSources } from './recipes.sources.js';
 import { assertFetchableUrl } from './recipes.ssrf.js';
 
@@ -42,30 +43,76 @@ function versionAllows(recipe: Recipe, current: string): boolean {
   return !isNewer(recipe.minPanelVersion, current);
 }
 
-function extractRawList(payload: unknown): unknown[] {
+/**
+ * The raw recipe list a payload carries, and what it is: a registry (an index
+ * object with `recipes`, or a bare array), one recipe (an object that says it
+ * is one: `schemaVersion` or `id`, the form a single file in a registry
+ * repository has), or neither.
+ */
+function extractRawList(payload: unknown): { raws: unknown[]; shape: 'list' | 'single' | 'none' } {
   const parsed = RegistryIndexSchema.safeParse(payload);
-  if (!parsed.success) return [];
-  return Array.isArray(parsed.data) ? parsed.data : parsed.data.recipes;
+  if (parsed.success) return { raws: Array.isArray(parsed.data) ? parsed.data : parsed.data.recipes, shape: 'list' };
+  if (payload && typeof payload === 'object' && ('schemaVersion' in payload || 'id' in payload)) {
+    return { raws: [payload], shape: 'single' };
+  }
+  return { raws: [], shape: 'none' };
+}
+
+/** Why one raw entry is not served, in the words the import answers with. */
+function recipeProblem(raw: unknown, index: number, current: string): string | null {
+  const id = (raw as { id?: unknown } | null)?.id;
+  const name = `recipe ${typeof id === 'string' ? id : `#${index + 1}`}`;
+  const version = (raw as { schemaVersion?: unknown } | null)?.schemaVersion;
+  if (version === 1) return `${name}: recipe schemaVersion 1 is not read any more, see the registry README`;
+  const res = RecipeSchema.safeParse(raw);
+  if (!res.success) {
+    const issue = res.error.issues[0]!;
+    return `${name}: ${issue.path.join('.') || '(root)'}: ${issue.message}`;
+  }
+  if (res.data.schemaVersion !== RECIPE_SCHEMA_VERSION) {
+    return `${name}: schemaVersion ${res.data.schemaVersion}, this panel reads ${RECIPE_SCHEMA_VERSION}`;
+  }
+  if (!versionAllows(res.data as Recipe, current)) {
+    return `${name}: needs panel ${res.data.minPanelVersion}, this one is ${current}`;
+  }
+  return null;
+}
+
+export interface ReadRecipes {
+  /** What passed the schema and the version gate, deduped by id. */
+  recipes: Recipe[];
+  /** Why each other entry was left out, in words, in the order they came. */
+  problems: string[];
+  /** How many entries the payload carried at all. */
+  total: number;
+  shape: 'list' | 'single' | 'none';
 }
 
 /**
- * Validate + version-gate a parsed payload (registry index or bare array)
- * into typed recipes, deduped by id. Pure, so it also backs the pasted-JSON
- * import path.
+ * Validate + version-gate a parsed payload (registry index, bare array or one
+ * recipe) into typed recipes, deduped by id, saying why each rejected entry
+ * was rejected. Pure, so it backs the source fetch and the import alike.
  */
-export function parseRecipes(payload: unknown): Recipe[] {
+export function readRecipes(payload: unknown): ReadRecipes {
   const current = readCurrentVersion();
-  const out: Recipe[] = [];
+  const { raws, shape } = extractRawList(payload);
+  const recipes: Recipe[] = [];
+  const problems: string[] = [];
   const seen = new Set<string>();
-  for (const raw of extractRawList(payload)) {
-    const recipe = parseRecipe(raw);
-    if (!recipe) continue; // malformed or unknown schemaVersion
-    if (seen.has(recipe.id)) continue; // first id wins
-    if (!versionAllows(recipe, current)) continue;
+  raws.forEach((raw, i) => {
+    const problem = recipeProblem(raw, i, current);
+    if (problem) return void problems.push(problem);
+    const recipe = parseRecipe(raw)!;
+    if (seen.has(recipe.id)) return; // first id wins
     seen.add(recipe.id);
-    out.push(recipe);
-  }
-  return out;
+    recipes.push(recipe);
+  });
+  return { recipes, problems, total: raws.length, shape };
+}
+
+/** The recipes of a payload, the rejected ones dropped. */
+export function parseRecipes(payload: unknown): Recipe[] {
+  return readRecipes(payload).recipes;
 }
 
 /**
@@ -137,7 +184,7 @@ async function readBounded(res: Response, maxBytes: number): Promise<string> {
  * The abort timer stays armed across the body read so a slow stream cannot
  * hang, and the body is size-capped while streaming.
  */
-async function fetchGuardedText(startUrl: string): Promise<string> {
+async function fetchGuardedText(startUrl: string): Promise<{ text: string; contentType: string }> {
   let url = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     // Re-validate the start URL and every redirect hop. A refusal keeps its
@@ -169,7 +216,8 @@ async function fetchGuardedText(startUrl: string): Promise<string> {
           res.status,
         );
       }
-      return await readBounded(res, MAX_BYTES);
+      const contentType = (res.headers.get('content-type') ?? '').split(';')[0]!.trim();
+      return { text: await readBounded(res, MAX_BYTES), contentType };
     } finally {
       clearTimeout(timer);
     }
@@ -178,18 +226,38 @@ async function fetchGuardedText(startUrl: string): Promise<string> {
 }
 
 /**
+ * The body of a link that is not JSON. Named by what the server said it is:
+ * a GitHub file PAGE (text/html) is the usual case, and "no valid recipes"
+ * about an HTML page sent the operator looking for a schema problem.
+ */
+export class RecipeNotJsonError extends SyntaxError {
+  constructor(readonly contentType: string) {
+    super(`the link does not answer with JSON (${contentType || 'no content-type'})`);
+    this.name = 'RecipeNotJsonError';
+  }
+}
+
+/**
  * Fetch + validate recipes from one URL. No caching, no source tagging;
  * used by the registry (wrapped in a cache) and the ad-hoc import route.
  * Throws on guard / network / size / redirect failure so the caller can 400
- * or fall back.
+ * or fall back, and RecipeNotJsonError on a body that is not JSON.
  */
-export async function fetchRecipesFromUrl(url: string): Promise<Recipe[]> {
-  const text = await fetchGuardedText(url);
-  return parseRecipes(JSON.parse(text) as unknown);
+export async function fetchRecipesFromUrl(url: string): Promise<ReadRecipes> {
+  const { text, contentType } = await fetchGuardedText(url);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new RecipeNotJsonError(contentType);
+  }
+  return readRecipes(payload);
 }
 
 interface SourceCache {
   recipes: Recipe[];
+  /** Why the entries left out of the last good fetch were left out. */
+  problems?: string[];
   fetchedAt: number; // epoch ms of the last SUCCESSFUL fetch
   ok: boolean; // did the most recent attempt succeed
   failedAt?: number; // epoch ms of the last FAILED attempt (negative cache)
@@ -223,8 +291,8 @@ async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
     flight = (async () => {
       const prev = cache.get(key);
       try {
-        const recipes = await fetchRecipesFromUrl(source.url);
-        const entry: SourceCache = { recipes, fetchedAt: Date.now(), ok: true };
+        const { recipes, problems } = await fetchRecipesFromUrl(source.url);
+        const entry: SourceCache = { recipes, problems, fetchedAt: Date.now(), ok: true };
         cache.set(key, entry);
         return entry;
       } catch (err) {
@@ -233,6 +301,7 @@ async function getSourceRecipes(source: RecipeSource): Promise<SourceCache> {
         // reason rides the cached entry, so a negative-cache hit says the same.
         const entry: SourceCache = {
           recipes: prev?.recipes ?? [],
+          problems: prev?.problems,
           fetchedAt: prev?.fetchedAt ?? 0,
           ok: false,
           failedAt: Date.now(),
@@ -293,9 +362,11 @@ export async function getRecipeRegistry(
   filters: RecipeRegistryFilters = {},
 ): Promise<RecipeRegistryResponse> {
   const sources = await getEnabledSources();
-  const results = await Promise.all(
-    sources.map(async (s) => ({ source: s, cache: await getSourceRecipes(s) })),
-  );
+  const [results, mine, hiddenIds] = await Promise.all([
+    Promise.all(sources.map(async (s) => ({ source: s, cache: await getSourceRecipes(s) }))),
+    listOperatorRecipes(),
+    getHiddenIds(),
+  ]);
 
   let anyFailed = false;
   let latest = 0;
@@ -303,15 +374,19 @@ export async function getRecipeRegistry(
   const statuses: RecipeSourceStatus[] = [];
   for (const { source, cache: c } of results) {
     if (!c.ok) anyFailed = true;
+    // Entries a source carries and the panel cannot read (schema v1 above all)
+    // are skipped and said, so an empty tile is not a mystery.
+    const problems = c.problems && c.problems.length > 0 ? { problems: c.problems } : {};
     statuses.push(
       c.ok
-        ? { id: source.id, name: source.name, ok: true }
+        ? { id: source.id, name: source.name, ok: true, ...problems }
         : {
             id: source.id,
             name: source.name,
             ok: false,
             reason: c.reason ?? 'unreachable',
             ...(c.httpStatus !== undefined ? { httpStatus: c.httpStatus } : {}),
+            ...problems,
           },
     );
     if (c.fetchedAt > latest) latest = c.fetchedAt;
@@ -327,11 +402,16 @@ export async function getRecipeRegistry(
     }
   }
 
-  // The operator's sources in the order of their list, then the snapshot: the
-  // registry fetched today is newer than the one the panel was built with.
-  // With every source down the operator has exactly the snapshot, and the
-  // statuses say which source failed.
-  let recipes = mergeRecipesById([...fromSources, ...snapshotRecipes()]);
+  // The operator's own first, then their sources in the order of the list,
+  // then the snapshot: the registry fetched today is newer than the one the
+  // panel was built with. With every source down the operator has exactly the
+  // snapshot and their own, and the statuses say which source failed.
+  const current = readCurrentVersion();
+  const merged = mergeRecipesById([...mine.filter((r) => versionAllows(r, current)), ...fromSources, ...snapshotRecipes()]);
+  // Only ids a recipe has: a hidden id whose recipe is gone is not served.
+  const liveIds = new Set(merged.map((r) => r.id));
+  const hidden = hiddenIds.filter((id) => liveIds.has(id));
+  let recipes = merged;
   if (filters.protocol) {
     recipes = recipes.filter((r) => r.protocol === filters.protocol);
   }
@@ -345,5 +425,11 @@ export async function getRecipeRegistry(
     recipes,
     stale: anyFailed,
     sources: statuses,
+    hidden,
   };
+}
+
+/** Every id the merged list has now: what the hidden list may name. */
+export async function knownRecipeIds(): Promise<Set<string>> {
+  return new Set((await getRecipeRegistry()).recipes.map((r) => r.id));
 }

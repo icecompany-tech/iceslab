@@ -1,11 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
-import { getRecipeRegistry, bustSourceCache } from './recipes.registry.js';
+import { getRecipeRegistry, bustSourceCache, knownRecipeIds } from './recipes.registry.js';
 import { addSource, deleteSource, getSources, updateSource } from './recipes.sources.js';
 import { importRecipes } from './recipes.import.js';
+import { deleteOperatorRecipe, RecipeNotFoundError, setHiddenIds } from './recipes.mine.js';
+import { exportProfileRecipe } from './recipes.export.js';
 import {
+  HiddenRequestSchema,
   ImportRequestSchema,
+  RecipeIdParamSchema,
   SourceInputSchema,
   SourceUpdateSchema,
 } from './recipes.schemas.js';
@@ -23,7 +27,11 @@ import { assertFetchableUrl } from './recipes.ssrf.js';
  *   POST   /api/recipes/sources     add a source
  *   PATCH  /api/recipes/sources/:id enable / rename / repoint a source
  *   DELETE /api/recipes/sources/:id remove a source
- *   POST   /api/recipes/import      validate ad-hoc recipes (url or pasted json)
+ *   POST   /api/recipes/import      validate ad-hoc recipes (url or pasted json),
+ *                                   `save: true` keeps the one as the operator's
+ *   DELETE /api/recipes/mine/:id    remove a saved recipe (404 RECIPE_NOT_FOUND)
+ *   PUT    /api/recipes/hidden      replace the hidden list ({ ids })
+ *   GET    /api/profiles/:id/recipe a profile as a registry recipe (schema v2)
  */
 const QuerySchema = z.object({
   protocol: z.string().max(32).optional(),
@@ -91,12 +99,41 @@ export async function recipesRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/recipes/import', auth, async (req, reply) => {
     const body = ImportRequestSchema.parse(req.body);
     try {
-      const recipes = await importRecipes(body);
-      return reply.send({ recipes });
+      return reply.send(await importRecipes(body));
     } catch (err) {
       return reply
         .code(400)
         .send({ error: 'IMPORT_FAILED', message: (err as Error).message });
     }
+  });
+
+  // The operator's own recipe, saved on import. Only those: a registry recipe
+  // is hidden, not deleted.
+  app.delete('/api/recipes/mine/:id', auth, async (req, reply) => {
+    const { id } = RecipeIdParamSchema.parse(req.params);
+    try {
+      await deleteOperatorRecipe(id);
+      return reply.code(204).send();
+    } catch (err) {
+      if (err instanceof RecipeNotFoundError) {
+        return reply.code(404).send({ error: err.code, message: err.message });
+      }
+      throw err;
+    }
+  });
+
+  // The hidden list, replaced whole. Ids no recipe has are dropped silently.
+  app.put('/api/recipes/hidden', auth, async (req, reply) => {
+    const { ids } = HiddenRequestSchema.parse(req.body);
+    return reply.send({ hidden: await setHiddenIds(ids, await knownRecipeIds()) });
+  });
+
+  // A profile as a registry recipe (schema v2), what the operator puts in a
+  // pull request to the registry. Under /api/profiles: it reads a profile.
+  app.get('/api/profiles/:id/recipe', auth, async (req, reply) => {
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const recipe = await exportProfileRecipe(id);
+    if (!recipe) return reply.code(404).send({ error: 'NOT_FOUND', message: `profile ${id} not found` });
+    return reply.send(recipe);
   });
 }

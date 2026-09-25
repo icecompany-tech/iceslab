@@ -1,0 +1,27 @@
+// Recipes the operator keeps and hides (25.09, "recipes can be deleted and
+// never duplicated"). The registry's recipes are not stored: they come from
+// the pinned snapshot and the operator's sources on every read.
+
+// A recipe the operator imported with `save: true`. Keyed by the recipe's own
+// id, so saving the same id again replaces the row instead of adding one, and
+// in the merged list it wins over a registry recipe with that id.
+model OperatorRecipe {
+  id        String   @id
+  // The recipe as RecipeSchema read it (schema v2), re-validated on every read.
+  recipe    Json
+  // Where it was imported from; null for pasted JSON.
+  sourceUrl String?  @map("source_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("operator_recipes")
+}
+
+// The ids the operator hid from the recipe rail. A personal list, replaced
+// whole by PUT /api/recipes/hidden; an id that no recipe has any more is
+// dropped on the next write and never served.
+model RecipeHidden {
+  id String @id
+
+  @@map("recipe_hidden")
+}
