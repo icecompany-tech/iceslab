@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { RESOLVER_DOWN_REASON } from '@iceslab/shared';
-import { statusFromHealth } from './nodes.cron.js';
+import {
+  capStatusMessage,
+  STATUS_MESSAGE_MAX,
+  statusFromHealth,
+  UNNAMED_DEGRADED,
+} from './nodes.cron.js';
 
 /**
  * A node's status has to answer "is this serving anybody", not just "did the
@@ -78,12 +83,12 @@ describe('statusFromHealth', () => {
     expect(v.message).toBe('not running: xray');
   });
 
-  it('keeps the raw answer when the agent is unhappy but names no core', () => {
-    // The one case where we cannot say what is wrong in advance, so the payload
-    // is the message rather than a confident-sounding guess.
+  it('says in words that the agent named no cause (E38)', () => {
+    // The raw answer used to be the message, cut mid-JSON at 160 characters.
+    // Now the message says what is known, and the poller logs the answer.
     const v = statusFromHealth({ status: 'degraded', cores: [] });
-    expect(v.status).toBe('degraded');
-    expect(v.message).toContain('degraded:');
+    expect(v).toEqual({ status: 'degraded', message: UNNAMED_DEGRADED });
+    expect(v.message).toBe('agent reports degraded without a core reason');
   });
 
   it("carries the node's own reason when every core runs (E37)", () => {
@@ -104,6 +109,50 @@ describe('statusFromHealth', () => {
       reason: RESOLVER_DOWN_REASON,
     });
     expect(v.message).toBe('system resolver not answering; not running: hysteria');
+  });
+});
+
+/**
+ * E38: the stored message is 200 characters, and it used to be cut at the
+ * 200th wherever that fell, mid-name. Now it is cut at a whole part or a whole
+ * `, ` item, and a cut message says so with "…".
+ */
+describe('the status message length', () => {
+  const twelve = Array.from({ length: 12 }, (_, i) => `core-with-a-long-name-${String(i + 1).padStart(2, '0')}`);
+
+  it('cuts twelve down cores at a whole name and ends in an ellipsis', () => {
+    const v = statusFromHealth({
+      status: 'degraded',
+      cores: twelve.map((name) => ({ name, running: false, provisioned: true })),
+      reason: RESOLVER_DOWN_REASON,
+    });
+    const message = v.message!;
+    expect(`${RESOLVER_DOWN_REASON}; not running: ${twelve.join(', ')}`.length).toBeGreaterThan(STATUS_MESSAGE_MAX);
+    expect(message.length).toBeLessThanOrEqual(STATUS_MESSAGE_MAX);
+    expect(message.endsWith('…')).toBe(true);
+    expect(message.startsWith(`${RESOLVER_DOWN_REASON}; not running: `)).toBe(true);
+    // Every name that made it is whole: the last one before the ellipsis too.
+    const names = message.slice(`${RESOLVER_DOWN_REASON}; not running: `.length, -1).split(', ');
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) expect(twelve).toContain(n);
+  });
+
+  it('leaves a message that fits exactly as it was', () => {
+    expect(capStatusMessage(['system resolver not answering', 'not running: xray, hysteria'])).toBe(
+      'system resolver not answering; not running: xray, hysteria',
+    );
+    const exact = 'x'.repeat(STATUS_MESSAGE_MAX);
+    expect(capStatusMessage([exact])).toBe(exact);
+  });
+
+  it('drops a whole part rather than a piece of it when the first fills the room', () => {
+    const first = 'r'.repeat(190); // fits alone, leaves no room for the second
+    expect(capStatusMessage([first, 'a second part that does not fit'])).toBe(`${first}…`);
+  });
+
+  it('cuts inside only an item longer than the whole limit', () => {
+    const out = capStatusMessage(['y'.repeat(500)]);
+    expect(out).toBe(`${'y'.repeat(STATUS_MESSAGE_MAX - 1)}…`);
   });
 });
 

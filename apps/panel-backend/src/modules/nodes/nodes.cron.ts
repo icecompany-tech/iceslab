@@ -83,6 +83,15 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       // the row forever after the underlying subprocess came back.
       const statusChanged = result.status !== node.status;
       const messageChanged = result.message !== node.lastStatusMessage;
+      // A degraded node whose agent named no cause: the message only says so,
+      // and the answer itself is logged here, once per change of state rather
+      // than every tick (E38).
+      if ((statusChanged || messageChanged) && result.unnamedDetail !== undefined) {
+        getLogger().warn(
+          { node: node.name, health: result.unnamedDetail },
+          `[cron] node ${node.name}: ${UNNAMED_DEGRADED}`,
+        );
+      }
       // T7: only touch coreVersion when this poll actually observed one (a
       // reachable agent that reported an xray core). Undefined = keep stored.
       const versionChanged =
@@ -242,6 +251,8 @@ interface PollResult {
    */
   status: 'online' | 'degraded' | 'unreachable';
   message: string | null;
+  /** The agent's whole answer when `message` is UNNAMED_DEGRADED (E38). */
+  unnamedDetail?: unknown;
   // T7: xray core version reported by this poll's /healthz, or undefined when
   // the node was unreachable / reported no xray core / runs a pre-T7 agent.
   // Undefined means "leave the stored coreVersion untouched".
@@ -476,6 +487,9 @@ async function checkOne(node: {
     const verdict = statusFromHealth(res, { chainExpected: node.chainSentAt != null });
     return {
       ...verdict,
+      // The whole answer, kept only when the message could not name the cause:
+      // the poller logs it once per change of state.
+      unnamedDetail: verdict.message === UNNAMED_DEGRADED ? res : undefined,
       coreVersion,
       coreRestarts,
       cores: observedCores(res.cores, new Date().toISOString(), res.arch),
@@ -570,12 +584,51 @@ export function statusFromHealth(
     if (down.length) parts.push(`not running: ${down.join(', ')}`);
     return {
       status: 'degraded',
-      message: parts.length
-        ? parts.join('; ').slice(0, 200)
-        : // No core reports itself down, yet the agent called the node degraded.
-          // Keep the payload here: this is the case where the detail is not
-          // something we can name in advance.
-          `degraded: ${JSON.stringify(res).slice(0, 160)}`,
+      // No core reports itself down, yet the agent called the node degraded.
+      // Said in words (E38): the raw answer used to be the message, cut at 160
+      // characters mid-JSON, which read as an explanation and explained
+      // nothing. The answer itself goes to the log, once per change of state
+      // (pollNodeStatuses), where somebody can read all of it.
+      message: parts.length ? capStatusMessage(parts) : UNNAMED_DEGRADED,
     };
   }
+}
+
+/** The message of a node the agent calls degraded without naming why. */
+export const UNNAMED_DEGRADED = 'agent reports degraded without a core reason';
+
+/** The stored status message's length: the column and the card are sized for it. */
+export const STATUS_MESSAGE_MAX = 200;
+
+/**
+ * Joins the parts of a status message and fits it into `limit` characters
+ * without breaking a word (E38). Whole parts first; the part that no longer
+ * fits is cut at its last whole `, ` item, so "not running: a, b, ..." never
+ * ends inside a core's name; anything cut ends in "…". A message that fits is
+ * returned as it was. Only a single item longer than the whole limit is cut
+ * inside itself, since there is no boundary left to cut at.
+ */
+export function capStatusMessage(parts: string[], limit = STATUS_MESSAGE_MAX): string {
+  const whole = parts.join('; ');
+  if (whole.length <= limit) return whole;
+  const room = limit - 1; // the ellipsis
+  let out = '';
+  for (const part of parts) {
+    const next = out ? `${out}; ${part}` : part;
+    if (next.length <= room) {
+      out = next;
+      continue;
+    }
+    const lead = out ? `${out}; ` : '';
+    let taken = '';
+    for (const item of part.split(', ')) {
+      const candidate = taken ? `${taken}, ${item}` : item;
+      if ((lead + candidate).length > room) break;
+      taken = candidate;
+    }
+    if (taken) out = lead + taken;
+    break;
+  }
+  if (!out) out = whole.slice(0, room);
+  return `${out}…`;
 }
