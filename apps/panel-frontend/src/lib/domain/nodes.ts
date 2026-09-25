@@ -133,6 +133,13 @@ export interface Node {
    *  `undefined` пока сервер поле не отдаёт; тогда экран об этом молчит. */
   awgRuntime?: AwgRuntime | null;
   /**
+   * Самоподписанная пара нативной hysteria, которую выпустила панель (E30a,
+   * 7fd101a): намерение, не факт. `null` у ноды с FQDN (ACME) или до первого
+   * пуша; `undefined` у сервера старше поля. Что нода отдаёт на деле, говорит
+   * `cores[].tls` строки hysteria.
+   */
+  hysteriaTls?: NodeHysteriaTls | null;
+  /**
    * The cores this machine reported, with the panel's freshness stamp.
    *
    * ⚠ `null` means no reporting agent has ever checked in, which is NOT a node
@@ -266,6 +273,26 @@ export async function registerNodeWarp(id: string): Promise<Node> {
 /** Turn off WARP egress for this node (keeps creds for instant re-enable). */
 export async function disableNodeWarp(id: string): Promise<Node> {
   const { data } = await api.delete<Node>(`/api/nodes/${id}/warp`);
+  return data;
+}
+
+/** Публичная часть пары hysteria (ключ панель не отдаёт никогда). */
+export interface NodeHysteriaTls {
+  /** sha256 DER, hex в нижнем регистре, 64 символа: что пинят клиенты. */
+  certSha256: string;
+  /** Хост в SAN: адрес ноды на момент выпуска. */
+  host: string;
+  createdAt: string;
+}
+
+/**
+ * Выпустить новую самоподписанную пару hysteria и сразу разослать её на ноду.
+ * 200 { hysteriaTls }; 409 HYSTERIA_TLS_NOT_SELF_SIGNED у ноды с FQDN; 404.
+ * Все выданные hy2-ссылки перестанут подключаться, пока клиенты не обновят
+ * подписку: в ней пин старого сертификата.
+ */
+export async function rotateHysteriaTls(id: string): Promise<{ hysteriaTls: NodeHysteriaTls }> {
+  const { data } = await api.post<{ hysteriaTls: NodeHysteriaTls }>(`/api/nodes/${id}/hysteria-tls/rotate`);
   return data;
 }
 

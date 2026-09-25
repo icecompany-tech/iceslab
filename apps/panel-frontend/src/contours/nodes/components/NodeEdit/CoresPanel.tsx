@@ -10,7 +10,19 @@ import {
   type EngineName,
   type NodeCoreVersions,
 } from '@iceslab/shared';
-import type { Node, NodeCore } from '@/lib/domain/nodes';
+import { rotateHysteriaTls, type Node, type NodeCore } from '@/lib/domain/nodes';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import { apiErrorMessage } from '@/lib/net/client';
+import {
+  canRotateHysteriaTls,
+  hysteriaTlsFacts,
+  hysteriaTlsRefusal,
+  isNativeHysteria,
+  type HysteriaTlsFacts,
+} from '@/contours/nodes/lib/hysteriaTls';
+import { HysteriaTlsLine } from '@/contours/nodes/components/NodeEdit/HysteriaTlsLine';
 import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
 import {
@@ -100,6 +112,32 @@ export function CoresPanel({
   refusal?: string[] | null;
 }) {
   const { t } = useTranslation();
+  // Ротация самоподписанной пары hysteria (E30a): сервер выпускает новую и
+  // сразу пушит. 409 HYSTERIA_TLS_NOT_SELF_SIGNED словами сервера.
+  const qc = useQueryClient();
+  const rotateMutation = useMutation({
+    mutationFn: () => rotateHysteriaTls(node.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['node', node.id] });
+      void qc.invalidateQueries({ queryKey: ['nodes'] });
+      notifications.show({ color: 'green', message: t('nodeEdit.hyTls.rotated') });
+    },
+    onError: (err) => {
+      const refusal = hysteriaTlsRefusal(err);
+      notifications.show({
+        color: 'red',
+        title: t('nodeEdit.hyTls.rotateFailed'),
+        message: refusal ? refusal.message || t('nodeEdit.hyTls.notSelfSigned') : apiErrorMessage(err),
+      });
+    },
+  });
+  const confirmRotate = () =>
+    modals.openConfirmModal({
+      title: t('nodeEdit.hyTls.rotateConfirm'),
+      labels: { confirm: t('nodeEdit.hyTls.rotate'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => rotateMutation.mutate(),
+    });
   // Порядок манифеста, как у «Версий ядер» в мастере; отчёт не трогается.
   const cores = node.cores?.cores ? coreRowsInManifestOrder(node.cores.cores) : undefined;
 
@@ -176,6 +214,9 @@ export function CoresPanel({
               // Поколение AWG: намерение ноды против версии, которую сообщило
               // ядро. Только у amneziawg и только когда сервер поле отдаёт.
               awg={c.name === 'amneziawg' ? awgVersionFacts(node.awgProtocol, readCoreAwg(c)) : null}
+              tls={hysteriaTlsFacts(node, c)}
+              onRotate={isNativeHysteria(c) && canRotateHysteriaTls(node) ? confirmRotate : undefined}
+              rotating={rotateMutation.isPending}
             />
           ))}
           {/* Инвентарь, а не живость: поднято ли ядро прямо сейчас, говорит
@@ -221,7 +262,14 @@ function CoreRow({
   intent,
   onIntent,
   awg,
+  tls,
+  onRotate,
+  rotating,
 }: {
+  /** Сертификат нативной hysteria (hysteriaTlsFacts); null у прочих строк. */
+  tls: HysteriaTlsFacts | null;
+  onRotate?: () => void;
+  rotating?: boolean;
   core: NodeCore;
   /** «Как удалить» у первой строки движка; null у остальных. */
   remove: RowRemove | null;
@@ -376,6 +424,10 @@ function CoreRow({
           </RowButton>
         )}
       </Box>
+
+      {/* Сертификат нативной hysteria (E30a): какой отдаёт нода и тот ли, что
+          выпустила панель. Сказать нечего: строки нет. */}
+      {tls && <HysteriaTlsLine facts={tls} onRotate={onRotate} rotating={rotating} />}
 
       {/* Почему удалить нельзя: кому ядро нужно, по строке на причину. Или что
           панель не сообщила: молчание не «никому», кнопки тогда нет. */}
