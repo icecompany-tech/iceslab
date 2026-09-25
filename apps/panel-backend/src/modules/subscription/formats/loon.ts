@@ -1,14 +1,14 @@
 import { isPlainXray, type SubscriptionEndpoint } from '../subscription.formats.js';
 
 /**
- * Loon proxy-line list (`?format=loon`). Comma-positional + colon-keyed params:
- * `Name = type,host,port,...,key:value`.
+ * Loon proxy-line list (`?format=loon`): `Name = Type,host,port,<positional>,key=value,...`.
  *
- * Loon supports shadowsocks / vmess / vless / trojan / hysteria2 (incl. REALITY
- * via `public-key:` / `short-id:`). NOTE: unlike Surge/QX, Loon's exact
- * proxy-line grammar (especially the REALITY keys) could not be verified
- * upstream cleanly, so this builder is best-effort - validate the import in the
- * Loon app and file an issue if a field name drifted (alpha).
+ * The grammar is nsloon.app/en/docs/Node, read 2026-09-25: parameters are
+ * `key=value` on every type, the TLS name is `sni`, and the type names are
+ * `Shadowsocks`, `Hysteria2`, `VLESS`, `VMess`, `Trojan`. Until then this
+ * builder wrote `key:value` and `tls-name:`, taken from nothing it could
+ * cite, and Loon read none of those parameters: a Salamander hysteria went
+ * out without its obfuscation, a REALITY vless without its key.
  */
 function safeName(name: string): string {
   return name.replace(/[,=]/g, '-').trim();
@@ -22,10 +22,12 @@ export function buildLoonConf(endpoints: SubscriptionEndpoint[]): string {
       lines.push(`${name} = Shadowsocks,${e.host},${e.port},${e.method},"${e.password}",udp=true`);
     } else if (e.protocol === 'hysteria') {
       const p = [`${name} = Hysteria2,${e.host},${e.port},"${e.password}"`];
-      if (e.obfsPassword) p.push(`salamander-password:${e.obfsPassword}`);
+      if (e.obfsPassword) p.push(`salamander-password=${e.obfsPassword}`);
+      if (typeof e.portHoppingStart === 'number' && typeof e.portHoppingEnd === 'number') {
+        p.push(`server-ports="${e.portHoppingStart}:${e.portHoppingEnd}"`);
+      }
+      if (e.downMbps) p.push(`download-bandwidth=${e.downMbps}`);
       // E30a: the panel's self-signed certificate on a node addressed by IP.
-      // Spelled as nsloon.app/en/docs/Node shows the hysteria2 line (read
-      // 2026-09-25): `key=value`, the certificate's sha256 as `tls-cert-sha256`.
       if (e.tlsPin) p.push('skip-cert-verify=false', `tls-cert-sha256=${e.tlsPin.certSha256}`);
       lines.push(p.join(','));
     } else if (e.protocol === 'xray' && !isPlainXray(e)) {
@@ -37,18 +39,18 @@ export function buildLoonConf(endpoints: SubscriptionEndpoint[]): string {
       const sub = e.subprotocol ?? 'vless';
       const net = e.network === 'ws' ? 'ws' : e.network === 'grpc' ? 'grpc' : 'tcp';
       if (sub === 'vless') {
-        const p = [`${name} = VLESS,${e.host},${e.port},"${e.uuid}"`, `transport:${net}`];
-        if (tls) p.push('over-tls:true', `tls-name:${e.sni}`);
-        if (e.flow) p.push(`flow:${e.flow}`);
-        if (reality) p.push(`public-key:${e.publicKey}`, `short-id:${e.shortId}`);
+        const p = [`${name} = VLESS,${e.host},${e.port},"${e.uuid}"`, `transport=${net}`];
+        if (e.flow) p.push(`flow=${e.flow}`);
+        if (reality) p.push(`public-key="${e.publicKey}"`, `short-id=${e.shortId}`);
+        if (tls) p.push('over-tls=true', `sni=${e.sni}`);
         lines.push(p.join(','));
       } else if (sub === 'vmess') {
-        const p = [`${name} = vmess,${e.host},${e.port},auto,"${e.uuid}"`, `transport:${net}`];
-        if (tls) p.push('over-tls:true', `tls-name:${e.sni}`);
+        const p = [`${name} = VMess,${e.host},${e.port},auto,"${e.uuid}"`, `transport=${net}`];
+        if (tls) p.push('over-tls=true', `sni=${e.sni}`);
         lines.push(p.join(','));
       } else if (sub === 'trojan') {
-        const p = [`${name} = trojan,${e.host},${e.port},"${e.uuid}"`];
-        if (tls) p.push(`tls-name:${e.sni}`);
+        const p = [`${name} = Trojan,${e.host},${e.port},"${e.uuid}"`];
+        if (tls) p.push(`sni=${e.sni}`);
         lines.push(p.join(','));
       }
     }

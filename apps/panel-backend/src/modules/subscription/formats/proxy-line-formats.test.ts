@@ -86,19 +86,29 @@ describe('buildQuantumultXConf (incl REALITY, verified syntax)', () => {
   });
 });
 
-describe('buildLoonConf (best-effort, incl REALITY)', () => {
+// The lines against nsloon.app/en/docs/Node (read 2026-09-25): key=value, `sni`,
+// capitalised type names. No `key:value` survives anywhere in the output.
+describe('buildLoonConf (the grammar of the Loon docs)', () => {
   it('emits a VLESS REALITY line', () => {
-    const out = buildLoonConf([vlessReality]);
-    expect(out).toContain('eu-3 = VLESS,n3.example.com,443,"uuid-1"');
-    expect(out).toContain('over-tls:true');
-    expect(out).toContain('tls-name:www.cloudflare.com');
-    expect(out).toContain('flow:xtls-rprx-vision');
-    expect(out).toContain('public-key:PUBKEY');
-    expect(out).toContain('short-id:SHORT');
+    expect(buildLoonConf([vlessReality])).toBe(
+      'eu-3 = VLESS,n3.example.com,443,"uuid-1",transport=tcp,flow=xtls-rprx-vision,public-key="PUBKEY",short-id=SHORT,over-tls=true,sni=www.cloudflare.com\n',
+    );
+  });
+  it('emits a Hysteria2 line with Salamander, bandwidth and port hopping', () => {
+    expect(buildLoonConf([{ ...hy, portHoppingStart: 20000, portHoppingEnd: 50000 }])).toBe(
+      'eu-2 = Hysteria2,n2.example.com,443,"hy-pass",salamander-password=salt,server-ports="20000:50000",download-bandwidth=100\n',
+    );
+  });
+  it('emits a Trojan line over TLS', () => {
+    expect(buildLoonConf([trojanTls])).toBe('eu-4 = Trojan,n3.example.com,443,"uuid-1",sni=www.cloudflare.com\n');
   });
   it('emits a Shadowsocks line', () => {
-    expect(buildLoonConf([ss])).toContain(
-      'eu-1 = Shadowsocks,n.example.com,8388,2022-blake3-aes-128-gcm,"ss-pass"',
-    );
+    expect(buildLoonConf([ss])).toBe('eu-1 = Shadowsocks,n.example.com,8388,2022-blake3-aes-128-gcm,"ss-pass",udp=true\n');
+  });
+  it('writes no key:value parameter at all', () => {
+    const out = buildLoonConf([ss, hy, vlessReality, trojanTls]);
+    for (const line of out.trim().split('\n')) {
+      for (const p of line.split(' = ')[1]!.split(',')) expect(p, line).not.toMatch(/^[a-z-]+:/);
+    }
   });
 });
