@@ -10,9 +10,12 @@ import {
   buildExportRecipe,
   RECIPES,
   RECIPE_COMMON_FIELDS,
+  RECIPES_REPO_DEFAULT,
+  recipeRailEmpty,
   recipesForKind,
   recipeText,
   recipeTile,
+  registryRepo,
   registryProblems,
   resolveRecipeApply,
   validateXrayConfig,
@@ -155,6 +158,29 @@ describe('рецепты у каждой плитки: форма и черно�
       expect(typeof cards[r.id]?.name, r.id).toBe('string');
       expect(cards[r.id]?.notes?.length ?? 0, r.id).toBe(r.notes?.length ?? 0);
     }
+  });
+});
+
+describe('панель рецептов: откуда и почему пусто', () => {
+  it('registryRepo: owner/repo из source ответа, кривое значение даёт реестр по умолчанию', () => {
+    expect(registryRepo('icecompany-tech/iceslab-recipes@4f1c2d0')).toEqual({
+      name: 'iceslab-recipes',
+      url: 'https://github.com/icecompany-tech/iceslab-recipes',
+    });
+    expect(registryRepo('me/my-recipes')).toEqual({ name: 'my-recipes', url: 'https://github.com/me/my-recipes' });
+    for (const bad of [undefined, 42, '', 'javascript:alert(1)', 'a/b/c'])
+      expect(registryRepo(bad).url, String(bad)).toBe(`https://github.com/${RECIPES_REPO_DEFAULT}`);
+  });
+
+  it('recipeRailEmpty: у плитки нет рецептов и реестр недоступен без снимка это разные слова', () => {
+    const base = { loading: false, failed: false, stale: false, answered: 5, shown: 0 };
+    expect(recipeRailEmpty(base)).toBe('tile');
+    expect(recipeRailEmpty({ ...base, stale: true, answered: 0 })).toBe('unavailable');
+    expect(recipeRailEmpty({ ...base, failed: true })).toBe('unavailable');
+    // Устаревший кэш с рецептами это не «недоступен»: показать есть что.
+    expect(recipeRailEmpty({ ...base, stale: true, answered: 3 })).toBe('tile');
+    expect(recipeRailEmpty({ ...base, shown: 2 })).toBeNull();
+    expect(recipeRailEmpty({ ...base, loading: true })).toBeNull();
   });
 });
 

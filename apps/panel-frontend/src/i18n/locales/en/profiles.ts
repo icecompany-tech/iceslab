@@ -335,7 +335,11 @@ export const profiles = {
   recipes: {
     searchPlaceholder: 'Search recipes…',
     countLine: '{{shown}} of {{total}} recipes · built-in registry',
-    emptyForKind: 'No built-in recipes for {{kind}}. Import your own or save this profile as a recipe.',
+    emptyForKind: 'The registry has no recipes for {{kind}}. Import your own or propose it to the registry.',
+    fromRegistry: 'Recipes from the registry',
+    proposeOwn: 'propose your own:',
+    registryUnavailable:
+      'The recipe registry is unreachable and this panel carries no snapshot of it: nothing to show. Import by link or JSON still works.',
     title: 'Quick-setup recipes',
     subtitle: "Click and the fields below populate for the chosen scenario. Manual edits stay available.",
     appliedBadge: 'RECIPE APPLIED',

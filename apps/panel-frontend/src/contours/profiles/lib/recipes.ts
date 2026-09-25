@@ -691,6 +691,44 @@ export function recipeText(
   };
 }
 
+/** Публичный реестр, из которого панель берёт рецепты (решение владельца
+ *  25.09), когда ответ сервера его не назвал. */
+export const RECIPES_REPO_DEFAULT = 'icecompany-tech/iceslab-recipes';
+
+/**
+ * Ссылка на репозиторий реестра для строки панели рецептов. Сервер называет
+ * источник в `source` ответа как `owner/repo@ref`; кривое или отсутствующее
+ * значение не ссылка, тогда реестр по умолчанию.
+ */
+export function registryRepo(source: unknown): { name: string; url: string } {
+  const m = typeof source === 'string' ? /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:@.*)?$/.exec(source.trim()) : null;
+  const slug = m?.[1] ?? RECIPES_REPO_DEFAULT;
+  return { name: slug.split('/')[1]!, url: `https://github.com/${slug}` };
+}
+
+/**
+ * Что панель рецептов говорит, когда показать нечего:
+ *
+ *   null         есть что показать, или ответ ещё не пришёл;
+ *   tile         реестр ответил, у этой плитки рецептов нет;
+ *   unavailable  реестр недоступен и снимка нет (сервер старше снимка): в
+ *                ответе пусто и он устарел, или запрос упал. Это другое
+ *                «пусто»: дело не в плитке, а в источнике.
+ */
+export function recipeRailEmpty(s: {
+  loading: boolean;
+  failed: boolean;
+  stale: boolean;
+  /** Рецептов во всём ответе реестра (по протоколу, до фильтра плитки). */
+  answered: number;
+  /** Рецептов на этой плитке, из любого источника. */
+  shown: number;
+}): 'tile' | 'unavailable' | null {
+  if (s.loading || s.shown > 0) return null;
+  if (s.failed || (s.stale && s.answered === 0)) return 'unavailable';
+  return 'tile';
+}
+
 /** The built-in recipes of one protocol tile (a PROFILE_KINDS key). */
 export function recipesForKind(kindKey: string): Recipe[] {
   return RECIPES.filter((r) => recipeTile(r) === kindKey);

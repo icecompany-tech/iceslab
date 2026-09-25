@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -34,9 +35,11 @@ import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
 import { recipeImportUrl } from '@/contours/profiles/lib/recipeImportUrl';
 import {
   fromWireRecipe,
+  recipeRailEmpty,
   recipesForKind,
   recipeText,
   recipeTile,
+  registryRepo,
   registryProblems,
   type Recipe,
   type RecipeProtocol,
@@ -127,10 +130,17 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
     onPick(r);
   };
 
-  // The rail is always there (owner, 24.09): a tile with nothing built in
-  // still offers Import and says what to do, instead of a form that grows no
-  // rail at all.
-  const empty = builtins.length === 0 && registry.length === 0 && !registryQuery.isLoading;
+  // The rail is always there (owner, 24.09): a tile with nothing to show
+  // still offers Import and says why it is empty. «This tile has none» and
+  // «the registry is not there» are different facts (recipeRailEmpty).
+  const empty = recipeRailEmpty({
+    loading: registryQuery.isLoading,
+    failed: registryQuery.isError,
+    stale,
+    answered: registryQuery.data?.recipes.length ?? 0,
+    shown: builtins.length + registry.length,
+  });
+  const repo = registryRepo(registryQuery.data?.source);
 
   const visibleBuiltins = builtins.filter((r) => {
     const q = search.trim().toLowerCase();
@@ -157,6 +167,20 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
           {t('recipes.import.button')}
         </Button>
       </Group>
+
+      {/* Откуда рецепты и как добавить свой (владелец, 25.09): рецептов в
+          коде панели нет, есть публичный реестр. */}
+      <Text style={{ fontSize: 11, lineHeight: '15px', color: '#7A8BA3' }}>
+        {t('recipes.fromRegistry')}{' '}
+        <Anchor href={repo.url} target="_blank" rel="noreferrer" size="xs">
+          {repo.name}
+        </Anchor>
+        {' · '}
+        {t('recipes.proposeOwn')}{' '}
+        <Anchor href={`${repo.url}/pulls`} target="_blank" rel="noreferrer" size="xs">
+          pull request
+        </Anchor>
+      </Text>
 
       <TextInput
         size="xs"
@@ -208,7 +232,9 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 
       {empty ? (
         <Text style={{ fontSize: 11, lineHeight: '15px', color: '#7A8BA3' }}>
-          {t('recipes.emptyForKind', { kind: kindLabel })}
+          {empty === 'unavailable'
+            ? t('recipes.registryUnavailable')
+            : t('recipes.emptyForKind', { kind: kindLabel })}
         </Text>
       ) : (
         <Text style={{ fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace", fontSize: 10, color: '#5A6B82' }}>
