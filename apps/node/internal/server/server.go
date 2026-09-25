@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -73,6 +74,10 @@ type Config struct {
 	// Geo is the geo directory (phase 9). Nil means this agent keeps none:
 	// /assets answers 404 and a push carrying geo is refused.
 	Geo *geo.Store
+	// ResolverProbe asks the host's resolver on every /healthz (E37); an error
+	// degrades the node with dto.ResolverDownReason. main wires
+	// SystemResolverProbe. Nil asks nothing, which is what tests get.
+	ResolverProbe func(ctx context.Context) error
 }
 
 type Server struct {
@@ -338,6 +343,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// Fixed-index slots avoid a shared-write race and preserve adapter order.
 	cores := make([]dto.CoreStatus, len(s.cfg.Adapters))
 	var wg sync.WaitGroup
+	// The host's resolver, asked beside the cores rather than after them, so a
+	// dead one costs the healthcheck its 2 s once and not on top of the rest.
+	resolverDown := false
+	if s.cfg.ResolverProbe != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(r.Context(), resolverProbeTimeout)
+			defer cancel()
+			if err := s.cfg.ResolverProbe(ctx); err != nil {
+				s.logger.Warn("the host's resolver did not answer", "err", err)
+				resolverDown = true
+			}
+		}()
+	}
 	for i, adapter := range s.cfg.Adapters {
 		wg.Add(1)
 		go func(i int, adapter core.CoreAdapter) {
@@ -504,13 +524,47 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if chainStatus != nil && !chainStatus.Running {
 		status = "degraded"
 	}
+	// E37, 25.09 on nl-01: the stub resolver stopped answering, every xray host
+	// on the node died, and every core still ran, so the node read ONLINE. A
+	// machine that cannot resolve names cannot serve, whatever its cores say.
+	reason := ""
+	if resolverDown {
+		status = "degraded"
+		reason = dto.ResolverDownReason
+	}
 	writeJSON(w, http.StatusOK, dto.HealthcheckResponse{
 		Status: status,
 		Cores:  cores,
 		Chain:  chainStatus,
 		Arch:   core.MachineArch(),
 		Geo:    s.geoStatus(),
+		Reason: reason,
 	})
+}
+
+// resolverProbeTimeout: how long the host's resolver has to answer (E37).
+const resolverProbeTimeout = 2 * time.Second
+
+// probeNames are asked in turn; one answer is enough. Two operators' names, so
+// a single domain's own trouble does not read as the node's.
+var probeNames = []string{"www.google.com", "one.one.one.one"}
+
+// SystemResolverProbe asks the host's own resolver, the one xray's `localhost`
+// and every process without its own DNS use (/etc/resolv.conf, on a systemd
+// host the stub at 127.0.0.53). Nil when any name resolves.
+func SystemResolverProbe(ctx context.Context) error {
+	var last error
+	for _, name := range probeNames {
+		_, err := net.DefaultResolver.LookupHost(ctx, name)
+		if err == nil {
+			return nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return last
 }
 
 // geoStatus is the healthcheck's geo: the files on disk (sha256 from the

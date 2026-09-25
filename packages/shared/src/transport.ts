@@ -1763,7 +1763,20 @@ export interface HealthcheckResponse {
   arch?: CoreArch;
   /** The geo directory. Absent from an agent older than phase 9.2. */
   geo?: GeoStatus;
+  /**
+   * Why the NODE is degraded when the cause is the machine and not a core or
+   * the chain. Today only RESOLVER_DOWN_REASON (E37). Absent otherwise, and
+   * from an agent older than the field.
+   */
+  reason?: string;
 }
+
+/**
+ * The host's own resolver did not answer the agent's probe. E37, 25.09 on
+ * nl-01: every xray host of the node was dead while every core ran and the
+ * panel read ONLINE. Mirrors dto.ResolverDownReason.
+ */
+export const RESOLVER_DOWN_REASON = 'system resolver not answering';
 
 /**
  * What the PANEL stores per node from the healthcheck above: the cores the

@@ -126,6 +126,7 @@ func main() {
 		InboundsStorePath: getenv("NODE_INBOUNDS_STORE", defaultInboundsStorePath),
 		Chain:             chainMgr,
 		Geo:               geo.NewStore(geoDir),
+		ResolverProbe:     server.SystemResolverProbe,
 	})
 	if err != nil {
 		logger.Error("build server", "err", err)

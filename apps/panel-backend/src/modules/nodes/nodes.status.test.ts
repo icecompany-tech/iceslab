@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RESOLVER_DOWN_REASON } from '@iceslab/shared';
 import { statusFromHealth } from './nodes.cron.js';
 
 /**
@@ -83,6 +84,26 @@ describe('statusFromHealth', () => {
     const v = statusFromHealth({ status: 'degraded', cores: [] });
     expect(v.status).toBe('degraded');
     expect(v.message).toContain('degraded:');
+  });
+
+  it("carries the node's own reason when every core runs (E37)", () => {
+    // nl-01, 25.09: the host's resolver stopped answering, every xray host died,
+    // every core ran, and the node read online. The agent now says why.
+    const v = statusFromHealth({
+      status: 'degraded',
+      cores: [{ name: 'xray', running: true, provisioned: true }],
+      reason: RESOLVER_DOWN_REASON,
+    });
+    expect(v).toEqual({ status: 'degraded', message: 'system resolver not answering' });
+  });
+
+  it("puts the node's reason before the down cores, so the cut drops a core name", () => {
+    const v = statusFromHealth({
+      status: 'degraded',
+      cores: [{ name: 'hysteria', running: false, provisioned: true }],
+      reason: RESOLVER_DOWN_REASON,
+    });
+    expect(v.message).toBe('system resolver not answering; not running: hysteria');
   });
 });
 

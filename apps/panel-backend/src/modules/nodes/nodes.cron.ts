@@ -505,6 +505,7 @@ export function statusFromHealth(
     status: string;
     cores: { name: string; running: boolean; provisioned?: boolean }[];
     chain?: { running: boolean; error?: string } | null;
+    reason?: string;
   },
   opts: { chainExpected?: boolean } = {},
 ): { status: 'online' | 'degraded'; message: string | null } {
@@ -560,10 +561,17 @@ export function statusFromHealth(
     // Still not `unreachable`: the subscription's liveness filter is keyed on
     // that word, and a core being down is not a reason to pull the node's other
     // endpoints out of every subscriber's client.
+    //
+    // The node's own reason travels beside the cores (E37: the host's resolver
+    // not answering, every core running). Put before the down cores when both
+    // hold, so the 200-char cut drops a core's name and not the node's reason.
+    const parts: string[] = [];
+    if (res.reason) parts.push(res.reason);
+    if (down.length) parts.push(`not running: ${down.join(', ')}`);
     return {
       status: 'degraded',
-      message: down.length
-        ? `not running: ${down.join(', ')}`.slice(0, 200)
+      message: parts.length
+        ? parts.join('; ').slice(0, 200)
         : // No core reports itself down, yet the agent called the node degraded.
           // Keep the payload here: this is the case where the detail is not
           // something we can name in advance.

@@ -700,7 +700,14 @@ type HealthcheckResponse struct {
 	// The geo directory. Absent only from an agent older than the field (or
 	// one built without a geo directory); an agent that has one always says.
 	Geo *GeoStatusDto `json:"geo,omitempty"`
+	// Why the NODE is degraded when the cause is the machine and not a core or
+	// the chain: today only ResolverDownReason (E37). Empty otherwise.
+	Reason string `json:"reason,omitempty"`
 }
+
+// ResolverDownReason: the host's own resolver did not answer the agent's probe
+// (E37, 25.09 on nl-01: every xray host of the node dead while all cores ran).
+const ResolverDownReason = "system resolver not answering"
 
 // ───── GET /metrics ─────
 //
