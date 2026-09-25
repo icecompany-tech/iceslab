@@ -11,6 +11,7 @@ import {
   RECIPES,
   RECIPE_COMMON_FIELDS,
   recipesForKind,
+  recipeTile,
   registryProblems,
   resolveRecipeApply,
   validateXrayConfig,
@@ -25,10 +26,63 @@ describe('рецепты у каждой плитки', () => {
   });
 
   it('рецепт плитки sing-box не показывается на плитке своего демона, и наоборот', () => {
-    expect(recipesForKind('hysteria').every((r) => r.kind === undefined)).toBe(true);
-    expect(recipesForKind('hysteria#singbox').every((r) => r.kind === 'hysteria#singbox')).toBe(true);
+    expect(recipesForKind('hysteria').every((r) => r.engine === undefined)).toBe(true);
+    expect(recipesForKind('hysteria#singbox').every((r) => r.engine === 'singbox')).toBe(true);
     expect(recipesForKind('socks5').map((r) => r.id)).toEqual(['telegram-socks5']);
   });
+});
+
+describe('recipeTile: плитка выводится из engine, protocol, subprotocol', () => {
+  it('на всех 16 плитках: рецепт с полями плитки ложится ровно на неё, как профиль (profileKindKey)', () => {
+    const tiles = [
+      ...PROFILE_KINDS.map((k) => ({ key: k.key, r: { protocol: k.protocol, engine: k.engine, subprotocol: k.subprotocol } })),
+      ...PREVIEW_KINDS.map((k) => ({ key: k.key, r: { protocol: k.key, engine: 'native' as const } })),
+    ];
+    expect(tiles).toHaveLength(16);
+    for (const { key, r } of tiles) expect(recipeTile(r), key).toBe(key);
+  });
+
+  it('sing-box-only протоколы без суффикса; v1 без engine на родной плитке; не-плоский subprotocol не в счёт', () => {
+    expect(recipeTile({ protocol: 'tuic', engine: 'singbox' })).toBe('tuic');
+    expect(recipeTile({ protocol: 'hysteria' })).toBe('hysteria');
+    expect(recipeTile({ protocol: 'xray', subprotocol: 'vless' })).toBe('xray');
+    expect(recipeTile({ protocol: 'xray', subprotocol: 'socks' })).toBe('socks5');
+  });
+
+  // Тест-миграция (25.09): плитки встроенных рецептов, пока они читались из
+  // поля kind. Снимается вместе с массивом RECIPES, когда рецепты придут из
+  // снимка реестра.
+  it('миграция: каждый встроенный рецепт на той же плитке, что при поле kind', () => {
+    const OLD_KIND: Record<string, string> = {
+      'xray-reality-vision-raw': 'xray',
+      'xray-reality-xhttp': 'xray',
+      'xray-trojan-reality': 'xray',
+      'xray-reality-grpc-ru': 'xray',
+      'hysteria-default': 'hysteria',
+      'hysteria-salamander': 'hysteria',
+      'awg-default': 'amneziawg',
+      'awg-iran': 'amneziawg',
+      'naive-default': 'naive',
+      'ss-2022-blake3': 'shadowsocks',
+      'mtproto-default': 'mtproto',
+      'mieru-default': 'mieru',
+      'singbox-vless-reality-vision': 'xray#singbox',
+      'singbox-hysteria-clean': 'hysteria#singbox',
+      'singbox-hysteria-salamander': 'hysteria#singbox',
+      'singbox-ss-2022-blake3': 'shadowsocks#singbox',
+      'tuic-bbr': 'tuic',
+      'anytls-default-padding': 'anytls',
+      'shadowtls-v3-bing': 'shadowtls',
+      'telegram-socks5': 'socks5',
+      'telegram-http': 'http',
+      'telegram-web-tproxy-websocket': 'telegramweb',
+    };
+    expect(RECIPES.map((r) => r.id).sort()).toEqual(Object.keys(OLD_KIND).sort());
+    for (const r of RECIPES) expect(recipeTile(r), r.id).toBe(OLD_KIND[r.id]);
+  });
+});
+
+describe('рецепты у каждой плитки: форма и черновик', () => {
 
   it('каждый рецепт ложится на пустую форму своей плитки: только её поля, без ошибок', () => {
     for (const kind of PROFILE_KINDS) {
@@ -89,7 +143,7 @@ describe('рецепты у каждой плитки', () => {
     const ids = RECIPES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     const cards = (en as unknown as { recipes: { cards: Record<string, { name?: string }> } }).recipes.cards;
-    for (const r of RECIPES.filter((x) => x.kind)) expect(typeof cards[r.id]?.name, r.id).toBe('string');
+    for (const r of RECIPES) expect(typeof cards[r.id]?.name, r.id).toBe('string');
   });
 });
 

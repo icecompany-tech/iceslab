@@ -34,6 +34,7 @@ import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
 import {
   fromWireRecipe,
   recipesForKind,
+  recipeTile,
   registryProblems,
   type Recipe,
   type RecipeProtocol,
@@ -125,14 +126,13 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
-  // Registry recipes carry a protocol and no tile: they are written against
-  // the protocol's own core, so they show only on its native tile. On the
-  // sing-box tile a native hysteria recipe would set fields the sing-box
-  // renderer reads differently.
-  const nativeTile = kindKey === protocol;
+  // A registry recipe lands on the tile its engine, protocol and subprotocol
+  // say (recipeTile), the way a saved profile does. A v1 recipe (no engine)
+  // stays on its protocol's native tile: on the sing-box tile a native
+  // hysteria recipe would set fields the sing-box renderer reads differently.
   const registry = useMemo(
-    () => (nativeTile ? (registryQuery.data?.recipes ?? []).map(fromWireRecipe) : []),
-    [registryQuery.data, nativeTile],
+    () => (registryQuery.data?.recipes ?? []).map(fromWireRecipe).filter((r) => recipeTile(r) === kindKey),
+    [registryQuery.data, kindKey],
   );
   const stale = registryQuery.data?.stale ?? false;
   const problems = registryProblems(registryQuery.data);

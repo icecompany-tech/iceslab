@@ -16,7 +16,7 @@
  */
 
 import type { ProtocolName } from '@/lib/domain/protocols';
-import type { PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
+import { profileKindKey, type PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { LINK_CONGESTIONS, RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
 import type {
   Recipe as WireRecipe,
@@ -34,13 +34,15 @@ export interface Recipe {
   id: string;
   protocol: RecipeProtocol;
   /**
-   * The protocol tile this recipe belongs to (a PROFILE_KINDS key: `xray`,
-   * `xray#singbox`, `socks5`, `tuic`...). Absent means the protocol's native
-   * tile, which is every recipe written before the sing-box and Telegram
-   * tiles had any. A recipe for hysteria on its own daemon must not show on
-   * the sing-box tile: the two render different configs from the same fields.
+   * Which core runs the recipe (schema v2): the protocol's own (`native`) or
+   * sing-box. Absent reads as `native`, which is every v1 recipe. With
+   * `protocol` and `subprotocol` it decides the tile (recipeTile), the same
+   * way a saved profile finds its tile; the recipe does not name its tile.
    */
-  kind?: string;
+  engine?: 'native' | 'singbox';
+  /** `socks` or `http` for the two xray subprotocols that have tiles of their
+   *  own (Telegram SOCKS5 and HTTP); absent everywhere else. */
+  subprotocol?: string;
   /** Single emoji in the chip, pick from a tight palette for visual variety. */
   emoji: string;
   /** Card title, short, direct, intent-driven. */
@@ -430,7 +432,7 @@ export const RECIPES: Recipe[] = [
   // xtls-rprx-vision), https://sing-box.sagernet.org/configuration/shared/tls/
   {
     id: 'singbox-vless-reality-vision',
-    kind: 'xray#singbox',
+    engine: 'singbox',
     protocol: 'xray',
     emoji: '🛡',
     name: 'VLESS + REALITY + Vision (sing-box)',
@@ -456,7 +458,7 @@ export const RECIPES: Recipe[] = [
   // https://sing-box.sagernet.org/configuration/inbound/hysteria2/
   {
     id: 'singbox-hysteria-clean',
-    kind: 'hysteria#singbox',
+    engine: 'singbox',
     protocol: 'hysteria',
     emoji: '⚡',
     name: 'Hysteria 2 (clean, sing-box)',
@@ -474,7 +476,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'singbox-hysteria-salamander',
-    kind: 'hysteria#singbox',
+    engine: 'singbox',
     protocol: 'hysteria',
     emoji: '🐉',
     name: 'Hysteria 2 + Salamander (sing-box)',
@@ -501,7 +503,7 @@ export const RECIPES: Recipe[] = [
   // https://sing-box.sagernet.org/configuration/inbound/shadowsocks/
   {
     id: 'singbox-ss-2022-blake3',
-    kind: 'shadowsocks#singbox',
+    engine: 'singbox',
     protocol: 'shadowsocks',
     emoji: '🔒',
     name: 'SS-2022 (blake3-aes-256, sing-box)',
@@ -519,7 +521,7 @@ export const RECIPES: Recipe[] = [
   // https://sing-box.sagernet.org/configuration/inbound/tuic/
   {
     id: 'tuic-bbr',
-    kind: 'tuic',
+    engine: 'singbox',
     protocol: 'tuic',
     emoji: '🚀',
     name: 'TUIC (bbr, self-signed)',
@@ -538,7 +540,7 @@ export const RECIPES: Recipe[] = [
   // https://sing-box.sagernet.org/configuration/inbound/anytls/
   {
     id: 'anytls-default-padding',
-    kind: 'anytls',
+    engine: 'singbox',
     protocol: 'anytls',
     emoji: '🧩',
     name: 'AnyTLS (default padding)',
@@ -556,7 +558,7 @@ export const RECIPES: Recipe[] = [
   // https://sing-box.sagernet.org/configuration/inbound/shadowtls/
   {
     id: 'shadowtls-v3-bing',
-    kind: 'shadowtls',
+    engine: 'singbox',
     protocol: 'shadowtls',
     emoji: '🎭',
     name: 'ShadowTLS v3 → real site',
@@ -577,7 +579,7 @@ export const RECIPES: Recipe[] = [
   // window offers.
   {
     id: 'telegram-socks5',
-    kind: 'socks5',
+    subprotocol: 'socks',
     protocol: 'xray',
     emoji: '✈',
     name: 'Telegram SOCKS5 (1080)',
@@ -591,7 +593,7 @@ export const RECIPES: Recipe[] = [
   },
   {
     id: 'telegram-http',
-    kind: 'http',
+    subprotocol: 'http',
     protocol: 'xray',
     emoji: '🖥',
     name: 'Telegram HTTP (3128)',
@@ -612,7 +614,6 @@ export const RECIPES: Recipe[] = [
   // own domain and has no sensible default.
   {
     id: 'telegram-web-tproxy-websocket',
-    kind: 'telegramweb',
     protocol: 'telegramweb',
     emoji: '🌐',
     name: 'WEB (tproxy-server, websocket)',
@@ -655,9 +656,21 @@ export function registryProblems(resp: { sources?: unknown } | null | undefined)
   return out;
 }
 
+/**
+ * The tile a recipe lands on, derived, not read: profileKindKey, the very
+ * function a saved profile finds its tile by, so a recipe and the profile it
+ * makes cannot land apart. sing-box-only protocols (tuic, anytls, shadowtls)
+ * key by their own name, a shared protocol on sing-box by `<protocol>#singbox`,
+ * the xray subprotocols socks and http by their Telegram tiles. A v1 recipe
+ * (no `engine`) lands on its protocol's native tile.
+ */
+export function recipeTile(r: Pick<Recipe, 'protocol' | 'engine' | 'subprotocol'>): string {
+  return profileKindKey(r.protocol, r.engine ?? 'native', r.subprotocol);
+}
+
 /** The built-in recipes of one protocol tile (a PROFILE_KINDS key). */
 export function recipesForKind(kindKey: string): Recipe[] {
-  return RECIPES.filter((r) => (r.kind ?? r.protocol) === kindKey);
+  return RECIPES.filter((r) => recipeTile(r) === kindKey);
 }
 
 // ───── Randomise resolvers ─────
