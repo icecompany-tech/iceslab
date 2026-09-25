@@ -24,7 +24,9 @@
 # The cores are a set, none of them the main one (what the panel emits, one
 # core too):
 #   --engines xray,hysteria,singbox
-# The order means nothing. The older spellings still work: --protocol <p> adds
+# The order means nothing, and the set may be empty: with no --engines and no
+# --protocol only the agent goes on (env, mTLS, its unit, ufw for its port),
+# its cores added later from the node page. The older spellings still work: --protocol <p> adds
 # the core <p> runs on (shadowsocks runs on xray; tuic, anytls and shadowtls on
 # singbox), so a command an older panel printed installs what it always did;
 # --with-singbox adds singbox. Install flags follow the core they belong to:
@@ -102,9 +104,10 @@
 #   bash <(curl -fsSL .../install-iceslab-node.sh) --protocol xray --payload-file /tmp/payload.b64
 #   bash <(curl -fsSL .../install-iceslab-node.sh) --protocol xray --payload "@/tmp/payload.b64"
 #
-# Or interactive:
+# No core named at all: the agent alone, the cores added later from the node
+# page. Without --payload/--bootstrap it asks for the payload (accepts
+# `@/path/to/file` syntax):
 #   bash <(curl -fsSL .../install-iceslab-node.sh)
-# (asks for protocol, then payload; accepts `@/path/to/file` syntax).
 #
 # Don't paste the raw payload string into the terminal directly. Linux
 # TTY canonical-mode truncates pastes at 4096 bytes; real payloads are ~6-7
@@ -309,6 +312,7 @@ NODE_PORT=${NODE_PORT:-1337}
 
 PROTOCOL=""
 ENGINES_ARG=""
+ENGINES_GIVEN=0   # --engines was passed at all, even as ''
 WITH_SINGBOX=0
 PAYLOAD=""
 PANEL_URL=""
@@ -489,7 +493,9 @@ bootstrap_of() {
 
 # resolve_engines: ENGINES, the set of cores this node gets; none of them is
 # the main one. --engines names them; --protocol, the older spelling, adds the
-# core it runs on; --with-singbox adds singbox. At least one has to be named.
+# core it runs on; --with-singbox adds singbox. The set may be empty: nothing
+# named installs the agent alone, and the cores come later from the node page.
+# `--engines ''` is refused all the same: it names a list and puts nothing in.
 #
 # The order means nothing to the node. It matters only to an old checkout,
 # which installs the first core alone (install_engines), so the core of
@@ -502,8 +508,8 @@ resolve_engines() {
     ENGINES=("$native")
     seen+="$native "
   fi
-  if [[ -n "$ENGINES_ARG" ]]; then
-    local -a named
+  if [[ "$ENGINES_GIVEN" == 1 || -n "$ENGINES_ARG" ]]; then
+    local -a named=()
     IFS=',' read -ra named <<<"${ENGINES_ARG// /}"
     for e in "${named[@]}"; do
       [[ -n "$e" ]] || continue
@@ -520,7 +526,6 @@ resolve_engines() {
   if [[ "$WITH_SINGBOX" == 1 && "$seen" != *" singbox "* ]]; then
     ENGINES+=(singbox)
   fi
-  [[ ${#ENGINES[@]} -gt 0 ]] || fail "no core named: pass --engines (for example --engines xray)"
 }
 
 has_engine() { [[ " ${ENGINES[*]} " == *" $1 "* ]]; }
@@ -558,6 +563,10 @@ EOF
 # a warning that says what fixes it.
 install_engines() {
   local dir="$1" e
+  if [[ ${#ENGINES[@]} -eq 0 ]]; then
+    log "No core named: the agent alone, its cores come from the node page"
+    return 0
+  fi
   if [[ ! -f "$dir/lib/node-env.sh" ]]; then
     warn "the checkout at $ICESLAB_NODE_DIR ($ICESLAB_NODE_REF) predates --engines: its bootstraps do not wire their core into the agent"
     warn "installing only one core, ${ENGINES[0]}, wired by this installer"
@@ -657,7 +666,7 @@ while [[ $# -gt 0 ]]; do
     --ssh-allowlist)      SSH_ALLOWLIST="$2"; shift 2 ;;
     # The cores this node gets, comma-separated, in any order:
     # xray,singbox,hysteria,amneziawg,mtproto,mieru,naive. See resolve_engines.
-    --engines)            ENGINES_ARG="$2"; shift 2 ;;
+    --engines)            ENGINES_ARG="$2"; ENGINES_GIVEN=1; shift 2 ;;
     # The old spelling of adding singbox, still accepted.
     --with-singbox)       WITH_SINGBOX=1; shift ;;
     -h|--help)
@@ -720,44 +729,6 @@ if [[ -n "$BOOTSTRAP_TOKEN" && -n "$PANEL_URL" ]]; then
 elif [[ -n "$BOOTSTRAP_TOKEN" || -n "$PANEL_URL" ]]; then
   fail "--panel-url and --bootstrap must be passed TOGETHER (got only one)"
 fi
-
-prompt_protocol() {
-  cat <<'EOF'
-
-Pick a protocol for this node (one protocol per VPS is the recommended
-pattern: resource isolation, simpler firewall):
-
-  1) Xray          VLESS+REALITY+Vision (TCP/443, raw/xhttp/ws/grpc transports)
-  2) Hysteria 2    UDP/443, QUIC, Brutal CC, best throughput on lossy links
-  3) AmneziaWG     DPI-resistant WireGuard fork (needs kernel module + DKMS)
-  4) NaiveProxy    Caddy fork with klzgrad/forwardproxy@naive (≥2 GB RAM build)
-  5) Shadowsocks   SS2022 multi-user via xray-core (TCP+UDP/443, no separate bin)
-  6) MTProto       Telegram-only proxy via 9seconds/mtg (Fake-TLS over TCP/443)
-  7) Mieru         Stealth proxy via enfein/mieru (mita server, TCP+UDP)
-  8) TUIC          QUIC proxy via sing-box engine (UDP, TUIC v5, self-signed TLS)
-  9) AnyTLS        TLS proxy via sing-box engine (TCP, password-only, self-signed)
- 10) ShadowTLS     TLS-camouflage wrapper via sing-box (fronts a whitelisted site)
-
-EOF
-  local choice
-  while true; do
-    read -rp "Select [1-10]: " choice </dev/tty || fail "no /dev/tty; pass --engines explicitly"
-    case "$choice" in
-      1) PROTOCOL=xray;        break ;;
-      2) PROTOCOL=hysteria;    break ;;
-      3) PROTOCOL=amneziawg;   break ;;
-      4) PROTOCOL=naive;       break ;;
-      5) PROTOCOL=shadowsocks; break ;;
-      6) PROTOCOL=mtproto;     break ;;
-      7) PROTOCOL=mieru;       break ;;
-      8) PROTOCOL=tuic;        break ;;
-      9) PROTOCOL=anytls;      break ;;
-      10) PROTOCOL=shadowtls;  break ;;
-      *) echo "  → invalid choice '$choice'; enter 1-10." ;;
-    esac
-  done
-  log "Selected protocol: $PROTOCOL"
-}
 
 prompt_payload() {
   cat <<'EOF'
@@ -833,18 +804,9 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
 fi
 
 # The cores come from --engines; --protocol (the older spelling) is optional
-# and adds its core. Nothing named at all: ask, where there is someone to ask.
+# and adds its core. Nothing named at all: the agent alone (25.09), no menu.
 case "$PROTOCOL" in
-  hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
-  "")
-    if [[ -z "$ENGINES_ARG" && "$WITH_SINGBOX" != 1 ]]; then
-      if [[ -e /dev/tty ]]; then
-        prompt_protocol
-      else
-        fail "Pass --engines ${KNOWN_ENGINES// /,} (one or more; no /dev/tty for interactive menu)"
-      fi
-    fi
-    ;;
+  ""|hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
   *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls)" ;;
 esac
 resolve_engines
@@ -856,7 +818,7 @@ case "${ID:-}" in
   ubuntu|debian) ;;
   *) fail "Only Ubuntu/Debian supported here" ;;
 esac
-ok "$PRETTY_NAME · cores: ${ENGINES[*]}"
+ok "$PRETTY_NAME · cores: ${ENGINES[*]:-none, the agent alone}"
 
 # RAM / swap check, same insurance as install-iceslab.sh. Go build itself is
 # light, but the protocol bootstrap scripts (xcaddy compile for Naive, DKMS
@@ -1056,7 +1018,7 @@ else
   log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"
 fi
 
-step "Cores (${ENGINES[*]})"
+step "Cores (${ENGINES[*]:-none})"
 install_engines "$ICESLAB_NODE_DIR/apps/node/scripts"
 step "Firewall (ufw)"
 # Allow SSH FIRST so enabling ufw can't lock us out, then per-protocol ports,
@@ -1572,7 +1534,11 @@ printf '\033[1;32m────────────────────�
 printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m  \033[2m(total %s)\033[0m\n' "$(elapsed_total)"
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
-printf '  Cores        %s\n' "${ENGINES[*]}"
+if [[ ${#ENGINES[@]} -gt 0 ]]; then
+  printf '  Cores        %s\n' "${ENGINES[*]}"
+else
+  printf '  Cores        no cores installed, add them from the node page\n'
+fi
 printf '  Public IP    %s\n' "$PUBLIC_IP"
 printf '  mTLS port    %s/tcp  (panel connects here)\n' "$NODE_PORT"
 printf '  Env file     %s  (chmod 600)\n' "$ENV_FILE"

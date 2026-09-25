@@ -118,8 +118,11 @@ export function intendedEngines(node: {
   if (node.intendedEngines && node.intendedEngines.length > 0) {
     return ENGINE_NAMES.filter((e) => node.intendedEngines!.includes(e));
   }
-  // The row predates the column: its label named the one core it was
-  // installed with. The only place `protocol` still says anything.
+  // An empty list is either a node with no core (25.09), whose label says
+  // `none` (NO_CORE_LABEL in node-intended-engines.ts), or a row that predates
+  // the column, whose label named the one core it was installed with. The only
+  // place `protocol` still says anything.
+  if (node.protocol === 'none') return node.singboxEngine ? ['singbox'] : [];
   const out = new Set<EngineName>([nativeEngineFor(node.protocol)]);
   if (node.singboxEngine) out.add('singbox');
   return ENGINE_NAMES.filter((e) => out.has(e));

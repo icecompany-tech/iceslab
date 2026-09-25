@@ -20,20 +20,21 @@ import { intendedEngines, nativeEngineFor } from './node-engines.js';
  */
 
 export class NodeEnginesError extends Error {
+  /** The body contradicts itself. The one refusal left: an empty set is a
+   *  node (25.09, see resolveNodeEngines). */
+  readonly code = 'INVALID_ENGINES';
   constructor(
     message: string,
     /** The body field the refusal is about. */
     public path: 'intendedEngines' | 'singboxEngine',
-    /**
-     * INVALID_ENGINES: the body contradicts itself. LAST_CORE: the write would
-     * leave the node without a core, and a node without cores is not a node.
-     */
-    readonly code: 'INVALID_ENGINES' | 'LAST_CORE' = 'INVALID_ENGINES',
   ) {
     super(message);
     this.name = 'NodeEnginesError';
   }
 }
+
+/** The label of a node with no core: only the agent runs there. */
+export const NO_CORE_LABEL = 'none';
 
 /** The set in the order of ENGINE_NAMES, each engine once. */
 export function engineSet(engines: readonly EngineName[]): EngineName[] {
@@ -45,10 +46,12 @@ export function engineSet(engines: readonly EngineName[]): EngineName[] {
  * first of the set in the order of ENGINE_NAMES. Deterministic, so the same set
  * always reads the same, and the order the operator ticked the cores in says
  * nothing. A sing-box-only node reads `singbox`, which is an engine rather
- * than a protocol: the label is display, and no install line carries it.
+ * than a protocol: the label is display, and no install line carries it. A
+ * node with no core reads `none` (NO_CORE_LABEL), which is also how the empty
+ * set is told from a row that predates the column (intendedEngines).
  */
 export function nodeProtocolOf(engines: readonly EngineName[]): string {
-  return engineSet(engines)[0] ?? 'xray';
+  return engineSet(engines)[0] ?? NO_CORE_LABEL;
 }
 
 /**
@@ -86,8 +89,10 @@ export interface NodeEngines {
  *                    form, whose `protocol` meant "the core it runs on", the
  *                    same thing the installer still reads `--protocol` as.
  *
- * Throws NodeEnginesError on a contradiction rather than picking a side, and
- * LAST_CORE when the result would be empty.
+ * The set may be empty (owner's decision 25.09): a node is registered with
+ * the agent alone and takes its cores later from its page, a transit of a
+ * cascade may carry sing-box and nothing else. Throws NodeEnginesError on a
+ * contradiction rather than picking a side.
  */
 export function resolveNodeEngines(input: NodeEnginesInput, stored?: NodeEngines): NodeEngines {
   let engines: EngineName[];
@@ -106,13 +111,6 @@ export function resolveNodeEngines(input: NodeEnginesInput, stored?: NodeEngines
       : [nativeEngineFor(input.protocol ?? 'xray')];
     if (input.singboxEngine === true) engines = engineSet([...engines, 'singbox']);
     if (input.singboxEngine === false) engines = engines.filter((e) => e !== 'singbox');
-  }
-  if (engines.length === 0) {
-    throw new NodeEnginesError(
-      'a node keeps at least one core: this would remove its last one',
-      input.intendedEngines !== undefined ? 'intendedEngines' : 'singboxEngine',
-      'LAST_CORE',
-    );
   }
   return { intendedEngines: engines, protocol: nodeProtocolOf(engines), singboxEngine: engines.includes('singbox') };
 }

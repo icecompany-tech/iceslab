@@ -129,10 +129,10 @@ const ProtocolSchema = z.enum([
 
 /**
  * Which engines the node is set up to carry (core-lifecycle.md section 7), a
- * set: the order means nothing. No repeats. Empty passes here on purpose, so
- * that it is refused by name (LAST_CORE) in resolveNodeEngines
- * (node-intended-engines.ts), which also says how it combines with `protocol`
- * and `singboxEngine`.
+ * set: the order means nothing. No repeats. Empty is a node too (25.09): the
+ * agent alone, its cores added later from its page. How it combines with
+ * `protocol` and `singboxEngine` is resolveNodeEngines
+ * (node-intended-engines.ts).
  */
 const IntendedEnginesSchema = z
   .array(z.enum(ENGINE_NAMES))
@@ -171,8 +171,8 @@ export const UpdateNodeSchema = z.object({
   // the enum: an old screen that sends back the label it read gets no 400,
   // and a sing-box-only node's label is `singbox`, which the enum lacks.
   protocol: z.string().max(32).optional(),
-  // Absent = untouched; a list replaces the list. No null, and no empty list
-  // (LAST_CORE): a node carries at least one core.
+  // Absent = untouched; a list replaces the list, the empty one included (a
+  // node with the agent alone). No null.
   intendedEngines: IntendedEnginesSchema.optional(),
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().optional(),

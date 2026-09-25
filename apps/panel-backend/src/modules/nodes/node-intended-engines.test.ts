@@ -97,13 +97,24 @@ describe('resolveNodeEngines', () => {
     expect(resolveNodeEngines({ protocol: 'mieru' }, stored).intendedEngines).toEqual(['xray', 'hysteria']);
   });
 
-  it('refuses a contradiction, and a node left without a core', () => {
+  it('refuses a contradiction', () => {
     expect(refusal(() => resolveNodeEngines({ intendedEngines: ['xray'], singboxEngine: true }))).toBe(
       'INVALID_ENGINES singboxEngine',
     );
-    expect(refusal(() => resolveNodeEngines({ intendedEngines: [] }))).toBe('LAST_CORE intendedEngines');
+  });
+
+  it('takes a node with no core: the agent alone, labelled none', () => {
+    expect(resolveNodeEngines({ intendedEngines: [] })).toEqual({ intendedEngines: [], protocol: 'none', singboxEngine: false });
     const tuic = { intendedEngines: ['singbox' as const], protocol: 'tuic', singboxEngine: true };
-    expect(refusal(() => resolveNodeEngines({ singboxEngine: false }, tuic))).toBe('LAST_CORE singboxEngine');
+    expect(resolveNodeEngines({ singboxEngine: false }, tuic)).toEqual({
+      intendedEngines: [],
+      protocol: 'none',
+      singboxEngine: false,
+    });
+    // And the empty set reads back as empty, not as the row that predates the
+    // column (whose label names its one core).
+    expect(intendedEngines({ intendedEngines: [], protocol: 'none', singboxEngine: false })).toEqual([]);
+    expect(intendedEngines({ intendedEngines: [], protocol: 'hysteria', singboxEngine: false })).toEqual(['hysteria']);
   });
 
   it('reads the old create body the way it always meant', () => {
@@ -166,10 +177,19 @@ describe('POST and PUT /api/nodes with intendedEngines', () => {
     expect(cmd).not.toContain('--protocol');
   });
 
-  it('refuses an empty set by name, and a repeated one', async () => {
+  it('creates a node with no core, labelled none, whose install line names none', async () => {
     const empty = await create({ intendedEngines: [] });
-    expect(empty.statusCode).toBe(400);
-    expect(JSON.parse(empty.body)).toMatchObject({ error: 'LAST_CORE', path: ['intendedEngines'] });
+    expect(empty.statusCode, empty.body).toBe(201);
+    const node = JSON.parse(empty.body);
+    expect(node).toMatchObject({ intendedEngines: [], protocol: 'none', singboxEngine: false });
+    expect(node.bootstrap.command).not.toContain('--engines');
+    expect(node.bootstrap.command).not.toContain('--protocol');
+    // It reads back empty too, on GET and in the list.
+    const got = JSON.parse((await app.inject({ method: 'GET', url: `/api/nodes/${node.id}`, headers: auth() })).body);
+    expect(got).toMatchObject({ intendedEngines: [], protocol: 'none' });
+  });
+
+  it('refuses a repeated set', async () => {
     expect((await create({ intendedEngines: ['xray', 'xray'] })).statusCode).toBe(400);
     // A protocol beside the set is no contradiction any more: it is not heard.
     const beside = await create({ intendedEngines: ['hysteria'], protocol: 'xray' });
@@ -198,15 +218,16 @@ describe('POST and PUT /api/nodes with intendedEngines', () => {
     expect((await put(id, { intendedEngines: null })).statusCode).toBe(400);
   });
 
-  it('refuses to remove the last core: LAST_CORE', async () => {
+  it('PUT may take the last core away, and give one back', async () => {
     const id = JSON.parse((await create({ intendedEngines: ['singbox'] })).body).id as string;
     for (const body of [{ intendedEngines: [] }, { singboxEngine: false }]) {
+      await put(id, { intendedEngines: ['singbox'] });
       const res = await put(id, body);
-      expect(res.statusCode, res.body).toBe(400);
-      expect(JSON.parse(res.body)).toMatchObject({ error: 'LAST_CORE' });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({ intendedEngines: [], protocol: 'none', singboxEngine: false });
     }
-    const row = await prisma.node.findUniqueOrThrow({ where: { id } });
-    expect(row.intendedEngines).toEqual(['singbox']);
+    const back = JSON.parse((await put(id, { intendedEngines: ['hysteria'] })).body);
+    expect(back).toMatchObject({ intendedEngines: ['hysteria'], protocol: 'hysteria' });
   });
 });
 

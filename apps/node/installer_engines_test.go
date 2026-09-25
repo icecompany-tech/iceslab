@@ -89,7 +89,7 @@ func runInstallWith(t *testing.T, withLib bool, protocol, engines string, withSi
 	prog := "set -euo pipefail\nlog() { :; }\nwarn() { echo \"warn: $*\"; }\nfail() { echo \"fail: $*\"; exit 1; }\n" +
 		coresSection(t) + "\n" +
 		"ICESLAB_NODE_DIR='" + root + "'\nICESLAB_NODE_REF=v0.1.9\nENV_FILE='" + env + "'\nHY_DOMAIN=''\nHY_EMAIL=''\n" +
-		"XR_PRIVATE_KEY=''\nXR_SHORT_IDS=''\nXR_SERVER_NAMES='www.cloudflare.com'\nXR_DEST='www.cloudflare.com:443'\nXR_PORT=443\n" +
+		"XR_PRIVATE_KEY=''\nXR_SHORT_IDS=''\nXR_SERVER_NAMES='www.cloudflare.com'\nXR_DEST='www.cloudflare.com:443'\nXR_PORT=443\nENGINES_GIVEN=0\n" +
 		flags + "\n" +
 		"PROTOCOL='" + protocol + "'\nENGINES_ARG='" + engines + "'\nWITH_SINGBOX=" + ws + "\n" +
 		"resolve_engines\ninstall_engines \"$ICESLAB_NODE_DIR/apps/node/scripts\"\ncore_flags_env\necho \"ENGINES=${ENGINES[*]}\"\n"
@@ -191,14 +191,36 @@ func TestProtocolAloneIsTheSetOfItsCore(t *testing.T) {
 	}
 }
 
+// 25.09: a node may run no core at all. Nothing named installs the agent
+// alone: no bootstrap runs, the env holds what this install wrote and nothing
+// of a core.
+func TestNothingNamedInstallsTheAgentAlone(t *testing.T) {
+	for _, withLib := range []bool{true, false} {
+		r := runInstallWith(t, withLib, "", "", false, "HY_DOMAIN='hy.example.com'\nHY_EMAIL='ops@example.com'")
+		if r.err != nil {
+			t.Fatalf("withLib=%v: %v\n%s", withLib, r.err, r.out)
+		}
+		if r.calls != "" {
+			t.Errorf("withLib=%v: a bootstrap ran:\n%s", withLib, r.calls)
+		}
+		if r.env != "NODE_PAYLOAD=x\n" {
+			t.Errorf("withLib=%v: the env got more than the install's own:\n%s", withLib, r.env)
+		}
+		if !strings.Contains(r.out, "ENGINES=\n") {
+			t.Errorf("withLib=%v: the set is not empty:\n%s", withLib, r.out)
+		}
+	}
+}
+
 func TestInstallerRefusesAnUnusableSet(t *testing.T) {
-	for _, c := range []struct{ protocol, engines, says string }{
-		{"xray", "xray,xray", "named twice"},
-		{"xray", "xray,wireguard", "unknown core 'wireguard'"},
-		{"", ",", "names no core"},
-		{"", "", "no core named"},
+	for _, c := range []struct{ protocol, engines, flags, says string }{
+		{"xray", "xray,xray", "", "named twice"},
+		{"xray", "xray,wireguard", "", "unknown core 'wireguard'"},
+		{"", ",", "", "names no core"},
+		// --engines '' names a list and puts nothing in it: a typo, not a choice.
+		{"", "", "ENGINES_GIVEN=1", "names no core"},
 	} {
-		r := runInstall(t, true, c.protocol, c.engines, false)
+		r := runInstallWith(t, true, c.protocol, c.engines, false, c.flags)
 		if r.err == nil || !strings.Contains(r.out, c.says) {
 			t.Errorf("%s/%s: want a refusal saying %q, got %v\n%s", c.protocol, c.engines, c.says, r.err, r.out)
 		}

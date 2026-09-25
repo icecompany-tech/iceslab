@@ -107,6 +107,19 @@ describe('appendHardeningFlags (install-command generation)', () => {
 });
 
 describe('enginesFlag (the cores of Node.intendedEngines)', () => {
+  it('says nothing for no core: the installer puts the agent alone', () => {
+    expect(enginesFlag([])).toBeNull();
+    const cmd = buildInstallCommand({ panelUrl: 'https://p', token: 't', engines: [], panelIp: '198.51.100.7', acmeEmail: '' });
+    expect(cmd).toBe(
+      [
+        'bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \\',
+        '  --panel-url https://p \\',
+        '  --bootstrap t \\',
+        '  --panel-ip 198.51.100.7',
+      ].join('\n'),
+    );
+  });
+
   it('names every core with --engines, one core too', () => {
     expect(enginesFlag(['xray'])).toBe('--engines xray');
     expect(enginesFlag(['hysteria', 'singbox'])).toBe('--engines hysteria,singbox');
@@ -137,7 +150,7 @@ describe('buildInstallCommand: no # inside the command, whatever the placeholder
   for (const panelIp of [null, '198.51.100.7'])
     for (const acmeEmail of ['', 'ops@example.com'])
       for (const hardening of [null, full])
-        for (const engines of [['xray'], ['hysteria'], ['singbox', 'hysteria', 'xray']] as EngineName[][])
+        for (const engines of [[], ['xray'], ['hysteria'], ['singbox', 'hysteria', 'xray']] as EngineName[][])
           cases.push({ panelIp, acmeEmail, hardening, engines });
 
   it.each(cases)('%o', (c) => {

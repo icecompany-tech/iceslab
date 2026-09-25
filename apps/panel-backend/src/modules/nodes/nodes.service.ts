@@ -233,10 +233,11 @@ export function appendHardeningFlags(lines: string[], hardening?: HardeningInput
  * (25.09: a node has no main core, the installer takes the set). The installer
  * still reads --protocol from the commands an older panel printed.
  *
- * In the order of ENGINE_NAMES, so one set is always one line.
+ * In the order of ENGINE_NAMES, so one set is always one line. null for the
+ * empty set: no flag, and the installer puts the agent alone.
  */
-export function enginesFlag(engines: readonly EngineName[]): string {
-  return `--engines ${engineSet(engines.length > 0 ? engines : ['xray']).join(',')}`;
+export function enginesFlag(engines: readonly EngineName[]): string | null {
+  return engines.length > 0 ? `--engines ${engineSet(engines).join(',')}` : null;
 }
 
 export interface InstallCommandInput {
@@ -264,7 +265,9 @@ export interface InstallCommandInput {
  */
 export function buildInstallCommand(input: InstallCommandInput): string {
   const notes: string[] = [];
-  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`, enginesFlag(input.engines)];
+  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`];
+  const engines = enginesFlag(input.engines);
+  if (engines) flags.push(engines);
 
   // Slice S7: the panel's egress IP locks the agent's UFW to it. When every
   // probe failed (offline egress?) the operator substitutes it by hand.

@@ -38,7 +38,8 @@ export interface PublicNodeDto {
   address: string;
   /**
    * A label, derived from `intendedEngines` on every write (25.09): xray when
-   * the node has it, else the first of its cores by ENGINE_NAMES. Not chosen,
+   * the node has it, else the first of its cores by ENGINE_NAMES, `none` for a
+   * node with no core (only the agent; readers must take it). Not chosen,
    * not a capability, and not taken back on create or update (except a create
    * in the old form, which names no set). Kept for old screens and filters.
    */
@@ -166,8 +167,8 @@ export interface PublicNodeDto {
   /**
    * The cores the cascades this node stands in need from it, and which
    * cascades (disabled ones included, `enabled: false`). Empty outside every
-   * cascade. One of the three facts that keep a core from being removed, beside
-   * `neededBy` on the core row and the node's last core (a node keeps one).
+   * cascade. One of the two facts that keep a core from being removed, beside
+   * `neededBy` on the core row (a node may end with no core, 25.09).
    * Present on the list and on GET by id.
    */
   cascadeNeedsEngines?: CascadeEngineNeed[];
