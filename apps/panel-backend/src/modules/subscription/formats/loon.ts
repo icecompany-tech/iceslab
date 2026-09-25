@@ -45,6 +45,9 @@ export function buildLoonConf(endpoints: SubscriptionEndpoint[]): string {
         if (tls) p.push('over-tls=true', `sni=${e.sni}`);
         lines.push(p.join(','));
       } else if (sub === 'vmess') {
+        // ⚠ The cipher `auto` is NOT verified: the docs' example shows
+        // `aes-128-gcm` and does not list the accepted values. Kept until a
+        // live import in Loon on iOS says whether `auto` is read (ARCH, 25.09).
         const p = [`${name} = VMess,${e.host},${e.port},auto,"${e.uuid}"`, `transport=${net}`];
         if (tls) p.push('over-tls=true', `sni=${e.sni}`);
         lines.push(p.join(','));
