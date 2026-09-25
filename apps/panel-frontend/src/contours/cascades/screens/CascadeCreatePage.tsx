@@ -67,7 +67,7 @@ import {
   WELL,
 } from '@/contours/cascades/lib/colors';
 import {
-  LINK_PROTOCOL_VALUES,
+  entryProtocolDefault,
   MAX_LINKS,
   MAX_POSITIONS,
   ROLE_TONE,
@@ -192,18 +192,15 @@ export function CascadeCreatePage() {
 
   /**
    * Picking the first node of the entry pool also sets the entry protocol,
-   * because the entry has to be dialled on a core that node actually runs. It
-   * stays editable: a node with the sing-box engine serves more than its own
-   * protocol.
+   * because the entry has to be dialled on a core that node actually runs
+   * (entryProtocolDefault, by the node's cores, not its label). It stays
+   * editable.
    */
   function setPoolNodes(idx: number, ids: string[]) {
     const first = ids.find(Boolean);
     const node = first ? nodeById.get(first) : null;
-    const proto =
-      idx === 0 && node && LINK_PROTOCOL_VALUES.includes(node.protocol)
-        ? (node.protocol as CascadeProtocol)
-        : null;
-    setPool(idx, { nodeIds: ids, ...(proto ? { entryProtocol: proto } : {}) });
+    const def = idx === 0 && node ? entryProtocolDefault(node) : null;
+    setPool(idx, { nodeIds: ids, ...(def?.kind === 'protocol' ? { entryProtocol: def.protocol } : {}) });
   }
 
   function addPosition() {
@@ -273,6 +270,9 @@ export function CascadeCreatePage() {
   // Та же первая стена, что на правке: цепь несёт только трафик xray, и
   // создавать каскад, который не повезёт ни одного клиента, незачем.
   const entryChain = entryChainFacts(pools[0]?.entryProtocol);
+  // Первая нода входа без ядра для входа: говорится у селектора входа.
+  const entryHead = nodeById.get(pools[0]?.nodeIds.find(Boolean) ?? '');
+  const entryNoCore = entryHead ? entryProtocolDefault(entryHead).kind === 'none' : false;
 
   const valid =
     trimmedName.length > 0 &&
@@ -540,7 +540,7 @@ export function CascadeCreatePage() {
                 onNodes={(ids) => setPoolNodes(i, ids)}
                 entryProtocol={i === 0 ? pool.entryProtocol : null}
                 onEntryProtocol={(v) => setPool(i, { entryProtocol: v })}
-                entryNote={i === 0 ? <EntryChainNote facts={entryChain} /> : undefined}
+                entryNote={i === 0 ? <EntryChainNote facts={entryChain} noEntryCore={entryNoCore} /> : undefined}
                 canUp={i > 1}
                 canDown={i > 0 && i < pools.length - 1}
                 canDelete={i > 0}

@@ -28,8 +28,7 @@ import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { defaults, nodeEnginesPut, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
-import { protocolDerived } from '@/lib/domain/nodeFields';
-import { nodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
+import { nodeEnginesRefusal, type NodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 import { awgPayload } from '@/lib/domain/awg';
@@ -176,13 +175,12 @@ export function useNodeEditForm() {
   const enginesKnown = node?.intendedEngines !== undefined;
   const enginesBody = nodeEnginesPut(
     enginesKnown,
-    protocolDerived(fleetQuery.data),
     node?.intendedEngines,
     form.values.engines,
     form.values.protocol,
   );
-  /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
-  const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
+  /** Отказ 400 INVALID_ENGINES или LAST_CORE: под чипами. */
+  const [enginesRefusal, setEnginesRefusal] = useState<NodeEnginesRefusal | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -203,8 +201,8 @@ export function useNodeEditForm() {
         // знает (ключ пришёл в ответе про ноду).
         ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
         // Ядра ноды и метка: у сервера старше поля прежний `protocol` из
-        // селекта; иначе только изменённый список, с меткой в паре, пока
-        // сервер её сверяет (nodeEnginesPut).
+        // селекта; иначе только изменённый список с меткой в паре
+        // (nodeEnginesPut).
         ...enginesBody,
       });
     },
@@ -231,9 +229,14 @@ export function useNodeEditForm() {
       // Строки встают в секции «Ядра», рядом с выбором, который их вызвал.
       const coreLines = coreVersionRefusal(err);
       setCoreRefusal(coreLines);
-      // Ядра противоречат протоколу: фраза сервера под чипами.
+      // Отказ по ядрам (INVALID_ENGINES, LAST_CORE): фраза сервера с кодом и
+      // полем под чипами. Чипов нет (сервер старше поля): тем же тостом.
       const enginesBad = nodeEnginesRefusal(err);
-      setEnginesRefusal(enginesBad ? enginesBad.message || t('nodes.form.enginesRefused') : null);
+      setEnginesRefusal(enginesBad);
+      if (enginesBad && !enginesKnown) {
+        notifications.show({ color: 'red', title: t('common.saveError'), message: t('nodes.form.enginesRefusedToast', { ...enginesBad }) });
+        return;
+      }
       if (refusal || coreLines || enginesBad) return;
       notifications.show({
         color: 'red',

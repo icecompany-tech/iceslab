@@ -21,12 +21,13 @@ import {
   nodeEnginesRefusal,
   pickFreePort,
   type FormValues,
+  type NodeEnginesRefusal,
   type Registered,
 } from '@/contours/nodes/lib/nodeCreateForm';
 import { coreVersionRefusal } from '@/lib/domain/coreVersions';
 import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
-import { nodeFieldKnown, protocolDerived } from '@/lib/domain/nodeFields';
+import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 import { installIntentLabel, intendedEnginesWords } from '@/lib/domain/engines';
 
 /**
@@ -148,8 +149,8 @@ export function useNodeCreateForm() {
    * не слал ключ, который сервер отвергнет.
    */
   const enginesKnown = nodeFieldKnown(fleetQuery.data, 'intendedEngines');
-  /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
-  const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
+  /** Отказ 400 INVALID_ENGINES или LAST_CORE: под чипами. */
+  const [enginesRefusal, setEnginesRefusal] = useState<NodeEnginesRefusal | null>(null);
   // Какие ядра встанут на ноду: чипы, или то же из старой формы.
   const engines = enginesKnown
     ? form.values.engines
@@ -236,9 +237,9 @@ export function useNodeCreateForm() {
           form.values.consumptionMultiplier === '' ? 1 : Number(form.values.consumptionMultiplier),
         domain: form.values.domain.trim() || null,
         hardening: buildHardening(form.values),
-        // Ядра: intendedEngines (с меткой в паре, пока сервер её сверяет), или
-        // прежние поля у сервера старше контракта.
-        ...enginesPayload(enginesKnown, protocolDerived(fleetQuery.data), engines, form.values.protocol),
+        // Ядра: intendedEngines с меткой в паре, или прежние поля у сервера
+        // старше контракта.
+        ...enginesPayload(enginesKnown, engines, form.values.protocol),
         // Только выбранное оператором и только если сервер поле знает.
         ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
         // Версии ядер: только выбранные компоненты; ничего не выбрано = ключа
@@ -296,9 +297,10 @@ export function useNodeCreateForm() {
       // на шаге параметров, туда же возвращаем оператора.
       const coreLines = coreVersionRefusal(err);
       setCoreRefusal(coreLines);
-      // Ядра противоречат протоколу: фраза сервера под чипами, туда же назад.
+      // Отказ по ядрам: под чипами с кодом и полем, туда же назад. Чипов нет
+      // (сервер старше поля): фраза сервера в тосте.
       const enginesBad = nodeEnginesRefusal(err);
-      setEnginesRefusal(enginesBad ? enginesBad.message || t('nodes.form.enginesRefused') : null);
+      setEnginesRefusal(enginesBad);
       if (coreLines || enginesBad) setStep(0);
       notifications.show({
         color: 'red',
@@ -306,7 +308,9 @@ export function useNodeCreateForm() {
         message: coreLines
           ? t('nodeEdit.coreVer.refused')
           : enginesBad
-            ? t('nodes.form.enginesRefused')
+            ? enginesKnown
+              ? t('nodes.form.enginesRefused')
+              : t('nodes.form.enginesRefusedToast', { ...enginesBad })
             : apiErrorMessage(err),
       });
     } finally {

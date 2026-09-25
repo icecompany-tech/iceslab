@@ -27,6 +27,7 @@ import {
 import {
   ROLE_TONE,
   chainEntryList,
+  CHAIN_ENTRY_PROTOCOLS,
   entryNoteKind,
   isKnownProtocol,
   legParamFacts,
@@ -2032,9 +2033,24 @@ export function EntryPolicyRow({
  * только краска: отказ красный, граница фазы спокойная, потому что это не
  * ошибка оператора, а свойство протокола, о котором он должен знать заранее.
  */
-export function EntryChainNote({ facts }: { facts: EntryChainFacts | null }) {
+export function EntryChainNote({
+  facts,
+  noEntryCore = false,
+}: {
+  facts: EntryChainFacts | null;
+  /** Первая нода входа не несёт ядра ни для одного входа (entryProtocolDefault
+   *  сказал none): говорится первым, это причина, а не следствие. */
+  noEntryCore?: boolean;
+}) {
   const { t } = useTranslation();
   const kind = entryNoteKind(facts);
+  if (noEntryCore) {
+    return (
+      <Note tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+        {t('cascadeCreate.entryNoCore', { supported: CHAIN_ENTRY_PROTOCOLS.join(t('cascadeCreate.entryNoCoreOr')) })}
+      </Note>
+    );
+  }
   if (!facts || !kind) return null;
   if (kind === 'notCarried') {
     return (

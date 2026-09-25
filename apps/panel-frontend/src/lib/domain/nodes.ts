@@ -15,6 +15,14 @@ export type NodeProtocol =
   | 'anytls'
   | 'shadowtls';
 
+/**
+ * `Node.protocol` как его отдаёт сервер с 93ad747: метка, выведенная из ядер
+ * (xray, если есть, иначе первое по ENGINE_NAMES). У ноды только с sing-box
+ * это `singbox`, которого среди протоколов установки нет. Ничего по метке не
+ * решается: ядра ноды это `intendedEngines`.
+ */
+export type NodeLabel = NodeProtocol | 'singbox';
+
 // G (Zashchita / hardening) - probe-resistance toggles persisted to
 // nodes.hardening. Each maps 1:1 to an install-iceslab-node.sh flag. NULL on a
 // node = no hardening (install command is unchanged).
@@ -66,7 +74,7 @@ export interface Node {
   id: string;
   name: string;
   address: string;
-  protocol: NodeProtocol;
+  protocol: NodeLabel;
   countryCode: string | null;
   status: string;
   lastStatusChange: string | null;
@@ -281,9 +289,8 @@ export interface NodesListResponse {
 export interface CreateNodeInput {
   name: string;
   address: string;
-  /** Метка установки. Не уходит только серверу, который выводит её сам
-   *  (protocolDerived); остальным обязательна. */
-  protocol?: NodeProtocol;
+  /** Метка установки, в паре со списком ядер (engineListForLabel). */
+  protocol: NodeProtocol;
   countryCode?: string | null;
   consumptionMultiplier?: number;
   regionId?: string | null;

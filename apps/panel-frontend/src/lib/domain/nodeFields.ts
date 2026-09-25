@@ -28,21 +28,6 @@ export function nodeFieldKnown(
 }
 
 /**
- * Имя в `fields` нод, которым сервер скажет «метку `protocol` вывожу сам, в
- * теле create/PUT она игнорируется» (работа BACK 25.09, понятия основного ядра
- * больше нет). Имя назовёт BACK; пока его нет, здесь `null`, и экран шлёт
- * метку в паре со списком ядер (engineListForLabel): это принимают и старый
- * сервер, и новый.
- */
-export const PROTOCOL_DERIVED_FIELD: string | null = null;
-
-/** Выводит ли сервер метку сам: только по слову сервера в `fields`, по нодам
- *  это не узнать (флаг про запись, а не ключ ответа). */
-export function protocolDerived(list: { fields?: unknown } | undefined, name: string | null = PROTOCOL_DERIVED_FIELD): boolean {
-  return name !== null && listFieldKnown(list?.fields, [], name);
-}
-
-/**
  * То же правило для любого списка с конвертом `fields` (у каскадов с Ф9.3,
  * CASCADE_DTO_FIELDS): сперва слово сервера, по элементам только у сервера
  * старше поля. Ответа ещё нет: не знает.

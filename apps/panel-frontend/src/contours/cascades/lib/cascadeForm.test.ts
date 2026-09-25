@@ -29,6 +29,7 @@ import {
   withEntryConfirm,
 } from '@/contours/cascades/lib/cascadeForm';
 import {
+  entryProtocolDefault,
   isOneLegCascade,
   legUnderlay,
   refusedUnderlay,
@@ -935,5 +936,30 @@ describe('подложка ноги (фаза 8): underlayFacts, legUnderlay, re
     for (const e of [null, 'x', new Error('x'), res({ error: 'LINK_PORT_IN_USE' }), res({ error: 'LINK_UNDERLAY_NOT_ON_NODE' }, 400)]) {
       expect(refusedUnderlay(e)).toBeNull();
     }
+  });
+});
+
+describe('entryProtocolDefault: вход по ядрам ноды, а не по метке (25.09)', () => {
+  it('нода с xray: xray', () => {
+    expect(entryProtocolDefault({ intendedEngines: ['xray', 'singbox'], protocol: 'xray' })).toEqual({
+      kind: 'protocol',
+      protocol: 'xray',
+    });
+  });
+
+  it('hysteria + naive без xray: hysteria', () => {
+    expect(entryProtocolDefault({ intendedEngines: ['hysteria', 'naive'], protocol: 'hysteria' })).toEqual({
+      kind: 'protocol',
+      protocol: 'hysteria',
+    });
+  });
+
+  it('только sing-box (метка singbox): умолчания нет, нода входом быть не может', () => {
+    expect(entryProtocolDefault({ intendedEngines: ['singbox'], protocol: 'singbox' })).toEqual({ kind: 'none' });
+  });
+
+  it('сервер старше intendedEngines: прежнее правило по метке, иначе сказать нечего', () => {
+    expect(entryProtocolDefault({ protocol: 'hysteria' })).toEqual({ kind: 'protocol', protocol: 'hysteria' });
+    expect(entryProtocolDefault({ protocol: 'tuic' })).toEqual({ kind: 'unknown' });
   });
 });

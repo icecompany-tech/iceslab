@@ -1,5 +1,5 @@
 import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
-import type { Node, NodeProtocol } from '@/lib/domain/nodes';
+import type { Node, NodeLabel, NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 import { engineListForLabel, sameEngines } from '@/contours/nodes/lib/nodeCreateForm';
@@ -44,13 +44,12 @@ export function enginesPatch(stored: EngineName[] | undefined, edited: EngineNam
  *
  *   сервер без `intendedEngines`   `protocol` из прежнего селекта, как было;
  *   ядра не правились              ничего: отсутствие ключа = нет правки;
- *   правились, метку сервер ещё    список и метка в паре (engineListForLabel),
- *   сверяет                        иначе 400 INVALID_ENGINES на `protocol`;
- *   сервер выводит метку сам       только список.
+ *   правились                      список и метка в паре (engineListForLabel):
+ *                                  сервер, что метку сверяет, иначе ответил бы
+ *                                  400 INVALID_ENGINES, новый её игнорирует.
  */
 export function nodeEnginesPut(
   known: boolean,
-  protocolDerived: boolean,
   stored: EngineName[] | undefined,
   edited: EngineName[],
   protocol: NodeProtocol,
@@ -58,9 +57,20 @@ export function nodeEnginesPut(
   if (!known) return { protocol };
   const diff = enginesPatch(stored, edited);
   if (!diff) return {};
-  if (protocolDerived) return { intendedEngines: diff };
   const pair = engineListForLabel(diff, protocol);
   return { intendedEngines: pair.engines, protocol: pair.protocol };
+}
+
+/**
+ * Метка ноды как значение формы. Сервер 93ad747 выводит `singbox` у ноды
+ * только с sing-box; протокола установки с таким именем нет, и в форме он
+ * читается как tuic, первый протокол sing-box. Уходит эта метка только в
+ * паре со списком ядер (engineListForLabel), а новый сервер метку на записи
+ * не слушает; старый `singbox` не отдаёт вовсе.
+ */
+export function formProtocolOf(label: NodeLabel | undefined): NodeProtocol {
+  if (label === undefined) return 'xray';
+  return label === 'singbox' ? 'tuic' : label;
 }
 
 export function splitAddress(address: string): { host: string; port: number } {
@@ -79,7 +89,7 @@ export function defaults(node: Node | null): FormValues {
     name: node?.name ?? '',
     host,
     port,
-    protocol: node?.protocol ?? 'xray',
+    protocol: formProtocolOf(node?.protocol),
     countryCode: node?.countryCode ?? '',
     regionId: node?.regionId ?? '',
     consumptionMultiplier: node ? Number(node.consumptionMultiplier) : 1,

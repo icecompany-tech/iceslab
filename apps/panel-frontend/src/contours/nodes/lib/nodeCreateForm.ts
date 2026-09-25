@@ -118,21 +118,17 @@ export function engineListForLabel(
  *
  *   сервер без `intendedEngines`   прежние `protocol` и `singboxEngine` (новый
  *                                  ключ он отверг бы);
- *   сервер с полем, метку ещё      список и метка в паре (engineListForLabel);
- *   сверяет
- *   сервер выводит метку сам       только список: `protocol` он игнорирует, и
- *   (`protocolDerived`)            слать выбор, которого на экране нет, незачем.
+ *   сервер с полем                 список и метка в паре (engineListForLabel).
+ *                                  Сервер, что метку ещё сверяет, её проверит;
+ *                                  новый при списке её не слушает (решение
+ *                                  ARCH 25.09: признака «выводит сам» нет,
+ *                                  пара годится обоим).
  */
 export function enginesPayload(
   known: boolean,
-  protocolDerived: boolean,
   engines: readonly EngineName[],
   protocol: NodeProtocol,
-):
-  | { intendedEngines: EngineName[] }
-  | { intendedEngines: EngineName[]; protocol: NodeProtocol }
-  | { protocol: NodeProtocol; singboxEngine: boolean } {
-  if (known && protocolDerived) return { intendedEngines: [...engines] };
+): { intendedEngines: EngineName[]; protocol: NodeProtocol } | { protocol: NodeProtocol; singboxEngine: boolean } {
   if (known) {
     const pair = engineListForLabel(engines, protocol);
     return { intendedEngines: pair.engines, protocol: pair.protocol };
@@ -140,21 +136,28 @@ export function enginesPayload(
   return { protocol, singboxEngine: engines.includes('singbox') && SINGBOX_ENGINE_CAPABLE.includes(protocol) };
 }
 
+/** Отказ сервера по ядрам ноды: код, поле тела и фраза сервера. */
+export interface NodeEnginesRefusal {
+  /** INVALID_ENGINES: тело противоречит себе. LAST_CORE (93ad747): запись
+   *  оставила бы ноду без ядер. */
+  code: 'INVALID_ENGINES' | 'LAST_CORE';
+  field: 'intendedEngines' | 'protocol' | 'singboxEngine';
+  message: string;
+}
+
 /**
- * The 400 INVALID_ENGINES: the field it names and the server's sentence, or
- * null for any other error. The input is checked first.
+ * The 400 INVALID_ENGINES or LAST_CORE: the code, the field it names and the
+ * server's sentence, or null for any other error. The input is checked first.
  */
-export function nodeEnginesRefusal(
-  err: unknown,
-): { field: 'intendedEngines' | 'protocol' | 'singboxEngine'; message: string } | null {
+export function nodeEnginesRefusal(err: unknown): NodeEnginesRefusal | null {
   if (!err || typeof err !== 'object') return null;
   const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
   if (!res || res.status !== 400 || !res.data || typeof res.data !== 'object') return null;
   const d = res.data as { error?: unknown; message?: unknown; path?: unknown };
-  if (d.error !== 'INVALID_ENGINES') return null;
+  if (d.error !== 'INVALID_ENGINES' && d.error !== 'LAST_CORE') return null;
   const field = Array.isArray(d.path) ? d.path[0] : undefined;
   if (field !== 'intendedEngines' && field !== 'protocol' && field !== 'singboxEngine') return null;
-  return { field, message: typeof d.message === 'string' ? d.message : '' };
+  return { code: d.error, field, message: typeof d.message === 'string' ? d.message : '' };
 }
 
 /**

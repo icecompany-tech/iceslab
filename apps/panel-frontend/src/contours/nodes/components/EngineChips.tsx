@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ENGINE_NAMES, type EngineName } from '@iceslab/shared';
 import { engineAccent } from '@/lib/ui/protocolAccent';
-import { toggleEngine } from '@/contours/nodes/lib/nodeCreateForm';
+import { toggleEngine, type NodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { DISPLAY, FAINT, HAIRLINE, MIST, MONO, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 
 const ENGINE_LABEL: Record<EngineName, string> = {
@@ -32,8 +32,9 @@ export function EngineChips({
 }: {
   engines: EngineName[];
   onChange: (next: EngineName[]) => void;
-  /** The server's INVALID_ENGINES sentence, under the chips. */
-  error?: string | null;
+  /** The server's INVALID_ENGINES or LAST_CORE refusal, under the chips: its
+   *  sentence, then the code and the field it names. */
+  error?: NodeEnginesRefusal | null;
 }) {
   const { t } = useTranslation();
 
@@ -83,7 +84,17 @@ export function EngineChips({
       <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
         {t('nodes.form.enginesHint')}
       </Text>
-      {error && <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED }}>{error}</Text>}
+      {error && (
+        <Stack gap={2}>
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED }}>
+            {error.code === 'LAST_CORE' ? t('nodes.form.enginesLastCoreRefused') : t('nodes.form.enginesRefusedLine')}
+            {error.message ? ` ${error.message}` : ''}
+          </Text>
+          <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '14px', color: FAINT }}>
+            {error.code} · {error.field}
+          </Text>
+        </Stack>
+      )}
     </Stack>
   );
 }

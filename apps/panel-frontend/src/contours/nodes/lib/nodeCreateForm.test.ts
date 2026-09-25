@@ -11,9 +11,8 @@ import {
   toggleEngine,
   wizardCoreComponents,
 } from '@/contours/nodes/lib/nodeCreateForm';
-import { enginesPatch, nodeEnginesPut } from '@/contours/nodes/lib/nodeEditForm';
+import { enginesPatch, formProtocolOf, nodeEnginesPut } from '@/contours/nodes/lib/nodeEditForm';
 import { intendedEnginesWords, nodeIntentWords } from '@/lib/domain/engines';
-import { protocolDerived } from '@/lib/domain/nodeFields';
 
 describe('wizardCoreComponents: ядра выбранных движков первыми', () => {
   it('hysteria: hysteria сверху, остальные под «остальные ядра»; строк столько, сколько компонентов в манифесте', () => {
@@ -74,26 +73,16 @@ describe('движки ноды: множество без основного (2
     expect(engineListForLabel(['singbox'], 'xray')).toEqual({ engines: ['singbox'], protocol: 'tuic' });
   });
 
-  it('тело создания: метка в паре, пока сервер её сверяет; без метки, когда выводит сам; старый сервер прежние поля', () => {
-    expect(enginesPayload(true, false, ['hysteria', 'xray'], 'xray')).toEqual({
+  it('тело создания: список и метка в паре; старый сервер прежние поля', () => {
+    expect(enginesPayload(true, ['hysteria', 'xray'], 'xray')).toEqual({
       intendedEngines: ['xray', 'hysteria'],
       protocol: 'xray',
     });
-    const derived = enginesPayload(true, true, ['hysteria', 'xray'], 'xray');
-    expect(derived).toEqual({ intendedEngines: ['hysteria', 'xray'] });
-    expect('protocol' in derived).toBe(false);
-    expect(enginesPayload(false, false, ['xray', 'singbox'], 'xray')).toEqual({ protocol: 'xray', singboxEngine: true });
-    expect(enginesPayload(false, false, ['amneziawg', 'singbox'], 'amneziawg')).toEqual({
+    expect(enginesPayload(false, ['xray', 'singbox'], 'xray')).toEqual({ protocol: 'xray', singboxEngine: true });
+    expect(enginesPayload(false, ['amneziawg', 'singbox'], 'amneziawg')).toEqual({
       protocol: 'amneziawg',
       singboxEngine: false,
     });
-  });
-
-  it('признак «сервер выводит метку сам» только по fields и только по названному имени', () => {
-    expect(protocolDerived({ fields: ['intendedEngines'] })).toBe(false);
-    expect(protocolDerived({ fields: ['protocolDerived'] }, 'protocolDerived')).toBe(true);
-    expect(protocolDerived({ fields: ['intendedEngines'] }, 'protocolDerived')).toBe(false);
-    expect(protocolDerived(undefined, 'protocolDerived')).toBe(false);
   });
 });
 
@@ -103,8 +92,20 @@ describe('nodeEnginesRefusal: 400 INVALID_ENGINES по полю', () => {
   it('поле из path и фраза сервера', () => {
     expect(
       nodeEnginesRefusal(res({ error: 'INVALID_ENGINES', message: 'a sing-box primary needs its protocol', path: ['protocol'] })),
-    ).toEqual({ field: 'protocol', message: 'a sing-box primary needs its protocol' });
+    ).toEqual({ code: 'INVALID_ENGINES', field: 'protocol', message: 'a sing-box primary needs its protocol' });
     expect(nodeEnginesRefusal(res({ error: 'INVALID_ENGINES', path: ['intendedEngines'] }))?.field).toBe('intendedEngines');
+  });
+
+  it('LAST_CORE (93ad747): последнее ядро, по списку или по старому переключателю sing-box', () => {
+    expect(
+      nodeEnginesRefusal(res({ error: 'LAST_CORE', message: 'a node keeps at least one core', path: ['intendedEngines'] })),
+    ).toEqual({ code: 'LAST_CORE', field: 'intendedEngines', message: 'a node keeps at least one core' });
+    expect(nodeEnginesRefusal(res({ error: 'LAST_CORE', path: ['singboxEngine'] }))).toEqual({
+      code: 'LAST_CORE',
+      field: 'singboxEngine',
+      message: '',
+    });
+    expect(nodeEnginesRefusal(res({ error: 'LAST_CORE', path: ['intendedEngines'] }, 409))).toBeNull();
   });
 
   it('мусор и чужие ответы: null', () => {
@@ -149,21 +150,28 @@ describe('enginesPatch: PUT по трём значениям', () => {
 
 describe('nodeEnginesPut: ядра и метка в PUT ноды', () => {
   it('сервер без поля: прежний protocol из селекта', () => {
-    expect(nodeEnginesPut(false, false, undefined, [], 'shadowsocks')).toEqual({ protocol: 'shadowsocks' });
+    expect(nodeEnginesPut(false, undefined, [], 'shadowsocks')).toEqual({ protocol: 'shadowsocks' });
   });
 
   it('ядра не правились (и перестановка не правка): ни списка, ни метки', () => {
-    expect(nodeEnginesPut(true, false, ['xray', 'hysteria'], ['hysteria', 'xray'], 'xray')).toEqual({});
+    expect(nodeEnginesPut(true, ['xray', 'hysteria'], ['hysteria', 'xray'], 'xray')).toEqual({});
   });
 
-  it('правились: метка в паре, пока сервер её сверяет; только список, когда выводит сам', () => {
-    expect(nodeEnginesPut(true, false, ['xray', 'hysteria'], ['hysteria'], 'xray')).toEqual({
+  it('метка singbox (нода только с sing-box) в форме читается как tuic; прочие как есть', () => {
+    expect(formProtocolOf('singbox')).toBe('tuic');
+    expect(formProtocolOf('hysteria')).toBe('hysteria');
+    expect(formProtocolOf(undefined)).toBe('xray');
+    expect(nodeEnginesPut(true, ['singbox', 'xray'], ['singbox'], formProtocolOf('xray'))).toEqual({
+      intendedEngines: ['singbox'],
+      protocol: 'tuic',
+    });
+  });
+
+  it('правились: список и метка в паре', () => {
+    expect(nodeEnginesPut(true, ['xray', 'hysteria'], ['hysteria'], 'xray')).toEqual({
       intendedEngines: ['hysteria'],
       protocol: 'hysteria',
     });
-    const derived = nodeEnginesPut(true, true, ['xray', 'hysteria'], ['hysteria'], 'xray');
-    expect(derived).toEqual({ intendedEngines: ['hysteria'] });
-    expect('protocol' in derived).toBe(false);
   });
 });
 

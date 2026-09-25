@@ -1,6 +1,6 @@
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
 import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
-import { linkCellPair, type EnginePair, type EngineName } from '@/lib/domain/engines';
+import { linkCellPair, nativeEngineOfIntent, type EnginePair, type EngineName } from '@/lib/domain/engines';
 import { DEFAULT_LINK_CONGESTION, DEFAULT_LINK_UNDERLAY, LINK_CONGESTIONS } from '@/lib/domain/cascades';
 import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
@@ -68,6 +68,38 @@ export function protocolOptions(current: string | null): { value: string; label:
  * одного клиента.
  */
 export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS];
+
+/**
+ * Протокол входа по умолчанию, когда оператор выбрал первую ноду входа.
+ *
+ * Раньше брался `node.protocol`, а это с 25.09 выведенная метка: у ноды
+ * только с sing-box она `singbox`, входа с таким именем нет. Теперь первый из
+ * CHAIN_ENTRY_PROTOCOLS, чьё родное ядро среди ядер ноды (intendedEngines):
+ * вход поднимает родное ядро протокола, как считает и сервер
+ * (cascadeNeedsEngines).
+ *
+ *   protocol  умолчание найдено;
+ *   none      ядра ноды известны, и ни одно не поднимает вход: умолчания нет,
+ *             экран говорит, что эта нода входом быть не может;
+ *   unknown   сервер старше `intendedEngines` и метка не протокол ноги:
+ *             умолчания нет и сказать нечего. У такого сервера метка ещё
+ *             выбрана оператором, и прежнее правило по ней остаётся.
+ */
+export type EntryDefault =
+  | { kind: 'protocol'; protocol: CascadeProtocol }
+  | { kind: 'none' }
+  | { kind: 'unknown' };
+
+export function entryProtocolDefault(node: Pick<Node, 'intendedEngines' | 'protocol'>): EntryDefault {
+  const engines = node.intendedEngines;
+  if (engines === undefined) {
+    return LINK_PROTOCOL_VALUES.includes(node.protocol)
+      ? { kind: 'protocol', protocol: node.protocol as CascadeProtocol }
+      : { kind: 'unknown' };
+  }
+  const p = CHAIN_ENTRY_PROTOCOLS.find((x) => engines.includes(nativeEngineOfIntent(x)));
+  return p ? { kind: 'protocol', protocol: p as CascadeProtocol } : { kind: 'none' };
+}
 
 /** Поддержанные входы строкой для текста отказа: имена как на проводе
  *  (`hysteria`, не подпись «hysteria2»), тем же списком, что читает сервер. */

@@ -103,6 +103,8 @@ export const cascades = {
     // time made the line untrue. The supported list comes from
     // CHAIN_ENTRY_PROTOCOLS, the same one the server refusal reads.
     entryNotCarried: 'An entry over {{protocol}} does not reach the chain: a cascade entry serves only {{supported}}.',
+    entryNoCore: 'This node cannot be an entry: it has no core for {{supported}}.',
+    entryNoCoreOr: ' or ',
     // The edge of phase 6, and it belongs where the operator picks the entry:
     // hearing it from a user who "cannot choose a country" is worse.
     entryHy2Auto:
