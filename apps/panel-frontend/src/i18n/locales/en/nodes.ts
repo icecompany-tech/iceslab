@@ -442,6 +442,9 @@
   },
 
   nodeCard: {
+    statusPhrase: {
+      resolverDown: 'the node cannot resolve names',
+    },
     // The policy badge in the list. Short on purpose: this is a card, and the
     // per-core detail lives on the node page. What travels here is only the
     // reason to go and look.

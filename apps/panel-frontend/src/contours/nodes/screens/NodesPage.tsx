@@ -1013,6 +1013,8 @@ export function NodesPage() {
                   // функция: «политики нет» и «политика не работает» слишком
                   // легко спутать, чтобы разбирать их в разметке.
                   policyReach: policyBadgeFacts(n),
+                  // Причина статуса словами сервера, с /api/nodes.
+                  statusMessage: n.lastStatusMessage,
                   protocol: n.protocol,
                   maxUsers: n.maxUsers ?? null,
                   // approxUsers: capacity bar source. Real per-node user

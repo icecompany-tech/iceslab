@@ -31,6 +31,7 @@ import { plainDefaultPort } from '@/contours/profiles/lib/plainSubprotocol';
 import { hostHiddenFacts, listHosts, type Host } from '@/lib/domain/hosts';
 import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
+import { nodeStatusText } from '@/lib/domain/nodeStatusText';
 import {
   engineCoreWord,
   engineListWords,
@@ -565,7 +566,7 @@ function NodeRow({
                   : (intent ?? node.protocol)}
             </Badge>
           </Tooltip>
-          <Tooltip label={node.lastStatusMessage ?? node.status}>
+          <Tooltip label={nodeStatusText(node.lastStatusMessage, t) ?? node.status}>
             <Badge variant="dot" color={statusColor} size="sm">
               {node.status}
             </Badge>

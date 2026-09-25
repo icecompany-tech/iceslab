@@ -35,6 +35,7 @@ import type { ChainFacts } from '@/lib/domain/chainStatus';
 import type { NodeGeoFacts } from '@/lib/domain/geoSets';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
+import { nodeStatusText } from '@/lib/domain/nodeStatusText';
 import { AMBER, CARD, CYAN, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/nodes/lib/colors';
 
 type DashboardNode = DashboardOverview['nodes'][number];
@@ -48,6 +49,8 @@ interface CardNode {
   maxUsers: number | null;
   approxUsers: number;
   lastStatusChange: string | null;
+  /** Причина статуса словами сервера (`lastStatusMessage`), null = нет. */
+  statusMessage?: string | null;
   inboundCount: number;
   todayBytes: number;
   metrics: DashboardNode['metrics'];
@@ -122,6 +125,7 @@ export function NodeCard({
   const accent = statusAccent(node.status);
   const isOffline = node.status === 'offline' || node.status === 'unreachable';
   const isDegraded = node.status === 'degraded';
+  const statusText = nodeStatusText(node.statusMessage, t);
 
   const bgTint = isOffline
     ? `linear-gradient(180deg, ${RED}0D 0%, ${CARD} 60%)`
@@ -264,6 +268,15 @@ export function NodeCard({
             </Menu>
           </Group>
         </Group>
+
+        {/* Причина статуса словами сервера (lastStatusMessage), с переводом
+            известных фраз агента: «нода не резолвит домены» (ca44e5f). У
+            online и выключенной ноды сказать нечего. */}
+        {statusText && node.status !== 'online' && node.status !== 'disabled' && (
+          <Text size="xs" style={{ color: accent, overflowWrap: 'anywhere' }}>
+            {statusText}
+          </Text>
+        )}
 
         {/* Сразу под статусом: по самому статусу отказа не видно, нода с
             отвергнутым конфигом отвечает и числится online, и без этой строки
