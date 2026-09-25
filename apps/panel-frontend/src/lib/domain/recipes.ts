@@ -1,5 +1,8 @@
 import type {
   Recipe as WireRecipe,
+  RecipeHiddenRequest,
+  RecipeHiddenResponse,
+  RecipeImportRequest,
   RecipeRegistryResponse,
   RecipeSource,
   RecipeSourceInput,
@@ -48,24 +51,21 @@ export async function deleteRecipeSource(id: string): Promise<void> {
 }
 
 /*
- * «Свои и скрытые» (контракт ARCH 25.09). Поля ниже BACK кладёт в shared
- * вместе с реестром v2; до его коммита экран описывает их здесь, как
- * необязательные: сервер старше их не отдаёт, и экран тогда молчит.
+ * «Свои и скрытые» (контракт ARCH 25.09, shared с ca94cbb). Типы из
+ * контракта; `hidden` и `saved` здесь необязательны только потому, что
+ * сервер старше ca94cbb их не отдаёт, и экран тогда молчит, а не падает.
  */
 
-/** `sourceId` своего рецепта (сохранённого из импорта). */
-export const RECIPE_SOURCE_MINE = 'mine';
+/** Ответ реестра; `hidden` отсутствует у сервера старше поля. */
+export type RecipeRegistryAnswer = Omit<RecipeRegistryResponse, 'hidden'> & Partial<Pick<RecipeRegistryResponse, 'hidden'>>;
 
-/** Ответ реестра с `hidden`: id, которые оператор скрыл. Скрытые остаются
- *  в `recipes`, прячет их экран. */
-export type RecipeRegistryAnswer = RecipeRegistryResponse & { hidden?: string[] };
-
-/** Ответ импорта с `saved`: что сохранено и заменило ли прежний с тем же id. */
-export type RecipeImportAnswer = RecipeImportResponse & { saved?: { id: string; replaced: boolean } | null };
+/** Ответ импорта; `saved` отсутствует у сервера старше поля. */
+export type RecipeImportAnswer = Omit<RecipeImportResponse, 'saved'> & Partial<Pick<RecipeImportResponse, 'saved'>>;
 
 /** Ad-hoc import: validate recipes from a one-off URL or pasted JSON; `save`
- *  keeps the recipe in the panel as the operator's own. */
-export async function importRecipes(body: { url?: string; json?: string; save?: boolean }): Promise<RecipeImportAnswer> {
+ *  keeps the ONE recipe in the panel as the operator's own (several with
+ *  `save` are refused in words). */
+export async function importRecipes(body: RecipeImportRequest): Promise<RecipeImportAnswer> {
   const { data } = await api.post<RecipeImportAnswer>('/api/recipes/import', body);
   return data;
 }
@@ -87,7 +87,8 @@ export async function deleteMyRecipe(id: string): Promise<void> {
 
 /** Скрытые id полной заменой; ответ это список, который сервер оставил
  *  (лишние и неизвестные id он отбрасывает молча). */
-export async function setHiddenRecipes(ids: string[]): Promise<{ hidden: string[] }> {
-  const { data } = await api.put<{ hidden: string[] }>('/api/recipes/hidden', { ids });
+export async function setHiddenRecipes(ids: string[]): Promise<RecipeHiddenResponse> {
+  const body: RecipeHiddenRequest = { ids };
+  const { data } = await api.put<RecipeHiddenResponse>('/api/recipes/hidden', body);
   return data;
 }

@@ -25,6 +25,7 @@ import {
   RECIPE_ENGINES,
   RECIPE_SCHEMA_VERSION,
   RECIPE_SOURCE_BUILTIN,
+  RECIPE_SOURCE_MINE,
   RECIPE_XRAY_SUBPROTOCOLS,
   TEMPLATE_TYPES,
   XRAY_PLAIN_SUBPROTOCOLS,
@@ -98,6 +99,8 @@ const GUARDED = [
   'RECIPE_ENGINES',
   'RECIPE_XRAY_SUBPROTOCOLS',
   'RECIPE_SOURCE_BUILTIN',
+  // Свои рецепты (ca94cbb). До него экран держал копию в lib/domain/recipes.ts.
+  'RECIPE_SOURCE_MINE',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -158,6 +161,7 @@ describe('копии перечислений контракта', () => {
     expect(RECIPE_ENGINES).toEqual(['native', 'singbox']);
     expect(RECIPE_XRAY_SUBPROTOCOLS).toContain('socks');
     expect(RECIPE_SOURCE_BUILTIN).toBe('builtin');
+    expect(RECIPE_SOURCE_MINE).toBe('mine');
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {

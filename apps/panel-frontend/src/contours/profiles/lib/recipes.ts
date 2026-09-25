@@ -17,14 +17,14 @@
 
 import type { ProtocolName } from '@/lib/domain/protocols';
 import { profileKindKey, type PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
-import { RECIPE_SCHEMA_VERSION, RECIPE_SOURCE_BUILTIN } from '@iceslab/shared';
+import { RECIPE_SCHEMA_VERSION, RECIPE_SOURCE_BUILTIN, RECIPE_SOURCE_MINE } from '@iceslab/shared';
 import snapshot from '@iceslab/shared/recipes.snapshot.json';
-import { RECIPE_SOURCE_MINE } from '@/lib/domain/recipes';
 import type {
   Recipe as WireRecipe,
   RecipeEngine,
   RecipeRandomize,
   RecipeRandomizeKind,
+  RecipeSaved,
   RecipeSnapshot,
   RecipeSourceProblem,
   RecipeSourceStatus,
@@ -348,8 +348,26 @@ export function hiddenAfter(hidden: readonly string[] | undefined, id: string, a
   return action === 'hide' ? [...rest, id] : rest;
 }
 
+/**
+ * Источники, которые ответили, но часть рецептов пропустили (`problems` у
+ * статуса источника, ca94cbb): строка на источник со словами сервера, по
+ * пропуску на строку. Кривые записи не факт и пропускаются.
+ */
+export function registrySkips(resp: { sources?: unknown } | null | undefined): { name: string; problems: string[] }[] {
+  if (!resp || !Array.isArray(resp.sources)) return [];
+  const out: { name: string; problems: string[] }[] = [];
+  for (const s of resp.sources as unknown[]) {
+    if (!s || typeof s !== 'object') continue;
+    const { name, problems } = s as { name?: unknown; problems?: unknown };
+    if (typeof name !== 'string' || !Array.isArray(problems)) continue;
+    const lines = problems.filter((p): p is string => typeof p === 'string' && p !== '');
+    if (lines.length > 0) out.push({ name, problems: lines });
+  }
+  return out;
+}
+
 /** `saved` из ответа импорта как факт, или null. Вход проверяется первым. */
-export function importSaved(saved: unknown): { id: string; replaced: boolean } | null {
+export function importSaved(saved: unknown): RecipeSaved | null {
   if (!saved || typeof saved !== 'object') return null;
   const { id, replaced } = saved as { id?: unknown; replaced?: unknown };
   return typeof id === 'string' && typeof replaced === 'boolean' ? { id, replaced } : null;

@@ -352,7 +352,8 @@ export const profiles = {
     mine: {
       badge: 'мой',
       saveLabel: 'Сохранить в панели',
-      saveHint: 'Рецепт появится на панели рецептов с пометкой «мой»; рецепт с тем же id заменит прежний.',
+      saveHint: 'Выбранный рецепт появится на панели рецептов с пометкой «мой»; рецепт с тем же id заменит прежний.',
+      saveFailed: 'Рецепт применён, но не сохранён',
       saved: 'Рецепт сохранён: {{name}}',
       replaced: 'Заменён: {{name}}',
       deleteTitle: 'Удалить свой рецепт «{{name}}»?',
@@ -391,6 +392,11 @@ export const profiles = {
         unknown: 'Реестр {{name}} не отдал рецепты',
       },
       staleBadge: 'кэш',
+      // Источник ответил, но часть рецептов пропустил (problems, ca94cbb).
+      skipped_one: '{{name}}: пропущен {{count}} рецепт',
+      skipped_few: '{{name}}: пропущено {{count}} рецепта',
+      skipped_many: '{{name}}: пропущено {{count}} рецептов',
+      skipped_other: '{{name}}: пропущено {{count}} рецептов',
       official: 'official',
       community: 'community',
       byAuthor: 'автор: {{author}}',

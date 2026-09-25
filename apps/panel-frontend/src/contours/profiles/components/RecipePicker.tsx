@@ -56,6 +56,7 @@ import {
   recipeTile,
   registryRepo,
   registryProblems,
+  registrySkips,
   type Recipe,
   type RecipeProtocol,
   type RegistryProblem,
@@ -152,6 +153,7 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
   const dupes = duplicateRecipeIds(onTile);
   const stale = registryQuery.data?.stale ?? false;
   const problems = registryProblems(registryQuery.data);
+  const skips = registrySkips(registryQuery.data);
 
   const handlePick = (r: Recipe) => {
     setPicked(r);
@@ -333,6 +335,20 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
         onDelete={confirmDelete}
       />
 
+      {/* Источник ответил, но часть рецептов пропущена: словами сервера,
+          строка на пропуск (ca94cbb, problems у статуса источника). */}
+      {skips.map((s) => (
+        <Stack key={s.name} gap={2}>
+          <Text size="xs" c="dimmed">
+            {t('recipes.registry.skipped', { name: s.name, count: s.problems.length })}
+          </Text>
+          {s.problems.map((line) => (
+            <Text key={line} size="10px" c="dimmed" ff="monospace" style={{ overflowWrap: 'anywhere' }}>
+              {line}
+            </Text>
+          ))}
+        </Stack>
+      ))}
       {dupes.length > 0 && (
         <Text size="xs" c="red">
           {t('recipes.duplicates', { ids: dupes.join(', ') })}
@@ -356,8 +372,8 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 /**
  * Import: paste a link (a GitHub file page, a gist, a raw URL) or the recipe
  * JSON. The backend validates it against the same schema, then the operator
- * picks one to apply. With «Сохранить в панели» (on by default) the server
- * also keeps it as the operator's own, badged «мой» on the rail.
+ * picks one to apply. With «Сохранить в панели» (on by default) the picked
+ * one is also kept as the operator's own, badged «мой» on the rail.
  */
 function RecipeImportModal({
   opened,
@@ -392,25 +408,34 @@ function RecipeImportModal({
 
   // Страница GitHub или gist уходит raw-адресом того же файла (recipeImportUrl).
   const target = recipeImportUrl(url);
-  // «Сохранить в панели» (контракт 25.09): по умолчанию включено, уходит
-  // явно. Сохранённый рецепт приходит в реестре с пометкой «мой».
+  // «Сохранить в панели» (контракт 25.09): по умолчанию включено. Сервер
+  // сохраняет ровно один рецепт и файл с несколькими отвергает (ca94cbb), а
+  // index реестра несёт их 22. Поэтому загрузка идёт без save, а сохраняется
+  // тот рецепт, который оператор выбрал: второй запрос с ним одним.
   const [save, setSave] = useState(true);
+  const [raw, setRaw] = useState<Map<string, unknown>>(new Map());
   const qc = useQueryClient();
+  const saveMutation = useMutation({
+    mutationFn: (wire: unknown) => importRecipes({ json: JSON.stringify(wire), save: true }),
+    onSuccess: (data) => {
+      const saved = importSaved(data.saved);
+      if (!saved) return;
+      const r = data.recipes.map(fromWireRecipe).find((x) => x.id === saved.id);
+      const name = r ? recipeText(r, (k) => i18n.exists(k), t).name : saved.id;
+      notifications.show({
+        color: 'green',
+        message: t(saved.replaced ? 'recipes.mine.replaced' : 'recipes.mine.saved', { name }),
+      });
+      void qc.invalidateQueries({ queryKey: ['recipes', 'registry'] });
+    },
+    onError: (err) =>
+      notifications.show({ color: 'red', title: t('recipes.mine.saveFailed'), message: apiErrorMessage(err) }),
+  });
   const importMutation = useMutation({
-    mutationFn: () =>
-      importRecipes({ ...(target.url ? { url: target.url } : { json: json.trim() }), save }),
+    mutationFn: () => importRecipes(target.url ? { url: target.url } : { json: json.trim() }),
     onSuccess: (data) => {
       const all = data.recipes.map(fromWireRecipe);
-      const saved = importSaved(data.saved);
-      if (saved) {
-        const r = all.find((x) => x.id === saved.id);
-        const name = r ? recipeText(r, (k) => i18n.exists(k), t).name : saved.id;
-        notifications.show({
-          color: 'green',
-          message: t(saved.replaced ? 'recipes.mine.replaced' : 'recipes.mine.saved', { name }),
-        });
-        void qc.invalidateQueries({ queryKey: ['recipes', 'registry'] });
-      }
+      setRaw(new Map(data.recipes.map((w) => [w.id, w] as const)));
       // Only recipes of THIS tile apply here (recipeTile, as on the rail). A
       // protocol match is not enough: a Telegram SOCKS5 recipe is xray too,
       // and on the Xray tile it would turn the vless form into socks.
@@ -512,6 +537,9 @@ function RecipeImportModal({
                 style={{ cursor: 'pointer' }}
                 onClick={() => {
                   onPick(r);
+                  // Сохраняется выбранный, одним рецептом (сервер берёт один).
+                  const wire = raw.get(r.id);
+                  if (save && wire) saveMutation.mutate(wire);
                   close();
                 }}
               >

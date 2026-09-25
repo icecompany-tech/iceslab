@@ -18,6 +18,7 @@ import {
   isCuratedRecipe,
   recipeNotFound,
   registryRecipePath,
+  registrySkips,
   splitHidden,
   recipeRailEmpty,
   recipesOnTile,
@@ -242,6 +243,23 @@ describe('свои и скрытые (контракт 25.09)', () => {
     expect(importSaved({ id: 'x', replaced: false })).toEqual({ id: 'x', replaced: false });
     expect(importSaved({ id: 'x', replaced: true })).toEqual({ id: 'x', replaced: true });
     for (const bad of [null, undefined, 'x', {}, { id: 'x' }, { id: 1, replaced: true }]) expect(importSaved(bad)).toBeNull();
+  });
+
+  it('registrySkips: пропуски источника словами сервера, кривое не факт', () => {
+    const resp = {
+      sources: [
+        { id: 's1', name: 'my-fork', ok: true, problems: ['recipe old: recipe schemaVersion 1 is not read any more', 7] },
+        { id: 's2', name: 'clean', ok: true },
+        { id: 's3', name: 'empty', ok: true, problems: [] },
+        null,
+        { id: 's4', problems: ['x'] },
+      ],
+    };
+    expect(registrySkips(resp)).toEqual([
+      { name: 'my-fork', problems: ['recipe old: recipe schemaVersion 1 is not read any more'] },
+    ]);
+    expect(registrySkips(undefined)).toEqual([]);
+    expect(registrySkips({ sources: 'x' })).toEqual([]);
   });
 
   it('удаление своего: 404 RECIPE_NOT_FOUND это «уже нет», прочее нет', () => {

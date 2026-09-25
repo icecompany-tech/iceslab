@@ -343,7 +343,8 @@ export const profiles = {
     mine: {
       badge: 'mine',
       saveLabel: 'Save in the panel',
-      saveHint: 'The recipe shows on the recipe rail marked «mine»; a recipe with the same id replaces the old one.',
+      saveHint: 'The picked recipe shows on the recipe rail marked «mine»; a recipe with the same id replaces the old one.',
+      saveFailed: 'Recipe applied, not saved',
       saved: 'Recipe saved: {{name}}',
       replaced: 'Replaced: {{name}}',
       deleteTitle: 'Delete your recipe «{{name}}»?',
@@ -376,6 +377,8 @@ export const profiles = {
         unknown: 'Registry {{name}} gave no recipes',
       },
       staleBadge: 'cached',
+      skipped_one: '{{name}}: {{count}} recipe skipped',
+      skipped_other: '{{name}}: {{count}} recipes skipped',
       official: 'official',
       community: 'community',
       byAuthor: 'by {{author}}',
