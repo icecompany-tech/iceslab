@@ -122,20 +122,51 @@ fi
 MIERU_VERSION="${MIERU_VERSION:-$MIERU_PINNED_VERSION}"
 MIERU_VERSION="${MIERU_VERSION#v}"
 
-# `mita version` prints the bare version, "3.37.0".
-version_of() {
-  "$1" version 2>/dev/null | awk 'NR == 1 { v = $1 } END { print v }'
+# ───── What is installed ─────
+#
+# E31, 25.09 on nl-01 (Ubuntu 26.04): dpkg installed mita 3.37.0, mita.service
+# was active, and the smoke test said "installed mita reports 'nothing'". It
+# asked $INSTALL_DIR/mita, /usr/local/bin, and the package puts mita in
+# /usr/bin: the binary asked was never there. So the version is read where the
+# package keeps it, the package database, and `mita version` only confirms.
+
+# Where mita is: wherever the package put it (the agent's env says the same).
+mita_bin() { command -v mita 2>/dev/null || echo "$INSTALL_DIR/mita"; }
+
+# The installed version by dpkg, epoch and Debian revision stripped: "3.37.0".
+# Empty when the package is not installed.
+installed_version() {
+  local v
+  v=$(dpkg-query -W -f='${Version}' mita 2>/dev/null || true)
+  v="${v#*:}"
+  printf '%s' "${v%%-*}"
+}
+
+# What the binary says, the first x.y.z in `mita version`, retried for up to
+# MITA_VERSION_WAIT seconds (10): mita is a client of its own daemon, and right
+# after the package starts mita.service the answer may not be there yet.
+binary_version() {
+  local bin i out
+  bin=$(mita_bin)
+  for ((i = 0; i < ${MITA_VERSION_WAIT:-10}; i++)); do
+    out=$("$bin" version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+    if [[ -n "$out" ]]; then
+      printf '%s' "$out"
+      return 0
+    fi
+    sleep 1
+  done
 }
 
 # ───── 1. Already on the wanted version? ─────
-if [[ -x "$INSTALL_DIR/mita" ]]; then
-  CURRENT=$(version_of "$INSTALL_DIR/mita" || true)
+CURRENT=$(installed_version)
+if [[ -n "$CURRENT" ]]; then
   if [[ "$CURRENT" == "$MIERU_VERSION" ]]; then
     log "mita $CURRENT is already installed, which is the wanted version"
     finish
     exit 0
   fi
-  log "mita ${CURRENT:-unknown} is installed, moving it to $MIERU_VERSION"
+  log "mita $CURRENT is installed, moving it to $MIERU_VERSION"
 fi
 
 # ───── 2. Detect arch ─────
@@ -173,8 +204,17 @@ dpkg -i "$TMPDIR/$DEB" || {
 }
 
 # ───── 5. Smoke-test ─────
-VERSION=$(version_of "$INSTALL_DIR/mita" || true)
-[[ "$VERSION" == "$MIERU_VERSION" ]] || fail "installed mita reports '${VERSION:-nothing}', expected $MIERU_VERSION"
+# The package database is the fact; the binary only confirms. A binary that
+# names ANOTHER version is a refusal; one that says nothing in time is a
+# warning, because what dpkg installed is what the node has.
+VERSION=$(installed_version)
+[[ "$VERSION" == "$MIERU_VERSION" ]] || fail "dpkg has mita '${VERSION:-not installed}', expected $MIERU_VERSION"
+SAYS=$(binary_version)
+if [[ -z "$SAYS" ]]; then
+  warn "$(mita_bin) version printed no version within ${MITA_VERSION_WAIT:-10}s; dpkg has mita $VERSION, going on"
+elif [[ "$SAYS" != "$MIERU_VERSION" ]]; then
+  fail "dpkg has mita $VERSION, but $(mita_bin) says $SAYS: another mita is first on PATH"
+fi
 log "Smoke-test passed: mita $VERSION"
 
 # ───── 6. /etc/mita (node-agent writes server.json there), unit, agent env ─────
