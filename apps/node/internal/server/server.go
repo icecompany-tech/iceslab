@@ -362,15 +362,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			_, rendersDns := adapter.(core.DnsReceiver)
 			cs.RendersPolicy = &rendersPolicy
 			cs.RendersDns = &rendersDns
-			// T7: surface the core version when the adapter can report it, so
-			// the panel can gate min-version features (xray >= 25.9.5 for
-			// cascade exit selection). Cached adapter-side, cheap to call.
-			if v, ok := adapter.(core.Versioner); ok {
-				cs.Version = v.CoreVersion()
-			}
-			if v, ok := adapter.(core.ToolsVersioner); ok {
-				cs.ToolsVersion = v.ToolsVersion()
-			}
 			// Whether this core is configured at all. Same optional-interface
 			// pattern; adapters that don't report count as configured.
 			if p, ok := adapter.(core.Provisionable); ok {
@@ -395,6 +386,22 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			if i, ok := adapter.(core.Installable); ok {
 				installed := i.Installed()
 				cs.Installed = &installed
+			}
+			// T7: surface the core version when the adapter can report it, so
+			// the panel can gate min-version features (xray >= 25.9.5 for
+			// cascade exit selection). Cached adapter-side, cheap to call.
+			//
+			// Only for a core that is on the machine (E35, ru-02 25.09): a
+			// leftover of an old install answers with a version of its own,
+			// the DKMS module 1.0.0 there, and "not installed, version 1.0.0"
+			// is a number for something that is not the core.
+			if cs.Installed == nil || *cs.Installed {
+				if v, ok := adapter.(core.Versioner); ok {
+					cs.Version = v.CoreVersion()
+				}
+				if v, ok := adapter.(core.ToolsVersioner); ok {
+					cs.ToolsVersion = v.ToolsVersion()
+				}
 			}
 			// The certificate this core serves (E30a), for the panel's "Cores"
 			// beside the certificate it minted. Absent = unknown.

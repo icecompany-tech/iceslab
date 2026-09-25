@@ -28,12 +28,22 @@ var versionToken = regexp.MustCompile(`(?:^|[\s(:])v?(\d+\.\d+(?:\.\d+)?(?:-[0-9
 // ParseVersion pulls the version out of a binary's `version` output, or "" when
 // there is none to be found. "" is an answer the panel reads as "unknown", never
 // as a version.
+//
+// Line by line, and a JSON log line is not an answer: E35, 25.09 on nl-01,
+// caddy-naive logs `{"level":"info","ts":1790322240.3261952,...}` on stderr
+// before it prints `v2.11.4 h1:...`, the run is read combined, and the Unix
+// timestamp after `"ts":` matched first. The node reported naive
+// 1790322240.3261952.
 func ParseVersion(out []byte) string {
-	m := versionToken.FindSubmatch(out)
-	if m == nil {
-		return ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "{") {
+			continue
+		}
+		if m := versionToken.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
 	}
-	return string(m[1])
+	return ""
 }
 
 // RunForOutput runs a command and returns what it printed; the shape adapters

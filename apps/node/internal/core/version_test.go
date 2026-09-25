@@ -22,6 +22,10 @@ func TestParseVersionOnWhatTheBinariesActuallySay(t *testing.T) {
 		"v2.8.4 h1:q3pe0wpBj1OcHFZ3n/1nl4V4bxBrYikDvXdkY3vvRdY=\n": "2.8.4",
 		"amneziawg-tools v1.0.20260618 - https://amnezia.org\n":    "1.0.20260618",
 		"1.0.20260611-2\n": "1.0.20260611-2",
+		// E35, nl-01 25.09: caddy-naive logs a JSON line on stderr first, and its
+		// Unix timestamp went out as the naive version.
+		`{"level":"info","ts":1790322240.3261952,"msg":"maxprocs: Leaving GOMAXPROCS=2: CPU quota undefined"}` + "\n" +
+			"v2.11.4 h1:XKxkY1bSEM1eCTrRMYHCN5NsuaQNSOWzEx8mA1k4Hkw=\n": "2.11.4",
 		"no version here":  "",
 		"":                 "",
 	}
