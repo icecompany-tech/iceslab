@@ -170,7 +170,7 @@
     copyCommand: 'Copy command',
     copyFailed: 'Could not reach the clipboard',
     runHint:
-      'Paste over SSH as root. Without --protocol the installer asks which core to put on the box; the flag just skips that prompt.',
+      'Paste over SSH as root. The cores come from --engines; without the flag only the agent is installed, and cores are added later on the node page.',
     manualTitle: 'Manual / file flow',
     advanced: 'Advanced',
     showPayload: 'Show raw payload',
@@ -475,7 +475,7 @@
     expiresIn: 'expires in {{min}} min',
     runOnNode: 'Run on the node',
     runOnNodeHint:
-      'Paste on the node over SSH. The installer will prompt for a protocol - or append --protocol xray (or hysteria, amneziawg, naive) to skip the prompt.',
+      'Paste on the node over SSH. The cores come from --engines; without the flag only the agent is installed, and cores are added later on the node page.',
     copyCommand: 'Copy command',
     copied: 'Copied',
     manualTitle: 'Manual / file flow (advanced)',
