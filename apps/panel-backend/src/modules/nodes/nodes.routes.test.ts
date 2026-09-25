@@ -279,6 +279,26 @@ describe('node hardening (Zashchita) → install command', () => {
     }
   });
 
+  it('E30: a node on an IP gets no hysteria domain, and its REALITY domain is not taken for one', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth(),
+      payload: { name: 'ru-ip', address: '46.149.66.235:1337', domain: 'cam.example.com', intendedEngines: ['hysteria'] },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const body = JSON.parse(created.body);
+    const refreshed = JSON.parse(
+      (await app.inject({ method: 'POST', url: `/api/nodes/${body.id}/bootstrap`, headers: auth() })).body,
+    );
+    for (const cmd of [body.bootstrap.command as string, refreshed.command as string]) {
+      expect(cmd).toContain('--engines hysteria');
+      expect(cmd).not.toContain('--hysteria-domain');
+      expect(cmd).not.toContain('--hysteria-email');
+      expect(cmd).not.toContain('cam.example.com');
+    }
+  });
+
   it('an old create body (protocol alone) installs its core by --engines', async () => {
     const created = await app.inject({
       method: 'POST',

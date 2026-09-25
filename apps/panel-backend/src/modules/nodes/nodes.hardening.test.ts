@@ -204,6 +204,30 @@ describe('buildInstallCommand: no # inside the command, whatever the placeholder
     }
     expect(cmd(['xray', 'singbox'])).not.toContain('--hysteria-');
   });
+
+  // E30, 25.09: ru-01 sits on an IP, and its command carried
+  // `--hysteria-domain 46.149.66.235`. Let's Encrypt does not issue for an IP,
+  // so the name goes only where a public CA can take it.
+  it('names a hysteria domain only for an address a public CA issues for', () => {
+    const flags = (nodeAddress: string) =>
+      buildInstallCommand({
+        panelUrl: 'https://p',
+        token: 't',
+        nodeAddress,
+        engines: ['hysteria'],
+        panelIp: '198.51.100.7',
+        acmeEmail: 'ops@example.com',
+      })
+        .split('\n')
+        .filter((l) => l.includes('--hysteria-') || l.includes('ACME_DEFAULT_EMAIL'));
+    for (const noName of ['46.149.66.235:1337', '46.149.66.235', '[2001:db8::1]:1337', 'localhost:1337', 'node1:1337']) {
+      expect(flags(noName), noName).toEqual([]);
+    }
+    expect(flags('HY.Example.com:1337')).toEqual([
+      '  --hysteria-domain hy.example.com \\',
+      '  --hysteria-email ops@example.com',
+    ]);
+  });
 });
 describe('HardeningSchema (validation contract)', () => {
   it('accepts a valid blob', () => {

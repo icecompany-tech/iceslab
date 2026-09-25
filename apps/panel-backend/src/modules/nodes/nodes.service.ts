@@ -29,6 +29,7 @@ import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.j
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
 import { engineSet, resolveNodeEngines } from './node-intended-engines.js';
+import { acmeHostnameFor } from '../inbounds/acme-hostname.js';
 import { collectGeoUses } from '../geo-sets/geo-refs.js';
 import { nodeGeoFor, publicIntended } from '../geo-sets/geo-push.js';
 import { intendedEngines } from './node-engines.js';
@@ -282,7 +283,13 @@ export function buildInstallCommand(input: InstallCommandInput): string {
   // and e-mail pre-baked here let its first config come up with a real name.
   // By the core being in the set, not by it being first: there is no first.
   // Naive / SS2022 / MTProto / Mieru take theirs from the panel's push.
-  const acmeDomain = input.nodeAddress?.split(':')[0] ?? '';
+  //
+  // Only a name a public CA issues for (E30, 25.09: ru-01 on an IP got
+  // `--hysteria-domain 46.149.66.235`, which Let's Encrypt refuses). Read the
+  // way the push reads it, acmeHostnameFor: the node's ADDRESS, what a hysteria
+  // client dials and sends as SNI, never `domain`, which is the REALITY
+  // self-steal camouflage name and would give a certificate no client checks.
+  const acmeDomain = acmeHostnameFor(input.nodeAddress);
   if (input.engines.includes('hysteria') && acmeDomain) {
     flags.push(`--hysteria-domain ${acmeDomain}`);
     if (input.acmeEmail) {

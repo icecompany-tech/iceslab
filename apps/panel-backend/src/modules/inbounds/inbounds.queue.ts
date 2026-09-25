@@ -1,4 +1,3 @@
-import { isIP } from 'node:net';
 import { Queue, Worker, type Job } from 'bullmq';
 import type {
   ApplyInboundsRequest,
@@ -7,7 +6,6 @@ import type {
   ProtocolName,
   XrayCascadeFragments,
 } from '@iceslab/shared';
-import { hostFromAddress } from '../subscription/subscription.formats.js';
 import { redis } from '../../lib/infra/redis.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
@@ -20,26 +18,11 @@ import { resolvePolicyForNode } from '../node-policies/node-policies.service.js'
 import { layOutGeo } from '../geo-sets/geo-push.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
 import { getLogger } from '../../lib/infra/logger.js';
+import { acmeHostnameFor } from './acme-hostname.js';
 
-/**
- * The FQDN to publish in a node's hysteria `acme.domains`, or null to leave the
- * node on the hostname it was installed with.
- *
- * Taken from the node's own address because that is both what a hysteria client
- * dials and what it sends as its SNI, which makes it the only name whose
- * certificate can validate. Anything a public CA cannot issue for returns null,
- * since asking hysteria to re-issue on a doomed name would cost it the working
- * certificate it already holds:
- *   - an IP literal, which Let's Encrypt does not serve
- *   - a single-label name, which cannot be publicly resolvable
- */
-export function acmeHostnameFor(address: string | null | undefined): string | null {
-  if (!address) return null;
-  const host = hostFromAddress(address.trim()).toLowerCase();
-  const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-  if (!bare || isIP(bare) !== 0 || !bare.includes('.')) return null;
-  return bare;
-}
+// Moved to its own module (E30) so the install command reads the address the
+// same way; re-exported for the callers that import it from here.
+export { acmeHostnameFor };
 
 // ───── Job data shapes ─────
 
