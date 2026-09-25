@@ -690,10 +690,21 @@ func renderMultiConfig(
 	//     `protocol: dns` traffic here so client DNS queries don't leak
 	//     out via `direct` and reveal real destinations to the resolver
 	//   - `blocked` (blackhole): drop target for BLOCK rules
+	ipv6 := nodeHasIPv6()
 	outbounds := []any{
 		map[string]any{
 			"protocol": "freedom",
 			"tag":      "direct",
+			// Names are resolved by the core's own `dns` section, not the host's.
+			// Without this freedom is AsIs: it hands the domain to the system
+			// resolver, and the dns section served routing alone. E37 on nl-01
+			// was exactly that resolver dying, and a dns section in the config
+			// would not have saved a single connection. The same family choice as
+			// the default section's queryStrategy, and also when the panel named
+			// the resolver: named means meant to be used.
+			"settings": map[string]any{
+				"domainStrategy": resolveStrategy(ipv6),
+			},
 			"streamSettings": map[string]any{
 				"sockopt": map[string]any{
 					// BBR congestion control, measurably better throughput
@@ -858,7 +869,7 @@ func renderMultiConfig(
 	// The resolver the panel named, else the default one (E37): no longer the
 	// host's resolver alone, which took every host of the core down with it.
 	if dnsSection == nil {
-		dnsSection = defaultDnsSection(nodeHasIPv6())
+		dnsSection = defaultDnsSection(ipv6)
 	}
 	doc["dns"] = dnsSection
 	// A balanced entry also carries the top-level `observatory` (nil on every

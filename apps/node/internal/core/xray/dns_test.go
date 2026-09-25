@@ -132,6 +132,44 @@ func TestAScopedResolverKeepsItsScope(t *testing.T) {
 	}
 }
 
+// E37 tail: freedom with no domainStrategy is AsIs, it dials a domain through
+// the HOST's resolver, and the dns section served routing alone. The direct
+// outbound resolves through the core's own section now, with the same family
+// choice, named resolver or default.
+func TestTheDirectOutboundResolvesThroughTheCore(t *testing.T) {
+	defer func(f func() bool) { nodeHasIPv6 = f }(nodeHasIPv6)
+	named := &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "77.88.8.8"}}}
+	for _, c := range []struct {
+		ipv6 bool
+		dns  *dto.DnsCfg
+		want string
+	}{{false, nil, "UseIPv4"}, {true, nil, "UseIP"}, {false, named, "UseIPv4"}, {true, named, "UseIP"}} {
+		nodeHasIPv6 = func() bool { return c.ipv6 }
+		blob, err := renderMultiConfig([]InboundConfig{validInbound()}, policyUsers(), nil, 8080, nil, c.dns)
+		if err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		var doc struct {
+			Outbounds []struct {
+				Tag      string         `json:"tag"`
+				Settings map[string]any `json:"settings"`
+			} `json:"outbounds"`
+		}
+		if err := json.Unmarshal(blob, &doc); err != nil {
+			t.Fatal(err)
+		}
+		got := "<no direct>"
+		for _, o := range doc.Outbounds {
+			if o.Tag == "direct" {
+				got, _ = o.Settings["domainStrategy"].(string)
+			}
+		}
+		if got != c.want {
+			t.Errorf("ipv6=%v named=%v: direct domainStrategy %q, want %q", c.ipv6, c.dns != nil, got, c.want)
+		}
+	}
+}
+
 // The push carries the resolver next to the policy, and the adapter has to take
 // it from there. On the inbound it would be ignored now, which is the point of
 // the move: one process, one section, one place it can come from.

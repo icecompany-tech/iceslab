@@ -16,14 +16,20 @@ import "net"
 // queryStrategy follows what the node can reach: an AAAA answer on a node with
 // no IPv6 is an address the connection then fails to dial.
 func defaultDnsSection(ipv6 bool) map[string]any {
-	strategy := "UseIPv4"
-	if ipv6 {
-		strategy = "UseIP"
-	}
 	return map[string]any{
 		"servers":       []any{"1.1.1.1", "8.8.8.8", "localhost"},
-		"queryStrategy": strategy,
+		"queryStrategy": resolveStrategy(ipv6),
 	}
+}
+
+// resolveStrategy is the one choice of address family, read in two places:
+// the default section's queryStrategy and the direct outbound's
+// domainStrategy. UseIP where the node has global IPv6, UseIPv4 otherwise.
+func resolveStrategy(ipv6 bool) string {
+	if ipv6 {
+		return "UseIP"
+	}
+	return "UseIPv4"
 }
 
 // nodeHasIPv6 is read at every render. A variable so tests can pin the answer:
