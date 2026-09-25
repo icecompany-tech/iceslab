@@ -989,6 +989,11 @@ export function NodesPage() {
                 key={n.id}
                 node={{
                   ...dashNode,
+                  // Статус и его причина из одного ответа (/api/nodes), иначе
+                  // значок из обзора и причина из списка расходятся на тик
+                  // (E38). Обзор остаётся для своих счётчиков и метрик.
+                  status: n.status,
+                  lastStatusChange: n.lastStatusChange,
                   rawId: n.id,
                   address: n.address,
                   regionLabel,

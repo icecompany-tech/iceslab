@@ -35,7 +35,7 @@ import type { ChainFacts } from '@/lib/domain/chainStatus';
 import type { NodeGeoFacts } from '@/lib/domain/geoSets';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import type { PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
-import { nodeStatusText } from '@/lib/domain/nodeStatusText';
+import { nodeStatusText, statusRepeatsRefusal } from '@/lib/domain/nodeStatusText';
 import { AMBER, CARD, CYAN, DIM, FAINT, GROUND, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/nodes/lib/colors';
 
 type DashboardNode = DashboardOverview['nodes'][number];
@@ -125,7 +125,10 @@ export function NodeCard({
   const accent = statusAccent(node.status);
   const isOffline = node.status === 'offline' || node.status === 'unreachable';
   const isDegraded = node.status === 'degraded';
-  const statusText = nodeStatusText(node.statusMessage, t);
+  // Причина, которую уже говорит блок «Отказ ядра», второй раз не пишется (E38).
+  const statusText = statusRepeatsRefusal(node.statusMessage, node.syncRefusal)
+    ? null
+    : nodeStatusText(node.statusMessage, t);
 
   const bgTint = isOffline
     ? `linear-gradient(180deg, ${RED}0D 0%, ${CARD} 60%)`

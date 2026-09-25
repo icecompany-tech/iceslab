@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { nodeStatusText } from '@/lib/domain/nodeStatusText';
+import { nodeStatusText, statusRepeatsRefusal } from '@/lib/domain/nodeStatusText';
+
+describe('statusRepeatsRefusal: одна беда один раз (E38)', () => {
+  const refusal = { reason: 'fetch failed', full: 'agent > sync > fetch failed' };
+  it('совпадает с причиной или полным текстом отказа: повтор', () => {
+    expect(statusRepeatsRefusal('fetch failed', refusal)).toBe(true);
+    expect(statusRepeatsRefusal('  agent >  sync > fetch failed ', refusal)).toBe(true);
+  });
+  it('разные тексты, нет отказа или нет причины: не повтор, показываются оба', () => {
+    expect(statusRepeatsRefusal('system resolver not answering', refusal)).toBe(false);
+    expect(statusRepeatsRefusal('fetch failed', null)).toBe(false);
+    expect(statusRepeatsRefusal(null, refusal)).toBe(false);
+    expect(statusRepeatsRefusal('', { reason: '', full: '' })).toBe(false);
+  });
+});
 
 const t = (k: string) => (k === 'nodeCard.statusPhrase.resolverDown' ? 'нода не резолвит домены' : k);
 

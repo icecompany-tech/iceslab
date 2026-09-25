@@ -11,6 +11,22 @@ const PHRASES: readonly (readonly [english: string, key: string])[] = [
   ['system resolver not answering', 'nodeCard.statusPhrase.resolverDown'],
 ];
 
+/**
+ * Повторяет ли причина статуса то, что карточка уже говорит блоком «Отказ
+ * ядра» (E38): у недоступной ноды оба говорят «fetch failed». Сравнение по
+ * сырому тексту без лишних пробелов, с причиной отказа и с его полным
+ * текстом. При различии показываются оба.
+ */
+export function statusRepeatsRefusal(
+  message: string | null | undefined,
+  refusal: { reason: string; full: string } | null | undefined,
+): boolean {
+  if (typeof message !== 'string' || !refusal) return false;
+  const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const m = flat(message);
+  return m !== '' && (m === flat(refusal.reason) || m === flat(refusal.full));
+}
+
 export function nodeStatusText(
   message: string | null | undefined,
   t: (key: string) => string,
