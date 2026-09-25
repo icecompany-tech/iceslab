@@ -47,6 +47,7 @@ import {
   fromWireRecipe,
   hiddenAfter,
   importSaved,
+  isCuratedRecipe,
   recipeNotFound,
   splitHidden,
   recipeRailEmpty,
@@ -139,8 +140,12 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
   );
   const hiddenIds = registryQuery.data?.hidden;
   const split = splitHidden(onTile, hiddenIds);
-  const builtins = split.shown.filter((r) => r.source === 'builtin');
-  const registry = split.shown.filter((r) => r.source !== 'builtin');
+  // The rail holds the curated set: the snapshot, and the same recipes when
+  // the official registry source wins the merge (it outranks the snapshot,
+  // which then only shows in `alsoIn`; caught live on dev 25.09, the rail
+  // stood empty). Community recipes and the operator's own go below.
+  const builtins = split.shown.filter(isCuratedRecipe);
+  const registry = split.shown.filter((r) => !isCuratedRecipe(r));
   // Hiding needs a server that has the field.
   const canHide = hiddenIds !== undefined;
   // The server merges duplicates itself: two recipes with one id are its bug.

@@ -15,6 +15,7 @@ import {
   fromWireRecipe,
   hiddenAfter,
   importSaved,
+  isCuratedRecipe,
   recipeNotFound,
   splitHidden,
   recipeRailEmpty,
@@ -187,6 +188,15 @@ describe('свои и скрытые (контракт 25.09)', () => {
     expect(fromWireRecipe(w('builtin')).source).toBe('builtin');
     expect(fromWireRecipe(w('src-1')).source).toBe('registry');
     expect(fromWireRecipe(w()).source).toBe('registry');
+  });
+
+  it('курируемые (снимок или официальный источник) в рельсе, сообщество и свои ниже', () => {
+    expect(isCuratedRecipe({ source: 'builtin' })).toBe(true);
+    // Официальный источник выиграл слияние у снимка (так на dev 25.09).
+    expect(isCuratedRecipe({ source: 'registry', verified: true })).toBe(true);
+    expect(isCuratedRecipe({ source: 'registry', verified: false })).toBe(false);
+    expect(isCuratedRecipe({ source: 'registry' })).toBe(false);
+    expect(isCuratedRecipe({ source: 'mine', verified: true })).toBe(false);
   });
 
   it('скрытие и возврат: полная замена списка, скрытые на экране отдельно', () => {

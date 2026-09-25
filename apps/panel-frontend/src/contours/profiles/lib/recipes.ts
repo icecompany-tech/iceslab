@@ -322,6 +322,17 @@ export function fromWireRecipe(w: WireRecipe): Recipe {
 // `alsoIn`. Экран ничего не сливает; два рецепта с одним id в ответе это
 // ошибка сервера, её называет duplicateRecipeIds.
 
+/**
+ * Курируемый рецепт: из снимка или официальный (verified, ставит CI
+ * реестра). Сервер при слиянии ставит источник оператора выше снимка, и
+ * официальный источник забирает рецепты снимка себе, а снимок уходит в
+ * `alsoIn`. Для оператора это одни и те же рецепты, поэтому место на
+ * экране решает курируемость, а не источник.
+ */
+export function isCuratedRecipe(r: Pick<Recipe, 'source' | 'verified'>): boolean {
+  return r.source === 'builtin' || (r.source === 'registry' && r.verified === true);
+}
+
 /** Рецепты на показ и скрытые, по `hidden` из ответа реестра. */
 export function splitHidden<R extends { id: string }>(recipes: readonly R[], hidden: readonly string[] | undefined): {
   shown: R[];
