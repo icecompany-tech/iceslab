@@ -1451,6 +1451,13 @@ export interface UserStats {
    * the panel falls back to the response-level `cumulative` flag.
    */
   cumulative?: boolean;
+  /**
+   * The protocol of the adapter that reported this entry: the inbound the user
+   * came through (25.09). Presence-only accounting (mtproto) is read off it
+   * per entry, not off the node's label. Absent on older agents, in which case
+   * the panel falls back to the label.
+   */
+  protocol?: string;
 }
 
 export interface GetStatsResponse {

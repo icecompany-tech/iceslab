@@ -23,13 +23,32 @@ export interface StatsUserEntry {
    * cron reads it to snapshot-delta only the cumulative users on a mixed node.
    */
   cumulative?: boolean;
+  /**
+   * The protocol of the inbound this entry came through (wire field
+   * `protocol`, the reporting adapter). Decides presence-only accounting per
+   * entry; absent on older agents.
+   */
+  protocol?: string;
 }
+
+/**
+ * Protocols whose adapter reports who is connected but no per-user bytes: the
+ * user being listed IS the online signal. mtproto (mtg) has one secret, so its
+ * traffic cannot be attributed to a user.
+ */
+const PRESENCE_ONLY_PROTOCOLS: ReadonlySet<string> = new Set(['mtproto']);
 
 export interface NodeStatsInput {
   users: StatsUserEntry[];
   /** node.consumptionMultiplier; <=0/NaN falls back to 1. */
   multiplier: number;
-  /** True only for adapters that report presence but no per-user bytes (mtproto). */
+  /**
+   * The fallback for entries WITHOUT `protocol` (an agent older than the field):
+   * the node's label says mtproto. An entry that names its protocol is judged by
+   * it alone, which is what counts both kinds of user right on a node carrying
+   * xray beside mtproto; the label, derived from the set of cores since 25.09,
+   * says "xray" there.
+   */
   isPresenceOnlyProtocol: boolean;
   /** Cumulative node counters, used only when there are no per-user bytes. */
   totalBytesIn?: number;
@@ -139,21 +158,27 @@ export function computeUserDeltas(
   // with 21000 ("ON CONFLICT DO UPDATE command cannot affect row a second
   // time"), rolling back the node's entire stats transaction (so it records
   // nothing). Mirrors the userId aggregation computeNodeStatsWrites already does.
-  const byUser = new Map<string, { cumIn: bigint; cumOut: bigint }>();
+  const byUser = new Map<string, { cumIn: bigint; cumOut: bigint; protocols: Set<string | undefined> }>();
   for (const u of reported) {
-    const cur = byUser.get(u.userId) ?? { cumIn: 0n, cumOut: 0n };
+    const cur = byUser.get(u.userId) ?? { cumIn: 0n, cumOut: 0n, protocols: new Set() };
     cur.cumIn += BigInt(u.bytesIn || 0);
     cur.cumOut += BigInt(u.bytesOut || 0);
+    cur.protocols.add(u.protocol);
     byUser.set(u.userId, cur);
   }
 
   const deltas: StatsUserEntry[] = [];
   const snapshots: { userId: string; cumIn: bigint; cumOut: bigint }[] = [];
-  for (const [userId, { cumIn, cumOut }] of byUser) {
+  for (const [userId, { cumIn, cumOut, protocols }] of byUser) {
     const p = prev.get(userId);
     const dIn = p ? (cumIn >= p.cumIn ? cumIn - p.cumIn : 0n) : 0n;
     const dOut = p ? (cumOut >= p.cumOut ? cumOut - p.cumOut : 0n) : 0n;
-    deltas.push({ userId, bytesIn: Number(dIn), bytesOut: Number(dOut) });
+    // The protocol survives the merge, so a summed entry is still judged by its
+    // inbound downstream and not by the node's label. Every entry here comes
+    // from a cumulative core (xray, sing-box), none of them presence-only, so
+    // which of several it keeps changes nothing.
+    const protocol = [...protocols].find((x) => x !== undefined);
+    deltas.push({ userId, bytesIn: Number(dIn), bytesOut: Number(dOut), ...(protocol !== undefined ? { protocol } : {}) });
     snapshots.push({ userId, cumIn, cumOut });
   }
   return { deltas, snapshots };
@@ -206,7 +231,11 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
       // the only "online" signal we get. Record a zero-increment touch (so the
       // upsert refreshes online_at/last_connected_node_id) without billing; skip
       // the daily history. Non-presence protocols drop the zero-delta user.
-      if (input.isPresenceOnlyProtocol) presenceOnly.add(u.userId);
+      // Judged per entry by the inbound it came through; the node flag only for
+      // an agent that does not say.
+      const presence =
+        u.protocol !== undefined ? PRESENCE_ONLY_PROTOCOLS.has(u.protocol) : input.isPresenceOnlyProtocol;
+      if (presence) presenceOnly.add(u.userId);
       continue;
     }
     usedByUser.set(u.userId, (usedByUser.get(u.userId) ?? 0n) + scale(delta));

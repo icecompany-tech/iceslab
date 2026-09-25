@@ -62,11 +62,13 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       deletedAt: null,
       status: { notIn: ['disabled', 'unreachable'] },
     },
-    // protocol drives the mtproto presence-only online fallback. Single-secret
-    // protocols (mtproto via mtg) can't attribute traffic to a specific userId,
-    // so the bytes-delta loop never touches user.onlineAt for them and the UI
-    // shows OFFLINE forever. We patch around that by treating "user is tracked
-    // by the adapter" as the online signal - only for protocols that force it.
+    // Single-secret protocols (mtproto via mtg) can't attribute traffic to a
+    // specific userId, so the bytes-delta loop never touches user.onlineAt for
+    // them and the UI shows OFFLINE forever. We patch around that by treating
+    // "user is tracked by the adapter" as the online signal. Which entries get
+    // it is read per entry off `protocol` (the inbound the user came through);
+    // `protocol` here, the node's label, is only the fallback for an agent that
+    // does not tag its entries.
     select: { id: true, address: true, consumptionMultiplier: true, protocol: true },
   });
   if (nodes.length === 0) return { ok: 0, failed: 0 };

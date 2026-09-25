@@ -205,6 +205,41 @@ func TestStatsAggregatesAcrossAdapters(t *testing.T) {
 	if resp.TotalBytesOut != 275 {
 		t.Errorf("totalOut: got %d want 275", resp.TotalBytesOut)
 	}
+	// Each entry names the protocol of the adapter that reported it.
+	byUser := map[string]string{}
+	for _, u := range resp.Users {
+		byUser[u.UserID] = u.Protocol
+	}
+	if byUser["a"] != "hysteria" || byUser["b"] != "xray" {
+		t.Errorf("protocol per entry: got %v", byUser)
+	}
+}
+
+// A node with xray beside mtproto: the mtproto entry says mtproto, which is
+// what lets the panel count its user online while the xray one is counted by
+// bytes (25.09).
+func TestStatsTagsTheMtprotoEntryOnAMixedNode(t *testing.T) {
+	mtg := &fakeAdapter{name: "mtproto", stats: &core.Stats{Users: []core.UserStats{{UserID: "m"}}}}
+	xry := &fakeAdapter{name: "xray", stats: &core.Stats{Users: []core.UserStats{{UserID: "x"}}, Cumulative: true}}
+	srv := newServerWith(t, xry, mtg)
+
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
+	rr := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rr, req)
+
+	var raw struct {
+		Users []map[string]any `json:"users"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, u := range raw.Users {
+		got[u["userId"].(string)] = u["protocol"]
+	}
+	if got["m"] != "mtproto" || got["x"] != "xray" {
+		t.Errorf("wire field protocol: got %v", got)
+	}
 }
 
 func TestStatsContinuesPastFailingAdapter(t *testing.T) {

@@ -484,6 +484,13 @@ type UserStats struct {
 	// the delta-core users down to ~zero (traffic under-count). Older panels
 	// ignore this field and fall back to the response-level flag.
 	Cumulative bool `json:"cumulative,omitempty"`
+	// Protocol is the Name() of the adapter that reported this entry, i.e. the
+	// protocol of the inbound the user came through (25.09). The panel reads
+	// presence-only accounting (mtproto: the user being listed is the online
+	// signal, there are no bytes) off it per entry, where it used to read the
+	// node's label, which on a node with xray beside mtproto said "xray" and
+	// left every mtproto user offline. Omitted by older agents.
+	Protocol string `json:"protocol,omitempty"`
 }
 
 type GetStatsResponse struct {

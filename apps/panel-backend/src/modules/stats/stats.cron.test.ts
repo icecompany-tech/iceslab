@@ -223,4 +223,66 @@ describe('pollNodeStats bulk upsert (B3, integration)', () => {
     expect(cum?.usedTrafficBytes).toBe(500n); // 0 + 500
     expect(del?.usedTrafficBytes).toBe(200n); // 100 + 100 (was 100 pre-fix: unbilled)
   });
+
+  // 25.09: presence-only accounting by the inbound a user came through, not by
+  // the node's label. A node carrying xray beside mtproto is labelled xray (the
+  // label is derived from its cores), and its mtproto users used to stay
+  // offline forever; with the old label mtproto, its idle xray users read online.
+  describe('presence by the inbound, on a node with xray beside mtproto', () => {
+    async function mixedNode(label: string): Promise<string> {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/nodes',
+        headers: auth(),
+        payload: { name: `mix-${label}`, address: `mix-${label}.test:1337`, intendedEngines: ['xray', 'mtproto'] },
+      });
+      if (res.statusCode !== 201) throw new Error(res.body);
+      const id = JSON.parse(res.body).id as string;
+      // The stored label, whatever it is, must not decide anything for an
+      // agent that tags its entries: both are tried.
+      await prisma.node.update({ where: { id }, data: { protocol: label } });
+      return id;
+    }
+
+    it.each(['xray', 'mtproto'])('label %s: mtproto online, idle xray not, xray bytes billed', async (label) => {
+      await mixedNode(label);
+      const tg = await createUser(`tg-${label}`); // on mtproto: listed, no bytes
+      const idle = await createUser(`idle-${label}`); // on xray, moved nothing
+      const busy = await createUser(`busy-${label}`); // on xray, moved bytes
+
+      // First poll baselines the cumulative xray counters, the second bills.
+      for (const cum of [1000, 1300]) {
+        vi.restoreAllMocks();
+        mockStats({
+          users: [
+            { userId: tg, bytesIn: 0, bytesOut: 0, protocol: 'mtproto' },
+            { userId: idle, bytesIn: 50, bytesOut: 0, cumulative: true, protocol: 'xray' },
+            { userId: busy, bytesIn: cum, bytesOut: 0, cumulative: true, protocol: 'xray' },
+          ],
+          uptime: 1,
+          totalBytesIn: 0,
+          totalBytesOut: 0,
+          cumulative: true,
+        });
+        await pollNodeStats();
+      }
+
+      const [t, i, b] = await Promise.all(
+        [tg, idle, busy].map((userId) => prisma.userTraffic.findUnique({ where: { userId } })),
+      );
+      expect(t?.onlineAt, 'the mtproto user is online').not.toBeNull();
+      expect(t?.usedTrafficBytes).toBe(0n);
+      expect(i?.onlineAt, 'the idle xray user is not').toBeNull();
+      expect(b?.usedTrafficBytes).toBe(300n);
+      expect(b?.onlineAt).not.toBeNull();
+    });
+
+    it('an agent that does not tag its entries still goes by the label', async () => {
+      await mixedNode('mtproto');
+      const tg = await createUser('tg-legacy');
+      mockStats(stats([{ userId: tg, bytesIn: 0, bytesOut: 0 }]));
+      await pollNodeStats();
+      expect((await prisma.userTraffic.findUnique({ where: { userId: tg } }))?.onlineAt).not.toBeNull();
+    });
+  });
 });

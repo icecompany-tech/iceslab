@@ -1249,6 +1249,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 					// panel treats cumulative-core (xray/singbox) and delta-core
 					// (awg/hysteria/ss) users correctly on a mixed node.
 					Cumulative: stats.Cumulative,
+					// And with its protocol, the inbound the user came through: the
+					// panel decides per entry whether bytes or presence count.
+					Protocol: adapter.Name(),
 				})
 			}
 			results[i] = res
