@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react';
 import { apiErrorMessage } from '@/lib/net/client';
 import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
+import { recipeImportUrl } from '@/contours/profiles/lib/recipeImportUrl';
 import {
   fromWireRecipe,
   recipesForKind,
@@ -232,7 +233,8 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
       <RecipeImportModal
         opened={importOpen}
         onClose={importCtl.close}
-        protocol={protocol}
+        kindKey={kindKey}
+        kindLabel={kindLabel}
         onPick={handlePick}
       />
     </Stack>
@@ -247,15 +249,18 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 function RecipeImportModal({
   opened,
   onClose,
-  protocol,
+  kindKey,
+  kindLabel,
   onPick,
 }: {
   opened: boolean;
   onClose: () => void;
-  protocol: RecipeProtocol;
+  /** The tile the form is on: only its recipes apply (recipeTile). */
+  kindKey: string;
+  kindLabel: string;
   onPick: (r: Recipe) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [url, setUrl] = useState('');
   const [json, setJson] = useState('');
   const [results, setResults] = useState<Recipe[] | null>(null);
@@ -272,15 +277,17 @@ function RecipeImportModal({
     onClose();
   };
 
+  // Страница GitHub или gist уходит raw-адресом того же файла (recipeImportUrl).
+  const target = recipeImportUrl(url);
   const importMutation = useMutation({
     mutationFn: () =>
-      importRecipes(url.trim() ? { url: url.trim() } : { json: json.trim() }),
+      importRecipes(target.url ? { url: target.url } : { json: json.trim() }),
     onSuccess: (data) => {
       const all = data.recipes.map(fromWireRecipe);
-      // A profile has one fixed protocol; only recipes for the protocol being
-      // configured can apply here. Hide the rest (e.g. an xray recipe while on
-      // hysteria) so they cannot be merged into the wrong form.
-      const matched = all.filter((r) => r.protocol === protocol);
+      // Only recipes of THIS tile apply here (recipeTile, as on the rail). A
+      // protocol match is not enough: a Telegram SOCKS5 recipe is xray too,
+      // and on the Xray tile it would turn the vless form into socks.
+      const matched = all.filter((r) => recipeTile(r) === kindKey);
       setResults(matched);
       setHidden(all.length - matched.length);
       if (matched.length === 0) {
@@ -288,7 +295,7 @@ function RecipeImportModal({
           color: 'yellow',
           message:
             all.length > 0
-              ? t('recipes.import.wrongProtocol', { protocol })
+              ? t('recipes.import.wrongProtocol', { protocol: kindLabel })
               : t('recipes.import.none'),
         });
       }
@@ -315,6 +322,15 @@ function RecipeImportModal({
             setUrl(e.currentTarget.value);
             setResults(null);
           }}
+          description={
+            target.rewritten ? (
+              <>
+                {t('recipes.import.rewritten', { url: target.url })}
+                {target.fromGistPage ? ` ${t('recipes.import.gistFirstFile')}` : ''}
+              </>
+            ) : undefined
+          }
+          inputWrapperOrder={['label', 'input', 'description', 'error']}
         />
         <Textarea
           label={t('recipes.import.jsonLabel')}
@@ -348,10 +364,12 @@ function RecipeImportModal({
             </Text>
             {hidden > 0 && (
               <Text size="xs" c="dimmed">
-                {t('recipes.import.hidden', { count: hidden, protocol })}
+                {t('recipes.import.hidden', { count: hidden, protocol: kindLabel })}
               </Text>
             )}
-            {results.map((r) => (
+            {results.map((r) => {
+              const text = recipeText(r, (k) => i18n.exists(k), t);
+              return (
               <Paper
                 key={recipeKey(r)}
                 withBorder
@@ -367,15 +385,16 @@ function RecipeImportModal({
                   <Text size="lg">{r.emoji}</Text>
                   <Stack gap={0} style={{ minWidth: 0 }}>
                     <Text size="sm" fw={500} truncate>
-                      {r.name}
+                      {text.name}
                     </Text>
                     <Text size="xs" c="dimmed" truncate>
-                      {r.description}
+                      {text.description}
                     </Text>
                   </Stack>
                 </Group>
               </Paper>
-            ))}
+              );
+            })}
           </Stack>
         )}
       </Stack>
