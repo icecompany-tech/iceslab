@@ -12,13 +12,10 @@ import (
 
 // Э3 piece F: who answers the users' name lookups.
 //
-// The node renders no `dns` section today, so the DNS-hijack rule hands client
-// queries to dns-out and they fall through to the NODE's own resolver. On a
-// cascade that is the wrong machine: the name is resolved by the entry while
-// the connection leaves from the exit (E13). What matters first, exactly as
-// with the policy, is that naming nothing changes nothing: the golden in
-// policy_test.go was captured before either field existed and still has to
-// match, which is why there is no second golden here.
+// The DNS-hijack rule hands client queries to dns-out and they are answered by
+// the NODE's resolver: the one the panel named, else the default section (E37).
+// On a cascade that is the wrong machine: the name is resolved by the entry
+// while the connection leaves from the exit (E13).
 //
 // The setting is the NODE's. It shipped on the inbound first, and this file
 // used to hold two tests about what happens when two profiles on one node
@@ -49,19 +46,39 @@ func dnsAdapter(t *testing.T) *Adapter {
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func TestNoResolverRendersNoDnsSection(t *testing.T) {
-	// Not an empty section: the key is absent, which is what makes shipping the
-	// field ahead of the panel side inert.
-	blob, err := renderConfig(validInbound(), policyUsers())
-	if err != nil {
-		t.Fatalf("renderConfig: %v", err)
+// The goldens of this package are rendered with no resolver named, so they
+// carry the default section, and its queryStrategy follows the machine. Pinned
+// here for every test in the package; the one test that asks about IPv6 sets
+// it itself and puts it back.
+func init() { nodeHasIPv6 = func() bool { return false } }
+
+// E37, 25.09 on nl-01: a node with no resolver named used to render no `dns`
+// section, so xray asked the host's stub alone; the stub stopped answering and
+// every vless host on the node died with the panel reading ONLINE. Now two
+// public resolvers go first and the host's own last.
+func TestNoResolverRendersTheDefaultSection(t *testing.T) {
+	defer func(f func() bool) { nodeHasIPv6 = f }(nodeHasIPv6)
+	for _, c := range []struct {
+		ipv6     bool
+		strategy string
+	}{{false, "UseIPv4"}, {true, "UseIP"}} {
+		nodeHasIPv6 = func() bool { return c.ipv6 }
+		dns := renderedDns(t, nil)
+		servers, _ := dns["servers"].([]any)
+		if len(servers) != 3 || servers[0] != "1.1.1.1" || servers[1] != "8.8.8.8" || servers[2] != "localhost" {
+			t.Errorf("ipv6=%v: servers %v, want 1.1.1.1, 8.8.8.8, localhost last", c.ipv6, dns["servers"])
+		}
+		if dns["queryStrategy"] != c.strategy {
+			t.Errorf("ipv6=%v: queryStrategy %v, want %s", c.ipv6, dns["queryStrategy"], c.strategy)
+		}
 	}
-	var doc map[string]json.RawMessage
-	if err := json.Unmarshal(blob, &doc); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	// A resolver the panel named replaces the default whole, not merged.
+	dns := renderedDns(t, &dto.DnsCfg{Servers: []dto.DnsServer{{Address: "77.88.8.8"}}})
+	if servers := dns["servers"].([]any); len(servers) != 1 || servers[0] != "77.88.8.8" {
+		t.Errorf("the named resolver was mixed with the default: %v", servers)
 	}
-	if _, present := doc["dns"]; present {
-		t.Errorf("a node nobody set a resolver on rendered a dns section")
+	if _, set := dns["queryStrategy"]; set {
+		t.Errorf("the default's queryStrategy leaked into a named resolver: %v", dns)
 	}
 }
 

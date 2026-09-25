@@ -70,8 +70,7 @@ func buildPolicyRules(rules []dto.NodePolicyRule) ([]any, error) {
 // refuse such a config and the panel had to guard the save that would create it;
 // moving the setting up one level deletes the question instead of answering it.
 //
-// Nil when nobody asked, which is every node today and renders with no `dns`
-// key at all.
+// Nil when nobody asked; the render then uses defaultDnsSection (E37).
 func renderDnsSection(chosen *dto.DnsCfg) map[string]any {
 	if chosen == nil {
 		return nil
@@ -856,12 +855,12 @@ func renderMultiConfig(
 		"outbounds": outbounds,
 		"routing":   routing,
 	}
-	// The resolver, when the panel named one. Absent otherwise, which is the
-	// state every node is in today: no `dns` key, DNS falls through to the
-	// host's own resolver.
-	if dnsSection != nil {
-		doc["dns"] = dnsSection
+	// The resolver the panel named, else the default one (E37): no longer the
+	// host's resolver alone, which took every host of the core down with it.
+	if dnsSection == nil {
+		dnsSection = defaultDnsSection(nodeHasIPv6())
 	}
+	doc["dns"] = dnsSection
 	// A balanced entry also carries the top-level `observatory` (nil on every
 	// other node, so the key is simply absent there).
 	if cascade != nil && len(cascade.Observatory) > 0 {
