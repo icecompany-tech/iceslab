@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseRecipe, RecipeSchema } from './recipes.schemas.js';
-import { parseRecipes } from './recipes.registry.js';
+import { githubRawUrl, parseRecipes } from './recipes.registry.js';
 import { assertFetchableUrl } from './recipes.ssrf.js';
 
 // A minimal well-formed recipe the validators accept (schema v2).
@@ -140,6 +140,26 @@ describe('parseRecipes (registry payload)', () => {
   it('returns nothing for a malformed payload', () => {
     expect(parseRecipes('not json object')).toHaveLength(0);
     expect(parseRecipes(null)).toHaveLength(0);
+  });
+});
+
+describe('githubRawUrl', () => {
+  it('a GitHub file page is its raw file; everything else is left alone', () => {
+    expect(githubRawUrl('https://github.com/o/r/blob/main/recipes/a/b.json')).toBe(
+      'https://raw.githubusercontent.com/o/r/main/recipes/a/b.json',
+    );
+    expect(githubRawUrl('https://github.com/o/r/blob/0123abc/x.json?plain=1#L3')).toBe(
+      'https://raw.githubusercontent.com/o/r/0123abc/x.json',
+    );
+    for (const other of [
+      'https://raw.githubusercontent.com/o/r/main/x.json',
+      'https://github.com/o/r/tree/main/recipes',
+      'http://github.com/o/r/blob/main/x.json',
+      'https://example.com/o/r/blob/main/x.json',
+      'not a url',
+    ]) {
+      expect(githubRawUrl(other), other).toBeNull();
+    }
   });
 });
 

@@ -124,14 +124,54 @@ describe('hidden recipes', () => {
 });
 
 describe('import refusals, in words', () => {
-  it('a link that is not JSON says what it is', async () => {
+  it('a link that answers a page, not JSON, says so and names the content type', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response('<!doctype html><html></html>', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })),
     );
-    const res = await call('POST', '/api/recipes/import', { url: 'https://github.com/o/r/blob/main/recipes/x.json' });
+    const res = await call('POST', '/api/recipes/import', { url: 'https://example.com/recipes/x.html' });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'IMPORT_FAILED', message: 'the link does not answer with JSON (text/html)' });
+  });
+
+  // FRONT's live run, 25.09: a GitHub file page answered "neither a recipe nor
+  // a registry". GitHub answers a page asked with Accept: application/json with
+  // the page's own data, { meta, payload }, as application/json: there was no
+  // HTML to name. A file page is now fetched as its raw file; a page it cannot
+  // rewrite is named for what it is.
+  it('a GitHub file page is fetched as its raw file', async () => {
+    const recipe = own('tuic-bbr', 'from a blob link');
+    const seen: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url);
+        return new Response(JSON.stringify(recipe), { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      }),
+    );
+    const res = await call('POST', '/api/recipes/import', {
+      url: 'https://github.com/icecompany-tech/iceslab-recipes/blob/main/recipes/singbox/tuic/tuic-bbr.json',
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.recipes.map((r: Recipe) => r.id)).toEqual(['tuic-bbr']);
+    expect(seen).toEqual(['https://raw.githubusercontent.com/icecompany-tech/iceslab-recipes/main/recipes/singbox/tuic/tuic-bbr.json']);
+  });
+
+  it('page data answered as JSON is refused as a page, with its content type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ meta: { title: 'recipes at main' }, payload: { tree: [] } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        }),
+      ),
+    );
+    const res = await call('POST', '/api/recipes/import', { url: 'https://github.com/icecompany-tech/iceslab-recipes/tree/main/recipes' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      "the link answers with the data of a web page (application/json), not a recipe file: open the file's Raw link",
+    );
   });
 
   it('JSON that is neither a recipe nor a registry', async () => {

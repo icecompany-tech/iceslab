@@ -226,31 +226,71 @@ async function fetchGuardedText(startUrl: string): Promise<{ text: string; conte
 }
 
 /**
- * The body of a link that is not JSON. Named by what the server said it is:
- * a GitHub file PAGE (text/html) is the usual case, and "no valid recipes"
- * about an HTML page sent the operator looking for a schema problem.
+ * The body of a link that is not a recipe file but a page. Named by what the
+ * server said it is: "no valid recipes" about a page sent the operator looking
+ * for a schema problem.
+ *
+ * Two kinds of page. One answers HTML. The other answers JSON, and that is
+ * GitHub itself: a file page (github.com/<owner>/<repo>/blob/...) asked with
+ * `Accept: application/json`, which every fetch here sends, answers with the
+ * page's own data, `{ meta, payload }`, as application/json. Measured
+ * 2026-09-25 on the registry's tuic-bbr.json. Such a link is rewritten to its
+ * raw file before the fetch (githubRawUrl); this is for the pages it cannot
+ * name.
  */
 export class RecipeNotJsonError extends SyntaxError {
-  constructor(readonly contentType: string) {
-    super(`the link does not answer with JSON (${contentType || 'no content-type'})`);
+  constructor(
+    readonly contentType: string,
+    kind: 'not-json' | 'page-data' = 'not-json',
+  ) {
+    super(
+      kind === 'not-json'
+        ? `the link does not answer with JSON (${contentType || 'no content-type'})`
+        : `the link answers with the data of a web page (${contentType || 'no content-type'}), not a recipe file: open the file's Raw link`,
+    );
     this.name = 'RecipeNotJsonError';
   }
+}
+
+/**
+ * A GitHub file page, as its raw file: github.com/<owner>/<repo>/blob/<ref>/<path>
+ * is raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>. null for any other
+ * address, which is fetched as it is.
+ */
+export function githubRawUrl(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' || (u.hostname !== 'github.com' && u.hostname !== 'www.github.com')) return null;
+  const m = /^\/([^/]+)\/([^/]+)\/blob\/(.+)$/.exec(u.pathname);
+  return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}` : null;
+}
+
+/** GitHub's page data: `{ meta, payload }` and nothing a recipe or a registry has. */
+function isPageData(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const keys = Object.keys(payload);
+  return keys.includes('payload') && keys.includes('meta') && !keys.includes('recipes') && !keys.includes('schemaVersion');
 }
 
 /**
  * Fetch + validate recipes from one URL. No caching, no source tagging;
  * used by the registry (wrapped in a cache) and the ad-hoc import route.
  * Throws on guard / network / size / redirect failure so the caller can 400
- * or fall back, and RecipeNotJsonError on a body that is not JSON.
+ * or fall back, and RecipeNotJsonError on a body that is a page.
  */
 export async function fetchRecipesFromUrl(url: string): Promise<ReadRecipes> {
-  const { text, contentType } = await fetchGuardedText(url);
+  const { text, contentType } = await fetchGuardedText(githubRawUrl(url) ?? url);
   let payload: unknown;
   try {
     payload = JSON.parse(text);
   } catch {
     throw new RecipeNotJsonError(contentType);
   }
+  if (isPageData(payload)) throw new RecipeNotJsonError(contentType, 'page-data');
   return readRecipes(payload);
 }
 
