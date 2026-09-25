@@ -24,7 +24,7 @@ import {
   nodeRendersProfile,
   renderableAtSave,
 } from '../nodes/node-engines.js';
-import { assertCoreOnNode } from '../nodes/node-core-gate.js';
+import { assertCoreOnNode, assertHysteriaHasHostname } from '../nodes/node-core-gate.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
 import { portOwnersOnNode, type PortOwner } from '../nodes/node-ports.js';
@@ -416,12 +416,16 @@ export async function updateProfile(
         where: { profileId: id, node: { deletedAt: null } },
         select: {
           node: {
-            select: { name: true, cores: true, protocol: true, singboxEngine: true, intendedEngines: true },
+            select: { name: true, address: true, cores: true, protocol: true, singboxEngine: true, intendedEngines: true },
           },
         },
       });
       for (const b of deployed) {
-        assertNodeRendersProfile(b.node, { protocol: existing.protocol, engine: input.engine ?? null });
+        const next = { protocol: existing.protocol, engine: input.engine ?? null };
+        // Moving a hysteria profile off sing-box onto the native core moves it
+        // onto ACME, which an IP-addressed node cannot pass (E30b).
+        assertHysteriaHasHostname(b.node, next);
+        assertNodeRendersProfile(b.node, next);
       }
     }
   }
@@ -745,6 +749,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   // version this panel refuses. First, because it is the specific answer and
   // it carries the command; the engine-list gate below is the general one.
   assertCoreOnNode(node, profile);
+  assertHysteriaHasHostname(node, profile);
   assertNodeRendersProfile(node, profile);
   assertSingboxServesBinding(profile, input.overrides);
 

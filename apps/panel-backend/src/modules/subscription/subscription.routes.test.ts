@@ -57,13 +57,18 @@ async function createNode(name: string, address: string): Promise<string> {
     method: 'POST',
     url: '/api/nodes',
     headers: { authorization: `Bearer ${token}` },
-    payload: { name, address },
+    // Created under a name ACME can take and moved onto its IP afterwards:
+    // since E30b native hysteria is not SAVED onto an IP-addressed node, and
+    // what these tests read is the subscription of a node that already carries
+    // it, the state every node deployed before the gate is in.
+    payload: { name, address: `${name}.fixture.test:1337` },
   });
   if (res.statusCode !== 201) {
     throw new Error(`createNode failed: ${res.statusCode} ${res.body}`);
   }
   const nodeId = JSON.parse(res.body).id as string;
   await createHysteriaInbound(nodeId);
+  await prisma.node.update({ where: { id: nodeId }, data: { address } });
   return nodeId;
 }
 
