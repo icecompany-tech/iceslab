@@ -6,6 +6,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Box,
   Button,
   Card,
   Group,
@@ -49,7 +50,7 @@ import {
   recipeNotFound,
   splitHidden,
   recipeRailEmpty,
-  recipesForKind,
+  recipesOnTile,
   recipeText,
   recipeTile,
   registryRepo,
@@ -112,7 +113,6 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
     const text = recipeText(r, (k) => i18n.exists(k), t);
     return { title: text.name, subtitle: text.description };
   };
-  const builtins = recipesForKind(kindKey);
   const [picked, setPicked] = useState<Recipe | null>(null);
   const [importOpen, importCtl] = useDisclosure(false);
   const [search, setSearch] = useState('');
@@ -127,14 +127,24 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
-  // A registry recipe lands on the tile its engine, protocol and subprotocol
-  // say (recipeTile), the way a saved profile does. A v1 recipe (no engine)
-  // stays on its protocol's native tile: on the sing-box tile a native
-  // hysteria recipe would set fields the sing-box renderer reads differently.
-  const registry = useMemo(
-    () => (registryQuery.data?.recipes ?? []).map(fromWireRecipe).filter((r) => recipeTile(r) === kindKey),
+  // Every recipe comes from the registry answer (32b5719: the panel ships
+  // none; its pinned snapshot is there as sourceId `builtin`, merged by the
+  // server). A recipe lands on the tile its engine, protocol and subprotocol
+  // say (recipesOnTile), the way a saved profile does. The snapshot's recipes
+  // keep the compact rail on top; other sources and the operator's own go
+  // below as cards. Hidden ones leave both and wait in «скрыто N».
+  const onTile = useMemo(
+    () => recipesOnTile((registryQuery.data?.recipes ?? []).map(fromWireRecipe), kindKey),
     [registryQuery.data, kindKey],
   );
+  const hiddenIds = registryQuery.data?.hidden;
+  const split = splitHidden(onTile, hiddenIds);
+  const builtins = split.shown.filter((r) => r.source === 'builtin');
+  const registry = split.shown.filter((r) => r.source !== 'builtin');
+  // Hiding needs a server that has the field.
+  const canHide = hiddenIds !== undefined;
+  // The server merges duplicates itself: two recipes with one id are its bug.
+  const dupes = duplicateRecipeIds(onTile);
   const stale = registryQuery.data?.stale ?? false;
   const problems = registryProblems(registryQuery.data);
 
@@ -243,9 +253,8 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
             const active = !!picked && recipeKey(picked) === recipeKey(r);
             const c = copy(r);
             return (
-              <UnstyledButton
+              <Box
                 key={recipeKey(r)}
-                onClick={() => handlePick(r)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -254,6 +263,10 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
                   backgroundColor: active ? '#7DD3FC0F' : '#0B1420',
                   borderTop: i === 0 ? 'none' : '1px solid #1C2A3D',
                 }}
+              >
+              <UnstyledButton
+                onClick={() => handlePick(r)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}
               >
                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                   <Text
@@ -272,6 +285,17 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
                 </Stack>
                 {active && <IconCheck size={13} stroke={2.4} color="#7DD3FC" />}
               </UnstyledButton>
+              {canHide && (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => hideMutation.mutate(hiddenAfter(hiddenIds, r.id, 'hide'))}
+                >
+                  {t('recipes.hidden.hide')}
+                </Button>
+              )}
+              </Box>
             );
           })}
         </Stack>
@@ -294,15 +318,22 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 
       <RegistrySection
         recipes={registry}
-        hiddenIds={registryQuery.data?.hidden}
+        canHide={canHide}
         loading={registryQuery.isLoading}
         stale={stale}
         problems={problems}
         pickedKey={picked ? recipeKey(picked) : null}
         onPick={handlePick}
-        onHide={(id, action) => hideMutation.mutate(hiddenAfter(registryQuery.data?.hidden, id, action))}
+        onHide={(id) => hideMutation.mutate(hiddenAfter(hiddenIds, id, 'hide'))}
         onDelete={confirmDelete}
       />
+
+      {dupes.length > 0 && (
+        <Text size="xs" c="red">
+          {t('recipes.duplicates', { ids: dupes.join(', ') })}
+        </Text>
+      )}
+      <HiddenRecipes recipes={split.hidden} onRestore={(id) => hideMutation.mutate(hiddenAfter(hiddenIds, id, 'show'))} />
 
       {picked && <AppliedAlert recipe={picked} />}
 
@@ -505,9 +536,39 @@ function RecipeImportModal({
  * GitHub. Collapses to a single offline hint on failure and renders nothing
  * while there is genuinely nothing to show.
  */
+/**
+ * «скрыт N, показать»: рецепты, которые оператор скрыл (hidden из ответа
+ * реестра), с «Вернуть» у каждого в развороте. Ничего не скрыто: молчит.
+ */
+function HiddenRecipes({ recipes, onRestore }: { recipes: Recipe[]; onRestore: (id: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  if (recipes.length === 0) return null;
+  return (
+    <Stack gap={4}>
+      <UnstyledButton onClick={() => setOpen((v) => !v)}>
+        <Text size="xs" c="dimmed">
+          {t(open ? 'recipes.hidden.collapse' : 'recipes.hidden.expand', { count: recipes.length })}
+        </Text>
+      </UnstyledButton>
+      {open &&
+        recipes.map((r) => (
+          <Group key={recipeKey(r)} gap={8} wrap="nowrap" justify="space-between">
+            <Text size="xs" truncate>
+              {r.emoji} {recipeText(r, (k) => i18n.exists(k), t).name}
+            </Text>
+            <Button size="compact-xs" variant="subtle" onClick={() => onRestore(r.id)}>
+              {t('recipes.hidden.restore')}
+            </Button>
+          </Group>
+        ))}
+    </Stack>
+  );
+}
+
 function RegistrySection({
-  recipes: all,
-  hiddenIds,
+  recipes,
+  canHide,
   loading,
   stale,
   problems,
@@ -516,27 +577,21 @@ function RegistrySection({
   onHide,
   onDelete,
 }: {
+  /** Рецепты не из снимка (источники оператора, свои), уже без скрытых. */
   recipes: Recipe[];
-  /** `hidden` из ответа реестра; undefined у сервера старше поля. */
-  hiddenIds: string[] | undefined;
+  /** Сервер знает поле hidden: у карточки есть «Скрыть». */
+  canHide: boolean;
   loading: boolean;
   stale: boolean;
   /** Failed sources, one line each; null = the server does not say (old). */
   problems: RegistryProblem[] | null;
   pickedKey: string | null;
   onPick: (r: Recipe) => void;
-  onHide: (id: string, action: 'hide' | 'show') => void;
+  onHide: (id: string) => void;
   onDelete: (r: Recipe) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [region, setRegion] = useState<string>('ALL');
-  const [hiddenOpen, setHiddenOpen] = useState(false);
-  // Скрытые остаются в ответе, прячет экран; внизу строка «скрыто N».
-  const { shown: recipes, hidden } = splitHidden(all, hiddenIds);
-  // Сервер сливает дубли сам: два рецепта с одним id это его ошибка.
-  const dupes = duplicateRecipeIds(all);
-  // Скрывать умеет только сервер с полем hidden.
-  const canHide = hiddenIds !== undefined;
 
   // Region chips, only the regions actually present (plus "All"). A handful of
   // recipes: counted each render, no memo to keep in step with the split above.
@@ -580,43 +635,9 @@ function RegistrySection({
       </Stack>
     ) : null;
 
-  const hiddenBlock =
-    hidden.length > 0 ? (
-      <Stack gap={4}>
-        <UnstyledButton onClick={() => setHiddenOpen((v) => !v)}>
-          <Text size="xs" c="dimmed">
-            {t(hiddenOpen ? 'recipes.hidden.collapse' : 'recipes.hidden.expand', { count: hidden.length })}
-          </Text>
-        </UnstyledButton>
-        {hiddenOpen &&
-          hidden.map((r) => (
-            <Group key={recipeKey(r)} gap={8} wrap="nowrap" justify="space-between">
-              <Text size="xs" truncate>
-                {r.emoji} {recipeText(r, (k) => i18n.exists(k), t).name}
-              </Text>
-              <Button size="compact-xs" variant="subtle" onClick={() => onHide(r.id, 'show')}>
-                {t('recipes.hidden.restore')}
-              </Button>
-            </Group>
-          ))}
-      </Stack>
-    ) : null;
-  const dupesBlock =
-    dupes.length > 0 ? (
-      <Text size="xs" c="red">
-        {t('recipes.duplicates', { ids: dupes.join(', ') })}
-      </Text>
-    ) : null;
-
-  // Nothing from the registry: only why, if anything failed. Built-ins
-  // already rendered above, so the picker still works.
-  if (recipes.length === 0)
-    return problemBlock || hiddenBlock ? (
-      <Stack gap={6}>
-        {hiddenBlock}
-        {problemBlock}
-      </Stack>
-    ) : null;
+  // Nothing beyond the snapshot: only why, if anything failed. The snapshot's
+  // recipes already rendered above, so the picker still works.
+  if (recipes.length === 0) return problemBlock;
 
   return (
     <Stack gap={6} mt={4}>
@@ -657,13 +678,11 @@ function RegistrySection({
             recipe={r}
             active={pickedKey === recipeKey(r)}
             onClick={() => onPick(r)}
-            onHide={canHide && r.source !== 'mine' ? () => onHide(r.id, 'hide') : undefined}
+            onHide={canHide && r.source !== 'mine' ? () => onHide(r.id) : undefined}
             onDelete={r.source === 'mine' ? () => onDelete(r) : undefined}
           />
         ))}
       </SimpleGrid>
-      {dupesBlock}
-      {hiddenBlock}
       {problemBlock}
     </Stack>
   );

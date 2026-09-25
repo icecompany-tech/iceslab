@@ -8,7 +8,7 @@ import {
 } from '@/contours/profiles/lib/telegramDraft';
 import {
   buildExportRecipe,
-  RECIPES,
+  SNAPSHOT_RECIPES,
   RECIPE_COMMON_FIELDS,
   RECIPES_REPO_DEFAULT,
   duplicateRecipeIds,
@@ -18,7 +18,7 @@ import {
   recipeNotFound,
   splitHidden,
   recipeRailEmpty,
-  recipesForKind,
+  recipesOnTile,
   recipeText,
   recipeTile,
   registryRepo,
@@ -30,16 +30,26 @@ import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import en from '@/i18n/locales/en';
 import ru from '@/i18n/locales/ru';
 
-describe('рецепты у каждой плитки', () => {
-  it('у каждой плитки PROFILE_KINDS не меньше одного встроенного рецепта', () => {
-    const bare = PROFILE_KINDS.filter((k) => recipesForKind(k.key).length === 0).map((k) => k.key);
+// Снимок реестра, который панель носит с собой (32b5719), как его отдаёт
+// сервер (sourceId builtin). Панель своих рецептов в коде не держит.
+const onTile = (key: string) => recipesOnTile(SNAPSHOT_RECIPES, key);
+
+describe('рецепты снимка у каждой плитки', () => {
+  it('снимок: 22 рецепта, id не повторяются, все помечены как встроенные', () => {
+    expect(SNAPSHOT_RECIPES).toHaveLength(22);
+    expect(duplicateRecipeIds(SNAPSHOT_RECIPES)).toEqual([]);
+    expect(SNAPSHOT_RECIPES.every((r) => r.schemaVersion === 2 && r.source === 'builtin')).toBe(true);
+  });
+
+  it('у каждой плитки PROFILE_KINDS не меньше одного рецепта', () => {
+    const bare = PROFILE_KINDS.filter((k) => onTile(k.key).length === 0).map((k) => k.key);
     expect(bare).toEqual([]);
   });
 
   it('рецепт плитки sing-box не показывается на плитке своего демона, и наоборот', () => {
-    expect(recipesForKind('hysteria').every((r) => r.engine === undefined)).toBe(true);
-    expect(recipesForKind('hysteria#singbox').every((r) => r.engine === 'singbox')).toBe(true);
-    expect(recipesForKind('socks5').map((r) => r.id)).toEqual(['telegram-socks5']);
+    expect(onTile('hysteria').every((r) => r.engine === 'native')).toBe(true);
+    expect(onTile('hysteria#singbox').every((r) => r.engine === 'singbox')).toBe(true);
+    expect(onTile('socks5').map((r) => r.id)).toEqual(['telegram-socks5']);
   });
 });
 
@@ -60,44 +70,13 @@ describe('recipeTile: плитка выводится из engine, protocol, sub
     expect(recipeTile({ protocol: 'xray', subprotocol: 'socks' })).toBe('socks5');
   });
 
-  // Тест-миграция (25.09): плитки встроенных рецептов, пока они читались из
-  // поля kind. Снимается вместе с массивом RECIPES, когда рецепты придут из
-  // снимка реестра.
-  it('миграция: каждый встроенный рецепт на той же плитке, что при поле kind', () => {
-    const OLD_KIND: Record<string, string> = {
-      'xray-reality-vision-raw': 'xray',
-      'xray-reality-xhttp': 'xray',
-      'xray-trojan-reality': 'xray',
-      'xray-reality-grpc-ru': 'xray',
-      'hysteria-default': 'hysteria',
-      'hysteria-salamander': 'hysteria',
-      'awg-default': 'amneziawg',
-      'awg-iran': 'amneziawg',
-      'naive-default': 'naive',
-      'ss-2022-blake3': 'shadowsocks',
-      'mtproto-default': 'mtproto',
-      'mieru-default': 'mieru',
-      'singbox-vless-reality-vision': 'xray#singbox',
-      'singbox-hysteria-clean': 'hysteria#singbox',
-      'singbox-hysteria-salamander': 'hysteria#singbox',
-      'singbox-ss-2022-blake3': 'shadowsocks#singbox',
-      'tuic-bbr': 'tuic',
-      'anytls-default-padding': 'anytls',
-      'shadowtls-v3-bing': 'shadowtls',
-      'telegram-socks5': 'socks5',
-      'telegram-http': 'http',
-      'telegram-web-tproxy-websocket': 'telegramweb',
-    };
-    expect(RECIPES.map((r) => r.id).sort()).toEqual(Object.keys(OLD_KIND).sort());
-    for (const r of RECIPES) expect(recipeTile(r), r.id).toBe(OLD_KIND[r.id]);
-  });
 });
 
 describe('рецепты у каждой плитки: форма и черновик', () => {
 
   it('каждый рецепт ложится на пустую форму своей плитки: только её поля, без ошибок', () => {
     for (const kind of PROFILE_KINDS) {
-      for (const recipe of recipesForKind(kind.key)) {
+      for (const recipe of onTile(kind.key)) {
         const base = {
           ...defaults(null),
           protocol: kind.protocol,
@@ -123,8 +102,8 @@ describe('рецепты у каждой плитки: форма и черно�
 
   it('WEB: у плитки предпросмотра свой встроенный рецепт, он ложится в черновик карточки, не в форму', () => {
     // Every tile, the preview one too (owner, 24.09).
-    for (const p of PREVIEW_KINDS) expect(recipesForKind(p.key).length, p.key).toBeGreaterThan(0);
-    const [web] = recipesForKind('telegramweb');
+    for (const p of PREVIEW_KINDS) expect(onTile(p.key).length, p.key).toBeGreaterThan(0);
+    const [web] = onTile('telegramweb');
     expect(web?.id).toBe('telegram-web-tproxy-websocket');
     const typed = { ...EMPTY_TELEGRAM_DRAFT.web, host: 'old.example.com', secret: 'ab'.repeat(16) };
     const draft = webDraftFromRecipe(typed, resolveRecipeApply(web!));
@@ -150,17 +129,38 @@ describe('рецепты у каждой плитки: форма и черно�
     expect(webDraftFromRecipe(EMPTY_TELEGRAM_DRAFT.web, r.apply as Record<string, unknown>)).toEqual({ ...web, secret: '' });
   });
 
-  it('id не повторяются, и у каждого рецепта новой плитки есть английская подпись', () => {
-    const ids = RECIPES.map((r) => r.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    const cards = (en as unknown as { recipes: { cards: Record<string, { name?: string }> } }).recipes.cards;
-    for (const r of RECIPES) expect(typeof cards[r.id]?.name, r.id).toBe('string');
+  it('randomize: AmneziaWG H1-H4 попарно разные при каждом применении', () => {
+    const awg = SNAPSHOT_RECIPES.filter((r) => r.randomize?.some((x) => x.kind === 'awgHeader'));
+    expect(awg.length).toBeGreaterThan(0);
+    for (const r of awg) {
+      for (let i = 0; i < 20; i++) {
+        const f = resolveRecipeApply(r);
+        const hs = ['awgH1', 'awgH2', 'awgH3', 'awgH4'].map((k) => f[k]);
+        expect(new Set(hs).size, r.id).toBe(4);
+      }
+    }
   });
 
-  it('русская подпись по id у всех 22: имя и столько же заметок, сколько у рецепта', () => {
+  it('экспорт в схеме v2: ядро и у xray подпротокол, как у профиля', () => {
+    const meta = { id: 'my', name: 'My', description: 'd', dpiResistance: 4, speed: 4 };
+    const vless = buildExportRecipe('xray', { engine: 'native', xraySubprotocol: 'vless', xrayNetwork: 'raw' }, meta);
+    expect(vless).toMatchObject({ schemaVersion: 2, engine: 'native', protocol: 'xray', subprotocol: 'vless' });
+    expect(recipeTile(vless)).toBe('xray');
+    const hy = buildExportRecipe('hysteria', { engine: 'singbox' }, meta);
+    expect(hy).toMatchObject({ engine: 'singbox', protocol: 'hysteria' });
+    expect('subprotocol' in hy).toBe(false);
+    expect(recipeTile(hy)).toBe('hysteria#singbox');
+  });
+
+  it('у каждого рецепта снимка есть английская подпись панели', () => {
+    const cards = (en as unknown as { recipes: { cards: Record<string, { name?: string }> } }).recipes.cards;
+    for (const r of SNAPSHOT_RECIPES) expect(typeof cards[r.id]?.name, r.id).toBe('string');
+  });
+
+  it('русская подпись по id у всех 22: имя и столько же заметок, сколько у рецепта снимка', () => {
     const cards = (ru as unknown as { recipes: { cards: Record<string, { name?: string; notes?: string[] }> } }).recipes
       .cards;
-    for (const r of RECIPES) {
+    for (const r of SNAPSHOT_RECIPES) {
       expect(typeof cards[r.id]?.name, r.id).toBe('string');
       expect(cards[r.id]?.notes?.length ?? 0, r.id).toBe(r.notes?.length ?? 0);
     }
@@ -179,12 +179,13 @@ describe('свои и скрытые (контракт 25.09)', () => {
     expect(duplicateRecipeIds([r('a'), r('b'), r('a')])).toEqual(['a']);
   });
 
-  it('свой рецепт по sourceId mine, остальное реестр', () => {
+  it('источник по sourceId: mine свой, builtin снимок, прочее реестр', () => {
     const w = (sourceId?: string) => ({ schemaVersion: 2, id: 'x', protocol: 'xray', sourceId }) as unknown as Parameters<
       typeof fromWireRecipe
     >[0];
     expect(fromWireRecipe(w('mine')).source).toBe('mine');
-    expect(fromWireRecipe(w('builtin')).source).toBe('registry');
+    expect(fromWireRecipe(w('builtin')).source).toBe('builtin');
+    expect(fromWireRecipe(w('src-1')).source).toBe('registry');
     expect(fromWireRecipe(w()).source).toBe('registry');
   });
 

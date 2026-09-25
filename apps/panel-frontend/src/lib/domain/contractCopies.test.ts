@@ -22,6 +22,10 @@ import {
   LINK_UNDERLAYS,
   REALITY_RECORD_LIMIT,
   REALITY_TARGET_SUGGESTIONS,
+  RECIPE_ENGINES,
+  RECIPE_SCHEMA_VERSION,
+  RECIPE_SOURCE_BUILTIN,
+  RECIPE_XRAY_SUBPROTOCOLS,
   TEMPLATE_TYPES,
   XRAY_PLAIN_SUBPROTOCOLS,
   XRAY_SUBPROTOCOLS,
@@ -88,6 +92,12 @@ const GUARDED = [
   'GEO_BUILTIN_NAMES',
   'GEO_BUILTIN',
   'GEO_FILE_MAX_BYTES',
+  // Рецепты схемы v2 (32b5719): версия схемы, ядра, подпротоколы xray и id
+  // снимка. До снимка у экрана был свой массив рецептов с полем плитки.
+  'RECIPE_SCHEMA_VERSION',
+  'RECIPE_ENGINES',
+  'RECIPE_XRAY_SUBPROTOCOLS',
+  'RECIPE_SOURCE_BUILTIN',
 ];
 
 const FILES = import.meta.glob('/src/**/*.{ts,tsx}', {
@@ -144,6 +154,10 @@ describe('копии перечислений контракта', () => {
     expect(GEO_SET_NAME.test('ru-blocked')).toBe(true);
     expect(Object.keys(GEO_BUILTIN)).toEqual(Object.keys(GEO_BUILTIN_NAMES));
     expect(GEO_FILE_MAX_BYTES).toBeGreaterThan(0);
+    expect(RECIPE_SCHEMA_VERSION).toBe(2);
+    expect(RECIPE_ENGINES).toEqual(['native', 'singbox']);
+    expect(RECIPE_XRAY_SUBPROTOCOLS).toContain('socks');
+    expect(RECIPE_SOURCE_BUILTIN).toBe('builtin');
   });
 
   it('4. подпротоколы xray не переписываются типом-перечнем', () => {
