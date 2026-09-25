@@ -1,11 +1,11 @@
 {
-  "keyLength": 678,
+  "keyLength": 466,
   "envelope": {
     "containers": [
       {
         "awg": {
           "isThirdPartyConfig": true,
-          "last_config": "{\"Jc\":\"4\",\"Jmin\":\"40\",\"Jmax\":\"70\",\"S1\":\"15\",\"S2\":\"18\",\"H1\":\"1111111111\",\"H2\":\"2222222222\",\"H3\":\"3333333333\",\"H4\":\"4444444444\",\"S3\":\"24\",\"S4\":\"20\",\"allowed_ips\":[\"0.0.0.0/0\",\"::/0\"],\"client_ip\":\"10.66.66.2/32\",\"client_priv_key\":\"cliPriv64\",\"config\":\"[Interface]\\nPrivateKey = cliPriv64\\nAddress = 10.66.66.2/32\\nJc = 4\\nJmin = 40\\nJmax = 70\\nS1 = 15\\nS2 = 18\\nS3 = 24\\nS4 = 20\\nH1 = 1111111111\\nH2 = 2222222222\\nH3 = 3333333333\\nH4 = 4444444444\\n\\n[Peer]\\nPublicKey = srvPub64\\nAllowedIPs = 0.0.0.0/0, ::/0\\nEndpoint = de.example.com:51820\\nPersistentKeepalive = 25\\n\",\"hostName\":\"de.example.com\",\"persistent_keep_alive\":\"25\",\"port\":51820,\"server_pub_key\":\"srvPub64\"}",
+          "last_config": "{\"Jc\":\"4\",\"Jmin\":\"40\",\"Jmax\":\"70\",\"S1\":\"15\",\"S2\":\"18\",\"H1\":\"1111111111\",\"H2\":\"2222222222\",\"H3\":\"3333333333\",\"H4\":\"4444444444\",\"S3\":\"24\",\"S4\":\"20\",\"allowed_ips\":[\"0.0.0.0/0\",\"::/0\"],\"client_ip\":\"10.66.66.2/32\",\"client_priv_key\":\"cliPriv64\",\"hostName\":\"de.example.com\",\"persistent_keep_alive\":\"25\",\"port\":51820,\"server_pub_key\":\"srvPub64\"}",
           "port": "51820",
           "transport_proto": "udp"
         },
@@ -34,7 +34,6 @@
     ],
     "client_ip": "10.66.66.2/32",
     "client_priv_key": "cliPriv64",
-    "config": "[Interface]\nPrivateKey = cliPriv64\nAddress = 10.66.66.2/32\nJc = 4\nJmin = 40\nJmax = 70\nS1 = 15\nS2 = 18\nS3 = 24\nS4 = 20\nH1 = 1111111111\nH2 = 2222222222\nH3 = 3333333333\nH4 = 4444444444\n\n[Peer]\nPublicKey = srvPub64\nAllowedIPs = 0.0.0.0/0, ::/0\nEndpoint = de.example.com:51820\nPersistentKeepalive = 25\n",
     "hostName": "de.example.com",
     "persistent_keep_alive": "25",
     "port": 51820,

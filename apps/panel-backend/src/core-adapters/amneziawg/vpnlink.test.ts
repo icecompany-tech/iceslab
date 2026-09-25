@@ -78,17 +78,13 @@ describe('buildAmneziaVpnLink', () => {
     // those keys at all, even when zero, and aborts with ParseError 9.
     expect('S3' in inner).toBe(false);
     expect('S4' in inner).toBe(false);
-    // Dead weight the app never reads, or overwrites on import.
-    for (const dead of ['mtu', 'isThirdPartyConfig', 'clientId', 'client_pub_key']) {
+    // Dead weight the app never reads, or overwrites on import. `config`, the
+    // .conf text, is among them: import checks only `containers`, the tunnel
+    // is built from the fields below, and it was what made the QR too dense to
+    // scan (stand, 25.09).
+    for (const dead of ['mtu', 'isThirdPartyConfig', 'clientId', 'client_pub_key', 'config']) {
       expect(dead in inner, dead).toBe(false);
     }
-
-    // The .conf text is required and non-empty; this is the other half of 900.
-    const conf = inner.config as string;
-    expect(conf).toContain('[Interface]');
-    expect(conf).toContain('[Peer]');
-    expect(conf).toContain('Endpoint = de.example.com:51820');
-    expect(conf).toContain('PrivateKey = cliPriv64');
 
     expect(inner.client_priv_key).toBe('cliPriv64');
     expect(inner.server_pub_key).toBe('srvPub64');
@@ -114,9 +110,6 @@ describe('buildAmneziaVpnLink', () => {
     expect('I2' in inner).toBe(false);
     expect('I4' in inner).toBe(false);
     expect('I5' in inner).toBe(false);
-    // the inline .conf likewise carries only the non-empty I-lines
-    expect(inner.config as string).toContain('I1 = aabb');
-    expect(inner.config as string).not.toContain('I2 =');
   });
 
   it('emits S3/S4 and psk_key when they carry a real value', () => {
@@ -128,20 +121,18 @@ describe('buildAmneziaVpnLink', () => {
     expect(inner.S3).toBe('12');
     expect(inner.S4).toBe('34');
     expect(inner.psk_key).toBe('pskBase64');
-    // the inline .conf carries the same non-zero S3/S4
-    expect(inner.config as string).toContain('S3 = 12');
-    expect(inner.config as string).toContain('S4 = 34');
   });
 });
 
 /**
  * The whole key, pinned: what the AmneziaVPN app receives, decoded.
  *
- * Why a golden and not more `toBe`s: the key's JSON is about to be cut down
- * (amnezia-client recon: which of last_config the import actually reads, the
- * key is what makes the QR too dense to scan off a screen), and the one thing
- * that must not happen along the way is a quiet change to a key the app does
- * read. With a golden every change is a diff somebody reads.
+ * Why a golden and not more `toBe`s: the key's JSON was cut down twice (23.09
+ * and 25.09, docs/plan/amnezia-key-recon.md: which of last_config the import
+ * actually reads, since the key's size is what makes the QR too dense to scan
+ * off a screen), and the one thing that must not happen along the way is a
+ * quiet change to a key the app does read. With a golden every change is a
+ * diff somebody reads.
  *
  * Two cases, because S3/S4 are the question the stand asked on 23.09 ("S3/S4
  * did not make it into the key at all"):
@@ -151,8 +142,8 @@ describe('buildAmneziaVpnLink', () => {
  *                   ParseError 9, the tunnel never starts; desktop and Android
  *                   accept the absence. The .conf builder follows the same rule
  *                   (wgconf.ts), so the key and the file never disagree.
- *   awg2-s3s4-set   non-zero S3/S4 (a 2.0-shaped profile): both appear, in
- *                   last_config and in the embedded .conf.
+ *   awg2-s3s4-set   non-zero S3/S4 (a 2.0-shaped profile): both appear in
+ *                   last_config (the key carries no .conf since 25.09).
  *
  * `keyLength` is pinned beside the JSON: it decides the QR version, and the QR
  * is where the length is felt.

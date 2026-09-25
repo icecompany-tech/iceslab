@@ -1,8 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import {
-  buildAmneziawgClientConfig,
-  type AmneziawgClientConfigOpts,
-} from './wgconf.js';
+import type { AmneziawgClientConfigOpts } from './wgconf.js';
 
 /**
  * AmneziaVPN "vpn://" connection-key builder for an AmneziaWG tunnel.
@@ -64,9 +61,8 @@ export function encodeAmneziaVpnKey(config: unknown): string {
 }
 
 export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
-  // The full wg-quick text drives the tunnel; the structured fields mirror it
-  // so the app can populate its UI and reconnect.
-  const conf = buildAmneziawgClientConfig(opts);
+  // The tunnel is built from the structured fields below on every platform;
+  // the wg-quick text is not in the key (see `config` below).
   const allowed = opts.clientAllowedIps?.length ? opts.clientAllowedIps : ['0.0.0.0/0', '::/0'];
 
   // Obfuscation params as strings (the app serializes them as JSON strings),
@@ -104,22 +100,27 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // Inner client config, DOUBLE-encoded (a stringified JSON), per the app's
   // AwgProtocolConfig::toJson. Only what a client reads (amnezia-client 94b51df,
   // docs/plan/amnezia-key-recon.md):
-  //   - the connection fields every platform builds the tunnel from; Android
-  //     requires client_ip, allowed_ips (array), hostName, port (number),
-  //     client_priv_key, server_pub_key;
-  //   - `config`, the .conf text: the tunnel does not use it, but the app's
-  //     client-settings page for the protocol opens only when it is non-empty,
-  //     and that page is where a person reads their Jc/S/H while working out why
-  //     a tunnel does not come up.
+  // the connection fields every platform builds the tunnel from; Android
+  // requires client_ip, allowed_ips (array), hostName, port (number),
+  // client_priv_key, server_pub_key.
+  //
   // Left out on purpose: `mtu` (the import overwrites it with the app's own
   // default, importController.cpp:775-776), `isThirdPartyConfig` (read at the awg
-  // level only), and the empty `clientId` / `client_pub_key`.
+  // level only), the empty `clientId` / `client_pub_key`, and `config`, the
+  // .conf text. `config` was the largest field and it made the key's QR too
+  // dense to scan off a screen (stand, 25.09: the .conf QR read, the vpn:// QR
+  // did not). Import checks only `containers` (importController.cpp:412), the
+  // tunnel never reads it, and the desktop's fallback parse of it runs only
+  // without allowed_ips or persistent_keep_alive, both sent here
+  // (vpnConnection.cpp:423-453). What goes with it, knowingly: the app's
+  // client-settings page for an imported server, which opens only on a
+  // non-empty .conf (protocolsModel.cpp:113-117). The .conf is its own tab in
+  // the panel for whoever needs to read their Jc/S/H.
   const lastConfig: Record<string, unknown> = {
     ...obf,
     allowed_ips: allowed,
     client_ip: opts.allowedIp,
     client_priv_key: opts.privateKey,
-    config: conf,
     hostName: opts.host,
     persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
     port: opts.port,
