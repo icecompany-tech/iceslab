@@ -45,6 +45,7 @@ import {
 } from './subscription.formats.js';
 import { engineSpeaksHysteriaObfs } from '../../core-adapters/hysteria/index.js';
 import { effectiveEngineOf } from '../nodes/node-engines.js';
+import { hysteriaPinFor } from '../nodes/hysteria-tls-shape.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import { endpointId } from './endpoint-identity.js';
 import { withVlessRouteTag } from './formats/xrayjson.js';
@@ -685,6 +686,9 @@ export async function generateSubscription(
                   domain: true,
                   // Drives the flag emoji in the server name a client displays.
                   countryCode: true,
+                  // E30a: the self-signed pair native hysteria serves on a node
+                  // addressed by IP; its certificate is what clients pin.
+                  hysteriaTls: true,
                   createdAt: true,
                   // Capacity hint, used as the WEIGHT when picking which
                   // entries of a pool a user gets: a node with twice the cap
@@ -983,6 +987,11 @@ export async function generateSubscription(
       const obfsPassword = engineSpeaksHysteriaObfs(ib.engine)
         ? hyCfg?.obfsPassword
         : undefined;
+      // E30a: native hysteria on a node addressed by IP serves the panel's
+      // self-signed certificate, and every client pins it. Only while the node
+      // has no FQDN (then ACME, no pin) and only on the native core (sing-box
+      // brings its own certificate).
+      const tlsPin = hysteriaPinFor(ib.engine, b.node.address, b.node.hysteriaTls);
       endpoints.push({
         protocol: 'hysteria',
         nodeName,
@@ -995,6 +1004,7 @@ export async function generateSubscription(
         downMbps: hyCfg?.brutalDownMbps,
         portHoppingStart: hyCfg?.portHoppingStart,
         portHoppingEnd: hyCfg?.portHoppingEnd,
+        ...(tlsPin ? { tlsPin } : {}),
         uri: buildHysteriaUri({
           password: user.hysteriaPassword,
           host,
@@ -1005,6 +1015,7 @@ export async function generateSubscription(
           downMbps: hyCfg?.brutalDownMbps,
           portHoppingStart: hyCfg?.portHoppingStart,
           portHoppingEnd: hyCfg?.portHoppingEnd,
+          pinSha256: tlsPin?.certSha256,
         }),
       });
     } else if (

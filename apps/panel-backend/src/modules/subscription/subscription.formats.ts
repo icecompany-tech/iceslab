@@ -1,4 +1,5 @@
 import type { User, UserTraffic } from '../../generated/prisma/client.js';
+import type { HysteriaTlsPin } from '../nodes/hysteria-tls-shape.js';
 import {
   XRAY_PLAIN_SUBPROTOCOLS,
   doorOf,
@@ -218,6 +219,12 @@ export interface HysteriaSubscriptionEndpoint extends SubscriptionEndpointBase {
    *  least this range for the rotating ports to actually reach hysteria. */
   portHoppingStart?: number;
   portHoppingEnd?: number;
+  /**
+   * E30a: the self-signed certificate native hysteria serves on a node
+   * addressed by IP, which every format pins in its own field (see each
+   * formatter). Absent = the certificate is ACME's and needs no pin.
+   */
+  tlsPin?: HysteriaTlsPin;
 }
 
 export interface XraySubscriptionEndpoint extends SubscriptionEndpointBase {

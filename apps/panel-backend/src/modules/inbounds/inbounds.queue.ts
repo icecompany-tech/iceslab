@@ -19,6 +19,7 @@ import { layOutGeo } from '../geo-sets/geo-push.js';
 import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } from '../../lib/auth/credentials.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import { acmeHostnameFor } from './acme-hostname.js';
+import { ensureHysteriaTls } from '../nodes/hysteria-tls.js';
 
 // Moved to its own module (E30) so the install command reads the address the
 // same way; re-exported for the callers that import it from here.
@@ -260,6 +261,22 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
           ...(ib.config as Record<string, unknown>),
           hostname: acmeHostname,
         } as InboundDto['config'];
+      }
+    } else {
+      // E30a: no name a public CA issues for, so native hysteria serves the
+      // panel's self-signed pair and clients pin it. Native only: hysteria on
+      // sing-box brings its own certificate, and the key has no business in a
+      // config the sing-box adapter keeps.
+      const native = hysteriaInbounds.filter((ib) => ib.engine === undefined || ib.engine === 'hysteria');
+      const pair = native.length > 0 ? await ensureHysteriaTls(nodeId) : null;
+      if (pair) {
+        for (const ib of native) {
+          ib.config = {
+            ...(ib.config as Record<string, unknown>),
+            tlsCertPem: pair.certPem,
+            tlsKeyPem: pair.keyPem,
+          } as InboundDto['config'];
+        }
       }
     }
 

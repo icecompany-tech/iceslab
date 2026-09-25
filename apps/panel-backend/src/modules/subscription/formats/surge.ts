@@ -28,6 +28,9 @@ export function buildSurgeConf(endpoints: SubscriptionEndpoint[]): string {
       if (e.portHoppingStart && e.portHoppingEnd) {
         p.push(`port-hopping=${e.portHoppingStart}-${e.portHoppingEnd}`);
       }
+      // E30a: the panel's self-signed certificate on a node addressed by IP.
+      // Surge's pin replaces X.509 validation outright, so no skip-cert-verify.
+      if (e.tlsPin) p.push(`server-cert-fingerprint-sha256=${e.tlsPin.certSha256}`);
       lines.push(p.join(', '));
     } else if (e.protocol === 'xray' && !isPlainXray(e)) {
       // socks/http (the Telegram doors) are carried by plain, clash, sing-box and

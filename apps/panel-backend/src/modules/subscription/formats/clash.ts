@@ -270,6 +270,11 @@ export function buildClashYaml(
       ) {
         lines.push(`    ports: ${e.portHoppingStart}-${e.portHoppingEnd}`);
       }
+      // E30a: the panel's self-signed certificate on a node addressed by IP.
+      // mihomo's `fingerprint` is the sha256 of the certificate DER (colons
+      // optional); a leaf that matches is accepted with no other check, so no
+      // skip-cert-verify (component/ca/fingerprint.go, read 2026-09-25).
+      if (e.tlsPin) lines.push(`    fingerprint: ${e.tlsPin.certSha256}`);
       proxies.push(lines.join('\n'));
     } else if (isPlainXray(e)) {
       // The Telegram doors: mihomo `socks5` / `http` with the user's login.

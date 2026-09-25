@@ -30,6 +30,7 @@ import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
 import { engineSet, resolveNodeEngines } from './node-intended-engines.js';
 import { acmeHostnameFor } from '../inbounds/acme-hostname.js';
+import { publicHysteriaTls, rotateHysteriaTls, type PublicHysteriaTls } from './hysteria-tls.js';
 import { collectGeoUses } from '../geo-sets/geo-refs.js';
 import { nodeGeoFor, publicIntended } from '../geo-sets/geo-push.js';
 import { intendedEngines } from './node-engines.js';
@@ -417,6 +418,29 @@ export async function disableNodeWarp(id: string): Promise<PublicNodeDto> {
   if (!existing) throw new NodeNotFoundError(id);
   const node = await repo.updateById(id, { warpEnabled: false });
   return mapNodeToPublic(node);
+}
+
+/** A rotation asked of a node whose hysteria takes ACME: there is nothing self-signed to rotate. */
+export class HysteriaTlsNotSelfSignedError extends Error {
+  readonly code = 'HYSTERIA_TLS_NOT_SELF_SIGNED';
+  constructor(public nodeName: string) {
+    super(`Node "${nodeName}" has a domain name as its address, so its hysteria takes an ACME certificate: there is no self-signed one to rotate`);
+    this.name = 'HysteriaTlsNotSelfSignedError';
+  }
+}
+
+/**
+ * E30a: a new self-signed pair for the node's native hysteria, pushed at once.
+ * Every link with the old pin stops connecting until its subscription is
+ * refreshed: that is what rotating means.
+ */
+export async function rotateNodeHysteriaTls(id: string): Promise<PublicHysteriaTls> {
+  const node = await repo.findActiveById(id);
+  if (!node) throw new NodeNotFoundError(id);
+  const fresh = await rotateHysteriaTls(id);
+  if (!fresh) throw new HysteriaTlsNotSelfSignedError(node.name);
+  eventBus.emit('node.updated', { nodeId: node.id, nodeName: node.name });
+  return publicHysteriaTls(fresh)!;
 }
 
 export async function updateNode(id: string, input: UpdateNodeInput): Promise<PublicNodeDto> {

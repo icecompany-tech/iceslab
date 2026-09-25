@@ -2,6 +2,10 @@ package hysteria
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -76,17 +80,26 @@ type InboundConfig struct {
 	MasqueradeURL  string
 	BrutalUpMbps   int
 	BrutalDownMbps int
+	// TLSCertPEM / TLSKeyPEM: the self-signed pair the PANEL minted for a node
+	// addressed by IP, where no public CA issues (E30a, 25.09). When set, the
+	// config gets `tls:` with the pair written beside it (tlsPaths) instead of
+	// `acme:`, and neither a hostname nor an ACME email is needed. Clients pin
+	// the certificate. Hysteria takes `tls` or `acme`, never both.
+	TLSCertPEM string
+	TLSKeyPEM  string
 }
 
-// inboundCfgWire mirrors HysteriaConfigSchema in
-// apps/panel-backend/src/modules/inbounds/inbounds.schemas.ts. Field names
-// are JSON-camelCase to match what the panel emits over /applyInbounds.
+// inboundCfgWire mirrors HysteriaInboundCfg in packages/shared/src/transport.ts.
+// Field names are JSON-camelCase to match what the panel emits over
+// /applyInbounds.
 type inboundCfgWire struct {
 	Hostname       string `json:"hostname,omitempty"`
 	ObfsPassword   string `json:"obfsPassword,omitempty"`
 	MasqueradeURL  string `json:"masqueradeUrl,omitempty"`
 	BrutalUpMbps   int    `json:"brutalUpMbps,omitempty"`
 	BrutalDownMbps int    `json:"brutalDownMbps,omitempty"`
+	TLSCertPem     string `json:"tlsCertPem,omitempty"`
+	TLSKeyPem      string `json:"tlsKeyPem,omitempty"`
 }
 
 func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
@@ -97,7 +110,51 @@ func (w inboundCfgWire) toInboundConfig(port int) InboundConfig {
 		MasqueradeURL:  w.MasqueradeURL,
 		BrutalUpMbps:   w.BrutalUpMbps,
 		BrutalDownMbps: w.BrutalDownMbps,
+		TLSCertPEM:     w.TLSCertPem,
+		TLSKeyPEM:      w.TLSKeyPem,
 	}
+}
+
+// tlsPaths: where the panel's pair is written, beside the config, under names
+// no upstream file takes. `bootstrap-hysteria.sh --remove` leaves them, as it
+// leaves the config directory.
+func tlsPaths(configPath string) (cert, key string) {
+	dir := filepath.Dir(configPath)
+	return filepath.Join(dir, "iceslab-tls.crt"), filepath.Join(dir, "iceslab-tls.key")
+}
+
+// parseTLSPair checks the pushed pair before it reaches the disk: a certificate
+// and a key that belong together, so a broken push fails here in words rather
+// than as a hysteria that will not start.
+func parseTLSPair(certPEM, keyPEM string) (*x509.Certificate, error) {
+	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("hysteria tls: the pushed certificate and key do not make a pair: %w", err)
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return nil, fmt.Errorf("hysteria tls: the pushed certificate does not parse: %w", err)
+	}
+	return cert, nil
+}
+
+// writeTLSPair writes the pair where renderConfig points `tls:`. The key 0600,
+// the certificate 0644.
+func writeTLSPair(configPath, certPEM, keyPEM string) error {
+	certPath, keyPath := tlsPaths(configPath)
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(certPath), err)
+	}
+	if err := atomicfile.Write(keyPath, []byte(keyPEM), 0o600); err != nil {
+		return err
+	}
+	return atomicfile.Write(certPath, []byte(certPEM), 0o644)
+}
+
+// certFingerprint is the sha256 of the DER in lowercase hex: what clients pin.
+func certFingerprint(cert *x509.Certificate) string {
+	sum := sha256.Sum256(cert.Raw)
+	return hex.EncodeToString(sum[:])
 }
 
 // ChainHandoff tells this core to give EVERY user to the chain process, phase 6.
@@ -137,7 +194,9 @@ func inboundEqual(a, b InboundConfig) bool {
 		a.ObfsPassword == b.ObfsPassword &&
 		a.MasqueradeURL == b.MasqueradeURL &&
 		a.BrutalUpMbps == b.BrutalUpMbps &&
-		a.BrutalDownMbps == b.BrutalDownMbps
+		a.BrutalDownMbps == b.BrutalDownMbps &&
+		a.TLSCertPEM == b.TLSCertPEM &&
+		a.TLSKeyPEM == b.TLSKeyPEM
 }
 
 // renderConfig produces a deterministic YAML body for hysteria server. The
@@ -155,6 +214,10 @@ func renderConfig(adapterCfg Config, inbound InboundConfig, handoff *ChainHandof
 	// one. A newline or YAML metacharacter in a pushed hostname would break out
 	// of the acme.domains scalar, so it is validated like every other pushed
 	// string before it reaches the file.
+	//
+	// The panel's self-signed pair (E30a) takes the place of all of it: a node
+	// addressed by IP has no name for ACME and no email to give it.
+	selfSigned := inbound.TLSCertPEM != ""
 	hostname := inbound.Hostname
 	if hostname != "" {
 		if err := validateInboundYAMLSafe("Hostname", hostname); err != nil {
@@ -163,11 +226,17 @@ func renderConfig(adapterCfg Config, inbound InboundConfig, handoff *ChainHandof
 	} else {
 		hostname = adapterCfg.Hostname
 	}
-	if hostname == "" {
-		return nil, fmt.Errorf("hysteria render: Hostname is required")
-	}
-	if adapterCfg.ACMEEmail == "" {
-		return nil, fmt.Errorf("hysteria render: ACMEEmail is required")
+	if selfSigned {
+		if adapterCfg.ConfigPath == "" {
+			return nil, fmt.Errorf("hysteria render: a self-signed certificate needs ConfigPath to be written beside")
+		}
+	} else {
+		if hostname == "" {
+			return nil, fmt.Errorf("hysteria render: Hostname is required")
+		}
+		if adapterCfg.ACMEEmail == "" {
+			return nil, fmt.Errorf("hysteria render: ACMEEmail is required")
+		}
 	}
 	// Port selection priority (slice 50, 2026-05-20):
 	//   1. inbound.Port: what the panel actually pushed, the source of truth
@@ -198,10 +267,17 @@ func renderConfig(adapterCfg Config, inbound InboundConfig, handoff *ChainHandof
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "listen: :%d\n", listenPort)
 	b.WriteString("\n")
-	b.WriteString("acme:\n")
-	b.WriteString("  domains:\n")
-	fmt.Fprintf(&b, "    - %s\n", hostname)
-	fmt.Fprintf(&b, "  email: %s\n", adapterCfg.ACMEEmail)
+	if selfSigned {
+		certPath, keyPath := tlsPaths(adapterCfg.ConfigPath)
+		b.WriteString("tls:\n")
+		fmt.Fprintf(&b, "  cert: %s\n", certPath)
+		fmt.Fprintf(&b, "  key: %s\n", keyPath)
+	} else {
+		b.WriteString("acme:\n")
+		b.WriteString("  domains:\n")
+		fmt.Fprintf(&b, "    - %s\n", hostname)
+		fmt.Fprintf(&b, "  email: %s\n", adapterCfg.ACMEEmail)
+	}
 	b.WriteString("\n")
 	b.WriteString("auth:\n")
 	b.WriteString("  type: http\n")

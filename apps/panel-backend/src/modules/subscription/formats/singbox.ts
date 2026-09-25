@@ -214,7 +214,13 @@ export function buildSingboxJson(
           : {}),
         tls: {
           enabled: true,
-          server_name: e.host,
+          // E30a: the panel's self-signed certificate on a node addressed by
+          // IP, given as the trust anchor itself with `insecure` off, the form
+          // the cascade legs use (cascades/link-tls.ts). sing-box then checks
+          // the name against it, so the name is the one in its SAN.
+          server_name: e.tlsPin ? e.tlsPin.serverName : e.host,
+          // As lines, like the legs' PEM: one string with newlines is taken too.
+          ...(e.tlsPin ? { certificate: e.tlsPin.certPem.trim().split(/\r?\n/) } : {}),
           // ALPN h3 is mandatory for some sing-box / Hiddify iOS builds,
           // without it the QUIC stream multiplexer never opens proxy
           // streams even though the QUIC connection itself is fine.

@@ -11,7 +11,6 @@ import {
 import { prisma } from '../../prisma.js';
 import { effectiveEngineOf } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
-import { acmeHostnameFor } from '../inbounds/acme-hostname.js';
 
 /**
  * A host does not go onto a node whose core for it is missing or known to be
@@ -59,59 +58,14 @@ export class CoreVersionRefusedError extends Error {
 }
 
 /**
- * E30b, 25.09: native hysteria gets its certificate only through ACME
- * (apps/node/internal/core/hysteria renders `acme:` and nothing else), and a
- * public CA does not issue for an IP. A node addressed by IP renders no
- * hysteria config at all ("Hostname is required"), so a host there is served
- * by nobody. Hysteria on sing-box brings its own certificate and works on an
- * IP.
- *
- * TEMPORARY: comes off when the agent issues a self-signed certificate for an
- * IP and the subscription pins it (E30a).
- */
-export class HysteriaNeedsHostnameError extends Error {
-  readonly code = 'HYSTERIA_NEEDS_HOSTNAME';
-  constructor(
-    public nodeName: string,
-    public address: string,
-  ) {
-    super(
-      `Native hysteria gets its certificate only through ACME, and node "${nodeName}" is addressed as ${address}, ` +
-        'for which no public CA issues one: give the node a domain name as its address, or run this profile on sing-box, which works on an IP',
-    );
-    this.name = 'HysteriaNeedsHostnameError';
-  }
-}
-
-/**
- * The E30b gate: a profile served by NATIVE hysteria (not hysteria on
- * sing-box) goes only onto a node whose address a public CA issues for, read
- * by the same acmeHostnameFor the push and the install command use.
- *
- * Save path only, where a host lands on a node: a new host, a new binding, a
- * profile switched onto native hysteria. Never on an edit that moves nothing:
- * turning off a host that cannot work has to stay possible.
- */
-export function assertHysteriaHasHostname(
-  node: { name: string; address: string },
-  profile: { protocol: string; engine: string | null },
-): void {
-  if (effectiveEngineOf(profile) !== 'hysteria') return;
-  if (acmeHostnameFor(node.address)) return;
-  throw new HysteriaNeedsHostnameError(node.name, node.address);
-}
-
-/**
- * The 409 each refusal answers with, or null for any other error. One shape
+ * The 409 either refusal answers with, or null for any other error. One shape
  * for POST /api/hosts and POST /api/bindings, so one screen draws both.
+ *
+ * (E30b's HYSTERIA_NEEDS_HOSTNAME, f73ba50, stood here for one day: native
+ * hysteria on a node addressed by IP now serves the panel's self-signed pair,
+ * E30a, and needs no domain.)
  */
 export function coreGateReply(err: unknown): { status: 409; body: Record<string, unknown> } | null {
-  if (err instanceof HysteriaNeedsHostnameError) {
-    return {
-      status: 409,
-      body: { error: err.code, message: err.message, nodeName: err.nodeName, address: err.address },
-    };
-  }
   if (err instanceof CoreNotOnNodeError) {
     return {
       status: 409,

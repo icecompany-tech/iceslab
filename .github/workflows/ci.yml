@@ -258,6 +258,27 @@ jobs:
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
           /tmp/sing-box-bin/sing-box version | head -1
 
+      # E30a: hysteria-pin.live.test.ts runs native hysteria on the pair the
+      # PANEL mints and dials it with hysteria's own client, sing-box and xray,
+      # each pinning it the way its subscription format says. Same release and
+      # sha256 as the agent job's step below. Without HYSTERIA_BIN the test
+      # skips itself.
+      - name: Install hysteria (for the pinned self-signed certificate test)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/hysteria \
+              https://github.com/apernet/hysteria/releases/download/app%2Fv2.12.3/hysteria-linux-amd64
+            then break; fi
+            echo "hysteria download failed (attempt ${attempt}/3)"
+            [ "$attempt" = 3 ] && exit 1
+            sleep $(( attempt * 5 ))
+          done
+          echo "8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e  /tmp/hysteria" | sha256sum -c -
+          chmod +x /tmp/hysteria
+          echo "HYSTERIA_BIN=/tmp/hysteria" >> "$GITHUB_ENV"
+          /tmp/hysteria version | grep '^Version:'
+
       # Phase 9: the panel converts v2fly geo lists into the chain's rule-sets
       # itself, and geo-dat.test.ts compares that, key by key, with sing-box's
       # own export of the same release (sing-geosite is built from the same

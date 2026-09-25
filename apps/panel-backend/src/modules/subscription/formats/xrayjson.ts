@@ -313,6 +313,15 @@ function buildHysteriaOutbound(e: SubscriptionEndpoint, tag: string): Record<str
   // NB: obfsPassword is intentionally NOT emitted, xray-core hy2 outbound has no
   // field for it. See the FIELD-PENDING note above: an obfs node needs Happ's
   // native hy2 core, and the эталон is the source of truth for that shape.
+  // E30a: the panel's self-signed certificate on a node addressed by IP,
+  // pinned by xray's `pinnedPeerCertSha256` (sha256 of the DER, hex). xray
+  // treats the pinned certificate as the anchor AND checks serverName against
+  // it ("against pinned CA and serverName", XTLS/Xray-core#5655), so the name
+  // is the one in its SAN. Verified live against xray 26.3.27 in
+  // hysteria-pin.live.test.ts.
+  const tlsSettings = e.tlsPin
+    ? { serverName: e.tlsPin.serverName, pinnedPeerCertSha256: e.tlsPin.certSha256 }
+    : { serverName: e.host };
   return {
     tag,
     protocol: 'hysteria',
@@ -320,7 +329,7 @@ function buildHysteriaOutbound(e: SubscriptionEndpoint, tag: string): Record<str
     streamSettings: {
       network: 'hysteria',
       security: 'tls',
-      tlsSettings: { serverName: e.host },
+      tlsSettings,
       hysteriaSettings,
     },
   };

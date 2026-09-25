@@ -276,6 +276,23 @@ type Installable interface {
 	Installed() bool
 }
 
+// TLSFact is the certificate a core serves, as the adapter knows it from what
+// it was given (E30a). Source is "acme" or "self-signed"; CertSha256 is the
+// sha256 of the certificate's DER in lowercase hex, empty for acme; NotAfter is
+// zero when unknown.
+type TLSFact struct {
+	Source     string
+	CertSha256 string
+	NotAfter   time.Time
+}
+
+// TLSReporter is an OPTIONAL interface: a core that serves a TLS certificate of
+// its own says which, for the panel's "Cores". nil = it serves none it knows of
+// (nothing applied yet). Cheap, called on every healthcheck.
+type TLSReporter interface {
+	TLSFact() *TLSFact
+}
+
 // ReservedPort is a port an adapter's own SERVICE holds, as opposed to the user
 // inbound the panel knows about.
 //

@@ -129,8 +129,7 @@ describe('the endpoints a user card copies', () => {
 
   it('keeps every other protocol on the URI the formats already give it', async () => {
     const user = await post('/api/users', { username: 'hy-copy' });
-    // A name ACME can take: native hysteria is not saved onto an IP (E30b).
-    const node = await post('/api/nodes', { name: 'hy-de', address: 'hy-de.fixture.test:8443' });
+    const node = await post('/api/nodes', { name: 'hy-de', address: '10.0.0.21:8443' });
     const profile = await post('/api/profiles', { name: 'hy', protocol: 'hysteria', config: {} });
     await post('/api/bindings', { profileId: profile.id, nodeId: node.id, port: 443 });
 

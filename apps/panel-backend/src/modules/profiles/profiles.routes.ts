@@ -158,10 +158,6 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
           canWait: err.canWait,
         });
       }
-      // E30b: switching a hysteria profile onto the native core puts it on ACME,
-      // which a node addressed by IP cannot pass. Same body as the bindings route.
-      const core = coreGateReply(err);
-      if (core) return reply.code(core.status).send(core.body);
       // The edit moves the profile onto the other transport, and somebody else
       // already holds that socket on one of its nodes. Named separately from
       // CONFLICT for the same reason as above: the screen points at the nodes,

@@ -125,6 +125,23 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // E30a: a new self-signed certificate for the node's native hysteria, pushed
+  // at once. Only for a node addressed by IP; with an FQDN hysteria takes ACME.
+  app.post('/api/nodes/:id/hysteria-tls/rotate', auth, async (request, reply) => {
+    const params = NodeIdParamSchema.parse(request.params);
+    try {
+      return reply.send({ hysteriaTls: await nodesService.rotateNodeHysteriaTls(params.id) });
+    } catch (err) {
+      if (err instanceof nodesService.NodeNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      if (err instanceof nodesService.HysteriaTlsNotSelfSignedError) {
+        return reply.code(409).send({ error: err.code, message: err.message, nodeName: err.nodeName });
+      }
+      throw err;
+    }
+  });
+
   app.post('/api/nodes/:id/bootstrap', auth, async (request, reply) => {
     const params = NodeIdParamSchema.parse(request.params);
     try {

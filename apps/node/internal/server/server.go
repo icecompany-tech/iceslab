@@ -396,6 +396,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 				installed := i.Installed()
 				cs.Installed = &installed
 			}
+			// The certificate this core serves (E30a), for the panel's "Cores"
+			// beside the certificate it minted. Absent = unknown.
+			if tr, ok := adapter.(core.TLSReporter); ok {
+				if f := tr.TLSFact(); f != nil {
+					t := dto.CoreTLSDto{Source: f.Source, CertSha256: f.CertSha256}
+					if !f.NotAfter.IsZero() {
+						t.NotAfter = f.NotAfter.UTC().Format(time.RFC3339)
+					}
+					cs.TLS = &t
+				}
+			}
 			// Ports this core's own services hold. The panel refuses a binding
 			// on a port a profile or a cascade leg already has, and had nothing
 			// to say about these: the save went through and the node failed to

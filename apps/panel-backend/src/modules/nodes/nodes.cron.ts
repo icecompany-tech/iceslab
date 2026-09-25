@@ -356,6 +356,9 @@ export function observedCores(
       // from one that cannot speak, so the two are different answers and
       // dropping the empty one would turn them back into the same silence.
       ...(c.reservedPorts !== undefined ? { reservedPorts: c.reservedPorts } : {}),
+      // E30a: the certificate the core serves, the fact beside the panel's
+      // hysteriaTls. Inventory: it changes with a push.
+      ...(c.tls !== undefined ? { tls: c.tls } : {}),
     })),
   };
 }

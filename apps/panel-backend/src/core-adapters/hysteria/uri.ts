@@ -35,6 +35,18 @@ export interface HysteriaUriOpts {
    *  fixed-port UDP throttle on RU TSPU / IR / CN ISPs. */
   portHoppingStart?: number;
   portHoppingEnd?: number;
+  /**
+   * E30a: the sha256 of the self-signed certificate native hysteria serves on
+   * a node addressed by IP, lowercase hex. Emitted as `pinSHA256=` together
+   * with `insecure=1`, and the pair is not a contradiction: the hysteria
+   * client runs Go's chain check first and its pin check in
+   * VerifyPeerCertificate after, so a self-signed certificate fails the chain
+   * check before the pin is ever read unless `insecure` switches that one off.
+   * The pin still refuses any other certificate: VerifyPeerCertificate runs
+   * with InsecureSkipVerify too (apernet/hysteria app/cmd/client.go, read
+   * 2026-09-25; docs: "pinSHA256 ... openssl x509 -fingerprint -sha256").
+   */
+  pinSha256?: string;
 }
 
 /**
@@ -81,6 +93,10 @@ export function buildHysteriaUri(opts: HysteriaUriOpts): string {
     typeof opts.portHoppingEnd === 'number'
   ) {
     params.set('mport', `${opts.portHoppingStart}-${opts.portHoppingEnd}`);
+  }
+  if (opts.pinSha256) {
+    params.set('insecure', '1');
+    params.set('pinSHA256', opts.pinSha256);
   }
   return `hysteria2://${encodeURIComponent(opts.password)}@${opts.host}:${opts.port}/?${params.toString()}#${encodeURIComponent(opts.name)}`;
 }

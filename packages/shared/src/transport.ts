@@ -846,6 +846,20 @@ export interface HysteriaInboundCfg {
   masqueradeUrl?: string;
   brutalUpMbps?: number;
   brutalDownMbps?: number;
+  /**
+   * The node's FQDN, for ACME (acme.domains). Set by the panel when the node's
+   * address is a name a public CA issues for; the certificate is then ACME's.
+   */
+  hostname?: string;
+  /**
+   * E30a, 25.09: the self-signed certificate and key the PANEL minted for a
+   * node addressed by IP, where ACME cannot issue. PEM. Sent only when
+   * `hostname` is not: the agent writes them beside its config and renders
+   * `tls:` instead of `acme:`, and clients pin the certificate. Native
+   * hysteria only; hysteria on sing-box brings its own certificate.
+   */
+  tlsCertPem?: string;
+  tlsKeyPem?: string;
 }
 
 export interface AmneziawgInboundCfg {
@@ -1661,6 +1675,32 @@ export interface CoreStatus {
    * a port it names and may never promise one it does not.
    */
   reservedPorts?: ReservedPort[];
+  /** The certificate this core serves, see CoreTls. Today only native hysteria. */
+  tls?: CoreTls;
+}
+
+/**
+ * The TLS certificate a core serves, as the agent READ it from what the core
+ * was given (E30a, 25.09). A FACT for the node's "Cores", beside the panel's
+ * intent (`hysteriaTls` on the node DTO); the pin in a subscription comes from
+ * the panel's own copy, never from this.
+ *
+ *   source      'acme': the core gets its certificate from a public CA by
+ *               name (the node has an FQDN); 'self-signed': the panel's
+ *               certificate for a node addressed by IP, pinned by clients.
+ *   certSha256  sha256 of the certificate's DER, lowercase hex, 64 characters,
+ *               no colons. The same value `openssl x509 -fingerprint -sha256`
+ *               prints, and the one pinned. Absent for 'acme': the agent does
+ *               not read hysteria's ACME store.
+ *   notAfter    ISO time the certificate expires, when known.
+ *
+ * Absent on the core = an agent older than the field, or a core that serves no
+ * TLS of its own: unknown, never "no certificate".
+ */
+export interface CoreTls {
+  source: 'acme' | 'self-signed';
+  certSha256?: string;
+  notAfter?: string;
 }
 
 /**
@@ -1773,6 +1813,8 @@ export interface NodeCoreInfo {
    * tick, and the port check has to answer between two healthchecks.
    */
   reservedPorts?: ReservedPort[];
+  /** See CoreStatus.tls. Inventory: it changes with a push, not a tick. */
+  tls?: CoreTls;
   /**
    * How many enabled hosts on this node this core row serves (host and
    * binding both enabled): hosts whose profile has this row's protocol and is

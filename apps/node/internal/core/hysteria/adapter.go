@@ -142,6 +142,10 @@ type Adapter struct {
 	// idled: Idle stopped the unit and nothing has been applied since, so a
 	// second push naming no hysteria does not stop it again.
 	idled bool
+
+	// tls: the certificate the last written config serves (E30a), reported in
+	// the healthcheck. nil until a config is written.
+	tls *core.TLSFact
 }
 
 type userEntry struct {
@@ -631,10 +635,36 @@ func (a *Adapter) rewriteLocked(inbound InboundConfig, handoff *ChainHandoff, wh
 	if err != nil {
 		return fmt.Errorf("hysteria %s: render: %w", who, err)
 	}
+	// The panel's pair goes on disk BEFORE the config that points at it, and is
+	// checked first: a pair that does not match fails the push in words.
+	fact := &core.TLSFact{Source: "acme"}
+	if inbound.TLSCertPEM != "" {
+		cert, err := parseTLSPair(inbound.TLSCertPEM, inbound.TLSKeyPEM)
+		if err != nil {
+			return fmt.Errorf("hysteria %s: %w", who, err)
+		}
+		if err := writeTLSPair(a.cfg.ConfigPath, inbound.TLSCertPEM, inbound.TLSKeyPEM); err != nil {
+			return fmt.Errorf("hysteria %s: write tls pair: %w", who, err)
+		}
+		fact = &core.TLSFact{Source: "self-signed", CertSha256: certFingerprint(cert), NotAfter: cert.NotAfter}
+	}
 	if err := writeConfig(a.cfg.ConfigPath, blob); err != nil {
 		return fmt.Errorf("hysteria %s: write %s: %w", who, a.cfg.ConfigPath, err)
 	}
+	a.tls = fact
 	return nil
+}
+
+// TLSFact implements core.TLSReporter: the certificate the last written config
+// serves. nil until one is written.
+func (a *Adapter) TLSFact() *core.TLSFact {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.tls == nil {
+		return nil
+	}
+	f := *a.tls
+	return &f
 }
 
 // restartLocked asks systemd to pick up the rewritten config. Caller holds mu.

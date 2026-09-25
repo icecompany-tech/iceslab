@@ -11,6 +11,12 @@ model Node {
   name                  String    @db.VarChar(64)
   address               String    @db.VarChar(255)
   protocol              String    @default("xray") @db.VarChar(32)
+  // E30a: the self-signed pair native hysteria serves when the node is
+  // addressed by IP and no public CA issues for it, minted by the panel
+  // (nodes/hysteria-tls.ts). { certPem, keyPem, host, certSha256, createdAt }.
+  // NULL until the first native hysteria push to such a node, and on every
+  // node with an FQDN, whose hysteria takes ACME.
+  hysteriaTls           Json?     @map("hysteria_tls")
   publicKey             Bytes?    @map("public_key")
   countryCode           String?   @map("country_code") @db.Char(2)
   status                String    @default("unknown") @db.VarChar(16)

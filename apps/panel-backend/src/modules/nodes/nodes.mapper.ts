@@ -11,6 +11,7 @@ import type {
 import { intendedEngines, reportedEngines } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
 import type { CascadeEngineNeed } from './node-cascade-needs.js';
+import { publicHysteriaTls, type PublicHysteriaTls } from './hysteria-tls-shape.js';
 
 // G (Zashchita / hardening) - public shape of the nodes.hardening jsonb blob.
 // Mirrors HardeningInput in nodes.schemas.ts; the frontend reads this to seed
@@ -184,6 +185,18 @@ export interface PublicNodeDto {
    * on the list and on GET by id.
    */
   geoIntended?: NodeGeoIntended | null;
+  /**
+   * E30a: the self-signed certificate the panel minted for this node's native
+   * hysteria, the INTENT: what clients pin. null = none (the node has an FQDN
+   * and its hysteria takes ACME, or no native hysteria was pushed to it yet).
+   * The FACT is `cores[].tls` on the hysteria row; the card compares the two
+   * `certSha256`. Never the key.
+   *
+   *   certSha256  sha256 of the certificate's DER, lowercase hex, no colons
+   *   host        the address it was minted for (its SAN)
+   *   createdAt   ISO time it was minted
+   */
+  hysteriaTls: PublicHysteriaTls | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -214,6 +227,8 @@ export const NODE_DTO_FIELDS = [
   'cores[].reason',
   'geo',
   'geoIntended',
+  'hysteriaTls',
+  'cores[].tls',
 ] as const;
 
 /**
@@ -253,6 +268,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     coreVersions: readCoreVersions(node.coreVersions),
     ...(engines !== undefined ? { engines } : {}),
     geo: (node.geo as NodeGeoFact | null) ?? null,
+    hysteriaTls: publicHysteriaTls(node.hysteriaTls),
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

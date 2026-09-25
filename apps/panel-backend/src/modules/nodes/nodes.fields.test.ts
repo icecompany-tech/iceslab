@@ -69,7 +69,13 @@ describe('the node list names the fields this server renders', () => {
           observedAt: new Date().toISOString(),
           cores: [
             { name: 'xray', engine: 'xray', installed: true },
-            { name: 'hysteria', engine: 'hysteria', installed: true, reason: 'no inbounds in the last push' },
+            {
+              name: 'hysteria',
+              engine: 'hysteria',
+              installed: true,
+              reason: 'no inbounds in the last push',
+              tls: { source: 'self-signed', certSha256: 'a'.repeat(64) },
+            },
           ],
         },
       },

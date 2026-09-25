@@ -23,6 +23,10 @@ export function buildLoonConf(endpoints: SubscriptionEndpoint[]): string {
     } else if (e.protocol === 'hysteria') {
       const p = [`${name} = Hysteria2,${e.host},${e.port},"${e.password}"`];
       if (e.obfsPassword) p.push(`salamander-password:${e.obfsPassword}`);
+      // E30a: the panel's self-signed certificate on a node addressed by IP.
+      // Spelled as nsloon.app/en/docs/Node shows the hysteria2 line (read
+      // 2026-09-25): `key=value`, the certificate's sha256 as `tls-cert-sha256`.
+      if (e.tlsPin) p.push('skip-cert-verify=false', `tls-cert-sha256=${e.tlsPin.certSha256}`);
       lines.push(p.join(','));
     } else if (e.protocol === 'xray' && !isPlainXray(e)) {
       // socks/http (the Telegram doors) are carried by plain, clash, sing-box and

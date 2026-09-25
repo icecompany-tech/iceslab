@@ -18,7 +18,7 @@ import {
 import { mapHost, type HostReach, type PublicHostDto } from './hosts.mapper.js';
 import { hostConfigChangedAt } from './hosts.freshness.js';
 import { getHiddenCascadeNodes, type HidingCascade } from '../cascades/cascade.service.js';
-import { assertCoreOnNode, assertHysteriaHasHostname } from '../nodes/node-core-gate.js';
+import { assertCoreOnNode } from '../nodes/node-core-gate.js';
 import type {
   CreateHostInput,
   ListHostsQuery,
@@ -308,15 +308,9 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   if (input.bindingId) {
     const binding = await prisma.profileNodeBinding.findUnique({
       where: { id: input.bindingId },
-      select: {
-        id: true,
-        profile: { select: { id: true, protocol: true, config: true, engine: true } },
-        node: { select: { name: true, address: true } },
-      },
+      select: { id: true, profile: { select: { id: true, protocol: true, config: true } } },
     });
     if (!binding) throw new BindingNotFoundError(input.bindingId);
-    // A host on native hysteria is served only by an ACME certificate (E30b).
-    assertHysteriaHasHostname(binding.node, binding.profile);
     return { bindingId: binding.id, profile: binding.profile };
   }
 
@@ -332,7 +326,7 @@ async function planHostCreate(input: CreateHostInput): Promise<{
 
   const node = await prisma.node.findFirst({
     where: { id: nodeId, deletedAt: null },
-    select: { id: true, name: true, address: true, cores: true, coreVersions: true },
+    select: { id: true, name: true, cores: true, coreVersions: true },
   });
   if (!node) throw new NodeNotFoundError(nodeId);
 
@@ -344,7 +338,6 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   // node, and the node's core is what serves it.
   if (existing) {
     assertCoreOnNode(node, profile);
-    assertHysteriaHasHostname(node, profile);
     return { bindingId: existing.id, profile };
   }
 
@@ -365,7 +358,6 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   await assertPortFreeOfOthers(nodeId, port, transport, node.name);
   // After the ports, before anything is written (docs/plan/core-lifecycle.md 6).
   assertCoreOnNode(node, profile);
-  assertHysteriaHasHostname(node, profile);
 
   return { bindingId: null, profile, nodeId, port };
 }
