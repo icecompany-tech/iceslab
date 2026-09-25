@@ -2,6 +2,7 @@ import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
+import { engineListForLabel, sameEngines } from '@/contours/nodes/lib/nodeCreateForm';
 export interface FormValues {
   name: string;
   host: string;
@@ -20,9 +21,9 @@ export interface FormValues {
   /** Намерение по версиям ядер, как в `Node.coreVersions`: нет компонента =
    *  пин. На сервер уходит только разница с сохранённым (`coreVersionsPatch`). */
   coreVersions: NodeCoreVersions;
-  /** Ядра ноды (intendedEngines), первое основное. Пусто, если сервер поля не
-   *  знает: тогда на экране прежний селект протокола. На сервер уходит только
-   *  изменённым (`enginesPatch`). */
+  /** Ядра ноды (intendedEngines), множество без основного. Пусто, если сервер
+   *  поля не знает: тогда на экране прежний селект протокола. На сервер уходит
+   *  только изменённым (`nodeEnginesPut`). */
   engines: EngineName[];
 }
 
@@ -30,12 +31,36 @@ export interface FormValues {
  * The `intendedEngines` of a PUT, by the three-value rule: absent = untouched,
  * a list replaces the list, and null is never sent (the server refuses it). Only
  * a changed list goes, and only to a server that has the field (`stored`
- * present). Order matters: the first is the primary.
+ * present). The list is a set (25.09): the same cores in another order are no
+ * edit.
  */
 export function enginesPatch(stored: EngineName[] | undefined, edited: EngineName[]): EngineName[] | undefined {
   if (stored === undefined || edited.length === 0) return undefined;
-  const same = stored.length === edited.length && stored.every((e, i) => e === edited[i]);
-  return same ? undefined : [...edited];
+  return sameEngines(stored, edited) ? undefined : [...edited];
+}
+
+/**
+ * Поля ядер и метки в PUT ноды:
+ *
+ *   сервер без `intendedEngines`   `protocol` из прежнего селекта, как было;
+ *   ядра не правились              ничего: отсутствие ключа = нет правки;
+ *   правились, метку сервер ещё    список и метка в паре (engineListForLabel),
+ *   сверяет                        иначе 400 INVALID_ENGINES на `protocol`;
+ *   сервер выводит метку сам       только список.
+ */
+export function nodeEnginesPut(
+  known: boolean,
+  protocolDerived: boolean,
+  stored: EngineName[] | undefined,
+  edited: EngineName[],
+  protocol: NodeProtocol,
+): { protocol?: NodeProtocol; intendedEngines?: EngineName[] } {
+  if (!known) return { protocol };
+  const diff = enginesPatch(stored, edited);
+  if (!diff) return {};
+  if (protocolDerived) return { intendedEngines: diff };
+  const pair = engineListForLabel(diff, protocol);
+  return { intendedEngines: pair.engines, protocol: pair.protocol };
 }
 
 export function splitAddress(address: string): { host: string; port: number } {

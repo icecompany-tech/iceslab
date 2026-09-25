@@ -133,8 +133,8 @@ export function NodeEditPage() {
           <Text style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, lineHeight: '22px', color: SNOW }}>
             {node.name}
           </Text>
-          {/* Ядра, на которые нода настроена (intendedEngines), основное
-              первым. Намерение, не отчёт: что стоит, говорит секция «Ядра». */}
+          {/* Ядра, на которые нода настроена (intendedEngines), множество в
+              одном порядке. Намерение, не отчёт: что стоит, говорит «Ядра». */}
           {node.intendedEngines && node.intendedEngines.length > 0 && (
             <Text
               title={t('nodeEdit.intendedEnginesHint')}

@@ -1,4 +1,4 @@
-import { LINK_CELLS } from '@iceslab/shared';
+import { ENGINE_NAMES, LINK_CELLS } from '@iceslab/shared';
 import type { EngineName } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { protocolLabelCompact } from '@/lib/domain/protocols';
@@ -144,11 +144,24 @@ export function installIntentLabel(
 
 /**
  * The engines a node is SET UP to carry (intendedEngines), as the node header
- * and the create form say them: «xray + hysteria + sing-box», the primary
- * first. An intent, not the report: what runs is `engines` / `cores`.
+ * and the create form say them: «xray + hysteria + sing-box». A set with no
+ * primary (25.09), so always in the one order of ENGINE_NAMES, whatever order
+ * the list was stored in. An intent, not the report: what runs is `engines` /
+ * `cores`.
  */
 export function intendedEnginesWords(engines: readonly EngineName[]): string {
-  return engines.map((e) => (e === 'singbox' ? 'sing-box' : e)).join(' + ');
+  return ENGINE_NAMES.filter((e) => engines.includes(e))
+    .map((e) => (e === 'singbox' ? 'sing-box' : e))
+    .join(' + ');
+}
+
+/**
+ * Ядра ноды словами для строки, у которой отчёта о ядрах нет: то, на что нода
+ * настроена (intendedEngines). `null` у сервера старше поля: тогда остаётся
+ * метка `protocol`, и экран так и говорит, что это метка.
+ */
+export function nodeIntentWords(node: Pick<Node, 'intendedEngines'>): string | null {
+  return node.intendedEngines && node.intendedEngines.length > 0 ? intendedEnginesWords(node.intendedEngines) : null;
 }
 
 /** Only for the create form above: which core the installer puts down for this

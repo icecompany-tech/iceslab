@@ -71,15 +71,14 @@ export function StepParams({
               </Box>
 
               {/* Нода живёт с несколькими ядрами (владелец, 24.09): чип на
-                  ядро, первое отмеченное основное, протокол под ним. */}
+                  ядро. Основного нет (25.09), и протокол здесь не выбирается:
+                  его решает хост при привязке. */}
               {enginesKnown && (
                 <EngineChips
                   engines={form.values.engines}
-                  protocol={form.values.protocol}
                   error={enginesRefusal}
-                  onChange={({ engines: next, protocol }) => {
+                  onChange={(next) => {
                     form.setFieldValue('engines', next);
-                    form.setFieldValue('protocol', protocol);
                     setEnginesRefusal(null);
                   }}
                 />

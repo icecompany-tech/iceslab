@@ -1,26 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_COMPONENTS } from '@iceslab/shared';
 import {
+  corePickable,
   createCoreVersions,
+  engineListForLabel,
   enginesPayload,
   legacyEngines,
-  makePrimary,
   nodeEnginesRefusal,
-  primaryProtocols,
-  protocolForPrimary,
+  sameEngines,
   toggleEngine,
   wizardCoreComponents,
 } from '@/contours/nodes/lib/nodeCreateForm';
-import { enginesPatch } from '@/contours/nodes/lib/nodeEditForm';
-import { intendedEnginesWords } from '@/lib/domain/engines';
+import { enginesPatch, nodeEnginesPut } from '@/contours/nodes/lib/nodeEditForm';
+import { intendedEnginesWords, nodeIntentWords } from '@/lib/domain/engines';
+import { protocolDerived } from '@/lib/domain/nodeFields';
 
 describe('wizardCoreComponents: ядра выбранных движков первыми', () => {
-  it('hysteria: hysteria сверху, остальные под «остальные ядра», caddy-naive не предлагается вовсе', () => {
+  it('hysteria: hysteria сверху, остальные под «остальные ядра»; строк столько, сколько компонентов в манифесте', () => {
     const { relevant, others } = wizardCoreComponents(['hysteria']);
     expect(relevant).toEqual(['hysteria']);
     expect(others).not.toContain('hysteria');
-    expect([...relevant, ...others]).not.toContain('caddy-naive');
-    expect(new Set([...relevant, ...others]).size).toBe(CORE_COMPONENTS.length - 1);
+    expect(new Set([...relevant, ...others]).size).toBe(CORE_COMPONENTS.length);
+  });
+
+  it('NaiveProxy: строка caddy-naive есть, выбора у неё нет (собирается из ветки)', () => {
+    expect(wizardCoreComponents(['naive']).relevant).toEqual(['caddy-naive']);
+    expect(corePickable('caddy-naive')).toBe(false);
+    expect(corePickable('xray')).toBe(true);
   });
 
   it('по всем выбранным движкам: AWG двумя компонентами, порядок движков сохраняется', () => {
@@ -40,42 +46,54 @@ describe('wizardCoreComponents: ядра выбранных движков пе�
   });
 });
 
-describe('движки ноды: чипы, основной, протокол под основным', () => {
-  it('протоколы основного: xray это xray или shadowsocks, sing-box это tuic, anytls, shadowtls, прочие свои', () => {
-    expect(primaryProtocols('xray')).toEqual(['xray', 'shadowsocks']);
-    expect(primaryProtocols('singbox')).toEqual(['tuic', 'anytls', 'shadowtls']);
-    expect(primaryProtocols('amneziawg')).toEqual(['amneziawg']);
-    expect(primaryProtocols('mtproto')).toEqual(['mtproto']);
-  });
-
-  it('чип добавляет в конец и снимает; последний не снимается', () => {
+describe('движки ноды: множество без основного (25.09)', () => {
+  it('любой чип снимается, в том числе бывший первым; последний не снимается', () => {
     expect(toggleEngine(['xray'], 'hysteria')).toEqual(['xray', 'hysteria']);
     expect(toggleEngine(['xray', 'hysteria'], 'xray')).toEqual(['hysteria']);
+    expect(toggleEngine(['xray', 'hysteria'], 'hysteria')).toEqual(['xray']);
     expect(toggleEngine(['xray'], 'xray')).toEqual(['xray']);
+    expect(toggleEngine(['singbox'], 'singbox')).toEqual(['singbox']);
   });
 
-  it('у стоящей ноды основное не снимается, остальные снимаются (core-lifecycle §8)', () => {
-    expect(toggleEngine(['xray', 'hysteria'], 'xray', true)).toEqual(['xray', 'hysteria']);
-    expect(toggleEngine(['xray', 'hysteria'], 'hysteria', true)).toEqual(['xray']);
+  it('порядок не в счёт: те же ядра в другом порядке одно множество', () => {
+    expect(sameEngines(['xray', 'singbox'], ['singbox', 'xray'])).toBe(true);
+    expect(sameEngines(['xray'], ['xray', 'hysteria'])).toBe(false);
   });
 
-  it('основной переставляется вперёд, протокол следует за ним', () => {
-    expect(makePrimary(['xray', 'hysteria', 'singbox'], 'singbox')).toEqual(['singbox', 'xray', 'hysteria']);
-    expect(protocolForPrimary('shadowsocks', 'xray')).toBe('shadowsocks');
-    expect(protocolForPrimary('shadowsocks', 'singbox')).toBe('tuic');
-    expect(protocolForPrimary('xray', 'hysteria')).toBe('hysteria');
+  it('метка для сервера, что ещё сверяет первое ядро: нынешняя сохраняется, её ядро встаёт первым', () => {
+    expect(engineListForLabel(['hysteria', 'xray'], 'shadowsocks')).toEqual({
+      engines: ['xray', 'hysteria'],
+      protocol: 'shadowsocks',
+    });
+    expect(engineListForLabel(['singbox', 'xray'], 'anytls')).toEqual({ engines: ['singbox', 'xray'], protocol: 'anytls' });
+    // Ядро метки снято: метка первого ядра по таблице; у sing-box она обязательна.
+    expect(engineListForLabel(['hysteria', 'singbox'], 'xray')).toEqual({
+      engines: ['hysteria', 'singbox'],
+      protocol: 'hysteria',
+    });
+    expect(engineListForLabel(['singbox'], 'xray')).toEqual({ engines: ['singbox'], protocol: 'tuic' });
   });
 
-  it('тело: новый сервер получает intendedEngines и protocol, старый прежние поля', () => {
-    expect(enginesPayload(true, ['xray', 'singbox'], 'xray')).toEqual({
-      intendedEngines: ['xray', 'singbox'],
+  it('тело создания: метка в паре, пока сервер её сверяет; без метки, когда выводит сам; старый сервер прежние поля', () => {
+    expect(enginesPayload(true, false, ['hysteria', 'xray'], 'xray')).toEqual({
+      intendedEngines: ['xray', 'hysteria'],
       protocol: 'xray',
     });
-    expect(enginesPayload(false, ['xray', 'singbox'], 'xray')).toEqual({ protocol: 'xray', singboxEngine: true });
-    expect(enginesPayload(false, ['amneziawg', 'singbox'], 'amneziawg')).toEqual({
+    const derived = enginesPayload(true, true, ['hysteria', 'xray'], 'xray');
+    expect(derived).toEqual({ intendedEngines: ['hysteria', 'xray'] });
+    expect('protocol' in derived).toBe(false);
+    expect(enginesPayload(false, false, ['xray', 'singbox'], 'xray')).toEqual({ protocol: 'xray', singboxEngine: true });
+    expect(enginesPayload(false, false, ['amneziawg', 'singbox'], 'amneziawg')).toEqual({
       protocol: 'amneziawg',
       singboxEngine: false,
     });
+  });
+
+  it('признак «сервер выводит метку сам» только по fields и только по названному имени', () => {
+    expect(protocolDerived({ fields: ['intendedEngines'] })).toBe(false);
+    expect(protocolDerived({ fields: ['protocolDerived'] }, 'protocolDerived')).toBe(true);
+    expect(protocolDerived({ fields: ['intendedEngines'] }, 'protocolDerived')).toBe(false);
+    expect(protocolDerived(undefined, 'protocolDerived')).toBe(false);
   });
 });
 
@@ -112,13 +130,40 @@ describe('enginesPatch: PUT по трём значениям', () => {
     expect(enginesPatch(['xray'], [])).toBeUndefined();
   });
 
-  it('список заменяет список, и порядок тоже правка: первое основное', () => {
+  it('список заменяет список; другой порядок тех же ядер не правка', () => {
     expect(enginesPatch(['xray'], ['xray', 'hysteria'])).toEqual(['xray', 'hysteria']);
-    expect(enginesPatch(['xray', 'singbox'], ['singbox', 'xray'])).toEqual(['singbox', 'xray']);
+    expect(enginesPatch(['xray', 'singbox'], ['singbox', 'xray'])).toBeUndefined();
   });
 
-  it('заголовок ноды: ядра через плюс, основное первым', () => {
+  it('заголовок ноды: ядра через плюс в одном порядке, как бы список ни хранился', () => {
     expect(intendedEnginesWords(['xray', 'hysteria', 'singbox'])).toBe('xray + hysteria + sing-box');
+    expect(intendedEnginesWords(['singbox', 'hysteria', 'xray'])).toBe('xray + hysteria + sing-box');
+  });
+
+  it('строка без отчёта: ядра намерения вместо метки; у сервера старше поля null', () => {
+    expect(nodeIntentWords({ intendedEngines: ['amneziawg', 'xray'] })).toBe('xray + amneziawg');
+    expect(nodeIntentWords({})).toBeNull();
+    expect(nodeIntentWords({ intendedEngines: [] })).toBeNull();
+  });
+});
+
+describe('nodeEnginesPut: ядра и метка в PUT ноды', () => {
+  it('сервер без поля: прежний protocol из селекта', () => {
+    expect(nodeEnginesPut(false, false, undefined, [], 'shadowsocks')).toEqual({ protocol: 'shadowsocks' });
+  });
+
+  it('ядра не правились (и перестановка не правка): ни списка, ни метки', () => {
+    expect(nodeEnginesPut(true, false, ['xray', 'hysteria'], ['hysteria', 'xray'], 'xray')).toEqual({});
+  });
+
+  it('правились: метка в паре, пока сервер её сверяет; только список, когда выводит сам', () => {
+    expect(nodeEnginesPut(true, false, ['xray', 'hysteria'], ['hysteria'], 'xray')).toEqual({
+      intendedEngines: ['hysteria'],
+      protocol: 'hysteria',
+    });
+    const derived = nodeEnginesPut(true, true, ['xray', 'hysteria'], ['hysteria'], 'xray');
+    expect(derived).toEqual({ intendedEngines: ['hysteria'] });
+    expect('protocol' in derived).toBe(false);
   });
 });
 

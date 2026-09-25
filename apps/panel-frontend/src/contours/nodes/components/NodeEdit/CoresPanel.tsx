@@ -27,7 +27,7 @@ import {
   firstRowOfEngine,
   type CoreRemoveFacts,
 } from '@/contours/nodes/lib/coreRemove';
-import { CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
+import { CoreVersionNote, CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
 import {
   AMBER,
   CARD,
@@ -180,9 +180,14 @@ export function CoresPanel({
               статус ноды, и повторять его здесь второй раз значит завести
               второй источник правды, который разойдётся с первым. */}
           <Box style={{ borderTop: `1px solid ${HAIRLINE}`, padding: '12px 20px 16px' }}>
-            <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>
-              {t('nodeEdit.coresInventoryNote')}
-            </Text>
+            <Stack gap={6}>
+              {/* Чем рекомендуемая отличается от закреплённой: одна строка на
+                  секцию, только когда выбор версий на экране есть. */}
+              {intent && onIntent && <CoreVersionNote />}
+              <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>
+                {t('nodeEdit.coresInventoryNote')}
+              </Text>
+            </Stack>
           </Box>
         </Stack>
       )}
@@ -380,7 +385,7 @@ function CoreRow({
                 ? t('nodeEdit.coreRemove.hosts', { count: r.count })
                 : r.kind === 'cascade'
                   ? t(r.enabled ? 'nodeEdit.coreRemove.cascade' : 'nodeEdit.coreRemove.cascadeOff', { name: r.name })
-                  : t('nodeEdit.coreRemove.primary')}
+                  : t('nodeEdit.coreRemove.last')}
             </Text>
           ))}
         </Stack>

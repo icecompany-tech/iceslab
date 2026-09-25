@@ -8,7 +8,6 @@ import { StepInstall } from '@/contours/nodes/components/NodeCreate/StepInstall'
 import { StepParams } from '@/contours/nodes/components/NodeCreate/StepParams';
 import { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 import { useTranslation } from 'react-i18next';
-import { installIntentLabel, intendedEnginesWords } from '@/lib/domain/engines';
 import {
   Box,
   Stack,
@@ -49,6 +48,7 @@ export function NodeCreatePage() {
     coreRefusal,
     enginesKnown,
     engines,
+    installWords,
     enginesRefusal,
     setEnginesRefusal,
     groups,
@@ -187,7 +187,7 @@ export function NodeCreatePage() {
                 >
                   {/* What is being installed: every core, or on an older
                       server the pair, not the protocol alone. */}
-                  {enginesKnown ? intendedEnginesWords(engines) : installIntentLabel(form.values, t)}
+                  {installWords}
                 </Text>
               </Box>
             </>
@@ -328,7 +328,7 @@ export function NodeCreatePage() {
         />
       )}
 
-      {step === 1 && <StepHosts form={form} selected={selected} groupOpen={groupOpen} setGroupOpen={setGroupOpen} profilesQuery={profilesQuery} groups={groups} portByProfile={portByProfile} toggle={toggle} toggleAllCan={toggleAllCan} />}
+      {step === 1 && <StepHosts form={form} installWords={installWords} selected={selected} groupOpen={groupOpen} setGroupOpen={setGroupOpen} profilesQuery={profilesQuery} groups={groups} portByProfile={portByProfile} toggle={toggle} toggleAllCan={toggleAllCan} />}
 
       {step === 2 && registered && <StepInstall registered={registered} showPayload={showPayload} setShowPayload={setShowPayload} copied={copied} isOnline={isOnline} waited={waited} copy={copy} downloadPayload={downloadPayload} />}
 

@@ -77,20 +77,16 @@ export function NodeParamsForm({
                   )}
                 </Box>
 
-                {/* Ядра, на которые нода настроена: те же чипы, что в мастере.
-                    Уходит только изменённый список (enginesPatch). Что стоит
-                    на машине на самом деле, говорит секция «Ядра». */}
+                {/* Ядра, на которые нода настроена: те же чипы, что в мастере,
+                    множество без основного. Уходит только изменённый список
+                    (nodeEnginesPut). Что стоит на машине на самом деле, говорит
+                    секция «Ядра». */}
                 {enginesKnown && form.values.engines.length > 0 && (
                   <EngineChips
                     engines={form.values.engines}
-                    protocol={form.values.protocol}
                     error={enginesRefusal}
-                    // Нода стоит: основное ядро не снимается щелчком, сперва
-                    // назначить другое (core-lifecycle §8).
-                    lockPrimary
-                    onChange={({ engines, protocol }) => {
+                    onChange={(engines) => {
                       form.setFieldValue('engines', engines);
-                      form.setFieldValue('protocol', protocol);
                       setEnginesRefusal(null);
                     }}
                   />

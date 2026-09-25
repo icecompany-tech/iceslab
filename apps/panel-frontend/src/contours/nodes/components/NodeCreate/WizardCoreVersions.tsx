@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { IconChevronDown } from '@tabler/icons-react';
 import type { CoreComponent, NodeCoreVersions } from '@iceslab/shared';
-import { CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
-import { wizardCoreComponents } from '@/contours/nodes/lib/nodeCreateForm';
+import { CoreVersionNote, CoreVersionSelect } from '@/contours/nodes/components/CoreVersionSelect';
+import { corePickable, wizardCoreComponents } from '@/contours/nodes/lib/nodeCreateForm';
 import { FAINT, HAIRLINE, MIST, MONO, RED, SNOW } from '@/contours/nodes/lib/colors';
 
 /**
@@ -37,7 +37,11 @@ export function WizardCoreVersions({
       <Text style={{ fontFamily: MONO, fontSize: 12, color: SNOW, minWidth: 150 }}>
         {t(`profiles.engine.component.${c}`)}
       </Text>
-      <CoreVersionSelect component={c} intent={value} onIntent={onChange} ariaLabel={c} />
+      {corePickable(c) ? (
+        <CoreVersionSelect component={c} intent={value} onIntent={onChange} ariaLabel={c} />
+      ) : (
+        <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{t('nodes.form.coreVersionsBuilt')}</Text>
+      )}
     </Box>
   );
 
@@ -83,6 +87,7 @@ export function WizardCoreVersions({
         </>
       )}
 
+      <CoreVersionNote />
       <Text style={{ fontSize: 12, lineHeight: '17px', color: FAINT }}>{t('nodes.form.coreVersionsNote')}</Text>
     </Stack>
   );

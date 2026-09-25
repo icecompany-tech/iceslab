@@ -34,6 +34,7 @@ import { listNodes, type Node as PanelNode } from '@/lib/domain/nodes';
 import {
   engineCoreWord,
   engineListWords,
+  nodeIntentWords,
   nodeRunsEngine,
   type EngineName,
 } from '@/lib/domain/engines';
@@ -493,6 +494,9 @@ function NodeRow({
    */
   const runs = wanted ? nodeRunsEngine(node, wanted) : undefined;
   const willNotRun = runs === false;
+  // Отчёта нет: ядра, на которые нода настроена, а не метка «протокол ноды».
+  // Метка остаётся только у сервера старше `intendedEngines`.
+  const intent = nodeIntentWords(node);
   const blocked = blockedWhy !== null;
   return (
     <Paper
@@ -533,7 +537,9 @@ function NodeRow({
           <Tooltip
             label={
               runs === undefined
-                ? t('profileForm.nodeEnginesUnknown', { protocol: node.protocol })
+                ? intent
+                  ? t('profileForm.nodeEnginesIntended')
+                  : t('profileForm.nodeEnginesUnknown', { protocol: node.protocol })
                 : willNotRun
                   ? t('profileForm.nodeWillNotRun', {
                       wanted: wanted ? engineCoreWord(wanted, t) : '',
@@ -552,7 +558,11 @@ function NodeRow({
               size="sm"
               tt="uppercase"
             >
-              {willNotRun ? `⚠ ${engineListWords(node, t)}` : runs === true ? engineListWords(node, t) : node.protocol}
+              {willNotRun
+                ? `⚠ ${engineListWords(node, t)}`
+                : runs === true
+                  ? engineListWords(node, t)
+                  : (intent ?? node.protocol)}
             </Badge>
           </Tooltip>
           <Tooltip label={node.lastStatusMessage ?? node.status}>

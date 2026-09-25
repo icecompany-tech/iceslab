@@ -27,7 +27,8 @@ import { listNodePolicies, policyFitRefusal as readPolicyRefusal } from '@/lib/d
 import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { defaults, enginesPatch, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
+import { defaults, nodeEnginesPut, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
+import { protocolDerived } from '@/lib/domain/nodeFields';
 import { nodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
@@ -173,7 +174,13 @@ export function useNodeEditForm() {
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
   // Ядра ноды: только изменённый список и только если сервер поле знает.
   const enginesKnown = node?.intendedEngines !== undefined;
-  const enginesDiff = enginesPatch(node?.intendedEngines, form.values.engines);
+  const enginesBody = nodeEnginesPut(
+    enginesKnown,
+    protocolDerived(fleetQuery.data),
+    node?.intendedEngines,
+    form.values.engines,
+    form.values.protocol,
+  );
   /** Отказ 400 INVALID_ENGINES: фраза сервера под чипами. */
   const [enginesRefusal, setEnginesRefusal] = useState<string | null>(null);
 
@@ -183,7 +190,6 @@ export function useNodeEditForm() {
       return updateNode(id!, {
         name: form.values.name.trim(),
         address: `${form.values.host.trim()}:${port}`,
-        protocol: form.values.protocol,
         countryCode: form.values.countryCode || null,
         regionId: form.values.regionId || null,
         consumptionMultiplier:
@@ -196,9 +202,10 @@ export function useNodeEditForm() {
         // Версии ядер: только изменённые компоненты, и только если сервер поле
         // знает (ключ пришёл в ответе про ноду).
         ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
-        // Ядра ноды: список заменяет список, протокол выше уже идёт с ним в
-        // паре (сервер проверяет, что его обслуживает первое ядро).
-        ...(enginesDiff ? { intendedEngines: enginesDiff } : {}),
+        // Ядра ноды и метка: у сервера старше поля прежний `protocol` из
+        // селекта; иначе только изменённый список, с меткой в паре, пока
+        // сервер её сверяет (nodeEnginesPut).
+        ...enginesBody,
       });
     },
     onSuccess: () => {

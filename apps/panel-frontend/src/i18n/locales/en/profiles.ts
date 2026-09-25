@@ -325,6 +325,8 @@ export const profiles = {
       'The profile needs {{wanted}}, and this node reported only: {{engines}}. The binding would be created with nothing to serve it: the subscription link would point at a port nobody listens on.',
     nodeEnginesUnknown:
       'This node has not reported which cores it runs, so there is nothing to say about compatibility. "{{protocol}}" is the label of the adapter installed as primary, not a capability list: a node with one label routinely serves profiles of other protocols beside it.',
+    nodeEnginesIntended:
+      'This node has not reported which cores it runs, so there is nothing to say about compatibility. Shown are the cores it is set up to carry: an intent, not a report about the machine.',
     portRangeStart: 'Port range start',
     portRangeStartDesc: 'UDP port-hopping to evade RU TSPU. Empty = single port.',
     portRangeEnd: 'Port range end',

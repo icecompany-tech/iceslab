@@ -19,8 +19,9 @@ export interface FormValues {
   consumptionMultiplier: number | '';
   domain: string;
   singboxEngine: boolean;
-  /** The engines the node is set up to carry, first = primary (intendedEngines).
-   *  `protocol` is the primary's install label, chosen under its chip. */
+  /** Ядра, на которые нода настроена (intendedEngines): множество, порядок
+   *  ничего не значит. `protocol` при известном поле экраном не выбирается,
+   *  это метка для сервера, который её ещё сверяет (engineListForLabel). */
   engines: EngineName[];
   hardenUfw: boolean;
   hardenFail2ban: boolean;
@@ -44,14 +45,20 @@ export function pickFreePort(used: number[]): number {
  * Which core components the create wizard offers a version for, and in what
  * order: the ones the chosen engines will install first, the rest folded
  * under «остальные ядра» (a node can gain them later, and the choice rides the
- * same bootstrap). A component with no release to choose (caddy-naive is built
- * from a branch) is not offered at all.
+ * same bootstrap). Every component of the manifest gets its row: one with no
+ * release to choose (caddy-naive is built on the node from a branch) says so
+ * in place of a picker (`corePickable`), rather than vanishing from the list
+ * as if NaiveProxy installed nothing.
  */
 export function wizardCoreComponents(engines: readonly string[]): { relevant: CoreComponent[]; others: CoreComponent[] } {
-  const pickable = (c: CoreComponent) => coreReleaseOptions(c).length > 0;
-  const relevant = [...new Set(engines)].flatMap((e) => componentsOfEngine(e)).filter(pickable);
-  const others = CORE_COMPONENTS.filter((c) => !relevant.includes(c) && pickable(c));
+  const relevant = [...new Set([...new Set(engines)].flatMap((e) => componentsOfEngine(e)))];
+  const others = CORE_COMPONENTS.filter((c) => !relevant.includes(c));
   return { relevant, others };
+}
+
+/** Есть ли у компонента релиз на выбор; нет у собираемого из ветки. */
+export function corePickable(c: CoreComponent): boolean {
+  return coreReleaseOptions(c).length > 0;
 }
 
 /**
@@ -59,68 +66,77 @@ export function wizardCoreComponents(engines: readonly string[]): { relevant: Co
  * server older than `intendedEngines` and for the wizard's first render.
  */
 export function legacyEngines(protocol: string, singboxEngine: boolean): EngineName[] {
-  const primary = nativeEngineOfIntent(protocol);
-  return primary !== 'singbox' && singboxEngine ? [primary, 'singbox'] : [primary];
+  const own = nativeEngineOfIntent(protocol);
+  return own !== 'singbox' && singboxEngine ? [own, 'singbox'] : [own];
 }
 
 /* ───── Node engines (intendedEngines, 64d7078) ─────────────────────────── */
 
-/**
- * The protocols a primary engine can be installed as: the choice under the
- * primary chip. xray is xray or shadowsocks, sing-box is tuic, anytls or
- * shadowtls, every other engine is its own protocol. Read off the protocol
- * list through nativeEngineOfIntent, the same mapping the server checks with.
+/*
+ * Ядра ноды это МНОЖЕСТВО (решение владельца 25.09: «не должно быть понятия
+ * основного ядра»). Порядок не хранится и ничего не значит, выбирать «главное»
+ * оператору нечего: `Node.protocol` у сервера выведенная метка, а какой
+ * протокол обслуживает sing-box или xray, решает хост при привязке.
  */
-export function primaryProtocols(engine: EngineName): NodeProtocol[] {
+
+/** Протоколы, которые движок обслуживает, по той же таблице, что у сервера. */
+function protocolsOfEngine(engine: EngineName): NodeProtocol[] {
   return PROTOCOL_OPTIONS.map((p) => p.value).filter((p) => nativeEngineOfIntent(p) === engine);
 }
 
-/**
- * Add an engine at the end, or take it off; the last one cannot go.
- *
- * `lockPrimary` (a node that exists, core-lifecycle §8): the primary does not
- * leave the list until another is made primary. On a machine the primary is
- * what `protocol` names, and dropping it by a click would quietly promote the
- * next engine to the node's label. The wizard has no machine yet and keeps the
- * free toggle.
- */
-export function toggleEngine(
-  engines: readonly EngineName[],
-  engine: EngineName,
-  lockPrimary = false,
-): EngineName[] {
+/** Отметить ядро или снять его; последнее снять нельзя. */
+export function toggleEngine(engines: readonly EngineName[], engine: EngineName): EngineName[] {
   if (!engines.includes(engine)) return [...engines, engine];
-  if (lockPrimary && engines[0] === engine) return [...engines];
   return engines.length > 1 ? engines.filter((e) => e !== engine) : [...engines];
 }
 
-/** Move an engine to the front: the first one is the primary. */
-export function makePrimary(engines: readonly EngineName[], engine: EngineName): EngineName[] {
-  if (!engines.includes(engine)) return [...engines];
-  return [engine, ...engines.filter((e) => e !== engine)];
+/** Одно ли это множество ядер: порядок не в счёт. */
+export function sameEngines(a: readonly EngineName[], b: readonly EngineName[]): boolean {
+  return a.length === b.length && a.every((e) => b.includes(e));
 }
 
 /**
- * The protocol once the primary is known: kept when the primary still serves
- * it (shadowsocks stays under xray), else the primary's first protocol. The
- * server refuses a protocol its first engine does not serve.
+ * Список и метка для сервера, который ещё читает первое ядро как основное (до
+ * работы BACK 25.09): он требует, чтобы `protocol` обслуживало ПЕРВОЕ ядро, а
+ * у sing-box первым метку назвать обязательно. Нынешняя метка сохраняется,
+ * если её обслуживает хоть одно отмеченное ядро: оно встаёт первым
+ * (shadowsocks при снятом hysteria остаётся shadowsocks). Иначе метка первого
+ * ядра по таблице. Порядок остальных как был.
  */
-export function protocolForPrimary(current: NodeProtocol, primary: EngineName): NodeProtocol {
-  const options = primaryProtocols(primary);
-  return options.includes(current) ? current : (options[0] ?? current);
+export function engineListForLabel(
+  engines: readonly EngineName[],
+  current: NodeProtocol,
+): { engines: EngineName[]; protocol: NodeProtocol } {
+  const serving = engines.find((e) => nativeEngineOfIntent(current) === e);
+  if (serving) return { engines: [serving, ...engines.filter((e) => e !== serving)], protocol: current };
+  const first = engines[0];
+  return { engines: [...engines], protocol: (first && protocolsOfEngine(first)[0]) || current };
 }
 
 /**
- * The engine fields of a create or update body, by what the server knows:
- * `intendedEngines` and `protocol` when it has the field, the old `protocol`
- * and `singboxEngine` when it does not (it would refuse the new key).
+ * Поля ядер в теле создания, по тому, что сервер знает:
+ *
+ *   сервер без `intendedEngines`   прежние `protocol` и `singboxEngine` (новый
+ *                                  ключ он отверг бы);
+ *   сервер с полем, метку ещё      список и метка в паре (engineListForLabel);
+ *   сверяет
+ *   сервер выводит метку сам       только список: `protocol` он игнорирует, и
+ *   (`protocolDerived`)            слать выбор, которого на экране нет, незачем.
  */
 export function enginesPayload(
   known: boolean,
+  protocolDerived: boolean,
   engines: readonly EngineName[],
   protocol: NodeProtocol,
-): { intendedEngines: EngineName[]; protocol: NodeProtocol } | { protocol: NodeProtocol; singboxEngine: boolean } {
-  if (known) return { intendedEngines: [...engines], protocol };
+):
+  | { intendedEngines: EngineName[] }
+  | { intendedEngines: EngineName[]; protocol: NodeProtocol }
+  | { protocol: NodeProtocol; singboxEngine: boolean } {
+  if (known && protocolDerived) return { intendedEngines: [...engines] };
+  if (known) {
+    const pair = engineListForLabel(engines, protocol);
+    return { intendedEngines: pair.engines, protocol: pair.protocol };
+  }
   return { protocol, singboxEngine: engines.includes('singbox') && SINGBOX_ENGINE_CAPABLE.includes(protocol) };
 }
 

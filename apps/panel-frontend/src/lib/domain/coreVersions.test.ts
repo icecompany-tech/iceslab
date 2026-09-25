@@ -10,6 +10,7 @@ import {
 import {
   coreNeed,
   coreReleaseOptions,
+  coreVersionChoices,
   coreVersionFleet,
   coreUpdateCommand,
   coreVersionFacts,
@@ -246,6 +247,22 @@ describe('coreReleaseOptions', () => {
         expect(o.blocked).toBeNull();
       }
     }
+  });
+});
+
+describe('coreVersionChoices: рекомендуемая и закреплённая не читаются как дубль', () => {
+  it('первый пункт без ключа, «рекомендуемая» с версией пина; версия пина это «закрепить (сейчас рекомендуемая)»', () => {
+    const c = coreVersionChoices('xray');
+    expect(c[0]).toEqual({ value: '', kind: 'recommended', v: PIN('xray'), blocked: null });
+    const same = c.find((x) => x.value === PIN('xray'));
+    expect(same?.kind).toBe('pinCurrent');
+    expect(c.filter((x) => x.kind === 'recommended')).toHaveLength(1);
+    expect(c.filter((x) => x.kind === 'pinCurrent')).toHaveLength(1);
+    expect(c.slice(1).every((x) => x.value !== '')).toBe(true);
+  });
+
+  it('компонент без релиза (caddy-naive): выбирать нечего, кроме рекомендуемой без версии', () => {
+    expect(coreVersionChoices('caddy-naive')).toEqual([{ value: '', kind: 'recommended', v: '', blocked: null }]);
   });
 });
 

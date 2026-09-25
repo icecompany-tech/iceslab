@@ -90,8 +90,8 @@ export interface Node {
   // 64d7078 read off `intendedEngines` by the server ("singbox" in the list).
   singboxEngine: boolean;
   /**
-   * Which engines the node is SET UP to carry, first = primary, the engine
-   * `protocol` names (64d7078). An intent: the installer and the node card read
+   * Which engines the node is SET UP to carry (64d7078), a set: since 25.09 no
+   * engine is the primary and the order means nothing. An intent: the installer and the node card read
    * it, no gate does; what the node RUNS is `engines` below. Absent = a server
    * older than the field, and the screens then keep protocol + sing-box switch.
    */
@@ -281,7 +281,9 @@ export interface NodesListResponse {
 export interface CreateNodeInput {
   name: string;
   address: string;
-  protocol: NodeProtocol;
+  /** Метка установки. Не уходит только серверу, который выводит её сам
+   *  (protocolDerived); остальным обязательна. */
+  protocol?: NodeProtocol;
   countryCode?: string | null;
   consumptionMultiplier?: number;
   regionId?: string | null;
@@ -289,8 +291,9 @@ export interface CreateNodeInput {
   domain?: string | null;
   hardening?: NodeHardening | null;
   singboxEngine?: boolean;
-  /** The engines to install, first = primary; only to a server that knows the
-   *  field (`protocol` must be served by the first). 400 INVALID_ENGINES. */
+  /** The engines to install, a set; only to a server that knows the field.
+   *  While the server still checks `protocol` against the first engine, the
+   *  list goes ordered for it (engineListForLabel). 400 INVALID_ENGINES. */
   intendedEngines?: EngineName[];
   /** Поколение AmneziaWG (фаза 7). Уходит ТОЛЬКО если оператор его выбирал:
    *  до контракта сервер поля не знает, и ключ, которого он не ждёт, это отказ

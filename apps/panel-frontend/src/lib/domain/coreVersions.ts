@@ -157,6 +157,41 @@ export function coreReleaseOptions(component: CoreComponent): CoreReleaseOption[
 }
 
 /**
+ * Пункты выбора версии (владелец 25.09: «пин манифеста (26.3.27)» и
+ * «26.3.27 · пин» читались как дубль). Два разных намерения, и слова разные:
+ *
+ *   recommended  ключа нет: нода идёт за пином манифеста и сдвинется вместе
+ *                с ним, когда панель обновит манифест;
+ *   pin          ключ с версией: версия закреплена до решения оператора;
+ *   pinCurrent   то же, у версии, которая сейчас совпадает с пином. Это не
+ *                повтор первого пункта: закреплённая не сдвинется с манифестом.
+ *
+ * Ни «авто», ни «обновление»: нода сама ничего не обновляет, ядро меняется
+ * только командой из «Ядер».
+ */
+export interface CoreVersionChoice {
+  /** '' = без ключа (рекомендуемая). */
+  value: string;
+  kind: 'recommended' | 'pin' | 'pinCurrent';
+  v: string;
+  blocked: CoreReleaseOption['blocked'];
+}
+
+export function coreVersionChoices(component: CoreComponent): CoreVersionChoice[] {
+  const options = coreReleaseOptions(component);
+  const pinned = options.find((o) => o.isPin)?.version ?? '';
+  return [
+    { value: '', kind: 'recommended', v: pinned, blocked: null },
+    ...options.map((o): CoreVersionChoice => ({
+      value: o.version,
+      kind: o.isPin ? 'pinCurrent' : 'pin',
+      v: o.version,
+      blocked: o.blocked,
+    })),
+  ];
+}
+
+/**
  * How the fleet stands against the pin for one component, as the profile
  * form shows it: the version is the node's, the profile only says so.
  *

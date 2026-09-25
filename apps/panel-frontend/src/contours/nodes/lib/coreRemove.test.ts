@@ -45,8 +45,21 @@ describe('coreRemoveFacts: «Как удалить» по фактам', () => {
         { kind: 'hosts', count: 3 },
         { kind: 'cascade', name: 'EU', enabled: true },
         { kind: 'cascade', name: 'old', enabled: false },
-        { kind: 'primary' },
       ],
+    });
+  });
+
+  it('основного нет (25.09): первое в списке снимается, отказ только у последнего ядра ноды', () => {
+    const xr = core({ name: 'xray', engine: 'xray', neededBy: 0 });
+    expect(coreRemoveFacts('xray', node([xr]))).toEqual({ kind: 'allowed', dropped: false });
+    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: ['xray'] }))).toEqual({
+      kind: 'refused',
+      reasons: [{ kind: 'last' }],
+    });
+    // Последнее по списку ядро другое: этот движок снят, удалить можно.
+    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: ['hysteria'] }))).toEqual({
+      kind: 'allowed',
+      dropped: true,
     });
   });
 

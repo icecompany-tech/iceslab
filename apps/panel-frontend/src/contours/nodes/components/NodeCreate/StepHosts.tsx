@@ -6,8 +6,6 @@ import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 import { HostGroup, HostRow } from '@/contours/nodes/components/NodeCreate/HostGroup';
 import { SummaryRow } from '@/contours/nodes/components/NodeCreate/SummaryRow';
 import { hardeningSummary, profileMeta } from '@/contours/nodes/lib/nodeInstall';
-import { protocolLabel } from '@/lib/domain/protocols';
-import { installIntentLabel } from '@/lib/domain/engines';
 import { useTranslation } from 'react-i18next';
 import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
 
@@ -19,6 +17,7 @@ type Wizard = ReturnType<typeof useNodeCreateForm>;
  */
 export function StepHosts({
   form,
+  installWords,
   selected,
   groupOpen,
   setGroupOpen,
@@ -27,7 +26,7 @@ export function StepHosts({
   portByProfile,
   toggle,
   toggleAllCan,
-}: Pick<Wizard, 'form' | 'selected' | 'groupOpen' | 'setGroupOpen' | 'profilesQuery' | 'groups' | 'portByProfile' | 'toggle' | 'toggleAllCan'>) {
+}: Pick<Wizard, 'form' | 'installWords' | 'selected' | 'groupOpen' | 'setGroupOpen' | 'profilesQuery' | 'groups' | 'portByProfile' | 'toggle' | 'toggleAllCan'>) {
   const { t } = useTranslation();
 
   return (
@@ -66,7 +65,7 @@ export function StepHosts({
                   accent={MOSS}
                   chip={t('nodeCreate.canAttach')}
                   chipColor={MOSS}
-                  hint={t('nodeCreate.canAttachHint', { protocol: protocolLabel(form.values.protocol) })}
+                  hint={t('nodeCreate.canAttachHint', { engines: installWords })}
                   count={`${groups.can.filter((p) => selected.includes(p.id)).length}/${groups.can.length}`}
                   open={groupOpen.can}
                   onToggleOpen={() => setGroupOpen((s) => ({ ...s, can: !s.can }))}
@@ -154,7 +153,7 @@ export function StepHosts({
                   // The pair the installer is about to put down, including the
                   // sing-box switch two steps back: the summary is the last
                   // place to notice it was left off.
-                  value={`${form.values.name.trim() || '-'} · ${installIntentLabel(form.values, t)}`}
+                  value={`${form.values.name.trim() || '-'} · ${installWords}`}
                 />
                 <SummaryRow
                   label={t('nodeCreate.sumEndpoint')}

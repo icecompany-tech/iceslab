@@ -26,7 +26,8 @@ import {
 import { coreVersionRefusal } from '@/lib/domain/coreVersions';
 import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
-import { nodeFieldKnown } from '@/lib/domain/nodeFields';
+import { nodeFieldKnown, protocolDerived } from '@/lib/domain/nodeFields';
+import { installIntentLabel, intendedEnginesWords } from '@/lib/domain/engines';
 
 /**
  * Everything the create wizard owns that is not markup: the form, the profile
@@ -156,6 +157,8 @@ export function useNodeCreateForm() {
         form.values.protocol,
         SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
       );
+  // Что встанет на машину, словами: ядра, или у сервера старше пара протокола.
+  const installWords = enginesKnown ? intendedEnginesWords(engines) : installIntentLabel(form.values, t);
 
   // A host can land here only if one of the engines this node will carry runs
   // the profile: its effective engine, resolved by the server, among them.
@@ -233,9 +236,9 @@ export function useNodeCreateForm() {
           form.values.consumptionMultiplier === '' ? 1 : Number(form.values.consumptionMultiplier),
         domain: form.values.domain.trim() || null,
         hardening: buildHardening(form.values),
-        // Ядра: intendedEngines с протоколом основного, или прежние поля у
-        // сервера старше контракта.
-        ...enginesPayload(enginesKnown, engines, form.values.protocol),
+        // Ядра: intendedEngines (с меткой в паре, пока сервер её сверяет), или
+        // прежние поля у сервера старше контракта.
+        ...enginesPayload(enginesKnown, protocolDerived(fleetQuery.data), engines, form.values.protocol),
         // Только выбранное оператором и только если сервер поле знает.
         ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
         // Версии ядер: только выбранные компоненты; ничего не выбрано = ключа
@@ -354,6 +357,7 @@ export function useNodeCreateForm() {
     coreRefusal,
     enginesKnown,
     engines,
+    installWords,
     enginesRefusal,
     setEnginesRefusal,
     groups,
