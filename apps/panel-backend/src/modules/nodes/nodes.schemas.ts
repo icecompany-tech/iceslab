@@ -111,8 +111,9 @@ const CoreVersionsPatchSchema = z
   .nullable();
 
 // Slice 27: keep parity with the inbound/profile protocol enum in
-// inbounds.schemas.ts. Node.protocol is a label for "which adapter is the
-// primary / installed on this VPS"; the actual deployment is per-binding.
+// inbounds.schemas.ts. Node.protocol is a label derived from the node's cores
+// (25.09: no core is the main one); the actual deployment is per-binding. Still
+// validated when sent, for the one place it is heard: a create in the old form.
 const ProtocolSchema = z.enum([
   'xray',
   'hysteria',
@@ -127,21 +128,22 @@ const ProtocolSchema = z.enum([
 ]);
 
 /**
- * Which engines the node is set up to carry, first = primary (core-lifecycle.md
- * section 7). At least one, no repeats. How it combines with `protocol` and
- * `singboxEngine` is resolveNodeEngines (node-intended-engines.ts).
+ * Which engines the node is set up to carry (core-lifecycle.md section 7), a
+ * set: the order means nothing. No repeats. Empty passes here on purpose, so
+ * that it is refused by name (LAST_CORE) in resolveNodeEngines
+ * (node-intended-engines.ts), which also says how it combines with `protocol`
+ * and `singboxEngine`.
  */
 const IntendedEnginesSchema = z
   .array(z.enum(ENGINE_NAMES))
-  .min(1, 'at least one engine')
   .max(ENGINE_NAMES.length)
   .refine((a) => new Set(a).size === a.length, 'an engine is listed twice');
 
 export const CreateNodeSchema = z.object({
   name: NameSchema,
   address: AddressSchema,
-  // Optional now: `intendedEngines` can name the primary instead. Neither sent
-  // is the old default, xray.
+  // The old form: heard only when `intendedEngines` is absent, as "the core it
+  // runs on". Neither sent is the old default, xray.
   protocol: ProtocolSchema.optional(),
   intendedEngines: IntendedEnginesSchema.optional(),
   countryCode: CountryCodeSchema.nullish(),
@@ -165,9 +167,12 @@ export type CreateNodeInput = z.infer<typeof CreateNodeSchema>;
 export const UpdateNodeSchema = z.object({
   name: NameSchema.optional(),
   address: AddressSchema.optional(),
-  protocol: ProtocolSchema.optional(),
-  // Absent = untouched; a list replaces the list. No null: a node carries at
-  // least its primary engine.
+  // Accepted and ignored: the label is derived from the cores. Any string, not
+  // the enum: an old screen that sends back the label it read gets no 400,
+  // and a sing-box-only node's label is `singbox`, which the enum lacks.
+  protocol: z.string().max(32).optional(),
+  // Absent = untouched; a list replaces the list. No null, and no empty list
+  // (LAST_CORE): a node carries at least one core.
   intendedEngines: IntendedEnginesSchema.optional(),
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().optional(),

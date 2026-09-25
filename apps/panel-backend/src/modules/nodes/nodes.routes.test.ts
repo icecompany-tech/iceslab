@@ -270,8 +270,27 @@ describe('node hardening (Zashchita) → install command', () => {
     const enginesLine = (s: string) => s.split('\n').filter((l) => l.includes('--engines'));
     expect(enginesLine(body.bootstrap.command)).toEqual(['  --engines xray,hysteria,singbox \\']);
     expect(enginesLine(JSON.parse(refreshed.body).command)).toEqual(enginesLine(body.bootstrap.command));
-    // Right after --protocol, carrying its own continuation.
-    expect(body.bootstrap.command).toContain('--protocol xray \\\n  --engines xray,hysteria,singbox \\\n');
+    // Right after the token, carrying its own continuation, and no --protocol:
+    // the cores are a set, none of them the main one (25.09).
+    expect(body.bootstrap.command).toContain('--bootstrap ');
+    expect(body.bootstrap.command).toMatch(/--bootstrap \S+ \\\n {2}--engines xray,hysteria,singbox \\\n/);
+    for (const cmd of [body.bootstrap.command, JSON.parse(refreshed.body).command]) {
+      expect(cmd).not.toContain('--protocol');
+    }
+  });
+
+  it('an old create body (protocol alone) installs its core by --engines', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: auth(),
+      payload: { name: 'old-form-1', address: 'hy.example.com:1337', protocol: 'hysteria' },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const cmd: string = JSON.parse(created.body).bootstrap.command;
+    expect(cmd).toContain('  --engines hysteria \\');
+    expect(cmd).toContain('--hysteria-domain hy.example.com');
+    expect(cmd).not.toContain('--protocol');
   });
 
   it('create and refresh commands carry the same hardening flags (mirror contract)', async () => {

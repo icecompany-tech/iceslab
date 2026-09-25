@@ -43,8 +43,15 @@ type installRun struct {
 }
 
 // runInstall builds a checkout (with or without lib/node-env.sh), runs
-// resolve_engines and install_engines, and returns what happened.
+// resolve_engines, install_engines and core_flags_env, and returns what
+// happened.
 func runInstall(t *testing.T, withLib bool, protocol, engines string, withSingbox bool) installRun {
+	return runInstallWith(t, withLib, protocol, engines, withSingbox, "")
+}
+
+// runInstallWith is runInstall with shell assignments of the install flags
+// (HY_DOMAIN=..., XR_PRIVATE_KEY=...) set before the run.
+func runInstallWith(t *testing.T, withLib bool, protocol, engines string, withSingbox bool, flags string) installRun {
 	t.Helper()
 	bash := needBash(t)
 	root := t.TempDir()
@@ -82,8 +89,10 @@ func runInstall(t *testing.T, withLib bool, protocol, engines string, withSingbo
 	prog := "set -euo pipefail\nlog() { :; }\nwarn() { echo \"warn: $*\"; }\nfail() { echo \"fail: $*\"; exit 1; }\n" +
 		coresSection(t) + "\n" +
 		"ICESLAB_NODE_DIR='" + root + "'\nICESLAB_NODE_REF=v0.1.9\nENV_FILE='" + env + "'\nHY_DOMAIN=''\nHY_EMAIL=''\n" +
+		"XR_PRIVATE_KEY=''\nXR_SHORT_IDS=''\nXR_SERVER_NAMES='www.cloudflare.com'\nXR_DEST='www.cloudflare.com:443'\nXR_PORT=443\n" +
+		flags + "\n" +
 		"PROTOCOL='" + protocol + "'\nENGINES_ARG='" + engines + "'\nWITH_SINGBOX=" + ws + "\n" +
-		"resolve_engines\ninstall_engines \"$ICESLAB_NODE_DIR/apps/node/scripts\"\necho \"ENGINES=${ENGINES[*]}\"\n"
+		"resolve_engines\ninstall_engines \"$ICESLAB_NODE_DIR/apps/node/scripts\"\ncore_flags_env\necho \"ENGINES=${ENGINES[*]}\"\n"
 	cmd := exec.Command(bash, "-c", prog)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "ICESLAB_NODE_ENV=" + env, "CALLS=" + calls}
 	out, err := cmd.CombinedOutput()
@@ -129,11 +138,65 @@ func TestInstallerTakesTheOldSpellingsToo(t *testing.T) {
 	}
 }
 
-func TestInstallerRefusesEnginesThatDisagreeWithTheProtocol(t *testing.T) {
+// 25.09: a node's cores are a set, none of them the main one. --engines alone
+// installs them in any order, and the flags follow the core they belong to.
+func TestInstallerTakesTheSetAndTheFlagsFollowTheirCore(t *testing.T) {
+	r := runInstallWith(t, true, "", "hysteria,xray", false,
+		"HY_DOMAIN='hy.example.com'\nHY_EMAIL='ops@example.com'\nXR_PRIVATE_KEY='priv'\nXR_SHORT_IDS='ab12'")
+	if r.err != nil {
+		t.Fatalf("%v\n%s", r.err, r.out)
+	}
+	if r.calls != "bootstrap-hysteria.sh \nbootstrap-xray.sh \n" {
+		t.Errorf("calls:\n%s", r.calls)
+	}
+	for _, want := range []string{
+		"HYSTERIA_HOSTNAME=hy.example.com\n",
+		"HYSTERIA_ACME_EMAIL=ops@example.com\n",
+		"XRAY_REALITY_PRIVATE_KEY=priv\n",
+		"XRAY_REALITY_SHORT_IDS=ab12\n",
+	} {
+		if !strings.Contains(r.env, want) {
+			t.Errorf("the env lacks %q:\n%s", want, r.env)
+		}
+	}
+
+	// A flag of a core the node does not get writes nothing.
+	r = runInstallWith(t, true, "", "xray", false, "HY_DOMAIN='hy.example.com'\nHY_EMAIL='ops@example.com'")
+	if r.err != nil || strings.Contains(r.env, "HYSTERIA_") {
+		t.Errorf("a hysteria flag on an xray node: %v\n%s", r.err, r.env)
+	}
+
+	// --protocol beside --engines adds its core, wherever the list puts it:
+	// no "main core goes first" any more.
+	r = runInstall(t, true, "xray", "hysteria,xray", false)
+	if r.err != nil || !strings.Contains(r.out, "ENGINES=xray hysteria") {
+		t.Errorf("--protocol xray --engines hysteria,xray: %v\n%s", r.err, r.out)
+	}
+}
+
+// A command an older panel printed keeps working: --protocol hysteria is
+// --engines hysteria, calls and env alike.
+func TestProtocolAloneIsTheSetOfItsCore(t *testing.T) {
+	flags := "HY_DOMAIN='hy.example.com'\nHY_EMAIL='ops@example.com'"
+	old := runInstallWith(t, true, "hysteria", "", false, flags)
+	set := runInstallWith(t, true, "", "hysteria", false, flags)
+	if old.err != nil || set.err != nil {
+		t.Fatalf("%v %v\n%s\n%s", old.err, set.err, old.out, set.out)
+	}
+	if old.calls != set.calls || old.env != set.env {
+		t.Errorf("--protocol hysteria and --engines hysteria differ:\ncalls %q / %q\nenv:\n%s\n---\n%s", old.calls, set.calls, old.env, set.env)
+	}
+	if !strings.Contains(old.env, "HYSTERIA_HOSTNAME=hy.example.com\n") {
+		t.Errorf("--protocol hysteria lost its flags:\n%s", old.env)
+	}
+}
+
+func TestInstallerRefusesAnUnusableSet(t *testing.T) {
 	for _, c := range []struct{ protocol, engines, says string }{
-		{"xray", "hysteria,xray", "the main core goes first"},
 		{"xray", "xray,xray", "named twice"},
 		{"xray", "xray,wireguard", "unknown core 'wireguard'"},
+		{"", ",", "names no core"},
+		{"", "", "no core named"},
 	} {
 		r := runInstall(t, true, c.protocol, c.engines, false)
 		if r.err == nil || !strings.Contains(r.out, c.says) {
@@ -145,13 +208,13 @@ func TestInstallerRefusesEnginesThatDisagreeWithTheProtocol(t *testing.T) {
 	}
 }
 
-func TestAnOldCheckoutGetsTheMainCoreAndAWarningThatSaysWhatFixesIt(t *testing.T) {
+func TestAnOldCheckoutGetsOneCoreAndAWarningThatSaysWhatFixesIt(t *testing.T) {
 	r := runInstall(t, false, "xray", "xray,hysteria,singbox", false)
 	if r.err != nil {
 		t.Fatalf("%v\n%s", r.err, r.out)
 	}
 	if r.calls != "bootstrap-xray.sh \n" {
-		t.Errorf("an old checkout ran more than the main core:\n%s", r.calls)
+		t.Errorf("an old checkout ran more than the core of --protocol:\n%s", r.calls)
 	}
 	for _, want := range []string{
 		"predates --engines",
@@ -168,9 +231,9 @@ func TestAnOldCheckoutGetsTheMainCoreAndAWarningThatSaysWhatFixesIt(t *testing.T
 			t.Errorf("the warning lacks %q:\n%s", want, r.out)
 		}
 	}
-	// And the main core is wired the old way, or the node would have none.
+	// And that core is wired the old way, or the node would have none.
 	if !strings.Contains(r.env, "XRAY_BINARY=/usr/local/bin/xray\n") {
-		t.Errorf("the main core is not in the env:\n%s", r.env)
+		t.Errorf("the one core is not in the env:\n%s", r.env)
 	}
 }
 

@@ -10,12 +10,13 @@ import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
 import { NodeEnginesError, resolveNodeEngines } from './node-intended-engines.js';
+import { intendedEngines } from './node-engines.js';
 
 /**
  * Node.intendedEngines (core-lifecycle.md section 7): the engines a node is set
- * up to carry, first = primary. `protocol` and `singboxEngine` are derived
- * from it and kept in step; the old body (protocol + singboxEngine) still
- * works and produces the same list.
+ * up to carry, a set with no main core (25.09). `protocol` and `singboxEngine`
+ * are derived from it and kept in step; the old create body (protocol +
+ * singboxEngine) still works and produces the same set.
  */
 
 let app: FastifyInstance;
@@ -52,8 +53,17 @@ async function create(body: Record<string, unknown>) {
 const put = (id: string, body: Record<string, unknown>) =>
   app.inject({ method: 'PUT', url: `/api/nodes/${id}`, headers: auth(), payload: body });
 
+const refusal = (f: () => unknown) => {
+  try {
+    f();
+    return 'no throw';
+  } catch (e) {
+    return `${(e as NodeEnginesError).code} ${(e as NodeEnginesError).path}`;
+  }
+};
+
 describe('resolveNodeEngines', () => {
-  it('derives protocol and singboxEngine from the list', () => {
+  it('derives protocol and singboxEngine from the set', () => {
     expect(resolveNodeEngines({ intendedEngines: ['xray', 'hysteria', 'singbox'] })).toEqual({
       intendedEngines: ['xray', 'hysteria', 'singbox'],
       protocol: 'xray',
@@ -61,48 +71,66 @@ describe('resolveNodeEngines', () => {
     });
   });
 
-  it('keeps a stored protocol the first engine still serves', () => {
-    const stored = { intendedEngines: ['xray' as const], protocol: 'shadowsocks', singboxEngine: false };
-    expect(resolveNodeEngines({ intendedEngines: ['xray', 'mtproto'] }, stored).protocol).toBe('shadowsocks');
-    expect(resolveNodeEngines({ intendedEngines: ['hysteria', 'xray'] }, stored).protocol).toBe('hysteria');
-  });
-
-  it('refuses a contradiction instead of picking a side', () => {
-    const bad = [
-      () => resolveNodeEngines({ intendedEngines: ['hysteria'], protocol: 'xray' }),
-      () => resolveNodeEngines({ intendedEngines: ['singbox', 'xray'] }),
-      () => resolveNodeEngines({ intendedEngines: ['xray'], singboxEngine: true }),
-    ];
-    const paths = bad.map((f) => {
-      try {
-        f();
-        return 'no throw';
-      } catch (e) {
-        return (e as NodeEnginesError).path;
-      }
-    });
-    expect(paths).toEqual(['protocol', 'protocol', 'singboxEngine']);
-    // A sing-box primary with its protocol named is fine.
-    expect(resolveNodeEngines({ intendedEngines: ['singbox'], protocol: 'tuic' })).toEqual({
-      intendedEngines: ['singbox'],
-      protocol: 'tuic',
+  it('is a set: no core is first, the label is xray if present, else the first by ENGINE_NAMES', () => {
+    expect(resolveNodeEngines({ intendedEngines: ['singbox', 'xray'] })).toEqual({
+      intendedEngines: ['xray', 'singbox'],
+      protocol: 'xray',
       singboxEngine: true,
     });
+    expect(resolveNodeEngines({ intendedEngines: ['mtproto', 'amneziawg', 'hysteria'] })).toMatchObject({
+      intendedEngines: ['hysteria', 'amneziawg', 'mtproto'],
+      protocol: 'hysteria',
+    });
+    expect(resolveNodeEngines({ intendedEngines: ['singbox'] }).protocol).toBe('singbox');
+    // A stored label is not kept: it is derived, whatever it said before.
+    const stored = { intendedEngines: ['xray' as const], protocol: 'shadowsocks', singboxEngine: false };
+    expect(resolveNodeEngines({ intendedEngines: ['hysteria', 'xray'] }, stored).protocol).toBe('xray');
   });
 
-  it('reads the old body the way it always meant', () => {
+  it('ignores a protocol sent beside the set, and on an update', () => {
+    expect(resolveNodeEngines({ intendedEngines: ['hysteria'], protocol: 'xray' })).toEqual({
+      intendedEngines: ['hysteria'],
+      protocol: 'hysteria',
+      singboxEngine: false,
+    });
+    const stored = { intendedEngines: ['xray' as const, 'hysteria' as const], protocol: 'xray', singboxEngine: false };
+    expect(resolveNodeEngines({ protocol: 'mieru' }, stored).intendedEngines).toEqual(['xray', 'hysteria']);
+  });
+
+  it('refuses a contradiction, and a node left without a core', () => {
+    expect(refusal(() => resolveNodeEngines({ intendedEngines: ['xray'], singboxEngine: true }))).toBe(
+      'INVALID_ENGINES singboxEngine',
+    );
+    expect(refusal(() => resolveNodeEngines({ intendedEngines: [] }))).toBe('LAST_CORE intendedEngines');
+    const tuic = { intendedEngines: ['singbox' as const], protocol: 'tuic', singboxEngine: true };
+    expect(refusal(() => resolveNodeEngines({ singboxEngine: false }, tuic))).toBe('LAST_CORE singboxEngine');
+  });
+
+  it('reads the old create body the way it always meant', () => {
     expect(resolveNodeEngines({})).toEqual({ intendedEngines: ['xray'], protocol: 'xray', singboxEngine: false });
     expect(resolveNodeEngines({ protocol: 'hysteria', singboxEngine: true }).intendedEngines).toEqual([
       'hysteria',
       'singbox',
     ]);
+    expect(resolveNodeEngines({ protocol: 'tuic' })).toMatchObject({ intendedEngines: ['singbox'], singboxEngine: true });
     const stored = { intendedEngines: ['xray' as const, 'hysteria' as const, 'singbox' as const], protocol: 'xray', singboxEngine: true };
-    // protocol alone moves the primary and keeps the rest.
-    expect(resolveNodeEngines({ protocol: 'hysteria' }, stored).intendedEngines).toEqual(['hysteria', 'xray', 'singbox']);
-    // The old toggle alone removes sing-box, never a sing-box primary.
+    // The old toggle alone removes sing-box.
     expect(resolveNodeEngines({ singboxEngine: false }, stored).intendedEngines).toEqual(['xray', 'hysteria']);
-    const tuic = { intendedEngines: ['singbox' as const], protocol: 'tuic', singboxEngine: true };
-    expect(resolveNodeEngines({ singboxEngine: false }, tuic).intendedEngines).toEqual(['singbox']);
+  });
+});
+
+describe('the fallback engines of a node without a stored set', () => {
+  it('the order of a stored set does not matter', () => {
+    const a = intendedEngines({ intendedEngines: ['singbox', 'hysteria', 'xray'], protocol: 'hysteria', singboxEngine: true });
+    const b = intendedEngines({ intendedEngines: ['xray', 'singbox', 'hysteria'], protocol: 'xray', singboxEngine: true });
+    expect(a).toEqual(['xray', 'hysteria', 'singbox']);
+    expect(b).toEqual(a);
+  });
+
+  it('only a row with no set falls back to its label, the one it was installed with', () => {
+    expect(intendedEngines({ intendedEngines: [], protocol: 'shadowsocks', singboxEngine: true })).toEqual(['xray', 'singbox']);
+    // With a set, the label says nothing.
+    expect(intendedEngines({ intendedEngines: ['hysteria'], protocol: 'xray', singboxEngine: false })).toEqual(['hysteria']);
   });
 });
 
@@ -128,26 +156,57 @@ describe('POST and PUT /api/nodes with intendedEngines', () => {
     expect(bare).toMatchObject({ protocol: 'xray', intendedEngines: ['xray'], singboxEngine: false });
   });
 
-  it('refuses a contradiction with the field, and an empty or repeated list', async () => {
-    const clash = await create({ intendedEngines: ['hysteria'], protocol: 'xray' });
-    expect(clash.statusCode).toBe(400);
-    expect(JSON.parse(clash.body)).toMatchObject({ error: 'INVALID_ENGINES', path: ['protocol'] });
-    expect((await create({ intendedEngines: [] })).statusCode).toBe(400);
-    expect((await create({ intendedEngines: ['xray', 'xray'] })).statusCode).toBe(400);
+  it('creates a sing-box and xray node without a 400, labelled xray', async () => {
+    const res = await create({ intendedEngines: ['singbox', 'xray'] });
+    expect(res.statusCode, res.body).toBe(201);
+    expect(JSON.parse(res.body)).toMatchObject({ intendedEngines: ['xray', 'singbox'], protocol: 'xray', singboxEngine: true });
+    // And its install line names the set, no --protocol.
+    const cmd = JSON.parse(res.body).bootstrap.command as string;
+    expect(cmd).toContain('--engines xray,singbox');
+    expect(cmd).not.toContain('--protocol');
   });
 
-  it('PUT follows the three-value rule', async () => {
+  it('refuses an empty set by name, and a repeated one', async () => {
+    const empty = await create({ intendedEngines: [] });
+    expect(empty.statusCode).toBe(400);
+    expect(JSON.parse(empty.body)).toMatchObject({ error: 'LAST_CORE', path: ['intendedEngines'] });
+    expect((await create({ intendedEngines: ['xray', 'xray'] })).statusCode).toBe(400);
+    // A protocol beside the set is no contradiction any more: it is not heard.
+    const beside = await create({ intendedEngines: ['hysteria'], protocol: 'xray' });
+    expect(beside.statusCode, beside.body).toBe(201);
+    expect(JSON.parse(beside.body)).toMatchObject({ intendedEngines: ['hysteria'], protocol: 'hysteria' });
+  });
+
+  it('PUT follows the three-value rule, and a protocol in its body is ignored', async () => {
     const id = JSON.parse((await create({ intendedEngines: ['xray', 'hysteria'] })).body).id as string;
-    // An unrelated edit leaves the list alone.
+    // An unrelated edit leaves the set alone.
     const renamed = JSON.parse((await put(id, { name: 'eng-renamed' })).body);
     expect(renamed.intendedEngines).toEqual(['xray', 'hysteria']);
-    // A list replaces the list; the order matters only for the first.
-    const moved = JSON.parse((await put(id, { intendedEngines: ['hysteria', 'xray', 'amneziawg'] })).body);
-    expect(moved).toMatchObject({ intendedEngines: ['hysteria', 'xray', 'amneziawg'], protocol: 'hysteria', singboxEngine: false });
-    // The old toggle adds sing-box to the list.
+    // protocol is not an edit: no 400, nothing moves, even for a label the
+    // enum lacks (a sing-box-only node reads `singbox`).
+    for (const protocol of ['hysteria', 'singbox']) {
+      const res = await put(id, { protocol });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({ intendedEngines: ['xray', 'hysteria'], protocol: 'xray' });
+    }
+    // A set replaces the set; its order says nothing.
+    const moved = JSON.parse((await put(id, { intendedEngines: ['amneziawg', 'hysteria'] })).body);
+    expect(moved).toMatchObject({ intendedEngines: ['hysteria', 'amneziawg'], protocol: 'hysteria', singboxEngine: false });
+    // The old toggle adds sing-box to the set.
     const toggled = JSON.parse((await put(id, { singboxEngine: true })).body);
-    expect(toggled.intendedEngines).toEqual(['hysteria', 'xray', 'amneziawg', 'singbox']);
+    expect(toggled.intendedEngines).toEqual(['hysteria', 'singbox', 'amneziawg']);
     expect((await put(id, { intendedEngines: null })).statusCode).toBe(400);
+  });
+
+  it('refuses to remove the last core: LAST_CORE', async () => {
+    const id = JSON.parse((await create({ intendedEngines: ['singbox'] })).body).id as string;
+    for (const body of [{ intendedEngines: [] }, { singboxEngine: false }]) {
+      const res = await put(id, body);
+      expect(res.statusCode, res.body).toBe(400);
+      expect(JSON.parse(res.body)).toMatchObject({ error: 'LAST_CORE' });
+    }
+    const row = await prisma.node.findUniqueOrThrow({ where: { id } });
+    expect(row.intendedEngines).toEqual(['singbox']);
   });
 });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { EngineName } from '@iceslab/shared';
 import { appendHardeningFlags, buildInstallCommand, enginesFlag } from './nodes.service.js';
 import { HardeningSchema } from './nodes.schemas.js';
 
@@ -15,7 +16,7 @@ function baseLines(): string[] {
     'bash <(curl -fsSL https://example/install-iceslab-node.sh) \\',
     '  --panel-url https://panel.example.com \\',
     '  --bootstrap bs_token \\',
-    '  --protocol xray \\',
+    '  --engines xray \\',
     '  --panel-ip 203.0.113.10',
   ];
 }
@@ -106,20 +107,15 @@ describe('appendHardeningFlags (install-command generation)', () => {
 });
 
 describe('enginesFlag (the cores of Node.intendedEngines)', () => {
-  it('says nothing for one core: --protocol already names it', () => {
-    expect(enginesFlag(['xray'])).toBeNull();
-    expect(enginesFlag([])).toBeNull();
-  });
-
-  it('uses --with-singbox for the main core plus singbox, which every installer knows', () => {
-    for (const main of ['xray', 'hysteria', 'amneziawg']) {
-      expect(enginesFlag([main, 'singbox'])).toBe('--with-singbox');
-    }
-  });
-
-  it('names every core with --engines otherwise, the main one first', () => {
+  it('names every core with --engines, one core too', () => {
+    expect(enginesFlag(['xray'])).toBe('--engines xray');
+    expect(enginesFlag(['hysteria', 'singbox'])).toBe('--engines hysteria,singbox');
     expect(enginesFlag(['xray', 'hysteria', 'singbox'])).toBe('--engines xray,hysteria,singbox');
-    expect(enginesFlag(['hysteria', 'amneziawg'])).toBe('--engines hysteria,amneziawg');
+  });
+
+  it('is a set: the order it was ticked in says nothing, one set is one line', () => {
+    expect(enginesFlag(['singbox', 'hysteria', 'xray'])).toBe('--engines xray,hysteria,singbox');
+    expect(enginesFlag(['amneziawg', 'hysteria'])).toBe(enginesFlag(['hysteria', 'amneziawg']));
   });
 });
 
@@ -137,13 +133,12 @@ describe('buildInstallCommand: no # inside the command, whatever the placeholder
    * " \".
    */
   const full = { ufwLockdown: true, fail2ban: true, realisticFallback: true, sshAllowlist: ['203.0.113.4'] };
-  const cases = [];
+  const cases: { panelIp: string | null; acmeEmail: string; hardening: typeof full | null; engines: EngineName[] }[] = [];
   for (const panelIp of [null, '198.51.100.7'])
     for (const acmeEmail of ['', 'ops@example.com'])
-      for (const protocol of ['hysteria', 'xray'])
-        for (const hardening of [null, full])
-          for (const engines of [['x'], ['hysteria', 'xray', 'singbox']])
-            cases.push({ panelIp, acmeEmail, protocol, hardening, engines });
+      for (const hardening of [null, full])
+        for (const engines of [['xray'], ['hysteria'], ['singbox', 'hysteria', 'xray']] as EngineName[][])
+          cases.push({ panelIp, acmeEmail, hardening, engines });
 
   it.each(cases)('%o', (c) => {
     const cmd = buildInstallCommand({
@@ -166,19 +161,35 @@ describe('buildInstallCommand: no # inside the command, whatever the placeholder
       expect(cmd).toContain('--ssh-allowlist 203.0.113.4');
     }
     if (!c.panelIp) expect(cmd).toMatch(/^# panel IP auto-detect failed/m);
-    if (c.protocol === 'hysteria' && !c.acmeEmail) expect(cmd).toMatch(/^# set ACME_DEFAULT_EMAIL/m);
+    if (c.engines.includes('hysteria') && !c.acmeEmail) expect(cmd).toMatch(/^# set ACME_DEFAULT_EMAIL/m);
   });
 
-  it('puts the cores right after --protocol', () => {
+  it('names the cores right after the token, and no --protocol', () => {
     const cmd = buildInstallCommand({
       panelUrl: 'https://p',
       token: 't',
-      protocol: 'xray',
       engines: ['xray', 'hysteria', 'singbox'],
       panelIp: '198.51.100.7',
       acmeEmail: '',
     });
-    expect(cmd).toContain('  --protocol xray \\\n  --engines xray,hysteria,singbox \\\n  --panel-ip 198.51.100.7');
+    expect(cmd).toContain('  --bootstrap t \\\n  --engines xray,hysteria,singbox \\\n  --panel-ip 198.51.100.7');
+    expect(cmd).not.toContain('--protocol');
+  });
+
+  it('writes the hysteria flags when hysteria is in the set, wherever it stands', () => {
+    const cmd = (engines: EngineName[]) =>
+      buildInstallCommand({
+        panelUrl: 'https://p',
+        token: 't',
+        nodeAddress: 'hy.example.com:1337',
+        engines,
+        panelIp: '198.51.100.7',
+        acmeEmail: 'ops@example.com',
+      });
+    for (const engines of [['hysteria'], ['xray', 'hysteria'], ['singbox', 'hysteria']] as EngineName[][]) {
+      expect(cmd(engines)).toContain('--hysteria-domain hy.example.com \\\n  --hysteria-email ops@example.com');
+    }
+    expect(cmd(['xray', 'singbox'])).not.toContain('--hysteria-');
   });
 });
 describe('HardeningSchema (validation contract)', () => {

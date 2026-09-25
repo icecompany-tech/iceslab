@@ -11,7 +11,7 @@ export interface CascadeEngineNeed {
 /**
  * Which cores each node must keep for the cascades it stands in, the third
  * reason a core cannot be removed (core-lifecycle.md section 8; the other two
- * are `neededBy` on the core row and the node's main core).
+ * are `neededBy` on the core row and the node's last core: a node keeps one).
  *
  * By the fact of the code, what a cascade asks of a node:
  *   - singbox: any node of a v4 cascade (positions or directions), because the

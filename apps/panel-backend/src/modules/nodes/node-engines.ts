@@ -1,4 +1,4 @@
-import type { EngineName, NodeCores, ProtocolName } from '@iceslab/shared';
+import { ENGINE_NAMES, type EngineName, type NodeCores, type ProtocolName } from '@iceslab/shared';
 
 /**
  * Which engine serves a protocol when nothing pins one.
@@ -94,8 +94,9 @@ export function reportedEngines(node: { cores: unknown }): EngineName[] | undefi
  * What the node's own settings SUGGEST it runs.
  *
  * ⚠ Not usable as a capability list, and that is why nothing gates on it.
- * `Node.protocol` is a LABEL for which adapter is primary on that VPS, and the
- * schema says so in as many words: "the actual deployment is per-binding". A
+ * `Node.protocol` is a LABEL, derived from this set since 25.09 (a node has no
+ * main core), and the schema says so in as many words: "the actual deployment
+ * is per-binding". A
  * node installed as xray routinely serves a hysteria profile as well, because
  * the agent registers an adapter for every protocol the operator might switch
  * on later.
@@ -112,12 +113,16 @@ export function intendedEngines(node: {
    *  derived the way the migration backfilled it. */
   intendedEngines?: string[] | null;
 }): EngineName[] {
+  // A set, in the order of ENGINE_NAMES: no engine of it is the main one
+  // (25.09), so a row stored in another order reads the same as the canonical.
   if (node.intendedEngines && node.intendedEngines.length > 0) {
-    return [...new Set(node.intendedEngines as EngineName[])];
+    return ENGINE_NAMES.filter((e) => node.intendedEngines!.includes(e));
   }
+  // The row predates the column: its label named the one core it was
+  // installed with. The only place `protocol` still says anything.
   const out = new Set<EngineName>([nativeEngineFor(node.protocol)]);
   if (node.singboxEngine) out.add('singbox');
-  return [...out];
+  return ENGINE_NAMES.filter((e) => out.has(e));
 }
 
 /**

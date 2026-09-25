@@ -6,7 +6,7 @@
 #   2. Clones repo into $ICESLAB_NODE_DIR (default /opt/iceslab-node)
 #   3. Builds the static node-agent binary -> /usr/local/bin/iceslab-node
 #   4. Writes /etc/iceslab-node/env with NODE_PAYLOAD and the install flags
-#   5. Runs the bootstrap of every core the node gets (--engines, else the
+#   5. Runs the bootstrap of every core the node gets (--engines, plus the
 #      core of --protocol), the same apps/node/scripts/bootstrap-<core>.sh the
 #      panel's "how to install" runs on a live node. Each one installs its core
 #      and writes its own block of the env (and its unit, where it has one), so
@@ -21,10 +21,14 @@
 #   6. Drops a systemd unit at /etc/systemd/system/iceslab-node.service
 #   7. Enables + starts the service, waits for it to be active
 #
-# Several cores at once (what the panel's node wizard emits):
-#   --protocol xray --engines xray,hysteria,singbox
-# The first engine is the node's main one and must be the core --protocol runs
-# on; --with-singbox is kept as the old spelling of adding singbox.
+# The cores are a set, none of them the main one (what the panel emits, one
+# core too):
+#   --engines xray,hysteria,singbox
+# The order means nothing. The older spellings still work: --protocol <p> adds
+# the core <p> runs on (shadowsocks runs on xray; tuic, anytls and shadowtls on
+# singbox), so a command an older panel printed installs what it always did;
+# --with-singbox adds singbox. Install flags follow the core they belong to:
+# --hysteria-* act when hysteria is in the set, --xray-reality-* when xray is.
 #
 # Usage (as root). Recommended: bootstrap-token flow (single command, no
 # manual file transfer needed):
@@ -32,7 +36,7 @@
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_AbC123dEf456 \
-#     --protocol xray
+#     --engines xray
 #
 # Get the bootstrap token + ready-made command by clicking "Create node"
 # in the panel UI: the modal shows a copy-pastable single-liner. Token is
@@ -55,7 +59,7 @@
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_xxx \
-#     --protocol hysteria \
+#     --engines hysteria \
 #     --hysteria-domain hy2-01.example.com \
 #     --hysteria-email admin@example.com
 #   # Optional: --hysteria-masquerade-url https://en.wikipedia.org/
@@ -68,7 +72,7 @@
 #   bash <(curl -fsSL .../install-iceslab-node.sh) \
 #     --panel-url https://panel.example.com \
 #     --bootstrap bs_xxx \
-#     --protocol xray \
+#     --engines xray \
 #     --xray-reality-private-key sI_p9bg-7cy... \
 #     --xray-reality-short-ids abc123 \
 #     --xray-reality-server-names www.cloudflare.com \
@@ -334,7 +338,7 @@ FAIL2BAN=0
 REALISTIC_FALLBACK=0
 SSH_ALLOWLIST=""   # comma-list of IP/CIDR; empty = keep world-open 22/tcp
 
-# Hysteria 2 server config (only used with --protocol hysteria). When DOMAIN
+# Hysteria 2 server config (only used when hysteria is a core). When DOMAIN
 # is given, the script writes /etc/hysteria/config.yaml + a hysteria systemd
 # unit and starts the server, so the admin gets a configured node from one
 # command, no manual SSH editing.
@@ -352,7 +356,7 @@ HY_OBFS_PASSWORD=""
 # hysteria.
 HY_PORT_RANGE="20000-50000"
 
-# Xray REALITY inbound params (only used with --protocol xray). When the
+# Xray REALITY inbound params (only used when xray is a core). When the
 # required ones are passed, they're written into /etc/iceslab-node/env so
 # the node-agent's xray adapter spawns a REALITY listener at startup.
 # Without these flags the Xray adapter stays disabled until the admin edits
@@ -483,49 +487,80 @@ bootstrap_of() {
   esac
 }
 
-# resolve_engines: ENGINES, the cores this node gets, the main one first.
-# --engines when given (the main one must be the core --protocol runs on),
-# else the core of --protocol; --with-singbox adds singbox either way.
+# resolve_engines: ENGINES, the set of cores this node gets; none of them is
+# the main one. --engines names them; --protocol, the older spelling, adds the
+# core it runs on; --with-singbox adds singbox. At least one has to be named.
+#
+# The order means nothing to the node. It matters only to an old checkout,
+# which installs the first core alone (install_engines), so the core of
+# --protocol goes first: that is the one such a command always installed.
 resolve_engines() {
-  local native e seen=" "
-  native="$(native_engine_of "$PROTOCOL")" || fail "Unknown protocol: $PROTOCOL"
+  local native e seen=" " listed=" "
   ENGINES=()
+  if [[ -n "$PROTOCOL" ]]; then
+    native="$(native_engine_of "$PROTOCOL")" || fail "Unknown protocol: $PROTOCOL"
+    ENGINES=("$native")
+    seen+="$native "
+  fi
   if [[ -n "$ENGINES_ARG" ]]; then
     local -a named
     IFS=',' read -ra named <<<"${ENGINES_ARG// /}"
     for e in "${named[@]}"; do
       [[ -n "$e" ]] || continue
       [[ " $KNOWN_ENGINES " == *" $e "* ]] || fail "--engines: unknown core '$e' (known: ${KNOWN_ENGINES// /, })"
-      [[ "$seen" != *" $e "* ]] || fail "--engines: '$e' is named twice"
-      seen+="$e "
-      ENGINES+=("$e")
+      [[ "$listed" != *" $e "* ]] || fail "--engines: '$e' is named twice"
+      listed+="$e "
+      if [[ "$seen" != *" $e "* ]]; then
+        ENGINES+=("$e")
+        seen+="$e "
+      fi
     done
-    [[ ${#ENGINES[@]} -gt 0 ]] || fail "--engines names no core"
-    [[ "${ENGINES[0]}" == "$native" ]] \
-      || fail "--engines starts with ${ENGINES[0]}, but --protocol $PROTOCOL runs on $native: the main core goes first"
-  else
-    ENGINES=("$native")
-    seen+="$native "
+    [[ "$listed" != " " ]] || fail "--engines names no core"
   fi
   if [[ "$WITH_SINGBOX" == 1 && "$seen" != *" singbox "* ]]; then
     ENGINES+=(singbox)
   fi
+  [[ ${#ENGINES[@]} -gt 0 ]] || fail "no core named: pass --engines (for example --engines xray)"
 }
 
 has_engine() { [[ " ${ENGINES[*]} " == *" $1 "* ]]; }
+
+# core_flags_env: the install flags of each core in the set, into the env. By
+# the core, not by --protocol: --hysteria-domain acts on any node with
+# hysteria, a REALITY key on any node with xray.
+core_flags_env() {
+  # Hysteria's identity from --hysteria-domain / --hysteria-email, so the
+  # agent's rewrites of the hysteria config keep it (without these it fell back
+  # to "your.domain.net" on the next write; caught live on the first install).
+  if has_engine hysteria; then
+    if [[ -n "$HY_DOMAIN" ]]; then echo "HYSTERIA_HOSTNAME=${HY_DOMAIN}" >> "$ENV_FILE"; fi
+    if [[ -n "$HY_EMAIL" ]]; then echo "HYSTERIA_ACME_EMAIL=${HY_EMAIL}" >> "$ENV_FILE"; fi
+  fi
+  # Xray REALITY pre-filled from --xray-reality-*, so the adapter starts at once.
+  if has_engine xray && [[ -n "$XR_PRIVATE_KEY" && -n "$XR_SHORT_IDS" ]]; then
+    cat >> "$ENV_FILE" <<EOF
+XRAY_REALITY_PRIVATE_KEY=${XR_PRIVATE_KEY}
+XRAY_REALITY_SHORT_IDS=${XR_SHORT_IDS}
+XRAY_REALITY_SERVER_NAMES=${XR_SERVER_NAMES}
+XRAY_REALITY_DEST=${XR_DEST}
+XRAY_PORT=${XR_PORT}
+EOF
+    log "Xray REALITY env populated (port=${XR_PORT}, sni=${XR_SERVER_NAMES})"
+  fi
+}
 
 # install_engines <scripts dir>: the bootstrap of every core in ENGINES, in
 # order. Each installs its core and writes its own block of the env (see
 # lib/node-env.sh there), so nothing about a core is repeated in this file.
 #
 # A checkout from before that (no lib/node-env.sh) has bootstraps that only
-# install: it gets the main core alone, wired by legacy_primary_env below, and
+# install: it gets the first core alone, wired by legacy_primary_env below, and
 # a warning that says what fixes it.
 install_engines() {
   local dir="$1" e
   if [[ ! -f "$dir/lib/node-env.sh" ]]; then
     warn "the checkout at $ICESLAB_NODE_DIR ($ICESLAB_NODE_REF) predates --engines: its bootstraps do not wire their core into the agent"
-    warn "installing only the main core, ${ENGINES[0]}, wired by this installer"
+    warn "installing only one core, ${ENGINES[0]}, wired by this installer"
     if [[ ${#ENGINES[@]} -gt 1 ]]; then
       warn "NOT installed: ${ENGINES[*]:1}"
     fi
@@ -546,11 +581,13 @@ install_engines() {
   done
 }
 
-# legacy_primary_env: what this installer wrote for the main core before the
-# bootstraps wrote it themselves. For an old checkout ONLY (install_engines);
-# delete once no supported release lacks lib/node-env.sh.
+# legacy_primary_env: what this installer wrote for the one core an old
+# checkout installs, before the bootstraps wrote it themselves. For an old
+# checkout ONLY (install_engines); delete once no supported release lacks
+# lib/node-env.sh. Keyed by --protocol when given (shadowsocks has its own
+# config), else by that core.
 legacy_primary_env() {
-  case "$PROTOCOL" in
+  case "${PROTOCOL:-${ENGINES[0]}}" in
     hysteria)
       {
         echo "HYSTERIA_BINARY=/usr/local/bin/hysteria"
@@ -571,7 +608,7 @@ legacy_primary_env() {
       printf 'MTG_BINARY=/usr/local/bin/mtg\nMTG_CONFIG=/etc/mtg/config.toml\n' >>"$ENV_FILE" ;;
     mieru)
       printf 'MITA_BINARY=/usr/local/bin/mita\nMITA_CONFIG=/etc/mita/server.json\n' >>"$ENV_FILE" ;;
-    tuic|anytls|shadowtls)
+    singbox|tuic|anytls|shadowtls)
       printf 'SINGBOX_BINARY=/usr/local/bin/sing-box\nSINGBOX_CERT=/etc/sing-box/cert.pem\nSINGBOX_KEY=/etc/sing-box/key.pem\n' >>"$ENV_FILE" ;;
     amneziawg) ;; # the agent finds awg on its own
   esac
@@ -579,8 +616,9 @@ legacy_primary_env() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    # The older spelling of a core: adds the one this protocol runs on.
     --protocol)      PROTOCOL="$2"; shift 2 ;;
-    --payload)       PAYLOAD=$(resolve_payload "$2"); shift 2 ;;
+    --payload)     PAYLOAD=$(resolve_payload "$2"); shift 2 ;;
     --payload-file)  PAYLOAD=$(resolve_payload "@$2"); shift 2 ;;
     --panel-url)     PANEL_URL="${2%/}"; shift 2 ;;
     # --bootstrap exposes the token in /proc/cmdline; prefer --bootstrap-file
@@ -617,10 +655,10 @@ while [[ $# -gt 0 ]]; do
     --fail2ban)           FAIL2BAN=1; shift ;;
     --realistic-fallback) REALISTIC_FALLBACK=1; shift ;;
     --ssh-allowlist)      SSH_ALLOWLIST="$2"; shift 2 ;;
-    # The cores this node gets, comma-separated, the main one first:
+    # The cores this node gets, comma-separated, in any order:
     # xray,singbox,hysteria,amneziawg,mtproto,mieru,naive. See resolve_engines.
     --engines)            ENGINES_ARG="$2"; shift 2 ;;
-    # The old spelling of adding singbox to the main core, still accepted.
+    # The old spelling of adding singbox, still accepted.
     --with-singbox)       WITH_SINGBOX=1; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \?//'
@@ -703,7 +741,7 @@ pattern: resource isolation, simpler firewall):
 EOF
   local choice
   while true; do
-    read -rp "Select [1-10]: " choice </dev/tty || fail "no /dev/tty; pass --protocol explicitly"
+    read -rp "Select [1-10]: " choice </dev/tty || fail "no /dev/tty; pass --engines explicitly"
     case "$choice" in
       1) PROTOCOL=xray;        break ;;
       2) PROTOCOL=hysteria;    break ;;
@@ -794,22 +832,17 @@ if [[ $EXISTING_INSTALL -eq 1 ]]; then
   fi
 fi
 
-# --engines without --protocol: the main core names it, except sing-box, which
-# serves three protocols and so cannot say which one this node is.
-if [[ -z "$PROTOCOL" && -n "$ENGINES_ARG" ]]; then
-  _FIRST="${ENGINES_ARG%%,*}"
-  _FIRST="${_FIRST// /}"
-  [[ "$_FIRST" != singbox ]] || fail "--engines starting with singbox needs --protocol tuic|anytls|shadowtls"
-  PROTOCOL="$_FIRST"
-fi
-
+# The cores come from --engines; --protocol (the older spelling) is optional
+# and adds its core. Nothing named at all: ask, where there is someone to ask.
 case "$PROTOCOL" in
   hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls) ;;
   "")
-    if [[ -e /dev/tty ]]; then
-      prompt_protocol
-    else
-      fail "Pass --protocol hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls (no /dev/tty for interactive menu)"
+    if [[ -z "$ENGINES_ARG" && "$WITH_SINGBOX" != 1 ]]; then
+      if [[ -e /dev/tty ]]; then
+        prompt_protocol
+      else
+        fail "Pass --engines ${KNOWN_ENGINES// /,} (one or more; no /dev/tty for interactive menu)"
+      fi
     fi
     ;;
   *)  fail "Unknown protocol: $PROTOCOL (valid: hysteria|xray|amneziawg|naive|shadowsocks|mtproto|mieru|tuic|anytls|shadowtls)" ;;
@@ -823,7 +856,7 @@ case "${ID:-}" in
   ubuntu|debian) ;;
   *) fail "Only Ubuntu/Debian supported here" ;;
 esac
-ok "$PRETTY_NAME · protocol=$PROTOCOL · cores: ${ENGINES[*]}"
+ok "$PRETTY_NAME · cores: ${ENGINES[*]}"
 
 # RAM / swap check, same insurance as install-iceslab.sh. Go build itself is
 # light, but the protocol bootstrap scripts (xcaddy compile for Naive, DKMS
@@ -1017,24 +1050,7 @@ EOF
   if [[ "$REALISTIC_FALLBACK" == "1" ]]; then
     echo "REALISTIC_FALLBACK=1" >> "$ENV_FILE"
   fi
-  # Hysteria's identity from --hysteria-domain / --hysteria-email, so the
-  # agent's rewrites of the hysteria config keep it (without these it fell back
-  # to "your.domain.net" on the next write; caught live on the first install).
-  if has_engine hysteria; then
-    if [[ -n "$HY_DOMAIN" ]]; then echo "HYSTERIA_HOSTNAME=${HY_DOMAIN}" >> "$ENV_FILE"; fi
-    if [[ -n "$HY_EMAIL" ]]; then echo "HYSTERIA_ACME_EMAIL=${HY_EMAIL}" >> "$ENV_FILE"; fi
-  fi
-  # Xray REALITY pre-filled from --xray-reality-*, so the adapter starts at once.
-  if has_engine xray && [[ -n "$XR_PRIVATE_KEY" && -n "$XR_SHORT_IDS" ]]; then
-    cat >> "$ENV_FILE" <<EOF
-XRAY_REALITY_PRIVATE_KEY=${XR_PRIVATE_KEY}
-XRAY_REALITY_SHORT_IDS=${XR_SHORT_IDS}
-XRAY_REALITY_SERVER_NAMES=${XR_SERVER_NAMES}
-XRAY_REALITY_DEST=${XR_DEST}
-XRAY_PORT=${XR_PORT}
-EOF
-    log "Xray REALITY env populated (port=${XR_PORT}, sni=${XR_SERVER_NAMES})"
-  fi
+  core_flags_env
   chmod 600 "$ENV_FILE"
 else
   log "$ENV_FILE exists; keeping current payload (pass --payload to overwrite)"
@@ -1106,10 +1122,11 @@ if [[ "${SKIP_FIREWALL:-0}" != "1" ]]; then
     warn "  ufw delete allow ${NODE_PORT}/tcp; ufw allow from <panel-ip> to any port ${NODE_PORT} proto tcp"
     ufw allow "${NODE_PORT}/tcp"           >/dev/null 2>&1 || true
   fi
-  # The main protocol's ports, then each added core's: a core added with
-  # --engines needs the same (AmneziaWG above all: without the FORWARD policy
-  # flip below its clients connect and no packet gets through).
-  for _FW in "$PROTOCOL" "${ENGINES[@]:1}"; do
+  # Every core's ports (AmneziaWG above all: without the FORWARD policy flip
+  # below its clients connect and no packet gets through), and those of
+  # --protocol where an older command gave one: shadowsocks also wants 443/udp,
+  # which its core, xray, does not open.
+  for _FW in $PROTOCOL "${ENGINES[@]}"; do
   case "$_FW" in
     hysteria)
       ufw allow 443/udp                  >/dev/null 2>&1 || true
@@ -1299,8 +1316,8 @@ systemctl restart iceslab-node.service
 # Hysteria 2 server config and systemd unit. Without this, the admin would
 # have to SSH in and write /etc/hysteria/config.yaml by hand after running
 # install-iceslab-node.sh, a friction point caught during a VPS test.
-# Skipped silently if either flag is missing or if the protocol isn't
-# hysteria.
+# Skipped silently if either flag is missing or if hysteria is not among the
+# cores (it need not be the first: there is no first).
 if has_engine hysteria && [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
   HY_CONFIG=/etc/hysteria/config.yaml
   # The secret the agent polls the stats with, as the hysteria block (or, on an
@@ -1437,7 +1454,7 @@ EOF
   # rule is also restored on every boot (WantedBy=multi-user.target).
   #
   # We only install when:
-  #   1. PROTOCOL=hysteria   (port-hopping is hysteria-specific)
+  #   1. hysteria is a core  (port-hopping is hysteria-specific)
   #   2. HY_PORT_RANGE is non-empty (admin can pass "" to opt out)
   #   3. iptables is present on the system
   if [[ -n "$HY_PORT_RANGE" ]] && command -v iptables >/dev/null 2>&1; then
@@ -1555,7 +1572,6 @@ printf '\033[1;32m────────────────────�
 printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m  \033[2m(total %s)\033[0m\n' "$(elapsed_total)"
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
-printf '  Protocol     %s\n' "$PROTOCOL"
 printf '  Cores        %s\n' "${ENGINES[*]}"
 printf '  Public IP    %s\n' "$PUBLIC_IP"
 printf '  mTLS port    %s/tcp  (panel connects here)\n' "$NODE_PORT"

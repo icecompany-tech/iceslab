@@ -24,11 +24,11 @@ import type {
   ListNodesQuery,
   HardeningInput,
 } from './nodes.schemas.js';
-import { resolveCoreVersions } from '@iceslab/shared';
+import { resolveCoreVersions, type EngineName } from '@iceslab/shared';
 import { applyCoreVersionsPatch, readCoreVersions } from './node-core-versions.js';
 import { hostsByEngine, withNeededBy } from './node-core-gate.js';
 import { cascadeNeedsByNode, type CascadeEngineNeed } from './node-cascade-needs.js';
-import { resolveNodeEngines } from './node-intended-engines.js';
+import { engineSet, resolveNodeEngines } from './node-intended-engines.js';
 import { collectGeoUses } from '../geo-sets/geo-refs.js';
 import { nodeGeoFor, publicIntended } from '../geo-sets/geo-push.js';
 import { intendedEngines } from './node-engines.js';
@@ -113,7 +113,7 @@ export async function createNode(
 
   // Checked before the row exists: a refused version creates nothing.
   const coreVersions = applyCoreVersionsPatch({}, input.coreVersions ?? {});
-  // The engines, the primary's label and the sing-box flag, in step.
+  // The set of cores, the label derived from it and the sing-box flag, in step.
   const engines = resolveNodeEngines(input);
 
   let node;
@@ -177,7 +177,6 @@ export async function createNode(
     command: await renderBootstrapCommand(
       ctx.panelUrl,
       tokenInfo.token,
-      node.protocol,
       node.address,
       input.hardening,
       intendedEngines(node),
@@ -229,31 +228,23 @@ export function appendHardeningFlags(lines: string[], hardening?: HardeningInput
 }
 
 /**
- * The cores the node is installed with, from Node.intendedEngines (the main one
- * first, the one --protocol runs on).
+ * The cores the node is installed with, Node.intendedEngines, as the one flag
+ * that names them: `--engines a,b,c`, one core too. No --protocol beside it
+ * (25.09: a node has no main core, the installer takes the set). The installer
+ * still reads --protocol from the commands an older panel printed.
  *
- *   one core            nothing: --protocol already says it;
- *   main core + singbox `--with-singbox`, the spelling EVERY installer knows;
- *   anything else       `--engines a,b,c`.
- *
- * Why the old spelling where it is enough: the command fetches the installer
- * from `main`, which can be older than this panel, and an installer that does
- * not know --engines stops at "Unknown arg". The one shape it cannot express
- * (a third core) is also the one it could never install.
+ * In the order of ENGINE_NAMES, so one set is always one line.
  */
-export function enginesFlag(engines: readonly string[]): string | null {
-  const extra = engines.slice(1);
-  if (extra.length === 0) return null;
-  return extra.length === 1 && extra[0] === 'singbox' ? '--with-singbox' : `--engines ${engines.join(',')}`;
+export function enginesFlag(engines: readonly EngineName[]): string {
+  return `--engines ${engineSet(engines.length > 0 ? engines : ['xray']).join(',')}`;
 }
 
 export interface InstallCommandInput {
   panelUrl: string;
   token: string;
-  protocol: string;
   nodeAddress?: string;
   hardening?: HardeningInput | null;
-  engines?: readonly string[];
+  engines: readonly EngineName[];
   /** The panel's public IP, or null when every probe failed. */
   panelIp: string | null;
   /** ACME_DEFAULT_EMAIL, trimmed; empty when unset. */
@@ -273,10 +264,7 @@ export interface InstallCommandInput {
  */
 export function buildInstallCommand(input: InstallCommandInput): string {
   const notes: string[] = [];
-  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`, `--protocol ${input.protocol}`];
-
-  const engines = enginesFlag(input.engines ?? []);
-  if (engines) flags.push(engines);
+  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`, enginesFlag(input.engines)];
 
   // Slice S7: the panel's egress IP locks the agent's UFW to it. When every
   // probe failed (offline egress?) the operator substitutes it by hand.
@@ -287,11 +275,12 @@ export function buildInstallCommand(input: InstallCommandInput): string {
     notes.push('# panel IP auto-detect failed: replace YOUR_PANEL_PUBLIC_IP below with the panel public IP');
   }
 
-  // Hysteria is the only protocol that takes install-time ACME flags: the
-  // domain and e-mail pre-baked here let its first config come up with a real
-  // name. Naive / SS2022 / MTProto / Mieru take theirs from the panel's push.
+  // Hysteria is the only core that takes install-time ACME flags: the domain
+  // and e-mail pre-baked here let its first config come up with a real name.
+  // By the core being in the set, not by it being first: there is no first.
+  // Naive / SS2022 / MTProto / Mieru take theirs from the panel's push.
   const acmeDomain = input.nodeAddress?.split(':')[0] ?? '';
-  if (input.protocol === 'hysteria' && acmeDomain) {
+  if (input.engines.includes('hysteria') && acmeDomain) {
     flags.push(`--hysteria-domain ${acmeDomain}`);
     if (input.acmeEmail) {
       flags.push(`--hysteria-email ${input.acmeEmail}`);
@@ -313,15 +302,13 @@ export function buildInstallCommand(input: InstallCommandInput): string {
 async function renderBootstrapCommand(
   panelUrl: string,
   token: string,
-  protocol: string,
-  nodeAddress?: string,
-  hardening?: HardeningInput | null,
-  engines: readonly string[] = [],
+  nodeAddress: string | undefined,
+  hardening: HardeningInput | null | undefined,
+  engines: readonly EngineName[],
 ): Promise<string> {
   return buildInstallCommand({
     panelUrl,
     token,
-    protocol,
     nodeAddress,
     hardening,
     engines,
@@ -438,13 +425,10 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   const data: Parameters<typeof repo.updateById>[1] = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.address !== undefined) data.address = input.address;
-  // The engines, the primary's label and the sing-box flag move together, and
-  // only when the body touches one of them.
-  if (
-    input.intendedEngines !== undefined ||
-    input.protocol !== undefined ||
-    input.singboxEngine !== undefined
-  ) {
+  // The set, the label derived from it and the sing-box flag move together,
+  // and only when the body touches the set. `protocol` alone is no edit: the
+  // label is not chosen (25.09).
+  if (input.intendedEngines !== undefined || input.singboxEngine !== undefined) {
     const engines = resolveNodeEngines(input, {
       intendedEngines: intendedEngines(existing),
       protocol: existing.protocol,

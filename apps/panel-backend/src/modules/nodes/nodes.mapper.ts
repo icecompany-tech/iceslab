@@ -36,6 +36,12 @@ export interface PublicNodeDto {
   id: string;
   name: string;
   address: string;
+  /**
+   * A label, derived from `intendedEngines` on every write (25.09): xray when
+   * the node has it, else the first of its cores by ENGINE_NAMES. Not chosen,
+   * not a capability, and not taken back on create or update (except a create
+   * in the old form, which names no set). Kept for old screens and filters.
+   */
   protocol: string;
   countryCode: string | null;
   status: string;
@@ -104,10 +110,11 @@ export interface PublicNodeDto {
   // off intendedEngines ("singbox" in the list); kept for the older screens.
   singboxEngine: boolean;
   /**
-   * Which engines the node is SET UP to carry, first = primary, the engine
-   * `protocol` names (core-lifecycle.md section 7). An intent: the installer
-   * and the node card read it, no gate does. Not `engines` below, which is
-   * what the node REPORTED.
+   * Which engines the node is SET UP to carry (core-lifecycle.md section 7), a
+   * set in the order of ENGINE_NAMES: no engine of it is the main one (25.09).
+   * `protocol` above is a label derived from it. An intent: the installer and
+   * the node card read it, no gate does. Not `engines` below, which is what
+   * the node REPORTED.
    */
   intendedEngines: EngineName[];
   /** Э3: node-level routing policy this node runs, null = none. The rules
@@ -160,7 +167,7 @@ export interface PublicNodeDto {
    * The cores the cascades this node stands in need from it, and which
    * cascades (disabled ones included, `enabled: false`). Empty outside every
    * cascade. One of the three facts that keep a core from being removed, beside
-   * `neededBy` on the core row and the main core (intendedEngines[0]).
+   * `neededBy` on the core row and the node's last core (a node keeps one).
    * Present on the list and on GET by id.
    */
   cascadeNeedsEngines?: CascadeEngineNeed[];

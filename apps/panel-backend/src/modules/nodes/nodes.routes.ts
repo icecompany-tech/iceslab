@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { TRANSPORTS } from '@iceslab/shared';
+import { TRANSPORTS, type EngineName } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import { config } from '../../config.js';
 import {
@@ -45,15 +45,13 @@ const auth = { onRequest: [requireAuth] };
 async function renderRefreshBootstrapCommand(
   panelUrl: string,
   token: string,
-  protocol: string,
   nodeAddress: string,
-  hardening?: HardeningInput | null,
-  engines: readonly string[] = [],
+  hardening: HardeningInput | null | undefined,
+  engines: readonly EngineName[],
 ): Promise<string> {
   return buildInstallCommand({
     panelUrl,
     token,
-    protocol,
     nodeAddress,
     hardening,
     engines,
@@ -138,7 +136,6 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
         command: await renderRefreshBootstrapCommand(
           publicUrlFromRequest(request),
           tokenInfo.token,
-          node.protocol,
           node.address,
           node.hardening,
           node.intendedEngines,
