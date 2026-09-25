@@ -496,7 +496,7 @@ function NodeRow({
   const willNotRun = runs === false;
   // Отчёта нет: ядра, на которые нода настроена, а не метка «протокол ноды».
   // Метка остаётся только у сервера старше `intendedEngines`.
-  const intent = nodeIntentWords(node);
+  const intent = nodeIntentWords(node, t);
   const blocked = blockedWhy !== null;
   return (
     <Paper

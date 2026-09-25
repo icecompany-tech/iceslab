@@ -28,7 +28,7 @@ import { coreVersionRefusal } from '@/lib/domain/coreVersions';
 import { apiErrorMessage } from '@/lib/net/client';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
 import { nodeFieldKnown } from '@/lib/domain/nodeFields';
-import { installIntentLabel, intendedEnginesWords } from '@/lib/domain/engines';
+import { installIntentLabel, nodeIntentWords } from '@/lib/domain/engines';
 
 /**
  * Everything the create wizard owns that is not markup: the form, the profile
@@ -159,7 +159,9 @@ export function useNodeCreateForm() {
         SINGBOX_ENGINE_CAPABLE.includes(form.values.protocol) && form.values.singboxEngine,
       );
   // Что встанет на машину, словами: ядра, или у сервера старше пара протокола.
-  const installWords = enginesKnown ? intendedEnginesWords(engines) : installIntentLabel(form.values, t);
+  const installWords = enginesKnown
+    ? (nodeIntentWords({ intendedEngines: engines }, t) ?? '')
+    : installIntentLabel(form.values, t);
 
   // A host can land here only if one of the engines this node will carry runs
   // the profile: its effective engine, resolved by the server, among them.

@@ -157,11 +157,15 @@ export function intendedEnginesWords(engines: readonly EngineName[]): string {
 
 /**
  * Ядра ноды словами для строки, у которой отчёта о ядрах нет: то, на что нода
- * настроена (intendedEngines). `null` у сервера старше поля: тогда остаётся
- * метка `protocol`, и экран так и говорит, что это метка.
+ * настроена (intendedEngines). Пустой набор это нода без ядер (владелец,
+ * 25.09, стоит один агент): «без ядер», а не пустая строка. `null` у сервера
+ * старше поля: тогда остаётся метка `protocol`, и экран так и говорит, что
+ * это метка.
  */
-export function nodeIntentWords(node: Pick<Node, 'intendedEngines'>): string | null {
-  return node.intendedEngines && node.intendedEngines.length > 0 ? intendedEnginesWords(node.intendedEngines) : null;
+export function nodeIntentWords(node: Pick<Node, 'intendedEngines'>, t: T): string | null {
+  const engines = node.intendedEngines;
+  if (engines === undefined) return null;
+  return engines.length > 0 ? intendedEnginesWords(engines) : t('engine.noCores');
 }
 
 /** Only for the create form above: which core the installer puts down for this

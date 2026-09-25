@@ -49,18 +49,11 @@ describe('coreRemoveFacts: «Как удалить» по фактам', () => {
     });
   });
 
-  it('основного нет (25.09): первое в списке снимается, отказ только у последнего ядра ноды', () => {
+  it('основного нет и нода без ядер допустима (25.09): единственное ядро удаляется, если никому не нужно', () => {
     const xr = core({ name: 'xray', engine: 'xray', neededBy: 0 });
     expect(coreRemoveFacts('xray', node([xr]))).toEqual({ kind: 'allowed', dropped: false });
-    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: ['xray'] }))).toEqual({
-      kind: 'refused',
-      reasons: [{ kind: 'last' }],
-    });
-    // Последнее по списку ядро другое: этот движок снят, удалить можно.
-    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: ['hysteria'] }))).toEqual({
-      kind: 'allowed',
-      dropped: true,
-    });
+    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: ['xray'] }))).toEqual({ kind: 'allowed', dropped: false });
+    expect(coreRemoveFacts('xray', node([xr], { intendedEngines: [] }))).toEqual({ kind: 'allowed', dropped: true });
   });
 
   it('поля каскадов нет (старая панель): не отказывать и не разрешать', () => {

@@ -32,10 +32,10 @@ export interface FormValues {
  * a list replaces the list, and null is never sent (the server refuses it). Only
  * a changed list goes, and only to a server that has the field (`stored`
  * present). The list is a set (25.09): the same cores in another order are no
- * edit.
+ * edit. An empty list is a real edit too (a node with no core, owner 25.09).
  */
 export function enginesPatch(stored: EngineName[] | undefined, edited: EngineName[]): EngineName[] | undefined {
-  if (stored === undefined || edited.length === 0) return undefined;
+  if (stored === undefined) return undefined;
   return sameEngines(stored, edited) ? undefined : [...edited];
 }
 
@@ -64,12 +64,13 @@ export function nodeEnginesPut(
 /**
  * Метка ноды как значение формы. Сервер 93ad747 выводит `singbox` у ноды
  * только с sing-box; протокола установки с таким именем нет, и в форме он
- * читается как tuic, первый протокол sing-box. Уходит эта метка только в
+ * читается как tuic, первый протокол sing-box. `none` (нода без ядер) как
+ * xray, прежнее значение по умолчанию. Уходит эта метка только в
  * паре со списком ядер (engineListForLabel), а новый сервер метку на записи
  * не слушает; старый `singbox` не отдаёт вовсе.
  */
 export function formProtocolOf(label: NodeLabel | undefined): NodeProtocol {
-  if (label === undefined) return 'xray';
+  if (label === undefined || label === 'none') return 'xray';
   return label === 'singbox' ? 'tuic' : label;
 }
 

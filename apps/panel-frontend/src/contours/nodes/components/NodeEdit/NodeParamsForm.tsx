@@ -81,7 +81,9 @@ export function NodeParamsForm({
                     множество без основного. Уходит только изменённый список
                     (nodeEnginesPut). Что стоит на машине на самом деле, говорит
                     секция «Ядра». */}
-                {enginesKnown && form.values.engines.length > 0 && (
+                {/* Пустой набор тоже рисуется: нода без ядер (владелец, 25.09),
+                    а «сервер поля не знает» говорит enginesKnown. */}
+                {enginesKnown && (
                   <EngineChips
                     engines={form.values.engines}
                     error={enginesRefusal}

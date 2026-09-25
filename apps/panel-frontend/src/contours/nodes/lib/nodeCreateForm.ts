@@ -51,8 +51,11 @@ export function pickFreePort(used: number[]): number {
  * as if NaiveProxy installed nothing.
  */
 export function wizardCoreComponents(engines: readonly string[]): { relevant: CoreComponent[]; others: CoreComponent[] } {
-  const relevant = [...new Set([...new Set(engines)].flatMap((e) => componentsOfEngine(e)))];
-  const others = CORE_COMPONENTS.filter((c) => !relevant.includes(c));
+  // Порядок манифеста, а не щелчков (владелец, стенд 25.09: отмеченные
+  // Xray, Hysteria 2, MTProto дали строки mtg, xray, hysteria).
+  const wanted = new Set(engines.flatMap((e) => componentsOfEngine(e)));
+  const relevant = CORE_COMPONENTS.filter((c) => wanted.has(c));
+  const others = CORE_COMPONENTS.filter((c) => !wanted.has(c));
   return { relevant, others };
 }
 
@@ -84,10 +87,10 @@ function protocolsOfEngine(engine: EngineName): NodeProtocol[] {
   return PROTOCOL_OPTIONS.map((p) => p.value).filter((p) => nativeEngineOfIntent(p) === engine);
 }
 
-/** Отметить ядро или снять его; последнее снять нельзя. */
+/** Отметить ядро или снять его. Снять можно все (владелец, 25.09): нода без
+ *  ядер ставится одним агентом, ядра добавляются потом на странице ноды. */
 export function toggleEngine(engines: readonly EngineName[], engine: EngineName): EngineName[] {
-  if (!engines.includes(engine)) return [...engines, engine];
-  return engines.length > 1 ? engines.filter((e) => e !== engine) : [...engines];
+  return engines.includes(engine) ? engines.filter((e) => e !== engine) : [...engines, engine];
 }
 
 /** Одно ли это множество ядер: порядок не в счёт. */

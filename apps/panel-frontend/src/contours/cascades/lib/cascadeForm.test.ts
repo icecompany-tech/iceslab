@@ -958,6 +958,10 @@ describe('entryProtocolDefault: вход по ядрам ноды, а не по 
     expect(entryProtocolDefault({ intendedEngines: ['singbox'], protocol: 'singbox' })).toEqual({ kind: 'none' });
   });
 
+  it('нода без ядер (метка none): умолчания нет, та же строка', () => {
+    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none' })).toEqual({ kind: 'none' });
+  });
+
   it('сервер старше intendedEngines: прежнее правило по метке, иначе сказать нечего', () => {
     expect(entryProtocolDefault({ protocol: 'hysteria' })).toEqual({ kind: 'protocol', protocol: 'hysteria' });
     expect(entryProtocolDefault({ protocol: 'tuic' })).toEqual({ kind: 'unknown' });

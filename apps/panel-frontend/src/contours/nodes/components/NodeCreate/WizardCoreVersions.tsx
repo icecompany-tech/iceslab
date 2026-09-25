@@ -66,7 +66,11 @@ export function WizardCoreVersions({
         </Box>
       )}
 
-      {relevant.map(row)}
+      {relevant.length === 0 ? (
+        <Text style={{ fontSize: 12, lineHeight: '17px', color: MIST }}>{t('nodes.form.coreVersionsNoneChosen')}</Text>
+      ) : (
+        relevant.map(row)
+      )}
 
       {others.length > 0 && (
         <>

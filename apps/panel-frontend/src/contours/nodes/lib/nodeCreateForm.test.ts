@@ -28,10 +28,12 @@ describe('wizardCoreComponents: ядра выбранных движков пе�
     expect(corePickable('xray')).toBe(true);
   });
 
-  it('по всем выбранным движкам: AWG двумя компонентами, порядок движков сохраняется', () => {
+  it('по всем выбранным движкам: AWG двумя компонентами, строки в порядке манифеста, не щелчков', () => {
     expect(wizardCoreComponents(['amneziawg']).relevant).toEqual(['amneziawg-module', 'amneziawg-tools']);
-    expect(wizardCoreComponents(['xray', 'hysteria', 'singbox']).relevant).toEqual(['xray', 'hysteria', 'singbox']);
-    expect(wizardCoreComponents(['singbox', 'amneziawg']).relevant).toEqual([
+    expect(wizardCoreComponents(['xray', 'hysteria', 'singbox']).relevant).toEqual(['xray', 'singbox', 'hysteria']);
+    // Стенд 25.09: отмечены MTProto, Hysteria 2, Xray, строки всё равно xray первым.
+    expect(wizardCoreComponents(['mtproto', 'hysteria', 'xray']).relevant).toEqual(['xray', 'hysteria', 'mtg']);
+    expect(wizardCoreComponents(['amneziawg', 'singbox']).relevant).toEqual([
       'singbox',
       'amneziawg-module',
       'amneziawg-tools',
@@ -46,12 +48,19 @@ describe('wizardCoreComponents: ядра выбранных движков пе�
 });
 
 describe('движки ноды: множество без основного (25.09)', () => {
-  it('любой чип снимается, в том числе бывший первым; последний не снимается', () => {
+  it('любой чип снимается, в том числе последний: нода без ядер допустима', () => {
     expect(toggleEngine(['xray'], 'hysteria')).toEqual(['xray', 'hysteria']);
     expect(toggleEngine(['xray', 'hysteria'], 'xray')).toEqual(['hysteria']);
     expect(toggleEngine(['xray', 'hysteria'], 'hysteria')).toEqual(['xray']);
-    expect(toggleEngine(['xray'], 'xray')).toEqual(['xray']);
-    expect(toggleEngine(['singbox'], 'singbox')).toEqual(['singbox']);
+    expect(toggleEngine(['xray'], 'xray')).toEqual([]);
+    expect(toggleEngine([], 'singbox')).toEqual(['singbox']);
+  });
+
+  it('нода без ядер: пустой список уходит как есть, версий выбирать не из чего', () => {
+    expect(enginesPayload(true, [], 'xray')).toEqual({ intendedEngines: [], protocol: 'xray' });
+    expect(wizardCoreComponents([])).toEqual({ relevant: [], others: [...CORE_COMPONENTS] });
+    expect(nodeEnginesPut(true, ['xray'], [], 'xray')).toEqual({ intendedEngines: [], protocol: 'xray' });
+    expect(formProtocolOf('none')).toBe('xray');
   });
 
   it('порядок не в счёт: те же ядра в другом порядке одно множество', () => {
@@ -128,7 +137,11 @@ describe('enginesPatch: PUT по трём значениям', () => {
   it('не менялось или сервер поля не знает: ключа нет', () => {
     expect(enginesPatch(['xray', 'singbox'], ['xray', 'singbox'])).toBeUndefined();
     expect(enginesPatch(undefined, ['xray'])).toBeUndefined();
-    expect(enginesPatch(['xray'], [])).toBeUndefined();
+    expect(enginesPatch([], [])).toBeUndefined();
+  });
+
+  it('снять все ядра это правка: пустой список уходит', () => {
+    expect(enginesPatch(['xray'], [])).toEqual([]);
   });
 
   it('список заменяет список; другой порядок тех же ядер не правка', () => {
@@ -141,10 +154,11 @@ describe('enginesPatch: PUT по трём значениям', () => {
     expect(intendedEnginesWords(['singbox', 'hysteria', 'xray'])).toBe('xray + hysteria + sing-box');
   });
 
-  it('строка без отчёта: ядра намерения вместо метки; у сервера старше поля null', () => {
-    expect(nodeIntentWords({ intendedEngines: ['amneziawg', 'xray'] })).toBe('xray + amneziawg');
-    expect(nodeIntentWords({})).toBeNull();
-    expect(nodeIntentWords({ intendedEngines: [] })).toBeNull();
+  it('строка без отчёта: ядра намерения вместо метки; пустой набор «без ядер»; у сервера старше поля null', () => {
+    const t = (k: string) => k;
+    expect(nodeIntentWords({ intendedEngines: ['amneziawg', 'xray'] }, t)).toBe('xray + amneziawg');
+    expect(nodeIntentWords({ intendedEngines: [] }, t)).toBe('engine.noCores');
+    expect(nodeIntentWords({}, t)).toBeNull();
   });
 });
 

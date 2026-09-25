@@ -19,9 +19,9 @@ const ENGINE_LABEL: Record<EngineName, string> = {
  * Which engines the node is set up to carry (intendedEngines, 64d7078): a chip
  * per engine, ticked or not. A set (owner's decision 25.09): no chip leads,
  * the order is not kept, and which protocol sing-box or xray serves is the
- * host's business at binding, not the node's. The last ticked chip does not
- * untick. The old protocol select and sing-box switch are what an older
- * server gets instead.
+ * host's business at binding, not the node's. Every chip unticks: a node with
+ * no core is the agent alone (owner, 25.09). The old protocol select and
+ * sing-box switch are what an older server gets instead.
  *
  * The decision is the pure toggleEngine of nodeCreateForm; this paints.
  */
@@ -44,15 +44,12 @@ export function EngineChips({
       <Box style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {ENGINE_NAMES.map((e) => {
           const on = engines.includes(e);
-          const last = on && engines.length === 1;
           const accent = engineAccent(e);
           return (
             <UnstyledButton
               key={e}
               type="button"
               aria-pressed={on}
-              aria-disabled={last || undefined}
-              title={last ? t('nodes.form.enginesLastOne') : undefined}
               onClick={() => onChange(toggleEngine(engines, e))}
               style={{
                 display: 'flex',
@@ -63,7 +60,6 @@ export function EngineChips({
                 borderRadius: 8,
                 backgroundColor: on ? `${accent}14` : WELL,
                 border: `1px solid ${on ? `${accent}66` : HAIRLINE}`,
-                cursor: last ? 'not-allowed' : 'pointer',
               }}
             >
               <Box
@@ -84,6 +80,13 @@ export function EngineChips({
       <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
         {t('nodes.form.enginesHint')}
       </Text>
+      {/* Пустой набор допустим (владелец, 25.09): это не ошибка, а нода с
+          одним агентом, поэтому краска спокойная. */}
+      {engines.length === 0 && (
+        <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: MIST }}>
+          {t('nodes.form.enginesNone')}
+        </Text>
+      )}
       {error && (
         <Stack gap={2}>
           <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED }}>

@@ -11,9 +11,9 @@ import type { CascadeEngineNeed, Node, NodeCore } from '@/lib/domain/nodes';
  *   hosts    `neededBy > 0`: на ноде включённые хосты этого движка;
  *   cascade  нода в каскаде, которому движок нужен (sing-box у цепи, xray у
  *            входа), выключенный каскад тоже: он сломается при включении;
- *   last     движок единственный в `intendedEngines`: последнее ядро ноды.
- *            Основного ядра нет (решение владельца 25.09), порядок списка
- *            ничего не значит, поэтому отказ по месту в списке ушёл.
+ *   intent   (третий факт, не причина отказа) `intendedEngines`: снято ли
+ *            ядро из набора ноды. Отказа «последнее ядро» нет: нода без ядер
+ *            допустима (владелец 25.09), ставится один агент.
  *
  * Сказать «да» можно только когда известны ВСЕ три. Нет `neededBy`, нет
  * `cascadeNeedsEngines` или нет `intendedEngines` (сервер старше поля): это не
@@ -27,8 +27,7 @@ import type { CascadeEngineNeed, Node, NodeCore } from '@/lib/domain/nodes';
 
 export type CoreRemoveRefusal =
   | { kind: 'hosts'; count: number }
-  | { kind: 'cascade'; name: string; enabled: boolean }
-  | { kind: 'last' };
+  | { kind: 'cascade'; name: string; enabled: boolean };
 
 export type CoreRemoveFacts =
   /** Файла на машине нет: удалять нечего. */
@@ -94,7 +93,6 @@ export function coreRemoveFacts(
 
   const intended = node.intendedEngines;
   if (intended === undefined) missing.push('intent');
-  else if (intended.length === 1 && intended[0] === engine) reasons.push({ kind: 'last' });
 
   if (reasons.length > 0) return { kind: 'refused', reasons };
   if (missing.length > 0) return { kind: 'unknown', missing };

@@ -383,9 +383,7 @@ function CoreRow({
             <Text key={i} style={{ fontSize: 12, lineHeight: '17px', color: MIST }}>
               {r.kind === 'hosts'
                 ? t('nodeEdit.coreRemove.hosts', { count: r.count })
-                : r.kind === 'cascade'
-                  ? t(r.enabled ? 'nodeEdit.coreRemove.cascade' : 'nodeEdit.coreRemove.cascadeOff', { name: r.name })
-                  : t('nodeEdit.coreRemove.last')}
+                : t(r.enabled ? 'nodeEdit.coreRemove.cascade' : 'nodeEdit.coreRemove.cascadeOff', { name: r.name })}
             </Text>
           ))}
         </Stack>

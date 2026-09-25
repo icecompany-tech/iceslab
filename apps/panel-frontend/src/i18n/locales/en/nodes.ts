@@ -66,7 +66,8 @@
       singboxEngine: 'Also install sing-box engine',
       coreVersionsTitle: 'Core versions',
       enginesTitle: 'Node cores',
-      enginesLastOne: 'A node has to keep at least one core',
+      enginesNone: 'A node with no core: only the agent is installed, cores are added on the node page',
+      coreVersionsNoneChosen: 'no core chosen',
       enginesRefused: 'The server did not accept the node cores: the reason is under the chips',
       enginesRefusedLine: 'The server did not accept the node cores:',
       enginesLastCoreRefused: 'The server did not remove the last core, a node keeps at least one:',
@@ -329,7 +330,6 @@
       hosts_other: 'Cannot remove: {{count}} hosts need it, take them off first.',
       cascade: 'Cannot remove: cascade "{{name}}" needs it.',
       cascadeOff: 'Cannot remove: cascade "{{name}}" needs it (disabled, it would break when switched on).',
-      last: 'Cannot remove: the node\'s last core, it cannot come off.',
       unknown: 'Cannot tell whether it can go: the panel did not report {{what}}.',
       unknownWhat: {
         hosts: 'how many hosts wait for it',

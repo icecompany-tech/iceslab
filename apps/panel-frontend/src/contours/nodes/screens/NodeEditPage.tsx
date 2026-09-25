@@ -21,7 +21,7 @@ import { chainFacts } from '@/lib/domain/chainStatus';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { ServerIcon } from '@/contours/nodes/components/NodeCreate/icons';
 import { useEffect } from 'react';
-import { intendedEnginesWords } from '@/lib/domain/engines';
+import { nodeIntentWords } from '@/lib/domain/engines';
 import { useTranslation } from 'react-i18next';
 import { modals } from '@mantine/modals';
 import {
@@ -135,12 +135,12 @@ export function NodeEditPage() {
           </Text>
           {/* Ядра, на которые нода настроена (intendedEngines), множество в
               одном порядке. Намерение, не отчёт: что стоит, говорит «Ядра». */}
-          {node.intendedEngines && node.intendedEngines.length > 0 && (
+          {node.intendedEngines && (
             <Text
               title={t('nodeEdit.intendedEnginesHint')}
               style={{ fontFamily: MONO, fontSize: 12, lineHeight: '16px', color: MIST, whiteSpace: 'nowrap' }}
             >
-              {intendedEnginesWords(node.intendedEngines)}
+              {nodeIntentWords(node, t)}
             </Text>
           )}
         </Box>

@@ -18,10 +18,11 @@ export type NodeProtocol =
 /**
  * `Node.protocol` как его отдаёт сервер с 93ad747: метка, выведенная из ядер
  * (xray, если есть, иначе первое по ENGINE_NAMES). У ноды только с sing-box
- * это `singbox`, которого среди протоколов установки нет. Ничего по метке не
+ * это `singbox`, которого среди протоколов установки нет; у ноды без ядер
+ * (решение владельца 25.09, стоит один агент) это `none`. Ничего по метке не
  * решается: ядра ноды это `intendedEngines`.
  */
-export type NodeLabel = NodeProtocol | 'singbox';
+export type NodeLabel = NodeProtocol | 'singbox' | 'none';
 
 // G (Zashchita / hardening) - probe-resistance toggles persisted to
 // nodes.hardening. Each maps 1:1 to an install-iceslab-node.sh flag. NULL on a
