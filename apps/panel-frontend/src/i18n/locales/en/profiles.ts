@@ -412,6 +412,13 @@ export const profiles = {
       descLabel: 'Description',
       regionLabel: 'Region',
       download: 'Download JSON',
+      fromSaved:
+        'The server builds the recipe from the saved profile: unsaved edits in the form are not in it. Random values (passwords, AmneziaWG headers) go out as «draw on apply», not as this profile\'s values. Nothing is saved.',
+      pathHint: 'Save it as a file in your fork of the registry:',
+      ratingsHint: 'DPI and speed ratings are set to 3 of 5: adjust them before the pull request, the panel does not measure them.',
+      copy: 'Copy',
+      copied: 'Copied',
+      failed: 'Could not build the recipe: {{message}}',
       filename: 'file: {{name}}.json',
     },
     cards: {

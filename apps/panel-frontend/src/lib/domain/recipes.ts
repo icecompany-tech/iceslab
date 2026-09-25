@@ -1,4 +1,5 @@
 import type {
+  Recipe as WireRecipe,
   RecipeRegistryResponse,
   RecipeSource,
   RecipeSourceInput,
@@ -66,6 +67,16 @@ export type RecipeImportAnswer = RecipeImportResponse & { saved?: { id: string; 
  *  keeps the recipe in the panel as the operator's own. */
 export async function importRecipes(body: { url?: string; json?: string; save?: boolean }): Promise<RecipeImportAnswer> {
   const { data } = await api.post<RecipeImportAnswer>('/api/recipes/import', body);
+  return data;
+}
+
+/**
+ * Сохранённый профиль как рецепт реестра (схема v2), собранный сервером:
+ * только поля, которые несут рецепты реестра; случайные значения уходят как
+ * `randomize`, а не значением этого профиля. Ничего не сохраняется.
+ */
+export async function getProfileRecipe(profileId: string): Promise<WireRecipe> {
+  const { data } = await api.get<WireRecipe>(`/api/profiles/${encodeURIComponent(profileId)}/recipe`);
   return data;
 }
 

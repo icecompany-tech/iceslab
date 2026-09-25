@@ -439,6 +439,20 @@ export function buildExportRecipe(
   };
 }
 
+/**
+ * Куда рецепт кладётся в форке реестра icecompany-tech/iceslab-recipes:
+ * `recipes/<engine>/<wire>/<id>.json`. Проводное имя это протокол; у
+ * семейства xray ещё папка подпротокола (`xray/vless`, `xray/trojan`), а
+ * SOCKS5 и HTTP лежат в своих папках (`socks`, `http`), как их плитки.
+ * Раскладка сверена с деревом реестра 25.09 (тест по 22 рецептам снимка).
+ */
+export function registryRecipePath(r: Pick<Recipe, 'id' | 'engine' | 'subprotocol'> & { protocol: string }): string {
+  const sub = r.subprotocol;
+  const wire =
+    r.protocol === 'xray' ? (sub === 'socks' || sub === 'http' ? sub : `xray/${sub || 'vless'}`) : r.protocol;
+  return `recipes/${r.engine ?? 'native'}/${wire}/${r.id}.json`;
+}
+
 /** Trigger a browser download of a recipe as pretty JSON. */
 export function downloadRecipeJson(recipe: Recipe): void {
   const blob = new Blob([JSON.stringify(recipe, null, 2)], {

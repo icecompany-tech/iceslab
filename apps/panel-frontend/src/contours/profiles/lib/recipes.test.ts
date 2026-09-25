@@ -17,6 +17,7 @@ import {
   importSaved,
   isCuratedRecipe,
   recipeNotFound,
+  registryRecipePath,
   splitHidden,
   recipeRailEmpty,
   recipesOnTile,
@@ -151,6 +152,35 @@ describe('рецепты у каждой плитки: форма и черно�
     expect(hy).toMatchObject({ engine: 'singbox', protocol: 'hysteria' });
     expect('subprotocol' in hy).toBe(false);
     expect(recipeTile(hy)).toBe('hysteria#singbox');
+  });
+
+  it('registryRecipePath: все 22 рецепта снимка там, где они лежат в реестре', () => {
+    // Дерево icecompany-tech/iceslab-recipes на 25.09 (api.github.com git/trees).
+    const TREE = [
+      'recipes/native/amneziawg/awg-default.json',
+      'recipes/native/amneziawg/awg-iran.json',
+      'recipes/native/http/telegram-http.json',
+      'recipes/native/hysteria/hysteria-default.json',
+      'recipes/native/hysteria/hysteria-salamander.json',
+      'recipes/native/mieru/mieru-default.json',
+      'recipes/native/mtproto/mtproto-default.json',
+      'recipes/native/naive/naive-default.json',
+      'recipes/native/shadowsocks/ss-2022-blake3.json',
+      'recipes/native/socks/telegram-socks5.json',
+      'recipes/native/telegramweb/telegram-web-tproxy-websocket.json',
+      'recipes/native/xray/trojan/xray-trojan-reality.json',
+      'recipes/native/xray/vless/xray-reality-grpc-ru.json',
+      'recipes/native/xray/vless/xray-reality-vision-raw.json',
+      'recipes/native/xray/vless/xray-reality-xhttp.json',
+      'recipes/singbox/anytls/anytls-default-padding.json',
+      'recipes/singbox/hysteria/singbox-hysteria-clean.json',
+      'recipes/singbox/hysteria/singbox-hysteria-salamander.json',
+      'recipes/singbox/shadowsocks/singbox-ss-2022-blake3.json',
+      'recipes/singbox/shadowtls/shadowtls-v3-bing.json',
+      'recipes/singbox/tuic/tuic-bbr.json',
+      'recipes/singbox/xray/vless/singbox-vless-reality-vision.json',
+    ];
+    expect(SNAPSHOT_RECIPES.map(registryRecipePath).sort()).toEqual([...TREE].sort());
   });
 
   it('у каждого рецепта снимка есть английская подпись панели', () => {

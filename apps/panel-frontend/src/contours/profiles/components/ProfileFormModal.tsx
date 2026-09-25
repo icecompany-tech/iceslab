@@ -21,6 +21,7 @@ import {
 } from '@/lib/domain/profiles';
 import { RecipePicker } from '@/contours/profiles/components/RecipePicker';
 import { RecipeExportModal } from '@/contours/profiles/components/RecipeExportModal';
+import { ProfileRecipeExportModal } from '@/contours/profiles/components/ProfileRecipeExportModal';
 import {
   resolveRecipeApply,
   RECIPE_COMMON_FIELDS,
@@ -245,18 +246,24 @@ export function ProfileFormModal({
 
           <IdentitySection form={form} isEdit={isEdit} inline={inline} />
 
-          {/* A WEB draft exports from the draft, under its recipe keys and
-              without the secret; every other tile from the form. */}
-          <RecipeExportModal
-            opened={exportOpen}
-            onClose={exportCtl.close}
-            protocol={preview ?? form.values.protocol}
-            values={
-              preview
-                ? webDraftRecipeValues(webDraft.web)
-                : (form.values as unknown as Record<string, unknown>)
-            }
-          />
+          {/* A saved profile exports as the server builds it (the registry's
+              own field allowlist, random values as `randomize`). A profile not
+              saved yet, and the WEB draft, export from the form: the draft
+              under its recipe keys and without the secret. */}
+          {isEdit && profile?.id && !preview ? (
+            <ProfileRecipeExportModal opened={exportOpen} onClose={exportCtl.close} profileId={profile.id} />
+          ) : (
+            <RecipeExportModal
+              opened={exportOpen}
+              onClose={exportCtl.close}
+              protocol={preview ?? form.values.protocol}
+              values={
+                preview
+                  ? webDraftRecipeValues(webDraft.web)
+                  : (form.values as unknown as Record<string, unknown>)
+              }
+            />
+          )}
 
           {/* Recipes ride the right rail on the page (see index.css): they are
               a shortcut into the fields, not a step before them, so they sit
