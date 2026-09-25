@@ -554,15 +554,59 @@ EOF
   fi
 }
 
+# run_bootstrap <engine> <scripts dir>: one core's bootstrap, in a process of
+# its own, its output shown as it runs and kept. Returns the bootstrap's exit
+# code; its last line (colours stripped) is left in BOOTSTRAP_LAST, which for a
+# refusal is the `[fail]` line that says why.
+#
+# Called only as a condition (`if run_bootstrap ...`), so neither `set -e` nor
+# the ERR trap ends the install on a core that failed: E32, 25.09, mieru failed
+# on nl-01 and set -e took the agent's unit, ufw, fail2ban and the four other
+# cores down with it, after the one-shot bootstrap token was already spent.
+run_bootstrap() {
+  local e="$1" dir="$2" out rc
+  out=$(mktemp)
+  bash "$dir/$(bootstrap_of "$e")" 2>&1 | tee "$out"
+  rc=${PIPESTATUS[0]}
+  BOOTSTRAP_LAST=$(sed 's/\x1b\[[0-9;]*m//g' "$out" | grep -v '^[[:space:]]*$' | tail -n 1)
+  rm -f "$out"
+  return "$rc"
+}
+
+# The cores that went on, and the ones that did not with the reason, filled by
+# install_engines. core_ok <engine>: it is in the first list.
+core_ok() { [[ " ${INSTALLED_ENGINES[*]} " == *" $1 "* ]]; }
+
+# cores_summary: the lines the end of the install prints about the cores, one
+# per failed core with the command that puts it on later.
+cores_summary() {
+  local i
+  printf '  Cores        %s\n' "${INSTALLED_ENGINES[*]:-no cores installed, add them from the node page}"
+  for i in "${!FAILED_ENGINES[@]}"; do
+    printf '  FAILED       %s: %s\n' "${FAILED_ENGINES[$i]}" "${FAILED_REASONS[$i]}"
+    printf '               install later: sudo bash %s/apps/node/scripts/%s --restart-agent\n' \
+      "$ICESLAB_NODE_DIR" "$(bootstrap_of "${FAILED_ENGINES[$i]}")"
+  done
+}
+
 # install_engines <scripts dir>: the bootstrap of every core in ENGINES, in
 # order. Each installs its core and writes its own block of the env (see
 # lib/node-env.sh there), so nothing about a core is repeated in this file.
+#
+# A core that fails does not stop the install: the others, the agent and its
+# unit still go on, the node reports what it runs, and the end of the install
+# names the failed core, why, and how to add it later (E32). Its exit code is
+# the install's, non-zero, but the node is up.
 #
 # A checkout from before that (no lib/node-env.sh) has bootstraps that only
 # install: it gets the first core alone, wired by legacy_primary_env below, and
 # a warning that says what fixes it.
 install_engines() {
   local dir="$1" e
+  INSTALLED_ENGINES=()
+  FAILED_ENGINES=()
+  FAILED_REASONS=()
+  BOOTSTRAP_LAST=""
   if [[ ${#ENGINES[@]} -eq 0 ]]; then
     log "No core named: the agent alone, its cores come from the node page"
     return 0
@@ -580,13 +624,25 @@ install_engines() {
     warn "  a node where 'go' is missing gets it back by rerunning this installer,"
     warn "  or by unpacking go${GO_VERSION:-1.23.4} there and linking /usr/local/go/bin/go into /usr/local/bin)"
     LEGACY_CHECKOUT=1
-    bash "$dir/$(bootstrap_of "${ENGINES[0]}")"
-    legacy_primary_env
+    if run_bootstrap "${ENGINES[0]}" "$dir"; then
+      legacy_primary_env
+      INSTALLED_ENGINES+=("${ENGINES[0]}")
+    else
+      warn "core ${ENGINES[0]} failed: ${BOOTSTRAP_LAST:-no output}"
+      FAILED_ENGINES+=("${ENGINES[0]}")
+      FAILED_REASONS+=("${BOOTSTRAP_LAST:-no output}")
+    fi
     return 0
   fi
   for e in "${ENGINES[@]}"; do
     log "Core $e: $(bootstrap_of "$e")"
-    bash "$dir/$(bootstrap_of "$e")"
+    if run_bootstrap "$e" "$dir"; then
+      INSTALLED_ENGINES+=("$e")
+    else
+      warn "core $e failed: ${BOOTSTRAP_LAST:-no output}; the install goes on without it"
+      FAILED_ENGINES+=("$e")
+      FAILED_REASONS+=("${BOOTSTRAP_LAST:-no output}")
+    fi
   done
 }
 
@@ -1280,7 +1336,9 @@ systemctl restart iceslab-node.service
 # install-iceslab-node.sh, a friction point caught during a VPS test.
 # Skipped silently if either flag is missing or if hysteria is not among the
 # cores (it need not be the first: there is no first).
-if has_engine hysteria && [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
+# core_ok, not has_engine: a hysteria whose bootstrap failed has no binary and
+# no unit to configure, and restarting it would end the install (E32).
+if core_ok hysteria && [[ -n "$HY_DOMAIN" && -n "$HY_EMAIL" ]]; then
   HY_CONFIG=/etc/hysteria/config.yaml
   # The secret the agent polls the stats with, as the hysteria block (or, on an
   # old checkout, legacy_primary_env) wrote it: the config must carry the same.
@@ -1497,7 +1555,7 @@ EOF
     [[ -z "$HY_PORT_RANGE" ]] && log "Port-hopping disabled by --hysteria-port-range ''"
     command -v iptables >/dev/null 2>&1 || warn "iptables not installed; skipping port-hopping setup"
   fi
-elif has_engine hysteria; then
+elif core_ok hysteria; then
   warn "Hysteria server NOT pre-configured (no --hysteria-domain/--hysteria-email): hysteria.service"
   warn "waits for its config, which the agent writes on the panel's first push"
 fi
@@ -1534,11 +1592,7 @@ printf '\033[1;32m────────────────────�
 printf '\033[1;32m  ✓ Iceslab node-agent is up\033[0m  \033[2m(total %s)\033[0m\n' "$(elapsed_total)"
 printf '\033[1;32m──────────────────────────────────────────────────────────────\033[0m\n'
 printf '\n'
-if [[ ${#ENGINES[@]} -gt 0 ]]; then
-  printf '  Cores        %s\n' "${ENGINES[*]}"
-else
-  printf '  Cores        no cores installed, add them from the node page\n'
-fi
+cores_summary
 printf '  Public IP    %s\n' "$PUBLIC_IP"
 printf '  mTLS port    %s/tcp  (panel connects here)\n' "$NODE_PORT"
 printf '  Env file     %s  (chmod 600)\n' "$ENV_FILE"
@@ -1549,3 +1603,10 @@ printf '  Logs       journalctl -u iceslab-node -f -o short-iso\n'
 printf '  Restart    systemctl restart iceslab-node\n'
 printf '  Status     systemctl status  iceslab-node\n'
 printf '\n'
+
+# The node is up and reports what it runs; a core that did not go on still
+# makes the install's exit code non-zero, for whoever scripts it (E32).
+if [[ ${#FAILED_ENGINES[@]} -gt 0 ]]; then
+  warn "not every core went on: ${FAILED_ENGINES[*]} (see FAILED above)"
+  exit 1
+fi

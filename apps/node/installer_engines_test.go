@@ -69,7 +69,9 @@ func runInstallWith(t *testing.T, withLib bool, protocol, engines string, withSi
 		}
 	}
 	for engine, name := range bootstraps {
-		stub := "#!/usr/bin/env bash\nset -euo pipefail\necho \"" + name + " $*\" >>\"$CALLS\"\n"
+		stub := "#!/usr/bin/env bash\nset -euo pipefail\necho \"" + name + " $*\" >>\"$CALLS\"\n" +
+			// FAIL_CORE names a core whose bootstrap refuses, as bootstrap-mieru did on nl-01.
+			"if [[ \"${FAIL_CORE:-}\" == " + engine + " ]]; then printf '\\033[1;31m[fail]\\033[0m %s\\n' \"" + engine + " broke\" >&2; exit 1; fi\n"
 		if withLib {
 			stub += ". \"$(dirname \"$0\")/lib/node-env.sh\"\nnode_env_block " + engine + " STUB_" + strings.ToUpper(engine) + "=1\n"
 		}
@@ -92,7 +94,8 @@ func runInstallWith(t *testing.T, withLib bool, protocol, engines string, withSi
 		"XR_PRIVATE_KEY=''\nXR_SHORT_IDS=''\nXR_SERVER_NAMES='www.cloudflare.com'\nXR_DEST='www.cloudflare.com:443'\nXR_PORT=443\nENGINES_GIVEN=0\n" +
 		flags + "\n" +
 		"PROTOCOL='" + protocol + "'\nENGINES_ARG='" + engines + "'\nWITH_SINGBOX=" + ws + "\n" +
-		"resolve_engines\ninstall_engines \"$ICESLAB_NODE_DIR/apps/node/scripts\"\ncore_flags_env\necho \"ENGINES=${ENGINES[*]}\"\n"
+		"resolve_engines\ninstall_engines \"$ICESLAB_NODE_DIR/apps/node/scripts\"\ncore_flags_env\necho \"ENGINES=${ENGINES[*]}\"\n" +
+		"echo \"INSTALLED=${INSTALLED_ENGINES[*]}\"\necho \"FAILED=${FAILED_ENGINES[*]}\"\ncores_summary\n"
 	cmd := exec.Command(bash, "-c", prog)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "ICESLAB_NODE_ENV=" + env, "CALLS=" + calls}
 	out, err := cmd.CombinedOutput()
@@ -171,6 +174,36 @@ func TestInstallerTakesTheSetAndTheFlagsFollowTheirCore(t *testing.T) {
 	r = runInstall(t, true, "xray", "hysteria,xray", false)
 	if r.err != nil || !strings.Contains(r.out, "ENGINES=xray hysteria") {
 		t.Errorf("--protocol xray --engines hysteria,xray: %v\n%s", r.err, r.out)
+	}
+}
+
+// E32, 25.09 on nl-01: mieru's bootstrap failed and set -e ended the install
+// there, the agent's unit and the cores after it never went on. A failed core
+// is now collected: the others still install, and the summary names it, why,
+// and the command that adds it later.
+func TestAFailedCoreDoesNotStopTheOthers(t *testing.T) {
+	r := runInstallWith(t, true, "", "xray,mieru,mtproto", false, "export FAIL_CORE=mieru")
+	if r.err != nil {
+		t.Fatalf("install_engines ended the install: %v\n%s", r.err, r.out)
+	}
+	if r.calls != "bootstrap-xray.sh \nbootstrap-mieru.sh \nbootstrap-mtg.sh \n" {
+		t.Errorf("calls:\n%s", r.calls)
+	}
+	for _, want := range []string{
+		"INSTALLED=xray mtproto\n",
+		"FAILED=mieru\n",
+		"  Cores        xray mtproto\n",
+		"  FAILED       mieru: [fail] mieru broke\n",
+		"install later: sudo bash " + "",
+		"/apps/node/scripts/bootstrap-mieru.sh --restart-agent\n",
+	} {
+		if !strings.Contains(r.out, want) {
+			t.Errorf("the output lacks %q:\n%s", want, r.out)
+		}
+	}
+	// The cores that went on wired themselves; the failed one did not.
+	if strings.Contains(r.env, "env:mieru") || !strings.Contains(r.env, "env:mtproto") {
+		t.Errorf("env:\n%s", r.env)
 	}
 }
 
