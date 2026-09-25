@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { modals } from '@mantine/modals';
 import {
   Alert,
   Anchor,
@@ -14,6 +15,7 @@ import {
   SegmentedControl,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   Textarea,
   TextInput,
@@ -31,10 +33,21 @@ import {
   IconWorld,
 } from '@tabler/icons-react';
 import { apiErrorMessage } from '@/lib/net/client';
-import { getRecipeRegistry, importRecipes } from '@/lib/domain/recipes';
+import {
+  deleteMyRecipe,
+  getRecipeRegistry,
+  importRecipes,
+  setHiddenRecipes,
+  type RecipeRegistryAnswer,
+} from '@/lib/domain/recipes';
 import { recipeImportUrl } from '@/contours/profiles/lib/recipeImportUrl';
 import {
+  duplicateRecipeIds,
   fromWireRecipe,
+  hiddenAfter,
+  importSaved,
+  recipeNotFound,
+  splitHidden,
   recipeRailEmpty,
   recipesForKind,
   recipeText,
@@ -129,6 +142,40 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
     setPicked(r);
     onPick(r);
   };
+
+  // Скрытые: полная замена списка; экран берёт список из ответа сервера (id,
+  // который сервер отбросил, пропадает и с экрана). Список один на панель,
+  // поэтому перечитываются все ответы реестра.
+  const qc = useQueryClient();
+  const hideMutation = useMutation({
+    mutationFn: setHiddenRecipes,
+    onSuccess: ({ hidden }) => {
+      qc.setQueriesData<RecipeRegistryAnswer>({ queryKey: ['recipes', 'registry'] }, (old) =>
+        old ? { ...old, hidden } : old,
+      );
+    },
+    onError: (err) => notifications.show({ color: 'red', message: apiErrorMessage(err) }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: deleteMyRecipe,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recipes', 'registry'] }),
+    onError: (err) => {
+      // 404: его уже нет (удалили из другой вкладки). Сказать и перечитать.
+      if (recipeNotFound(err)) {
+        notifications.show({ color: 'yellow', message: t('recipes.mine.alreadyGone') });
+        void qc.invalidateQueries({ queryKey: ['recipes', 'registry'] });
+        return;
+      }
+      notifications.show({ color: 'red', message: apiErrorMessage(err) });
+    },
+  });
+  const confirmDelete = (r: Recipe) =>
+    modals.openConfirmModal({
+      title: t('recipes.mine.deleteTitle', { name: recipeText(r, (k) => i18n.exists(k), t).name }),
+      labels: { confirm: t('common.delete'), cancel: t('common.cancel') },
+      confirmProps: { color: 'red' },
+      onConfirm: () => deleteMutation.mutate(r.id),
+    });
 
   // The rail is always there (owner, 24.09): a tile with nothing to show
   // still offers Import and says why it is empty. «This tile has none» and
@@ -247,11 +294,14 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 
       <RegistrySection
         recipes={registry}
+        hiddenIds={registryQuery.data?.hidden}
         loading={registryQuery.isLoading}
         stale={stale}
         problems={problems}
         pickedKey={picked ? recipeKey(picked) : null}
         onPick={handlePick}
+        onHide={(id, action) => hideMutation.mutate(hiddenAfter(registryQuery.data?.hidden, id, action))}
+        onDelete={confirmDelete}
       />
 
       {picked && <AppliedAlert recipe={picked} />}
@@ -268,9 +318,10 @@ export function RecipePicker({ kindKey, kindLabel, protocol, onPick }: Props) {
 }
 
 /**
- * Ad-hoc import: paste a raw URL (your gist / GitHub) or the recipe JSON
- * directly. The backend validates it against the same schema, then the
- * operator picks one to apply. Nothing is persisted; this is a one-off.
+ * Import: paste a link (a GitHub file page, a gist, a raw URL) or the recipe
+ * JSON. The backend validates it against the same schema, then the operator
+ * picks one to apply. With «Сохранить в панели» (on by default) the server
+ * also keeps it as the operator's own, badged «мой» on the rail.
  */
 function RecipeImportModal({
   opened,
@@ -305,11 +356,25 @@ function RecipeImportModal({
 
   // Страница GitHub или gist уходит raw-адресом того же файла (recipeImportUrl).
   const target = recipeImportUrl(url);
+  // «Сохранить в панели» (контракт 25.09): по умолчанию включено, уходит
+  // явно. Сохранённый рецепт приходит в реестре с пометкой «мой».
+  const [save, setSave] = useState(true);
+  const qc = useQueryClient();
   const importMutation = useMutation({
     mutationFn: () =>
-      importRecipes(target.url ? { url: target.url } : { json: json.trim() }),
+      importRecipes({ ...(target.url ? { url: target.url } : { json: json.trim() }), save }),
     onSuccess: (data) => {
       const all = data.recipes.map(fromWireRecipe);
+      const saved = importSaved(data.saved);
+      if (saved) {
+        const r = all.find((x) => x.id === saved.id);
+        const name = r ? recipeText(r, (k) => i18n.exists(k), t).name : saved.id;
+        notifications.show({
+          color: 'green',
+          message: t(saved.replaced ? 'recipes.mine.replaced' : 'recipes.mine.saved', { name }),
+        });
+        void qc.invalidateQueries({ queryKey: ['recipes', 'registry'] });
+      }
       // Only recipes of THIS tile apply here (recipeTile, as on the rail). A
       // protocol match is not enough: a Telegram SOCKS5 recipe is xray too,
       // and on the Xray tile it would turn the vless form into socks.
@@ -358,9 +423,16 @@ function RecipeImportModal({
           }
           inputWrapperOrder={['label', 'input', 'description', 'error']}
         />
+        <Switch
+          size="xs"
+          checked={save}
+          onChange={(e) => setSave(e.currentTarget.checked)}
+          label={t('recipes.mine.saveLabel')}
+          description={t('recipes.mine.saveHint')}
+        />
         <Textarea
           label={t('recipes.import.jsonLabel')}
-          placeholder='{ "schemaVersion": 1, "id": "...", "protocol": "xray", ... }'
+          placeholder='{ "schemaVersion": 2, "id": "...", "engine": "native", "protocol": "xray", "subprotocol": "vless", ... }'
           autosize
           minRows={3}
           maxRows={10}
@@ -434,29 +506,41 @@ function RecipeImportModal({
  * while there is genuinely nothing to show.
  */
 function RegistrySection({
-  recipes,
+  recipes: all,
+  hiddenIds,
   loading,
   stale,
   problems,
   pickedKey,
   onPick,
+  onHide,
+  onDelete,
 }: {
   recipes: Recipe[];
+  /** `hidden` из ответа реестра; undefined у сервера старше поля. */
+  hiddenIds: string[] | undefined;
   loading: boolean;
   stale: boolean;
   /** Failed sources, one line each; null = the server does not say (old). */
   problems: RegistryProblem[] | null;
   pickedKey: string | null;
   onPick: (r: Recipe) => void;
+  onHide: (id: string, action: 'hide' | 'show') => void;
+  onDelete: (r: Recipe) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [region, setRegion] = useState<string>('ALL');
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  // Скрытые остаются в ответе, прячет экран; внизу строка «скрыто N».
+  const { shown: recipes, hidden } = splitHidden(all, hiddenIds);
+  // Сервер сливает дубли сам: два рецепта с одним id это его ошибка.
+  const dupes = duplicateRecipeIds(all);
+  // Скрывать умеет только сервер с полем hidden.
+  const canHide = hiddenIds !== undefined;
 
-  // Region chips, only the regions actually present (plus "All").
-  const regions = useMemo(() => {
-    const present = new Set(recipes.map((r) => r.region ?? 'GLOBAL'));
-    return ['ALL', ...[...present].sort()];
-  }, [recipes]);
+  // Region chips, only the regions actually present (plus "All"). A handful of
+  // recipes: counted each render, no memo to keep in step with the split above.
+  const regions = ['ALL', ...[...new Set(recipes.map((r) => r.region ?? 'GLOBAL'))].sort()];
 
   const shown =
     region === 'ALL'
@@ -496,9 +580,43 @@ function RegistrySection({
       </Stack>
     ) : null;
 
+  const hiddenBlock =
+    hidden.length > 0 ? (
+      <Stack gap={4}>
+        <UnstyledButton onClick={() => setHiddenOpen((v) => !v)}>
+          <Text size="xs" c="dimmed">
+            {t(hiddenOpen ? 'recipes.hidden.collapse' : 'recipes.hidden.expand', { count: hidden.length })}
+          </Text>
+        </UnstyledButton>
+        {hiddenOpen &&
+          hidden.map((r) => (
+            <Group key={recipeKey(r)} gap={8} wrap="nowrap" justify="space-between">
+              <Text size="xs" truncate>
+                {r.emoji} {recipeText(r, (k) => i18n.exists(k), t).name}
+              </Text>
+              <Button size="compact-xs" variant="subtle" onClick={() => onHide(r.id, 'show')}>
+                {t('recipes.hidden.restore')}
+              </Button>
+            </Group>
+          ))}
+      </Stack>
+    ) : null;
+  const dupesBlock =
+    dupes.length > 0 ? (
+      <Text size="xs" c="red">
+        {t('recipes.duplicates', { ids: dupes.join(', ') })}
+      </Text>
+    ) : null;
+
   // Nothing from the registry: only why, if anything failed. Built-ins
   // already rendered above, so the picker still works.
-  if (recipes.length === 0) return problemBlock;
+  if (recipes.length === 0)
+    return problemBlock || hiddenBlock ? (
+      <Stack gap={6}>
+        {hiddenBlock}
+        {problemBlock}
+      </Stack>
+    ) : null;
 
   return (
     <Stack gap={6} mt={4}>
@@ -539,9 +657,13 @@ function RegistrySection({
             recipe={r}
             active={pickedKey === recipeKey(r)}
             onClick={() => onPick(r)}
+            onHide={canHide && r.source !== 'mine' ? () => onHide(r.id, 'hide') : undefined}
+            onDelete={r.source === 'mine' ? () => onDelete(r) : undefined}
           />
         ))}
       </SimpleGrid>
+      {dupesBlock}
+      {hiddenBlock}
       {problemBlock}
     </Stack>
   );
@@ -570,14 +692,22 @@ function RecipeCard({
   recipe,
   active,
   onClick,
+  onHide,
+  onDelete,
 }: {
   recipe: Recipe;
   active: boolean;
   onClick: () => void;
+  /** «Скрыть»: у рецепта реестра, когда сервер умеет скрытые. */
+  onHide?: () => void;
+  /** «Удалить»: у своего рецепта. */
+  onDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const text = useRecipeText(recipe);
   const isRegistry = recipe.source === 'registry';
+  const isMine = recipe.source === 'mine';
+  const alsoIn = Array.isArray(recipe.alsoIn) ? recipe.alsoIn.filter((s) => typeof s === 'string') : [];
   return (
     <Tooltip label={text.details} multiline w={320} withArrow openDelay={400}>
       <Card
@@ -602,6 +732,11 @@ function RecipeCard({
               <Text fw={600} size="sm" lh={1.2}>
                 {text.name}
               </Text>
+              {isMine && (
+                <Badge size="xs" variant="light" color="cyan">
+                  {t('recipes.mine.badge')}
+                </Badge>
+              )}
               {isRegistry && (
                 <Badge
                   size="xs"
@@ -640,6 +775,41 @@ function RecipeCard({
                   .filter(Boolean)
                   .join(' · ')}
               </Text>
+            )}
+            {alsoIn.length > 0 && (
+              <Text size="10px" c="dimmed" truncate>
+                {t('recipes.alsoIn', { list: alsoIn.join(', ') })}
+              </Text>
+            )}
+            {(onHide || onDelete) && (
+              <Group gap={4} mt={2}>
+                {onHide && (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onHide();
+                    }}
+                  >
+                    {t('recipes.hidden.hide')}
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                )}
+              </Group>
             )}
           </Stack>
         </Group>

@@ -11,6 +11,12 @@ import {
   RECIPES,
   RECIPE_COMMON_FIELDS,
   RECIPES_REPO_DEFAULT,
+  duplicateRecipeIds,
+  fromWireRecipe,
+  hiddenAfter,
+  importSaved,
+  recipeNotFound,
+  splitHidden,
   recipeRailEmpty,
   recipesForKind,
   recipeText,
@@ -158,6 +164,50 @@ describe('рецепты у каждой плитки: форма и черно�
       expect(typeof cards[r.id]?.name, r.id).toBe('string');
       expect(cards[r.id]?.notes?.length ?? 0, r.id).toBe(r.notes?.length ?? 0);
     }
+  });
+});
+
+describe('свои и скрытые (контракт 25.09)', () => {
+  const r = (id: string) => ({ id });
+
+  it('слияние на сервере: победитель с alsoIn, экран не сливает; два одинаковых id это ошибка', () => {
+    const wire = { schemaVersion: 2, id: 'a', protocol: 'xray', alsoIn: ['my-fork'] } as unknown as Parameters<
+      typeof fromWireRecipe
+    >[0];
+    expect(fromWireRecipe(wire).alsoIn).toEqual(['my-fork']);
+    expect(duplicateRecipeIds([r('a'), r('b')])).toEqual([]);
+    expect(duplicateRecipeIds([r('a'), r('b'), r('a')])).toEqual(['a']);
+  });
+
+  it('свой рецепт по sourceId mine, остальное реестр', () => {
+    const w = (sourceId?: string) => ({ schemaVersion: 2, id: 'x', protocol: 'xray', sourceId }) as unknown as Parameters<
+      typeof fromWireRecipe
+    >[0];
+    expect(fromWireRecipe(w('mine')).source).toBe('mine');
+    expect(fromWireRecipe(w('builtin')).source).toBe('registry');
+    expect(fromWireRecipe(w()).source).toBe('registry');
+  });
+
+  it('скрытие и возврат: полная замена списка, скрытые на экране отдельно', () => {
+    expect(splitHidden([r('a'), r('b'), r('c')], ['b'])).toEqual({ shown: [r('a'), r('c')], hidden: [r('b')] });
+    expect(splitHidden([r('a')], undefined)).toEqual({ shown: [r('a')], hidden: [] });
+    expect(hiddenAfter(['b'], 'a', 'hide')).toEqual(['b', 'a']);
+    expect(hiddenAfter(['b', 'a'], 'a', 'hide')).toEqual(['b', 'a']);
+    expect(hiddenAfter(['b', 'a'], 'b', 'show')).toEqual(['a']);
+    expect(hiddenAfter(undefined, 'a', 'show')).toEqual([]);
+  });
+
+  it('replaced в обеих ветках; кривой или пустой saved не факт', () => {
+    expect(importSaved({ id: 'x', replaced: false })).toEqual({ id: 'x', replaced: false });
+    expect(importSaved({ id: 'x', replaced: true })).toEqual({ id: 'x', replaced: true });
+    for (const bad of [null, undefined, 'x', {}, { id: 'x' }, { id: 1, replaced: true }]) expect(importSaved(bad)).toBeNull();
+  });
+
+  it('удаление своего: 404 RECIPE_NOT_FOUND это «уже нет», прочее нет', () => {
+    const res = (data: unknown, status: number) => ({ response: { status, data } });
+    expect(recipeNotFound(res({ error: 'RECIPE_NOT_FOUND' }, 404))).toBe(true);
+    for (const e of [null, 'x', res({ error: 'RECIPE_NOT_FOUND' }, 400), res({ error: 'NOT_FOUND' }, 404), res(null, 404)])
+      expect(recipeNotFound(e)).toBe(false);
   });
 });
 

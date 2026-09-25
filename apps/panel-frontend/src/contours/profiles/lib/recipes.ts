@@ -18,6 +18,7 @@
 import type { ProtocolName } from '@/lib/domain/protocols';
 import { profileKindKey, type PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { LINK_CONGESTIONS, RECIPE_SCHEMA_VERSION } from '@iceslab/shared';
+import { RECIPE_SOURCE_MINE } from '@/lib/domain/recipes';
 import type {
   Recipe as WireRecipe,
   RecipeRandomize,
@@ -99,8 +100,11 @@ export interface Recipe {
   /** Source this recipe was merged from (backend-stamped); absent on built-ins. */
   sourceName?: string;
   sourceId?: string;
-  /** Provenance. Built-ins leave this undefined (treated as built-in). */
-  source?: 'builtin' | 'registry';
+  /** Provenance. Built-ins leave this undefined (treated as built-in);
+   *  `mine` is the operator's own, saved from an import. */
+  source?: 'builtin' | 'registry' | 'mine';
+  /** Other sources that carry this id (server-merged, the winner here). */
+  alsoIn?: string[];
 }
 
 // Random path generator, REALITY+xhttp benefits from unpredictable paths
@@ -796,7 +800,55 @@ export function resolveRecipeApply(
  * badge it as community/official.
  */
 export function fromWireRecipe(w: WireRecipe): Recipe {
-  return { ...w, protocol: w.protocol as RecipeProtocol, source: 'registry' };
+  return {
+    ...w,
+    protocol: w.protocol as RecipeProtocol,
+    source: w.sourceId === RECIPE_SOURCE_MINE ? 'mine' : 'registry',
+  };
+}
+
+// ───── Свои и скрытые (контракт ARCH 25.09) ─────
+//
+// Сливает дубли СЕРВЕР: один рецепт на id, проигравшие источники у него в
+// `alsoIn`. Экран ничего не сливает; два рецепта с одним id в ответе это
+// ошибка сервера, её называет duplicateRecipeIds.
+
+/** Рецепты на показ и скрытые, по `hidden` из ответа реестра. */
+export function splitHidden<R extends { id: string }>(recipes: readonly R[], hidden: readonly string[] | undefined): {
+  shown: R[];
+  hidden: R[];
+} {
+  const set = new Set(hidden ?? []);
+  return { shown: recipes.filter((r) => !set.has(r.id)), hidden: recipes.filter((r) => set.has(r.id)) };
+}
+
+/** Список скрытых для PUT (полная замена): скрыть или вернуть один id. */
+export function hiddenAfter(hidden: readonly string[] | undefined, id: string, action: 'hide' | 'show'): string[] {
+  const rest = (hidden ?? []).filter((x) => x !== id);
+  return action === 'hide' ? [...rest, id] : rest;
+}
+
+/** `saved` из ответа импорта как факт, или null. Вход проверяется первым. */
+export function importSaved(saved: unknown): { id: string; replaced: boolean } | null {
+  if (!saved || typeof saved !== 'object') return null;
+  const { id, replaced } = saved as { id?: unknown; replaced?: unknown };
+  return typeof id === 'string' && typeof replaced === 'boolean' ? { id, replaced } : null;
+}
+
+/** 404 RECIPE_NOT_FOUND на удаление своего: его уже нет. */
+export function recipeNotFound(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
+  if (!res || res.status !== 404 || !res.data || typeof res.data !== 'object') return false;
+  return (res.data as { error?: unknown }).error === 'RECIPE_NOT_FOUND';
+}
+
+/** id, пришедшие больше одного раза: ошибка сервера, а не состояние экрана. */
+export function duplicateRecipeIds(recipes: readonly { id: string }[]): string[] {
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const r of recipes) (seen.has(r.id) ? twice : seen).add(r.id);
+  return [...twice];
 }
 
 // ───── Export (author your own recipe from the current form) ─────
