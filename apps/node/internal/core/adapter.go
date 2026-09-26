@@ -191,6 +191,18 @@ type CascadeReceiver interface {
 	ApplyCascade(fragments json.RawMessage) error
 }
 
+// ChainAware is an OPTIONAL interface for a CascadeReceiver that also reads a
+// transitional copy of the cascade from somewhere else (xray: from its
+// inbound). E47, 26.09 on ru-02 and nl-01: with the chain process holding the
+// legs, a transit's xray still drew the leg's link-in from that copy, and the
+// two bound the same port; xray lost, five times, and went down with the
+// node's own hosts. The server tells it, on every push and BEFORE
+// ApplyCascade, whether the chain holds this node's cascade; while it does, a
+// nil ApplyCascade means "no cascade here at all", and the copy is not read.
+type ChainAware interface {
+	SetChainHolds(held bool)
+}
+
 // Provisionable is an OPTIONAL interface for adapters that can be REGISTERED
 // without being CONFIGURED. The installer registers an adapter for every
 // protocol the operator might switch on later, and such an adapter sits idle

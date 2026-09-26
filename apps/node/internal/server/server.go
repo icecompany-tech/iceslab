@@ -928,6 +928,12 @@ func (s *Server) applyPush(
 		if !ok {
 			continue
 		}
+		// E47: first say whether the chain holds this node's cascade, so a nil
+		// below reads as "no cascade here" and not as "take the copy on your
+		// inbound", which would draw a leg's link-in on the chain's port.
+		if ca, ok := adapter.(core.ChainAware); ok {
+			ca.SetChainHolds(chainInForce)
+		}
 		var mine json.RawMessage
 		if router != "" && adapter.Engine() == router {
 			mine = cascadeFragments

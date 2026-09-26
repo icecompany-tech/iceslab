@@ -97,6 +97,11 @@ type Adapter struct {
 	// deliver.
 	cascadeFromNode bool
 
+	// chainHolds: the chain process holds this node's cascade in this push
+	// (core.ChainAware, E47). Then the legs are the chain's, a nil
+	// ApplyCascade clears the cascade, and the copy on the inbound is not read.
+	chainHolds bool
+
 	// selfSteal is the K9-B local TLS fallback, running only while the inbound
 	// is REALITY self-steal mode. nil otherwise. Lifecycle is managed in
 	// regenerateAndRestart under restartMu; the field is read under a.mu.
@@ -258,7 +263,22 @@ func (a *Adapter) ApplyCascade(fragments json.RawMessage) error {
 
 	a.mu.Lock()
 	// Written on every call: the flag means "in this push", see its declaration.
-	a.cascadeFromNode = parsed != nil
+	// While the chain holds the cascade, nothing on the inbound is ours to read
+	// either (E47).
+	a.cascadeFromNode = parsed != nil || a.chainHolds
+	if parsed == nil && a.chainHolds {
+		// The legs are the chain's: whatever this core drew of the cascade before
+		// (a transit's link-in from the inbound copy, bound to the port the chain
+		// now needs) goes, in one restart, and only if there was something.
+		if a.cascade == nil {
+			a.mu.Unlock()
+			return nil
+		}
+		a.cascade = nil
+		a.mu.Unlock()
+		a.logger.Info("xray ApplyCascade: the chain process holds the cascade, dropping the legs from xray")
+		return a.regenerateAndRestart(context.Background())
+	}
 	if parsed == nil || cascadeEqual(a.cascade, parsed) {
 		a.mu.Unlock()
 		return nil
@@ -268,6 +288,14 @@ func (a *Adapter) ApplyCascade(fragments json.RawMessage) error {
 
 	a.logger.Info("xray ApplyCascade: cascade changed, regenerating")
 	return a.regenerateAndRestart(context.Background())
+}
+
+// SetChainHolds implements core.ChainAware; the server calls it before
+// ApplyCascade on every push.
+func (a *Adapter) SetChainHolds(held bool) {
+	a.mu.Lock()
+	a.chainHolds = held
+	a.mu.Unlock()
 }
 
 // NoteGeo implements core.GeoReceiver: remember what the files are now. No
