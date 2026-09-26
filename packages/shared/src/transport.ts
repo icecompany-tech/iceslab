@@ -1720,6 +1720,15 @@ export interface CoreStatus {
    * 1.0.0). A gate refuses on a present value only.
    */
   awgProtocol?: AwgProtocol;
+  /**
+   * The interface generations this AGENT can bring up, [1] or [1, 3] (t07-6),
+   * whatever the module speaks. Only the amneziawg core reports it.
+   *
+   * ⚠ Unlike every other field here, ABSENT IS A REFUSAL for a 3.1 profile:
+   * an agent older than the 3.1 interface reads a 3.1 inbound as a 1.x one and
+   * overwrites the live 1.x interface with it, silently.
+   */
+  awgGenerations?: AwgProtocol[];
   /** Whether this core is CONFIGURED, i.e. has an inbound and is expected to
    *  run. The installer registers an adapter for every protocol the operator
    *  might switch on later, and an unconfigured one sits idle by design.
@@ -1927,6 +1936,8 @@ export interface NodeCoreInfo {
   toolsVersion?: string;
   /** See CoreStatus.awgProtocol. Inventory: it changes with a bootstrap. */
   awgProtocol?: AwgProtocol;
+  /** See CoreStatus.awgGenerations. Inventory: it changes with the agent. */
+  awgGenerations?: AwgProtocol[];
   provisioned?: boolean;
   /** See CoreStatus.reason. Inventory: it changes with a push, not a tick. */
   reason?: string;

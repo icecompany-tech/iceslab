@@ -604,6 +604,12 @@ type CoreStatus struct {
 	// amneziawg core sets it. 0 (absent) is unknown, never 1: no module, or a
 	// version that does not tell the generation.
 	AwgProtocol int `json:"awgProtocol,omitempty"`
+	// AwgGenerations are the interface generations this AGENT can carry, [1]
+	// or [1,3] (t07-6). Not the module's: an agent older than the 3.1
+	// interface takes a 3.1 inbound for a 1.x one and overwrites the live 1.x
+	// interface with it, so the panel refuses a 3.1 profile where 3 is not
+	// listed. Only the amneziawg core sets it.
+	AwgGenerations []int `json:"awgGenerations,omitempty"`
 	// Provisioned tells "this core has a config and should be running" apart
 	// from "nobody has configured this core yet". The installer registers an
 	// adapter for every protocol the operator might switch on later, so an

@@ -1394,6 +1394,15 @@ func (a *Adapter) AwgProtocol() int {
 	return awgProtocolOf(a.CoreVersion())
 }
 
+// AwgGenerations: what this agent can bring up, whatever the module is. The
+// panel refuses a 3.1 profile onto a node that does not list 3 (t07-6).
+func (a *Adapter) AwgGenerations() []int {
+	if a.v3 == nil {
+		return []int{1}
+	}
+	return []int{1, 3}
+}
+
 func awgProtocolOf(version string) int {
 	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if v == "" || v == "1.0.0" {

@@ -362,4 +362,6 @@ type ToolsVersioner interface {
 // (t07-1). Same contract as CoreVersion: goroutine-safe, cheap.
 type AwgProtocolReporter interface {
 	AwgProtocol() int
+	// AwgGenerations: the interface generations this agent carries (t07-6).
+	AwgGenerations() []int
 }

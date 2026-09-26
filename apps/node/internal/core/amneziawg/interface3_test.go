@@ -215,6 +215,16 @@ func TestAPushThatDropsOneGenerationTakesOnlyThatInterfaceDown(t *testing.T) {
 	}
 }
 
+func TestTheAgentSaysItCarriesBothGenerations(t *testing.T) {
+	a, _ := twoInterfaceAdapter(t)
+	if got := a.AwgGenerations(); len(got) != 2 || got[0] != 1 || got[1] != 3 {
+		t.Errorf("AwgGenerations = %v, want [1 3]", got)
+	}
+	if got := a.v3.AwgGenerations(); len(got) != 1 || got[0] != 1 {
+		t.Errorf("the 3.1 interface itself reports %v; only the registered adapter speaks for the agent", got)
+	}
+}
+
 func TestAUserOnBothInterfacesIsBilledOnce(t *testing.T) {
 	got := mergeStats(
 		&core.Stats{Users: []core.UserStats{{UserID: "u1", BytesIn: 10, BytesOut: 1}, {UserID: "u2", BytesIn: 5}}, TotalBytesIn: 15, TotalBytesOut: 1},

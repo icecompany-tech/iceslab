@@ -9,6 +9,7 @@ import { registerAndLogin } from '../../../tests/helpers/auth.js';
 import { fetchEnabledInbounds } from '../inbounds/inbounds.queue.js';
 import { awg3GeometryViolations, ensureAwg3Geometry } from './awg3-geometry.js';
 import { subnetsOverlap } from './node-core-gate.js';
+import { observedCores } from './nodes.cron.js';
 
 /**
  * t07-6: a 3.1 profile on a node is pushed as the node's 3.1 interface, with
@@ -42,7 +43,18 @@ async function makeNode(): Promise<string> {
   seq += 1;
   const res = await post('/api/nodes', { name: `awg-${seq}`, address: `awg-${seq}.test`, protocol: 'xray' });
   expect(res.statusCode, res.body).toBe(201);
-  return JSON.parse(res.body).id as string;
+  const id = JSON.parse(res.body).id as string;
+  // An agent that carries both generations: a 3.1 profile is refused anywhere else.
+  await prisma.node.update({
+    where: { id },
+    data: {
+      cores: observedCores(
+        [{ name: 'amneziawg', engine: 'amneziawg', running: true, installed: true, awgProtocol: 3, awgGenerations: [1, 3] }],
+        new Date().toISOString(),
+      ) as unknown as object,
+    },
+  });
+  return id;
 }
 
 async function awgProfile(awgProtocol: 1 | 3, subnet: string): Promise<string> {

@@ -84,6 +84,35 @@ export class AwgProtocolMismatchError extends Error {
   }
 }
 
+/**
+ * A 3.1 profile onto a node whose agent does not say it carries a 3.1
+ * interface (t07-6): `awgGenerations` without 3, or absent.
+ *
+ * ⚠ THE ONE PLACE WHERE ABSENCE IS A REFUSAL (ARCH 26.09), against the rule
+ * every other gate here follows. An agent older than the field takes a 3.1
+ * inbound for a 1.x one and brings it up on the 1.x interface, overwriting the
+ * live one: the node's 1.x users drop, silently, and nothing refuses anything.
+ * Waiting for the fact costs an agent rebuild; guessing costs those users.
+ */
+export class AwgAgentTooOldError extends Error {
+  readonly code = 'AWG_AGENT_TOO_OLD';
+  constructor(public nodeName: string) {
+    super(
+      `The agent on node "${nodeName}" is older than the AmneziaWG 3.1 interface. ` +
+        `Rebuild the agent on the node, then bind the 3.1 profile.`,
+    );
+    this.name = 'AwgAgentTooOldError';
+  }
+}
+
+/** Whether the node's agent says it brings up a 3.1 interface. */
+export function agentCarriesAwg3(cores: NodeCores | null): boolean {
+  const row = cores?.cores.find(
+    (c) => c.name === 'amneziawg' && (c.engine === undefined || c.engine === 'amneziawg'),
+  );
+  return row?.awgGenerations?.includes(3) === true;
+}
+
 function awgName(g: AwgProtocol): string {
   return g === 3 ? '3.1' : '1.x';
 }
@@ -121,8 +150,11 @@ export function assertAwgProtocolOnNode(
 ): void {
   const wanted = profileAwgProtocol(profile);
   if (wanted !== 3) return;
-  const has = reportedAwgProtocol((node.cores as NodeCores | null) ?? null);
+  const cores = (node.cores as NodeCores | null) ?? null;
+  const has = reportedAwgProtocol(cores);
   if (has === 1) throw new AwgProtocolMismatchError(node.name, wanted, has);
+  // Not the fact-only rule: see AwgAgentTooOldError.
+  if (!agentCarriesAwg3(cores)) throw new AwgAgentTooOldError(node.name);
 }
 
 /**
@@ -240,6 +272,9 @@ export function coreGateReply(err: unknown): { status: 409; body: Record<string,
       },
     };
   }
+  if (err instanceof AwgAgentTooOldError) {
+    return { status: 409, body: { error: err.code, message: err.message, nodeName: err.nodeName } };
+  }
   if (err instanceof AwgSubnetOverlapError) {
     return {
       status: 409,
@@ -270,8 +305,12 @@ export function assertCoreOnNode(
   const cores = (node.cores as NodeCores | null) ?? null;
   const rows = cores?.cores.filter((c) => c.engine === engine) ?? [];
   // Not reported (never checked in, an agent older than `engine`, or this
-  // engine not among the ones the agent knows): nothing to refuse on.
-  if (rows.length === 0) return;
+  // engine not among the ones the agent knows): nothing to refuse on, except
+  // a 3.1 profile, whose gate takes absence for a refusal (AwgAgentTooOldError).
+  if (rows.length === 0) {
+    assertAwgProtocolOnNode(node, profile);
+    return;
+  }
 
   const present = rows.filter((c) => c.installed !== false);
   const intent = readCoreVersions(node.coreVersions);

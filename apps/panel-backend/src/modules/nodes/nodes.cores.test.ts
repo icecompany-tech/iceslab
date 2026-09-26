@@ -99,6 +99,16 @@ describe('what the panel keeps from the healthcheck', () => {
     expect('awgProtocol' in got.cores[1]!).toBe(false);
   });
 
+  it('keeps the generations the agent carries, only ones the panel knows', () => {
+    // t07-6: a 3.1 profile is refused where 3 is not among them.
+    const got = observedCores(
+      [core({ name: 'amneziawg', engine: 'amneziawg', awgGenerations: [1, 2 as never, 3] })],
+      AT,
+    );
+    expect(got.cores[0]!.awgGenerations).toEqual([1, 3]);
+    expect('awgGenerations' in observedCores([core({ name: 'amneziawg' })], AT).cores[0]!).toBe(false);
+  });
+
   it('keeps the machine arch the manifest names, and no other', () => {
     // The update command picks a release file and its sha256 by arch.
     expect(observedCores([], AT, 'arm64').arch).toBe('arm64');

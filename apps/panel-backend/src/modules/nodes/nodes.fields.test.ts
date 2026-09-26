@@ -69,7 +69,7 @@ describe('the node list names the fields this server renders', () => {
           observedAt: new Date().toISOString(),
           cores: [
             { name: 'xray', engine: 'xray', installed: true },
-            { name: 'amneziawg', engine: 'amneziawg', installed: true, version: '3.1.20260906', awgProtocol: 3 },
+            { name: 'amneziawg', engine: 'amneziawg', installed: true, version: '3.1.20260906', awgProtocol: 3, awgGenerations: [1, 3] },
             {
               name: 'hysteria',
               engine: 'hysteria',

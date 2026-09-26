@@ -211,13 +211,20 @@ const AWG = {
   obfuscation: {},
 };
 
-/** An AmneziaWG row as the agent reports it after t07-1. */
-const awgRow = (awgProtocol?: 1 | 3, version = awgProtocol === 3 ? '3.1.20260906' : '1.0.20260611') => ({
+/** An AmneziaWG row as the agent reports it after t07-6: the module's
+ *  generation, and what the agent carries (both, unless said otherwise). */
+const awgRow = (
+  awgProtocol?: 1 | 3,
+  version = awgProtocol === 3 ? '3.1.20260906' : '1.0.20260611',
+  // null = the agent does not report the field (older than t07-6).
+  awgGenerations: (1 | 3)[] | null = [1, 3],
+) => ({
   name: 'amneziawg' as const,
   engine: 'amneziawg' as const,
   installed: true,
   version,
   ...(awgProtocol ? { awgProtocol } : {}),
+  ...(awgGenerations ? { awgGenerations } : {}),
 });
 
 const getNode = async (id: string) =>
@@ -278,14 +285,51 @@ describe('the AmneziaWG generation gate (t07-1)', () => {
     expect((await bind(three, nodeId, 51822)).statusCode).toBe(201);
   });
 
-  it('lets through a node that did not say which module it runs', async () => {
+  it('lets through a node whose module does not say, when its agent carries 3.1', async () => {
     const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
-    // An agent older than the field, or a raw build that says 1.0.0: no key.
+    // A raw build that says 1.0.0: no module fact, and that alone refuses nothing.
     const silent = await makeNode();
     await report(silent, [awgRow(undefined, '1.0.0')], 'amd64');
     expect((await bind(three, silent, 51820)).statusCode).toBe(201);
+  });
+
+  it('refuses a 3.1 profile where the agent does not say it carries 3.1, absence included (ARCH 26.09)', async () => {
+    // An older agent reads a 3.1 inbound as 1.x and overwrites the live 1.x
+    // interface with it: here, and only here, absence is a refusal.
+    const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+    const old = await makeNode();
+    await report(old, [awgRow(3, '3.1.20260906', null)], 'amd64');
+    const onlyOne = await makeNode();
+    await report(onlyOne, [awgRow(3, '3.1.20260906', [1])], 'amd64');
     const never = await makeNode();
-    expect((await host(three, never, 51820)).statusCode).toBe(201);
+    for (const res of [await bind(three, old, 51820), await bind(three, onlyOne, 51820), await host(three, never, 51820)]) {
+      expect(res.statusCode, res.body).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({ error: 'AWG_AGENT_TOO_OLD' });
+    }
+    // A 1.x profile asks nothing of the agent.
+    const one = await makeProfile('amneziawg', { ...AWG, subnet: '10.68.68.0/24' });
+    expect((await bind(one, old, 51821)).statusCode).toBe(201);
+    // And a move to 3.1 over PUT, the same answer.
+    const put = await app.inject({ method: 'PUT', url: `/api/profiles/${one}`, headers: auth(), payload: { awgProtocol: 3 } });
+    expect(put.statusCode, put.body).toBe(409);
+    expect(JSON.parse(put.body).error).toBe('AWG_AGENT_TOO_OLD');
+  });
+
+  it('a PUT that moves the subnet onto the other generation is refused as the binding would be', async () => {
+    const nodeId = await makeNode();
+    await report(nodeId, [awgRow(3)], 'amd64');
+    const one = await makeProfile('amneziawg', AWG);
+    const three = await makeProfile('amneziawg', { ...AWG, subnet: '10.67.67.0/24' }, { awgProtocol: 3 });
+    expect((await bind(one, nodeId, 51820)).statusCode).toBe(201);
+    expect((await bind(three, nodeId, 51830)).statusCode).toBe(201);
+    const put = (payload: object) =>
+      app.inject({ method: 'PUT', url: `/api/profiles/${three}`, headers: auth(), payload });
+    const onto = await put({ config: { ...AWG, subnet: '10.66.66.0/24' } });
+    expect(onto.statusCode, onto.body).toBe(409);
+    expect(JSON.parse(onto.body)).toMatchObject({ error: 'AWG_SUBNET_OVERLAP', otherSubnet: '10.66.66.0/24' });
+    expect((await put({ config: { ...AWG, subnet: '10.69.69.0/24' } })).statusCode).toBe(200);
+    // Back to 1.x on its own subnet: the same generation as the other, not asked.
+    expect((await put({ awgProtocol: null })).statusCode).toBe(200);
   });
 
   it('refuses moving a deployed profile to 3.1 while one of its nodes runs 1.x, and back is free', async () => {

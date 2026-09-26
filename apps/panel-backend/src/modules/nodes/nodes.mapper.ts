@@ -233,6 +233,7 @@ export interface PublicNodeDto {
 export const NODE_DTO_FIELDS = [
   'awgProtocol',
   'cores[].awgProtocol',
+  'cores[].awgGenerations',
   'intendedEngines',
   'coreVersions',
   'engines',

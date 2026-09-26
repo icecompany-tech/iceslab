@@ -427,6 +427,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 				}
 				if g, ok := adapter.(core.AwgProtocolReporter); ok {
 					cs.AwgProtocol = g.AwgProtocol()
+					cs.AwgGenerations = g.AwgGenerations()
 				}
 			}
 			// The certificate this core serves (E30a), for the panel's "Cores"

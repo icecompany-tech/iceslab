@@ -220,7 +220,8 @@ type generationCore struct {
 	generation int
 }
 
-func (g *generationCore) AwgProtocol() int { return g.generation }
+func (g *generationCore) AwgProtocol() int      { return g.generation }
+func (g *generationCore) AwgGenerations() []int { return []int{1, 3} }
 
 // t07-1: the module generation travels on the amneziawg row, and a core that
 // cannot tell (0) sends no key, so the panel reads "unknown" and not 1.
@@ -231,6 +232,10 @@ func TestAwgProtocolTravelsOnlyWhenKnown(t *testing.T) {
 	)
 	if !strings.Contains(body, `"awgProtocol":3`) || strings.Count(body, `"awgProtocol"`) != 1 {
 		t.Errorf("the generation belongs on the amneziawg row alone: %s", body)
+	}
+	// t07-6: and what the agent can carry, beside it.
+	if !strings.Contains(body, `"awgGenerations":[1,3]`) || strings.Count(body, `"awgGenerations"`) != 1 {
+		t.Errorf("the agent's interface generations belong on the amneziawg row: %s", body)
 	}
 	body = healthBody(t, &generationCore{fakeCore{name: "amneziawg", running: true}, 0})
 	if strings.Contains(body, `"awgProtocol"`) {

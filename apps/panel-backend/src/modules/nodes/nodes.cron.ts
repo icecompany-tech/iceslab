@@ -372,6 +372,10 @@ export function observedCores(
       // t07-1: the module generation. Only a value the panel knows is kept:
       // the gate compares it, and a stray number would refuse on nothing.
       ...(c.awgProtocol !== undefined && AWG_PROTOCOLS.includes(c.awgProtocol) ? { awgProtocol: c.awgProtocol } : {}),
+      // t07-6: what the agent can carry; only generations the panel knows.
+      ...(Array.isArray(c.awgGenerations)
+        ? { awgGenerations: c.awgGenerations.filter((g) => AWG_PROTOCOLS.includes(g)) }
+        : {}),
       ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
       ...(c.reason ? { reason: c.reason } : {}),
       ...(c.installed !== undefined ? { installed: c.installed } : {}),
