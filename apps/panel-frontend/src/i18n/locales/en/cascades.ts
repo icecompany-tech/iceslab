@@ -113,6 +113,21 @@ export const cascades = {
     // missing. A server FACT from the node's report, so the button is not
     // disabled ahead of it.
     entryCannotChain: '{{name}} reported {{engines}}, sing-box is not on it.',
+    viaPool: 'node pool',
+    viaOutbound: 'outbound',
+    outboundPick: 'pick a named outbound',
+    outboundNone: 'no vless or socks outbounds',
+    outboundNoneHint: 'There are no vless or socks outbounds yet.',
+    outboundGo: 'Add one',
+    directionEmpty: 'Direction {{n}} is empty: it has neither nodes nor an outbound, the server will not save it.',
+    outboundTaken: 'Direction {{n}} already stands on this outbound: one outbound is one way out, two directions cannot share it.',
+    outboundNeedsChain: 'A direction\'s outbound is dialled by the chain of the last position, and {{name}} reported {{engines}}, sing-box is not on it.',
+    directionRefused: {
+      DIRECTION_OUTBOUND_AND_NODES: 'Direction {{n}}: both nodes and an outbound. Keep one of the two.',
+      DIRECTION_EMPTY: 'Direction {{n}} is empty: give it nodes or an outbound, or remove it.',
+      notFound: 'The chosen outbound is gone: it was deleted while the form was open. Pick another.',
+      type: 'An outbound of type {{type}} does not fit a direction: vless or socks only.',
+    },
     entryPolicyLabel: 'entry policy',
     entryPolicyNone: 'none',
     entryPolicyHint: 'for every user of this entry',

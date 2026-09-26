@@ -26,6 +26,7 @@ import {
   ChainIcon,
   Counter,
   DashedAdd,
+  DirectionNotes,
   DirectionRow,
   EntryBystandersNote,
   EntryChainNote,
@@ -90,12 +91,18 @@ import {
   refusedUnderlay,
   toDirectionInputs,
   toPositionInputs,
+  directionLines,
+  directionVia,
+  outboundChainGaps,
+  refusedDirection,
+  type DirectionRefusal,
   type CellRefusal,
   type EntryChainConflict,
   type LinkPortConflict,
   type DirectionDraft,
   type PositionDraft,
 } from '@/contours/cascades/lib/cascadeForm';
+import { directionOutbounds, listNamedOutbounds, outboundAddress } from '@/lib/domain/namedOutbounds';
 
 /**
  * Build a cascade, as a page.
@@ -131,6 +138,10 @@ export function CascadeCreatePage() {
   const [underlayRefused, setUnderlayRefused] = useState<string[]>([]);
   /** Входные ноды, которые не могут поднять цепь (409 `ENTRY_CANNOT_CHAIN`). */
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
+  /** Фаза 10: отказ про направление и его выход; строка у своего направления. */
+  const [dirRefusal, setDirRefusal] = useState<DirectionRefusal | null>(null);
+  /** 409 NAMED_OUTBOUND_NEEDS_CHAIN: ноды последней позиции без sing-box. */
+  const [outboundChainRefusals, setOutboundChainRefusals] = useState<EntryChainConflict[]>([]);
 
   const nextKey = useRef(2);
   // Pools are the entry and any transits after it. The exit is not a pool: it
@@ -151,6 +162,17 @@ export function CascadeCreatePage() {
   // Политика входа (Ф9.3). Знает ли сервер поле, говорит `fields` конверта
   // каскадов (и на пустом списке); по стоящим каскадам только у сервера старше.
   const entryPolicyKnown = listFieldKnown(cascadesQuery.data?.fields, cascadesQuery.data?.cascades, 'entryPolicy');
+  // Фаза 10 (d28cc14): направление на именованном выходе. Знает ли сервер
+  // поле, говорит `fields` конверта каскадов.
+  const outboundKnown = listFieldKnown(
+    cascadesQuery.data?.fields,
+    cascadesQuery.data?.cascades.flatMap((c) => c.directions),
+    'outboundId',
+    'directions[].outboundId',
+  );
+  const outboundsQuery = useQuery({ queryKey: ['named-outbounds'], queryFn: listNamedOutbounds });
+  const outboundOptions = directionOutbounds(outboundsQuery.data?.outbounds);
+  const outboundById = new Map((outboundsQuery.data?.outbounds ?? []).map((o) => [o.id, o] as const));
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
   /** Выбранная политика входа; `null` = нет (у create это то же, что отсутствие). */
   const [entryPolicyId, setEntryPolicyId] = useState<string | null>(null);
@@ -226,6 +248,9 @@ export function CascadeCreatePage() {
   }
 
   function setDirection(idx: number, patch: Partial<DirectionDraft>) {
+    // Отказ был про прошлую форму: правка направления делает его неверным.
+    setDirRefusal(null);
+    setOutboundChainRefusals([]);
     setDirections((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   }
 
@@ -325,6 +350,14 @@ export function CascadeCreatePage() {
       const unchainable = refusedEntryChain(err);
       if (unchainable) {
         setEntryChainRefusals(unchainable);
+        return;
+      }
+      // Фаза 10: отказ про направление и его выход.
+      const dirRef = refusedDirection(err);
+      if (dirRef) {
+        if (dirRef.kind === 'needsChain') setOutboundChainRefusals(dirRef.conflicts);
+        else setDirRefusal(dirRef);
+        if (dirRef.kind === 'notFound') qc.invalidateQueries({ queryKey: ['named-outbounds'] });
         return;
       }
       const cells = refusedCells(err);
@@ -688,7 +721,45 @@ export function CascadeCreatePage() {
                   onUp={() => moveDirection(i, -1)}
                   onDown={() => moveDirection(i, 1)}
                   onDelete={() => setDirections((prev) => prev.filter((_, j) => j !== i))}
+                  outbound={
+                    outboundKnown
+                      ? {
+                          via: directionVia(dir),
+                          onVia: (via) =>
+                            setDirection(i, {
+                              via,
+                              outboundTouched: true,
+                              ...(via === 'outbound' ? { nodeIds: [''] } : { outboundId: null }),
+                            }),
+                          outboundId: dir.outboundId ?? null,
+                          options: outboundOptions,
+                          onOutbound: (o) =>
+                            setDirection(i, {
+                              outboundId: o?.id ?? null,
+                              outboundTouched: true,
+                              ...(o?.countryCode && !dir.countryCode ? { countryCode: o.countryCode } : {}),
+                            }),
+                        }
+                      : undefined
+                  }
                 />
+              ))}
+              {directions.map((_, i) => (
+                <DirectionNotes key={`notes-${i}`} lines={directionLines(directions, i, dirRefusal, t)} />
+              ))}
+
+              {/* Выход набирает цепь последней позиции: без sing-box там он
+                  не поднимется (NAMED_OUTBOUND_NEEDS_CHAIN). */}
+              {entryChainNotes(
+                outboundChainGaps(directions, (pools[pools.length - 1]?.nodeIds ?? []).map((nid) => nodeById.get(nid))),
+                outboundChainRefusals,
+              ).map((c) => (
+                <Note key={`out-chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                  {t('cascadeCreate.outboundNeedsChain', {
+                    name: c.nodeName,
+                    engines: c.engines.length ? c.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+                  })}
+                </Note>
               ))}
 
               <DashedAdd
@@ -784,12 +855,20 @@ export function CascadeCreatePage() {
                     countryCode={dir.countryCode}
                     prospectiveTag={i + 1}
                     note={
-                      dir.nodeIds.filter(Boolean).length
-                        ? dir.nodeIds
-                            .filter(Boolean)
-                            .map((id) => nodeById.get(id)?.name ?? id)
-                            .join(' · ')
-                        : t('cascadeCreate.directionNoNodes')
+                      // Фаза 10: выход последней ступенью, его имя и адрес.
+                      directionVia(dir) === 'outbound'
+                        ? (() => {
+                            const o = dir.outboundId ? outboundById.get(dir.outboundId) : undefined;
+                            return o
+                              ? [o.name, outboundAddress(o)].filter(Boolean).join(' · ')
+                              : t('cascadeCreate.outboundPick');
+                          })()
+                        : dir.nodeIds.filter(Boolean).length
+                          ? dir.nodeIds
+                              .filter(Boolean)
+                              .map((id) => nodeById.get(id)?.name ?? id)
+                              .join(' · ')
+                          : t('cascadeCreate.directionNoNodes')
                     }
                   />
                 ) : (

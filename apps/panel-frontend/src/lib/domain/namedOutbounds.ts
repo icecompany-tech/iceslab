@@ -13,6 +13,20 @@ export type NamedOutboundType = (typeof NAMED_OUTBOUND_TYPES)[number];
  *  политики ноды, они видны в списке, только если пришли импортом. */
 export const CREATABLE_OUTBOUND_TYPES: readonly NamedOutboundType[] = ['vless', 'socks'];
 
+/** На чём может стоять направление каскада (ARCH 26.09, сервер то же). */
+export const DIRECTION_OUTBOUND_TYPES: readonly NamedOutboundType[] = ['vless', 'socks'];
+
+/** Выходы, которые можно дать направлению: только vless и socks. */
+export function directionOutbounds(list: readonly NamedOutbound[] | undefined): NamedOutbound[] {
+  return (list ?? []).filter((o) => DIRECTION_OUTBOUND_TYPES.includes(o.type));
+}
+
+/** Сервер и порт выхода одной строкой; у freedom и blackhole пусто. */
+export function outboundAddress(o: Pick<NamedOutbound, 'config'>): string {
+  const { server, port } = o.config;
+  return typeof server === 'string' && server ? `${server}:${typeof port === 'number' ? port : ''}` : '';
+}
+
 /** uTLS-отпечатки, которые берёт движок цепи (sing-box 1.13). */
 export const OUTBOUND_FINGERPRINTS = [
   'chrome',

@@ -37,7 +37,114 @@ import {
   withUnderlay,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { Node } from '@/lib/domain/nodes';
-import { entryChainGaps, entryChainNotes } from '@/contours/cascades/lib/cascadeForm';
+import {
+  directionEmpty,
+  directionLines,
+  directionOfRefusal,
+  entryChainGaps,
+  entryChainNotes,
+  outboundChainGaps,
+  outboundTakenBy,
+  refusedDirection,
+  type DirectionDraft,
+} from '@/contours/cascades/lib/cascadeForm';
+import { directionOutbounds, type NamedOutbound } from '@/lib/domain/namedOutbounds';
+
+describe('направление на именованном выходе (фаза 10, d28cc14)', () => {
+  const dir = (over: Partial<DirectionDraft>): DirectionDraft => ({
+    key: 1,
+    id: 'd1',
+    countryCode: 'DE',
+    nodeIds: ['n1'],
+    tag: 1,
+    ...over,
+  });
+
+  it('на выходе: пула нет, ноги нет, outboundId уходит', () => {
+    expect(toDirectionInputs([dir({ outboundId: 'o1', linkProtocol: 'vless', linkTouched: true })])).toEqual([
+      { id: 'd1', countryCode: 'DE', nodeIds: [], outboundId: 'o1' },
+    ]);
+    // Выход ещё не выбран: оба ключа, сервер ответит DIRECTION_EMPTY.
+    expect(toDirectionInputs([dir({ via: 'outbound', outboundId: null })])[0]).toMatchObject({
+      nodeIds: [],
+      outboundId: null,
+    });
+  });
+
+  it('переведено на пул: outboundId null рядом с пулом; не трогали: ключа нет', () => {
+    expect(toDirectionInputs([dir({ via: 'pool', outboundId: null, outboundTouched: true })])[0]).toMatchObject({
+      nodeIds: ['n1'],
+      outboundId: null,
+    });
+    expect('outboundId' in toDirectionInputs([dir({ outboundId: null })])[0]).toBe(false);
+    expect('outboundId' in toDirectionInputs([dir({})])[0]).toBe(false);
+  });
+
+  it('пустое направление и один выход у двух направлений', () => {
+    expect(directionEmpty(dir({ nodeIds: [''] }))).toBe(true);
+    expect(directionEmpty(dir({ via: 'outbound', outboundId: null }))).toBe(true);
+    expect(directionEmpty(dir({ via: 'outbound', outboundId: 'o1' }))).toBe(false);
+    const ds = [dir({ outboundId: 'o1' }), dir({ outboundId: 'o2' }), dir({ outboundId: 'o1' })];
+    expect(outboundTakenBy(ds, 2)).toBe(1);
+    expect(outboundTakenBy(ds, 1)).toBeNull();
+    expect(outboundTakenBy(ds, 0)).toBeNull();
+  });
+
+  it('refusedDirection: пять отказов по полям, мусор null', () => {
+    const res = (status: number, data: unknown) => ({ response: { status, data } });
+    expect(refusedDirection(res(400, { error: 'DIRECTION_EMPTY', directionIndex: 1, directionTag: null }))).toEqual({
+      kind: 'shape',
+      code: 'DIRECTION_EMPTY',
+      index: 1,
+      tag: null,
+    });
+    expect(refusedDirection(res(400, { error: 'NAMED_OUTBOUND_NOT_FOUND', outboundId: 'o9' }))).toEqual({
+      kind: 'notFound',
+      outboundId: 'o9',
+    });
+    expect(
+      refusedDirection(res(409, { error: 'NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION', outboundId: 'o1', type: 'freedom' })),
+    ).toEqual({ kind: 'type', outboundId: 'o1', type: 'freedom' });
+    expect(
+      refusedDirection(res(409, { error: 'NAMED_OUTBOUND_NEEDS_CHAIN', conflicts: [{ nodeName: 'nl-01', engines: ['xray'] }, 7] })),
+    ).toEqual({ kind: 'needsChain', conflicts: [{ nodeName: 'nl-01', engines: ['xray'] }] });
+    for (const e of [null, 'x', res(409, { error: 'DIRECTION_EMPTY' }), res(400, { error: 'INVALID' }), res(400, null)]) {
+      expect(refusedDirection(e)).toBeNull();
+    }
+  });
+
+  it('отказ к направлению: по тегу, иначе по месту; про выход по его id', () => {
+    const ds = [dir({ tag: 3 }), dir({ id: null, tag: null, via: 'outbound', outboundId: 'o1' })];
+    expect(directionOfRefusal({ kind: 'shape', code: 'DIRECTION_EMPTY', index: 0, tag: 3 }, ds)).toBe(0);
+    expect(directionOfRefusal({ kind: 'shape', code: 'DIRECTION_EMPTY', index: 1, tag: null }, ds)).toBe(1);
+    expect(directionOfRefusal({ kind: 'type', outboundId: 'o1', type: 'freedom' }, ds)).toBe(1);
+    expect(directionOfRefusal(null, ds)).toBe(-1);
+  });
+
+  it('directionLines: пустое до кнопки, отказ EMPTY второй раз не пишется', () => {
+    const t = (k: string, o?: Record<string, unknown>) => `${k}${o ? JSON.stringify(o) : ''}`;
+    const ds = [dir({ via: 'outbound', outboundId: null })];
+    const refusal = { kind: 'shape' as const, code: 'DIRECTION_EMPTY' as const, index: 0, tag: 1 };
+    expect(directionLines(ds, 0, refusal, t)).toEqual(['cascadeCreate.directionEmpty{"n":1}']);
+    expect(directionLines([dir({})], 0, { kind: 'shape', code: 'DIRECTION_OUTBOUND_AND_NODES', index: 0, tag: 1 }, t)).toEqual([
+      'cascadeCreate.directionRefused.DIRECTION_OUTBOUND_AND_NODES{"n":1}',
+    ]);
+  });
+
+  it('выход без sing-box на последней позиции: только когда есть направление на выходе', () => {
+    const last = [{ name: 'nl-01', engines: ['xray'] as EngineName[] }];
+    expect(outboundChainGaps([dir({})], last)).toEqual([]);
+    expect(outboundChainGaps([dir({ outboundId: 'o1' })], last)).toEqual([{ nodeName: 'nl-01', engines: ['xray'] }]);
+  });
+
+  it('выходы для направления: только vless и socks', () => {
+    const o = (type: NamedOutbound['type']) => ({ id: type, type }) as NamedOutbound;
+    expect(directionOutbounds([o('vless'), o('socks'), o('freedom'), o('blackhole')]).map((x) => x.type)).toEqual([
+      'vless',
+      'socks',
+    ]);
+  });
+});
 import { nodeCarriesCell } from '@/lib/domain/linkCells';
 
 describe('вход amneziawg (t07-wire): как hysteria', () => {

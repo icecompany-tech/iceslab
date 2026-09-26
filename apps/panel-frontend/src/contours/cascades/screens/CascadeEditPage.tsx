@@ -17,6 +17,12 @@ import {
   type CascadeProtocol,
 } from '@/lib/domain/cascades';
 import { listNodes, type Node } from '@/lib/domain/nodes';
+import {
+  directionOutbounds,
+  listNamedOutbounds,
+  outboundAddress,
+  type NamedOutbound,
+} from '@/lib/domain/namedOutbounds';
 import { listRoutePolicies } from '@/lib/domain/routePolicies';
 import { listFieldKnown } from '@/lib/domain/nodeFields';
 import { refusalOf } from '@/lib/domain/syncRefusal';
@@ -42,6 +48,7 @@ import {
   Counter,
   DashedAdd,
   DirectionLegRow,
+  DirectionNotes,
   DirectionRow,
   EntryBystandersNote,
   EntryChainNote,
@@ -117,6 +124,12 @@ import {
   entryChainNotes,
   entryPolicyRefusal,
   storedEntryPolicy,
+  directionEmpty,
+  directionLines,
+  directionVia,
+  outboundChainGaps,
+  refusedDirection,
+  type DirectionRefusal,
   type CellRefusal,
   type EntryChainConflict,
   type EntryChangeRefusal,
@@ -197,6 +210,21 @@ export function CascadeEditPage() {
   const [entryChainRefusals, setEntryChainRefusals] = useState<EntryChainConflict[]>([]);
   /** 400 ENTRY_POLICY_NOT_FOUND: выбранную политику входа удалили. */
   const [entryPolicyGone, setEntryPolicyGone] = useState(false);
+  /** Фаза 10: отказ про направление и его выход; строка у своего направления. */
+  const [dirRefusal, setDirRefusal] = useState<DirectionRefusal | null>(null);
+  /** 409 NAMED_OUTBOUND_NEEDS_CHAIN: ноды последней позиции без sing-box. */
+  const [outboundChainRefusals, setOutboundChainRefusals] = useState<EntryChainConflict[]>([]);
+  // Именованные выходы для направлений: тот же ключ кэша, что у их экрана.
+  const outboundsQuery = useQuery({ queryKey: ['named-outbounds'], queryFn: listNamedOutbounds });
+  const outboundOptions = directionOutbounds(outboundsQuery.data?.outbounds);
+  const outboundById = new Map((outboundsQuery.data?.outbounds ?? []).map((o) => [o.id, o] as const));
+  // Знает ли сервер `directions[].outboundId` (d28cc14): без этого переключателя нет.
+  const outboundKnown = listFieldKnown(
+    cascadesQuery.data?.fields,
+    cascadesQuery.data?.cascades.flatMap((c) => c.directions),
+    'outboundId',
+    'directions[].outboundId',
+  );
   // Route-политики для селектора входа: тот же ключ кэша, что у экрана правил.
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
   // Хук стоит ДО раннего выхода страницы: иначе число хуков меняется между
@@ -353,6 +381,15 @@ export function CascadeEditPage() {
         setEntryChainRefusals(unchainable);
         return;
       }
+      // Фаза 10: отказ про направление и его выход, строкой у направления;
+      // выход без sing-box на последней позиции, строкой у выходов.
+      const dirRef = refusedDirection(err);
+      if (dirRef) {
+        if (dirRef.kind === 'needsChain') setOutboundChainRefusals(dirRef.conflicts);
+        else setDirRefusal(dirRef);
+        if (dirRef.kind === 'notFound') qc.invalidateQueries({ queryKey: ['named-outbounds'] });
+        return;
+      }
       // Смена протокола входа снимает каскад с профилей входных нод.
       const dropped = refusedEntryChange(err);
       if (dropped) {
@@ -445,6 +482,8 @@ export function CascadeEditPage() {
     setPortConflicts([]);
     setUnderlayRefused([]);
     setEntryChainRefusals([]);
+    setDirRefusal(null);
+    setOutboundChainRefusals([]);
     setDraft((d) => (d ? { ...d, ...p } : d));
   };
   const positionCount = pools.length + 1;
@@ -483,6 +522,9 @@ export function CascadeEditPage() {
   }
 
   function setDirection(idx: number, p: Partial<DirectionDraft>) {
+    // Отказ про направление был про прошлую форму: правка его снимает.
+    setDirRefusal(null);
+    setOutboundChainRefusals([]);
     setDraft((d) =>
       d ? { ...d, directions: d.directions.map((x, i) => (i === idx ? { ...x, ...p } : x)) } : d,
     );
@@ -602,7 +644,7 @@ export function CascadeEditPage() {
     .filter((n): n is string => Boolean(n));
   // Directions that actually carry a node. An empty one is a tag with nothing
   // behind it yet, and it is not something the balancer can pick.
-  const filledDirections = directions.filter((d) => d.nodeIds.some(Boolean)).length;
+  const filledDirections = directions.filter((d) => !directionEmpty(d)).length;
 
   return (
     <Stack gap={20}>
@@ -969,10 +1011,35 @@ export function CascadeEditPage() {
                   onUp={() => moveDirection(i, -1)}
                   onDown={() => moveDirection(i, 1)}
                   onDelete={() => patch({ directions: directions.filter((_, j) => j !== i) })}
+                  outbound={
+                    outboundKnown
+                      ? {
+                          via: directionVia(dir),
+                          onVia: (via) =>
+                            setDirection(i, {
+                              via,
+                              outboundTouched: true,
+                              ...(via === 'outbound' ? { nodeIds: [''] } : { outboundId: null }),
+                            }),
+                          outboundId: dir.outboundId ?? null,
+                          options: outboundOptions,
+                          onOutbound: (o) =>
+                            setDirection(i, {
+                              outboundId: o?.id ?? null,
+                              outboundTouched: true,
+                              // Страна выхода подставляется, если у направления её нет.
+                              ...(o?.countryCode && !dir.countryCode ? { countryCode: o.countryCode } : {}),
+                            }),
+                        }
+                      : undefined
+                  }
                 />
+                <DirectionNotes lines={directionLines(directions, i, dirRefusal, t)} />
                 {/* Нога ДО ЭТОГО выхода. До фазы 5 сервер полей не отдаёт, и
                     строка это показывает: ячейка входа, порт назначит сервер,
-                    селектор заблокирован. */}
+                    селектор заблокирован. У направления на выходе ноги нет:
+                    его набирает цепь последней позиции (фаза 10). */}
+                {directionVia(dir) === 'pool' && (
                 <DirectionLegRow
                   facts={legFacts(dir.linkProtocol, pools.length, linkCellEngines)}
                   cell={dir.linkProtocol ?? null}
@@ -998,7 +1065,23 @@ export function CascadeEditPage() {
                     oneLeg ? 'one-leg' : 'direction',
                   )}
                 />
+                )}
                 </Fragment>
+              ))}
+
+              {/* Выход набирает цепь последней позиции: без sing-box там он
+                  не поднимется. Предсказание по факту и отказ сервера одной
+                  строкой на ноду. */}
+              {entryChainNotes(
+                outboundChainGaps(directions, (pools[pools.length - 1]?.nodeIds ?? []).map((nid) => nodeById.get(nid))),
+                outboundChainRefusals,
+              ).map((c) => (
+                <Note key={`out-chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+                  {t('cascadeCreate.outboundNeedsChain', {
+                    name: c.nodeName,
+                    engines: c.engines.length ? c.engines.join(', ') : t('cascadeCreate.legNodeNoEngines'),
+                  })}
+                </Note>
               ))}
 
               <DashedAdd
@@ -1110,7 +1193,7 @@ export function CascadeEditPage() {
                     key={dir.key}
                     countryCode={dir.countryCode}
                     prospectiveTag={dir.tag ?? nextFreeTag(directions, i, draft.nextTag)}
-                    note={directionNote(dir, nodeById, todayByNode, t)}
+                    note={directionNote(dir, nodeById, todayByNode, t, outboundById)}
                   />
                 ) : (
                   <PreviewPending
@@ -1453,6 +1536,8 @@ function toDraft(c: Cascade, byId: Map<string, Node>, entryPolicyKnown: boolean)
         linkProtocol: d.linkProtocol,
         linkParams: d.linkParams,
         linkPort: d.linkPort,
+        // Фаза 10: выход вместо пула, те же три значения.
+        outboundId: d.outboundId,
       })),
       nextTag: c.nextDirectionTag,
       entryPolicyId: storedEntryPolicy(c.entryPolicy, entryPolicyKnown),
@@ -1533,7 +1618,13 @@ function directionNote(
   byId: Map<string, Node>,
   todayByNode: Map<string, number | null>,
   t: (k: string, o?: Record<string, unknown>) => string,
+  outboundById: Map<string, NamedOutbound>,
 ): string {
+  // Фаза 10: выход последней ступенью, его имя и адрес.
+  if (directionVia(d) === 'outbound') {
+    const o = d.outboundId ? outboundById.get(d.outboundId) : undefined;
+    return o ? [o.name, outboundAddress(o)].filter(Boolean).join(' · ') : t('cascadeCreate.outboundPick');
+  }
   const picked = d.nodeIds.filter(Boolean);
   if (picked.length === 0) return t('cascadeCreate.directionNoNodes');
   const names = picked.map((nid) => byId.get(nid)?.name ?? nid).join(' · ');
@@ -1563,7 +1654,9 @@ function subscriptionRows(
   const rows: { label: string; note: string; tone: string }[] = [];
   // Same two conditions the panel enforces when it builds the subscription: the
   // switch is on, and there are at least two directions to choose between.
-  if (d.autoProfile && d.directions.filter((x) => x.nodeIds.some(Boolean)).length > 1) {
+  // Направление на выходе (фаза 10) обслуживается так же, как с пулом.
+  const served = (x: DirectionDraft) => !directionEmpty(x);
+  if (d.autoProfile && d.directions.filter(served).length > 1) {
     rows.push({
       label: t('cascadeEdit.subAuto', { name: d.name }),
       note: t('cascadeEdit.subTag', { tag: 'ffff' }),
@@ -1571,7 +1664,7 @@ function subscriptionRows(
     });
   }
   d.directions.forEach((dir, i) => {
-    if (!dir.countryCode || !dir.nodeIds.some(Boolean)) return;
+    if (!dir.countryCode || !served(dir)) return;
     rows.push({
       label: t('cascadeEdit.subVia', { name: d.name, where: dir.countryCode }),
       note: t('cascadeEdit.subTag', {
@@ -1582,7 +1675,7 @@ function subscriptionRows(
   });
   // Off means the direction nodes keep their own direct entries alongside.
   if (!d.hideHops) {
-    for (const nid of d.directions.flatMap((x) => x.nodeIds.filter(Boolean))) {
+    for (const nid of d.directions.flatMap((x) => (directionVia(x) === 'pool' ? x.nodeIds.filter(Boolean) : []))) {
       const name = byId.get(nid)?.name;
       if (name) rows.push({ label: name, note: t('cascadeEdit.subDirect'), tone: DIM });
     }

@@ -108,9 +108,12 @@ export interface CascadeDirection {
   id: string;
   tag: number;
   countryCode: string;
-  /** May legitimately be empty: the tag exists, no node stands behind it yet,
-   *  and the direction is simply not handed to clients. */
+  /** Пусто ровно тогда, когда направление стоит на именованном выходе (фаза
+   *  10, d28cc14). Старая строка без нод и без выхода не обслуживается. */
   nodeIds: string[];
+  /** Именованный выход вместо пула нод (фаза 10), `null` = пул. `undefined`
+   *  у сервера старше поля (CASCADE_DTO_FIELDS `directions[].outboundId`). */
+  outboundId?: string | null;
   /**
    * Нога до этого выхода, фаза 5.
    *
@@ -272,6 +275,9 @@ export interface CascadeDirectionInput {
    */
   linkProtocol?: LinkCell | null;
   linkParams?: LinkParams | null;
+  /** Фаза 10: выход вместо пула. Нет ключа: не трогать; при переводе уходят
+   *  оба ключа, у оставляемого `null` или `[]`. */
+  outboundId?: string | null;
 }
 
 export interface CreateCascadeV4Input {

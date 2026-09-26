@@ -1,5 +1,5 @@
 import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS } from '@iceslab/shared';
-import type { CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
+import type { CascadeDirectionInput, CascadeMode, CascadeProtocol } from '@/lib/domain/cascades';
 import { linkCellPair, nativeEngineOfIntent, type EnginePair, type EngineName } from '@/lib/domain/engines';
 import { DEFAULT_LINK_CONGESTION, DEFAULT_LINK_UNDERLAY, LINK_CONGESTIONS } from '@/lib/domain/cascades';
 import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
@@ -364,6 +364,41 @@ export interface DirectionDraft {
    * сквада стёрло profileIds 2026-07-31.
    */
   linkTouched?: boolean;
+  /**
+   * Фаза 10 (d28cc14): куда направление выходит, пул своих нод или
+   * именованный выход. `undefined`: читается по `outboundId`.
+   */
+  via?: DirectionVia;
+  /** Выход направления; `null` = на пуле. `undefined` у сервера старше поля. */
+  outboundId?: string | null;
+  /** Переключал ли оператор пул и выход: тогда `outboundId` уходит и при
+   *  переводе на пул, `null`-ом, иначе сервер счёл бы это «оба сразу». */
+  outboundTouched?: boolean;
+}
+
+export type DirectionVia = 'pool' | 'outbound';
+
+/** Куда выходит направление: явный выбор формы, иначе по сохранённому. */
+export function directionVia(d: Pick<DirectionDraft, 'via' | 'outboundId'>): DirectionVia {
+  return d.via ?? (d.outboundId ? 'outbound' : 'pool');
+}
+
+/** Ни нод, ни выхода: сервер откажет DIRECTION_EMPTY. Экран говорит это до
+ *  кнопки строкой, кнопку не гасит. */
+export function directionEmpty(d: Pick<DirectionDraft, 'via' | 'outboundId' | 'nodeIds'>): boolean {
+  return directionVia(d) === 'outbound' ? !d.outboundId : d.nodeIds.filter(Boolean).length === 0;
+}
+
+/** Номер (с 1) более раннего направления на том же выходе, или null: один
+ *  выход у двух направлений сервер не принимает. */
+export function outboundTakenBy(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId'>[],
+  index: number,
+): number | null {
+  const d = directions[index];
+  if (!d || directionVia(d) !== 'outbound' || !d.outboundId) return null;
+  const j = directions.findIndex((x, k) => k < index && directionVia(x) === 'outbound' && x.outboundId === d.outboundId);
+  return j === -1 ? null : j + 1;
 }
 
 /** Pools are the entry and whatever transits follow it; the exit is the
@@ -402,18 +437,146 @@ export function toPositionInputs(pools: PositionDraft[]) {
  * `tag` is deliberately not sent. The panel issues tags and never reuses them,
  * so a tag from the client could only contradict the server.
  */
-export function toDirectionInputs(directions: DirectionDraft[]) {
-  return directions.map((d) => ({
+export function toDirectionInputs(directions: DirectionDraft[]): CascadeDirectionInput[] {
+  return directions.map((d): CascadeDirectionInput => {
+    // Фаза 10: направление на выходе уходит без пула и без ноги (ноги у него
+    // нет: выход набирает цепь последней позиции). Оба ключа, у пула `[]`.
+    if (directionVia(d) === 'outbound') {
+      return {
+        ...(d.id ? { id: d.id } : {}),
+        countryCode: d.countryCode,
+        nodeIds: [],
+        outboundId: d.outboundId ?? null,
+      };
+    }
+    return poolDirectionInput(d);
+  });
+}
+
+function poolDirectionInput(d: DirectionDraft): CascadeDirectionInput {
+  return {
     ...(d.id ? { id: d.id } : {}),
     countryCode: d.countryCode,
     nodeIds: d.nodeIds.filter(Boolean),
+    // Переведено с выхода на пул: `outboundId: null` рядом с пулом, иначе
+    // сервер оставит выход и откажет «оба сразу».
+    ...(d.outboundTouched ? { outboundId: null } : {}),
     // Нога уходит ТОЛЬКО если её правили. До фазы 5 полей нет вовсе, и
     // отправленный `null` означал бы «сбрось ячейку», а не «я про неё ничего
     // не знаю». `linkPort` не отправляется никогда: его назначает сервер.
     ...(d.linkTouched
       ? { linkProtocol: d.linkProtocol ?? null, linkParams: d.linkParams ?? null }
       : {}),
-  }));
+  };
+}
+
+/**
+ * Отказ сервера про направление и его выход (фаза 10, d28cc14), или null:
+ *
+ *   400 DIRECTION_OUTBOUND_AND_NODES / DIRECTION_EMPTY { directionIndex, directionTag }
+ *   400 NAMED_OUTBOUND_NOT_FOUND { outboundId }
+ *   409 NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION { outboundId, type }
+ *   409 NAMED_OUTBOUND_NEEDS_CHAIN { conflicts[{ nodeName, engines }] }
+ *
+ * Вход проверяется первым: это разбор сетевой ошибки.
+ */
+export type DirectionRefusal =
+  | { kind: 'shape'; code: 'DIRECTION_OUTBOUND_AND_NODES' | 'DIRECTION_EMPTY'; index: number | null; tag: number | null }
+  | { kind: 'notFound'; outboundId: string }
+  | { kind: 'type'; outboundId: string; type: string }
+  | { kind: 'needsChain'; conflicts: EntryChainConflict[] };
+
+export function refusedDirection(err: unknown): DirectionRefusal | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
+  if (!res || !res.data || typeof res.data !== 'object') return null;
+  const d = res.data as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+  if (res.status === 400 && (d.error === 'DIRECTION_OUTBOUND_AND_NODES' || d.error === 'DIRECTION_EMPTY')) {
+    return { kind: 'shape', code: d.error, index: num(d.directionIndex), tag: num(d.directionTag) };
+  }
+  if (res.status === 400 && d.error === 'NAMED_OUTBOUND_NOT_FOUND' && typeof d.outboundId === 'string') {
+    return { kind: 'notFound', outboundId: d.outboundId };
+  }
+  if (res.status === 409 && d.error === 'NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION' && typeof d.outboundId === 'string') {
+    return { kind: 'type', outboundId: d.outboundId, type: typeof d.type === 'string' ? d.type : '' };
+  }
+  if (res.status === 409 && d.error === 'NAMED_OUTBOUND_NEEDS_CHAIN' && Array.isArray(d.conflicts)) {
+    const conflicts: EntryChainConflict[] = [];
+    for (const raw of d.conflicts) {
+      if (!raw || typeof raw !== 'object') continue;
+      const c = raw as Record<string, unknown>;
+      if (typeof c.nodeName !== 'string') continue;
+      conflicts.push({ nodeName: c.nodeName, engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [] });
+    }
+    return { kind: 'needsChain', conflicts };
+  }
+  return null;
+}
+
+/**
+ * Какому направлению формы принадлежит отказ: сперва по тегу (он у
+ * сохранённого направления и не меняется), иначе по месту в запросе; порядок
+ * направлений в запросе тот же, что в форме. `-1`: отказ не про направление.
+ */
+export function directionOfRefusal(
+  r: DirectionRefusal | null,
+  directions: Pick<DirectionDraft, 'tag' | 'outboundId' | 'via'>[],
+): number {
+  if (!r) return -1;
+  if (r.kind === 'shape') {
+    if (r.tag !== null) {
+      const byTag = directions.findIndex((d) => d.tag === r.tag);
+      if (byTag !== -1) return byTag;
+    }
+    return r.index !== null && r.index < directions.length ? r.index : -1;
+  }
+  if (r.kind === 'notFound' || r.kind === 'type') {
+    return directions.findIndex((d) => directionVia(d) === 'outbound' && d.outboundId === r.outboundId);
+  }
+  return -1;
+}
+
+/**
+ * Строки под направлением `index` (фаза 10), по порядку: пустое (до кнопки),
+ * выход уже у другого направления, отказ сервера про это направление. Отказ
+ * DIRECTION_EMPTY о направлении, которое экран уже назвал пустым, второй раз
+ * не пишется.
+ */
+export function directionLines(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId' | 'nodeIds' | 'tag'>[],
+  index: number,
+  refusal: DirectionRefusal | null,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string[] {
+  const d = directions[index];
+  if (!d) return [];
+  const n = index + 1;
+  const out: string[] = [];
+  const empty = directionEmpty(d);
+  if (empty) out.push(t('cascadeCreate.directionEmpty', { n }));
+  const taken = outboundTakenBy(directions, index);
+  if (taken !== null) out.push(t('cascadeCreate.outboundTaken', { n: taken }));
+  if (refusal && directionOfRefusal(refusal, directions) === index) {
+    if (refusal.kind === 'shape' && !(refusal.code === 'DIRECTION_EMPTY' && empty)) {
+      out.push(t(`cascadeCreate.directionRefused.${refusal.code}`, { n }));
+    }
+    if (refusal.kind === 'notFound') out.push(t('cascadeCreate.directionRefused.notFound'));
+    if (refusal.kind === 'type') out.push(t('cascadeCreate.directionRefused.type', { type: refusal.type }));
+  }
+  return out;
+}
+
+/**
+ * Ноды последней позиции, которые ТОЧНО не наберут выход направления: выход
+ * набирает цепь, цепь это sing-box (NAMED_OUTBOUND_NEEDS_CHAIN, по тому же
+ * чтению, что вход без sing-box). Пусто, пока ни одно направление не на выходе.
+ */
+export function outboundChainGaps(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId'>[],
+  lastPosition: Parameters<typeof entryChainGaps>[0],
+): EntryChainConflict[] {
+  return directions.some((d) => directionVia(d) === 'outbound') ? entryChainGaps(lastPosition) : [];
 }
 
 /**

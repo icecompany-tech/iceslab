@@ -43,7 +43,9 @@ import {
   type LegUnderlay,
   type UnderlayChoice,
   type EntryPolicyPlace,
+  type DirectionVia,
 } from '@/contours/cascades/lib/cascadeForm';
+import { outboundAddress, type NamedOutbound } from '@/lib/domain/namedOutbounds';
 import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/domain/cascades';
 import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
 import { CoreChips } from '@/ui/CoreChips';
@@ -971,6 +973,7 @@ export function DirectionRow({
   onUp,
   onDown,
   onDelete,
+  outbound,
 }: {
   tag: number | null;
   prospectiveTag: number;
@@ -988,7 +991,22 @@ export function DirectionRow({
   onUp: () => void;
   onDown: () => void;
   onDelete: () => void;
+  /**
+   * Фаза 10 (d28cc14): переключатель «пул нод | выход». Нет пропса: сервер
+   * поля не знает, направление всегда пул, как было.
+   */
+  outbound?: {
+    via: DirectionVia;
+    onVia: (via: DirectionVia) => void;
+    outboundId: string | null;
+    /** Только vless и socks (directionOutbounds). */
+    options: NamedOutbound[];
+    onOutbound: (o: NamedOutbound | null) => void;
+  };
 }) {
+  const { t } = useTranslation();
+  const onOutbound = outbound?.via === 'outbound';
+  const picked = onOutbound ? (outbound.options.find((o) => o.id === outbound.outboundId) ?? null) : null;
   return (
     <Box className="cascade-direction" style={{ alignItems: 'flex-start' }}>
       <Box className="cascade-direction-tag">
@@ -998,14 +1016,53 @@ export function DirectionRow({
         <CountrySelect value={countryCode} onChange={onCountry} />
       </Box>
       <Box className="cascade-direction-nodes">
-        <PoolField
-          nodeIds={nodeIds}
-          nodes={nodes}
-          claimedBy={claimedBy}
-          usedElsewhere={usedElsewhere}
-          addLabel={addNodeLabel}
-          onChange={onNodes}
-        />
+        <Stack gap={8}>
+          {outbound && (
+            <SegmentedControl
+              size="xs"
+              value={outbound.via}
+              onChange={(v) => outbound.onVia(v as DirectionVia)}
+              data={[
+                { value: 'pool', label: t('cascadeCreate.viaPool') },
+                { value: 'outbound', label: t('cascadeCreate.viaOutbound') },
+              ]}
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
+          {onOutbound ? (
+            <>
+              <Select
+                placeholder={t('cascadeCreate.outboundPick')}
+                data={outbound.options.map((o) => ({
+                  value: o.id,
+                  label: `${o.name} · ${o.type}${outboundAddress(o) ? ` · ${outboundAddress(o)}` : ''}`,
+                }))}
+                value={outbound.outboundId}
+                searchable
+                nothingFoundMessage={t('cascadeCreate.outboundNone')}
+                onChange={(id) => outbound.onOutbound(outbound.options.find((o) => o.id === id) ?? null)}
+              />
+              {picked && <OutboundCard outbound={picked} />}
+              {outbound.options.length === 0 && (
+                <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
+                  {t('cascadeCreate.outboundNoneHint')}{' '}
+                  <Link to="/traffic/named-outbounds" style={{ color: CYAN }}>
+                    {t('cascadeCreate.outboundGo')}
+                  </Link>
+                </Text>
+              )}
+            </>
+          ) : (
+            <PoolField
+              nodeIds={nodeIds}
+              nodes={nodes}
+              claimedBy={claimedBy}
+              usedElsewhere={usedElsewhere}
+              addLabel={addNodeLabel}
+              onChange={onNodes}
+            />
+          )}
+        </Stack>
       </Box>
       <RowActions
         canUp={canUp}
@@ -1015,6 +1072,51 @@ export function DirectionRow({
         onDown={onDown}
         onDelete={onDelete}
       />
+    </Box>
+  );
+}
+
+/** Строки под направлением (directionLines), красным. Пусто: ничего. */
+export function DirectionNotes({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <Stack gap={6}>
+      {lines.map((line) => (
+        <Note key={line} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
+          {line}
+        </Note>
+      ))}
+    </Stack>
+  );
+}
+
+/**
+ * Карточка выхода направления на месте ноги (фаза 10): у такого направления
+ * ноги, порта и транспорта нет, выход набирает цепь последней позиции. Имя,
+ * тип, сервер:порт, страна флагом.
+ */
+export function OutboundCard({ outbound }: { outbound: NamedOutbound }) {
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 12px',
+        borderRadius: 8,
+        backgroundColor: GROUND,
+        border: `1px solid ${HAIRLINE}`,
+      }}
+    >
+      <Text style={{ fontSize: 14, lineHeight: '14px', width: 18 }}>
+        {outbound.countryCode ? countryFlag(outbound.countryCode) : ''}
+      </Text>
+      <Text style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 500, color: SNOW }}>{outbound.name}</Text>
+      <Text style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: MIST }}>
+        {outbound.type}
+      </Text>
+      <Box style={{ flex: 1, minWidth: 0 }} />
+      <Text style={{ fontFamily: MONO, fontSize: 11, color: FAINT }}>{outboundAddress(outbound)}</Text>
     </Box>
   );
 }
