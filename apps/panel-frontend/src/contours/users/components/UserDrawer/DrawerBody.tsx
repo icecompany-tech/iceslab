@@ -105,7 +105,9 @@ export function DrawerBody({
           {ui.isEdit && user && (
             <>
               <DeviceList userId={user.id} limit={ui.form.values.hwidDeviceLimit} />
-              {onRevoke && <SubscriptionCard user={user} onRevoke={onRevoke} />}
+              {onRevoke && (
+                <SubscriptionCard user={user} onRevoke={onRevoke} endpoints={ui.endpointsQuery.data?.endpoints} />
+              )}
             </>
           )}
         </Box>

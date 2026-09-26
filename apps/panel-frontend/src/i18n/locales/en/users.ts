@@ -204,6 +204,9 @@ export const users = {
     copyLinkHint: "Copy the link to this node's config",
     copyNoLink: 'AmneziaWG has no link line; the config is fetched as a file on the subscription page',
     openAsClient: 'Open as client',
+    subScope: 'What the link hands out',
+    subAll: 'the whole subscription',
+    subOnly: 'The link hands out {{protocol}} only.',
     revoke: 'Revoke',
     revokeHint:
       'Revoking answers 403 on the current link. The client stops updating until the new link reaches them.',
