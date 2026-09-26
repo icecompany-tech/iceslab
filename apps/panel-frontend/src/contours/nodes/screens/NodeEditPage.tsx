@@ -70,7 +70,6 @@ export function NodeEditPage() {
     coreRefusal,
     enginesKnown,
     enginesRefusal,
-    setEnginesRefusal,
   } = useNodeEditForm();
 
   // `#cores`: the deploy window and the host form link here for a core the
@@ -303,7 +302,6 @@ export function NodeEditPage() {
                 awgKnown={awgKnown}
                 enginesKnown={enginesKnown}
                 enginesRefusal={enginesRefusal}
-                setEnginesRefusal={setEnginesRefusal}
               />
 
               <EgressCard navigate={navigate} cascade={cascade} warpMutation={warpMutation} egress={egress} />

@@ -29,9 +29,14 @@ export function EngineChips({
   engines,
   onChange,
   error,
+  readOnly = false,
 }: {
   engines: EngineName[];
-  onChange: (next: EngineName[]) => void;
+  /** Не нужен при readOnly. */
+  onChange?: (next: EngineName[]) => void;
+  /** Страница ноды (E42, 2359c7e): набор только показывается, его сообщает
+   *  нода, ставят и снимают ядра командами «Ядер». */
+  readOnly?: boolean;
   /** The server's INVALID_ENGINES or LAST_CORE refusal, under the chips: its
    *  sentence, then the code and the field it names. */
   error?: NodeEnginesRefusal | null;
@@ -50,8 +55,10 @@ export function EngineChips({
               key={e}
               type="button"
               aria-pressed={on}
-              onClick={() => onChange(toggleEngine(engines, e))}
+              disabled={readOnly}
+              onClick={() => onChange?.(toggleEngine(engines, e))}
               style={{
+                cursor: readOnly ? 'default' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 7,
@@ -78,13 +85,13 @@ export function EngineChips({
       </Box>
 
       <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: FAINT }}>
-        {t('nodes.form.enginesHint')}
+        {t(readOnly ? 'nodes.form.enginesHintReadOnly' : 'nodes.form.enginesHint')}
       </Text>
       {/* Пустой набор допустим (владелец, 25.09): это не ошибка, а нода с
           одним агентом, поэтому краска спокойная. */}
       {engines.length === 0 && (
         <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: MIST }}>
-          {t('nodes.form.enginesNone')}
+          {t(readOnly ? 'nodes.form.enginesNoneReadOnly' : 'nodes.form.enginesNone')}
         </Text>
       )}
       {error && (

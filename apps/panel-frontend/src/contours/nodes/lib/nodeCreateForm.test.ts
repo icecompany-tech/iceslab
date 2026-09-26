@@ -11,7 +11,7 @@ import {
   toggleEngine,
   wizardCoreComponents,
 } from '@/contours/nodes/lib/nodeCreateForm';
-import { enginesPatch, formProtocolOf, nodeEnginesPut } from '@/contours/nodes/lib/nodeEditForm';
+import { formProtocolOf, nodeEnginesPut } from '@/contours/nodes/lib/nodeEditForm';
 import { intendedEnginesWords, nodeIntentWords } from '@/lib/domain/engines';
 
 describe('wizardCoreComponents: ядра выбранных движков первыми', () => {
@@ -59,7 +59,6 @@ describe('движки ноды: множество без основного (2
   it('нода без ядер: пустой список уходит как есть, версий выбирать не из чего', () => {
     expect(enginesPayload(true, [], 'xray')).toEqual({ intendedEngines: [], protocol: 'xray' });
     expect(wizardCoreComponents([])).toEqual({ relevant: [], others: [...CORE_COMPONENTS] });
-    expect(nodeEnginesPut(true, ['xray'], [], 'xray')).toEqual({ intendedEngines: [], protocol: 'xray' });
     expect(formProtocolOf('none')).toBe('xray');
   });
 
@@ -133,22 +132,7 @@ describe('nodeEnginesRefusal: 400 INVALID_ENGINES по полю', () => {
   });
 });
 
-describe('enginesPatch: PUT по трём значениям', () => {
-  it('не менялось или сервер поля не знает: ключа нет', () => {
-    expect(enginesPatch(['xray', 'singbox'], ['xray', 'singbox'])).toBeUndefined();
-    expect(enginesPatch(undefined, ['xray'])).toBeUndefined();
-    expect(enginesPatch([], [])).toBeUndefined();
-  });
-
-  it('снять все ядра это правка: пустой список уходит', () => {
-    expect(enginesPatch(['xray'], [])).toEqual([]);
-  });
-
-  it('список заменяет список; другой порядок тех же ядер не правка', () => {
-    expect(enginesPatch(['xray'], ['xray', 'hysteria'])).toEqual(['xray', 'hysteria']);
-    expect(enginesPatch(['xray', 'singbox'], ['singbox', 'xray'])).toBeUndefined();
-  });
-
+describe('ядра ноды словами', () => {
   it('заголовок ноды: ядра через плюс в одном порядке, как бы список ни хранился', () => {
     expect(intendedEnginesWords(['xray', 'hysteria', 'singbox'])).toBe('xray + hysteria + sing-box');
     expect(intendedEnginesWords(['singbox', 'hysteria', 'xray'])).toBe('xray + hysteria + sing-box');
@@ -162,30 +146,21 @@ describe('enginesPatch: PUT по трём значениям', () => {
   });
 });
 
-describe('nodeEnginesPut: ядра и метка в PUT ноды', () => {
+describe('nodeEnginesPut: PUT страницы ноды (E42, 2359c7e)', () => {
   it('сервер без поля: прежний protocol из селекта', () => {
-    expect(nodeEnginesPut(false, undefined, [], 'shadowsocks')).toEqual({ protocol: 'shadowsocks' });
+    expect(nodeEnginesPut(false, 'shadowsocks')).toEqual({ protocol: 'shadowsocks' });
   });
 
-  it('ядра не правились (и перестановка не правка): ни списка, ни метки', () => {
-    expect(nodeEnginesPut(true, ['xray', 'hysteria'], ['hysteria', 'xray'], 'xray')).toEqual({});
+  it('сервер с полем: ни intendedEngines, ни singboxEngine, ни метки', () => {
+    const body = nodeEnginesPut(true, 'xray');
+    expect(body).toEqual({});
+    expect('intendedEngines' in body || 'singboxEngine' in body || 'protocol' in body).toBe(false);
   });
 
   it('метка singbox (нода только с sing-box) в форме читается как tuic; прочие как есть', () => {
     expect(formProtocolOf('singbox')).toBe('tuic');
     expect(formProtocolOf('hysteria')).toBe('hysteria');
     expect(formProtocolOf(undefined)).toBe('xray');
-    expect(nodeEnginesPut(true, ['singbox', 'xray'], ['singbox'], formProtocolOf('xray'))).toEqual({
-      intendedEngines: ['singbox'],
-      protocol: 'tuic',
-    });
-  });
-
-  it('правились: список и метка в паре', () => {
-    expect(nodeEnginesPut(true, ['xray', 'hysteria'], ['hysteria'], 'xray')).toEqual({
-      intendedEngines: ['hysteria'],
-      protocol: 'hysteria',
-    });
   });
 });
 

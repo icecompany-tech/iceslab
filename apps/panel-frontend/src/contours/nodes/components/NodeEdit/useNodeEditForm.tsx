@@ -171,14 +171,9 @@ export function useNodeEditForm() {
   // ничего или если сервер поля не знает.
   const coreVersionsDiff = coreVersionsPatch(node?.coreVersions, form.values.coreVersions);
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
-  // Ядра ноды: только изменённый список и только если сервер поле знает.
+  // Ядра ноды на этой странице только показываются (E42): в PUT не уходят.
   const enginesKnown = node?.intendedEngines !== undefined;
-  const enginesBody = nodeEnginesPut(
-    enginesKnown,
-    node?.intendedEngines,
-    form.values.engines,
-    form.values.protocol,
-  );
+  const enginesBody = nodeEnginesPut(enginesKnown, form.values.protocol);
   /** Отказ 400 INVALID_ENGINES или LAST_CORE: под чипами. */
   const [enginesRefusal, setEnginesRefusal] = useState<NodeEnginesRefusal | null>(null);
 
@@ -200,9 +195,8 @@ export function useNodeEditForm() {
         // Версии ядер: только изменённые компоненты, и только если сервер поле
         // знает (ключ пришёл в ответе про ноду).
         ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
-        // Ядра ноды и метка: у сервера старше поля прежний `protocol` из
-        // селекта; иначе только изменённый список с меткой в паре
-        // (nodeEnginesPut).
+        // Метка: у сервера старше поля прежний `protocol` из селекта; у
+        // сервера с полем ни ядер, ни метки (nodeEnginesPut, E42).
         ...enginesBody,
       });
     },

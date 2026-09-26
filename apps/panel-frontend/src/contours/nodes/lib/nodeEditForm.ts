@@ -2,7 +2,6 @@ import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeLabel, NodeProtocol } from '@/lib/domain/nodes';
 import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
-import { engineListForLabel, sameEngines } from '@/contours/nodes/lib/nodeCreateForm';
 export interface FormValues {
   name: string;
   host: string;
@@ -21,44 +20,24 @@ export interface FormValues {
   /** Намерение по версиям ядер, как в `Node.coreVersions`: нет компонента =
    *  пин. На сервер уходит только разница с сохранённым (`coreVersionsPatch`). */
   coreVersions: NodeCoreVersions;
-  /** Ядра ноды (intendedEngines), множество без основного. Пусто, если сервер
-   *  поля не знает: тогда на экране прежний селект протокола. На сервер уходит
-   *  только изменённым (`nodeEnginesPut`). */
+  /** Ядра ноды (intendedEngines), только для показа: на странице ноды их не
+   *  правят (E42, 2359c7e), состав сообщает нода по командам «Ядер». Пусто,
+   *  если сервер поля не знает: тогда на экране прежний селект протокола. */
   engines: EngineName[];
 }
 
 /**
- * The `intendedEngines` of a PUT, by the three-value rule: absent = untouched,
- * a list replaces the list, and null is never sent (the server refuses it). Only
- * a changed list goes, and only to a server that has the field (`stored`
- * present). The list is a set (25.09): the same cores in another order are no
- * edit. An empty list is a real edit too (a node with no core, owner 25.09).
- */
-export function enginesPatch(stored: EngineName[] | undefined, edited: EngineName[]): EngineName[] | undefined {
-  if (stored === undefined) return undefined;
-  return sameEngines(stored, edited) ? undefined : [...edited];
-}
-
-/**
- * Поля ядер и метки в PUT ноды:
+ * Поля ядер и метки в PUT ноды (E42, 2359c7e):
  *
  *   сервер без `intendedEngines`   `protocol` из прежнего селекта, как было;
- *   ядра не правились              ничего: отсутствие ключа = нет правки;
- *   правились                      список и метка в паре (engineListForLabel):
- *                                  сервер, что метку сверяет, иначе ответил бы
- *                                  400 INVALID_ENGINES, новый её игнорирует.
+ *   сервер с полем                 ничего: ядра на странице ноды только
+ *                                  показываются, их ставят и снимают командами
+ *                                  «Ядер», и нода сообщает состав сама. Ни
+ *                                  `intendedEngines`, ни `singboxEngine`, ни
+ *                                  метка в PUT не уходят.
  */
-export function nodeEnginesPut(
-  known: boolean,
-  stored: EngineName[] | undefined,
-  edited: EngineName[],
-  protocol: NodeProtocol,
-): { protocol?: NodeProtocol; intendedEngines?: EngineName[] } {
-  if (!known) return { protocol };
-  const diff = enginesPatch(stored, edited);
-  if (!diff) return {};
-  const pair = engineListForLabel(diff, protocol);
-  return { intendedEngines: pair.engines, protocol: pair.protocol };
+export function nodeEnginesPut(known: boolean, protocol: NodeProtocol): { protocol?: NodeProtocol } {
+  return known ? {} : { protocol };
 }
 
 /**

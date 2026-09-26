@@ -68,6 +68,8 @@
       enginesTitle: 'Node cores',
       enginesNone: 'A node with no core: only the agent is installed, cores are added on the node page',
       coreVersionsNoneChosen: 'no core chosen',
+      enginesHintReadOnly: 'Cores are installed and removed with the commands in the Cores block below; the node reports its set itself.',
+      enginesNoneReadOnly: 'No cores: only the agent runs on the node.',
       enginesRefused: 'The server did not accept the node cores: the reason is under the chips',
       enginesRefusedLine: 'The server did not accept the node cores:',
       enginesLastCoreRefused: 'The server did not remove the last core, a node keeps at least one:',

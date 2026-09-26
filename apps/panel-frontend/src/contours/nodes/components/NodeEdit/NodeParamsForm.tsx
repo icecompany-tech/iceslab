@@ -26,7 +26,6 @@ export function NodeParamsForm({
   awgKnown,
   enginesKnown,
   enginesRefusal,
-  setEnginesRefusal,
 }: Pick<
   NodeEditor,
   | 'regionsQuery'
@@ -38,7 +37,6 @@ export function NodeParamsForm({
   | 'awgKnown'
   | 'enginesKnown'
   | 'enginesRefusal'
-  | 'setEnginesRefusal'
 >) {
   const { t } = useTranslation();
   const reach = policyReachFacts(node?.cores?.cores);
@@ -78,20 +76,11 @@ export function NodeParamsForm({
                 </Box>
 
                 {/* Ядра, на которые нода настроена: те же чипы, что в мастере,
-                    множество без основного. Уходит только изменённый список
-                    (nodeEnginesPut). Что стоит на машине на самом деле, говорит
-                    секция «Ядра». */}
-                {/* Пустой набор тоже рисуется: нода без ядер (владелец, 25.09),
-                    а «сервер поля не знает» говорит enginesKnown. */}
+                    но только для чтения (E42, 2359c7e): набор сообщает нода,
+                    ставят и снимают ядра командами секции «Ядра» ниже. Пустой
+                    набор тоже рисуется: нода без ядер. */}
                 {enginesKnown && (
-                  <EngineChips
-                    engines={form.values.engines}
-                    error={enginesRefusal}
-                    onChange={(engines) => {
-                      form.setFieldValue('engines', engines);
-                      setEnginesRefusal(null);
-                    }}
-                  />
+                  <EngineChips engines={form.values.engines} error={enginesRefusal} readOnly />
                 )}
 
                 {/* Поколение AmneziaWG: свойство ноды, и от него зависит, каким
