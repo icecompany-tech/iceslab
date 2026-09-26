@@ -247,8 +247,6 @@ export const users = {
     directLinksEmpty:
       "No active endpoints. Bind user to a squad with inbounds and deploy a profile to a node.",
     copyUri: 'Copy URI',
-    copyWgconfHint:
-      'Copy wgconf URL (opens in AmneziaVPN: + → "Configuration file" → paste URL)',
     copyToClipboard: 'Copy',
     copiedShort: 'Copied',
     tooltipUsers: 'Users',

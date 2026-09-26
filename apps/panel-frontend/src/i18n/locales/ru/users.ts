@@ -256,8 +256,6 @@ export const users = {
     directLinksEmpty:
       'Нет активных endpoint\'ов. Привяжи юзера к squad с inbound\'ами и разверни профиль на ноду.',
     copyUri: 'Скопировать URI',
-    copyWgconfHint:
-      'Скопировать wgconf URL (открывается в AmneziaVPN: + → "Файл с настройками подключения" → вставить URL)',
     copyToClipboard: 'Скопировать',
     copiedShort: 'Скопировано',
     tooltipUsers: 'Пользователей',
