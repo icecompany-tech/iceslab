@@ -179,6 +179,14 @@ func (a *Adapter) Start(ctx context.Context) error {
 	}
 
 	if managed {
+		// The sweep only before an up that will run the hooks: an interface
+		// still up from the last agent answers "already exists" below and runs
+		// no PostUp, so sweeping it would take its live rules away for good.
+		if !interfaceExists(inbound.Interface) {
+			if err := a.sweepChain(ctx, inbound.Interface, inbound.Chain); err != nil {
+				return err
+			}
+		}
 		if out, err := a.cfg.runCmd(ctx, a.cfg.AwgQuickBin, "up", inbound.Interface); err != nil {
 			// awg-quick up is idempotent-ish, failing because the iface is
 			// already up is fine. Anything else is a real error.
@@ -540,6 +548,9 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	// the wire expressed a new one it'd be a separate diffRestart anyway.
 	newInbound.PostUp = a.cfg.Inbound.PostUp
 	newInbound.PostDown = a.cfg.Inbound.PostDown
+	// And the hand-off to the chain, which is the push's userCore and not the
+	// inbound's: ApplyCascade set it earlier in this same push.
+	newInbound.Chain = a.cfg.Inbound.Chain
 
 	kind := classifyDiff(a.cfg.Inbound, newInbound)
 	switch kind {
@@ -561,7 +572,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		a.mu.Unlock()
 		a.logger.Info("amneziawg ApplyInbound: subnet change with no peers, restarting interface",
 			"address", newInbound.Address)
-		return a.restartInterfaceFrom(context.Background(), inbound, peers)
+		return a.restartInterfaceFrom(context.Background(), inbound, peers, nil)
 	case diffSyncconf:
 		a.cfg.Inbound = newInbound
 		inbound := a.cfg.Inbound
@@ -576,7 +587,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		a.mu.Unlock()
 		a.logger.Info("amneziawg ApplyInbound: interface-level change, full restart",
 			"iface", newInbound.Interface)
-		return a.restartInterfaceFrom(context.Background(), inbound, peers)
+		return a.restartInterfaceFrom(context.Background(), inbound, peers, nil)
 	default:
 		a.mu.Unlock()
 		return fmt.Errorf("amneziawg ApplyInbound: unknown diffKind %d", kind)
@@ -585,17 +596,33 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 
 // restartInterfaceFrom writes the given config snapshot and bounces the
 // interface via awg-quick down/up. Used for changes that syncconf can't apply
-// (H1-H4, keys, listen port). Caller MUST hold restartMu and MUST NOT hold mu
-// (the awg-quick forks run lock-free; readiness is flipped via setStarted).
+// (H1-H4, keys, listen port) and for a changed hand-off to the chain. Caller
+// MUST hold restartMu and MUST NOT hold mu (the awg-quick forks run lock-free;
+// readiness is flipped via setStarted).
+//
+// DOWN BEFORE WRITE (t07-wire). `awg-quick down` runs the PostDown of the file
+// on disk, and that has to be the file the interface came up with: written
+// first, a changed hand-off would have the old TPROXY rules deleted by lines
+// that name the new mark, which fail, and the old rules would stay, steering
+// users at a mark nothing routes. Rendered before the down all the same, so a
+// config that does not render never takes a running interface down.
+//
+// Before the up, the hand-off's lines are swept (sweepChainTProxy): an earlier
+// up that failed half way leaves them behind with no PostDown ever run.
+// `also` is a second hand-off to sweep, the one being replaced.
 //
 // In config-only mode (AwgQuickBin == "") we just rewrite the file and skip
 // the actual bounce, that's what the unit tests rely on, and what dev
 // machines without amneziawg installed need.
-func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundConfig, peers []Peer) error {
-	if err := a.writeConfigSnapshot(inbound, peers); err != nil {
-		return err
+func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundConfig, peers []Peer, also *ChainTProxy) error {
+	blob, err := renderConfig(inbound, peers)
+	if err != nil {
+		return fmt.Errorf("render amneziawg config: %w", err)
 	}
 	if a.cfg.AwgQuickBin == "" {
+		if err := writeConfig(a.cfg.ConfigPath, blob); err != nil {
+			return err
+		}
 		a.logger.Info("amneziawg restart skipped (config-only mode)")
 		a.setStarted(true)
 		return nil
@@ -608,9 +635,18 @@ func (a *Adapter) restartInterfaceFrom(parent context.Context, inbound InboundCo
 		a.logger.Warn("awg-quick down returned non-zero (often safe)",
 			"err", err, "out", strings.TrimSpace(string(out)))
 	}
+	if err := writeConfig(a.cfg.ConfigPath, blob); err != nil {
+		return err
+	}
+	for _, t := range []*ChainTProxy{also, inbound.Chain} {
+		if err := a.sweepChain(ctx, inbound.Interface, t); err != nil {
+			return err
+		}
+	}
 	if out, err := a.cfg.runCmd(ctx, a.cfg.AwgQuickBin, "up", inbound.Interface); err != nil {
 		return fmt.Errorf("awg-quick up %s: %w (%s)", inbound.Interface, err, strings.TrimSpace(string(out)))
 	}
+	a.logChain(ctx, inbound.Interface, inbound.Chain)
 	// Mark started so Healthy() returns true and main.go's heartbeat sees
 	// a ready adapter after the first ApplyInbound on a freshly-bootstrapped
 	// node (Start() returned early because PrivateKey was empty), and drop the
@@ -666,6 +702,249 @@ func (a *Adapter) syncFromSnapshot(ctx context.Context, inbound InboundConfig, p
 	a.dropLegacyMasquerade(ctx, inbound.Interface)
 	a.logger.Info("amneziawg synced", "peers", len(peers))
 	return nil
+}
+
+// ApplyCascade implements core.CascadeReceiver: the hand-off of this node's
+// users to the chain, t07-wire. The payload is userCore.tproxy of the push
+// (dto.ChainUserCoreTProxy), and the server gives it to this adapter only when
+// the chain is in force and names amneziawg; every other push says nil.
+//
+// nil takes the TPROXY rules away: the interface's users go out through the
+// host again, which is what a node that is no entry does. A hand-off does
+// NOT arrive as nil by mistake: the server refuses a userCore whose engine is
+// amneziawg without tproxy and then tells no adapter anything (dto.Payload).
+//
+// The rules live in the interface's PostUp/PostDown, so every later bounce
+// draws them; a change on a running interface is swapped in place with the
+// same lines (swapChainLive), because a bounce drops every peer's session.
+// Only on a real change: a push that repeats the hand-off is a no-op. With no
+// inbound yet the hand-off is only remembered; ApplyInbound of the same push
+// brings the interface up with it.
+//
+// One interface today, the 1.x one this adapter carries; a 3.1 interface gets
+// its own hand-off (own mark) when the adapter learns to carry it.
+var _ core.CascadeReceiver = (*Adapter)(nil)
+
+func (a *Adapter) ApplyCascade(raw json.RawMessage) error {
+	var next *ChainTProxy
+	if len(raw) > 0 && string(raw) != "null" {
+		var wire struct {
+			Port int    `json:"port"`
+			Mark uint32 `json:"mark"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			return fmt.Errorf("amneziawg ApplyCascade: %w", err)
+		}
+		t := ChainTProxy{Port: wire.Port, Mark: wire.Mark}
+		if err := t.validate(); err != nil {
+			return fmt.Errorf("amneziawg ApplyCascade: %w", err)
+		}
+		next = &t
+	}
+
+	a.restartMu.Lock()
+	defer a.restartMu.Unlock()
+
+	a.mu.Lock()
+	prev := a.cfg.Inbound.Chain
+	if chainEqual(prev, next) {
+		a.mu.Unlock()
+		return nil
+	}
+	if a.cfg.Inbound.PrivateKey == "" {
+		a.cfg.Inbound.Chain = next
+		iface := a.cfg.Inbound.Interface
+		a.mu.Unlock()
+		a.logger.Info("amneziawg ApplyCascade: hand-off to the chain remembered, no interface yet",
+			"interface", iface, "chain", next != nil)
+		return nil
+	}
+	inbound := a.cfg.Inbound
+	inbound.Chain = next
+	peers := sortedPeers(a.peers)
+	// Rendered before it is stored: a hand-off the renderer refuses must not
+	// become what the next ApplyInbound renders against.
+	if _, err := renderConfig(inbound, peers); err != nil {
+		a.mu.Unlock()
+		return fmt.Errorf("amneziawg ApplyCascade: render: %w", err)
+	}
+	a.cfg.Inbound.Chain = next
+	a.mu.Unlock()
+
+	// Not bounced while the interface is up. Stand run on se-02, 26.09: a bounce
+	// drops every peer's session, and a client only notices after ~15 s without
+	// an answer and handshakes again; three runs of four had a client with no
+	// traffic three seconds after the hand-off changed. So the rules are swapped
+	// in place, and the file on disk takes the new hooks for the next bounce.
+	//
+	// A swap that fails is UNDONE, not bounced: the new rules go in before the
+	// old ones come out, so taking the new ones away again leaves the interface
+	// exactly as it ran, and the push reports the failure. A bounce here would
+	// run a PostDown whose first lines name rules that never came up, and
+	// awg-quick stops at the first failing hook, leaving the FORWARD and NAT
+	// rules behind to be doubled by the up.
+	if a.cfg.AwgQuickBin != "" && interfaceExists(inbound.Interface) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.swapChainLive(ctx, inbound.Interface, prev, next); err != nil {
+			a.undoSwap(ctx, inbound.Interface, prev, next)
+			a.mu.Lock()
+			a.cfg.Inbound.Chain = prev
+			a.mu.Unlock()
+			return fmt.Errorf("amneziawg ApplyCascade: %w; the interface keeps the hand-off it had", err)
+		}
+		if err := writeConfig(a.cfg.ConfigPath, mustRender(inbound, peers)); err != nil {
+			return err
+		}
+		a.logger.Info("amneziawg ApplyCascade: hand-off to the chain changed in place, no bounce",
+			"interface", inbound.Interface, "chain", next != nil)
+		a.logChain(ctx, inbound.Interface, next)
+		return nil
+	}
+	a.logger.Info("amneziawg ApplyCascade: hand-off to the chain changed, bringing the interface up with it",
+		"interface", inbound.Interface, "chain", next != nil)
+	return a.restartInterfaceFrom(context.Background(), inbound, peers, prev)
+}
+
+// mustRender renders a snapshot ApplyCascade has already rendered once under
+// mu; the second render cannot fail on the same input.
+func mustRender(inbound InboundConfig, peers []Peer) string {
+	blob, _ := renderConfig(inbound, peers)
+	return blob
+}
+
+// swapChainLive moves a running interface from one hand-off to another with
+// the hooks' own lines, run directly, and BY LINE: what both sets hold stays
+// as it is (the RETURN for local traffic is the same line for every mark, and
+// so are the ip rule and route of an unchanged mark), what only the new set
+// holds goes in, then what only the old set holds comes out. New before old
+// leaves no moment with the interface's packets steered nowhere and routed
+// out of the host instead.
+//
+// Before the new lines go in, their own residue is swept (an up that failed
+// half way leaves exactly these); lines the old set holds are never swept,
+// or their rules would lose them while still in use.
+func (a *Adapter) swapChainLive(ctx context.Context, iface string, prev, next *ChainTProxy) error {
+	prevUp, prevDown, err := hookLines(prev)
+	if err != nil {
+		return err
+	}
+	nextUp, nextDown, err := hookLines(next)
+	if err != nil {
+		return err
+	}
+	if err := a.sweepLines(ctx, iface, without(nextDown, prevDown)); err != nil {
+		return err
+	}
+	for _, l := range without(nextUp, prevUp) {
+		argv := strings.Fields(forInterface(l, iface))
+		if out, err := a.cfg.runCmd(ctx, argv[0], argv[1:]...); err != nil {
+			return fmt.Errorf("%s: %w (%s)", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+	return a.sweepLines(ctx, iface, without(prevDown, nextDown))
+}
+
+// undoSwap takes away what a failed swapChainLive may have added: the lines
+// only the new set holds. Their PostDown mirror is exactly that set, and
+// sweeping it is quiet for a line that never went in.
+func (a *Adapter) undoSwap(ctx context.Context, iface string, prev, next *ChainTProxy) {
+	_, prevDown, err1 := hookLines(prev)
+	_, nextDown, err2 := hookLines(next)
+	if err1 != nil || err2 != nil {
+		return
+	}
+	if err := a.sweepLines(ctx, iface, without(nextDown, prevDown)); err != nil {
+		a.logger.Error("amneziawg: undoing a failed hand-off swap", "interface", iface, "err", err)
+	}
+}
+
+// hookLines is a hand-off's PostUp and PostDown, none for nil.
+func hookLines(t *ChainTProxy) (up, down []string, err error) {
+	if t == nil {
+		return nil, nil, nil
+	}
+	return chainTProxyHooks(*t)
+}
+
+// without is `lines` less every line `other` also holds, in order.
+func without(lines, other []string) []string {
+	skip := make(map[string]bool, len(other))
+	for _, l := range other {
+		skip[l] = true
+	}
+	var out []string
+	for _, l := range lines {
+		if !skip[l] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+func (a *Adapter) sweepLines(ctx context.Context, iface string, down []string) error {
+	return sweepChainTProxy(iface, down, func(argv []string) error {
+		_, err := a.cfg.runCmd(ctx, argv[0], argv[1:]...)
+		return err
+	})
+}
+
+func chainEqual(a, b *ChainTProxy) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// sweepChain runs sweepChainTProxy for one hand-off on this interface, with
+// the adapter's runner. Nil or config-only mode sweeps nothing.
+func (a *Adapter) sweepChain(ctx context.Context, iface string, t *ChainTProxy) error {
+	if t == nil || a.cfg.AwgQuickBin == "" {
+		return nil
+	}
+	_, down, err := chainTProxyHooks(*t)
+	if err != nil {
+		return err
+	}
+	return a.sweepLines(ctx, iface, down)
+}
+
+// logChain says in the journal what the kernel holds for the hand-off after an
+// up: the TPROXY rules on this interface and the ip rule of its mark, read
+// back from iptables and ip, not echoed from the config. The line the stand
+// greps for; a hand-off whose rules did not come up reads "rules: 0".
+func (a *Adapter) logChain(ctx context.Context, iface string, t *ChainTProxy) {
+	if t == nil {
+		return
+	}
+	mark := fmt.Sprintf("0x%x", t.Mark)
+	var rules []string
+	if out, err := a.cfg.runCmd(ctx, "iptables", "-t", "mangle", "-S", "PREROUTING"); err == nil {
+		for _, l := range strings.Split(string(out), "\n") {
+			if strings.Contains(l, "-i "+iface+" ") {
+				rules = append(rules, strings.TrimSpace(l))
+			}
+		}
+	}
+	var iprule []string
+	if out, err := a.cfg.runCmd(ctx, "ip", "rule", "show", "fwmark", mark); err == nil {
+		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if l = strings.TrimSpace(l); l != "" {
+				iprule = append(iprule, l)
+			}
+		}
+	}
+	a.logger.Info("amneziawg: hand-off to the chain in force",
+		"interface", iface, "tproxyPort", t.Port, "mark", mark,
+		"rules", len(rules), "iptables", strings.Join(rules, " | "),
+		"ipRule", strings.Join(iprule, " | "))
+}
+
+// interfaceExists: whether the kernel has a link by this name. A variable so
+// the tests can say.
+var interfaceExists = func(iface string) bool {
+	_, err := os.Stat("/sys/class/net/" + iface)
+	return err == nil
 }
 
 // interfaceChanged: the interface was just brought up or reloaded. Marks the

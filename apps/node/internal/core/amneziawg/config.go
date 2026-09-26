@@ -106,6 +106,14 @@ type InboundConfig struct {
 	// withDefaults). Operators on tightly-firewalled hosts may override.
 	PostUp   []string
 	PostDown []string
+
+	// Chain is the TPROXY hand-off of this interface's users to the chain
+	// process (t07-wire), or nil when this node is no AmneziaWG entry. Not on
+	// the inbound wire: it arrives as the push's userCore (ApplyCascade). Its
+	// hooks go AFTER PostUp and BEFORE PostDown, so the interface's own
+	// forwarding is in place before traffic is steered and stays until the
+	// steering is gone.
+	Chain *ChainTProxy
 }
 
 // Peer is a single [Peer] block. Generated from a panel `amneziawg_peers` row.
@@ -341,13 +349,22 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 	// Each command is validated and emitted as its own PostUp/PostDown line;
 	// awg-quick runs them in order. This keeps every rule inside the strict
 	// single-command whitelist (validatePostHook rejects ';' and friends).
-	for _, cmd := range cfg.PostUp {
+	up, down := cfg.PostUp, cfg.PostDown
+	if cfg.Chain != nil {
+		hu, hd, err := chainTProxyHooks(*cfg.Chain)
+		if err != nil {
+			return "", err
+		}
+		up = append(append([]string{}, up...), hu...)
+		down = append(append([]string{}, hd...), down...)
+	}
+	for _, cmd := range up {
 		if err := validatePostHook(cmd); err != nil {
 			return "", fmt.Errorf("PostUp: %w", err)
 		}
 		fmt.Fprintf(&b, "PostUp = %s\n", cmd)
 	}
-	for _, cmd := range cfg.PostDown {
+	for _, cmd := range down {
 		if err := validatePostHook(cmd); err != nil {
 			return "", fmt.Errorf("PostDown: %w", err)
 		}

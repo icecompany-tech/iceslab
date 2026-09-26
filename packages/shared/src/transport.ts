@@ -146,17 +146,19 @@ export const LINK_CELL_TRANSPORT: Record<LinkCell, Transport> = {
  * come to disagree, and the disagreement shows up as a form that offers an
  * option the server rejects.
  *
- * It grows with the phases: hysteria2 in 6 (here now), amneziawg in 7.
+ * It grows with the phases: hysteria2 in 6, amneziawg in 7 (t07-wire, the
+ * agent draws the TPROXY rules and the chain listens).
  *
- * ⚠ The two entries are not two spellings of one thing. An xray entry lets a
- * user pick the way out (the choice rides in the UUID as vlessRoute); a
- * hysteria entry cannot, because a hysteria user is a password, so the whole
- * entry hands to the chain's Auto line and the policy. One protocol per
+ * ⚠ The entries are not spellings of one thing. An xray entry lets a user pick
+ * the way out (the choice rides in the UUID as vlessRoute); a hysteria entry
+ * cannot, because a hysteria user is a password, and an amneziawg one cannot,
+ * because its user is a key: both hand the whole entry to the chain's Auto
+ * line and the policy. One protocol per
  * cascade, by decision, and switching it moves the cascade from one set of
  * users to the other: the save asks for confirmation (ENTRY_CHANGE_DROPS_USERS)
  * rather than letting it happen quietly.
  */
-export const CHAIN_ENTRY_PROTOCOLS = ['xray', 'hysteria'] as const;
+export const CHAIN_ENTRY_PROTOCOLS = ['xray', 'hysteria', 'amneziawg'] as const;
 
 /**
  * The formats a subscription can be served in.
@@ -1337,10 +1339,10 @@ export interface ChainUserCoreHysteria {
  * is a key, there is no vlessRoute), so the chain routes from its tproxy
  * listener with the policy.
  *
- * ⚠ Shipped ahead of the door: `amneziawg` joins CHAIN_ENTRY_PROTOCOLS only in
- * the commit that also makes the agent draw the rules and the chain listen.
- * Before that, a save with this entry is refused (ENTRY_NOT_CHAINABLE), because
- * a 200 over a node that changes nothing is a silence, not a refusal.
+ * The door opened in t07-wire, one commit with the agent drawing the rules
+ * (amneziawg ApplyCascade) and the chain listening (a tproxy inbound on
+ * CHAIN_TPROXY_PORT). The rules go on the interface of the generation the
+ * adapter carries, 1.x today; a 3.1 interface gets its own mark.
  */
 export interface ChainUserCoreAmneziawg {
   engine: 'amneziawg';

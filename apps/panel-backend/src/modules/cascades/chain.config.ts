@@ -1,6 +1,6 @@
 import type { LinkCell } from '@iceslab/shared';
 import { LINK_PORT_BASE, type LinkCred } from './cascade.config.js';
-import { chainSocksPort, chainSocksUser } from './chain.ports.js';
+import { CHAIN_TPROXY_PORT, chainSocksPort, chainSocksUser } from './chain.ports.js';
 import { chainMatchIsEmpty, type ChainPolicy } from './chain-policy.js';
 import { LINK_TLS_SERVER_NAME, pemLines, type LinkTls } from './link-tls.js';
 
@@ -105,6 +105,14 @@ export interface ChainRenderInput {
   policies?: ChainPolicy[];
   /** The rule-sets those policies name, local files in the geo directory. */
   ruleSets?: { tag: string; path: string }[];
+  /**
+   * t07-wire: the entry's users arrive by TPROXY off an awg interface, not by
+   * socks. Entry only. There is no user on such a connection (the kernel
+   * steered a packet, nobody logged in), so the policy is gated on the
+   * INBOUND: `ordinal` is the cascade's entry policy, 0 for the plain profile,
+   * which draws no rules. Every such connection goes to the Auto line.
+   */
+  tproxy?: { ordinal: number };
 }
 
 type Json = Record<string, unknown>;
@@ -119,6 +127,9 @@ function outTag(tag: number): string {
 function socksTag(tag: number): string {
   return `in-d${tag}`;
 }
+
+/** Inbound tag of the tproxy listener an AmneziaWG entry's packets land on. */
+export const TPROXY_IN_TAG = 'in-tproxy';
 
 /** One leg INSIDE a pooled direction. Only used when a direction has more than
  *  one, so a direction with a single way on keeps `out-d<tag>` on the leg
@@ -465,15 +476,20 @@ export const CHAIN_PROTECTION_RULES = 4;
  * After the protections (an operator's rule must not reopen port 25) and
  * before the ways out (a door placed first matches everything behind it).
  */
-function policyRules(policies: ChainPolicy[]): Json[] {
+function policyRules(policies: ChainPolicy[], tproxy?: { ordinal: number }): Json[] {
   const rules: Json[] = [];
   for (const p of policies) {
-    const user = [chainSocksUser(p.ordinal)];
-    if (!chainMatchIsEmpty(p.block)) {
-      rules.push({ auth_user: user, ...p.block, action: 'reject', method: 'drop' });
-    }
-    if (!chainMatchIsEmpty(p.direct)) {
-      rules.push({ auth_user: user, ...p.direct, action: 'route', outbound: 'direct' });
+    // Who carries this policy: the socks user of its ordinal and, when the
+    // entry takes users by TPROXY with this policy, that listener as a whole.
+    const gates: Json[] = [{ auth_user: [chainSocksUser(p.ordinal)] }];
+    if (tproxy?.ordinal === p.ordinal) gates.push({ inbound: [TPROXY_IN_TAG] });
+    for (const gate of gates) {
+      if (!chainMatchIsEmpty(p.block)) {
+        rules.push({ ...gate, ...p.block, action: 'reject', method: 'drop' });
+      }
+      if (!chainMatchIsEmpty(p.direct)) {
+        rules.push({ ...gate, ...p.direct, action: 'route', outbound: 'direct' });
+      }
     }
   }
   return rules;
@@ -491,7 +507,8 @@ export function renderChainConfig(input: ChainRenderInput): Json {
   const outbounds: Json[] = [];
   const isEntry = input.role === 'entry';
   const policies = isEntry ? (input.policies ?? []) : [];
-  const rules: Json[] = [...protectionRules(), ...policyRules(policies)];
+  const tproxy = isEntry ? input.tproxy : undefined;
+  const rules: Json[] = [...protectionRules(), ...policyRules(policies, tproxy)];
 
   if (isEntry) {
     // One user per profile the entry can hand over: the plain one and each
@@ -508,6 +525,18 @@ export function renderChainConfig(input: ChainRenderInput): Json {
         // Authenticated even on loopback: a VPS has other users, and an open
         // proxy on 127.0.0.1 is an open relay for anyone with a shell.
         users,
+      });
+    }
+    // t07-wire: where the agent's TPROXY rules steer an awg interface's
+    // packets. Loopback, both tcp and udp (no `network`), and the shape the
+    // Ф7.0 probe ran on se-02. No users: TPROXY carries no login, and the
+    // rules that steer here are scoped to the awg interface on the node.
+    if (tproxy) {
+      inbounds.push({
+        type: 'tproxy',
+        tag: TPROXY_IN_TAG,
+        listen: '127.0.0.1',
+        listen_port: CHAIN_TPROXY_PORT,
       });
     }
   } else if (input.in) {
@@ -609,6 +638,11 @@ export function renderChainConfig(input: ChainRenderInput): Json {
       const hasWayOut = outbounds.some((o) => o.tag === outTag(tag));
       if (!hasWayOut) continue;
       rules.push({ inbound: [socksTag(tag)], action: 'route', outbound: outTag(tag) });
+    }
+    // Every packet off the awg interface takes the Auto line: its user is a
+    // key and cannot pick a way out, as a hysteria user cannot.
+    if (tproxy && outbounds.some((o) => o.tag === outTag(AUTO_TAG))) {
+      rules.push({ inbound: [TPROXY_IN_TAG], action: 'route', outbound: outTag(AUTO_TAG) });
     }
   } else if (input.role === 'transit' && input.in?.cred.protocol === 'vless') {
     // A transit sees links, not users: which credential the traffic arrived on

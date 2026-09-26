@@ -889,6 +889,13 @@ export async function generateSubscription(
     groupIds,
     entryReach,
   );
+  // t07-wire: the same for entries entered through AmneziaWG, their awg hosts.
+  const awgEntryLabels = await getHysteriaEntryLabels(
+    [...new Set(bindings.filter((b) => b.profile.protocol === 'amneziawg').map((b) => b.node.id))],
+    groupIds,
+    entryReach,
+    'amneziawg',
+  );
 
   const endpoints: SubscriptionEndpoint[] = [];
   for (const b of bindings) {
@@ -942,7 +949,11 @@ export async function generateSubscription(
       // A hy2 host on the entry of a cascade entered through hysteria IS the
       // cascade (E48): its users leave through the chain, not from this node.
       const cascadeLabel =
-        b.profile.protocol === 'hysteria' ? hysteriaEntryLabels.get(b.node.id) : undefined;
+        b.profile.protocol === 'hysteria'
+          ? hysteriaEntryLabels.get(b.node.id)
+          : b.profile.protocol === 'amneziawg'
+            ? awgEntryLabels.get(b.node.id)
+            : undefined;
       const nodeName =
         cascadeLabel ??
         subscriptionServerName({

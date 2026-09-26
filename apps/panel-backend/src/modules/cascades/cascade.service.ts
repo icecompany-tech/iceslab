@@ -55,7 +55,7 @@ import type {
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
-import { chainSocksPort, chainSocksUser } from './chain.ports.js';
+import { CHAIN_TPROXY_PORT, chainSocksPort, chainSocksUser, chainTProxyMark } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
 import { canRunChainAtSave, carriesCellAtSave, chainEngineOf } from './cell-carriage.js';
 import {
@@ -861,11 +861,15 @@ export interface CascadeRouteProfile {
  * more, it IS the cascade, and it is named like one: the exit's flag and
  * country when there is one direction, the Auto line when there are several.
  * A squad that switched the cascade off keeps the host under its own name.
+ *
+ * `protocol` since t07-wire: an AmneziaWG entry's awg host is the cascade in
+ * the same way, its users are keys and pick no way out either.
  */
 export async function getHysteriaEntryLabels(
   nodeIds: string[],
   groupIds: string[] = [],
   entryReach?: Map<string, Set<string>>,
+  protocol: 'hysteria' | 'amneziawg' = 'hysteria',
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (nodeIds.length === 0) return out;
@@ -873,7 +877,7 @@ export async function getHysteriaEntryLabels(
     where: {
       enabled: true,
       positions: {
-        some: { position: 0, entryProtocol: 'hysteria', nodes: { some: { nodeId: { in: nodeIds } } } },
+        some: { position: 0, entryProtocol: protocol, nodes: { some: { nodeId: { in: nodeIds } } } },
       },
     },
     select: {
@@ -1036,7 +1040,8 @@ export async function getRouteProfilesByEntryNode(
       // drawing. vless profiles here would be ways in the cascade does not
       // carry. The entry's hy2 host stands for the cascade instead
       // (getHysteriaEntryLabels).
-      if (entryPos?.entryProtocol === 'hysteria') continue;
+      // An amneziawg entry the same, t07-wire: its awg host stands for it.
+      if (entryReachesCascadeOnlyThroughChain(entryPos?.entryProtocol)) continue;
       const allowed = allowByCascade.get(c.id);
       /**
        * Policies that apply to THIS direction: only the ones granted by squads
@@ -2273,6 +2278,10 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
   const secret = await chainSecretFor(nodeId);
   const input = chainInputFor(nodeId, topology, role, secret);
   if (!input) return null;
+  // t07-wire: an AmneziaWG entry's hand-off is minted from its interface's
+  // listen port, so it is read here, where the database is.
+  const awgPort =
+    role === 'entry' && topology.entryProtocol === 'amneziawg' ? await awgInterfacePort(nodeId) : undefined;
 
   const config = renderChainConfig(input);
   // One listener per way out this node offers its user core. Only an entry has
@@ -2294,9 +2303,27 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
     config: config as Record<string, unknown>,
     socks,
     socksPassword: secret,
-    ...userCoreFor(nodeId, topology, role, secret),
+    ...userCoreFor(nodeId, topology, role, secret, awgPort),
     ...(tunnels.length > 0 ? { tunnels } : {}),
   };
+}
+
+/**
+ * The UDP port the AmneziaWG interface of this node listens on, or undefined
+ * when the node serves no AmneziaWG binding (nothing to steer).
+ *
+ * The port of the enabled binding with the HIGHEST port, which is not a
+ * preference but what the agent ends up with: fetchEnabledInbounds sends the
+ * bindings in port order, the adapter carries one interface, and each AWG
+ * inbound it applies replaces the last. The mark has to be that interface's.
+ */
+async function awgInterfacePort(nodeId: string): Promise<number | undefined> {
+  const b = await prisma.profileNodeBinding.findFirst({
+    where: { nodeId, enabled: true, profile: { enabled: true, protocol: 'amneziawg' } },
+    orderBy: { port: 'desc' },
+    select: { port: true },
+  });
+  return b?.port;
 }
 
 /**
@@ -2319,8 +2346,21 @@ function userCoreFor(
   topology: TopologyInput,
   role: ChainRole,
   secret: string,
+  awgPort?: number,
 ): { userCore?: ChainUserCore } {
   if (role !== 'entry') return {};
+  if (topology.entryProtocol === 'amneziawg') {
+    // t07-wire: the agent steers the awg interface into the chain's tproxy
+    // listener. No AWG binding on this entry, no interface to steer: then
+    // nothing is handed over, and no xray drawing either (entersOnAnotherCore).
+    if (awgPort === undefined) return {};
+    return {
+      userCore: {
+        engine: 'amneziawg',
+        tproxy: { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(awgPort) },
+      },
+    };
+  }
   if (topology.entryProtocol === 'hysteria') {
     // One listener for the whole entry: Auto's, which chainInputFor always
     // renders for a hysteria entry. A port and not an address; the agent
@@ -2434,12 +2474,14 @@ function chainInputFor(
      *
      * One direction becomes a group of one, which the engine accepts.
      */
-    const directionTags =
-      t.entryProtocol === 'hysteria'
+    // And an amneziawg entry the same way, t07-wire: its user is a key, the
+    // whole entry lands on the tproxy listener, and that routes to Auto.
+    const handsWholeEntry = t.entryProtocol === 'hysteria' || t.entryProtocol === 'amneziawg';
+    const directionTags = handsWholeEntry
+      ? [0, ...tags]
+      : t.auto && tags.length > 1
         ? [0, ...tags]
-        : t.auto && tags.length > 1
-          ? [0, ...tags]
-          : tags;
+        : tags;
     // Phase 9.3: the route policies are carried out HERE, gated on the user
     // the entry's core hands each connection over as, and no longer on the
     // xray entry (buildTopologyFragmentsForNode draws none under handover).
@@ -2452,6 +2494,9 @@ function chainInputFor(
       directionTags,
       out,
       ...(policies.length > 0 ? { policies, ruleSets: ruleSets.map((r) => ({ tag: r.tag, path: r.path })) } : {}),
+      // The listener the agent's TPROXY rules steer to, with the entry policy
+      // the whole entry carries (as a hysteria entry's socks user does).
+      ...(t.entryProtocol === 'amneziawg' ? { tproxy: { ordinal: t.entryPolicyOrdinal ?? 0 } } : {}),
     };
   }
   if (!inLeg) return null;
@@ -2527,16 +2572,19 @@ async function legacyDrawingIsMoot(
 /**
  * Is this node the entry of a cascade whose users do NOT enter on xray?
  *
+ * Hysteria (phase 6) and amneziawg (t07-wire): the entries that reach the
+ * cascade only through the chain.
+ *
  * ⚠ Such an entry must carry NO xray drawing at all, and this is what closes
  * it. The agent tells xray "not you" (ApplyCascade(nil)) when the chain block
- * names hysteria, and nil there does not mean "no cascade": it means "read the
+ * names another engine, and nil there does not mean "no cascade": it means "read the
  * transitional copy on your inbound". If the panel still attached one, xray
  * would dial the legacy legs ITSELF beside the chain process, and its users
  * would stay cascaded: the opposite of what the operator confirmed when they
  * switched the entry, and a second process drawing one chain.
  */
 function entersOnAnotherCore(nodeId: string, entryProtocol: string | null | undefined, entryNodeIds: string[]): boolean {
-  return entryProtocol === 'hysteria' && entryNodeIds.includes(nodeId);
+  return entryReachesCascadeOnlyThroughChain(entryProtocol) && entryNodeIds.includes(nodeId);
 }
 
 async function buildCascadeFragmentsForNode(

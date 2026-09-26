@@ -306,12 +306,37 @@ func TestAUserCoreThatDoesNotMatchItsEngineReachesNobody(t *testing.T) {
 	}
 }
 
-// TestAnAmneziawgHandOffNobodyDrawsYetIsLoud pins the gap between the contract
-// and the door. The union knows amneziawg before the awg adapter can take a
-// hand-off, and the panel refuses such an entry at the save until it can. If a
-// well-formed block arrives anyway, it must land on the same alarm as any
-// drawing without a taker, not pass as applied.
-func TestAnAmneziawgHandOffNobodyDrawsYetIsLoud(t *testing.T) {
+// t07-wire: the awg adapter takes the hand-off, and only it. The tproxy half
+// reaches the core whose engine is amneziawg, verbatim; xray is told "not
+// you".
+func TestAnAmneziawgHandOffReachesTheAwgCoreAlone(t *testing.T) {
+	awg := &cascadeCore{fakeCore: fakeCore{name: "amneziawg", engine: "amneziawg", running: true}}
+	xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
+	var logs strings.Builder
+	s, _ := serverWithChain(t, &logs, awg, xray)
+
+	block := chainBlock()
+	block.UserCore = &dto.ChainUserCore{
+		Engine: "amneziawg",
+		TProxy: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+	}
+	s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: block})
+
+	if len(awg.got) != 1 || string(awg.got[0]) != `{"port":25000,"mark":117356}` {
+		t.Fatalf("the awg core got %q", awg.got)
+	}
+	if len(xray.got) != 1 || xray.got[0] != nil {
+		t.Fatalf("xray was handed the awg hand-off: %v", xray.got)
+	}
+	if strings.Contains(logs.String(), "the chain is NOT applied") {
+		t.Fatalf("a hand-off the awg core took raised the alarm:\n%s", logs.String())
+	}
+}
+
+// And a node whose awg core cannot take one (an adapter that is not a
+// CascadeReceiver) lands on the same alarm as any drawing without a taker, not
+// on "applied".
+func TestAnAmneziawgHandOffNobodyTakesIsLoud(t *testing.T) {
 	awg := &fakeCore{name: "amneziawg", engine: "amneziawg", running: true}
 	xray := &cascadeCore{fakeCore: fakeCore{name: "vless", engine: "xray", running: true}}
 	var logs strings.Builder

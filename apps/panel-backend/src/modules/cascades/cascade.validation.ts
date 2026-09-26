@@ -58,9 +58,8 @@ function assertLinkCellExists(protocol: string | null | undefined, where: string
  * to fall back on. For these the chain on the entry nodes is not an
  * optimisation but the whole hand-off, which is what the save gate asks about.
  *
- * About the protocol's nature, not about what is allowed: amneziawg is named
- * here before it joins CHAIN_ENTRY_PROTOCOLS, and until it does the save never
- * gets this far with it.
+ * About the protocol's nature, not about what is allowed: what may be saved is
+ * CHAIN_ENTRY_PROTOCOLS (both since t07-wire).
  */
 const ENTRIES_ONLY_THROUGH_CHAIN: readonly string[] = ['hysteria', 'amneziawg'];
 

@@ -85,10 +85,13 @@ describe('the protocol a cascade entry serves users with', () => {
     expect(res.statusCode, res.body).toBe(201);
   });
 
-  // amneziawg stays here until the commit that makes the agent draw its TPROXY
-  // rules: a 200 over a node that changes nothing is a silence, not a refusal.
-  // The other three are here for good, and none of the four is promised a phase.
-  for (const protocol of ['amneziawg', 'mtproto', 'naive', 'mieru']) {
+  it('takes amneziawg since t07-wire, the commit in which the agent draws its TPROXY rules', async () => {
+    const res = await save('amneziawg', await makeNode('ru-awg'), await makeNode('nl'));
+    expect(res.statusCode, res.body).toBe(201);
+  });
+
+  // These three are here for good, and none of them is promised a phase.
+  for (const protocol of ['mtproto', 'naive', 'mieru']) {
     it(`refuses ${protocol} and names what the chain takes, not a phase`, async () => {
       const res = await save(protocol, await makeNode(`ru-${protocol}`), await makeNode('nl'));
       expect(res.statusCode, res.body).toBe(400);
@@ -108,8 +111,7 @@ describe('the protocol a cascade entry serves users with', () => {
   it('asks the chain gate about every entry that has no other way in', () => {
     // hysteria and amneziawg users cannot carry a choice of way out, so the
     // chain on the entry node is their whole hand-off and the save asks
-    // whether it can run there. amneziawg is named before it may be saved:
-    // the gate is ready on the day the door opens, not a commit later.
+    // whether it can run there.
     for (const p of ['hysteria', 'amneziawg']) expect(entryReachesCascadeOnlyThroughChain(p)).toBe(true);
     for (const p of ['xray', 'mtproto', 'naive', 'mieru', null, undefined]) {
       expect(entryReachesCascadeOnlyThroughChain(p)).toBe(false);
@@ -120,6 +122,6 @@ describe('the protocol a cascade entry serves users with', () => {
     // One list, shared. A second copy on the frontend is how a form comes to
     // offer an option the server rejects, and the operator learns the rule from
     // an error instead of from the control.
-    expect([...CHAIN_ENTRY_PROTOCOLS]).toEqual(['xray', 'hysteria']);
+    expect([...CHAIN_ENTRY_PROTOCOLS]).toEqual(['xray', 'hysteria', 'amneziawg']);
   });
 });
