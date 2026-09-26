@@ -49,6 +49,8 @@ export const hosts = {
       // nothing until an agent reports it, and an unknown key would reach the
       // operator as bare "chain-socks" instead of words.
       'chain-socks': 'the chain socks port',
+      // Phase 7: an AmneziaWG entry hands its users to the chain by TPROXY.
+      'chain-tproxy': 'the chain tproxy (AWG entry)',
     },
   },
 
