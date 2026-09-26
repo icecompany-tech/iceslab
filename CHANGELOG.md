@@ -3,9 +3,140 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
-## Unreleased
+## v0.2.1 (2026-09-26)
+
+The routing release. Everything that leaves a node now goes through one policy
+layer: a cascade is carried by its own chain process on every hop, it can be
+entered through Xray, Hysteria 2 or AmneziaWG, its legs can be VLESS,
+Shadowsocks, Hysteria 2 or TUIC and can ride inside an AmneziaWG tunnel, a
+direction can stand on a foreign VLESS or SOCKS server instead of one of your
+nodes, and geo sets are managed by the panel and laid out on the nodes. Around
+it: a node is its set of cores with no primary one, cores are added and removed
+from the node page, every core version is pinned and checked, and roughly fifty
+field findings from a clean-machine stand run are fixed. 516 commits since
+v0.2.0.
+
+Upgrading nodes: the agent has no self-update yet. After deploying the panel,
+rebuild the agent on every node (`git fetch`, `go build`, restart), then rerun
+`bootstrap-amneziawg.sh --restart-agent` on AmneziaWG nodes with the interface
+down to move them to the 3.1 module; existing 1.x clients keep working on it.
 
 ### Added
+
+- **The cascade runs as its own chain process on every hop.** A sing-box
+  process the agent owns receives the legs, applies the route policy and picks
+  the way out, instead of the cascade being drawn into the user-facing core's
+  config. The entry hands its users over to it: an Xray entry by the socks
+  user each profile arrives as, a Hysteria 2 entry by one listener for all its
+  users, an AmneziaWG entry by TPROXY off its interface. Four protection rules
+  are always drawn (DNS hijack, BitTorrent, port 25, sniffing), a chain that
+  dies is reported by the node, and the panel refuses to save a cascade a hop
+  cannot carry, naming the node and the core it lacks.
+
+- **Legs choose their cell.** A leg between two hops is VLESS with REALITY (one
+  keypair per receiving node, a short id per leg, a target measured to fit the
+  8192-byte record limit REALITY relays), Shadowsocks 2022, Hysteria 2 or TUIC
+  (with a TLS pair the panel mints and the dialling side pins). Every cell is
+  proven by a live request between two engine processes in the test suite, not
+  by `check`. A leg can also ride inside an AmneziaWG tunnel the agent raises
+  between the two nodes, one tunnel per pair with its keys, inner /30 and port,
+  rotated from the cascade page.
+
+- **A cascade is entered through Hysteria 2 or AmneziaWG, not only Xray.** The
+  entry protocol is one per cascade. Users of a Hysteria or AmneziaWG entry
+  cannot pick a country (there is no UUID to carry the choice), so they leave
+  through Auto and one entry policy the cascade names; the subscription hands
+  their host out under the cascade's name and country. Switching the entry asks
+  who leaves the cascade before it lets them go.
+
+- **AmneziaWG 3.1 beside 1.x on one node.** Nodes get the 3.1 kernel module
+  and tools, which carry the fleet's 1.x interface unchanged (measured on a
+  throwaway machine: both generations side by side, junk parameters, padding,
+  a 1.x client refused by the 3.1 interface, a plain WireGuard client refused
+  by both). A node reports the generation its module speaks and whether its
+  agent carries a 3.1 interface; a profile chooses its generation; a 3.1
+  profile is refused onto a 1.x module or an older agent, and two generations
+  on one node must not share a subnet. The 3.1 geometry (junk, header
+  protection, decoys, padding, timers) is minted once per node and handed to
+  AmneziaVPN 5.x as an `amnezia-awg2` key and a `.conf`; the panel never
+  reuses stock decoys.
+
+- **Named outbounds.** A foreign VLESS (raw over TCP, TLS or REALITY) or SOCKS5
+  server the operator names becomes a direction of a cascade, drawn by the
+  chain of the last position and offered to subscribers as a country like any
+  other direction. Refusals name the direction and the node that lacks
+  sing-box. `freedom` and `blackhole` exist in the model for imported configs
+  and are not offered as directions.
+
+- **Geo sets managed by the panel.** A set comes from a URL with a sidecar
+  digest, from an uploaded file of up to 64 MB or from the two built-in
+  releases fetched at start, as a v2fly `.dat`, a sing-box rule-set JSON or a
+  MaxMind database, recognised by its bytes. Versions are verified and kept in
+  the database, a URL set refreshes itself by conditional requests, a rule line
+  suggests the tags of the set being typed, and rolling a version out lays the
+  files on each node's agent, which points xray at them and restarts it once.
+  The chain builds the rule-set for a tag the way xray reads it.
+
+- **Route policies reach every core.** A node-level policy (domain, IP, port,
+  protocol, network; direct, block, WARP or a cascade direction) is drawn by
+  the core that applies it, and the node says which cores that is and where
+  the policy does not apply. A cascade names an entry policy for the users who
+  cannot pick one, a squad can switch a cascade off for its members, and the
+  resolver belongs to the node.
+
+- **A node is its set of cores.** No primary core, no protocol question: the
+  installer takes `--engines a,b,c`, a node may run no core at all and take
+  its cores later from the node page, every core bootstrap wires itself into
+  the agent's env, `--remove` takes a core off (refused while it serves), and
+  `--uninstall` leaves a clean machine (`--keep-cores` keeps the old
+  behaviour). The node reports which cores it declares, which are installed,
+  their versions, which ports they hold and what a cascade still needs from
+  them; the panel shows all of it and never edits the set itself.
+
+- **Every core version is pinned and judged.** One manifest of core versions
+  with the pin, the ceiling and the known-bad ranges; installers download by
+  sha256; every core row reads as recommended or pinned and says how to move;
+  xray stays at or below 26.7.28 until the REALITY MLKEM change is measured.
+
+- **Cores on IP-addressed nodes.** Native Hysteria 2 on a node addressed by IP
+  serves an ECDSA certificate the panel mints with the IP as SAN, ten years,
+  and every subscription format pins it (hy2 links with `pinSHA256`, mihomo,
+  sing-box, xray, Surge, Loon); the core row shows the fingerprint and rotates
+  it. Xray and Shadowsocks on a node resolve names through their own resolvers
+  with the host's as the last fallback, so a dead host stub no longer takes
+  every host of the core down, and a node whose resolver is dead reads
+  degraded with the reason.
+
+- **SOCKS5 and HTTP as profiles on the xray core**, with a login per user,
+  replaced live without restarting the core and counted to the right person;
+  the subscription hands them out in plain, Clash, sing-box and xray-json and
+  the page offers `tg://socks` beside MTProto.
+
+- **Recipes live in a public registry.** The panel ships no recipes of its own,
+  only a pinned snapshot of `iceslab-recipes`, reads recipes by engine,
+  protocol and subprotocol, imports one from a GitHub file page, a gist or
+  pasted JSON, keeps the operator's own, hides registry ones, and exports a
+  saved profile as a registry recipe with the path it takes in a fork.
+
+- **Subscription page rebuilt**, with a lapsed page instead of an error
+  object, the operator's own words for a lapsed subscriber, one table of which
+  format carries which door and why the rest do not, an Outline dynamic key
+  per Shadowsocks node, AmneziaWG keys drawn as the scanner of the app expects
+  them (the app never accepted a `vpn://` string in a QR), and delivery
+  settings that say format and address.
+
+- **Port checks by socket.** A port is taken per transport, so Hysteria 2 on
+  443/udp sits beside REALITY on 443/tcp; the check says who holds a port and
+  how sure it is, a leg port and a profile port are one question asked both
+  ways, and a UDP port inside a node's Hysteria hopping range is warned about
+  before the save.
+
+- **Screens that say why.** The node card lists every core with its version,
+  the status carries the agent's reason in words, a cascade whose chain a node
+  could not start says so on its card, deploying a profile onto a node that
+  cannot serve it is refused before the save with the install line, and every
+  refusal the server makes is spoken by the screen in the same words it
+  predicted.
 
 - **An Auto line in the subscription.** A cascade can now offer one extra entry
   that names no country: the client hands the choice to the cascade entry, which
@@ -25,6 +156,33 @@ All notable changes to Iceslab are documented here. Format loosely follows
   the client showed an exit. The row is back only now that the node routes it.
 
 ### Changed
+
+- **The panel and the node exchange facts, not labels.** A node's protocol is
+  derived from its cores, its intended cores follow what the bootstraps wrote
+  on the machine, the wizard learns which optional fields a server renders from
+  the server, and every gate refuses only on a complete report: a partial list
+  is enough to say yes and never enough to say no.
+
+- **Installers are pinned and honest.** `ICESLAB_REF` and `ICESLAB_NODE_REF`
+  default to the release tag, a core whose bootstrap fails no longer stops the
+  install (the agent and the other cores go on and the end names the failed
+  core and how to add it), a bootstrap check reads a command's whole output
+  instead of racing `grep -q` under `pipefail`, an apt lock is stale only when
+  nothing holds it, AmneziaWG packages of a foreign PPA are removed before the
+  pinned build, and the Hysteria port-hopping range survives a bootstrap rerun.
+
+- **Panel structure.** Contours own their locales and colours (one token per
+  colour), the Prisma schema is split by domain, `src/lib` grouped by concern,
+  the nav is a card with four groups, one sans face carried by the panel
+  itself, the users table ports the artboard (columns panel, density, full
+  screen, pointer reordering), and the demo build is gone.
+
+- **CI.** The backend gets a linter, lint is a gate now that the debt is zero,
+  one gate protects the branch, the pinned engines are installed so the chain
+  config is asked rather than assumed, the geo conversion is compared with the
+  pinned sing-geosite release on every run, and gitleaks scans the whole
+  history with fixtures allowed by value, never by directory. Dependabot opens
+  against `develop`, the branch work lands on; `main` is what installers pull.
 
 - **A pooled cascade shows each of its lines once, not once per way in.** Two
   entries meant every row twice: two called Auto, two "ru → NL", two "ru → SE",
@@ -66,6 +224,55 @@ All notable changes to Iceslab are documented here. Format loosely follows
   start is exactly the one waiting for a config it can load.
 
 ### Fixed
+
+- **Found on a clean-machine stand run, all fixed before this tag.** The
+  default AmneziaWG MASQUERADE rule also matched loopback and rewrote the
+  source of every query to the host's stub resolver, so xray lost DNS on any
+  node with AmneziaWG (the rule now covers peer traffic only). A Hysteria
+  port-hopping redirect swallowed the UDP of the agent's own leg tunnels and of
+  AmneziaWG users leaving through TPROXY; the node now keeps its own ports out
+  of the redirect and lets a caught flow go. A packet TPROXY steered into the
+  chain was dropped by ufw in INPUT; it is accepted ahead of the host firewall.
+  A transit routed every direction into the first one, because the rule used
+  the process user instead of the connection's user, and `check` passed it. A
+  push started a named core before stopping the one it no longer named, so two
+  cores fought for 443/udp. xray on a transit fought the chain for the leg
+  port. A cascade onto nodes without sing-box saved as "done" and served
+  nothing; a hysteria-entered cascade was handed out as VLESS profiles the entry
+  no longer carried. The `vpn://` key was too dense for a phone camera and, once
+  slimmed, still unreadable by the app's scanner, which expects its own chunk
+  format. The Loon lines used a grammar Loon does not read.
+
+- **Cascades.** Every entry of a pool serves the cascade, not just the first; a
+  pooled entry pushed nothing when edited or deleted; the observatory reached
+  the builder but not the node; a save no longer rotates the secrets of every
+  leg; a key the client did not send is not an edit; a leg switched to hy2 or
+  tuic reaches both ends; a direction inherits the leg underlay unless chosen;
+  a one-leg cascade's congestion choice reaches both ends; a deleted node in a
+  cascade says which cascade refuses; a REALITY leg hides behind a target whose
+  handshake record the engine can relay.
+
+- **Nodes and cores.** A core's version is read past the JSON log lines before
+  it and an uninstalled core reports none; the agent asks only serving cores
+  for traffic; an idle core is not a hole in the policy; a restarted agent
+  brings its cores back from disk; a config the core rejects never replaces a
+  working one; the chain process lives by the agent's lifetime; holding no
+  ports is an answer; unpacked binaries are root-owned; hysteria is pinned on
+  both roads to it; mtproto users count online by the inbound they came
+  through.
+
+- **Subscription and clients.** The Loon lines read the obfuscation, the
+  REALITY key and the pin they were ignoring; legacy AEAD Shadowsocks starts
+  and authenticates; the seeded User-Agent rules follow the client catalog;
+  cascade lines read in the right direction and stop repeating; an endpoint is
+  identified by its host row, not its label; the AmneziaVPN key carries only
+  what the app reads; the platform picker and the key picker keep their own
+  state.
+
+- **Panel.** Forms seed before the first frame instead of fighting the
+  operator; the bootstrap countdown ticks; a refused save is handled, not
+  thrown; a POST with no body is a request; the users' All squad comes back on
+  a database that lost it; `/health` answers 503 when a dependency is down.
 
 - **The agent asks the core before replacing a working config.** xray refuses a
   bad config whole, taking the user inbounds down with whatever was wrong, so a
@@ -117,20 +324,6 @@ All notable changes to Iceslab are documented here. Format loosely follows
   hours while the panel showed the nodes green, and the second fault meant the
   panel could not have delivered a fix even after the first was repaired.
 
-### Removed
-
-- **The demo build and its seeded dataset.** A `VITE_DEMO_MODE` frontend build
-  served the panel read-only from invented fixtures for an iframe on the
-  marketing site, and a `DEMO=1` backend switch plus `seed:demo` /
-  `demo:metrics` scripts kept a fake fleet looking alive by turning the node
-  pollers off. It existed to make a screenshot, and it cost more than it
-  earned: fixtures to keep in step with every DTO, a build-time flag threaded
-  through router setup and three forms, a clock indirection in four more files,
-  and a scheduler that could be told to stop watching nodes. The panel is easier
-  to reason about with one build and one clock.
-
-### Fixed
-
 - **The hosts screen shows how many people reach a host, not how many
   memberships.** It now reads the count v0.2.0 added to the API instead of
   summing each squad's member count, which reported one person in two squads as
@@ -146,6 +339,30 @@ All notable changes to Iceslab are documented here. Format loosely follows
   The check is now ASCII-only, matching what the panel accepts, and says to look
   at the keyboard layout. When the stack still fails to come up, the installer
   prints the backend's own log, where the reason is one line.
+
+### Removed
+
+- **The demo build and its seeded dataset.** A `VITE_DEMO_MODE` frontend build
+  served the panel read-only from invented fixtures for an iframe on the
+  marketing site, and a `DEMO=1` backend switch plus `seed:demo` /
+  `demo:metrics` scripts kept a fake fleet looking alive by turning the node
+  pollers off. It existed to make a screenshot, and it cost more than it
+  earned: fixtures to keep in step with every DTO, a build-time flag threaded
+  through router setup and three forms, a clock indirection in four more files,
+  and a scheduler that could be told to stop watching nodes. The panel is easier
+  to reason about with one build and one clock.
+
+### Known limitations
+
+- The agent does not update itself: after a panel deploy, rebuild it on each
+  node over ssh.
+- A REALITY inbound dials its target through the host resolver on every
+  handshake; sing-box and native Hysteria resolve through the host as well. A
+  node whose resolver is down reads degraded with that reason.
+- A squad that restricts a cascade's exits by node does not see directions on
+  named outbounds; the allow-list is keyed by node.
+- Users of a Hysteria or AmneziaWG entry share the cascade's entry policy; a
+  per-user policy on such an entry is not built.
 
 ## v0.2.0
 

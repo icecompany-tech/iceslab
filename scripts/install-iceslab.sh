@@ -15,12 +15,12 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab.sh)
 #
 # Or with a specific tag/branch:
-#   ICESLAB_REF=v0.2.0 bash <(curl ...)
+#   ICESLAB_REF=v0.2.1 bash <(curl ...)
 #
 # Customisation via env:
 #   ICESLAB_DIR        Install dir (default /opt/iceslab)
 #   ICESLAB_REPO       Git URL (default https://github.com/icecompany-tech/iceslab.git)
-#   ICESLAB_REF        Branch/tag/sha (default v0.2.0, pinned for alpha)
+#   ICESLAB_REF        Branch/tag/sha (default v0.2.1, pinned for alpha)
 #   ICESLAB_REF_SHA    Optional commit SHA to verify after checkout. Defeats
 #                      upstream tag re-pointing. Recommended for prod.
 #   FRONTEND_PORT        Host port the SPA listens on (default 8080)
@@ -126,7 +126,7 @@ banner() {
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m\n'
   printf '\n'
   printf '  Self-hosted multi-core proxy panel\n'
-  printf '  v0.2.0  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.2.1  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
@@ -206,7 +206,7 @@ wait_for_apt
 
 ICESLAB_DIR=${ICESLAB_DIR:-/opt/iceslab}
 ICESLAB_REPO=${ICESLAB_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_REF=${ICESLAB_REF:-v0.2.0}
+ICESLAB_REF=${ICESLAB_REF:-v0.2.1}
 FRONTEND_PORT=${FRONTEND_PORT:-8080}
 PANEL_DOMAIN=${PANEL_DOMAIN:-}
 ACME_DEFAULT_EMAIL=${ACME_DEFAULT_EMAIL:-}

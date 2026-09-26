@@ -207,7 +207,7 @@ banner() {
   printf '  | | (__| _|\\__ \\| |__ / _ \\| _ \\\n'
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m  node-agent\n'
   printf '\n'
-  printf '  v0.2.0  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.2.1  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
@@ -293,7 +293,7 @@ wait_for_apt
 
 ICESLAB_NODE_DIR=${ICESLAB_NODE_DIR:-/opt/iceslab-node}
 ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.0}
+ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.1}
 
 # ───── Cores ─────
 #
