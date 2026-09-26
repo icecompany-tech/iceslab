@@ -24,6 +24,11 @@ Makefile    text eol=lf
 *.html      text
 *.sql       text
 
+# Test goldens and fixtures are compared BYTE FOR BYTE with what the code
+# renders, which is LF. Under autocrlf a Windows checkout rewrote them to CRLF,
+# and every golden test failed on a render that had not changed (26.09).
+**/__testdata__/**  text eol=lf
+
 # Binary: never touch line endings.
 *.png       binary
 *.jpg       binary
