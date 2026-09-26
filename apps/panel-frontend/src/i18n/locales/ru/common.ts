@@ -231,6 +231,7 @@ export const common = {
     subscriptionDeliverySetup: '/ ПОДПИСКА · ФОРМАТ И АДРЕС',
     subscriptionRoutes: '/ ПОДПИСКА · МАРШРУТЫ',
     geoSets: '/ ТРАФИК · ГЕО-НАБОРЫ',
+    namedOutbounds: '/ ТРАФИК · ИМЕНОВАННЫЕ ВЫХОДЫ',
     subscriptionDelivery: '/ ПОДПИСКА · ВЫДАЧА',
     subscriptionTemplates: '/ ПОДПИСКА · ШАБЛОНЫ',
     insights: '/ СИСТЕМА · АНАЛИТИКА',

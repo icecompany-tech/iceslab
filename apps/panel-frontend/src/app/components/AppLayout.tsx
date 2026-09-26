@@ -439,6 +439,7 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   '/subscription/metadata/delivery': 'breadcrumb.subscriptionDeliverySetup',
   '/subscription/routes': 'breadcrumb.subscriptionRoutes',
   '/traffic/geo-sets': 'breadcrumb.geoSets',
+  '/traffic/named-outbounds': 'breadcrumb.namedOutbounds',
   '/subscription/delivery': 'breadcrumb.subscriptionDelivery',
   '/subscription/templates': 'breadcrumb.subscriptionTemplates',
   '/insights': 'breadcrumb.insights',
@@ -910,6 +911,11 @@ function AppLayoutInner() {
                 to="/subscription/routes"
                 label={t('sidebar.policies')}
                 icon={<NavPoliciesIcon />}
+              />
+              <NavItem
+                to="/traffic/named-outbounds"
+                label={t('sidebar.namedOutbounds')}
+                icon={<NavEgressIcon />}
               />
               <NavItem
                 label={t('sidebar.torrentBlocker')}

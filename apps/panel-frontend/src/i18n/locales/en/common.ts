@@ -199,6 +199,7 @@ export const common = {
     subscriptionDeliverySetup: '/ SUBSCRIPTION · FORMAT AND ADDRESS',
     subscriptionRoutes: '/ SUBSCRIPTION · ROUTES',
     geoSets: '/ TRAFFIC · GEO SETS',
+    namedOutbounds: '/ TRAFFIC · NAMED OUTBOUNDS',
     subscriptionDelivery: '/ SUBSCRIPTION · DELIVERY',
     subscriptionTemplates: '/ SUBSCRIPTION · TEMPLATES',
     insights: '/ SYSTEM · INSIGHTS',

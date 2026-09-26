@@ -28,6 +28,7 @@ export const app = {
     // ноды», «Правила юзера», «Правила устройства». Пункт «Политики» не
     // совпадал с экраном ни одним словом.
     policies: 'Правила',
+    namedOutbounds: 'Именованные выходы',
     torrentBlocker: 'Torrent Blocker',
     geoSets: 'Гео-наборы',
     ruleSets: 'Наборы правил',

@@ -28,6 +28,7 @@ export const app = {
     // The door carries the same word as the three tabs behind it: node rules,
     // user rules, device rules. «Policies» shared no word with the screen.
     policies: 'Rules',
+    namedOutbounds: 'Named outbounds',
     torrentBlocker: 'Torrent Blocker',
     geoSets: 'Geo sets',
     ruleSets: 'Rule sets',
