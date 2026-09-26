@@ -18,6 +18,19 @@ version: 2
 # deliberate decision (a typescript or i18n major changes how we write code),
 # taken when we choose to, not when a bot notices.
 #
+# Since 2026-09-26 a green minor or patch PR merges ITSELF into develop
+# (workflows/dependabot-automerge.yml); nobody reviews a bot's diff by hand.
+# That is acceptable here and not in general, for three reasons that are all
+# in CI rather than in anybody's attention: majors never reach that path (they
+# are ignored above, and a group carrying one is left for a person); the audit
+# gate fails the build on a high advisory; and the backend suite runs against
+# the pinned xray, sing-box and hysteria binaries, live legs included, so a
+# library that breaks what the cores are handed breaks the build, not a node.
+# The one thing CI cannot see is a release that is itself the attack, which is
+# what the week of cooldown below is for: a version is taken only after it
+# has been public for seven days, long enough for a compromised one to be
+# noticed and yanked by somebody else.
+#
 # ⚠ EVERY ecosystem targets `develop`, and leaving it out is not a small
 # difference: dependabot opens against the default branch, which is `main`, the
 # branch installers pull from. A dependency bump would then arrive straight at
@@ -32,6 +45,8 @@ updates:
     target-branch: develop
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -46,6 +61,8 @@ updates:
     target-branch: develop
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -63,6 +80,8 @@ updates:
     target-branch: develop
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       go:
         patterns: ['*']

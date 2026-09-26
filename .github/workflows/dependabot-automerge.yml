@@ -1,0 +1,48 @@
+name: Dependabot auto-merge
+
+# The owner's decision of 2026-09-26: a bot's pull request is not reviewed by
+# hand. A minor or patch bump into develop is queued to merge ITSELF, and GitHub
+# merges it only once the required checks on develop are green (CI's `gate`),
+# so this workflow decides WHETHER to merge, never WHEN. A red PR stays open.
+#
+# What is left out on purpose:
+#   - majors. dependabot.yml already ignores them for npm and gomod; the
+#     actions group can still carry one, and fetch-metadata reports a group by
+#     its largest bump, so such a group is left for a person;
+#   - anything not opened by dependabot, and anything not aimed at develop.
+#     A person's pull request goes through this file untouched.
+#
+# ⚠ Two things this relies on that are not in the repository:
+#   - "Allow auto-merge" on in the repository settings (the owner turns it on);
+#   - a required status check on develop. Without one, `--auto` has nothing to
+#     wait for and merges at once, green or not.
+#
+# ⚠ A merge made with GITHUB_TOKEN starts no workflow of its own (GitHub's rule
+# against recursive runs), so the push to develop that this merge makes runs no
+# CI and publishes no `develop` image. The PR's own CI is what vouched for it;
+# the next push to develop builds and ships it with everything else.
+
+on:
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Queue the merge for when the checks are green
+        if: steps.meta.outputs.update-type == 'version-update:semver-minor' || steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
