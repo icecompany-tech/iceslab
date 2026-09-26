@@ -404,8 +404,17 @@ describe('GET /sub/:token - multi-format (slice 21)', () => {
     const first = JSON.parse((await get('')).body);
     expect(first).toMatchObject({ server: firstAead.host, method: 'chacha20-ietf-poly1305' });
 
-    expect((await get(node('eu-3'))).body).toBe('');
-    expect((await get('&node=nowhere')).body).toBe('');
+    // E54: a node the format cannot read, and a node there is not, each a
+    // 404 in words with the names there are, not an empty 200.
+    const unreadable = await get(node('eu-3'));
+    expect(unreadable.statusCode).toBe(404);
+    expect(JSON.parse(unreadable.body)).toMatchObject({ error: 'SUBSCRIPTION_NODE_UNKNOWN', node: 'eu-3 · Shadowsocks' });
+    expect(JSON.parse(unreadable.body).message).toMatch(/^the outline format cannot carry the server "eu-3 · Shadowsocks"/);
+    const nowhere = await get('&node=nowhere');
+    expect(nowhere.statusCode).toBe(404);
+    expect(JSON.parse(nowhere.body)).toMatchObject({ error: 'SUBSCRIPTION_NODE_UNKNOWN', node: 'nowhere' });
+    expect(JSON.parse(nowhere.body).nodes.sort()).toEqual(['eu-1 · Shadowsocks', 'eu-2 · Shadowsocks']);
+    expect(JSON.parse(nowhere.body).message).toMatch(/^this subscription has no shadowsocks server named "nowhere"/);
   });
 
   it('hands a legacy AEAD client its own key alone, an SS2022 client server:user (E19)', async () => {

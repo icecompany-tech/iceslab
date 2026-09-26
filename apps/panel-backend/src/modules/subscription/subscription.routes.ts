@@ -101,6 +101,13 @@ const QuerySchema = z.object({
  */
 const COMMENTED_FORMATS: ReadonlySet<Format> = new Set<Format>(['clash', 'wgconf', 'surge', 'quantumultx', 'loon']);
 
+/** Formats that carry ONE server, picked by `?node=`, and the protocol it is. */
+const SINGLE_SERVER_FORMATS: Partial<Record<Format, string>> = {
+  wgconf: 'amneziawg',
+  amneziavpn: 'amneziawg',
+  outline: 'shadowsocks',
+};
+
 /**
  * Why a narrowed subscription gave this format nothing, in the terms the
  * person can act on. Two different answers, and mixing them read as a
@@ -785,6 +792,37 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             message: words,
             protocols: onlyProtocols,
             available: availableProtocols,
+          });
+        }
+      }
+
+      /**
+       * E54, stand 26.09: a single-server file asked for a server by a name
+       * this subscription does not have answered 200 with an empty body, the
+       * same as "no such protocol at all", so a mistyped `node=` read as an
+       * empty subscription. The name is the server's LABEL as the subscription
+       * prints it, flag included ("🇷🇺 awg-ru-01"), which is easy to get
+       * wrong by hand; the answer names the ones there are.
+       *
+       * Only with `node=`: without it these formats keep their contract (the
+       * first server, or an empty body when there is none).
+       */
+      const singleServerProtocol = SINGLE_SERVER_FORMATS[format];
+      if (query.node && singleServerProtocol) {
+        const names = [...new Set(served.filter((e) => e.protocol === singleServerProtocol).map((e) => e.nodeName))];
+        if (!names.includes(query.node)) {
+          reply.removeHeader('Content-Disposition');
+          // The server may exist and be one this format cannot read (an
+          // SS2022 cipher for Outline): that is a different sentence.
+          const exists = filtered.some((e) => e.protocol === singleServerProtocol && e.nodeName === query.node);
+          const has = names.length > 0 ? `it has: ${names.map((n) => JSON.stringify(n)).join(', ')}` : 'it has none';
+          return reply.code(404).send({
+            error: 'SUBSCRIPTION_NODE_UNKNOWN',
+            message: exists
+              ? `the ${format} format cannot carry the server ${JSON.stringify(query.node)}; for this format ${has}`
+              : `this subscription has no ${singleServerProtocol} server named ${JSON.stringify(query.node)}; for the ${format} format ${has}`,
+            node: query.node,
+            nodes: names,
           });
         }
       }

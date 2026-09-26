@@ -211,6 +211,19 @@ describe('?protocols= on the subscription', () => {
     expect(wg.body).toBe('');
   });
 
+  it('E54: a server named by node= that is not there is a 404 in words, not an empty file', async () => {
+    const s = await subscriber();
+    const res = await get(`/sub/${s.subscriptionToken}?format=wgconf&node=${encodeURIComponent('awg-ru-01')}&dl=1`);
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-disposition']).toBeUndefined();
+    expect(JSON.parse(res.body)).toMatchObject({
+      error: 'SUBSCRIPTION_NODE_UNKNOWN',
+      node: 'awg-ru-01',
+      nodes: [],
+      message: 'this subscription has no amneziawg server named "awg-ru-01"; for the wgconf format it has none',
+    });
+  });
+
   it('one narrowed request does not narrow the next one (the cache holds the whole subscription)', async () => {
     const s = await subscriber();
     const narrowed = text('plain', (await get(`/sub/${s.subscriptionToken}?protocols=xray`)).body);
