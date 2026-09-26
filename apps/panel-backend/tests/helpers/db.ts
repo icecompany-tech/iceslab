@@ -31,6 +31,9 @@ export const TABLES = [
   'cascade_position_nodes',
   'cascade_positions',
   'cascades',
+  // Phase 10. After cascade_directions, which points at it with RESTRICT; the
+  // name is unique, so a row left behind would refuse the next test's create.
+  'named_outbounds',
   'amneziawg_peers',
   'subscription_events',
   'subscription_request_history',

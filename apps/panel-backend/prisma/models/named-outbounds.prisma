@@ -1,0 +1,33 @@
+/// Phase 10 (Э3.2): a way out of a cascade that is NOT one of our nodes, a
+/// foreign server by vless or socks, under a name the operator gave it.
+///
+/// It is not a new routing surface. It stands behind a CascadeDirection
+/// (CascadeDirection.outboundId) in place of a pool of nodes, so everything
+/// that already picks a direction (the client's vlessRoute, a squad's ACL, the
+/// Auto line, a node policy's cascade action) reaches it unchanged. The node of
+/// the cascade's last position draws it as that direction's way out in its
+/// chain process (ARCH 26.09: xray is not taught foreign outbounds).
+///
+/// The set is closed on purpose (client plan, Э3.2): vless and socks, which
+/// a direction takes, and freedom and blackhole, which exist for importing the
+/// operator's own config and stand behind no direction (their direct and block
+/// are already actions of a node policy).
+model NamedOutbound {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(64)
+  /// vless | socks | freedom | blackhole
+  type        String   @db.VarChar(16)
+  /// Shown as the direction's country in the subscription (flag and label),
+  /// the way a pool's nodes lend theirs. NULL = none.
+  countryCode String?  @map("country_code") @db.Char(2)
+  /// Per type, checked by named-outbounds.schemas.ts on every write: the
+  /// server, the port and the credentials. The operator's own, returned to the
+  /// admin as a profile's config is.
+  config      Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  directions CascadeDirection[]
+
+  @@map("named_outbounds")
+}

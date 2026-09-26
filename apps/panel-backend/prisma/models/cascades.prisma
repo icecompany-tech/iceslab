@@ -175,6 +175,13 @@ model CascadeDirection {
   // shape of the cascade, so a client that could set it could point a leg at a
   // port the node uses for something else. NULL until the cascade is saved.
   linkPort Int? @map("link_port")
+  // Phase 10: a foreign server this direction goes out through, IN PLACE of a
+  // pool of nodes (exactly one of the two). Drawn by the node of the last
+  // position as out-d<tag> of its chain; such a direction has no leg, no link
+  // and no linkProtocol. RESTRICT: an outbound a direction stands on is not
+  // deleted under it, the API refuses first and names the directions.
+  outboundId String?        @map("outbound_id") @db.Uuid
+  outbound   NamedOutbound? @relation(fields: [outboundId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   cascade Cascade                @relation(fields: [cascadeId], references: [id], onDelete: Cascade)
@@ -185,6 +192,7 @@ model CascadeDirection {
   policyRules NodePolicyRule[]
 
   @@unique([cascadeId, tag])
+  @@index([outboundId])
   @@map("cascade_directions")
 }
 
