@@ -171,16 +171,18 @@ export const UpdateNodeSchema = z.object({
   // the enum: an old screen that sends back the label it read gets no 400,
   // and a sing-box-only node's label is `singbox`, which the enum lacks.
   protocol: z.string().max(32).optional(),
-  // Absent = untouched; a list replaces the list, the empty one included (a
-  // node with the agent alone). No null.
-  intendedEngines: IntendedEnginesSchema.optional(),
+  // No `intendedEngines` and no `singboxEngine` (E42, 26.09): the node's
+  // intended cores are the env blocks its bootstraps write, reported by the
+  // agent on every healthcheck (nodes.cron, intendedFromReport). A tick edited
+  // here would be written back within a poll. Not in this schema, so an older
+  // screen that still sends them is stripped quietly, neither written nor
+  // refused. A create still takes the set: the wizard's --engines needs it.
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().optional(),
   regionId: z.uuid().nullable().optional(),
   maxUsers: z.number().int().positive().max(100000).nullable().optional(),
   domain: DomainSchema,
   hardening: HardeningSchema,
-  singboxEngine: z.boolean().optional(),
   // Э3: the node-level routing policy this node runs. null detaches it, which
   // rewrites the node's config without the rules rather than leaving the last
   // policy running.

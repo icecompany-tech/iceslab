@@ -459,19 +459,9 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   const data: Parameters<typeof repo.updateById>[1] = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.address !== undefined) data.address = input.address;
-  // The set, the label derived from it and the sing-box flag move together,
-  // and only when the body touches the set. `protocol` alone is no edit: the
-  // label is not chosen (25.09).
-  if (input.intendedEngines !== undefined || input.singboxEngine !== undefined) {
-    const engines = resolveNodeEngines(input, {
-      intendedEngines: intendedEngines(existing),
-      protocol: existing.protocol,
-      singboxEngine: existing.singboxEngine,
-    });
-    data.intendedEngines = engines.intendedEngines;
-    data.protocol = engines.protocol;
-    data.singboxEngine = engines.singboxEngine;
-  }
+  // The set, its label and the sing-box flag are not edited here (E42): they
+  // follow what the node's env declares, written by the poller on every report
+  // (intendedFromReport). `protocol` in a body is no edit either (25.09).
   if (input.countryCode !== undefined) data.countryCode = input.countryCode;
   if (input.consumptionMultiplier !== undefined) {
     data.consumptionMultiplier = BigInt(input.consumptionMultiplier);

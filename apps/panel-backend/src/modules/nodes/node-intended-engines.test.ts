@@ -9,7 +9,7 @@ import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
-import { NodeEnginesError, resolveNodeEngines } from './node-intended-engines.js';
+import { NodeEnginesError, intendedFromReport, resolveNodeEngines } from './node-intended-engines.js';
 import { intendedEngines } from './node-engines.js';
 
 /**
@@ -197,37 +197,40 @@ describe('POST and PUT /api/nodes with intendedEngines', () => {
     expect(JSON.parse(beside.body)).toMatchObject({ intendedEngines: ['hysteria'], protocol: 'hysteria' });
   });
 
-  it('PUT follows the three-value rule, and a protocol in its body is ignored', async () => {
+  it('PUT does not edit the set, and neither refuses nor writes what an older screen sends (E42)', async () => {
     const id = JSON.parse((await create({ intendedEngines: ['xray', 'hysteria'] })).body).id as string;
-    // An unrelated edit leaves the set alone.
-    const renamed = JSON.parse((await put(id, { name: 'eng-renamed' })).body);
-    expect(renamed.intendedEngines).toEqual(['xray', 'hysteria']);
-    // protocol is not an edit: no 400, nothing moves, even for a label the
-    // enum lacks (a sing-box-only node reads `singbox`).
-    for (const protocol of ['hysteria', 'singbox']) {
-      const res = await put(id, { protocol });
-      expect(res.statusCode, res.body).toBe(200);
-      expect(JSON.parse(res.body)).toMatchObject({ intendedEngines: ['xray', 'hysteria'], protocol: 'xray' });
+    const kept = { intendedEngines: ['xray', 'hysteria'], protocol: 'xray', singboxEngine: false };
+    // The set follows the node's env now (intendedFromReport); a tick edited
+    // here would be written back within a poll. An older screen still sends
+    // these: 200, and nothing moves.
+    for (const body of [
+      { intendedEngines: ['amneziawg', 'hysteria'] },
+      { intendedEngines: [] },
+      { singboxEngine: true },
+      { intendedEngines: null },
+      { protocol: 'singbox' },
+    ]) {
+      const res = await put(id, body);
+      expect(res.statusCode, `${JSON.stringify(body)}: ${res.body}`).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject(kept);
     }
-    // A set replaces the set; its order says nothing.
-    const moved = JSON.parse((await put(id, { intendedEngines: ['amneziawg', 'hysteria'] })).body);
-    expect(moved).toMatchObject({ intendedEngines: ['hysteria', 'amneziawg'], protocol: 'hysteria', singboxEngine: false });
-    // The old toggle adds sing-box to the set.
-    const toggled = JSON.parse((await put(id, { singboxEngine: true })).body);
-    expect(toggled.intendedEngines).toEqual(['hysteria', 'singbox', 'amneziawg']);
-    expect((await put(id, { intendedEngines: null })).statusCode).toBe(400);
+    // Beside another edit, that edit goes through and the set does not move.
+    const renamed = JSON.parse((await put(id, { name: 'eng-renamed', intendedEngines: ['singbox'] })).body);
+    expect(renamed).toMatchObject({ name: 'eng-renamed', ...kept });
+    const row = await prisma.node.findUniqueOrThrow({ where: { id } });
+    expect(row).toMatchObject(kept);
   });
 
-  it('PUT may take the last core away, and give one back', async () => {
-    const id = JSON.parse((await create({ intendedEngines: ['singbox'] })).body).id as string;
-    for (const body of [{ intendedEngines: [] }, { singboxEngine: false }]) {
-      await put(id, { intendedEngines: ['singbox'] });
-      const res = await put(id, body);
-      expect(res.statusCode, res.body).toBe(200);
-      expect(JSON.parse(res.body)).toMatchObject({ intendedEngines: [], protocol: 'none', singboxEngine: false });
-    }
-    const back = JSON.parse((await put(id, { intendedEngines: ['hysteria'] })).body);
-    expect(back).toMatchObject({ intendedEngines: ['hysteria'], protocol: 'hysteria' });
+  it('the next report with declared cores is what writes the set', async () => {
+    const id = JSON.parse((await create({ intendedEngines: ['xray'] })).body).id as string;
+    await put(id, { intendedEngines: ['hysteria'] }); // ignored
+    const row = await prisma.node.findUniqueOrThrow({ where: { id } });
+    // What the poller does with a healthcheck that declares xray and amneziawg.
+    const write = intendedFromReport(row, ['amneziawg', 'xray']);
+    expect(write).toEqual({ intendedEngines: ['xray', 'amneziawg'], protocol: 'xray', singboxEngine: false });
+    await prisma.node.update({ where: { id }, data: write! });
+    const got = JSON.parse((await app.inject({ method: 'GET', url: `/api/nodes/${id}`, headers: auth() })).body);
+    expect(got).toMatchObject({ intendedEngines: ['xray', 'amneziawg'], protocol: 'xray' });
   });
 });
 

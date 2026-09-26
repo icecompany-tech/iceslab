@@ -350,10 +350,6 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
       }
       // A version the manifest does not list: no checksum to install it by.
       // `problems` names each component and what it can be instead.
-      // intendedEngines, protocol and singboxEngine that contradict each other.
-      if (err instanceof nodesService.NodeEnginesError) {
-        return reply.code(400).send({ error: err.code, message: err.message, path: [err.path] });
-      }
       if (err instanceof nodesService.CoreVersionIntentError) {
         return reply
           .code(400)
