@@ -1,5 +1,6 @@
 import type { User, UserTraffic } from '../../generated/prisma/client.js';
 import type { HysteriaTlsPin } from '../nodes/hysteria-tls-shape.js';
+import type { AwgGeometry3 } from '@iceslab/shared';
 import {
   XRAY_PLAIN_SUBPROTOCOLS,
   doorOf,
@@ -328,6 +329,12 @@ export interface AmneziawgSubscriptionEndpoint extends SubscriptionEndpointBase 
   i3: string;
   i4: string;
   i5: string;
+  /**
+   * t07-6c: the node's 3.1 geometry, on an endpoint of a 3.1 profile. When
+   * present the formats render it and NOT jc..i5, which carry the profile's
+   * own numbers and are not what the node's 3.1 interface runs.
+   */
+  geometry3?: AwgGeometry3;
 }
 
 export interface NaiveSubscriptionEndpoint extends SubscriptionEndpointBase {

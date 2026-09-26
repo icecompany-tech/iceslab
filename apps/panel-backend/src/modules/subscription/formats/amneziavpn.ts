@@ -48,6 +48,7 @@ export function buildAwgVpnLink(
     i3: awg.i3,
     i4: awg.i4,
     i5: awg.i5,
+    ...(awg.geometry3 ? { geometry3: awg.geometry3 } : {}),
     description: `AmneziaWG ${awg.nodeName}`,
   });
 }

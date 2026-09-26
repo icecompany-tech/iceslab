@@ -3,6 +3,7 @@ import { inflateSync } from 'node:zlib';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { AwgGeometry3 } from '@iceslab/shared';
 import {
   AMNEZIA_QR_MAGIC,
   amneziaQrChunkFromKey,
@@ -180,6 +181,75 @@ describe('the AmneziaVPN key, whole', () => {
   it('awg2-s3s4-set: non-zero S3/S4 travel everywhere the app reads them', () => {
     golden('awg2-s3s4-set', buildAmneziaVpnLink({ ...baseOpts, s1: 15, s2: 18, s3: 24, s4: 20 }));
   });
+
+  it('awg3: a 3.1 key, for AmneziaVPN 5.x (t07-6c)', () => {
+    golden('awg3', buildAmneziaVpnLink({ ...baseOpts, port: 51830, geometry3: GEOMETRY3 }));
+  });
+});
+
+/**
+ * The geometry the node's awg3 runs, the first one the panel's minter wrote
+ * into the agent's fixture: the same values the agent's tests render.
+ */
+const GEOMETRY3 = (
+  JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../../../node/internal/core/amneziawg/testdata/geometry3-minted.json'),
+      'utf8',
+    ),
+  ) as AwgGeometry3[]
+)[0]!;
+
+/** The 3.1 keys amnezia-client reads from last_config (configKeys.h:97-104). */
+const CLIENT_3_1_KEYS = [
+  'HeaderProtectionKey',
+  'ContentPaddingAddition',
+  'RekeyAfterTime',
+  'RekeyTimeout',
+  'RejectAfterTime',
+  'KeepaliveTimeout',
+  'MaxHandshakeAttempts',
+  'RandomTrailers',
+];
+
+describe('the 3.1 key (t07-6c)', () => {
+  const key = buildAmneziaVpnLink({ ...baseOpts, port: 51830, geometry3: GEOMETRY3 });
+  const env = decodeVpnKey(key) as Record<string, unknown> & { containers: Array<Record<string, unknown>> };
+  const awg = env.containers[0]!.awg as Record<string, unknown>;
+  const inner = JSON.parse(awg.last_config as string) as Record<string, unknown>;
+
+  it('is the app\'s own 3.1 container, tagged 3.1, with no Legacy flag to suppress', () => {
+    expect(env.defaultContainer).toBe('amnezia-awg2');
+    expect(env.containers[0]!.container).toBe('amnezia-awg2');
+    expect(awg.protocol_version).toBe('3.1');
+    expect('isThirdPartyConfig' in awg).toBe(false);
+  });
+
+  it('carries every 3.1 key the app reads, the node geometry value for value', () => {
+    for (const k of CLIENT_3_1_KEYS) expect(k in inner, k).toBe(true);
+    expect(inner.HeaderProtectionKey).toBe(GEOMETRY3.headerProtectionKey);
+    expect(inner.ContentPaddingAddition).toBe(GEOMETRY3.contentPaddingAddition);
+    expect(inner.RejectAfterTime).toBe(GEOMETRY3.rejectAfterTime);
+    expect(inner.RandomTrailers).toBe('on');
+    // Headers as the node runs them, strings; S3/S4 always, the 3.1 floor is 12.
+    expect(inner.H1).toBe(GEOMETRY3.h1);
+    expect(inner.S3).toBe(String(GEOMETRY3.s3));
+    expect(inner.S4).toBe(String(GEOMETRY3.s4));
+    expect(inner.I1).toBe(GEOMETRY3.i1);
+    expect('I3' in inner).toBe(GEOMETRY3.i3 !== '');
+  });
+
+  it('ignores the profile 1.x numbers entirely', () => {
+    // baseOpts carries H1 1111111111 and Jc 4: none of it may reach a 3.1 key.
+    expect(inner.H1).not.toBe('1111111111');
+    expect(inner.Jc).toBe(String(GEOMETRY3.jc));
+  });
+
+  it('keeps the connection fields of every key', () => {
+    expect(inner.client_ip).toBe('10.66.66.2/32');
+    expect(inner.port).toBe(51830);
+    expect(inner.allowed_ips).toEqual(['0.0.0.0/0', '::/0']);
+  });
 });
 
 /**
@@ -246,6 +316,7 @@ describe('the AmneziaVPN QR text', () => {
   for (const [name, opts] of [
     ['awg1-s3s4-zero', baseOpts],
     ['awg2-s3s4-set', { ...baseOpts, s1: 15, s2: 18, s3: 24, s4: 20 }],
+    ['awg3', { ...baseOpts, port: 51830, geometry3: GEOMETRY3 }],
   ] as const) {
     it(`golden ${name}.qr`, () => {
       const text = amneziaQrChunkFromKey(buildAmneziaVpnLink(opts));

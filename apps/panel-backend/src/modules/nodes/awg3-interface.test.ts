@@ -114,6 +114,40 @@ describe('the push of a node with both generations', () => {
   });
 });
 
+describe('what a subscriber is handed (t07-6c)', () => {
+  it('a 3.1 tunnel beside the 1.x one, carrying the node geometry, told apart by name', async () => {
+    const nodeId = await makeNode();
+    expect((await bind(await awgProfile(1, '10.66.66.0/24'), nodeId, 51820)).statusCode).toBe(201);
+    expect((await bind(await awgProfile(3, '10.67.67.0/24'), nodeId, 51830)).statusCode).toBe(201);
+    const u = await post('/api/users', { username: 'alice' });
+    expect(u.statusCode, u.body).toBe(201);
+    const subToken = JSON.parse(u.body).subscriptionToken as string;
+
+    const json = JSON.parse(
+      (await app.inject({ method: 'GET', url: `/sub/${subToken}?format=json` })).body,
+    ) as { endpoints: { protocol: string; nodeName: string; port: number; geometry3?: unknown }[] };
+    const awg = json.endpoints.filter((e) => e.protocol === 'amneziawg');
+    const one = awg.find((e) => e.port === 51820)!;
+    const three = awg.find((e) => e.port === 51830)!;
+    expect(one.geometry3).toBeUndefined();
+    expect(three.nodeName).toBe(`${one.nodeName} · 3.1`);
+    const stored = await prisma.node.findUniqueOrThrow({ where: { id: nodeId }, select: { awg3Geometry: true } });
+    expect(three.geometry3).toEqual(stored.awg3Geometry);
+
+    const conf = (
+      await app.inject({ method: 'GET', url: `/sub/${subToken}?format=wgconf&node=${encodeURIComponent(three.nodeName)}` })
+    ).body;
+    const g = stored.awg3Geometry as { headerProtectionKey: string };
+    expect(conf).toContain(`HeaderProtectionKey = ${g.headerProtectionKey}`);
+    expect(conf).toContain('Address = 10.67.67.');
+    const conf1 = (
+      await app.inject({ method: 'GET', url: `/sub/${subToken}?format=wgconf&node=${encodeURIComponent(one.nodeName)}` })
+    ).body;
+    expect(conf1).not.toContain('HeaderProtectionKey');
+    expect(conf1).toContain('Address = 10.66.66.');
+  });
+});
+
 describe('the subnets of the two interfaces', () => {
   it('refuses a 3.1 profile onto a node whose 1.x profile has the same subnet, in machine form', async () => {
     const nodeId = await makeNode();

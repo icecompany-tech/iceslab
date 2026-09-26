@@ -96,6 +96,9 @@ export interface SubscriptionPageData {
      *  the dense key QR is unreliable on screen and paste-the-key is the
      *  robust import path. */
     vpnKey?: string;
+    /** t07-6c: an AmneziaWG 3.1 tunnel. The page says which app version
+     *  takes it: a 1.x client does not connect to a 3.1 interface. */
+    awg3?: boolean;
   }>;
   /**
    * One entry per MTProto node, with its proxy link already built.
@@ -1132,7 +1135,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       figures.push(
         `<figure class="qrf${vpnOn}" data-target="awg:${esc(n.nodeName)}" data-app="vpn">` +
           qrBox({ text: amneziaQrChunkFromKey(n.vpnKey), fallback: n.vpnKey, note: t.qrNeedsJs, ecc: 'low', esc }) +
-          `<figcaption>AmneziaVPN</figcaption>${copyBtn}</figure>`,
+          `<figcaption>AmneziaVPN${n.awg3 ? `<br><small>${esc(t.awg3Client)}</small>` : ''}</figcaption>${copyBtn}</figure>`,
       );
     }
     if (n.conf) {

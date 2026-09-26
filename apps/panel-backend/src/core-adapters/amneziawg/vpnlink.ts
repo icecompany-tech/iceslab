@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import type { AmneziawgClientConfigOpts } from './wgconf.js';
+import { awg3ClientLines, type AmneziawgClientConfigOpts } from './wgconf.js';
 
 /**
  * AmneziaVPN "vpn://" connection-key builder for an AmneziaWG tunnel.
@@ -121,10 +121,22 @@ function qrChunk(compressed: Buffer): string {
   return Buffer.concat([head, compressed]).toString('base64url');
 }
 
+/**
+ * The container of a 3.1 key (t07-6c): `amnezia-awg2`, the app's own
+ * container for AmneziaWG 2.0 and 3.1 (containerUtils.cpp: "amnezia-awg2",
+ * shown as "AmneziaWG", no Legacy label), with the protocol object still under
+ * `awg` (containerTypeToString maps both to "awg"). Its own installer tags
+ * such a server `protocol_version` "3.1" (installController.cpp:207-211,
+ * protocolConstants.h awgV3), which is what the app's settings read as 3.1.
+ */
+const AWG3_CONTAINER = 'amnezia-awg2';
+const AWG3_VERSION = '3.1';
+
 export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   // The tunnel is built from the structured fields below on every platform;
   // the wg-quick text is not in the key (see `config` below).
   const allowed = opts.clientAllowedIps?.length ? opts.clientAllowedIps : ['0.0.0.0/0', '::/0'];
+  if (opts.geometry3) return buildAwg3Link(opts, allowed);
 
   // Obfuscation params as strings (the app serializes them as JSON strings),
   // inside last_config only. CRITICAL: on connect every AmneziaVPN client
@@ -217,5 +229,52 @@ export function buildAmneziaVpnLink(opts: AmneziaVpnLinkOpts): string {
   if (opts.dns?.[0]) envelope.dns1 = opts.dns[0];
   if (opts.dns?.[1]) envelope.dns2 = opts.dns[1];
 
+  return encodeAmneziaVpnKey(envelope);
+}
+
+/**
+ * The 3.1 key, for AmneziaVPN 5.x (t07-6c). Same envelope and the same
+ * connection fields as 1.x; what changes is the container, the version tag,
+ * and the obfuscation, which is the node's geometry key for key.
+ *
+ * Read in amnezia-client 94b51df:
+ *   - every platform builds the tunnel from last_config, and each 3.1 key is
+ *     read there by these names (configKeys.h:97-104; Android Wireguard.kt:
+ *     137-156 takes HeaderProtectionKey as base64, the rest as strings; the
+ *     desktop daemon daemon.cpp:446-468 the same);
+ *   - the app decides "3.1" from any of those keys being present
+ *     (awgProtocolConfig.cpp:23-45), so the label follows from the payload;
+ *   - S3 and S4 are always sent, and there is no choice about it: the node's
+ *     3.1 interface pads with them (floor 12, the header nonce), and a client
+ *     without them never matches a packet size. Whether the 5.x iOS extension
+ *     still has the 4.8.19 ParseError 9 on these keys is for the stand to show
+ *     (a 3.1 client on 4.8 does not connect at all).
+ */
+function buildAwg3Link(opts: AmneziaVpnLinkOpts, allowed: string[]): string {
+  const lastConfig: Record<string, unknown> = {
+    ...Object.fromEntries(awg3ClientLines(opts.geometry3!)),
+    allowed_ips: allowed,
+    client_ip: opts.allowedIp,
+    client_priv_key: opts.privateKey,
+    hostName: opts.host,
+    persistent_keep_alive: String(opts.persistentKeepalive ?? 25),
+    port: opts.port,
+    server_pub_key: opts.serverPublicKey,
+  };
+  if (opts.pskKey) lastConfig.psk_key = opts.pskKey;
+  const awg = {
+    last_config: JSON.stringify(lastConfig),
+    port: String(opts.port),
+    protocol_version: AWG3_VERSION,
+    transport_proto: 'udp',
+  };
+  const envelope: Record<string, unknown> = {
+    containers: [{ awg, container: AWG3_CONTAINER }],
+    defaultContainer: AWG3_CONTAINER,
+    description: opts.description ?? `AmneziaWG ${opts.host}`,
+    hostName: opts.host,
+  };
+  if (opts.dns?.[0]) envelope.dns1 = opts.dns[0];
+  if (opts.dns?.[1]) envelope.dns2 = opts.dns[1];
   return encodeAmneziaVpnKey(envelope);
 }

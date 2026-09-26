@@ -2,6 +2,7 @@ package amneziawg
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -52,6 +53,48 @@ func TestTheGeometryThePanelMintsIsOneTheAgentRenders(t *testing.T) {
 		if strings.Count(blob, "H1 = ") != 1 || strings.Contains(blob, "H1 = 100\n") {
 			t.Errorf("#%d: the 1.x block leaked into the 3.1 file:\n%s", i, blob)
 		}
+	}
+}
+
+// t07-6c: the client .conf the panel hands out for a 3.1 tunnel carries, key
+// for key, what this node's awg3 renders from the same geometry. One key off
+// and the client never handshakes. The golden is the panel's
+// (wgconf.awg3.test.ts), made from the first geometry of the fixture above.
+//
+// ⚠ Reads a file outside the package: `go test -count=1` locally.
+func TestTheClientConfCarriesWhatTheNodeRuns(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "panel-backend", "src", "core-adapters", "amneziawg", "__testdata__", "wgconf-awg3.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := fixtureWire(t).toGeometry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err := g.interfaceLines()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The client's block: after MTU, up to the blank line before [Peer].
+	var client []string
+	in := false
+	for _, l := range strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(l, "MTU = ") {
+			if l != fmt.Sprintf("MTU = %d", g.MTU) {
+				t.Errorf("client %q, node minted for %d", l, g.MTU)
+			}
+			in = true
+			continue
+		}
+		if in && l == "" {
+			break
+		}
+		if in {
+			client = append(client, l)
+		}
+	}
+	if strings.Join(client, "\n") != strings.Join(node, "\n") {
+		t.Errorf("client block:\n%s\nnode awg3 block:\n%s", strings.Join(client, "\n"), strings.Join(node, "\n"))
 	}
 }
 

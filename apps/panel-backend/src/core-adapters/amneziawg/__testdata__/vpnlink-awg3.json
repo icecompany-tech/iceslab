@@ -1,0 +1,52 @@
+{
+  "keyLength": 780,
+  "envelope": {
+    "containers": [
+      {
+        "awg": {
+          "last_config": "{\"Jc\":\"3\",\"Jmin\":\"65\",\"Jmax\":\"146\",\"S1\":\"27\",\"S2\":\"117\",\"S3\":\"49\",\"S4\":\"46\",\"H1\":\"1707668061\",\"H2\":\"1777446261\",\"H3\":\"1485019533\",\"H4\":\"1891020874\",\"I1\":\"<b 0x0001><b 0x000c><b 0x2112a442><r 12><b 0x8022><b 0x0008><rc 8>\",\"I2\":\"<r 196>\",\"HeaderProtectionKey\":\"CzpTkdFCW89NLCYwz9m1dvdo77wiWYFfNgcIsbPOshM=\",\"ContentPaddingAddition\":\"1-55\",\"RekeyAfterTime\":\"113-142\",\"RekeyTimeout\":\"4-7\",\"RejectAfterTime\":\"226-272\",\"KeepaliveTimeout\":\"9-17\",\"MaxHandshakeAttempts\":\"12-19\",\"RandomTrailers\":\"on\",\"allowed_ips\":[\"0.0.0.0/0\",\"::/0\"],\"client_ip\":\"10.66.66.2/32\",\"client_priv_key\":\"cliPriv64\",\"hostName\":\"de.example.com\",\"persistent_keep_alive\":\"25\",\"port\":51830,\"server_pub_key\":\"srvPub64\"}",
+          "port": "51830",
+          "protocol_version": "3.1",
+          "transport_proto": "udp"
+        },
+        "container": "amnezia-awg2"
+      }
+    ],
+    "defaultContainer": "amnezia-awg2",
+    "description": "AmneziaWG de.example.com",
+    "hostName": "de.example.com"
+  },
+  "lastConfig": {
+    "Jc": "3",
+    "Jmin": "65",
+    "Jmax": "146",
+    "S1": "27",
+    "S2": "117",
+    "S3": "49",
+    "S4": "46",
+    "H1": "1707668061",
+    "H2": "1777446261",
+    "H3": "1485019533",
+    "H4": "1891020874",
+    "I1": "<b 0x0001><b 0x000c><b 0x2112a442><r 12><b 0x8022><b 0x0008><rc 8>",
+    "I2": "<r 196>",
+    "HeaderProtectionKey": "CzpTkdFCW89NLCYwz9m1dvdo77wiWYFfNgcIsbPOshM=",
+    "ContentPaddingAddition": "1-55",
+    "RekeyAfterTime": "113-142",
+    "RekeyTimeout": "4-7",
+    "RejectAfterTime": "226-272",
+    "KeepaliveTimeout": "9-17",
+    "MaxHandshakeAttempts": "12-19",
+    "RandomTrailers": "on",
+    "allowed_ips": [
+      "0.0.0.0/0",
+      "::/0"
+    ],
+    "client_ip": "10.66.66.2/32",
+    "client_priv_key": "cliPriv64",
+    "hostName": "de.example.com",
+    "persistent_keep_alive": "25",
+    "port": 51830,
+    "server_pub_key": "srvPub64"
+  }
+}

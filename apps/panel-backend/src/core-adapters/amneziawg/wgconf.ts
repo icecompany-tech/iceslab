@@ -1,3 +1,5 @@
+import type { AwgGeometry3 } from '@iceslab/shared';
+
 /**
  * Client-side wg-quick config builder for AmneziaWG.
  *
@@ -58,6 +60,14 @@ export interface AmneziawgClientConfigOpts {
   i5?: string;
 
   /**
+   * t07-6c: the node's 3.1 geometry, for a 3.1 profile. When set it REPLACES
+   * jc..i5 above: a 3.1 client has to carry exactly what the node's awg3
+   * interface runs (headers as ranges, HeaderProtectionKey, the timings,
+   * RandomTrailers), and the profile's 1.x numbers are not that.
+   */
+  geometry3?: AwgGeometry3;
+
+  /**
    * Routes the client tunnels through the VPN. Default `0.0.0.0/0,::/0`
    * (full tunnel). Pass `[]` for split-tunnel split-by-app on Android, etc.
    */
@@ -73,6 +83,43 @@ export interface AmneziawgClientConfigOpts {
   persistentKeepalive?: number;
 }
 
+/**
+ * The 3.1 client block, key for key what the node's awg3 interface runs
+ * (the agent's Geometry3.interfaceLines), as the 3.1 tools and AmneziaVPN
+ * 5.x read them (amnezia-client configKeys.h:97-104). Values are the
+ * geometry's own strings: a range stays "lo-hi".
+ */
+export function awg3ClientLines(g: AwgGeometry3): [string, string][] {
+  const lines: [string, string][] = [
+    ['Jc', `${g.jc}`],
+    ['Jmin', `${g.jmin}`],
+    ['Jmax', `${g.jmax}`],
+    ['S1', `${g.s1}`],
+    ['S2', `${g.s2}`],
+    ['S3', `${g.s3}`],
+    ['S4', `${g.s4}`],
+    ['H1', g.h1],
+    ['H2', g.h2],
+    ['H3', g.h3],
+    ['H4', g.h4],
+  ];
+  [g.i1, g.i2, g.i3, g.i4, g.i5].forEach((v, i) => {
+    if (v) lines.push([`I${i + 1}`, v]);
+  });
+  return [
+    ...lines,
+    ['HeaderProtectionKey', g.headerProtectionKey],
+    ['ContentPaddingAddition', g.contentPaddingAddition],
+    ['RekeyAfterTime', g.rekeyAfterTime],
+    ['RekeyTimeout', g.rekeyTimeout],
+    ['RejectAfterTime', g.rejectAfterTime],
+    ['KeepaliveTimeout', g.keepaliveTimeout],
+    ['MaxHandshakeAttempts', g.maxHandshakeAttempts],
+    // Fleet-wide constant, the same on the node: both ends must agree.
+    ['RandomTrailers', 'on'],
+  ];
+}
+
 export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): string {
   const allowed = (opts.clientAllowedIps?.length ? opts.clientAllowedIps : ['0.0.0.0/0', '::/0']).join(', ');
   const lines: string[] = [];
@@ -82,6 +129,13 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
   lines.push(`Address = ${opts.allowedIp}`);
   if (opts.dns?.length) {
     lines.push(`DNS = ${opts.dns.join(', ')}`);
+  }
+  if (opts.geometry3) {
+    // The MTU the geometry was minted for: S4 is paid out of it on this end
+    // too, so a larger client MTU fragments full-size packets.
+    lines.push(`MTU = ${opts.geometry3.mtu}`);
+    for (const [k, v] of awg3ClientLines(opts.geometry3)) lines.push(`${k} = ${v}`);
+    return peerBlock(lines, opts, allowed);
   }
   lines.push(`Jc = ${opts.jc}`);
   lines.push(`Jmin = ${opts.jmin}`);
@@ -105,6 +159,10 @@ export function buildAmneziawgClientConfig(opts: AmneziawgClientConfigOpts): str
       lines.push(`I${idx + 1} = ${val}`);
     }
   }
+  return peerBlock(lines, opts, allowed);
+}
+
+function peerBlock(lines: string[], opts: AmneziawgClientConfigOpts, allowed: string): string {
   lines.push('');
   lines.push('[Peer]');
   lines.push(`PublicKey = ${opts.serverPublicKey}`);

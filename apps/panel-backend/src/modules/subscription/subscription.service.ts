@@ -50,6 +50,7 @@ import {
 import { engineSpeaksHysteriaObfs } from '../../core-adapters/hysteria/index.js';
 import { effectiveEngineOf } from '../nodes/node-engines.js';
 import { hysteriaPinFor } from '../nodes/hysteria-tls-shape.js';
+import { ensureAwg3Geometry, readAwg3Geometry } from '../nodes/awg3-geometry.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import { endpointId } from './endpoint-identity.js';
 import { withVlessRouteTag } from './formats/xrayjson.js';
@@ -679,7 +680,9 @@ export async function generateSubscription(
               // say. Two cores speaking one protocol do not speak the same
               // dialect of it, and a link built for the wrong one does not fail
               // loudly, it just never connects.
-              profile: { select: { id: true, protocol: true, engine: true, config: true } },
+              // awgProtocol (t07-6c): a 3.1 profile is handed out as the node's
+              // 3.1 interface, from the node's geometry below.
+              profile: { select: { id: true, protocol: true, engine: true, config: true, awgProtocol: true } },
               node: {
                 select: {
                   id: true,
@@ -693,6 +696,8 @@ export async function generateSubscription(
                   // E30a: the self-signed pair native hysteria serves on a node
                   // addressed by IP; its certificate is what clients pin.
                   hysteriaTls: true,
+                  // t07-6c: the node's 3.1 geometry, which a 3.1 key carries.
+                  awg3Geometry: true,
                   createdAt: true,
                   // Capacity hint, used as the WEIGHT when picking which
                   // entries of a pool a user gets: a node with twice the cap
@@ -1238,12 +1243,24 @@ export async function generateSubscription(
         );
         continue;
       }
+      // t07-6c: a 3.1 profile is the node's 3.1 interface, whose obfuscation
+      // is the node's geometry, not the profile's numbers. A node that has none
+      // yet has never been pushed a 3.1 inbound; it gets one minted here, the
+      // same one the push will then carry (ensureAwg3Geometry is atomic).
+      const is3 = b.profile.awgProtocol === 3;
+      const geometry3 = is3
+        ? (readAwg3Geometry(b.node.awg3Geometry) ?? (await ensureAwg3Geometry(b.node.id)))
+        : null;
+      if (is3 && !geometry3) continue;
       // Slice 27: peer is keyed on profileId (one allocation per logical
       // AmneziaWG profile, shared across all nodes the profile is bound to).
       const peer = await allocatePeer(ib.profileId, user.id, cfg.subnet);
       endpoints.push({
         protocol: 'amneziawg',
-        nodeName,
+        // A 3.1 endpoint is told apart by name: a node serving both
+        // generations has two AmneziaWG tunnels, and the page and `?node=`
+        // pick a tunnel by this name. It also tells a user which app it needs.
+        nodeName: is3 ? `${nodeName} · 3.1` : nodeName,
         host,
         port,
         ...hostMeta,
@@ -1266,6 +1283,7 @@ export async function generateSubscription(
         i3: obf.i3 ?? '',
         i4: obf.i4 ?? '',
         i5: obf.i5 ?? '',
+        ...(geometry3 ? { geometry3 } : {}),
         // No standardised URI format for AmneziaWG; clients fetch ?format=wgconf.
         uri: '',
       });

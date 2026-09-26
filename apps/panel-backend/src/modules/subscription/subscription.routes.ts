@@ -541,6 +541,8 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
               // dense key QR is unreliable on screen and paste-the-key is the
               // robust path.
               vpnKey: vpn || undefined,
+              // t07-6c: the page names the app version a 3.1 tunnel needs.
+              ...((e as { geometry3?: unknown }).geometry3 ? { awg3: true } : {}),
             };
           });
         /**

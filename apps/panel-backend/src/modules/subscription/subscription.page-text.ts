@@ -103,6 +103,9 @@ export interface Labels {
    *  JavaScript off the reader gets the link itself and this one line, so the
    *  empty square does not read as a broken page. */
   qrNeedsJs: string;
+  /** Under the AmneziaVPN code of a 3.1 tunnel (t07-6c): the app version
+   *  that takes it. An older app imports the key and never connects. */
+  awg3Client: string;
   setup: string;
   scanTitle: string;
   /** Said BEFORE the code, not after: a person with three servers must learn
@@ -278,6 +281,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copied: 'Copied',
     copyKey: 'Copy key',
     qrNeedsJs: 'The QR is drawn in the browser: turn JavaScript on, or copy the text above.',
+    awg3Client: 'AmneziaWG 3.1: needs AmneziaVPN 5.0.1.5 or newer.',
     setup: 'Set up',
     scanTitle: 'AmneziaWG keys',
     oneTunnel: 'One key is one tunnel to one server, not the whole subscription.',
@@ -457,6 +461,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copied: 'Скопировано',
     copyKey: 'Скопировать ключ',
     qrNeedsJs: 'QR рисуется в браузере: включите JavaScript или скопируйте текст выше.',
+    awg3Client: 'AmneziaWG 3.1: нужен AmneziaVPN 5.0.1.5 или новее.',
     setup: 'Установка',
     scanTitle: 'Ключи AmneziaWG',
     oneTunnel: 'Один ключ это один туннель до одного сервера, а не вся подписка.',
