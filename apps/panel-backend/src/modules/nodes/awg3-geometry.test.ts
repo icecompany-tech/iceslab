@@ -37,6 +37,13 @@ function seeded(seed: number): GeometryRandom {
 
 const valid = (): AwgGeometry3 => mintAwg3Geometry(seeded(7));
 
+/** A header protection key that says what it is. Exactly 32 bytes. */
+function fixtureHpk(n: number): string {
+  const s = `iceslab-awg3-fixture-hpk-${String(n).padStart(2, '0')}-0000`;
+  expect(Buffer.byteLength(s)).toBe(32);
+  return Buffer.from(s).toString('base64');
+}
+
 describe('minting', () => {
   it('every draw passes the table', () => {
     for (let i = 0; i < 500; i++) {
@@ -63,7 +70,15 @@ describe('minting', () => {
   });
 
   it('the fixture the agent reads is what this minter draws', () => {
-    const minted = Array.from({ length: 8 }, (_, i) => mintAwg3Geometry(seeded(1000 + i)));
+    // The key is replaced by one that SAYS it is a fixture: 32 bytes, base64 of
+    // "iceslab-awg3-fixture-hpk-<nn>-0000". A drawn one is indistinguishable
+    // from a live key, and the secrets scan (.gitleaks.toml) flagged every one
+    // (CI 36225534591). The table passes it all the same: any 32 bytes are a key.
+    const minted = Array.from({ length: 8 }, (_, i) => ({
+      ...mintAwg3Geometry(seeded(1000 + i)),
+      headerProtectionKey: fixtureHpk(i),
+    }));
+    for (const g of minted) expect(awg3GeometryViolations(g)).toEqual([]);
     if (process.env.UPDATE_AWG3_FIXTURE === '1') writeFileSync(FIXTURE, `${JSON.stringify(minted, null, 2)}\n`);
     expect(JSON.parse(readFileSync(FIXTURE, 'utf8'))).toEqual(minted);
   });

@@ -123,4 +123,23 @@ regexes = [
   # words, so a real secret pasted into ci.yml is still caught. The scan reads
   # history, where df28c4c holds it, so this line stays for good.
   '''geo-dlc-[0-9a-f]{64}-sing-[0-9a-f]{64}''',
+  # The AmneziaWG 3.1 fixtures (amneziawg/testdata/geometry3-minted.json, the
+  # panel's __testdata__/vpnlink-awg3*.json and wgconf-awg3.conf, t07-6): each
+  # geometry carries a HeaderProtectionKey, 32 bytes base64, key-shaped because
+  # the agent's table refuses anything else. They say what they are: base64 of
+  # "iceslab-awg3-fixture-hpk-<nn>-0000". One prefix covers them, and only
+  # them: base64 of "iceslab-awg3-fixture-hpk", which a real key does not start
+  # with.
+  '''aWNlc2xhYi1hd2czLWZpeHR1cmUtaHBr''',
+  # History, guarding nothing: the eight keys the minter drew for that fixture
+  # before it was taught to say what it is (92b471a, the goldens of a4ad8bc
+  # carry #0). The scan reads history, so they stay allowed for good.
+  '''CzpTkdFCW89NLCYwz9m1dvdo77wiWYFfNgcIsbPOshM=''',
+  '''rY91yPmHlEevgxF4zICWgc3SbcIRgWkSQE6qAv1dmvM=''',
+  '''WTMFZA1a3LOWeHArLn9F41xeh3TaS7O6k2\+KEIzd1nQ=''',
+  '''/iplKlhQ4o/F\+y2Lrt7oBPynSuFyk1wPfgnvhUfE0Qg=''',
+  '''FTGBajpdYYgVuJnlrrFW0xkCrgwuOz9R7u31tXpEdek=''',
+  '''HTmCZ5CiQzsSYyxTi4E5\+\+iyaBf7fiUYZZ\+eL7FrH2c=''',
+  '''mRiVJ/GPtJW3K7gDFf\+WDwvgLcQHQPzZ8e6/mnTr5zY=''',
+  '''3ueLgucjhP\+q4AuhvRGy7iWu/3IHYN25HcwBgHhVqYM=''',
 ]
