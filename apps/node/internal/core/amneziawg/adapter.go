@@ -45,6 +45,13 @@ type Config struct {
 	// kernel-module bug; without a timeout the panel queue would stall.
 	SyncTimeout time.Duration
 
+	// ModuleVersion and ModuleSrcVersion: the module bootstrap-amneziawg.sh
+	// built, from its env block (AMNEZIAWG_MODULE_VERSION,
+	// AMNEZIAWG_MODULE_SRCVERSION). See CoreVersion. Empty on a node installed
+	// before Ф7.1.
+	ModuleVersion    string
+	ModuleSrcVersion string
+
 	// runCmd is an injection point for tests. nil → real exec.CommandContext.
 	runCmd func(ctx context.Context, name string, args ...string) ([]byte, error)
 }
@@ -863,16 +870,32 @@ func (a *Adapter) ToolsVersion() string {
 // the one number an operator needs off this card. The tools version is not
 // folded into this string; two numbers in one field are one the panel cannot
 // compare. Empty when the module is not loaded.
+//
+// Ф7.1: every generation's module calls itself 1.0.0 there (Ф7.0 on se-02), so
+// the version the bootstrap INSTALLED wins, from AMNEZIAWG_MODULE_VERSION, but
+// only while the loaded module is that build: its srcversion has to match
+// AMNEZIAWG_MODULE_SRCVERSION. A module swapped since (a reinstall by hand, a
+// build that did not load) falls back to what /sys/module says, which is a
+// number the panel will not mistake for the pin.
 func (a *Adapter) CoreVersion() string {
 	b, err := os.ReadFile(moduleVersionPath)
 	if err != nil {
 		return ""
 	}
+	if a.cfg.ModuleVersion != "" && a.cfg.ModuleSrcVersion != "" {
+		if src, err := os.ReadFile(moduleSrcVersionPath); err == nil && strings.TrimSpace(string(src)) == a.cfg.ModuleSrcVersion {
+			return a.cfg.ModuleVersion
+		}
+	}
 	return strings.TrimSpace(string(b))
 }
 
-// moduleVersionPath is a variable so the test can point it at a file.
-var moduleVersionPath = "/sys/module/amneziawg/version"
+// moduleVersionPath and moduleSrcVersionPath are variables so the tests can
+// point them at files.
+var (
+	moduleVersionPath    = "/sys/module/amneziawg/version"
+	moduleSrcVersionPath = "/sys/module/amneziawg/srcversion"
+)
 
 // kernelModuleLoaded reports whether the amneziawg kernel module is loaded.
 //

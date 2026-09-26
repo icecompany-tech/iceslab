@@ -119,9 +119,8 @@ const XRAY_MLKEM =
   'cleanly. Read from source on 2026-09-23, no fix upstream (SagerNet/sing-box #4520).';
 
 const AWG_GENERATION =
-  'Another AmneziaWG protocol generation than the fleet runs (1.x). Moving to it is a ' +
-  're-issue of every config already handed out, and clients older than 4.8.12.9 stop ' +
-  'connecting: a decision about the operator\'s people, never an upgrade.';
+  'The AmneziaWG 2.x line: neither the 1.x generation the fleet\'s clients speak nor the 3.1 ' +
+  'module that carries both (Ф7.0 on se-02, 26.09). Never measured here, so never installed.';
 
 export const CORE_VERSIONS: Record<CoreComponent, CoreVersionEntry> = {
   xray: {
@@ -214,36 +213,68 @@ export const CORE_VERSIONS: Record<CoreComponent, CoreVersionEntry> = {
     knownBad: [],
   },
 
+  /**
+   * Ф7.1, owner's decision 23.09 (both generations, the generation a property
+   * of the node) and the Ф7.0 measurement on se-02 (docs/plan/f70-results.md):
+   * the 3.1 module carries a 1.x interface and a 3.1 interface side by side,
+   * with every 1.x client of the fleet connecting unchanged. So a node gets the
+   * 3.1 module and the 3.1 tools, and its existing 1.x interface keeps working
+   * as rendered today. The 1.x releases stay listed: the nodes that carry them
+   * read as drift, not as broken, until their bootstrap is rerun.
+   *
+   * ⚠ Both modules call themselves 1.0.0 in /sys/module and modinfo; the
+   * version on the card is the one the bootstrap installed, reported by the
+   * agent only while the loaded module is that build (AMNEZIAWG_MODULE_VERSION
+   * with its srcversion, bootstrap-amneziawg.sh).
+   */
   'amneziawg-module': {
     reportedBy: { engine: 'amneziawg', field: 'version' },
-    pinned: '1.0.20260611',
+    pinned: '3.1.20260906',
     releases: [
+      {
+        version: '3.1.20260906',
+        tag: 'v3.1.20260906',
+        commit: '4569c4c67f3a57414969260cafbbd04694fbaae0',
+        why:
+          'Carries 1.x and 3.1 interfaces side by side, both with zero negative controls ' +
+          '(Ф7.0, se-02, 6.8.0-48, 26.09).',
+        checkedAt: '2026-09-26',
+      },
       {
         version: '1.0.20260611',
         tag: 'v1.0.20260611',
         commit: '2a6e1a02ac024f54a23e18f894a279b7f870b8fb',
-        why: 'What ru-01 and se-01 carry (read 2026-09-21).',
+        why: 'What ru-01 and se-01 carried before Ф7.1 (read 2026-09-21); 1.x only.',
         checkedAt: '2026-09-21',
       },
     ],
-    knownBad: [{ from: '2', reason: AWG_GENERATION }],
+    knownBad: [{ from: '2', before: '3', reason: AWG_GENERATION }],
   },
 
   'amneziawg-tools': {
     reportedBy: { engine: 'amneziawg', field: 'toolsVersion' },
-    pinned: '1.0.20260618-2',
+    pinned: '3.1.20260812',
     releases: [
+      {
+        version: '3.1.20260812',
+        tag: 'v3.1.20260812',
+        commit: 'ee0f0a9aa34ff0a0da4b3433b9512781cfe02843',
+        why:
+          'Configures the 1.x interface of the 3.1 module without loss, and the 3.1 one ' +
+          '(Ф7.0, se-02, 26.09). The 1.x tools misread a 1.x module\'s H values on display.',
+        checkedAt: '2026-09-26',
+      },
       {
         // The "-2" is part of the upstream TAG, not packaging: v1.0.20260618 and
         // v1.0.20260618-2 are different commits.
         version: '1.0.20260618-2',
         tag: 'v1.0.20260618-2',
         commit: '61e741780e8465a67a7d7fb6cffe14a8a15d624a',
-        why: 'What ru-01 and se-01 carry (read 2026-09-21).',
+        why: 'What ru-01 and se-01 carried before Ф7.1 (read 2026-09-21).',
         checkedAt: '2026-09-21',
       },
     ],
-    knownBad: [{ from: '2', reason: AWG_GENERATION }],
+    knownBad: [{ from: '2', before: '3', reason: AWG_GENERATION }],
   },
 
   mtg: {

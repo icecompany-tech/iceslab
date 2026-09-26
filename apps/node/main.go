@@ -283,6 +283,10 @@ func buildAdapters(logger *slog.Logger) []core.CoreAdapter {
 			AwgBin:       awgBinPath,
 			AwgQuickBin:  awgQuickBinPath,
 			SystemctlBin: getenv("SYSTEMCTL_BIN", "/usr/bin/systemctl"),
+			// Ф7.1: the module the bootstrap built, honoured only while it is
+			// the loaded one (amneziawg CoreVersion).
+			ModuleVersion:    os.Getenv("AMNEZIAWG_MODULE_VERSION"),
+			ModuleSrcVersion: os.Getenv("AMNEZIAWG_MODULE_SRCVERSION"),
 			Inbound: amneziawg.InboundConfig{
 				Interface: getenv("AMNEZIAWG_INTERFACE", "awg0"),
 			},

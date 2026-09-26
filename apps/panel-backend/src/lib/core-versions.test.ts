@@ -154,13 +154,19 @@ describe('judgeCoreVersion', () => {
     ['xray', null, 'unknown'],
     ['xray', undefined, 'unknown'],
     ['xray', 'd2758a0', 'unknown'],
-    ['amneziawg-module', '1.0.20260611', 'intended'],
+    // Ф7.1: the 3.1 module and tools are the pin; a 1.x node reads as drift
+    // (behind the pin, not broken) until its bootstrap is rerun, and the 2.x
+    // line that was never measured stays known-bad.
+    ['amneziawg-module', '3.1.20260906', 'intended'],
+    ['amneziawg-module', '1.0.20260611', 'drift'],
+    // What /sys says for EVERY generation: not the pin, so never "intended".
     ['amneziawg-module', '1.0.0', 'drift'],
-    ['amneziawg-module', '3.1.20260906', 'known-bad'],
-    ['amneziawg-tools', '1.0.20260618-2', 'intended'],
+    ['amneziawg-module', '2.0.1', 'known-bad'],
+    ['amneziawg-tools', '3.1.20260812', 'intended'],
+    ['amneziawg-tools', '1.0.20260618-2', 'drift'],
     // The bare tag is another commit, not a worse version: drift, never bad.
     ['amneziawg-tools', '1.0.20260618', 'drift'],
-    ['amneziawg-tools', '3.1.20260812', 'known-bad'],
+    ['amneziawg-tools', '2.0.0', 'known-bad'],
     ['caddy-naive', '2.8.4', 'unpinned'],
     ['singbox', '1.13.14', 'intended'],
     ['hysteria', '2.12.3', 'intended'],

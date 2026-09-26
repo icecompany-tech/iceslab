@@ -56,12 +56,15 @@ func TestBootstrapPinsTheProtocolGeneration(t *testing.T) {
 			t.Fatalf("%s is not pinned at all, or the shape of the line changed; "+
 				"this test is checking nothing. Fix the pattern, do not delete the test.", name)
 		}
-		if !strings.HasPrefix(m[1], "v1.") {
-			t.Errorf("%s is %q, which is not the protocol generation the fleet runs (v1.x).\n"+
+		// Ф7.1 (owner's decision 23.09, measured on se-02 26.09): the 3.1
+		// module and tools, which carry the fleet's 1.x interface unchanged
+		// beside a 3.1 one. Held to 3.1 here, so the next move is a decision
+		// too and not a refreshed pin.
+		if !strings.HasPrefix(m[1], "v3.1.") {
+			t.Errorf("%s is %q, which is not the generation this node line installs (v3.1.x).\n"+
 				"If the move to another generation is deliberate, it is a decision about the\n"+
-				"operator's subscribers: every AmneziaWG config already issued stops working,\n"+
-				"and clients older than 4.8.12.9 cannot connect at all. Change this test in the\n"+
-				"same commit that carries that decision, and not before.", name, m[1])
+				"operator's subscribers, measured first (docs/plan/f70-results.md): change this\n"+
+				"test in the same commit that carries that decision, and not before.", name, m[1])
 		}
 	}
 }
