@@ -158,9 +158,13 @@ export function pageScript(o: PageScriptOpts): string {
         });
       }
     }
-    // Platform selector.
+    // Platform selector. Its rows are taken from INSIDE its own picker: the
+    // AmneziaWG server chooser above is the same control down to the class
+    // (.platform__item), and a page-wide query took its rows in too (E43,
+    // stand 26.09). Picking a server then ran show() with no platform: every
+    // panel hid, and the platform button took the server's name.
     var picker = document.querySelector('[data-platform-picker]');
-    var items = [].slice.call(document.querySelectorAll('.platform__item'));
+    var items = picker ? [].slice.call(picker.querySelectorAll('.platform__item')) : [];
     var panels = [].slice.call(document.querySelectorAll('.panel'));
     var pickerBtn = picker && picker.querySelector('[data-platform-btn]');
     function show(p) {
@@ -314,7 +318,8 @@ export function pageScript(o: PageScriptOpts): string {
     // сервер уже открыл, но отметки в блоке конфигов ставит этот же вызов, и
     // без него читатель с неузнанным UA не увидел бы ни одной точки.
     var known = guess && items.some(function (it) { return it.getAttribute('data-pick') === guess; });
-    var first = items[0] && items[0].getAttribute('data-pick');
+    // One platform, no picker: the panel the server opened is the platform.
+    var first = items[0] ? items[0].getAttribute('data-pick') : panels[0] && panels[0].getAttribute('data-platform');
     if (known) show(guess);
     else if (first) show(first);
   })();
