@@ -214,13 +214,20 @@ describe('what a PUT does not mention', () => {
       directions: [{ id: c.directions[0].id, countryCode: 'NL' }],
     });
     expect(after.directions[0].nodeIds).toEqual([nl]);
-    // An explicit empty pool is still a choice, and still allowed: "the tag
-    // exists, the machine does not" is a shape v4 can express on purpose.
-    const emptied = await put(c.id, {
-      positions: [{ position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'vless' }],
-      directions: [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [] }],
+    // An explicit empty pool is a choice, and since phase 10 a refused one
+    // (ARCH 26.09): a direction with neither nodes nor an outbound is
+    // DIRECTION_EMPTY, and the stored pool stays.
+    const emptied = await app.inject({
+      method: 'PUT',
+      url: `/api/cascades/${c.id}`,
+      headers: auth(),
+      payload: {
+        positions: [{ position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'vless' }],
+        directions: [{ id: c.directions[0].id, countryCode: 'NL', nodeIds: [] }],
+      },
     });
-    expect(emptied.directions[0].nodeIds).toEqual([]);
+    expect(emptied.statusCode, emptied.body).toBe(400);
+    expect(JSON.parse(emptied.body)).toMatchObject({ error: 'DIRECTION_EMPTY', directionTag: 1, directionIndex: 0 });
   });
 
   it('keeps the country of a direction that was not asked about', async () => {

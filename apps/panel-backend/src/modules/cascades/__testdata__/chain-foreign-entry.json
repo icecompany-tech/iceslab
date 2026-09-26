@@ -1,0 +1,209 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "socks",
+      "tag": "in-d0",
+      "listen": "127.0.0.1",
+      "listen_port": 26000,
+      "users": [
+        {
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    },
+    {
+      "type": "socks",
+      "tag": "in-d1",
+      "listen": "127.0.0.1",
+      "listen_port": 26001,
+      "users": [
+        {
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    },
+    {
+      "type": "socks",
+      "tag": "in-d2",
+      "listen": "127.0.0.1",
+      "listen_port": 26002,
+      "users": [
+        {
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    },
+    {
+      "type": "socks",
+      "tag": "in-d3",
+      "listen": "127.0.0.1",
+      "listen_port": 26003,
+      "users": [
+        {
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    },
+    {
+      "type": "socks",
+      "tag": "in-d4",
+      "listen": "127.0.0.1",
+      "listen_port": 26004,
+      "users": [
+        {
+          "username": "p0",
+          "password": "chain-socks-fixture-password-0000"
+        }
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "out-d1",
+      "server": "nl-1.example.com",
+      "server_port": 24000,
+      "uuid": "00000000-0000-4000-8000-000000000002",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.apple.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
+          "short_id": "0123abcd"
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "out-d2",
+      "server": "ch.example.net",
+      "server_port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000020",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.apple.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
+          "short_id": "abcd"
+        }
+      }
+    },
+    {
+      "type": "socks",
+      "tag": "out-d3",
+      "server": "203.0.113.7",
+      "server_port": 1080,
+      "version": "5",
+      "username": "op",
+      "password": "chain-socks-fixture-password-0000"
+    },
+    {
+      "type": "vless",
+      "tag": "out-d4",
+      "server": "tr.example.net",
+      "server_port": 8443,
+      "uuid": "00000000-0000-4000-8000-000000000021",
+      "tls": {
+        "enabled": true,
+        "server_name": "tr.example.net",
+        "alpn": [
+          "h2"
+        ]
+      }
+    },
+    {
+      "type": "urltest",
+      "tag": "out-d0",
+      "outbounds": [
+        "out-d1",
+        "out-d2",
+        "out-d3",
+        "out-d4"
+      ],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "tolerance": 50
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "inbound": [
+          "in-d0"
+        ],
+        "action": "route",
+        "outbound": "out-d0"
+      },
+      {
+        "inbound": [
+          "in-d1"
+        ],
+        "action": "route",
+        "outbound": "out-d1"
+      },
+      {
+        "inbound": [
+          "in-d2"
+        ],
+        "action": "route",
+        "outbound": "out-d2"
+      },
+      {
+        "inbound": [
+          "in-d3"
+        ],
+        "action": "route",
+        "outbound": "out-d3"
+      },
+      {
+        "inbound": [
+          "in-d4"
+        ],
+        "action": "route",
+        "outbound": "out-d4"
+      }
+    ]
+  }
+}

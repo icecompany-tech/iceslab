@@ -76,9 +76,12 @@ export interface CascadeDirectionDto {
    *  accepted as input, only reported. */
   tag: number;
   countryCode: string | null;
-  /** May be empty: a direction can exist with its tag reserved and no node
-   *  behind it yet. Such a direction is simply not served. */
+  /** Empty exactly when the direction stands on a named outbound (phase 10).
+   *  A stored row written before that may still be empty and is not served. */
   nodeIds: string[];
+  /** Phase 10: the named outbound this direction goes out through, in place
+   *  of the pool, or null. Always present, like the leg keys below. */
+  outboundId: string | null;
   /**
    * The cell of the LAST leg, the one reaching this direction (phase 5).
    *
@@ -124,6 +127,7 @@ export const CASCADE_DTO_FIELDS = [
   'directions[].linkProtocol',
   'directions[].linkParams',
   'directions[].linkPort',
+  'directions[].outboundId',
 ] as const;
 
 export interface CascadeDto {
@@ -202,6 +206,7 @@ interface CascadeRow {
     /** Whatever jsonb holds. Read, not trusted: see `legParams`. */
     linkParams?: unknown;
     linkPort?: number | null;
+    outboundId?: string | null;
     nodes: { nodeId: string }[];
   }[];
   /** Phase 8. Optional on the ROW so a narrow select still type-checks. */
@@ -290,6 +295,7 @@ export function mapCascade(c: CascadeRow): CascadeDto {
         tag: d.tag,
         countryCode: d.countryCode,
         nodeIds: d.nodes.map((n) => n.nodeId),
+        outboundId: d.outboundId ?? null,
         // `?? null` and not `?.`: a row selected without these columns must
         // answer the same three keys as a row that has them and holds nothing,
         // because the screen distinguishes "no value" from "no such field" and

@@ -56,12 +56,16 @@ export function storedLinkParams(raw: unknown): LegParams | null {
 export interface StoredDirection {
   id: string;
   nodes: { nodeId: string }[];
+  /** Phase 10. Optional so a caller that does not match by it need not select it. */
+  outboundId?: string | null;
 }
 
 /** A direction as it arrived, with every field allowed to be absent. */
 export interface IncomingDirection {
   id?: string;
   nodeIds?: string[];
+  /** Phase 10: the named outbound in place of a pool. */
+  outboundId?: string | null;
   countryCode?: string | null;
   linkProtocol?: string | null;
   linkParams?: LegParams | null;
@@ -70,7 +74,11 @@ export interface IncomingDirection {
 /** The same direction with nothing left unsaid. */
 export interface ResolvedDirection {
   id?: string;
+  /** The tag of the stored direction this one IS, when there is one. Read from
+   *  storage, never from the request; only for naming it in a refusal. */
+  tag?: number;
   nodeIds: string[];
+  outboundId?: string | null;
   countryCode?: string | null;
   linkProtocol?: string | null;
   linkParams?: LegParams | null;
@@ -86,6 +94,10 @@ export interface ResolvedDirection {
  *     a stored direction has to be recognised anyway. Without it every save
  *     would burn fresh tags, and a tag rides in the clients' UUIDs: the country
  *     they exit through would move under them.
+ *
+ *   - by OUTBOUND, phase 10, for a direction with no pool that stands on a
+ *     named outbound: the outbound is to it what the pool is to the others,
+ *     and one cascade cannot stand two directions on one outbound.
  *
  * Each stored direction is claimed at most once, so two incoming directions
  * with the same pool cannot both become the same row.
@@ -112,6 +124,9 @@ export function matchStoredDirections<S extends StoredDirection>(
           s.nodes.length === want.size &&
           s.nodes.every((n) => want.has(n.nodeId)),
       );
+    }
+    if (!match && d.outboundId && !(d.nodeIds && d.nodeIds.length > 0)) {
+      match = stored.find((s) => unclaimed.has(s.id) && s.nodes.length === 0 && s.outboundId === d.outboundId);
     }
     if (match && unclaimed.has(match.id)) {
       unclaimed.delete(match.id);
@@ -152,13 +167,19 @@ export function resolveDirections<S extends StoredDirection>(
   const matches = matchStoredDirections(stored, incoming);
   return incoming.map((d, i) => {
     const match = matches[i];
-    const kept = match ? read(match) : {};
+    const kept: Omit<ResolvedDirection, 'id' | 'nodeIds'> = match ? read(match) : {};
     return {
       // Carried forward so the writer matches the same row exactly rather than
       // by pool: after this merge the pool may be the stored one, and matching
       // on it twice by two rules is how the two could disagree.
       ...(match ? { id: match.id } : d.id ? { id: d.id } : {}),
+      ...(kept.tag !== undefined ? { tag: kept.tag } : {}),
       nodeIds: d.nodeIds ?? match?.nodes.map((n) => n.nodeId) ?? [],
+      // Phase 10, the same rule: a save that does not mention the outbound
+      // leaves the direction on it. Moving a direction from an outbound to a
+      // pool sends `outboundId: null` beside the pool, or the pair is refused
+      // as both (DIRECTION_OUTBOUND_AND_NODES) rather than guessed at.
+      outboundId: 'outboundId' in d ? (d.outboundId ?? null) : (kept.outboundId ?? null),
       countryCode: 'countryCode' in d ? d.countryCode : kept.countryCode,
       linkProtocol: 'linkProtocol' in d ? d.linkProtocol : kept.linkProtocol,
       linkParams: 'linkParams' in d ? d.linkParams : kept.linkParams,

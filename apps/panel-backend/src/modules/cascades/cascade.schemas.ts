@@ -172,9 +172,9 @@ export const CascadeDirectionSchema = z.object({
   tag: z.number().int().optional(),
   countryCode: z.string().length(2).nullish(),
   /**
-   * May be EMPTY: v4 can express "the tag exists, the node behind it does not
-   * yet". Serving skips such a direction until it has a node. The old model
-   * could not express this, because a direction WAS a node.
+   * Empty only beside an `outboundId` (phase 10): a direction with neither a
+   * pool nor an outbound is refused, DIRECTION_EMPTY (ARCH 26.09). It used to
+   * be allowed as "the tag exists, the node does not yet".
    *
    * ⚠ And it may be ABSENT, which is a different thing: see the rule below.
    * `.default([])` used to stand here, and a default is exactly what destroys
@@ -183,6 +183,15 @@ export const CascadeDirectionSchema = z.object({
    * arrive as an empty one and the direction would stop serving.
    */
   nodeIds: z.array(z.uuid()).optional(),
+  /**
+   * Phase 10: the named outbound this direction goes out through, IN PLACE of
+   * a pool. Exactly one of the two: both is DIRECTION_OUTBOUND_AND_NODES,
+   * neither is DIRECTION_EMPTY. Three values like every field here: absent
+   * keeps what is stored, null takes the direction off its outbound, an id
+   * puts it on one. Switching a direction between the two means sending both
+   * keys, the one being left as null or [].
+   */
+  outboundId: z.uuid().nullish(),
   /**
    * The cell of the LAST leg, the one that reaches this direction (phase 5).
    *

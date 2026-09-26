@@ -64,6 +64,18 @@ export interface ChainLegOut {
   via?: string;
 }
 
+/**
+ * A way out through a server that is not ours, phase 10: a named outbound a
+ * direction stands on, dialled by the node of the last position. `config` is
+ * the outbound's as the panel validated it (named-outbounds.schemas.ts).
+ */
+export interface ChainForeignOut {
+  /** Direction this outbound serves. */
+  tag: number;
+  type: 'vless' | 'socks';
+  config: Record<string, unknown>;
+}
+
 /** The leg this node RECEIVES on, with one credential per direction. */
 export interface ChainLegIn {
   cred: LinkCred;
@@ -94,6 +106,9 @@ export interface ChainRenderInput {
   directionTags?: number[];
   /** Legs out of here, one per direction. Empty on an exit. */
   out?: ChainLegOut[];
+  /** Phase 10: named outbounds this node dials, one per direction standing on
+   *  one. Only the last position has any. */
+  foreign?: ChainForeignOut[];
   /** The leg arriving here. Absent on an entry. */
   in?: ChainLegIn;
   /**
@@ -316,6 +331,51 @@ function ssOutbound(
     method: cred.method,
     password: cred.psk,
   };
+}
+
+/**
+ * A named outbound as a sing-box outbound, phase 10.
+ *
+ * vless over raw TCP only and socks5 only, the set the panel accepts. The
+ * fields map one to one from the stored config, and nothing is added that the
+ * operator did not write, with one exception: a REALITY client without a uTLS
+ * fingerprint is refused by sing-box 1.13.14 ("uTLS is required by reality
+ * client"), so an unset fingerprint there is `firefox`, the one the legs wear.
+ */
+function foreignOutbound(f: ChainForeignOut): Json {
+  const c = f.config;
+  if (f.type === 'socks') {
+    return {
+      type: 'socks',
+      tag: outTag(f.tag),
+      server: c.server,
+      server_port: c.port,
+      version: '5',
+      ...(typeof c.username === 'string' ? { username: c.username, password: c.password } : {}),
+    };
+  }
+  const out: Json = {
+    type: 'vless',
+    tag: outTag(f.tag),
+    server: c.server,
+    server_port: c.port,
+    uuid: c.uuid,
+    ...(typeof c.flow === 'string' ? { flow: c.flow } : {}),
+  };
+  if (c.security === 'tls' || c.security === 'reality') {
+    const reality = c.security === 'reality';
+    const fingerprint = typeof c.fingerprint === 'string' ? c.fingerprint : reality ? 'firefox' : undefined;
+    out.tls = {
+      enabled: true,
+      ...(typeof c.sni === 'string' ? { server_name: c.sni } : {}),
+      ...(Array.isArray(c.alpn) && c.alpn.length > 0 ? { alpn: c.alpn } : {}),
+      ...(fingerprint ? { utls: { enabled: true, fingerprint } } : {}),
+      ...(reality
+        ? { reality: { enabled: true, public_key: c.realityPublicKey, short_id: c.realityShortId ?? '' } }
+        : {}),
+    };
+  }
+  return out;
 }
 
 /**
@@ -613,6 +673,16 @@ export function renderChainConfig(input: ChainRenderInput): Json {
     legs.forEach((leg, i) => outbounds.push(renderLeg(legTags[i]!, leg)));
     outbounds.push(urltestOutbound(outTag(tag), legTags));
   }
+  // Phase 10: a named outbound is a way out like a leg, one per direction and
+  // never pooled, so Auto spans it with the rest. Only vless and socks reach
+  // here (ARCH 26.09): the fastest way out must not turn out to be this node's
+  // own country or a drop.
+  for (const f of [...(input.foreign ?? [])].sort((a, b) => a.tag - b.tag)) {
+    if (legsByDirection.has(f.tag)) continue;
+    outbounds.push(foreignOutbound(f));
+    directionsWithLegs.push(f.tag);
+  }
+  directionsWithLegs.sort((a, b) => a - b);
 
   // The Auto line, when the entry offers one. It spans the ways out rather than
   // the raw legs, so a pooled direction is entered through its own group and
@@ -648,10 +718,18 @@ export function renderChainConfig(input: ChainRenderInput): Json {
     // A transit sees links, not users: which credential the traffic arrived on
     // is the only thing that says which way out it was headed for.
     for (const client of input.in.clients) {
-      const leg = (input.out ?? []).find((l) => l.tag === client.tag);
+      const leg =
+        (input.out ?? []).find((l) => l.tag === client.tag) ??
+        (input.foreign ?? []).find((f) => f.tag === client.tag);
       if (!leg) continue;
       rules.push({
-        user: [chainLinkUser(client.tag)],
+        // ⚠ `auth_user`, the name the vless listener gives the arriving user.
+        // It was `user`, which in sing-box is the SYSTEM user of a local
+        // process (Linux only): it never matched, `check` accepted it, and
+        // every direction left a transit through the first outbound, route's
+        // default. Found by the live transit test of phase 10 (26.09): the
+        // request for direction 2 came out of direction 1's server.
+        auth_user: [chainLinkUser(client.tag)],
         action: 'route',
         outbound: outTag(client.tag),
       });

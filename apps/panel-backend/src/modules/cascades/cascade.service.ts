@@ -18,6 +18,7 @@ import { chainPoliciesOf } from './chain-policy.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import {
+  assertDirectionShapes,
   CascadeValidationError,
   entryReachesCascadeOnlyThroughChain,
   foldPositionsIntoHops,
@@ -29,6 +30,7 @@ import {
   buildCascadeConfigs,
   buildBalancerCascadeConfigs,
   buildTopologyFragmentsForNode,
+  CascadeTopologyBrokenError,
   generateLinkCreds,
   LINK_PORT_BASE,
   generateTopologyLinks,
@@ -54,7 +56,12 @@ import type {
   UpdateCascadeInput,
 } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
-import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
+import {
+  renderChainConfig,
+  type ChainForeignOut,
+  type ChainRenderInput,
+  type ChainRole,
+} from './chain.config.js';
 import { CHAIN_TPROXY_PORT, chainSocksPort, chainSocksUser, chainTProxyMark } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
 import { canRunChainAtSave, carriesCellAtSave, chainEngineOf } from './cell-carriage.js';
@@ -80,6 +87,7 @@ import {
   type TopologyTunnel,
 } from './cascade-tunnel.js';
 import { portOwnersOnNode } from '../nodes/node-ports.js';
+import { DIRECTION_OUTBOUND_TYPES, type NamedOutboundType } from '../named-outbounds/named-outbounds.schemas.js';
 
 export class CascadeNotFoundError extends Error {
   constructor(id: string) {
@@ -528,6 +536,94 @@ async function assertEntryCanChain(
     .filter((x) => !x.verdict.ok)
     .map((x) => ({ nodeName: x.node.name, engines: x.verdict.engines }));
   if (conflicts.length > 0) throw new CascadeEntryCannotChainError(conflicts, entry.entryProtocol!);
+}
+
+/** A direction names an outbound the panel does not have (deleted since the
+ *  screen loaded, or never was). 400 NAMED_OUTBOUND_NOT_FOUND. */
+export class CascadeOutboundNotFoundError extends Error {
+  readonly code = 'NAMED_OUTBOUND_NOT_FOUND';
+  constructor(public outboundId: string) {
+    super(`Named outbound ${outboundId} does not exist, so no direction can go out through it`);
+    this.name = 'CascadeOutboundNotFoundError';
+  }
+}
+
+/** A direction stands on an outbound of a type no direction may take
+ *  (freedom, blackhole: ARCH 26.09, (б)). 409, the same code the outbound's
+ *  own PUT answers with when it would move under standing directions. */
+export class CascadeOutboundTypeError extends Error {
+  readonly code = 'NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION';
+  constructor(
+    public outboundId: string,
+    public type: string,
+  ) {
+    super(
+      `A cascade direction goes out through ${DIRECTION_OUTBOUND_TYPES.join(' or ')}, and this ` +
+        `outbound is ${type}.`,
+    );
+    this.name = 'CascadeOutboundTypeError';
+  }
+}
+
+/**
+ * The nodes that would draw a named outbound cannot run the chain, phase 10.
+ *
+ * An outbound direction is drawn ONLY by the chain process of the last
+ * position's nodes, as its `out-d<tag>`: there is no xray drawing of it to fall
+ * back on, so such a node is the same dead end a hysteria entry without
+ * sing-box is. By fact only (canRunChainAtSave), every node named.
+ */
+export class CascadeOutboundNeedsChainError extends Error {
+  readonly code = 'NAMED_OUTBOUND_NEEDS_CHAIN';
+  constructor(public conflicts: { nodeName: string; engines: string[] }[]) {
+    super(
+      `A named outbound is drawn by the chain process of the nodes on the last position, and ` +
+        `these cannot run one: ` +
+        conflicts
+          .map((c) => `node "${c.nodeName}" reports ` + (c.engines.length > 0 ? `only ${c.engines.join(', ')}` : 'no engines'))
+          .join('; ') +
+        `. Install sing-box on them (bootstrap-singbox.sh), or put the direction on our nodes.`,
+    );
+    this.name = 'CascadeOutboundNeedsChainError';
+  }
+}
+
+/**
+ * The outbound side of the directions, phase 10, asked before the other gates.
+ *
+ * The shape first (a pool or an outbound, exactly one), because a direction
+ * that is neither is not something the gates below can judge at all. Then that
+ * each outbound exists and is of a type a direction may stand on. Then the
+ * nodes that will draw them: the LAST position's, which dial the outbound from
+ * their chain.
+ */
+async function assertDirectionOutbounds(
+  positions: { position: number; nodeIds: string[] }[] | undefined,
+  directions: ResolvedDirection[] | undefined,
+): Promise<void> {
+  if (!directions) return;
+  assertDirectionShapes(directions);
+  const ids = [...new Set(directions.map((d) => d.outboundId).filter((id): id is string => !!id))];
+  if (ids.length === 0) return;
+  const rows = await prisma.namedOutbound.findMany({ where: { id: { in: ids } }, select: { id: true, type: true } });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const id of ids) {
+    const row = byId.get(id);
+    if (!row) throw new CascadeOutboundNotFoundError(id);
+    if (!DIRECTION_OUTBOUND_TYPES.includes(row.type as NamedOutboundType)) throw new CascadeOutboundTypeError(id, row.type);
+  }
+  if (!positions || positions.length === 0) return;
+  const last = positions.reduce((a, b) => (b.position > a.position ? b : a));
+  const nodes = await prisma.node.findMany({
+    where: { id: { in: last.nodeIds } },
+    select: { name: true, cores: true, chainStatus: true },
+    orderBy: { name: 'asc' },
+  });
+  const conflicts = nodes
+    .map((n) => ({ node: n, verdict: canRunChainAtSave(n) }))
+    .filter((x) => !x.verdict.ok)
+    .map((x) => ({ nodeName: x.node.name, engines: x.verdict.engines }));
+  if (conflicts.length > 0) throw new CascadeOutboundNeedsChainError(conflicts);
 }
 
 /**
@@ -1449,6 +1545,8 @@ async function directionsForSave(
         where: { cascadeId },
         select: {
           id: true,
+          tag: true,
+          outboundId: true,
           countryCode: true,
           linkProtocol: true,
           linkParams: true,
@@ -1457,6 +1555,8 @@ async function directionsForSave(
       })
     : [];
   return resolveDirections(stored, incoming, (s) => ({
+    tag: s.tag,
+    outboundId: s.outboundId,
     countryCode: s.countryCode,
     linkProtocol: s.linkProtocol,
     linkParams: storedLinkParams(s.linkParams),
@@ -1543,6 +1643,8 @@ async function writeTopologyV4(
   directions: {
     id?: string;
     nodeIds: string[];
+    /** Phase 10: the named outbound in place of the pool. */
+    outboundId?: string | null;
     countryCode?: string | null;
     /** Phase 5: the last leg's cell and knobs. Null means the entry's cell. */
     linkProtocol?: string | null;
@@ -1551,7 +1653,7 @@ async function writeTopologyV4(
 ): Promise<void> {
   const stored = await tx.cascadeDirection.findMany({
     where: { cascadeId },
-    select: { id: true, tag: true, nodes: { select: { nodeId: true } } },
+    select: { id: true, tag: true, outboundId: true, nodes: { select: { nodeId: true } } },
   });
   // Resolve each incoming direction to a tag before writing anything. The
   // matching rule itself is shared with the merge that filled these directions
@@ -1662,11 +1764,19 @@ async function writeTopologyV4(
     // every field carries a value somebody chose: either this save's, or the
     // one already stored. Reading a missing key as null HERE is what dropped a
     // neighbouring direction's leg on 2026-09-22.
-    const leg = {
-      linkProtocol: d.linkProtocol ?? null,
-      linkParams: d.linkParams ? (d.linkParams as Prisma.InputJsonValue) : Prisma.DbNull,
-      linkPort: directionLinkPort,
-    };
+    //
+    // Phase 10: a direction on a named outbound has no leg at all, so none of
+    // the three is written, whatever the merge carried over from the pool it
+    // stood on before. The last position's chain dials the outbound itself.
+    const onOutbound = !!d.outboundId;
+    const leg = onOutbound
+      ? { outboundId: d.outboundId!, linkProtocol: null, linkParams: Prisma.DbNull, linkPort: null }
+      : {
+          outboundId: null,
+          linkProtocol: d.linkProtocol ?? null,
+          linkParams: d.linkParams ? (d.linkParams as Prisma.InputJsonValue) : Prisma.DbNull,
+          linkPort: directionLinkPort,
+        };
     if (d.keepId) {
       // The pool is rewritten, the row is not: its id is what policy rules hold.
       await tx.cascadeDirectionNode.deleteMany({ where: { directionId: d.keepId } });
@@ -1862,6 +1972,8 @@ export async function createCascade(input: CreateCascadeInput): Promise<CascadeD
   // a payload that carries hops and nothing else.
   await assertNodesExistNamed(nodeRefsOfTopology(positions, directions));
   await assertNodesExist(allNodeIds);
+  // Phase 10: each direction a pool or an outbound, and the outbounds drawable.
+  await assertDirectionOutbounds(positions, directions);
   // T7: an enabled balancer entry serves vlessRoute-tagged exit configs; gate
   // it on the entry's xray version. Disabled cascades don't expand in subs.
   // A v4-only shape gates on its entry position instead.
@@ -2050,6 +2162,7 @@ export async function updateCascade(id: string, input: UpdateCascadeInput): Prom
    */
   await assertNodesExistNamed(nodeRefsOfTopology(positions, directions));
   if (hops) await assertNodesExist(hops.map((h) => h.nodeId));
+  await assertDirectionOutbounds(positions, directions);
   // T7: gate an effectively-enabled balancer on the entry node's xray version
   // (covers both enabling an existing cascade and swapping in a new entry hop).
   const willBeEnabled = input.enabled ?? existing.enabled;
@@ -2405,11 +2518,24 @@ function userCoreFor(
  *  carries no leg, which the fragment builder also refuses. */
 function chainRoleOf(nodeId: string, t: TopologyInput): ChainRole | null {
   const incoming = t.links.some((l) => l.toNodeId === nodeId);
-  const outgoing = t.links.some((l) => l.fromNodeId === nodeId);
+  const outgoing = t.links.some((l) => l.fromNodeId === nodeId) || foreignOf(nodeId, t).length > 0;
   if (!incoming && !outgoing) return null;
   if (t.positions[0]?.nodeIds.includes(nodeId)) return 'entry';
   if (t.directions.some((d) => d.nodeIds.includes(nodeId))) return 'exit';
   return 'transit';
+}
+
+/**
+ * The named outbounds this node dials, phase 10: every outbound direction's,
+ * when the node stands on the LAST position. Nobody else draws them, and there
+ * is one way out per direction however many nodes that position holds.
+ */
+function foreignOf(nodeId: string, t: TopologyInput): ChainForeignOut[] {
+  const last = t.positions[t.positions.length - 1];
+  if (!last?.nodeIds.includes(nodeId)) return [];
+  return t.directions
+    .filter((d) => d.outbound)
+    .map((d) => ({ tag: d.tag, type: d.outbound!.type, config: d.outbound!.config }));
 }
 
 /**
@@ -2475,11 +2601,13 @@ function chainInputFor(
       }
     : undefined;
 
+  const foreign = foreignOf(nodeId, t);
   if (role === 'entry') {
     // The tags the user core may ask for, Auto first when the cascade offers
     // it. Auto has no leg of its own: the chain renders it as a group over the
-    // other ways out.
-    const tags = [...new Set(out.map((l) => l.tag))].sort((a, b) => a - b);
+    // other ways out. A named outbound this entry dials itself (no transit
+    // before it) is one of those ways out, phase 10.
+    const tags = [...new Set([...out.map((l) => l.tag), ...foreign.map((f) => f.tag)])].sort((a, b) => a - b);
     /**
      * ⚠ A hysteria entry gets Auto ALWAYS, phase 6.
      *
@@ -2512,6 +2640,7 @@ function chainInputFor(
       socksPassword,
       directionTags,
       out,
+      ...(foreign.length > 0 ? { foreign } : {}),
       ...(policies.length > 0 ? { policies, ruleSets: ruleSets.map((r) => ({ tag: r.tag, path: r.path })) } : {}),
       // The listener the agent's TPROXY rules steer to, with the entry policy
       // the whole entry carries (as a hysteria entry's socks user does).
@@ -2519,7 +2648,9 @@ function chainInputFor(
     };
   }
   if (!inLeg) return null;
-  return role === 'exit' ? { role, socksPassword, in: inLeg } : { role, socksPassword, in: inLeg, out };
+  return role === 'exit'
+    ? { role, socksPassword, in: inLeg }
+    : { role, socksPassword, in: inLeg, out, ...(foreign.length > 0 ? { foreign } : {}) };
 }
 
 /**
@@ -2581,7 +2712,11 @@ const NO_LEGACY_DRAWING = Symbol('no-legacy-drawing');
 async function legacyDrawingIsMoot(
   nodeId: string,
   links: { fromNodeId: string; toNodeId: string; cred: LinkCred }[],
+  /** Phase 10: this node dials a named outbound, which only the chain draws;
+   *  the save refused it on a node that reported it cannot run one. */
+  dialsForeign = false,
 ): Promise<boolean> {
+  if (dialsForeign) return true;
   const mine = links.filter((l) => l.fromNodeId === nodeId || l.toNodeId === nodeId);
   if (mine.some((l) => !LINK_CELL_ENGINES[l.cred.protocol].includes('xray'))) return true;
   const node = await prisma.node.findUnique({ where: { id: nodeId }, select: { chainStatus: true } });
@@ -2618,7 +2753,7 @@ async function buildCascadeFragmentsForNode(
     if (entersOnAnotherCore(nodeId, v4.entryProtocol, v4.positions[0]?.nodeIds ?? [])) {
       return NO_LEGACY_DRAWING;
     }
-    if (await legacyDrawingIsMoot(nodeId, v4.links)) return NO_LEGACY_DRAWING;
+    if (await legacyDrawingIsMoot(nodeId, v4.links, foreignOf(nodeId, v4).length > 0)) return NO_LEGACY_DRAWING;
     const mine = buildTopologyFragmentsForNode(nodeId, v4);
     if (mine) return toWireFragments(mine);
   }
@@ -2727,13 +2862,24 @@ async function buildCascadeFragmentsForNode(
  * consistent and wrong together, which is the hardest kind of wrong to see.
  */
 async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null> {
-  const link = await prisma.cascadeLink.findFirst({
-    where: {
-      cascade: { enabled: true },
-      OR: [{ fromNodeId: nodeId }, { toNodeId: nodeId }],
-    },
-    select: { cascadeId: true },
-  });
+  const link =
+    (await prisma.cascadeLink.findFirst({
+      where: {
+        cascade: { enabled: true },
+        OR: [{ fromNodeId: nodeId }, { toNodeId: nodeId }],
+      },
+      select: { cascadeId: true },
+    })) ??
+    // Phase 10: an entry whose only ways out are named outbounds has no link
+    // at all, and is in the cascade all the same. Found by its position, in
+    // a cascade that has an outbound direction to draw.
+    (await prisma.cascadePosition.findFirst({
+      where: {
+        nodes: { some: { nodeId } },
+        cascade: { enabled: true, directions: { some: { outboundId: { not: null } } } },
+      },
+      select: { cascadeId: true },
+    }));
   if (!link) return null;
 
   const [cascadeRow, positions, directions, links, policyRows, tunnelRows] = await Promise.all([
@@ -2758,7 +2904,12 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     prisma.cascadeDirection.findMany({
       where: { cascadeId: link.cascadeId },
       orderBy: { tag: 'asc' },
-      select: { tag: true, linkParams: true, nodes: { select: { nodeId: true } } },
+      select: {
+        tag: true,
+        linkParams: true,
+        nodes: { select: { nodeId: true } },
+        outbound: { select: { type: true, config: true } },
+      },
     }),
     prisma.cascadeLink.findMany({
       where: { cascadeId: link.cascadeId },
@@ -2831,7 +2982,11 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
       position: p.position,
       nodeIds: p.nodes.map((n) => n.nodeId),
     })),
-    directions: directions.map((d) => ({ tag: d.tag, nodeIds: d.nodes.map((n) => n.nodeId) })),
+    directions: directions.map((d) => ({
+      tag: d.tag,
+      nodeIds: d.nodes.map((n) => n.nodeId),
+      ...(d.outbound ? { outbound: drawableOutbound(nodeId, d.tag, d.outbound) } : {}),
+    })),
     links: rows,
     hosts,
     // As stored, the operator's spelling. Each renderer translates for its own
@@ -2850,6 +3005,26 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
     entryProtocol: positions.find((p) => p.position === 0)?.entryProtocol ?? undefined,
     tunnels,
   };
+}
+
+/**
+ * A stored outbound as the renderers take it, or a refusal.
+ *
+ * Only the types a direction may stand on: the save refuses the others and the
+ * outbound's own PUT cannot move under a direction. A row that got past both
+ * anyway is refused out loud rather than left undrawn, because an undrawn
+ * direction has no rule at the entry and its users would leave from the
+ * entry's own country under the flag they chose.
+ */
+function drawableOutbound(
+  nodeId: string,
+  tag: number,
+  o: { type: string; config: unknown },
+): { type: 'vless' | 'socks'; config: Record<string, unknown> } {
+  if (!DIRECTION_OUTBOUND_TYPES.includes(o.type as NamedOutboundType)) {
+    throw new CascadeTopologyBrokenError(nodeId, `direction ${tag} stands on a ${o.type} outbound, which no direction may`);
+  }
+  return { type: o.type as 'vless' | 'socks', config: (o.config ?? {}) as Record<string, unknown> };
 }
 
 export class CascadeTunnelNotFoundError extends Error {

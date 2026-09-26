@@ -8,7 +8,11 @@ import {
 } from './cascade.schemas.js';
 import { CASCADE_DTO_FIELDS } from './cascade.mapper.js';
 import * as svc from './cascade.service.js';
-import { CascadeEntryNotChainableError, CascadeValidationError } from './cascade.validation.js';
+import {
+  CascadeDirectionShapeError,
+  CascadeEntryNotChainableError,
+  CascadeValidationError,
+} from './cascade.validation.js';
 
 function handleError(err: unknown, reply: FastifyReply): FastifyReply {
   // Before the generic one, and with a CODE of its own: the screen matches on
@@ -17,8 +21,29 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
   if (err instanceof CascadeEntryNotChainableError) {
     return reply.code(400).send({ error: err.code, message: err.message });
   }
+  // Phase 10, before the generic one it extends: the screen points at the
+  // direction by its place in the payload, and by its tag when it has one.
+  if (err instanceof CascadeDirectionShapeError) {
+    return reply.code(400).send({
+      error: err.code,
+      message: err.message,
+      directionIndex: err.directionIndex,
+      directionTag: err.directionTag,
+    });
+  }
   if (err instanceof CascadeValidationError) {
     return reply.code(400).send({ error: 'INVALID', message: err.message });
+  }
+  if (err instanceof svc.CascadeOutboundNotFoundError) {
+    return reply.code(400).send({ error: err.code, message: err.message, outboundId: err.outboundId });
+  }
+  if (err instanceof svc.CascadeOutboundTypeError) {
+    return reply.code(409).send({ error: err.code, message: err.message, outboundId: err.outboundId, type: err.type });
+  }
+  if (err instanceof svc.CascadeOutboundNeedsChainError) {
+    // 409 like ENTRY_CANNOT_CHAIN: well-formed, and in conflict with what the
+    // last position's nodes have installed. Every such node named.
+    return reply.code(409).send({ error: err.code, message: err.message, conflicts: err.conflicts });
   }
   if (err instanceof svc.CascadeEntryPolicyNotFoundError) {
     return reply.code(400).send({ error: err.code, message: err.message, policyId: err.policyId });

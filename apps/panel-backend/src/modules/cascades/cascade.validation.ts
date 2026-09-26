@@ -100,6 +100,72 @@ export class CascadeValidationError extends Error {
   }
 }
 
+/**
+ * A direction that is not exactly one of a pool and an outbound, phase 10.
+ *
+ * With a CODE, because the screen points at the direction: `directionIndex` is
+ * its place in the payload, `directionTag` its tag when it already exists
+ * (null for a new one, which has none yet).
+ */
+export class CascadeDirectionShapeError extends CascadeValidationError {
+  constructor(
+    readonly code: 'DIRECTION_OUTBOUND_AND_NODES' | 'DIRECTION_EMPTY',
+    public directionIndex: number,
+    public directionTag: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'CascadeDirectionShapeError';
+  }
+}
+
+/**
+ * Every direction is either a pool of our nodes or one named outbound, never
+ * both and never neither (ARCH 26.09).
+ *
+ * Neither used to be allowed, "the tag exists, the machine does not yet". It is
+ * refused now: with outbounds in the model an empty direction is ambiguous about
+ * which of the two is missing, and serving skipped it silently anyway.
+ *
+ * And one cascade does not stand two directions on one outbound: the two would
+ * be one way out under two tags, and the direction merge matches an outbound
+ * direction by it.
+ */
+export function assertDirectionShapes(directions: ResolvedDirection[]): void {
+  const seen = new Set<string>();
+  directions.forEach((d, i) => {
+    const tag = d.tag ?? null;
+    const name = d.countryCode ? `${d.countryCode} (#${i + 1})` : `#${i + 1}`;
+    if (d.outboundId && d.nodeIds.length > 0) {
+      throw new CascadeDirectionShapeError(
+        'DIRECTION_OUTBOUND_AND_NODES',
+        i,
+        tag,
+        `direction ${name} has both nodes and a named outbound. A direction goes out through one ` +
+          `of the two: send outboundId: null to keep the nodes, or nodeIds: [] to keep the outbound.`,
+      );
+    }
+    if (!d.outboundId && d.nodeIds.length === 0) {
+      throw new CascadeDirectionShapeError(
+        'DIRECTION_EMPTY',
+        i,
+        tag,
+        `direction ${name} has neither nodes nor a named outbound, so it has no way out. Give it ` +
+          `one of the two, or remove it.`,
+      );
+    }
+    if (d.outboundId) {
+      if (seen.has(d.outboundId)) {
+        throw new CascadeValidationError(
+          `direction ${name} stands on a named outbound another direction of this cascade already ` +
+            `goes out through. One outbound is one way out: remove one of the two.`,
+        );
+      }
+      seen.add(d.outboundId);
+    }
+  });
+}
+
 export interface ValidatedTopology {
   positions: CascadePositionInput[];
   directions: ResolvedDirection[];
@@ -125,9 +191,9 @@ export interface ValidatedTopology {
  *     same machine as both a transit and an exit would route traffic into
  *     itself;
  *   - the path (positions plus the direction step) fits MAX_CASCADE_PATH;
- *   - the implied link count fits MAX_CASCADE_LINKS.
- *
- * A direction with an EMPTY pool is allowed on purpose, see the schema.
+ *   - the implied link count fits MAX_CASCADE_LINKS;
+ *   - each direction is a pool or a named outbound, exactly one of the two
+ *     (phase 10, assertDirectionShapes).
  */
 export function validateCascadeTopology(
   positions: CascadePositionInput[],
@@ -190,6 +256,7 @@ export function validateCascadeTopology(
     }
   });
 
+  assertDirectionShapes(directions);
   for (const d of directions) {
     if (new Set(d.nodeIds).size !== d.nodeIds.length) {
       throw new CascadeValidationError('a direction lists the same node twice');

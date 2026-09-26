@@ -18,15 +18,25 @@
           "uuid": "00000000-0000-4000-8000-000000000003",
           "name": "lnk-d2",
           "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "00000000-0000-4000-8000-000000000004",
+          "name": "lnk-d3",
+          "flow": "xtls-rprx-vision"
+        },
+        {
+          "uuid": "00000000-0000-4000-8000-000000000005",
+          "name": "lnk-d4",
+          "flow": "xtls-rprx-vision"
         }
       ],
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
+        "server_name": "www.apple.com",
         "reality": {
           "enabled": true,
           "handshake": {
-            "server": "www.microsoft.com",
+            "server": "www.apple.com",
             "server_port": 443
           },
           "private_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
@@ -41,13 +51,13 @@
     {
       "type": "vless",
       "tag": "out-d1",
-      "server": "nl-2.example.com",
+      "server": "nl-1.example.com",
       "server_port": 24001,
-      "uuid": "00000000-0000-4000-8000-000000000004",
+      "uuid": "00000000-0000-4000-8000-000000000009",
       "flow": "xtls-rprx-vision",
       "tls": {
         "enabled": true,
-        "server_name": "www.microsoft.com",
+        "server_name": "www.apple.com",
         "utls": {
           "enabled": true,
           "fingerprint": "firefox"
@@ -60,12 +70,48 @@
       }
     },
     {
-      "type": "shadowsocks",
+      "type": "vless",
       "tag": "out-d2",
-      "server": "se-2.example.com",
-      "server_port": 24001,
-      "method": "2022-blake3-aes-256-gcm",
-      "password": "aWNlc2xhYi1jaGFpbi1maXh0dXJlLXBzay0wMDAwMDA="
+      "server": "ch.example.net",
+      "server_port": 443,
+      "uuid": "00000000-0000-4000-8000-000000000020",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.apple.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "ppppppppppppppppppppppppppppppppppppppppppp",
+          "short_id": "abcd"
+        }
+      }
+    },
+    {
+      "type": "socks",
+      "tag": "out-d3",
+      "server": "203.0.113.7",
+      "server_port": 1080,
+      "version": "5",
+      "username": "op",
+      "password": "chain-socks-fixture-password-0000"
+    },
+    {
+      "type": "vless",
+      "tag": "out-d4",
+      "server": "tr.example.net",
+      "server_port": 8443,
+      "uuid": "00000000-0000-4000-8000-000000000021",
+      "tls": {
+        "enabled": true,
+        "server_name": "tr.example.net",
+        "alpn": [
+          "h2"
+        ]
+      }
     },
     {
       "type": "direct",
@@ -106,6 +152,20 @@
         ],
         "action": "route",
         "outbound": "out-d2"
+      },
+      {
+        "auth_user": [
+          "lnk-d3"
+        ],
+        "action": "route",
+        "outbound": "out-d3"
+      },
+      {
+        "auth_user": [
+          "lnk-d4"
+        ],
+        "action": "route",
+        "outbound": "out-d4"
       }
     ]
   }

@@ -110,8 +110,17 @@ describe('validateCascadeTopology', () => {
     expect(t.positions.map((p) => p.position)).toEqual([0, 1]);
   });
 
-  it('allows a direction with no nodes yet: the tag exists, the machine does not', () => {
-    const t = validateCascadeTopology([entry([N(1)])], [dir([])]);
+  it('refuses a direction with neither nodes nor an outbound (phase 10, ARCH 26.09)', () => {
+    expect(() => validateCascadeTopology([entry([N(1)])], [dir([])])).toThrow(
+      expect.objectContaining({ code: 'DIRECTION_EMPTY', directionIndex: 0 }),
+    );
+  });
+
+  it('takes a direction on a named outbound with no nodes and no link', () => {
+    const t = validateCascadeTopology(
+      [entry([N(1)])],
+      [{ ...dir([]), outboundId: '11111111-1111-4111-8111-111111111111' }],
+    );
     expect(t.linkCount).toBe(0);
   });
 

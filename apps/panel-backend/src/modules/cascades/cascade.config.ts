@@ -1131,8 +1131,17 @@ export interface TopologyNodeInput {
 export interface TopologyInput {
   /** Ordered steps; index 0 is the entry. Each holds a pool of node ids. */
   positions: { position: number; nodeIds: string[] }[];
-  /** Ways out, each with its frozen tag and a (possibly empty) pool. */
-  directions: { tag: number; nodeIds: string[] }[];
+  /**
+   * Ways out, each with its frozen tag and a pool, or, phase 10, a named
+   * outbound in place of the pool. An outbound direction has no leg and no
+   * link: the nodes of the LAST position dial it from their chain as its
+   * `out-d<tag>`. Its config is the outbound's, as stored and validated.
+   */
+  directions: {
+    tag: number;
+    nodeIds: string[];
+    outbound?: { type: 'vless' | 'socks'; config: Record<string, unknown> };
+  }[];
   links: TopologyLinkRow[];
   /** Public host per node id, for both dialling and firewall allow-lists. */
   hosts: Map<string, string>;
@@ -1301,9 +1310,16 @@ export function buildTopologyFragmentsForNode(
 ): HopConfig | null {
   const incoming = input.links.filter((l) => l.toNodeId === nodeId);
   const outgoing = input.links.filter((l) => l.fromNodeId === nodeId);
-  if (incoming.length === 0 && outgoing.length === 0) return null;
-
   const posIndex = input.positions.findIndex((p) => p.nodeIds.includes(nodeId));
+  // Phase 10: the directions this node dials a named outbound for, which is
+  // every outbound direction when it stands on the last position. No link
+  // says so, the topology does.
+  const foreignTags =
+    posIndex >= 0 && posIndex === input.positions.length - 1
+      ? input.directions.filter((d) => d.outbound).map((d) => d.tag)
+      : [];
+  if (incoming.length === 0 && outgoing.length === 0 && foreignTags.length === 0) return null;
+
   const isEntry = posIndex === 0;
   const isDirection = input.directions.some((d) => d.nodeIds.includes(nodeId));
   const role: HopRole = isEntry ? 'entry' : isDirection ? 'exit' : 'transit';
@@ -1372,6 +1388,22 @@ export function buildTopologyFragmentsForNode(
     const list = byDirection.get(l.directionTag) ?? [];
     list.push(tag);
     byDirection.set(l.directionTag, list);
+  }
+  for (const tag of foreignTags) {
+    // Only the chain draws a named outbound. Without the handover there is no
+    // way to send this direction anywhere but `freedom`, which is the entry's
+    // own country under the client's chosen flag: refused out loud. The push
+    // never gets here for such a node (legacyDrawingIsMoot), this is the floor.
+    if (!handover) {
+      throw new CascadeTopologyBrokenError(
+        nodeId,
+        `direction ${tag} goes out through a named outbound, which only the chain process draws`,
+      );
+    }
+    for (const o of handoverOrdinals(input.policies)) {
+      outbounds.push(chainSocksOutbound(tag, input.chainSocksPassword!, o));
+    }
+    byDirection.set(tag, [chainOutTag(tag)]);
   }
   outbounds.push(freedomOutbound);
 

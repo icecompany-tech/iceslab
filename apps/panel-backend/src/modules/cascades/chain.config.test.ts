@@ -203,7 +203,11 @@ describe('the chain config', () => {
       // And the protections come before the operator's policy, so no rule of
       // theirs can route port 25 out of an exit. Policies live on the entry
       // only (phase 9.3), gated on the hand-off user.
-      const firstPolicy = rules.findIndex((r) => Array.isArray(r.auth_user));
+      // A transit's rules name link users (lnk-d<tag>), a policy's the hand-off
+      // users (p<ordinal>): only the second are a policy.
+      const firstPolicy = rules.findIndex(
+        (r) => Array.isArray(r.auth_user) && !(r.auth_user as string[]).some((u) => u.startsWith('lnk-')),
+      );
       if (role === 'entry') expect(firstPolicy).toBeGreaterThanOrEqual(CHAIN_PROTECTION_RULES);
       else expect(firstPolicy).toBe(-1);
     });
@@ -263,8 +267,8 @@ describe('the chain config', () => {
     // A transit sees an internal link, not a user: which credential the
     // traffic came in on is the only thing that says where it was headed.
     const cfg = renderChainConfig(transitInput) as { route: { rules: Record<string, unknown>[] } };
-    const byUser = cfg.route.rules.filter((r) => Array.isArray(r.user));
-    expect(byUser.map((r) => [(r.user as string[])[0], r.outbound])).toEqual([
+    const byUser = cfg.route.rules.filter((r) => Array.isArray(r.auth_user));
+    expect(byUser.map((r) => [(r.auth_user as string[])[0], r.outbound])).toEqual([
       ['lnk-d1', 'out-d1'],
       ['lnk-d2', 'out-d2'],
     ]);
