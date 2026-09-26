@@ -935,12 +935,6 @@ function AppLayoutInner() {
                 placeholderTitle={notWired}
               />
               <NavItem
-                label={t('sidebar.egress')}
-                icon={<NavEgressIcon />}
-                placeholder
-                placeholderTitle={notWired}
-              />
-              <NavItem
                 label={t('sidebar.dns')}
                 icon={<NavDnsIcon />}
                 placeholder

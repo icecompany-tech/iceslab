@@ -32,7 +32,6 @@ export const app = {
     torrentBlocker: 'Torrent Blocker',
     geoSets: 'Гео-наборы',
     ruleSets: 'Наборы правил',
-    egress: 'Точки выхода',
     dns: 'DNS',
     toolsGroup: 'Инструменты',
     hwidInspector: 'Инспектор HWID',

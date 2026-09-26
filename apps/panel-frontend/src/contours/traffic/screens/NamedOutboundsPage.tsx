@@ -262,8 +262,12 @@ function OutboundForm({ stored, onDone }: { stored: NamedOutbound | null; onDone
     : [...CREATABLE_OUTBOUND_TYPES, v.type];
 
   const save = useMutation({
-    mutationFn: () =>
-      stored ? updateNamedOutbound(stored.id, outboundUpdateBody(stored, v)) : createNamedOutbound(outboundCreateBody(v)),
+    mutationFn: async () => {
+      if (!stored) return createNamedOutbound(outboundCreateBody(v));
+      // Ничего не правили: запроса нет, форма просто закрывается.
+      const body = outboundUpdateBody(stored, v);
+      return Object.keys(body).length === 0 ? stored : updateNamedOutbound(stored.id, body);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['named-outbounds'] });
       notifications.show({ color: 'green', message: t(stored ? 'namedOutbounds.saved' : 'namedOutbounds.created') });
@@ -274,7 +278,11 @@ function OutboundForm({ stored, onDone }: { stored: NamedOutbound | null; onDone
       if (r?.code === 'VALIDATION') {
         setServerErrors(Object.fromEntries(r.issues.map((i) => [i.field, i.message])));
       }
-      if (r?.code === 'NAME_TAKEN') setServerErrors({ name: t('namedOutbounds.refused.nameTaken', { name: r.name }) });
+      // Занятое имя говорится под полем имени, второй раз внизу не пишется.
+      if (r?.code === 'NAME_TAKEN') {
+        setServerErrors({ name: t('namedOutbounds.refused.nameTaken', { name: r.name }) });
+        return;
+      }
       setRefusal(r ? refusalWords(r, t) : apiErrorMessage(err));
     },
   });
