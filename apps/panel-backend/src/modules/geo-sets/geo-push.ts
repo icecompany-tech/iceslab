@@ -3,7 +3,7 @@ import type { NodeGeo, NodeGeoFile, NodeGeoIntended } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { NodeRequestError, type NodeTransport } from '../nodes/nodes.transport.js';
 import { chainRuleSetFileName, collectGeoUses, nodeFileName, type GeoUseSite } from './geo-refs.js';
-import { GeoTagUnknownError, geositeRuleSet, parseGeoDat, type GeoDatIndex } from './geo-dat.js';
+import { GeoTagUnknownError, geoipRuleSet, geositeRuleSet, parseGeoDat, type GeoDatIndex } from './geo-dat.js';
 
 /**
  * The `geo` of a push (phase 9.2, geo-contract.md sections 1, 2 and 7): which
@@ -42,14 +42,18 @@ const built = new Map<string, Built | null>();
 const PARSED_KEEP = 4;
 const BUILT_KEEP = 512;
 
-async function parsedVersion(sha256: string): Promise<{ buf: Uint8Array; index: GeoDatIndex }> {
-  const hit = parsed.get(sha256);
+async function parsedVersion(
+  sha256: string,
+  kind: 'geosite' | 'geoip' = 'geosite',
+): Promise<{ buf: Uint8Array; index: GeoDatIndex }> {
+  const key = `${kind}|${sha256}`;
+  const hit = parsed.get(key);
   if (hit) return hit;
   const blob = await prisma.geoBlob.findUniqueOrThrow({ where: { sha256 }, select: { data: true } });
   const buf = new Uint8Array(blob.data);
-  const entry = { buf, index: parseGeoDat(buf, 'geosite') };
+  const entry = { buf, index: parseGeoDat(buf, kind) };
   if (parsed.size >= PARSED_KEEP) parsed.delete(parsed.keys().next().value!);
-  parsed.set(sha256, entry);
+  parsed.set(key, entry);
   return entry;
 }
 
@@ -59,13 +63,18 @@ async function parsedVersion(sha256: string): Promise<{ buf: Uint8Array; index: 
  * chain config that names it fails `sing-box check` on the node in the
  * engine's words, the same as xray fails an `ext:` whose tag is gone.
  */
-export async function chainRuleSet(versionSha: string, tag: string): Promise<Built | null> {
-  const key = `${versionSha}|${tag}`;
+export async function chainRuleSet(
+  versionSha: string,
+  tag: string,
+  kind: 'geosite' | 'geoip' = 'geosite',
+): Promise<Built | null> {
+  const key = `${kind}|${versionSha}|${tag}`;
   if (built.has(key)) return built.get(key)!;
-  const { buf, index } = await parsedVersion(versionSha);
+  const { buf, index } = await parsedVersion(versionSha, kind);
   let out: Built | null;
   try {
-    const bytes = Buffer.from(JSON.stringify(geositeRuleSet(buf, index, tag)));
+    const rs = kind === 'geoip' ? geoipRuleSet(buf, index, tag) : geositeRuleSet(buf, index, tag);
+    const bytes = Buffer.from(JSON.stringify(rs));
     out = { bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
   } catch (err) {
     if (!(err instanceof GeoTagUnknownError)) throw err;
@@ -81,10 +90,15 @@ export async function chainRuleSet(versionSha: string, tag: string): Promise<Bui
  * in their domain lists. Route policies reach exactly the entries of enabled
  * cascades (geo-refs.ts), which is where the chain carries them out.
  */
-export function chainTagsFor(nodeId: string, sites: GeoUseSite[]): Map<string, string[]> {
+export function chainTagsFor(nodeId: string, sites: GeoUseSite[], cascadeExit = false): Map<string, string[]> {
   const out = new Map<string, Set<string>>();
   for (const s of sites) {
-    if (s.owner.kind !== 'route-policy' || s.ref.field !== 'domain' || !s.nodeIds.includes(nodeId)) continue;
+    if (!s.nodeIds.includes(nodeId)) continue;
+    // E53: the node policy of a cascade EXIT is carried out by its chain too,
+    // domain lists and ip lists both (chainNodePolicyOf).
+    const read =
+      (s.owner.kind === 'route-policy' && s.ref.field === 'domain') || (cascadeExit && s.owner.kind === 'node-policy');
+    if (!read) continue;
     const tags = out.get(s.ref.set) ?? new Set<string>();
     tags.add(s.ref.tag.toLowerCase());
     out.set(s.ref.set, tags);
@@ -98,6 +112,8 @@ export type IntendedFile = NodeGeoIntended['files'][number] & {
   /** The set version it comes from, and for a chain file the tag. */
   versionSha: string;
   chainTag?: string;
+  /** Which list a chain file is built from: a geoip set gives ip rule-sets. */
+  chainKind?: 'geosite' | 'geoip';
 };
 
 /**
@@ -114,9 +130,9 @@ export async function filesOfSet(
   const files: IntendedFile[] = [
     { name: nodeFileName(set), sha256: v.sha256, size: v.sizeBytes, reader: 'xray', ...base },
   ];
-  if (set.kind !== 'geosite') return files;
+  if (set.kind !== 'geosite' && set.kind !== 'geoip') return files;
   for (const tag of chainTags) {
-    const rs = await chainRuleSet(v.sha256, tag);
+    const rs = await chainRuleSet(v.sha256, tag, set.kind);
     if (!rs) continue;
     files.push({
       name: chainRuleSetFileName(set.name, tag),
@@ -124,6 +140,7 @@ export async function filesOfSet(
       size: rs.bytes.length,
       reader: 'chain',
       chainTag: tag,
+      chainKind: set.kind,
       ...base,
     });
   }
@@ -146,7 +163,12 @@ export async function nodeGeoFor(
   const sites = opts.sites ?? (await collectGeoUses());
   const names = [...new Set(sites.filter((s) => s.nodeIds.includes(nodeId)).map((s) => s.ref.set))];
   if (names.length === 0) return null;
-  const chainTags = chainTagsFor(nodeId, sites);
+  // Behind a direction of an enabled cascade: its chain reads its node policy.
+  const cascadeExit =
+    (await prisma.cascadeDirectionNode.count({
+      where: { nodeId, direction: { cascade: { enabled: true } } },
+    })) > 0;
+  const chainTags = chainTagsFor(nodeId, sites, cascadeExit);
 
   const sets = await prisma.geoSet.findMany({
     where: { name: { in: names } },
@@ -208,7 +230,7 @@ export async function layOutGeo(transport: NodeTransport, nodeId: string): Promi
     if (onNode.get(f.name) !== f.sha256) {
       const bytes =
         f.reader === 'chain'
-          ? (await chainRuleSet(f.versionSha, f.chainTag!))!.bytes
+          ? (await chainRuleSet(f.versionSha, f.chainTag!, f.chainKind))!.bytes
           : (await prisma.geoBlob.findUniqueOrThrow({ where: { sha256: f.sha256 }, select: { data: true } })).data;
       await transport.putAsset(f.name, bytes, f.sha256);
     }

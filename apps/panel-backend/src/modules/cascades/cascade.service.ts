@@ -14,7 +14,8 @@ import { cascadeAutoProfileLabel, cascadeProfileLabel } from '../../lib/util/cou
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../prisma.js';
 import { xrayGeoEntry } from '../geo-sets/geo-refs.js';
-import { chainPoliciesOf } from './chain-policy.js';
+import { chainNodePolicyOf, chainPoliciesOf } from './chain-policy.js';
+import { resolvePolicyForNode } from '../node-policies/node-policies.service.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { getLogger } from '../../lib/infra/logger.js';
 import {
@@ -61,6 +62,7 @@ import {
   type ChainForeignOut,
   type ChainRenderInput,
   type ChainRole,
+  type ChainWarp,
 } from './chain.config.js';
 import { CHAIN_TPROXY_PORT, chainSocksPort, chainSocksUser, chainTProxyMark } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
@@ -2447,8 +2449,9 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
   if (!role) return null;
 
   const secret = await chainSecretFor(nodeId);
-  const input = chainInputFor(nodeId, topology, role, secret);
-  if (!input) return null;
+  const base = chainInputFor(nodeId, topology, role, secret);
+  if (!base) return null;
+  const input = role === 'exit' ? { ...base, ...(await exitPolicyFor(nodeId)) } : base;
   // t07-wire: an AmneziaWG entry's hand-off is minted from its interface's
   // listen port, so it is read here, where the database is.
   // t07-6b: one per interface, the 1.x one and the 3.1 one.
@@ -2479,6 +2482,53 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
     socksPassword: secret,
     ...userCoreFor(nodeId, topology, role, secret, awgPorts),
     ...(tunnels.length > 0 ? { tunnels } : {}),
+  };
+}
+
+/**
+ * E53: the node policy of an exit, for its chain.
+ *
+ * Read from the same resolver that feeds the node's xray (resolvePolicyForNode),
+ * so the two drawings of one policy on one node are one list. A rule into WARP
+ * on a node with no usable account is refused out loud: the save already
+ * refuses WARP on a node with it switched off (POLICY_DOES_NOT_FIT_NODE), and
+ * an account the node holds but that lacks its key would otherwise put a rule
+ * to a tag nothing defines, which the engine refuses for the whole chain.
+ */
+async function exitPolicyFor(
+  nodeId: string,
+): Promise<Pick<ChainRenderInput, 'exitPolicy' | 'ruleSets'>> {
+  const policy = await resolvePolicyForNode(nodeId);
+  if (!policy || policy.rules.length === 0) return {};
+  const { rules, ruleSets, usesWarp } = chainNodePolicyOf(policy.rules);
+  if (rules.length === 0) return {};
+  let warp: ChainWarp | undefined;
+  if (usesWarp) {
+    const node = await prisma.node.findUnique({ where: { id: nodeId }, select: { warpEnabled: true, warpAccount: true } });
+    const acct = (node?.warpEnabled ? node.warpAccount : null) as {
+      secretKey?: string;
+      address?: string[];
+      publicKey?: string;
+      endpoint?: string;
+      reserved?: number[];
+    } | null;
+    if (!acct?.secretKey || !acct.address?.length) {
+      throw new CascadeTopologyBrokenError(
+        nodeId,
+        'the node policy routes into WARP and this exit has no usable WARP account (enable WARP on the node)',
+      );
+    }
+    warp = {
+      privateKey: acct.secretKey,
+      address: acct.address,
+      ...(acct.publicKey ? { publicKey: acct.publicKey } : {}),
+      ...(acct.endpoint ? { endpoint: acct.endpoint } : {}),
+      ...(acct.reserved ? { reserved: acct.reserved } : {}),
+    };
+  }
+  return {
+    exitPolicy: { rules, ...(warp ? { warp } : {}) },
+    ...(ruleSets.length > 0 ? { ruleSets: ruleSets.map((r) => ({ tag: r.tag, path: r.path })) } : {}),
   };
 }
 

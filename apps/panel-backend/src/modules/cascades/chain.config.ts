@@ -128,6 +128,57 @@ export interface ChainRenderInput {
    * which draws no rules. Every such connection goes to the Auto line.
    */
   tproxy?: { ordinal: number };
+  /**
+   * E53: the node policy of an EXIT, as route rules (chainNodePolicyOf), and
+   * the WARP egress its rules route into. The rule-sets they name travel in
+   * `ruleSets`. Exit only: that is where the cascade's traffic leaves.
+   */
+  exitPolicy?: { rules: Json[]; warp?: ChainWarp };
+}
+
+/** The exit's Cloudflare WARP egress, from the node's registered account. */
+export interface ChainWarp {
+  privateKey: string;
+  address: string[];
+  /** Cloudflare's well-known values when the account does not say. */
+  publicKey?: string;
+  endpoint?: string;
+  reserved?: number[];
+  mtu?: number;
+}
+
+/** The same defaults the agent's xray renders WARP with (xray/config.go). */
+const WARP_DEFAULT_PUBLIC_KEY = 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=';
+const WARP_DEFAULT_ENDPOINT = '162.159.192.1:2408';
+const WARP_DEFAULT_MTU = 1280;
+
+/**
+ * WARP as a sing-box 1.13 wireguard ENDPOINT: the wireguard outbound is gone
+ * from that version, an endpoint takes its place and is routed to by tag like
+ * an outbound. `system: false`, so no interface appears on the node.
+ */
+function warpEndpoint(w: ChainWarp): Json {
+  const ep = w.endpoint || WARP_DEFAULT_ENDPOINT;
+  const at = ep.lastIndexOf(':');
+  const host = at > 0 ? ep.slice(0, at).replace(/^\[|\]$/g, '') : ep;
+  const port = at > 0 ? Number.parseInt(ep.slice(at + 1), 10) || 2408 : 2408;
+  return {
+    type: 'wireguard',
+    tag: 'warp',
+    system: false,
+    mtu: w.mtu || WARP_DEFAULT_MTU,
+    address: w.address.map((a) => (a.includes('/') ? a : a.includes(':') ? `${a}/128` : `${a}/32`)),
+    private_key: w.privateKey,
+    peers: [
+      {
+        address: host,
+        port,
+        public_key: w.publicKey || WARP_DEFAULT_PUBLIC_KEY,
+        allowed_ips: ['0.0.0.0/0', '::/0'],
+        ...(w.reserved && w.reserved.length === 3 ? { reserved: w.reserved } : {}),
+      },
+    ],
+  };
 }
 
 type Json = Record<string, unknown>;
@@ -569,6 +620,10 @@ export function renderChainConfig(input: ChainRenderInput): Json {
   const policies = isEntry ? (input.policies ?? []) : [];
   const tproxy = isEntry ? input.tproxy : undefined;
   const rules: Json[] = [...protectionRules(), ...policyRules(policies, tproxy)];
+  // E53: the exit's node policy, after the protections (an operator's rule
+  // must not reopen port 25 here either) and before the default way out.
+  const exitPolicy = input.role === 'exit' ? input.exitPolicy : undefined;
+  if (exitPolicy) rules.push(...exitPolicy.rules);
 
   if (isEntry) {
     // One user per profile the entry can hand over: the plain one and each
@@ -739,13 +794,19 @@ export function renderChainConfig(input: ChainRenderInput): Json {
   // Only on an entry that has policies to read them. sing-box opens every
   // declared rule-set at start and refuses the config for a file it cannot
   // open, so a declaration nothing reads would be a way to fail for nothing.
-  const ruleSets = isEntry && policies.length > 0 ? (input.ruleSets ?? []) : [];
+  const ruleSets =
+    (isEntry && policies.length > 0) || (exitPolicy && exitPolicy.rules.length > 0) ? (input.ruleSets ?? []) : [];
   return {
     log: { level: 'warn' },
     inbounds,
     outbounds,
+    ...(exitPolicy?.warp ? { endpoints: [warpEndpoint(exitPolicy.warp)] } : {}),
     route: {
       rules,
+      // Named, not left to the engine, once the exit has a policy: with an
+      // endpoint beside the outbounds, "the first outbound" is one reading
+      // away from being WARP for everything the policy does not name.
+      ...(exitPolicy ? { final: 'direct' } : {}),
       ...(ruleSets.length > 0
         ? { rule_set: ruleSets.map((r) => ({ type: 'local', tag: r.tag, format: 'source', path: r.path })) }
         : {}),

@@ -1,0 +1,174 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "link-in",
+      "listen": "0.0.0.0",
+      "listen_port": 24000,
+      "users": [
+        {
+          "uuid": "00000000-0000-4000-8000-000000000002",
+          "name": "lnk-d1",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "www.apple.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.apple.com",
+            "server_port": 443
+          },
+          "private_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "short_id": [
+            "0123abcd"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "endpoints": [
+    {
+      "type": "wireguard",
+      "tag": "warp",
+      "system": false,
+      "mtu": 1280,
+      "address": [
+        "172.16.0.2/32",
+        "2606:4700:110:8a36::1/128"
+      ],
+      "private_key": "aWNlc2xhYi13YXJwLWZpeHR1cmUta2V5LTAwMDAwMDA=",
+      "peers": [
+        {
+          "address": "162.159.192.1",
+          "port": 2408,
+          "public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=",
+          "allowed_ips": [
+            "0.0.0.0/0",
+            "::/0"
+          ],
+          "reserved": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": [
+          25
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "protocol": "bittorrent",
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "domain": [
+          "cloudflare.com"
+        ],
+        "domain_suffix": [
+          ".cloudflare.com"
+        ],
+        "action": "route",
+        "outbound": "warp"
+      },
+      {
+        "rule_set": [
+          "geo-geosite-category-ads-all"
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "action": "resolve"
+      },
+      {
+        "ip_cidr": [
+          "10.0.0.0/8",
+          "192.0.2.1/32"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "port": [
+          51413
+        ],
+        "port_range": [
+          "6881:6889"
+        ],
+        "network": [
+          "udp"
+        ],
+        "action": "reject",
+        "method": "drop"
+      },
+      {
+        "type": "logical",
+        "mode": "and",
+        "rules": [
+          {
+            "domain": [
+              "api.example.com"
+            ]
+          },
+          {
+            "rule_set": [
+              "geo-geoip-private"
+            ]
+          }
+        ],
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "protocol": [
+          "quic"
+        ],
+        "action": "reject",
+        "method": "drop"
+      }
+    ],
+    "final": "direct",
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "geo-geoip-private",
+        "format": "source",
+        "path": "/etc/iceslab-node/geo/iceslab-geoip.private.json"
+      },
+      {
+        "type": "local",
+        "tag": "geo-geosite-category-ads-all",
+        "format": "source",
+        "path": "/etc/iceslab-node/geo/iceslab-geosite.category-ads-all.json"
+      }
+    ]
+  }
+}

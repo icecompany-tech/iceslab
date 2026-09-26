@@ -131,6 +131,11 @@ regexes = [
   # them: base64 of "iceslab-awg3-fixture-hpk", which a real key does not start
   # with.
   '''aWNlc2xhYi1hd2czLWZpeHR1cmUtaHBr''',
+  # The WARP key of the exit-policy chain golden (E53, chain-exit-policy.json):
+  # a WireGuard private key, 32 bytes, that says what it is, base64 of
+  # "iceslab-warp-fixture-key-0000000". Allowed by that value and nothing
+  # wider, so a real WARP account pasted into a golden is still caught.
+  '''aWNlc2xhYi13YXJwLWZpeHR1cmUta2V5LTAwMDAwMDA''',
   # History, guarding nothing: the eight keys the minter drew for that fixture
   # before it was taught to say what it is (92b471a, the goldens of a4ad8bc
   # carry #0). The scan reads history, so they stay allowed for good.
