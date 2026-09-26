@@ -46,8 +46,10 @@ function refuseUnknown(entries: string[]) {
     error: 'ROUTE_POLICY_ENTRY_UNKNOWN',
     message:
       `not a name or an address a rule can match: ${entries.map((e) => JSON.stringify(e)).join(', ')}. ` +
-      `Names: geosite:<tag>, ext:<set>:<tag>, domain:, full:, keyword:, regexp:, a hostname. ` +
-      `Addresses: geoip:<tag>, ext-ip:<set>:<tag>, an IP or a CIDR.`,
+      // Placeholders in capitals, not in angle brackets: a screen that renders
+      // the message as markup ate `<set>` and `<tag>` and showed "ext::".
+      `Names: geosite:TAG, ext:SET:TAG, domain:NAME, full:NAME, keyword:WORD, regexp:PATTERN, a hostname. ` +
+      `Addresses: geoip:TAG, ext-ip:SET:TAG, an IP or a CIDR.`,
     entries,
   };
 }

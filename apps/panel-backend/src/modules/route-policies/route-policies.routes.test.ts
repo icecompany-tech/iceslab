@@ -72,6 +72,10 @@ describe('POST /api/route-policies', () => {
     const bad = await create({ name: 'Typo', directDomains: ['geoip:', 'domain:ya.ru', 'http://x.ru'] });
     expect(bad.statusCode).toBe(400);
     expect(JSON.parse(bad.body)).toMatchObject({ error: 'ROUTE_POLICY_ENTRY_UNKNOWN', entries: ['geoip:', 'http://x.ru'] });
+    // No angle brackets in the sentence: a screen rendering it as markup ate
+    // them and showed "ext::" (stand, 26.09).
+    expect(JSON.parse(bad.body).message).not.toMatch(/[<>]/);
+    expect(JSON.parse(bad.body).message).toContain('ext:SET:TAG');
 
     const id = JSON.parse(ok.body).id as string;
     const put = await app.inject({
