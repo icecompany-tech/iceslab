@@ -73,32 +73,51 @@ export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS]
  * Протокол входа по умолчанию, когда оператор выбрал первую ноду входа.
  *
  * Раньше брался `node.protocol`, а это с 25.09 выведенная метка: у ноды
- * только с sing-box она `singbox`, входа с таким именем нет. Теперь первый из
- * CHAIN_ENTRY_PROTOCOLS, чьё родное ядро среди ядер ноды (intendedEngines):
- * вход поднимает родное ядро протокола, как считает и сервер
- * (cascadeNeedsEngines).
+ * только с sing-box она `singbox`, входа с таким именем нет. Вход поднимает
+ * родное ядро протокола, как считает и сервер (cascadeNeedsEngines).
+ *
+ * Судит ФАКТ, отчёт ноды `cores[]` (E45, 26.09): нода, поставленная без
+ * --engines, держит пустой intendedEngines при стоящем xray, и отказ по
+ * намерению отказывал ей по пустому списку. Намерение теперь только порядок
+ * предпочтения, когда кандидатов несколько. Отчёта нет: намерение может
+ * сказать «да» (первое найденное), но не «нет».
  *
  *   protocol  умолчание найдено;
- *   none      ядра ноды известны, и ни одно не поднимает вход: умолчания нет,
- *             экран говорит, что эта нода входом быть не может;
- *   unknown   сервер старше `intendedEngines` и метка не протокол ноги:
- *             умолчания нет и сказать нечего. У такого сервера метка ещё
- *             выбрана оператором, и прежнее правило по ней остаётся.
+ *   none      отчёт полный (у каждой строки есть engine), и ни одно ядро на
+ *             машине не поднимает вход: экран говорит, что эта нода входом
+ *             быть не может;
+ *   unknown   сказать нечего: у строки отчёта нет engine, либо отчёта нет и
+ *             намерение кандидата не дало, либо сервер старше
+ *             `intendedEngines` и метка не протокол ноги.
  */
 export type EntryDefault =
   | { kind: 'protocol'; protocol: CascadeProtocol }
   | { kind: 'none' }
   | { kind: 'unknown' };
 
-export function entryProtocolDefault(node: Pick<Node, 'intendedEngines' | 'protocol'>): EntryDefault {
-  const engines = node.intendedEngines;
-  if (engines === undefined) {
+export function entryProtocolDefault(
+  node: Pick<Node, 'intendedEngines' | 'protocol' | 'cores'>,
+): EntryDefault {
+  const intent = node.intendedEngines;
+  const rows = node.cores?.cores;
+  if (rows) {
+    // Хоть у одной строки engine не назван: список неполон, «нет» из него не
+    // выводится (CLAUDE.local, «ворота отказывают только по факту»).
+    if (rows.some((r) => !r.engine)) return { kind: 'unknown' };
+    // installed отсутствует у агента старше поля и читается как «стоит».
+    const onMachine = new Set(rows.filter((r) => r.installed !== false).map((r) => r.engine));
+    const candidates = CHAIN_ENTRY_PROTOCOLS.filter((x) => onMachine.has(nativeEngineOfIntent(x)));
+    if (candidates.length === 0) return { kind: 'none' };
+    const p = candidates.find((x) => intent?.includes(nativeEngineOfIntent(x))) ?? candidates[0];
+    return { kind: 'protocol', protocol: p as CascadeProtocol };
+  }
+  if (intent === undefined) {
     return LINK_PROTOCOL_VALUES.includes(node.protocol)
       ? { kind: 'protocol', protocol: node.protocol as CascadeProtocol }
       : { kind: 'unknown' };
   }
-  const p = CHAIN_ENTRY_PROTOCOLS.find((x) => engines.includes(nativeEngineOfIntent(x)));
-  return p ? { kind: 'protocol', protocol: p as CascadeProtocol } : { kind: 'none' };
+  const p = CHAIN_ENTRY_PROTOCOLS.find((x) => intent.includes(nativeEngineOfIntent(x)));
+  return p ? { kind: 'protocol', protocol: p as CascadeProtocol } : { kind: 'unknown' };
 }
 
 /** Поддержанные входы строкой для текста отказа: имена как на проводе

@@ -4,7 +4,7 @@ import {
   DEFAULT_LINK_CONGESTION,
   LINK_CONGESTIONS,
 } from '@iceslab/shared';
-import type { EngineName } from '@iceslab/shared';
+import type { EngineName, NodeCoreInfo } from '@iceslab/shared';
 import {
   CHAIN_ENTRY_PROTOCOLS,
   LINK_PROTOCOL_VALUES,
@@ -954,12 +954,66 @@ describe('entryProtocolDefault: вход по ядрам ноды, а не по 
     });
   });
 
-  it('только sing-box (метка singbox): умолчания нет, нода входом быть не может', () => {
-    expect(entryProtocolDefault({ intendedEngines: ['singbox'], protocol: 'singbox' })).toEqual({ kind: 'none' });
+  const report = (cores: NodeCoreInfo[]) => ({ observedAt: '2026-09-26T00:00:00Z', cores });
+
+  it('только sing-box по отчёту: умолчания нет, нода входом быть не может', () => {
+    expect(
+      entryProtocolDefault({
+        intendedEngines: ['singbox'],
+        protocol: 'singbox',
+        cores: report([{ name: 'tuic', engine: 'singbox' }]),
+      }),
+    ).toEqual({ kind: 'none' });
   });
 
-  it('нода без ядер (метка none): умолчания нет, та же строка', () => {
-    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none' })).toEqual({ kind: 'none' });
+  it('отчёт полный и пустой, намерение пустое: none', () => {
+    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores: report([]) })).toEqual({ kind: 'none' });
+  });
+
+  it('E45: намерение пустое, xray стоит по отчёту: xray, отказа нет', () => {
+    expect(
+      entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores: report([{ name: 'xray', engine: 'xray' }]) }),
+    ).toEqual({ kind: 'protocol', protocol: 'xray' });
+  });
+
+  it('E45: у строки отчёта нет engine: unknown, а не отказ', () => {
+    expect(
+      entryProtocolDefault({
+        intendedEngines: [],
+        protocol: 'none',
+        cores: report([{ name: 'tuic', engine: 'singbox' }, { name: 'xray' }]),
+      }),
+    ).toEqual({ kind: 'unknown' });
+  });
+
+  it('E45: installed false не на машине; отсутствие installed читается как стоит', () => {
+    expect(
+      entryProtocolDefault({
+        intendedEngines: ['xray'],
+        protocol: 'xray',
+        cores: report([{ name: 'xray', engine: 'xray', installed: false }]),
+      }),
+    ).toEqual({ kind: 'none' });
+  });
+
+  it('E45: два кандидата на машине, намерение выбирает порядок', () => {
+    const cores = report([
+      { name: 'xray', engine: 'xray' },
+      { name: 'hysteria', engine: 'hysteria' },
+    ]);
+    expect(entryProtocolDefault({ intendedEngines: ['hysteria'], protocol: 'hysteria', cores })).toEqual({
+      kind: 'protocol',
+      protocol: 'hysteria',
+    });
+    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores })).toEqual({
+      kind: 'protocol',
+      protocol: 'xray',
+    });
+  });
+
+  it('отчёта нет: намерение говорит «да», но не «нет»', () => {
+    expect(entryProtocolDefault({ intendedEngines: ['singbox'], protocol: 'singbox' })).toEqual({ kind: 'unknown' });
+    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores: null })).toEqual({ kind: 'unknown' });
   });
 
   it('сервер старше intendedEngines: прежнее правило по метке, иначе сказать нечего', () => {
