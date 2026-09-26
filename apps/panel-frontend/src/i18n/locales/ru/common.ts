@@ -136,6 +136,9 @@ export const common = {
     // 409 AWG_PROTOCOL_MISMATCH (227054e): профиль 3.1 на ноде с модулем 1.x.
     gateAwg: 'Нода {{node}} несёт модуль {{nodeGen}}, профиль требует {{profileGen}}.',
     gateAwgHow: 'Модуль 3.1 ставится повторным bootstrap AmneziaWG на ноде; он несёт и профили 1.x.',
+    // Предупреждение, не отказ (ARCH 26.09): UDP-порт внутри hopping hysteria.
+    portInHopRange:
+      'Порт внутри диапазона port hopping hysteria этой ноды; для этого порта hopping выключается, клиенты hysteria на нём не соединятся.',
     // 409 AWG_AGENT_TOO_OLD и AWG_SUBNET_OVERLAP (24b59b9).
     gateAwgAgent:
       'Агент на ноде {{node}} старше интерфейса AmneziaWG 3.1: пересоберите агент на ноде, потом привяжите профиль 3.1.',

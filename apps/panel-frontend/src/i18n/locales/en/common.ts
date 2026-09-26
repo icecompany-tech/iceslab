@@ -127,6 +127,8 @@ export const common = {
     gateRefused: 'The server refused: {{core}} {{version}} on {{node}} is refused by the panel.',
     gateAwg: 'Node {{node}} runs the {{nodeGen}} module, the profile needs {{profileGen}}.',
     gateAwgHow: 'The 3.1 module comes with a rerun of the AmneziaWG bootstrap on the node; it carries 1.x profiles too.',
+    portInHopRange:
+      'The port is inside this node\'s hysteria port hopping range; hopping is turned off for this port, and hysteria clients will not connect on it.',
     gateAwgAgent:
       'The agent on node {{node}} is older than the AmneziaWG 3.1 interface: rebuild the agent on the node, then bind the 3.1 profile.',
     gateAwgSubnet:

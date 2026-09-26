@@ -76,6 +76,7 @@ import {
 } from '@/lib/domain/formats';
 import { listNodes } from '@/lib/domain/nodes';
 import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
+import { portInHopRange } from '@/lib/domain/portHopping';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
@@ -395,6 +396,8 @@ export function HostEditPage() {
           node: n,
           fit,
           awgWhy,
+          // UDP-порт внутри hopping hysteria ноды: предупреждение, не отказ.
+          hopWarn: portInHopRange(portCheckTransport, port, n),
           selected: nodeId === n.id,
           reason: coreBlock
             ? // Before the port: a node without the core refuses on any port.
@@ -1294,6 +1297,11 @@ export function HostEditPage() {
                   {r.fit && (
                     <Box style={{ padding: '0 14px 10px 46px' }}>
                       <NodeCoreLine fit={r.fit} nodeId={r.node.id} compact />
+                    </Box>
+                  )}
+                  {r.selected && r.hopWarn && (
+                    <Box style={{ padding: '0 14px 10px 46px' }}>
+                      <Text style={{ fontSize: 11, lineHeight: '15px', color: AMBER }}>{t('nodeCore.portInHopRange')}</Text>
                     </Box>
                   )}
                   {r.awgWhy && coreRefusal?.nodeName !== r.node.name && (

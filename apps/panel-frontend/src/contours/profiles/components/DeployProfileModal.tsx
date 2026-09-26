@@ -49,6 +49,7 @@ import {
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
 import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
+import { portInHopRange } from '@/lib/domain/portHopping';
 import {
   awgGateText,
   awgProfilePrediction,
@@ -444,6 +445,13 @@ export function DeployProfileModal({ profile, onClose }: Props) {
                   {awgWhy && coreRefusal?.nodeName !== node.name && (
                     <Text size="xs" c="red" style={{ lineHeight: '15px' }}>
                       {awgWhy}
+                    </Text>
+                  )}
+                  {/* UDP-порт внутри hopping hysteria этой ноды: предупреждение,
+                      сохранение пройдёт (ARCH 26.09). Только у отмеченной. */}
+                  {checked && portInHopRange(portCheckTransport, port, node) && (
+                    <Text size="xs" c="yellow" style={{ lineHeight: '15px' }}>
+                      {t('nodeCore.portInHopRange')}
                     </Text>
                   )}
                   {coreRefusal?.nodeName === node.name && (
