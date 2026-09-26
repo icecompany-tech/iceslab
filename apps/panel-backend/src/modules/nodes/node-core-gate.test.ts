@@ -270,7 +270,9 @@ describe('the AmneziaWG generation gate (t07-1)', () => {
     await report(nodeId, [awgRow(3)], 'amd64');
     const legacy = await makeProfile('amneziawg', AWG);
     const one = await makeProfile('amneziawg', AWG, { awgProtocol: 1 });
-    const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+    // Its own subnet: the 3.1 interface cannot share the 1.x one (t07-6,
+    // AWG_SUBNET_OVERLAP).
+    const three = await makeProfile('amneziawg', { ...AWG, subnet: '10.67.67.0/24' }, { awgProtocol: 3 });
     expect((await bind(legacy, nodeId, 51820)).statusCode).toBe(201);
     expect((await bind(one, nodeId, 51821)).statusCode).toBe(201);
     expect((await bind(three, nodeId, 51822)).statusCode).toBe(201);

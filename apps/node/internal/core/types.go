@@ -15,10 +15,12 @@ type User struct {
 	NaivePassword      string
 	AmneziaWGPublicKey string
 	AmneziaWGAllowedIP string
-	TuicUUID           string
-	TuicPassword       string
-	AnytlsPassword     string
-	ShadowtlsPassword  string
+	// AmneziaWGAllowedIP3: the address on the 3.1 interface (t07-6).
+	AmneziaWGAllowedIP3 string
+	TuicUUID            string
+	TuicPassword        string
+	AnytlsPassword      string
+	ShadowtlsPassword   string
 }
 
 // UserStats are per-user traffic counters reported by a single core.

@@ -641,18 +641,19 @@ func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	coreUser := core.User{
-		UserID:             req.UserID,
-		ShortID:            req.ShortID,
-		Username:           req.Username,
-		HysteriaPassword:   req.Credentials.HysteriaPassword,
-		XrayUUID:           req.Credentials.XrayUUID,
-		NaivePassword:      req.Credentials.NaivePassword,
-		AmneziaWGPublicKey: req.Credentials.AmneziaWGPublicKey,
-		AmneziaWGAllowedIP: req.Credentials.AmneziaWGAllowedIP,
-		TuicUUID:           req.Credentials.TuicUUID,
-		TuicPassword:       req.Credentials.TuicPassword,
-		AnytlsPassword:     req.Credentials.AnytlsPassword,
-		ShadowtlsPassword:  req.Credentials.ShadowtlsPassword,
+		UserID:              req.UserID,
+		ShortID:             req.ShortID,
+		Username:            req.Username,
+		HysteriaPassword:    req.Credentials.HysteriaPassword,
+		XrayUUID:            req.Credentials.XrayUUID,
+		NaivePassword:       req.Credentials.NaivePassword,
+		AmneziaWGPublicKey:  req.Credentials.AmneziaWGPublicKey,
+		AmneziaWGAllowedIP:  req.Credentials.AmneziaWGAllowedIP,
+		AmneziaWGAllowedIP3: req.Credentials.AmneziaWGAllowedIP3,
+		TuicUUID:            req.Credentials.TuicUUID,
+		TuicPassword:        req.Credentials.TuicPassword,
+		AnytlsPassword:      req.Credentials.AnytlsPassword,
+		ShadowtlsPassword:   req.Credentials.ShadowtlsPassword,
 	}
 
 	// Best-effort fanout. A failure on a dormant adapter (no ApplyInbound

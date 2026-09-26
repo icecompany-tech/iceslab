@@ -17,7 +17,12 @@ model Node {
   // NULL until the first native hysteria push to such a node, and on every
   // node with an FQDN, whose hysteria takes ACME.
   hysteriaTls           Json?     @map("hysteria_tls")
-  publicKey             Bytes?    @map("public_key")
+  // t07-6: the obfuscation of this node's AmneziaWG 3.1 interface, minted by
+  // the panel once (nodes/awg3-geometry.ts), AwgGeometry3 in shared. Every 3.1
+  // key handed out for the node carries it. NULL until the first push of a 3.1
+  // profile here; never re-minted quietly.
+  awg3Geometry          Json?     @map("awg3_geometry")
+  publicKey            Bytes?    @map("public_key")
   countryCode           String?   @map("country_code") @db.Char(2)
   status                String    @default("unknown") @db.VarChar(16)
   lastStatusChange      DateTime? @map("last_status_change") @db.Timestamptz(6)

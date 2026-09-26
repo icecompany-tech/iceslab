@@ -20,6 +20,7 @@ import { deriveTuicPassword, deriveAnytlsPassword, deriveShadowtlsPassword } fro
 import { getLogger } from '../../lib/infra/logger.js';
 import { acmeHostnameFor } from './acme-hostname.js';
 import { ensureHysteriaTls } from '../nodes/hysteria-tls.js';
+import { ensureAwg3Geometry } from '../nodes/awg3-geometry.js';
 
 // Moved to its own module (E30) so the install command reads the address the
 // same way; re-exported for the callers that import it from here.
@@ -144,6 +145,58 @@ export async function fetchActiveUsers(): Promise<ActiveUser[]> {
   });
 }
 
+/**
+ * Each AWG user's address in the subnet of the profile behind `binding`, or an
+ * empty map when there is no such binding.
+ *
+ * Wave-14 #13: allocated serially (allocatePeer is racy under concurrency, IP
+ * slots aren't unique-indexed) before the addUser fan-out, and B7: one bulk
+ * allocation for the whole set, stragglers (race loss / contention) falling
+ * back to the per-user allocator.
+ */
+async function allocateAwgAddresses(
+  binding: InboundDto | undefined,
+  users: { id: string; username: string; amneziawgPublicKey: string | null }[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!binding) return out;
+  const row = await prisma.profileNodeBinding.findUnique({
+    where: { id: binding.id },
+    select: { profileId: true, profile: { select: { config: true } } },
+  });
+  if (!row) return out;
+  const profileId = row.profileId;
+  const subnet = ((row.profile.config ?? {}) as { subnet?: string }).subnet ?? '10.66.66.0/24';
+  const awgUsers = users.filter((u) => u.amneziawgPublicKey);
+  const bulk = await preallocatePeers(
+    profileId,
+    awgUsers.map((u) => u.id),
+    subnet,
+  ).catch((err) => {
+    const detail = err instanceof Error ? err.message : String(err);
+    getLogger().info(
+      `[worker:inbound-sync] bulk preallocatePeers on profile ${profileId} FAILED, per-user fallback: ${detail}`,
+    );
+    return new Map<string, string>();
+  });
+  for (const u of awgUsers) {
+    let ip = bulk.get(u.id);
+    if (!ip) {
+      try {
+        ip = (await allocatePeer(profileId, u.id, subnet)).ip;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        getLogger().info(`[worker:inbound-sync] allocatePeer ${u.username} on profile ${profileId} FAILED: ${detail}`);
+        // Fall through, addUser will silently skip the AWG portion on the
+        // node side, other protocols still work for this user.
+        continue;
+      }
+    }
+    out.set(u.id, ip);
+  }
+  return out;
+}
+
 export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]> {
   // Slice 27: walks ProfileNodeBinding rows joined to Profile, and resolves
   // the deployable config for each. Replaces the old per-node `inbounds`
@@ -157,11 +210,15 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
     },
     include: {
       profile: {
-        select: { id: true, name: true, protocol: true, engine: true, config: true },
+        select: { id: true, name: true, protocol: true, engine: true, config: true, awgProtocol: true },
       },
     },
     orderBy: { port: 'asc' },
   });
+  // t07-6: the node's 3.1 geometry, minted on the first push that needs it.
+  const awg3Geometry = bindings.some((b) => b.profile.protocol === 'amneziawg' && b.profile.awgProtocol === 3)
+    ? await ensureAwg3Geometry(nodeId)
+    : null;
 
   const inbounds = bindings.map((b) => {
     // Shallow merge: per-binding overrides win over profile.config. Used for
@@ -210,6 +267,11 @@ export async function fetchEnabledInbounds(nodeId: string): Promise<InboundDto[]
       config = {
         ...(config as Record<string, unknown>),
         listenPort: b.port,
+        // t07-6: which binding, so the agent can take down the interface of
+        // one the push stops carrying; and, for a 3.1 profile, the generation
+        // and the node's geometry, which replace the profile's jc..h4 there.
+        inboundId: b.id,
+        ...(b.profile.awgProtocol === 3 && awg3Geometry ? { awgProtocol: 3, geometry3: awg3Geometry } : {}),
       } as InboundDto['config'];
     }
 
@@ -622,66 +684,21 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
   // Keyed on profileId (NOT binding.id) so a user gets the same IP on
   // every node a profile is bound to, matches the subscription /
   // wgconf path which also keys on profileId.
-  const awgBinding = inbounds.find((i) => i.protocol === 'amneziawg');
-  let awgProfileId: string | null = null;
-  let awgSubnet: string | null = null;
-  if (awgBinding) {
-    const binding = await prisma.profileNodeBinding.findUnique({
-      where: { id: awgBinding.id },
-      select: { profileId: true, profile: { select: { config: true } } },
-    });
-    if (binding) {
-      awgProfileId = binding.profileId;
-      const pcfg = (binding.profile.config ?? {}) as { subnet?: string };
-      awgSubnet = pcfg.subnet ?? '10.66.66.0/24';
-    }
-  }
+  //
+  // t07-6: one per GENERATION. The node carries a 1.x interface and a 3.1
+  // one, each from its own profile and subnet, so a user has an address on
+  // each (amneziawgAllowedIp and amneziawgAllowedIp3). The agent keeps the
+  // last AWG inbound of a generation it is pushed, in port order; so does this.
+  const is3 = (i: InboundDto) => (i.config as { awgProtocol?: number }).awgProtocol === 3;
+  const awgBinding = inbounds.filter((i) => i.protocol === 'amneziawg' && !is3(i)).at(-1);
+  const awg3Binding = inbounds.filter((i) => i.protocol === 'amneziawg' && is3(i)).at(-1);
 
   const users = await fetchActiveUsers();
   getLogger().info(
     `[worker:inbound-sync] pushing ${users.length} user(s) to ${node.name}`,
   );
-
-  // Wave-14 #13: pre-allocate AWG IPs serially (allocatePeer is racy under
-  // concurrency, IP slots aren't unique-indexed). Then fan out addUser in
-  // bounded-parallel chunks. Pre-wave a 1000-user install did 1000 serial
-  // mTLS round-trips (~50ms each) = ~50s of worker time blocked per node
-  // push, which compounds when multiple nodes need re-push at once.
-  const awgIpByUser = new Map<string, string>();
-  if (awgProfileId && awgSubnet) {
-    const awgUsers = users.filter((u) => u.amneziawgPublicKey);
-    // B7 - one bulk allocation for the whole set instead of N serial
-    // allocatePeer round-trips. Stragglers (race loss / contention) fall back
-    // to the robust per-user allocator below.
-    const bulk = await preallocatePeers(
-      awgProfileId,
-      awgUsers.map((u) => u.id),
-      awgSubnet,
-    ).catch((err) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      getLogger().info(
-        `[worker:inbound-sync] bulk preallocatePeers on profile ${awgProfileId} FAILED, per-user fallback: ${detail}`,
-      );
-      return new Map<string, string>();
-    });
-    for (const u of awgUsers) {
-      let ip = bulk.get(u.id);
-      if (!ip) {
-        try {
-          ip = (await allocatePeer(awgProfileId, u.id, awgSubnet)).ip;
-        } catch (err) {
-          const detail = err instanceof Error ? err.message : String(err);
-          getLogger().info(
-            `[worker:inbound-sync] allocatePeer ${u.username} on profile ${awgProfileId} FAILED: ${detail}`,
-          );
-          // Fall through, addUser will silently skip the AWG portion on the
-          // node side, other protocols still work for this user.
-          continue;
-        }
-      }
-      awgIpByUser.set(u.id, ip);
-    }
-  }
+  const awgIpByUser = await allocateAwgAddresses(awgBinding, users);
+  const awg3IpByUser = await allocateAwgAddresses(awg3Binding, users);
 
   // Chunked parallel fanout. 25 is a balance between throughput and not
   // hammering the node-agent's HTTP server (default Node http.Agent
@@ -702,6 +719,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
             hysteriaPassword: u.hysteriaPassword,
             amneziawgPublicKey: u.amneziawgPublicKey,
             amneziawgAllowedIp: awgIpByUser.get(u.id),
+            amneziawgAllowedIp3: awg3IpByUser.get(u.id),
             naivePassword: u.naivePassword,
             tuicUuid: u.xrayUuid,
             tuicPassword: deriveTuicPassword(u.xrayUuid),

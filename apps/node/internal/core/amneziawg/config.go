@@ -114,6 +114,11 @@ type InboundConfig struct {
 	// forwarding is in place before traffic is steered and stays until the
 	// steering is gone.
 	Chain *ChainTProxy
+
+	// Geometry, when set, makes this a 3.1 interface (t07-6): its block
+	// replaces Jc..I5 above, and HeaderProtectionKey and the 3.1 timings come
+	// with it. nil is 1.x, rendered byte for byte as before.
+	Geometry *Geometry3
 }
 
 // Peer is a single [Peer] block. Generated from a panel `amneziawg_peers` row.
@@ -275,6 +280,11 @@ func (c *InboundConfig) validate() error {
 	if err := validateWGKey(c.PrivateKey); err != nil {
 		return fmt.Errorf("PrivateKey: %w", err)
 	}
+	// A 3.1 interface is judged by the geometry's own table, which covers
+	// everything below and more; its H are ranges, not the 1.x values.
+	if c.Geometry != nil {
+		return c.Geometry.validate()
+	}
 	for _, h := range []struct {
 		name string
 		val  uint32
@@ -321,24 +331,47 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 	fmt.Fprintf(&b, "PrivateKey = %s\n", cfg.PrivateKey)
 	fmt.Fprintf(&b, "ListenPort = %d\n", cfg.ListenPort)
 	fmt.Fprintf(&b, "Address = %s\n", cfg.Address)
-	fmt.Fprintf(&b, "Jc = %d\n", cfg.Jc)
-	fmt.Fprintf(&b, "Jmin = %d\n", cfg.Jmin)
-	fmt.Fprintf(&b, "Jmax = %d\n", cfg.Jmax)
-	fmt.Fprintf(&b, "S1 = %d\n", cfg.S1)
-	fmt.Fprintf(&b, "S2 = %d\n", cfg.S2)
-	fmt.Fprintf(&b, "S3 = %d\n", cfg.S3)
-	fmt.Fprintf(&b, "S4 = %d\n", cfg.S4)
-	fmt.Fprintf(&b, "H1 = %d\n", cfg.H1)
-	fmt.Fprintf(&b, "H2 = %d\n", cfg.H2)
-	fmt.Fprintf(&b, "H3 = %d\n", cfg.H3)
-	fmt.Fprintf(&b, "H4 = %d\n", cfg.H4)
+	if cfg.Geometry != nil {
+		// t07-6: the node's 3.1 block. MTU is awg-quick's key and the one the
+		// geometry was minted for: S4 is paid out of it.
+		lines, err := cfg.Geometry.interfaceLines()
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, "MTU = %d\n", cfg.Geometry.MTU)
+		for _, l := range lines {
+			fmt.Fprintln(&b, l)
+		}
+	} else {
+		renderObfuscation1(&b, cfg)
+	}
+	return renderHooksAndPeers(&b, cfg, peers)
+}
+
+// renderObfuscation1 is the 1.x block, unchanged since before phase 7.
+func renderObfuscation1(b *strings.Builder, cfg InboundConfig) {
+	fmt.Fprintf(b, "Jc = %d\n", cfg.Jc)
+	fmt.Fprintf(b, "Jmin = %d\n", cfg.Jmin)
+	fmt.Fprintf(b, "Jmax = %d\n", cfg.Jmax)
+	fmt.Fprintf(b, "S1 = %d\n", cfg.S1)
+	fmt.Fprintf(b, "S2 = %d\n", cfg.S2)
+	fmt.Fprintf(b, "S3 = %d\n", cfg.S3)
+	fmt.Fprintf(b, "S4 = %d\n", cfg.S4)
+	fmt.Fprintf(b, "H1 = %d\n", cfg.H1)
+	fmt.Fprintf(b, "H2 = %d\n", cfg.H2)
+	fmt.Fprintf(b, "H3 = %d\n", cfg.H3)
+	fmt.Fprintf(b, "H4 = %d\n", cfg.H4)
 	// I1-I5 are emitted only when non-empty, empty strings mean "no
 	// mimicry packet for this slot", and awg-quick rejects empty hex.
 	for i, val := range []string{cfg.I1, cfg.I2, cfg.I3, cfg.I4, cfg.I5} {
 		if val != "" {
-			fmt.Fprintf(&b, "I%d = %s\n", i+1, val)
+			fmt.Fprintf(b, "I%d = %s\n", i+1, val)
 		}
 	}
+}
+
+// renderHooksAndPeers is the rest of the file, the same for both generations.
+func renderHooksAndPeers(b *strings.Builder, cfg InboundConfig, peers []Peer) (string, error) {
 	// awg-quick evaluates PostUp/PostDown as a shell command, so anything
 	// we render here runs as root on every interface bounce. PostUp/Down
 	// are NOT accepted on the panel→node wire (see adapter.go ApplyInbound),
@@ -362,13 +395,13 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 		if err := validatePostHook(cmd); err != nil {
 			return "", fmt.Errorf("PostUp: %w", err)
 		}
-		fmt.Fprintf(&b, "PostUp = %s\n", cmd)
+		fmt.Fprintf(b, "PostUp = %s\n", cmd)
 	}
 	for _, cmd := range down {
 		if err := validatePostHook(cmd); err != nil {
 			return "", fmt.Errorf("PostDown: %w", err)
 		}
-		fmt.Fprintf(&b, "PostDown = %s\n", cmd)
+		fmt.Fprintf(b, "PostDown = %s\n", cmd)
 	}
 
 	for _, p := range peers {
@@ -381,10 +414,10 @@ func renderConfig(inbound InboundConfig, peers []Peer) (string, error) {
 		if err := validateAllowedIP(p.AllowedIP); err != nil {
 			return "", fmt.Errorf("peer AllowedIP: %w", err)
 		}
-		fmt.Fprintln(&b)
-		fmt.Fprintln(&b, "[Peer]")
-		fmt.Fprintf(&b, "PublicKey = %s\n", p.PublicKey)
-		fmt.Fprintf(&b, "AllowedIPs = %s\n", p.AllowedIP)
+		fmt.Fprintln(b)
+		fmt.Fprintln(b, "[Peer]")
+		fmt.Fprintf(b, "PublicKey = %s\n", p.PublicKey)
+		fmt.Fprintf(b, "AllowedIPs = %s\n", p.AllowedIP)
 	}
 
 	return b.String(), nil

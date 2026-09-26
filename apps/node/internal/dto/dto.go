@@ -59,6 +59,10 @@ type ProtocolCredentials struct {
 	// the peer block as `<ip>/32`. Only present when the user has access to
 	// an amneziawg inbound.
 	AmneziaWGAllowedIP string `json:"amneziawgAllowedIp,omitempty"`
+	// AmneziaWGAllowedIP3 is the user's address on the node's 3.1 interface
+	// (t07-6), from the 3.1 profile's own subnet: the two interfaces cannot
+	// share one. Same public key.
+	AmneziaWGAllowedIP3 string `json:"amneziawgAllowedIp3,omitempty"`
 	// TUIC (sing-box engine): per-user UUID + password. Both required for a
 	// TUIC v5 client to authenticate. Only present when the user has access
 	// to a tuic inbound.

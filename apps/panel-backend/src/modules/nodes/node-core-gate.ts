@@ -126,6 +126,73 @@ export function assertAwgProtocolOnNode(
 }
 
 /**
+ * A 1.x and a 3.1 AmneziaWG profile on one node whose subnets overlap (t07-6).
+ *
+ * The node brings them up as two interfaces, and the kernel routes a network
+ * to ONE link: the second interface's clients handshake and their replies go
+ * out of the first. Every AWG profile's default subnet is the same
+ * 10.66.66.0/24, so this is the ordinary case, not a corner.
+ */
+export class AwgSubnetOverlapError extends Error {
+  readonly code = 'AWG_SUBNET_OVERLAP';
+  constructor(
+    public nodeName: string,
+    public subnet: string,
+    public otherProfileName: string,
+    public otherSubnet: string,
+  ) {
+    super(
+      `Node "${nodeName}" already serves AmneziaWG profile "${otherProfileName}" of the other generation on ` +
+        `${otherSubnet}, which overlaps ${subnet}. The two run as separate interfaces and need separate subnets: ` +
+        `give this profile a subnet of its own.`,
+    );
+    this.name = 'AwgSubnetOverlapError';
+  }
+}
+
+function v4Range(cidr: string): [number, number] | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)\/(\d+)$/.exec(cidr.trim());
+  if (!m) return null;
+  const bits = Number(m[5]);
+  if (bits > 32) return null;
+  const ip = ((Number(m[1]) << 24) >>> 0) + (Number(m[2]) << 16) + (Number(m[3]) << 8) + Number(m[4]);
+  const size = 2 ** (32 - bits);
+  const start = Math.floor(ip / size) * size;
+  return [start, start + size - 1];
+}
+
+export function subnetsOverlap(a: string, b: string): boolean {
+  const x = v4Range(a);
+  const y = v4Range(b);
+  return x !== null && y !== null && x[0] <= y[1] && y[0] <= x[1];
+}
+
+const AWG_DEFAULT_SUBNET = '10.66.66.0/24';
+
+/**
+ * Refuses an AmneziaWG profile onto a node where a profile of the OTHER
+ * generation already has an overlapping subnet. Same generation is not asked:
+ * the node carries one interface per generation, and that is its own question.
+ */
+export async function assertAwgSubnetFree(
+  node: { id: string; name: string },
+  profile: { id: string; protocol: string; awgProtocol?: number | null; config: unknown },
+): Promise<void> {
+  const mine = profileAwgProtocol(profile);
+  if (mine === null) return;
+  const subnet = ((profile.config ?? {}) as { subnet?: string }).subnet ?? AWG_DEFAULT_SUBNET;
+  const others = await prisma.profileNodeBinding.findMany({
+    where: { nodeId: node.id, profile: { protocol: 'amneziawg', id: { not: profile.id } } },
+    select: { profile: { select: { name: true, protocol: true, awgProtocol: true, config: true } } },
+  });
+  for (const o of others) {
+    if (profileAwgProtocol(o.profile) === mine) continue;
+    const theirs = ((o.profile.config ?? {}) as { subnet?: string }).subnet ?? AWG_DEFAULT_SUBNET;
+    if (subnetsOverlap(subnet, theirs)) throw new AwgSubnetOverlapError(node.name, subnet, o.profile.name, theirs);
+  }
+}
+
+/**
  * The 409 each refusal above answers with, or null for any other error. One shape
  * for POST /api/hosts and POST /api/bindings, so one screen draws both.
  *
@@ -170,6 +237,19 @@ export function coreGateReply(err: unknown): { status: 409; body: Record<string,
         nodeName: err.nodeName,
         profileAwgProtocol: err.profileAwgProtocol,
         nodeAwgProtocol: err.nodeAwgProtocol,
+      },
+    };
+  }
+  if (err instanceof AwgSubnetOverlapError) {
+    return {
+      status: 409,
+      body: {
+        error: err.code,
+        message: err.message,
+        nodeName: err.nodeName,
+        subnet: err.subnet,
+        otherProfileName: err.otherProfileName,
+        otherSubnet: err.otherSubnet,
       },
     };
   }

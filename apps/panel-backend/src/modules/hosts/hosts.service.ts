@@ -18,7 +18,7 @@ import {
 import { mapHost, type HostReach, type PublicHostDto } from './hosts.mapper.js';
 import { hostConfigChangedAt } from './hosts.freshness.js';
 import { getHiddenCascadeNodes, type HidingCascade } from '../cascades/cascade.service.js';
-import { assertCoreOnNode } from '../nodes/node-core-gate.js';
+import { assertAwgSubnetFree, assertCoreOnNode } from '../nodes/node-core-gate.js';
 import type {
   CreateHostInput,
   ListHostsQuery,
@@ -358,6 +358,7 @@ async function planHostCreate(input: CreateHostInput): Promise<{
   await assertPortFreeOfOthers(nodeId, port, transport, node.name);
   // After the ports, before anything is written (docs/plan/core-lifecycle.md 6).
   assertCoreOnNode(node, profile);
+  await assertAwgSubnetFree(node, profile);
 
   return { bindingId: null, profile, nodeId, port };
 }

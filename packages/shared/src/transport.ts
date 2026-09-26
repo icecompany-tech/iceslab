@@ -562,6 +562,13 @@ export interface ProtocolCredentials {
    * straight into the [Peer] AllowedIPs field as `<ip>/32`.
    */
   amneziawgAllowedIp?: string;
+  /**
+   * t07-6: the user's address on the node's 3.1 interface, from the 3.1
+   * profile's subnet. Its own field because the two interfaces cannot share a
+   * subnet (the kernel routes a network to one link), so a user on both has
+   * two addresses. Same public key on both.
+   */
+  amneziawgAllowedIp3?: string;
   /** TUIC v5 (sing-box engine): per-user UUID + password. */
   tuicUuid?: string;
   tuicPassword?: string;
@@ -884,6 +891,63 @@ export interface AmneziawgInboundCfg {
   h4: number;
   postUp?: string;                // optional iptables / sysctl tweaks
   postDown?: string;
+  /** Which binding this is (the binding id), so the agent can drop the
+   *  interface of a binding the push no longer carries (RetainInbounds). */
+  inboundId?: string;
+  /** t07-6: 3 for a 3.1 profile, which the agent brings up as its own
+   *  interface beside the 1.x one. Absent is 1.x, as every push before. */
+  awgProtocol?: AwgProtocol;
+  /** t07-6: the node's 3.1 geometry, on a 3.1 inbound only. It replaces the
+   *  profile's jc..h4 on that interface. */
+  geometry3?: AwgGeometry3;
+}
+
+/**
+ * The obfuscation of a node's AmneziaWG 3.1 interface (t07-6), minted by the
+ * panel ONCE PER NODE and stored (nodes.awg3_geometry), the way leg
+ * credentials are: a classifier that learned one node must not have learned
+ * the fleet. Every 3.1 profile on the node rides it; the client's key carries
+ * the same values.
+ *
+ * Mirrors Geometry3 in the agent (apps/node/internal/core/amneziawg/
+ * geometry3.go), whose table of bounds the panel also holds before a write
+ * (awg3-geometry.ts): a geometry the agent would refuse is never stored.
+ *
+ * Ranges are strings the way the 3.1 tools and the client take them: "lo" or
+ * "lo-hi". The shape follows awg3-geometry.sh (MIT, amnezia-shared-panel
+ * 2066a80), whose bounds were read against amneziawg-go and the tools.
+ */
+export interface AwgGeometry3 {
+  /** Tunnel MTU the geometry was minted for; S4 is paid out of it. */
+  mtu: number;
+  jc: number;
+  jmin: number;
+  jmax: number;
+  s1: number;
+  s2: number;
+  s3: number;
+  s4: number;
+  h1: string;
+  h2: string;
+  h3: string;
+  h4: string;
+  /** Decoy packets in the 2.0 CPS syntax; I1 always set, the rest may be "". */
+  i1: string;
+  i2: string;
+  i3: string;
+  i4: string;
+  i5: string;
+  /** A Curve25519-sized key, base64 (44 characters), shared by both ends. */
+  headerProtectionKey: string;
+  contentPaddingAddition: string;
+  rekeyAfterTime: string;
+  rekeyTimeout: string;
+  rejectAfterTime: string;
+  keepaliveTimeout: string;
+  maxHandshakeAttempts: string;
+  /** Always true, fleet-wide: both ends must agree and a bit carries no
+   *  entropy worth a mismatch. */
+  randomTrailers: true;
 }
 
 export interface NaiveInboundCfg {

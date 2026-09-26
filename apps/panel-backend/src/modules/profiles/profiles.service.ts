@@ -25,7 +25,12 @@ import {
   nodeRendersProfile,
   renderableAtSave,
 } from '../nodes/node-engines.js';
-import { assertAwgProtocolOnNode, assertCoreOnNode, profileAwgProtocol } from '../nodes/node-core-gate.js';
+import {
+  assertAwgProtocolOnNode,
+  assertAwgSubnetFree,
+  assertCoreOnNode,
+  profileAwgProtocol,
+} from '../nodes/node-core-gate.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
 import { portOwnersOnNode, type PortOwner } from '../nodes/node-ports.js';
@@ -777,6 +782,7 @@ export async function createBinding(input: CreateBindingInput): Promise<PublicBi
   assertCoreOnNode(node, profile);
   assertNodeRendersProfile(node, profile);
   assertSingboxServesBinding(profile, input.overrides);
+  await assertAwgSubnetFree(node, profile);
 
   const created = await prisma.profileNodeBinding.create({
     data: {

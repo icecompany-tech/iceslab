@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -97,7 +98,24 @@ type Adapter struct {
 	// The last non-amneziawg answer already warned about (guarded by mu), so
 	// a wrong binary is logged once per binary, not once per poll.
 	toolsWarned string
+
+	// v3 carries the node's 3.1 interface (t07-6), beside this 1.x one. An
+	// adapter of the same kind with one interface of its own, so everything
+	// the 1.x interface does (peers, counters, health, bounce, sweep) it does
+	// unchanged; this one hands it the 3.1 inbound and each user's 3.1
+	// address. nil on the 3.1 adapter itself, and on adapters built in tests.
+	v3 *Adapter
+	// inboundID is the binding the interface was last applied from, guarded
+	// by mu. RetainInbounds takes the interface down when a push stops
+	// carrying it. Empty from a panel that sends no id: then nothing is
+	// retired by id, as before.
+	inboundID string
 }
+
+// V3Interface is the name of the 3.1 interface. Its own name, so awg-quick
+// finds its own file (/etc/amnezia/amneziawg/awg3.conf) and the kernel keeps
+// the two links apart.
+const V3Interface = "awg3"
 
 type peerCounters struct {
 	rx int64
@@ -117,12 +135,31 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 	if cfg.runCmd == nil {
 		cfg.runCmd = realRunCmd
 	}
+	a := newOne(cfg, logger)
+	if cfg.Inbound.Interface != V3Interface {
+		v3 := cfg
+		v3.Inbound = InboundConfig{Interface: V3Interface}
+		v3.ConfigPath = filepath.Join(filepath.Dir(cfg.ConfigPath), V3Interface+".conf")
+		a.v3 = newOne(v3, logger)
+	}
+	return a
+}
+
+func newOne(cfg Config, logger *slog.Logger) *Adapter {
 	return &Adapter{
 		cfg:       cfg,
 		logger:    logger,
 		peers:     make(map[string]Peer),
 		lastStats: make(map[string]peerCounters),
 	}
+}
+
+// both is this adapter and its 3.1 one, when there is one.
+func (a *Adapter) both() []*Adapter {
+	if a.v3 == nil {
+		return []*Adapter{a}
+	}
+	return []*Adapter{a, a.v3}
 }
 
 func realRunCmd(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -151,13 +188,30 @@ func (a *Adapter) Engine() string { return "amneziawg" }
 // Provisioned implements core.Provisionable: without a server key the interface
 // cannot come up at all. Same condition Start defers on, kept as one expression
 // so the two cannot drift apart.
+// Either interface counts (t07-6): a node that serves 3.1 alone is configured.
 func (a *Adapter) Provisioned() bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.cfg.Inbound.PrivateKey != ""
+	for _, x := range a.both() {
+		x.mu.Lock()
+		has := x.cfg.Inbound.PrivateKey != ""
+		x.mu.Unlock()
+		if has {
+			return true
+		}
+	}
+	return false
 }
 
+// Start brings up each interface that has a config (t07-6: both).
 func (a *Adapter) Start(ctx context.Context) error {
+	for _, x := range a.both() {
+		if err := x.startOne(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *Adapter) startOne(ctx context.Context) error {
 	a.restartMu.Lock()
 	defer a.restartMu.Unlock()
 
@@ -211,8 +265,46 @@ func (a *Adapter) Start(ctx context.Context) error {
 // users' interface down and forgets the server key (what Provisioned reads),
 // so the same inbound pushed again is a key change and brings the interface
 // back up. Peers stay in memory for that moment. A cascade leg's awg-l<n>
-// tunnel is the chain's, not this adapter's, and is not touched.
+// tunnel is the chain's, not this adapter's, and is not touched. Both
+// interfaces (t07-6).
 func (a *Adapter) Idle(ctx context.Context) error {
+	for _, x := range a.both() {
+		if err := x.idleOne(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RetainInbounds implements core.InboundReconciler (t07-6): an interface
+// whose binding the push no longer carries goes down, the other stays. The
+// server calls Idle only when the push names no AmneziaWG inbound at all, so
+// without this a node moved from 1.x and 3.1 to 3.1 alone would keep serving
+// the 1.x interface to its old users.
+var _ core.InboundReconciler = (*Adapter)(nil)
+
+func (a *Adapter) RetainInbounds(keep []string) error {
+	kept := make(map[string]bool, len(keep))
+	for _, id := range keep {
+		kept[id] = true
+	}
+	for _, x := range a.both() {
+		x.mu.Lock()
+		id := x.inboundID
+		if id == "" || kept[id] {
+			x.mu.Unlock()
+			continue
+		}
+		x.inboundID = ""
+		x.mu.Unlock()
+		if err := x.idleOne(context.Background()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *Adapter) idleOne(ctx context.Context) error {
 	a.restartMu.Lock()
 	defer a.restartMu.Unlock()
 	a.mu.Lock()
@@ -235,8 +327,29 @@ func (a *Adapter) Idle(ctx context.Context) error {
 	return nil
 }
 
-// Stop tears the interface down. Safe to call multiple times.
+// Stop tears both interfaces down. Safe to call multiple times.
 func (a *Adapter) Stop(ctx context.Context) error {
+	for _, x := range a.both() {
+		// A 3.1 interface this node never had is not taken down: there is
+		// nothing to take, and awg-quick would only complain about it.
+		if x != a && !x.inUse() {
+			continue
+		}
+		if err := x.stopOne(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// inUse: the interface has a config or came up.
+func (a *Adapter) inUse() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.started || a.cfg.Inbound.PrivateKey != ""
+}
+
+func (a *Adapter) stopOne(ctx context.Context) error {
 	a.restartMu.Lock()
 	defer a.restartMu.Unlock()
 
@@ -267,6 +380,23 @@ func (a *Adapter) setStarted(v bool) {
 // AddUser registers / updates a peer. No-op for users without amneziawg
 // credentials. Idempotent.
 func (a *Adapter) AddUser(user core.User) error {
+	if err := a.addPeer(user); err != nil {
+		return err
+	}
+	if a.v3 == nil {
+		return nil
+	}
+	// t07-6: the same key on the 3.1 interface, at the user's 3.1 address. A
+	// user without one (no 3.1 profile reaches them) leaves that interface.
+	if user.AmneziaWGPublicKey == "" || user.AmneziaWGAllowedIP3 == "" {
+		return a.v3.RemoveUser(user.UserID)
+	}
+	on3 := user
+	on3.AmneziaWGAllowedIP, on3.AmneziaWGAllowedIP3 = user.AmneziaWGAllowedIP3, ""
+	return a.v3.addPeer(on3)
+}
+
+func (a *Adapter) addPeer(user core.User) error {
 	if user.AmneziaWGPublicKey == "" || user.AmneziaWGAllowedIP == "" {
 		return nil
 	}
@@ -281,6 +411,12 @@ func (a *Adapter) AddUser(user core.User) error {
 		return nil // no change, no IO
 	}
 	a.peers[user.UserID] = desired
+	// A 3.1 interface whose inbound has not arrived (or failed) has no file to
+	// write the peer into; it is remembered, and the bring-up renders it.
+	if a.v3 == nil && a.cfg.Inbound.Interface == V3Interface && a.cfg.Inbound.PrivateKey == "" {
+		a.mu.Unlock()
+		return nil
+	}
 	a.mu.Unlock()
 
 	// IO runs under restartMu (not mu), re-snapshotting the latest peer set so
@@ -288,14 +424,24 @@ func (a *Adapter) AddUser(user core.User) error {
 	return a.syncConfigState(context.Background())
 }
 
-// RemoveUser drops the peer and reloads the interface. Idempotent.
+// RemoveUser drops the peer and reloads the interface, on both (t07-6).
+// Idempotent.
 func (a *Adapter) RemoveUser(userID string) error {
+	if a.v3 != nil {
+		if err := a.v3.RemoveUser(userID); err != nil {
+			return err
+		}
+	}
 	a.mu.Lock()
 	if _, ok := a.peers[userID]; !ok {
 		a.mu.Unlock()
 		return nil
 	}
 	delete(a.peers, userID)
+	if a.v3 == nil && a.cfg.Inbound.Interface == V3Interface && a.cfg.Inbound.PrivateKey == "" {
+		a.mu.Unlock()
+		return nil
+	}
 	a.mu.Unlock()
 
 	return a.syncConfigState(context.Background())
@@ -324,6 +470,40 @@ func (a *Adapter) RemoveUser(userID string) error {
 // shelling out, mirroring the old stub behaviour for dev environments
 // without amneziawg installed.
 func (a *Adapter) GetStats() (*core.Stats, error) {
+	st, err := a.statsOne()
+	if err != nil || a.v3 == nil || !a.v3.inUse() {
+		return st, err
+	}
+	// t07-6: a user on both interfaces is one user; the panel bills the sum.
+	st3, err := a.v3.statsOne()
+	if err != nil {
+		return st, nil
+	}
+	return mergeStats(st, st3), nil
+}
+
+func mergeStats(a, b *core.Stats) *core.Stats {
+	out := &core.Stats{
+		TotalBytesIn:  a.TotalBytesIn + b.TotalBytesIn,
+		TotalBytesOut: a.TotalBytesOut + b.TotalBytesOut,
+	}
+	at := make(map[string]int, len(a.Users))
+	for _, u := range a.Users {
+		at[u.UserID] = len(out.Users)
+		out.Users = append(out.Users, u)
+	}
+	for _, u := range b.Users {
+		if i, ok := at[u.UserID]; ok {
+			out.Users[i].BytesIn += u.BytesIn
+			out.Users[i].BytesOut += u.BytesOut
+			continue
+		}
+		out.Users = append(out.Users, u)
+	}
+	return out
+}
+
+func (a *Adapter) statsOne() (*core.Stats, error) {
 	// AWG#10 - read what we need under mu, then release it for the `awg show`
 	// fork so a slow/hung dump no longer blocks AddUser/RemoveUser. The delta
 	// accounting below re-acquires mu and runs verbatim (E4 contract preserved).
@@ -458,6 +638,18 @@ const healthProbeTTL = 20 * time.Second
 // it. So a CONFIGURED interface is judged by the interface itself, whatever
 // the last apply returned: the probe below, not the flag, is the answer.
 func (a *Adapter) Healthy() bool {
+	if a.v3 == nil || !a.v3.inUse() {
+		return a.healthyOne()
+	}
+	// t07-6: every interface the node serves has to be up. A node that serves
+	// 3.1 alone is judged by that interface.
+	if !a.inUse() {
+		return a.v3.healthyOne()
+	}
+	return a.healthyOne() && a.v3.healthyOne()
+}
+
+func (a *Adapter) healthyOne() bool {
 	a.mu.Lock()
 	started := a.started
 	configured := a.cfg.Inbound.PrivateKey != ""
@@ -523,6 +715,18 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	if err := json.Unmarshal(rawCfg, &wire); err != nil {
 		return fmt.Errorf("amneziawg ApplyInbound: parse cfg: %w", err)
 	}
+	// t07-6: a 3.1 inbound is the 3.1 interface's, never this one's. The
+	// interface a generation lands on is fixed, so a 1.x config cannot end up
+	// on awg3 or a 3.1 one on awg0.
+	is3 := a.cfg.Inbound.Interface == V3Interface && a.v3 == nil
+	switch {
+	case wire.AwgProtocol == 3 && a.v3 != nil:
+		return a.v3.ApplyInbound(port, rawCfg)
+	case wire.AwgProtocol == 3 && !is3:
+		return fmt.Errorf("amneziawg ApplyInbound: a 3.1 inbound and no 3.1 interface to carry it")
+	case wire.AwgProtocol != 3 && is3:
+		return fmt.Errorf("amneziawg ApplyInbound: a 1.x inbound handed to the 3.1 interface")
+	}
 
 	// AWG#10 - hold restartMu across the whole apply so a concurrent AddUser
 	// sync can't interleave with the interface mutation; mutate + snapshot under
@@ -551,6 +755,9 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	// And the hand-off to the chain, which is the push's userCore and not the
 	// inbound's: ApplyCascade set it earlier in this same push.
 	newInbound.Chain = a.cfg.Inbound.Chain
+	if wire.InboundID != "" {
+		a.inboundID = wire.InboundID
+	}
 
 	kind := classifyDiff(a.cfg.Inbound, newInbound)
 	switch kind {
@@ -559,7 +766,10 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		a.logger.Info("amneziawg ApplyInbound: config unchanged, skipping")
 		return nil
 	case diffSubnet:
-		if len(a.peers) > 0 {
+		// Peers remembered before the interface ever had an address (a 3.1
+		// user pushed ahead of its inbound, t07-6) hold addresses from THIS
+		// subnet: nothing to re-allocate, the first bring-up takes them.
+		if len(a.peers) > 0 && a.cfg.Inbound.Address != "" {
 			n := len(a.peers)
 			a.mu.Unlock()
 			return fmt.Errorf("amneziawg ApplyInbound: subnet change rejected, %d peer(s) already allocated; drain peers before changing subnet", n)
