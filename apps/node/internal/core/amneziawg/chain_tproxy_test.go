@@ -3,6 +3,7 @@ package amneziawg
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -24,6 +25,8 @@ func invertHook(t *testing.T, cmd string) string {
 		return "ip route del " + strings.TrimPrefix(cmd, "ip route add ")
 	case strings.HasPrefix(cmd, "iptables ") && strings.Count(cmd, " -A ") == 1:
 		return strings.Replace(cmd, " -A ", " -D ", 1)
+	case strings.HasPrefix(cmd, "iptables -I INPUT 1 "):
+		return "iptables -D INPUT " + strings.TrimPrefix(cmd, "iptables -I INPUT 1 ")
 	}
 	t.Fatalf("no inverse known for %q: a PostUp line nobody can undo", cmd)
 	return ""
@@ -83,9 +86,10 @@ func (h host) apply(cmd string) error {
 	case strings.HasPrefix(cmd, "ip route add "), strings.HasPrefix(cmd, "ip route del "):
 		add = strings.HasPrefix(cmd, "ip route add ")
 		key = "route " + cmd[len("ip route add "):]
-	case strings.Contains(cmd, " -A "), strings.Contains(cmd, " -D "):
-		add, dupOK = strings.Contains(cmd, " -A "), true
-		key = strings.NewReplacer(" -A ", " ", " -D ", " ").Replace(cmd)
+	case strings.Contains(cmd, " -A "), strings.Contains(cmd, " -D "), strings.Contains(cmd, " -I "):
+		// -I at a position adds like -A: iptables takes duplicates either way.
+		add, dupOK = !strings.Contains(cmd, " -D "), true
+		key = strings.NewReplacer(" -A ", " ", " -D ", " ", " -I INPUT 1 ", " INPUT ").Replace(cmd)
 	default:
 		return fmt.Errorf("model does not know %q", cmd)
 	}
@@ -248,6 +252,39 @@ func TestTwoInterfacesOnOneHostDoNotTouchEachOther(t *testing.T) {
 	if !maps.Equal(afterSweep, only3) {
 		t.Errorf("the sweep of awg1 changed awg3: left %v, want %v", afterSweep, only3)
 	}
+}
+
+func TestASteeredPacketIsAcceptedAheadOfTheHostFirewall(t *testing.T) {
+	// E50, ru-01 26.09: ufw's default-deny dropped every steered packet in
+	// filter INPUT ("[UFW BLOCK] IN=awg0 DST=1.1.1.1 DPT=53 MARK=0x11194"),
+	// because it arrives there with its foreign destination. The accept has to
+	// be at the TOP of INPUT (ahead of ufw's jumps), carry this interface and
+	// this mark and nothing wider, and be in place before any packet is
+	// steered.
+	up, down := hooks(t, testTProxy)
+	mark := fmt.Sprintf("0x%x", testTProxy.Mark)
+	want := "iptables -I INPUT 1 -i %i -m mark --mark " + mark + " -j ACCEPT"
+	at, firstSteer := -1, -1
+	for i, l := range up {
+		if l == want {
+			at = i
+		}
+		if firstSteer < 0 && strings.Contains(l, " -j TPROXY ") {
+			firstSteer = i
+		}
+	}
+	if at < 0 {
+		t.Fatalf("no INPUT accept for the mark in PostUp:\n%s", strings.Join(up, "\n"))
+	}
+	if at > firstSteer {
+		t.Errorf("the INPUT accept (line %d) comes after the first TPROXY line (%d): packets steered in between are dropped", at, firstSteer)
+	}
+	if !slices.Contains(down, "iptables -D INPUT -i %i -m mark --mark "+mark+" -j ACCEPT") {
+		t.Errorf("PostDown does not take the INPUT accept away:\n%s", strings.Join(down, "\n"))
+	}
+	// The lines as the entry's interface carries them, for the stand report.
+	t.Logf("PostUp:\n  %s", strings.Join(up, "\n  "))
+	t.Logf("PostDown:\n  %s", strings.Join(down, "\n  "))
 }
 
 func TestEveryHookPassesTheShellWhitelist(t *testing.T) {

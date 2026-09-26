@@ -60,6 +60,14 @@ func chainTProxyHooks(t ChainTProxy) (up, down []string, err error) {
 		// tproxy socket on loopback receive traffic addressed elsewhere.
 		fmt.Sprintf("ip rule add fwmark %s lookup %d", mark, table),
 		fmt.Sprintf("ip route add local 0.0.0.0/0 dev lo table %d", table),
+		// E50, ru-01 26.09: a steered packet is delivered locally, so it walks
+		// filter INPUT with its FOREIGN destination still on it, and a host
+		// firewall (ufw's default-deny) drops it there: "[UFW BLOCK] IN=awg0
+		// DST=1.1.1.1 DPT=53 MARK=0x11194". Accepted by our mark, on this
+		// interface only, at the top of INPUT so it is ahead of whatever the
+		// host keeps there, as the AWG FORWARD rules are. Before the steering
+		// lines, so no packet is steered into a drop.
+		fmt.Sprintf("iptables -I INPUT 1 -i %%i -m mark --mark %s -j ACCEPT", mark),
 		// Traffic to the node itself (its tunnel address, a DNS on it) stays
 		// with the node and never enters the chain.
 		"iptables -t mangle -A PREROUTING -i %i -m addrtype --dst-type LOCAL -j RETURN",
@@ -70,6 +78,7 @@ func chainTProxyHooks(t ChainTProxy) (up, down []string, err error) {
 		fmt.Sprintf("iptables -t mangle -D PREROUTING -i %%i -p udp -j TPROXY --on-ip 127.0.0.1 --on-port %d --tproxy-mark %s", t.Port, mark),
 		fmt.Sprintf("iptables -t mangle -D PREROUTING -i %%i -p tcp -j TPROXY --on-ip 127.0.0.1 --on-port %d --tproxy-mark %s", t.Port, mark),
 		"iptables -t mangle -D PREROUTING -i %i -m addrtype --dst-type LOCAL -j RETURN",
+		fmt.Sprintf("iptables -D INPUT -i %%i -m mark --mark %s -j ACCEPT", mark),
 		fmt.Sprintf("ip route del local 0.0.0.0/0 dev lo table %d", table),
 		fmt.Sprintf("ip rule del fwmark %s lookup %d", mark, table),
 	}

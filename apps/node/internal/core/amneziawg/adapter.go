@@ -1172,6 +1172,17 @@ func (a *Adapter) logChain(ctx context.Context, iface string, t *ChainTProxy) {
 			}
 		}
 	}
+	// E50: the accept ahead of the host firewall, read back the same way. The
+	// stand greps for it on a node with ufw: without it every steered packet
+	// dies in INPUT.
+	var input []string
+	if out, err := a.cfg.runCmd(ctx, "iptables", "-S", "INPUT"); err == nil {
+		for _, l := range strings.Split(string(out), "\n") {
+			if strings.Contains(l, "-i "+iface+" ") && strings.Contains(l, "--mark "+mark) {
+				input = append(input, strings.TrimSpace(l))
+			}
+		}
+	}
 	var iprule []string
 	if out, err := a.cfg.runCmd(ctx, "ip", "rule", "show", "fwmark", mark); err == nil {
 		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -1183,6 +1194,7 @@ func (a *Adapter) logChain(ctx context.Context, iface string, t *ChainTProxy) {
 	a.logger.Info("amneziawg: hand-off to the chain in force",
 		"interface", iface, "tproxyPort", t.Port, "mark", mark,
 		"rules", len(rules), "iptables", strings.Join(rules, " | "),
+		"input", strings.Join(input, " | "),
 		"ipRule", strings.Join(iprule, " | "))
 }
 
