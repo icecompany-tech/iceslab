@@ -2061,7 +2061,7 @@ export function EntryChainNote({
   }
   return (
     <Note tone={MIST} icon={<InfoIcon size={13} color={MIST} />}>
-      {t('cascadeCreate.entryHy2Auto')}
+      {t('cascadeCreate.entryAutoOnly', { protocol: facts.protocol === 'amneziawg' ? 'AmneziaWG' : facts.protocol })}
     </Note>
   );
 }

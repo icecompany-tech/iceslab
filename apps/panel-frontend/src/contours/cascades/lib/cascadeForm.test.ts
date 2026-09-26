@@ -37,6 +37,75 @@ import {
   withUnderlay,
 } from '@/contours/cascades/lib/cascadeForm';
 import type { Node } from '@/lib/domain/nodes';
+import { entryChainGaps, entryChainNotes } from '@/contours/cascades/lib/cascadeForm';
+import { nodeCarriesCell } from '@/lib/domain/linkCells';
+
+describe('вход amneziawg (t07-wire): как hysteria', () => {
+  it('в контракте входов, с «Авто» вместо выбора выхода', () => {
+    expect(SHARED_CHAIN_ENTRY_PROTOCOLS).toContain('amneziawg');
+    expect(entryNoteKind(entryChainFacts('amneziawg'))).toBe('autoOnly');
+    expect(entryNoteKind(entryChainFacts('hysteria'))).toBe('autoOnly');
+    expect(entryNoteKind(entryChainFacts('xray'))).toBeNull();
+  });
+
+  it('умолчание по ядрам: только amneziawg на машине даёт вход amneziawg, xray первее', () => {
+    const report = (engines: EngineName[]) => ({
+      observedAt: '2026-09-26T00:00:00Z',
+      cores: engines.map((e) => ({ name: e, engine: e }) as NodeCoreInfo),
+    });
+    expect(entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores: report(['amneziawg']) })).toEqual({
+      kind: 'protocol',
+      protocol: 'amneziawg',
+    });
+    expect(
+      entryProtocolDefault({ intendedEngines: [], protocol: 'none', cores: report(['amneziawg', 'xray']) }),
+    ).toEqual({ kind: 'protocol', protocol: 'xray' });
+  });
+});
+
+describe('entryChainGaps: вход без sing-box до кнопки (E46, canRunChainAtSave)', () => {
+  const n = (over: Record<string, unknown>) => ({ name: 'ru-01', ...over });
+
+  it('движки без sing-box: строка; с sing-box: нет', () => {
+    expect(entryChainGaps([n({ engines: ['xray', 'amneziawg'] })])).toEqual([
+      { nodeName: 'ru-01', engines: ['xray', 'amneziawg'] },
+    ]);
+    expect(entryChainGaps([n({ engines: ['xray', 'singbox'] })])).toEqual([]);
+  });
+
+  it('незнание не отказ: движков нет; блок цепи есть, агент не только-цепь', () => {
+    expect(entryChainGaps([n({}), undefined])).toEqual([]);
+    expect(entryChainGaps([n({ engines: ['xray'], chainStatus: { running: false } })])).toEqual([]);
+  });
+
+  it('цепь работает: несёт; агент только-цепь с упавшей цепью: решают движки', () => {
+    expect(entryChainGaps([n({ engines: ['xray'], chainStatus: { running: true } })])).toEqual([]);
+    expect(
+      entryChainGaps([n({ engines: ['xray'], chainStatus: { running: false }, cores: { chainEngine: 'singbox' } })]),
+    ).toEqual([{ nodeName: 'ru-01', engines: ['xray'] }]);
+  });
+
+  it('предсказание и отказ сервера: нода один раз, предсказание первым', () => {
+    const p = [{ nodeName: 'ru-01', engines: ['xray'] as EngineName[] }];
+    const r = [
+      { nodeName: 'ru-01', engines: ['xray'] as EngineName[] },
+      { nodeName: 'ru-02', engines: [] },
+    ];
+    expect(entryChainNotes(p, r).map((c) => c.nodeName)).toEqual(['ru-01', 'ru-02']);
+  });
+});
+
+describe('nodeCarriesCell: агент только-цепь принимает ногу движком цепи (E46)', () => {
+  it('vless на ноде с одним xray: по таблице да, у агента только-цепь нет', () => {
+    expect(nodeCarriesCell({ engines: ['xray'] }, 'vless')).toBe(true);
+    expect(nodeCarriesCell({ engines: ['xray'], cores: { chainEngine: 'singbox' } }, 'vless')).toBe(false);
+    expect(nodeCarriesCell({ engines: ['xray', 'singbox'], cores: { chainEngine: 'singbox' } }, 'vless')).toBe(true);
+  });
+
+  it('движков нет: незнание, и chainEngine его не отменяет', () => {
+    expect(nodeCarriesCell({ cores: { chainEngine: 'singbox' } }, 'vless')).toBeUndefined();
+  });
+});
 
 /**
  * Что стоит в строке пула на месте выбора ноды.

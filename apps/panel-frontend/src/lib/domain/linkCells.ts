@@ -48,13 +48,18 @@ export function linkCellEngines(
  * годится, чтобы сказать «да», и не годится, чтобы сказать «нет».
  */
 export function nodeCarriesCell(
-  node: { engines?: EngineName[] } | null | undefined,
+  node: { engines?: EngineName[]; cores?: { chainEngine?: EngineName } | null } | null | undefined,
   cell: string,
   source: CellTable | undefined = table,
 ): boolean | undefined {
   const engines = node?.engines;
   if (!engines) return undefined;
-  const carriers = linkCellEngines(cell, source);
-  if (!carriers) return undefined;
+  const byTable = linkCellEngines(cell, source);
+  if (!byTable) return undefined;
+  // E46 (3962886, carriesCellAtSave): агент, который несёт ноги ТОЛЬКО цепью,
+  // принимает ногу одним движком цепи. Таблица, где vless заканчивает и xray,
+  // верна для агентов старше цепи, а не для этого.
+  const chainEngine = node?.cores?.chainEngine;
+  const carriers = chainEngine ? [chainEngine] : byTable;
   return carriers.some((e) => engines.includes(e));
 }

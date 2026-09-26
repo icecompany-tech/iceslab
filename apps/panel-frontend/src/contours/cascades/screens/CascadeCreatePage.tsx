@@ -80,6 +80,8 @@ import {
   legUnderlay,
   withUnderlay,
   entryPolicyPlace,
+  entryChainGaps,
+  entryChainNotes,
   entryPolicyRefusal,
   poolRoleAt,
   refusedCells,
@@ -562,7 +564,10 @@ export function CascadeCreatePage() {
                 )}
                 {i === 0 && <EntryBystandersNote items={bystanders} />}
                 {i === 0 &&
-                  entryChainRefusals.map((c) => (
+                  entryChainNotes(
+                    entryChainGaps(entryIds.map((id) => nodeById.get(id))),
+                    entryChainRefusals,
+                  ).map((c) => (
                     <Note key={`chain-${c.nodeName}`} tone={RED} icon={<WarnIcon size={13} color={RED} />}>
                       {t('cascadeCreate.entryCannotChain', {
                         name: c.nodeName,

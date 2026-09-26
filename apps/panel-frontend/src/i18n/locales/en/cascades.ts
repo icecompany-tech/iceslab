@@ -105,10 +105,10 @@ export const cascades = {
     entryNotCarried: 'An entry over {{protocol}} does not reach the chain: a cascade entry serves only {{supported}}.',
     entryNoCore: 'This node cannot be an entry: it has no core for {{supported}}.',
     entryNoCoreOr: ' or ',
-    // The edge of phase 6, and it belongs where the operator picks the entry:
-    // hearing it from a user who "cannot choose a country" is worse.
-    entryHy2Auto:
-      'A hysteria entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
+    // The edge, and it belongs where the operator picks the entry: hearing it
+    // from a user who "cannot choose a country" is worse.
+    entryAutoOnly:
+      'A {{protocol}} entry leaves through Auto or by policy rules; picking the exit per user is available only to an xray entry.',
     // The server's refusal: the entry nodes cannot run the chain, sing-box is
     // missing. A server FACT from the node's report, so the button is not
     // disabled ahead of it.

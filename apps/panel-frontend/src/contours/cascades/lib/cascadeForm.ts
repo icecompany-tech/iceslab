@@ -1045,6 +1045,58 @@ export function refusedEntryChain(err: unknown): EntryChainConflict[] | null {
 }
 
 /**
+ * Входные ноды, которые ТОЧНО не поднимут цепь: то же чтение, что у сервера
+ * (canRunChainAtSave, cell-carriage.ts, 3962886), до кнопки.
+ *
+ *   цепь на ноде работает                     несёт, говорить не о чем;
+ *   блок цепи есть, но не работает, и агент
+ *   НЕ из тех, что несут ноги только цепью    незнание: причиной может быть
+ *                                             конфиг, который запись заменит;
+ *   агент несёт ноги только цепью
+ *   (`cores.chainEngine`, E46)                решают движки: «no singbox binary»
+ *                                             ровно такая причина;
+ *   движков в отчёте нет                      незнание;
+ *   движки есть, sing-box среди них нет       отказ, строка.
+ *
+ * Кнопку не гасит: это предсказание, отказ всё равно скажет сервер, и слова у
+ * них одни (entryCannotChain). Одинаково для входа xray, hysteria и
+ * amneziawg: цепь на входе одна и та же, sing-box.
+ */
+export function entryChainGaps(
+  nodes: ReadonlyArray<
+    | {
+        name: string;
+        engines?: EngineName[];
+        cores?: { chainEngine?: EngineName } | null;
+        chainStatus?: { running: boolean } | null;
+      }
+    | undefined
+  >,
+): EntryChainConflict[] {
+  const out: EntryChainConflict[] = [];
+  for (const n of nodes) {
+    if (!n) continue;
+    const chain = n.chainStatus ?? null;
+    if (chain?.running === true) continue;
+    const chainOnly = n.cores?.chainEngine !== undefined;
+    if (chain && !chainOnly) continue;
+    if (!n.engines) continue;
+    if (!n.engines.includes('singbox')) out.push({ nodeName: n.name, engines: [...n.engines] });
+  }
+  return out;
+}
+
+/** Предсказание и отказ сервера одной строкой на ноду: предсказание первым,
+ *  нода, о которой сказали оба, один раз (как legCellNotes). */
+export function entryChainNotes(
+  predicted: EntryChainConflict[],
+  refusals: EntryChainConflict[],
+): EntryChainConflict[] {
+  const seen = new Set(predicted.map((p) => p.nodeName));
+  return [...predicted, ...refusals.filter((r) => !seen.has(r.nodeName))];
+}
+
+/**
  * Пейлоад сохранения с согласием на смену входа или без него.
  *
  * ⚠ Флаг уходит ТОЛЬКО после явного «всё равно сменить». Отдельной функцией,
