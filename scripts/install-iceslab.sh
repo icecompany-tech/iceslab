@@ -144,9 +144,11 @@ banner
 # 2. APT_OPTS sets DPkg::Lock::Timeout=300, so apt waits up to 5 min for the
 #    lock instead of failing instantly. Covers the boot-time case where
 #    Ubuntu's `unattended-upgrades` is running.
-# 3. Stale-lock cleanup: if a previous apt-get died and left the lock file
-#    behind with no process holding it, remove it and run
-#    `dpkg --configure -a` to finish any half-applied state.
+# 3. A wait for a running apt before the first call, and NO lock deletion:
+#    apt locks with fcntl on files that always exist, a crashed apt leaves
+#    nothing locked, and deleting a held file lets two package managers write
+#    at once. Same code and reasons as install-iceslab-node.sh (wait_for_apt,
+#    26.09); then `dpkg --configure -a` finishes any half-applied state.
 exec 9>/var/run/iceslab-install.lock || fail "cannot open install lockfile"
 if ! flock -n 9; then
   fail "another install-iceslab.sh is already running (lock held). Wait for it, or 'rm /var/run/iceslab-install.lock' if you're sure it crashed."
@@ -155,21 +157,52 @@ fi
 APT_OPTS=(-o "DPkg::Lock::Timeout=300" -o "Dpkg::Options::=--force-confold" -o "Dpkg::Options::=--force-confdef")
 APT_ENV=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none)
 
-cleanup_stale_apt_locks() {
-  local lock_holder
-  # A lock file that exists but has no process holding it (fuser empty) is stale.
-  for lockfile in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
-    [[ -e "$lockfile" ]] || continue
-    lock_holder=$(fuser "$lockfile" 2>/dev/null || true)
-    if [[ -z "$lock_holder" ]]; then
-      log "stale apt lock detected at $lockfile (no process holds it), removing"
-      rm -f "$lockfile"
+APT_LOCKS="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+APT_WAIT_SECONDS="${APT_WAIT_SECONDS:-300}"
+
+# apt_busy / wait_for_apt: the same as in install-iceslab-node.sh, where the
+# reasons are written out.
+apt_busy() {
+  local p locks f holders
+  for p in apt apt-get aptitude dpkg unattended-upgr; do
+    if pgrep -x "$p" >/dev/null 2>&1; then
+      printf '%s is running' "$p"
+      return 0
     fi
   done
-  # Finish any packages an interrupted apt left half-configured. No-op when clean.
+  locks="$(lslocks -n -o PATH 2>/dev/null || true)"
+  for f in $APT_LOCKS; do
+    if grep -qxF "$f" <<<"$locks"; then
+      printf '%s is locked' "$f"
+      return 0
+    fi
+    if command -v fuser >/dev/null 2>&1 && [[ -e "$f" ]]; then
+      holders="$(fuser "$f" 2>/dev/null || true)"
+      if [[ -n "${holders// /}" ]]; then
+        printf '%s is held by pid%s' "$f" "$holders"
+        return 0
+      fi
+    fi
+  done
+  return 0
+}
+
+wait_for_apt() {
+  local why waited=0
+  why="$(apt_busy)"
+  [[ -z "$why" ]] && { dpkg --configure -a >/dev/null 2>&1 || true; return 0; }
+  log "apt is busy ($why), waiting up to ${APT_WAIT_SECONDS}s"
+  while [[ -n "$why" ]]; do
+    if (( waited >= APT_WAIT_SECONDS )); then
+      fail "apt busy ($why) for ${APT_WAIT_SECONDS}s; retry later, once it has finished (the lock files are left alone on purpose)"
+    fi
+    sleep 5
+    waited=$((waited + 5))
+    why="$(apt_busy)"
+  done
   dpkg --configure -a >/dev/null 2>&1 || true
 }
-cleanup_stale_apt_locks
+wait_for_apt
 
 ICESLAB_DIR=${ICESLAB_DIR:-/opt/iceslab}
 ICESLAB_REPO=${ICESLAB_REPO:-https://github.com/icecompany-tech/iceslab.git}

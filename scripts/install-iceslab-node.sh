@@ -216,9 +216,8 @@ banner() {
 banner
 
 # ───── Concurrency + apt lock hygiene ─────
-# Same protections as install-iceslab.sh: flock against concurrent runs,
-# wait on apt locks via DPkg::Lock::Timeout, stale-lock cleanup for the
-# orphan-apt-process case. See install-iceslab.sh for the rationale.
+# flock against concurrent runs, apt's own wait (DPkg::Lock::Timeout) on every
+# apt call, and a wait for a running apt before the first one (wait_for_apt).
 exec 9>/var/run/iceslab-node-install.lock || fail "cannot open install lockfile"
 if ! flock -n 9; then
   fail "another install-iceslab-node.sh is already running. Wait, or remove /var/run/iceslab-node-install.lock if you're sure it crashed."
@@ -227,19 +226,70 @@ fi
 APT_OPTS=(-o "DPkg::Lock::Timeout=300" -o "Dpkg::Options::=--force-confold" -o "Dpkg::Options::=--force-confdef")
 APT_ENV=(env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none)
 
-cleanup_stale_apt_locks() {
-  local lock_holder
-  for lockfile in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
-    [[ -e "$lockfile" ]] || continue
-    lock_holder=$(fuser "$lockfile" 2>/dev/null || true)
-    if [[ -z "$lock_holder" ]]; then
-      log "stale apt lock at $lockfile, removing"
-      rm -f "$lockfile"
+# apt's locks, and why this installer never deletes one.
+#
+# 26.09 on ru-01: every --uninstall printed four
+# "stale apt lock ... removing" lines on a machine where apt never ran. These
+# four files exist on every Debian/Ubuntu for good; apt and dpkg lock them with
+# fcntl (F_SETLK) on an open descriptor, not by creating them. The old check
+# called a file "stale" when `fuser` named no holder, and on a machine without
+# psmisc `fuser` does not exist, so every file read as unheld and was deleted,
+# a running unattended-upgrades' included: a second apt then takes a fresh
+# file, and two package managers write /var/lib/dpkg at once.
+#
+# A lock file nobody holds needs no removing: an fcntl lock dies with its
+# process, a crashed apt leaves nothing locked. So the files are never touched.
+# What is done instead: wait while apt or dpkg runs (APT_WAIT_SECONDS, default
+# 300), fail in words if it outlasts that, and only on a quiet machine finish
+# what a crashed dpkg left half-configured.
+APT_LOCKS="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+APT_WAIT_SECONDS="${APT_WAIT_SECONDS:-300}"
+
+# apt_busy: why apt is busy, or nothing when it is not. Any one of three is
+# enough: a package-manager process, a lock `lslocks` lists (util-linux, on
+# every such system; it sees fcntl locks, which `flock -n` does not), a holder
+# `fuser` names where psmisc is installed.
+apt_busy() {
+  local p locks f holders
+  for p in apt apt-get aptitude dpkg unattended-upgr; do
+    if pgrep -x "$p" >/dev/null 2>&1; then
+      printf '%s is running' "$p"
+      return 0
     fi
+  done
+  locks="$(lslocks -n -o PATH 2>/dev/null || true)"
+  for f in $APT_LOCKS; do
+    if grep -qxF "$f" <<<"$locks"; then
+      printf '%s is locked' "$f"
+      return 0
+    fi
+    if command -v fuser >/dev/null 2>&1 && [[ -e "$f" ]]; then
+      holders="$(fuser "$f" 2>/dev/null || true)"
+      if [[ -n "${holders// /}" ]]; then
+        printf '%s is held by pid%s' "$f" "$holders"
+        return 0
+      fi
+    fi
+  done
+  return 0
+}
+
+wait_for_apt() {
+  local why waited=0
+  why="$(apt_busy)"
+  [[ -z "$why" ]] && { dpkg --configure -a >/dev/null 2>&1 || true; return 0; }
+  log "apt is busy ($why), waiting up to ${APT_WAIT_SECONDS}s"
+  while [[ -n "$why" ]]; do
+    if (( waited >= APT_WAIT_SECONDS )); then
+      fail "apt busy ($why) for ${APT_WAIT_SECONDS}s; retry later, once it has finished (the lock files are left alone on purpose)"
+    fi
+    sleep 5
+    waited=$((waited + 5))
+    why="$(apt_busy)"
   done
   dpkg --configure -a >/dev/null 2>&1 || true
 }
-cleanup_stale_apt_locks
+wait_for_apt
 
 ICESLAB_NODE_DIR=${ICESLAB_NODE_DIR:-/opt/iceslab-node}
 ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
