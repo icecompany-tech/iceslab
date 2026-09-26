@@ -28,6 +28,10 @@ Makefile    text eol=lf
 # renders, which is LF. Under autocrlf a Windows checkout rewrote them to CRLF,
 # and every golden test failed on a render that had not changed (26.09).
 **/__testdata__/**  text eol=lf
+# The same for the generated artefacts a test compares with a fresh build:
+# the recipes snapshot and its JSON schema (recipes.snapshot.test.ts).
+packages/shared/src/recipes.snapshot.json  text eol=lf
+packages/shared/recipe.schema.json         text eol=lf
 
 # Binary: never touch line endings.
 *.png       binary
