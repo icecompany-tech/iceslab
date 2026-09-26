@@ -999,6 +999,9 @@ export function NodesPage() {
                   regionLabel,
                   cascadeLabel: cascade ? `${cascade.name} · ${cascade.role}` : null,
                   coreVersion: n.coreVersion ?? null,
+                  // Все ядра ноды в углу карточки (E44), версии из отчёта.
+                  engines: n.intendedEngines,
+                  cores: n.cores?.cores,
                   // Restart tally + memory headroom of the core. Lives on
                   // /api/nodes, not on the overview blob, so it refreshes on
                   // the nodes query's own tick.

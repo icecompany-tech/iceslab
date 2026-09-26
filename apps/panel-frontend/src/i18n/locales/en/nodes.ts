@@ -459,6 +459,9 @@
     metricsPending: 'Metrics pending - first poll within 15s',
     loadLabel: 'Load',
     coreVersion: 'xray core version (exit selection needs >= 25.9.5)',
+    engineVersionUnknown: 'version not reported',
+    enginesNotReported: 'The node has not reported core versions yet.',
+    enginesNoneTip: 'Only the agent runs on this node; cores are added on the node page.',
     coreNoData: 'no core data',
     // Geo on the machine against the intent (nodeGeoFacts). No line until the
     // server sends the field; "not reported" is already a fact about the node.

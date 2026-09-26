@@ -24,8 +24,11 @@ import {
   IconTrash,
   IconUpload,
 } from '@tabler/icons-react';
+import { useElementSize } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
+import type { EngineName, NodeCoreInfo } from '@iceslab/shared';
 import type { CoreRestarts } from '@/lib/domain/nodes';
+import { cardEngines, ENGINE_SHORT, engineVersionLines, fitEngineNames } from '@/contours/nodes/lib/nodeCardEngines';
 import type { DashboardOverview } from '@/lib/domain/dashboard';
 import { countryFlag } from '@/lib/domain/countries';
 import { relativeTime } from '@/lib/ui/relativeTime';
@@ -63,6 +66,11 @@ interface CardNode {
    *  reports in. Shown as a small chip so operators can spot nodes too old for
    *  cascade exit selection (needs xray >= 25.9.5). */
   coreVersion?: string | null;
+  /** Ядра намерения ноды (E44). `undefined` у сервера старше поля: тогда
+   *  угол карточки говорит по-старому, версией xray. */
+  engines?: EngineName[];
+  /** Отчёт ноды о ядрах, для версий в подсказке. `undefined` = не сообщала. */
+  cores?: NodeCoreInfo[];
   /** Restart tally + memory headroom of the xray core. null = never reported.
    *  See the CoreHealth block below for why the two are read as one thing. */
   coreRestarts?: CoreRestarts | null;
@@ -427,7 +435,9 @@ export function NodeCard({
               </Text>
             </Group>
           </Tooltip>
-          {node.coreVersion && (
+          {node.engines ? (
+            <EngineLine engines={node.engines} cores={node.cores} />
+          ) : node.coreVersion && (
             <Tooltip label={t('nodeCard.coreVersion')}>
               <Group gap={4} wrap="nowrap" style={{ marginLeft: 'auto' }}>
                 <IconCpu size={12} style={{ color: MIST }} />
@@ -435,12 +445,9 @@ export function NodeCard({
                   size="xs"
                   style={{ color: MIST, fontFamily: "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace" }}
                 >
-                  {/* The version alone. It used to be printed as «xray N» on
-                      every card, which names a core this machine may not be
-                      running: the protocol beside it is a derived label, not
-                      a list of what is installed. Which cores
-                      there are belongs to what the node reported, and that is
-                      not on this card. */}
+                  {/* Сервер старше intendedEngines: версия одна, без имени
+                      ядра, потому что метка протокола рядом выведена, а не
+                      список установленного. */}
                   {node.coreVersion}
                 </Text>
               </Group>
@@ -681,6 +688,69 @@ function MetricBar({
           }}
         />
       </Box>
+    </Tooltip>
+  );
+}
+
+const MONO_FONT = "'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace";
+
+/**
+ * Все ядра ноды в правом нижнем углу (E44): короткие имена в порядке
+ * ENGINE_NAMES, что не влезло, то «+N», без переноса и без обрезки имени.
+ * Ширина знака меряется по скрытому образцу того же шрифта: моноширинный, так
+ * что ширина строки это число знаков. Версии в подсказке.
+ */
+function EngineLine({ engines, cores }: { engines: EngineName[]; cores?: NodeCoreInfo[] }) {
+  const { t } = useTranslation();
+  const { ref: boxRef, width: boxWidth } = useElementSize();
+  const { ref: sampleRef, width: sampleWidth } = useElementSize();
+  const names = cardEngines(engines).map((e) => ENGINE_SHORT[e]);
+  const charWidth = sampleWidth / 10;
+  const maxChars = charWidth > 0 && boxWidth > 0 ? Math.floor(boxWidth / charWidth) : 0;
+  const { shown, rest } = fitEngineNames(names, maxChars);
+  const lines = engineVersionLines(engines, cores);
+
+  const tip =
+    lines.length === 0 ? (
+      t('nodeCard.enginesNoneTip')
+    ) : (
+      <Stack gap={2}>
+        {lines.map((l) => (
+          <Text key={l.engine} size="xs" style={{ fontFamily: MONO_FONT }}>
+            {l.engine} {l.version ?? t('nodeCard.engineVersionUnknown')}
+          </Text>
+        ))}
+        {!cores && (
+          <Text size="xs" style={{ color: MIST }}>
+            {t('nodeCard.enginesNotReported')}
+          </Text>
+        )}
+      </Stack>
+    );
+
+  return (
+    <Tooltip label={tip} withArrow multiline>
+      <Group gap={4} wrap="nowrap" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+        <IconCpu size={12} style={{ color: MIST, flexShrink: 0 }} />
+        <Box ref={boxRef} style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+          <Text
+            ref={sampleRef}
+            size="xs"
+            aria-hidden
+            style={{ position: 'absolute', visibility: 'hidden', whiteSpace: 'pre', fontFamily: MONO_FONT }}
+          >
+            0000000000
+          </Text>
+          <Text
+            size="xs"
+            style={{ color: MIST, fontFamily: MONO_FONT, whiteSpace: 'pre', textAlign: 'right' }}
+          >
+            {names.length === 0
+              ? t('engine.noCores')
+              : [...shown, ...(rest > 0 ? [`+${rest}`] : [])].join(' ')}
+          </Text>
+        </Box>
+      </Group>
     </Tooltip>
   );
 }
