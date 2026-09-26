@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Provision a fresh Ubuntu/Debian VPS to run an AmneziaWG inbound.
 #
-# Installation strategy:
-#   Ubuntu 22.04 (jammy) and earlier: use ppa:amnezia/amneziawg (Launchpad)
-#   Ubuntu 24.04 (noble) and later:   PPA doesn't register for noble, so we
-#     install via DKMS from the upstream GitHub source + build awg-tools.
+# Installation strategy: the kernel module via DKMS and awg-tools, both built
+# from pinned upstream sources on every Ubuntu/Debian. Packages of the Amnezia
+# PPA, where an earlier setup left them, are removed first (step 2a).
 #
 # Ends by writing the amneziawg block of the agent's env (lib/node-env.sh).
 # The agent looks for awg at /usr/bin/awg unless told otherwise, and `make
@@ -121,6 +120,34 @@ DEBIAN_FRONTEND=noninteractive apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   software-properties-common gnupg ca-certificates curl \
   build-essential dkms git libmnl-dev pkg-config wireguard-tools
+
+# ───── 2a. Packages of the Amnezia PPA ─────
+#
+# Stand, ru-02 26.09: a node set up by hand earlier still carried the PPA's
+# amneziawg 1.0.20210914, its dkms package and tools from 2021 next to the
+# ones this script builds. Two ways that bites. The PPA's tools own /usr/bin/awg
+# and awg-quick, the same paths `make install` writes, so the next apt upgrade
+# puts 2021 tools back under the agent. And the PPA's dkms package registers
+# amneziawg/1.0.0, the very name our build registers: removing or upgrading it
+# later takes our module with it.
+#
+# So they go, with the PPA's source list, BEFORE anything is built, and the
+# marker goes too: purging the dkms package runs `dkms remove amneziawg/1.0.0`,
+# which may have taken our build, and the module is built again below.
+ppa_packages() {
+  dpkg-query -W -f='${Package} ${db:Status-Status}\n' 'amneziawg*' 2>/dev/null \
+    | awk '$2 == "installed" { print $1 }' || true
+}
+PPA_PKGS="$(ppa_packages)"
+if [[ -n "$PPA_PKGS" ]]; then
+  log "Removing AmneziaWG packages of the Amnezia PPA: ${PPA_PKGS//$'\n'/ }"
+  # shellcheck disable=SC2086 # one package name per word, from dpkg itself
+  DEBIAN_FRONTEND=noninteractive apt-get purge -y $PPA_PKGS \
+    || fail "could not remove the PPA's AmneziaWG packages (${PPA_PKGS//$'\n'/ }): remove them by hand (apt-get purge) and run this again; they would overwrite the tools and the module this script installs"
+  rm -f /etc/apt/sources.list.d/amnezia-ubuntu-amneziawg-*.list \
+    /etc/apt/sources.list.d/amnezia-ubuntu-amneziawg-*.sources
+  rm -f "$MARKER"
+fi
 
 KERNEL_VER=$(uname -r)
 log "Running kernel: $KERNEL_VER"
