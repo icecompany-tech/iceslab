@@ -104,6 +104,33 @@ func TestNoBootstrapPipesIntoGrepQ(t *testing.T) {
 	}
 }
 
+// xray's --remove warns that sing-box loses its traffic counters, true when
+// xray alone goes. Inside the installer's --uninstall sing-box goes right after,
+// and the warning was noise on a clean removal (stand, 26.09).
+func TestXrayRemoveWarnsAboutSingboxOnlyWhenSingboxStays(t *testing.T) {
+	fn := shellFunc(t, "bootstrap-xray.sh", "remove_core")
+	env := filepath.Join(t.TempDir(), "env")
+	if err := os.WriteFile(env, []byte("SINGBOX_BINARY=/usr/local/bin/sing-box\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin := stubs(t, map[string]string{"systemctl": "exit 0\n"})
+	prog := func(flag string) string {
+		return "set -euo pipefail\n" + flag +
+			"log() { echo \"log: $*\"; }\nwarn() { echo \"warn: $*\"; }\n" +
+			"node_env_refuse_if_running() { :; }\nnode_env_pids() { :; }\ndisable_upstream_unit() { :; }\nunwire_env() { :; }\n" +
+			"INSTALL_PATH='" + filepath.Join(t.TempDir(), "xray") + "'\nICESLAB_NODE_ENV='" + env + "'\n" +
+			fn + "\nremove_core\n"
+	}
+	out, err := runBash(t, bin, prog(""))
+	if err != nil || !strings.Contains(out, "warn: sing-box on this node") {
+		t.Errorf("xray removed alone: no warning about sing-box: %v\n%s", err, out)
+	}
+	out, err = runBash(t, bin, prog("export ICESLAB_UNINSTALL=1\n"))
+	if err != nil || strings.Contains(out, "warn:") || !strings.Contains(out, "log: xray removed") {
+		t.Errorf("inside --uninstall: %v\n%s", err, out)
+	}
+}
+
 func TestAnAlreadyInstalledBinaryIsMadeRootOwned(t *testing.T) {
 	lib, err := filepath.Abs(filepath.Join("scripts", "lib", "node-env.sh"))
 	if err != nil {

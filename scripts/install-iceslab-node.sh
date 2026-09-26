@@ -529,7 +529,9 @@ remove_cores() {
       [[ $present -eq 1 ]] && KEPT_CORES+=("$e (the checkout predates --remove)")
       continue
     fi
-    if bash "$script" --remove; then
+    # ICESLAB_UNINSTALL: every core goes, so a bootstrap's warning about what
+    # its removal leaves another core without is noise here.
+    if ICESLAB_UNINSTALL=1 bash "$script" --remove; then
       [[ $present -eq 1 ]] && REMOVED_CORES+=("$e")
     elif [[ $present -eq 1 ]]; then
       KEPT_CORES+=("$e (its --remove refused, see above)")

@@ -125,7 +125,9 @@ remove_core() {
   rm -f /usr/local/etc/xray/config.json /etc/xray/config.json /etc/xray/shadowsocks.json
   systemctl daemon-reload >/dev/null 2>&1 || true
   unwire_env
-  if grep -q '^SINGBOX_BINARY=' "$ICESLAB_NODE_ENV" 2>/dev/null; then
+  # Not during the installer's --uninstall, which takes sing-box off right
+  # after: there the warning named a problem that was about to stop existing.
+  if [[ "${ICESLAB_UNINSTALL:-0}" != 1 ]] && grep -q '^SINGBOX_BINARY=' "$ICESLAB_NODE_ENV" 2>/dev/null; then
     warn "sing-box on this node read its traffic counters through xray; they stay at zero until SINGBOX_STATS_BIN names another xray"
   fi
   log "xray removed"

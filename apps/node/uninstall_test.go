@@ -58,7 +58,8 @@ func runUninstall(t *testing.T, keepCores bool, present, failCore, legacyCore st
 			body = "#!/usr/bin/env bash\n# an old bootstrap: any flag is an install\n"
 		}
 		body += "if [ -d '" + checkout + "' ]; then c=yes; else c=no; fi\n" +
-			"echo \"bootstrap " + engine + " $* checkout=$c\" >>'" + calls + "'\n"
+			"echo \"bootstrap " + engine + " $* checkout=$c\" >>'" + calls + "'\n" +
+			"echo \"uninstall-flag " + engine + " ${ICESLAB_UNINSTALL:-unset}\" >>'" + calls + "'\n"
 		if engine == failCore {
 			body += "echo '" + engine + " is running: not removed' >&2; exit 1\n"
 		}
@@ -141,6 +142,13 @@ func TestUninstallStopsThenRemovesThenDeletesTheCheckout(t *testing.T) {
 	for engine := range bootstraps {
 		if at(r.calls, "bootstrap "+engine+" --remove") == -1 {
 			t.Errorf("%s's --remove did not run", engine)
+		}
+	}
+	// Each --remove knows it is part of a whole uninstall, so it keeps quiet
+	// about the cores that are about to go anyway.
+	for engine := range bootstraps {
+		if at(r.calls, "uninstall-flag "+engine+" 1") == -1 {
+			t.Errorf("%s's --remove ran without ICESLAB_UNINSTALL=1:\n%s", engine, r.calls)
 		}
 	}
 	if _, err := os.Stat(r.checkout); !os.IsNotExist(err) {
