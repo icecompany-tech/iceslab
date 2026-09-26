@@ -118,6 +118,10 @@ export const traffic = {
     addRule: 'Add rule',
     dragHint: 'Drag to reorder',
     matchPlaceholder: 'geosite:google  geoip:private',
+    entryGrammar:
+      'An entry is a name (geosite:, ext:, domain:, full:, keyword:, regexp:, a hostname) or an address (geoip:, ext-ip:, IPv4/IPv6, CIDR).',
+    entryUnknown: 'Neither a name nor an address: {{entries}}. Such entries are marked in the rules.',
+    entryUnknownRow: 'Neither a name nor an address: {{entries}}.',
     notePlaceholder: 'why this rule exists',
     shadowedBy: 'never fires: {{match}} is claimed by a rule above, which takes this traffic first',
     hygieneMatch: 'DNS · bittorrent · port 25 · QUIC',

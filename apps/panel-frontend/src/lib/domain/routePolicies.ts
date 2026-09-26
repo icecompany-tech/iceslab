@@ -101,6 +101,26 @@ export function policyConflict(err: unknown): string | null {
   return res.data?.message ?? null;
 }
 
+/**
+ * 400 ROUTE_POLICY_ENTRY_UNKNOWN (BACK 265e93e): записи, которые ни имя, ни
+ * адрес, и правило по ним молча не сработало бы. `null`: отказ не этот. Вход
+ * проверяется первым; нестроковые записи пропускаются.
+ */
+export function policyEntryUnknown(err: unknown): string[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
+  if (!res || res.status !== 400 || !res.data || typeof res.data !== 'object') return null;
+  const d = res.data as { error?: unknown; entries?: unknown };
+  if (d.error !== 'ROUTE_POLICY_ENTRY_UNKNOWN' || !Array.isArray(d.entries)) return null;
+  return d.entries.filter((e): e is string => typeof e === 'string');
+}
+
+/** Какие записи правила сервер не принял: пересечение, в порядке правила. */
+export function unknownInMatch(match: readonly string[], unknown: readonly string[]): string[] {
+  const bad = new Set(unknown);
+  return match.filter((m) => bad.has(m));
+}
+
 export async function deleteRoutePolicy(id: string): Promise<void> {
   await api.delete(`/api/route-policies/${id}`);
 }

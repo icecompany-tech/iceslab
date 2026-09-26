@@ -51,6 +51,7 @@ export function RoutePolicyEditor({
     rules,
     dragging,
     setDragging,
+    unknownEntries,
   } = useRoutePolicyForm(policy, squads, onCreated);
 
   return (
@@ -149,7 +150,7 @@ export function RoutePolicyEditor({
         </Text>
       </Box>
 
-      <RulesList shadows={shadows} setRule={setRule} addRule={addRule} removeRule={removeRule} move={move} rules={rules} dragging={dragging} setDragging={setDragging} />
+      <RulesList shadows={shadows} setRule={setRule} addRule={addRule} removeRule={removeRule} move={move} rules={rules} dragging={dragging} setDragging={setDragging} unknownEntries={unknownEntries} />
 
       {/* The row that always exists and always has a value. */}
       <Box

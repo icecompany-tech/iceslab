@@ -8,6 +8,7 @@ import {
   deleteRoutePolicy,
   policyConflict,
   policyEntryOf,
+  policyEntryUnknown,
   routePolicyInUse,
   toPolicyInput,
   updateRoutePolicy,
@@ -39,6 +40,8 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   const [rules, setRules] = useState<DraftRule[]>(initial);
   const [loadedFor, setLoadedFor] = useState(policy.id);
   const [dragging, setDragging] = useState<number | null>(null);
+  /** Записи из отказа ROUTE_POLICY_ENTRY_UNKNOWN: подсветка до правки строки. */
+  const [unknownEntries, setUnknownEntries] = useState<string[]>([]);
 
   // Re-seed when the operator picks a different policy in the list.
   if (loadedFor !== policy.id) {
@@ -46,6 +49,7 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
     setName(policy.name);
     setRules(toRules(policy));
     setDragging(null);
+    setUnknownEntries([]);
   }
 
   // A policy that has never been saved is dirty by definition, even straight
@@ -71,6 +75,18 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
       onCreated?.();
     },
     onError: (err) => {
+      // Записи, которые ни имя, ни адрес (265e93e): подсвечиваются в своих
+      // строках, в тосте одна фраза со списком.
+      const unknown = policyEntryUnknown(err);
+      if (unknown) {
+        setUnknownEntries(unknown);
+        notifications.show({
+          color: 'red',
+          title: t('common.saveError'),
+          message: t('routes.entryUnknown', { entries: unknown.join(', ') }),
+        });
+        return;
+      }
       // A name or band collision, or a policy with no domains at all: the API
       // says which, and the fix differs, so its sentence is the useful one.
       const named = policyConflict(err);
@@ -110,6 +126,9 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
   const entryOf = policyEntryOf(policy.id, cascadesQuery.data?.cascades, cascadesQuery.data?.fields);
 
   function setRule(i: number, patch: Partial<DraftRule>) {
+    // Правка строки: подсветка отказа про неё становится неверной, сервер
+    // скажет заново на следующем сохранении.
+    if (patch.match) setUnknownEntries([]);
     setRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
   function addRule() {
@@ -178,6 +197,7 @@ export function useRoutePolicyForm(policy: RoutePolicy, squads: Squad[], onCreat
     setLoadedFor,
     dragging,
     setDragging,
+    unknownEntries,
   };
 }
 

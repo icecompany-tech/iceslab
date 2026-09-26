@@ -130,6 +130,11 @@ export const traffic = {
     addRule: 'Добавить правило',
     dragHint: 'Перетащите, чтобы поменять порядок',
     matchPlaceholder: 'geosite:google  geoip:private',
+    // Что правило принимает (265e93e): имя или адрес; прочее сервер отвергает.
+    entryGrammar:
+      'Запись это имя (geosite:, ext:, domain:, full:, keyword:, regexp:, хост) или адрес (geoip:, ext-ip:, IPv4/IPv6, CIDR).',
+    entryUnknown: 'Не имя и не адрес: {{entries}}. Такие записи отмечены в правилах.',
+    entryUnknownRow: 'Не имя и не адрес: {{entries}}.',
     notePlaceholder: 'зачем это правило',
     shadowedBy: 'никогда не сработает: {{match}} уже забирает правило выше',
     hygieneMatch: 'DNS · bittorrent · порт 25 · QUIC',
