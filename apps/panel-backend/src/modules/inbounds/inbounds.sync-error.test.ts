@@ -194,6 +194,46 @@ describe('a push the core refuses', () => {
     expect(recorded!.message).toContain(gone);
   });
 
+  it('holds the node to a chain the agent refused to start (E46)', async () => {
+    /**
+     * ru-01, 26.09: the chain block reached the agent, which answered
+     * ADAPTER_FAILED ("no singbox binary on this node"). chainSentAt was
+     * stamped on a success only, so the node status never counted the dead
+     * chain it was sent. The block DID arrive: stamped on the agent's refusal
+     * too, and not on a failure that never reached it.
+     */
+    const entry = await createNode('ru-01', '10.0.0.1:8443');
+    const exit = await createNode('nl-01', '10.0.0.2:8443');
+    await createCascade({
+      name: 'ru-nl',
+      enabled: true,
+      positions: [{ position: 0, nodeIds: [entry], entryProtocol: 'xray', linkProtocol: 'vless' }],
+      directions: [{ tag: 1, countryCode: 'NL', nodeIds: [exit] }],
+    } as never);
+    const chainRefusal = 'chain: no singbox binary on this node, so the chain cannot be drawn';
+    olderThanGeo();
+    const spy = vi.spyOn(NodeTransport.prototype, 'applyInbounds').mockRejectedValue(
+      new NodeRequestError(`Node 10.0.0.1:8443 returned 500: 1/0 inbounds failed to apply: ${chainRefusal}`, 500, {
+        error: 'ADAPTER_FAILED',
+        message: `1/0 inbounds failed to apply: ${chainRefusal}`,
+      }),
+    );
+    await expect(applyInboundsForNode(entry)).rejects.toThrow();
+    const sent = spy.mock.calls[0]![0];
+    expect(sent.chain, 'the fixture push carried no chain block').toBeDefined();
+    const row = await prisma.node.findUniqueOrThrow({ where: { id: entry }, select: { chainSentAt: true, lastInboundSyncError: true } });
+    expect(row.chainSentAt).not.toBeNull();
+    expect((row.lastInboundSyncError as { message: string }).message).toContain('no singbox binary');
+
+    // A failure that never reached the agent leaves the stamp alone.
+    await prisma.node.update({ where: { id: entry }, data: { chainSentAt: null } });
+    vi.restoreAllMocks();
+    olderThanGeo();
+    vi.spyOn(NodeTransport.prototype, 'applyInbounds').mockRejectedValue(new Error('connect ECONNREFUSED'));
+    await expect(applyInboundsForNode(entry)).rejects.toThrow();
+    expect((await prisma.node.findUniqueOrThrow({ where: { id: entry }, select: { chainSentAt: true } })).chainSentAt).toBeNull();
+  });
+
   it('does not let a huge core dump grow the row without limit', async () => {
     const nodeId = await createNode('eu-1', '10.0.0.1:8443');
     vi.spyOn(NodeTransport.prototype, 'applyInbounds').mockRejectedValue(

@@ -57,7 +57,7 @@ import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import { renderChainConfig, type ChainRenderInput, type ChainRole } from './chain.config.js';
 import { chainSocksPort, chainSocksUser } from './chain.ports.js';
 import { chainSecretFor } from '../nodes/chain-secret.js';
-import { canRunChainAtSave, carriesCellAtSave } from './cell-carriage.js';
+import { canRunChainAtSave, carriesCellAtSave, chainEngineOf } from './cell-carriage.js';
 import {
   matchStoredDirections,
   resolveDirections,
@@ -299,19 +299,23 @@ async function assertLinkPortsFree(
  */
 export class CascadeCellNotCarriedError extends Error {
   readonly code = 'CELL_NOT_CARRIED';
-  constructor(public conflicts: { nodeName: string; cell: string; engines: string[] }[]) {
+  constructor(public conflicts: { nodeName: string; cell: string; engines: string[]; chainEngine?: string }[]) {
     super(
       `Some nodes of this cascade cannot terminate the link cell chosen for them: ` +
         conflicts
-          .map(
-            (c) =>
-              `node "${c.nodeName}" would receive a ${c.cell} leg but reports ` +
-              (c.engines.length > 0 ? `only ${c.engines.join(', ')}` : 'no engines'),
+          .map((c) =>
+            // E46: an agent that carries legs through its chain process alone
+            // needs that engine whatever the cell; the cell is not the problem.
+            c.chainEngine
+              ? `node "${c.nodeName}" has no ${c.chainEngine === 'singbox' ? 'sing-box' : c.chainEngine}, ` +
+                `and its agent carries every leg through the chain process, which runs it`
+              : `node "${c.nodeName}" would receive a ${c.cell} leg but reports ` +
+                (c.engines.length > 0 ? `only ${c.engines.join(', ')}` : 'no engines'),
           )
           .join('; ') +
-        `. The two QUIC cells (hy2, tuic) are terminated by the chain process, which is ` +
-        `sing-box: choose vless or shadowsocks for those legs, or install sing-box on those ` +
-        `nodes.`,
+        `. The chain process that carries the legs is sing-box: install sing-box on those ` +
+        `nodes (bootstrap-singbox.sh from the node page), or, on a node with an older agent, ` +
+        `choose vless or shadowsocks, which its xray can end.`,
     );
     this.name = 'CascadeCellNotCarriedError';
   }
@@ -337,12 +341,17 @@ async function assertNodesCarryCells(
   if (!positions || !directions) return;
   const wanted = topologyReceivingCells(positions, directions);
   if (wanted.length === 0) return;
+  // Every node of the cascade, not only the receiving ones: on an agent that
+  // carries legs through its chain alone (E46), the entry DIALS its leg from
+  // that process too, so it needs the same engine as the side that ends it.
+  const everyNode = [...new Set([...positions.flatMap((p) => p.nodeIds), ...directions.flatMap((d) => d.nodeIds)])];
   const nodes = await prisma.node.findMany({
-    where: { id: { in: [...new Set(wanted.map((w) => w.nodeId))] } },
+    where: { id: { in: [...new Set([...wanted.map((w) => w.nodeId), ...everyNode])] } },
     select: { id: true, name: true, cores: true, chainStatus: true },
   });
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const conflicts: { nodeName: string; cell: string; engines: string[] }[] = [];
+  const conflicts: { nodeName: string; cell: string; engines: string[]; chainEngine?: string }[] = [];
+  const named = new Set<string>();
   for (const w of wanted) {
     const node = byId.get(w.nodeId);
     // A node that is not there is not this gate's refusal to make:
@@ -351,7 +360,21 @@ async function assertNodesCarryCells(
     if (!node) continue;
     const carriage = carriesCellAtSave(node, w.cell);
     if (carriage.ok) continue;
-    conflicts.push({ nodeName: node.name, cell: w.cell, engines: carriage.engines });
+    const chainEngine = chainEngineOf(node);
+    // One sentence per node when the cell is not the reason (E46).
+    if (chainEngine && named.has(node.id)) continue;
+    named.add(node.id);
+    conflicts.push({ nodeName: node.name, cell: w.cell, engines: carriage.engines, ...(chainEngine ? { chainEngine } : {}) });
+  }
+  for (const id of everyNode) {
+    const node = byId.get(id);
+    if (!node || named.has(id)) continue;
+    const chainEngine = chainEngineOf(node);
+    if (!chainEngine) continue;
+    const verdict = canRunChainAtSave(node);
+    if (verdict.ok) continue;
+    named.add(id);
+    conflicts.push({ nodeName: node.name, cell: 'any', engines: verdict.engines, chainEngine });
   }
   if (conflicts.length > 0) throw new CascadeCellNotCarriedError(conflicts);
 }
@@ -1223,11 +1246,21 @@ export interface CascadeHopStatus {
   /** The node acknowledged an inbound push made after this cascade was saved. */
   applied: boolean;
   online: boolean;
+  /**
+   * Why this hop does not carry the cascade, in the agent's words, or null
+   * (E46). The chain process the node reported as not running, with its
+   * reason ("no singbox binary on this node, so the chain cannot be drawn"),
+   * or a push refused since the save. A hop with a reason is never done,
+   * whatever `applied` says.
+   */
+  broken: string | null;
 }
 
 export interface CascadeStatusDto {
-  /** Every hop has acknowledged the push. */
+  /** Every hop has acknowledged the push and none is broken. */
   done: boolean;
+  /** The first broken hop as one sentence, "<node>: <reason>", or null. */
+  broken: string | null;
   hops: CascadeHopStatus[];
 }
 
@@ -1253,7 +1286,16 @@ export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
       hops: {
         orderBy: { position: 'asc' },
         include: {
-          node: { select: { id: true, name: true, status: true, lastInboundSyncAt: true } },
+          node: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              lastInboundSyncAt: true,
+              lastInboundSyncError: true,
+              chainStatus: true,
+            },
+          },
         },
       },
     },
@@ -1268,8 +1310,44 @@ export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
     // "applied" that could disagree is exactly the confusion this answers.
     applied: isConfigApplied(h.node.lastInboundSyncAt, savedAt),
     online: h.node.status === 'online',
+    broken: hopBrokenReason(h.node, savedAt),
   }));
-  return { done: hops.length > 0 && hops.every((h) => h.applied), hops };
+  const firstBroken = hops.find((h) => h.broken !== null);
+  return {
+    done: hops.length > 0 && hops.every((h) => h.applied && h.broken === null),
+    broken: firstBroken ? `${firstBroken.name}: ${firstBroken.broken}` : null,
+    hops,
+  };
+}
+
+/**
+ * Why a hop does not carry the cascade, from what the panel already knows
+ * (E46, stand 26.09: three nodes without sing-box logged "no singbox binary on
+ * this node" six times each while the cascade page read "done").
+ *
+ *   - the chain process the node REPORTS and reports down: the agent holds a
+ *     chain only while a push carried one, so a reported chain that does not
+ *     run is this cascade's, and its error is the agent's own sentence;
+ *   - a push refused after the save and not followed by a success: the
+ *     refusal text the worker kept (lastInboundSyncError).
+ *
+ * Exported for the tests.
+ */
+export function hopBrokenReason(
+  node: { chainStatus: unknown; lastInboundSyncAt: Date | null; lastInboundSyncError: unknown },
+  savedAt: Date,
+): string | null {
+  const chain = (node.chainStatus as ChainStatus | null) ?? null;
+  if (chain && chain.running === false) {
+    return `chain process not running: ${chain.error || 'no reason given'}`;
+  }
+  const err = (node.lastInboundSyncError as { at?: string; message?: string } | null) ?? null;
+  if (err?.at && err.message) {
+    const at = Date.parse(err.at);
+    const okAt = node.lastInboundSyncAt?.getTime() ?? 0;
+    if (Number.isFinite(at) && at >= savedAt.getTime() && at > okAt) return err.message;
+  }
+  return null;
 }
 
 /**

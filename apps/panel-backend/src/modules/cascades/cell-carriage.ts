@@ -1,4 +1,10 @@
-import { LINK_CELL_ENGINES, type ChainStatus, type EngineName, type LinkCell } from '@iceslab/shared';
+import {
+  LINK_CELL_ENGINES,
+  type ChainStatus,
+  type EngineName,
+  type LinkCell,
+  type NodeCores,
+} from '@iceslab/shared';
 import { reportedEngines } from '../nodes/node-engines.js';
 
 /**
@@ -58,8 +64,21 @@ export function carriesCellAtSave(
   node: { cores: unknown; chainStatus: unknown },
   cell: LinkCell,
 ): CellCarriage {
-  const carriers = LINK_CELL_ENGINES[cell];
-  return judge(node, (engines) => engines.some((e) => carriers.includes(e)));
+  // E46, stand 26.09: ru-01 -> ru-02 -> nl-01 on vless legs, no sing-box on any
+  // of the three, saved without a word; every node logged "no singbox binary"
+  // and "xray cascade fragments ignored", and the entry's xray sent users to a
+  // link-out that did not exist. LINK_CELL_ENGINES lets xray end vless for the
+  // fleet that predates the chain; an agent that says it carries legs through
+  // its chain process alone (chainEngine) is not that fleet, and there the
+  // chain's engine is the only receiver.
+  const chainEngine = chainEngineOf(node);
+  const carriers = chainEngine ? [chainEngine] : LINK_CELL_ENGINES[cell];
+  return judge(node, (engines) => engines.some((e) => carriers.includes(e)), chainEngine !== undefined);
+}
+
+/** The engine the node's agent carries legs through, when it said so (E46). */
+export function chainEngineOf(node: { cores: unknown }): EngineName | undefined {
+  return ((node.cores as NodeCores | null) ?? null)?.chainEngine;
 }
 
 /**
@@ -77,17 +96,25 @@ export function carriesCellAtSave(
  * is not among them.
  */
 export function canRunChainAtSave(node: { cores: unknown; chainStatus: unknown }): CellCarriage {
-  return judge(node, (engines) => engines.includes('singbox'));
+  return judge(node, (engines) => engines.includes('singbox'), chainEngineOf(node) !== undefined);
 }
 
-/** The three answers both questions share. See carriesCellAtSave's header. */
+/**
+ * The three answers both questions share. See carriesCellAtSave's header.
+ *
+ * `chainOnly`: the agent carries legs through its chain process alone (E46).
+ * Then a chain block that is present and not running is no longer a reason to
+ * let the save through unread: the engines decide, because the reason it is
+ * down may be exactly the missing binary ("no singbox binary on this node").
+ */
 function judge(
   node: { cores: unknown; chainStatus: unknown },
   enough: (engines: EngineName[]) => boolean,
+  chainOnly = false,
 ): CellCarriage {
   const chain = (node.chainStatus as ChainStatus | null) ?? null;
   if (chain?.running === true) return { ok: true, by: 'chain', engines: [] };
-  if (chain) return { ok: true, by: 'unknown', engines: [] };
+  if (chain && !chainOnly) return { ok: true, by: 'unknown', engines: [] };
   const engines = reportedEngines(node);
   if (!engines) return { ok: true, by: 'unknown', engines: [] };
   return { ok: enough(engines), by: 'engines', engines };

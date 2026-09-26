@@ -1780,6 +1780,14 @@ export interface HealthcheckResponse {
    * node whose env declares none.
    */
   declaredEngines?: EngineName[];
+  /**
+   * This agent carries cascade legs ONLY through its chain process, which
+   * runs this engine (E46). Once a chain block reaches it the legacy xray
+   * drawing is ignored, even when the chain then fails to start, so a node
+   * without this engine carries no leg at all. Absent from an agent older than
+   * the chain, which may still end vless and shadowsocks legs in its xray.
+   */
+  chainEngine?: EngineName;
 }
 
 /**
@@ -1808,6 +1816,9 @@ export interface NodeCores {
   observedAt: string;
   /** See HealthcheckResponse.arch. Inventory like the cores: kept per node. */
   arch?: CoreArch;
+  /** See HealthcheckResponse.chainEngine (E46). Kept with the inventory:
+   *  the cascade save reads it between healthchecks. */
+  chainEngine?: EngineName;
   cores: NodeCoreInfo[];
 }
 

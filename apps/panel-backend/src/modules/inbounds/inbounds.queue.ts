@@ -477,6 +477,8 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
    */
   let req: ApplyInboundsRequest;
   let inbounds: InboundDto[];
+  // Whether the push being tried carries a chain block (E46, see the catch).
+  let sentChain = false;
   const transport = new NodeTransport(node);
 
   try {
@@ -492,6 +494,7 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
       `[worker:inbound-sync] applyInbounds ${node.name}: pushing ${inbounds.length} inbound(s)`,
     );
 
+    sentChain = req.chain !== undefined;
     const res = await transport.applyInbounds(req);
     if (res.skipped > 0) {
       // The agent answers 200 even for an inbound whose (protocol, engine) pair
@@ -585,6 +588,19 @@ export async function applyInboundsForNode(nodeId: string): Promise<void> {
             // field fed by another program's stderr grows a row without limit.
             message: detail.slice(0, 2000),
           },
+          /**
+           * E46: a push the AGENT refused still reached it. ADAPTER_FAILED is
+           * the agent's answer after it applied what it could, the chain block
+           * included, so the node now holds (and reports) a chain the panel
+           * sent. Stamped here too, or a chain that fails to start on its very
+           * first push ("no singbox binary") would never be held against the
+           * node: the node status only counts a down chain the panel sent.
+           * Any other failure (network, a refusal before applying) leaves the
+           * stamp as it was.
+           */
+          ...(err instanceof NodeRequestError && err.status === 500 && err.body?.error === 'ADAPTER_FAILED'
+            ? { chainSentAt: sentChain ? new Date() : null }
+            : {}),
         },
       })
       .catch(() => null);

@@ -3,8 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
-import { createCascade, updateCascade, CascadeCellNotCarriedError } from './cascade.service.js';
-import { carriesCellAtSave } from './cell-carriage.js';
+import { createCascade, updateCascade, CascadeCellNotCarriedError, hopBrokenReason } from './cascade.service.js';
+import { canRunChainAtSave, carriesCellAtSave } from './cell-carriage.js';
 
 /**
  * Whether the node a leg lands on can end that leg, phase 5.
@@ -33,6 +33,7 @@ async function makeNode(
   name: string,
   cores: Core[] | null,
   chain?: { running: boolean; version?: string; error?: string },
+  chainEngine?: string,
 ) {
   seq += 1;
   const n = await prisma.node.create({
@@ -42,7 +43,9 @@ async function makeNode(
       protocol: 'xray',
       countryCode: name.startsWith('nl') ? 'NL' : 'RU',
       heartbeatSecret: randomBytes(32),
-      cores: cores ? ({ observedAt: new Date().toISOString(), cores } as unknown as object) : undefined,
+      cores: cores
+        ? ({ observedAt: new Date().toISOString(), ...(chainEngine ? { chainEngine } : {}), cores } as unknown as object)
+        : undefined,
       chainStatus: chain ? ({ ...chain, reservedPorts: [] } as unknown as object) : undefined,
     },
     select: { id: true },
@@ -128,6 +131,103 @@ describe('carriesCellAtSave', () => {
         'hy2',
       ),
     ).toEqual({ ok: true, by: 'unknown', engines: [] });
+  });
+});
+
+/**
+ * E46, stand 26.09: ru-01 -> ru-02 -> nl-01 on vless legs, sing-box on none of
+ * the three, saved without a word. Every node logged "no singbox binary on this
+ * node, so the chain cannot be drawn" and "xray cascade fragments ignored": an
+ * agent with a chain manager carries legs through its chain alone, and says so
+ * now (chainEngine). For such an agent xray is no receiver of any cell.
+ */
+describe('an agent that carries legs through its chain alone (E46)', () => {
+  const xrayOnly = (chain: unknown = null) => ({
+    cores: {
+      observedAt: 'now',
+      chainEngine: 'singbox',
+      cores: [
+        { name: 'xray', engine: 'xray' },
+        { name: 'tuic', engine: 'singbox', installed: false },
+      ],
+    },
+    chainStatus: chain,
+  });
+
+  it('refuses even vless on it without sing-box, where an older agent would pass', () => {
+    expect(carriesCellAtSave(xrayOnly(), 'vless')).toMatchObject({ ok: false, by: 'engines', engines: ['xray'] });
+    expect(carriesCellAtSave(xrayOnly(), 'shadowsocks')).toMatchObject({ ok: false, by: 'engines' });
+    // The same report without chainEngine is the transitional fleet: yes.
+    const old = { cores: { observedAt: 'now', cores: [{ name: 'xray', engine: 'xray' }] }, chainStatus: null };
+    expect(carriesCellAtSave(old, 'vless')).toMatchObject({ ok: true, by: 'engines' });
+  });
+
+  it('reads the engines, not a chain that is down for want of the binary', () => {
+    const down = { running: false, error: 'no singbox binary on this node, so the chain cannot be drawn', reservedPorts: [] };
+    expect(carriesCellAtSave(xrayOnly(down), 'vless')).toMatchObject({ ok: false, by: 'engines' });
+    expect(canRunChainAtSave(xrayOnly(down))).toMatchObject({ ok: false });
+  });
+
+  it('says yes once sing-box is on the node, and to a running chain', () => {
+    const withSingbox = {
+      cores: { observedAt: 'now', chainEngine: 'singbox', cores: [{ name: 'xray', engine: 'xray' }, { name: 'tuic', engine: 'singbox' }] },
+      chainStatus: null,
+    };
+    expect(carriesCellAtSave(withSingbox, 'vless')).toMatchObject({ ok: true });
+    expect(carriesCellAtSave(xrayOnly({ running: true, reservedPorts: [] }), 'vless')).toMatchObject({ ok: true, by: 'chain' });
+  });
+
+  it('refuses the save and names every node without sing-box, the entry included', async () => {
+    const xray = [{ name: 'xray', engine: 'xray' }];
+    const ru01 = await makeNode('ru-01', xray, undefined, 'singbox');
+    const nl01 = await makeNode('nl-01', xray, undefined, 'singbox');
+    const err = await create(ru01, nl01, 'vless').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CascadeCellNotCarriedError);
+    const msg = (err as Error).message;
+    for (const name of ['ru-01', 'nl-01']) {
+      expect(msg).toContain(`node "${name}" has no sing-box, and its agent carries every leg through the chain process`);
+    }
+    expect(await prisma.cascade.count()).toBe(0);
+  });
+});
+
+describe('a broken hop in the cascade status (E46)', () => {
+  const savedAt = new Date('2026-09-26T10:00:00Z');
+
+  it('names the chain the node reports down, in the agent words', () => {
+    expect(
+      hopBrokenReason(
+        {
+          chainStatus: { running: false, error: 'no singbox binary on this node, so the chain cannot be drawn' },
+          lastInboundSyncAt: new Date('2026-09-26T10:01:00Z'),
+          lastInboundSyncError: null,
+        },
+        savedAt,
+      ),
+    ).toBe('chain process not running: no singbox binary on this node, so the chain cannot be drawn');
+  });
+
+  it('names a push refused after the save and not followed by a success', () => {
+    const err = { at: '2026-09-26T10:02:00Z', message: '500 Node x returned 500: 1/1 inbounds failed to apply: chain: ...' };
+    expect(
+      hopBrokenReason({ chainStatus: null, lastInboundSyncAt: new Date('2026-09-26T09:00:00Z'), lastInboundSyncError: err }, savedAt),
+    ).toBe(err.message);
+    // A success after the refusal clears it; a refusal from before the save is not this save's.
+    expect(
+      hopBrokenReason({ chainStatus: null, lastInboundSyncAt: new Date('2026-09-26T10:03:00Z'), lastInboundSyncError: err }, savedAt),
+    ).toBeNull();
+    expect(
+      hopBrokenReason(
+        { chainStatus: null, lastInboundSyncAt: null, lastInboundSyncError: { at: '2026-09-26T09:59:00Z', message: 'old' } },
+        savedAt,
+      ),
+    ).toBeNull();
+  });
+
+  it('is nothing on a running chain and a clean push', () => {
+    expect(
+      hopBrokenReason({ chainStatus: { running: true }, lastInboundSyncAt: new Date('2026-09-26T10:01:00Z'), lastInboundSyncError: null }, savedAt),
+    ).toBeNull();
   });
 });
 

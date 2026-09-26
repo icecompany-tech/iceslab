@@ -545,7 +545,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		// The cores the env declares, read now: a bootstrap run or a --remove
 		// since the agent started shows on the next healthcheck (E42).
 		DeclaredEngines: declaredEngines(s.cfg.EnvFile),
+		ChainEngine:     s.chainEngine(),
 	})
+}
+
+// chainEngine: the engine the chain process runs when this agent has one,
+// which is every agent built with a chain manager. E46: such an agent ignores
+// the legacy xray drawing as soon as a chain block reaches it (chainInForce in
+// applyPush, and a failed Apply still holds the chain), so the panel must not
+// accept a leg onto a node without that engine.
+func (s *Server) chainEngine() dto.EngineName {
+	if s.cfg.Chain == nil {
+		return ""
+	}
+	return dto.EngineName(chain.Engine)
 }
 
 // resolverProbeTimeout: how long the host's resolver has to answer (E37).

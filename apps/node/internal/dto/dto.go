@@ -710,6 +710,12 @@ type HealthcheckResponse struct {
 	// not read its env (or is older than the field), NOT "no cores"; an empty
 	// list is a node whose env declares none.
 	DeclaredEngines *[]EngineName `json:"declaredEngines,omitempty"`
+	// ChainEngine: this agent carries cascade legs ONLY through its chain
+	// process, which runs this engine (E46). Once a chain block reaches it the
+	// legacy xray drawing is ignored, whether the chain then starts or not, so a
+	// node without this engine carries no leg at all. Absent from an agent older
+	// than the chain, which may still end vless and shadowsocks legs in xray.
+	ChainEngine EngineName `json:"chainEngine,omitempty"`
 }
 
 // ResolverDownReason: the host's own resolver did not answer the agent's probe

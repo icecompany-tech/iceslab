@@ -8,7 +8,7 @@ import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-n
 import { getLogger } from '../../lib/infra/logger.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import { CORE_ARCHES } from '@iceslab/shared';
+import { CORE_ARCHES, ENGINE_NAMES } from '@iceslab/shared';
 import type { CoreArch, CoreStatus, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
 
 const METRICS_KEY_PREFIX = 'node:metrics:';
@@ -354,12 +354,16 @@ export function observedCores(
   cores: CoreStatus[],
   observedAt: string,
   arch?: CoreArch,
+  chainEngine?: EngineName,
 ): NodeCores {
   return {
     observedAt,
     // Only a name the manifest knows: the update command picks a release file
     // and its sha256 by it, and a guessed arch hands out the wrong download.
     ...(arch && (CORE_ARCHES as readonly string[]).includes(arch) ? { arch } : {}),
+    // E46: legs on this node ride the chain process alone. A name outside
+    // EngineName is not kept: the gate would compare it with nothing.
+    ...(chainEngine && (ENGINE_NAMES as readonly string[]).includes(chainEngine) ? { chainEngine } : {}),
     cores: cores.map((c) => ({
       name: c.name,
       ...(c.engine !== undefined ? { engine: c.engine } : {}),
@@ -403,6 +407,7 @@ export function coresWorthWriting(
   if (!stored) return true;
   if (JSON.stringify(stored.cores) !== JSON.stringify(fresh.cores)) return true;
   if (stored.arch !== fresh.arch) return true;
+  if (stored.chainEngine !== fresh.chainEngine) return true;
   const storedAt = Date.parse(stored.observedAt);
   // NaN (missing or garbled stamp from an older build) counts as stale, so the
   // next poll repairs it instead of freezing forever.
@@ -504,7 +509,7 @@ async function checkOne(node: {
       unnamedDetail: verdict.message === UNNAMED_DEGRADED ? res : undefined,
       coreVersion,
       coreRestarts,
-      cores: observedCores(res.cores, new Date().toISOString(), res.arch),
+      cores: observedCores(res.cores, new Date().toISOString(), res.arch, res.chainEngine),
       // `null` and `undefined` are different answers here: null is "the node
       // answered and has no chain", undefined never reaches this line because
       // an unreachable node returns from the catch below.
