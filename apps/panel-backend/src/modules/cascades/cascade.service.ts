@@ -982,7 +982,11 @@ export async function getHysteriaEntryLabels(
       positions: { where: { position: 0 }, select: { nodes: { select: { nodeId: true } } } },
       directions: {
         orderBy: { tag: 'asc' },
-        select: { countryCode: true, nodes: { select: { node: { select: { name: true, countryCode: true } } } } },
+        select: {
+          countryCode: true,
+          nodes: { select: { node: { select: { name: true, countryCode: true } } } },
+          outbound: { select: { name: true, countryCode: true } },
+        },
       },
     },
   });
@@ -998,13 +1002,11 @@ export async function getHysteriaEntryLabels(
   for (const r of offRows) offByCascade.set(r.cascadeId, (offByCascade.get(r.cascadeId) ?? new Set()).add(r.groupId));
 
   for (const c of [...cascades].sort((a, b) => a.name.localeCompare(b.name))) {
-    const usable = c.directions.filter((d) => d.nodes.length > 0);
+    const usable = c.directions.filter(directionServes);
     if (usable.length === 0) continue;
     let label: string;
     if (usable.length === 1) {
-      const d = usable[0]!;
-      const exit = d.nodes[0]!.node;
-      label = cascadeProfileLabel(c.name, d.countryCode ?? exit.countryCode, exit.name);
+      label = directionProfileLabel(c.name, usable[0]!);
     } else {
       label = cascadeAutoProfileLabel(c.name);
     }
@@ -1015,6 +1017,35 @@ export async function getHysteriaEntryLabels(
     }
   }
   return out;
+}
+
+/**
+ * What a direction needs to be offered at all: a node behind it, or, phase 10,
+ * a named outbound the last position's chain dials. Neither is a direction
+ * stored before DIRECTION_EMPTY existed, and it serves nobody.
+ */
+function directionServes(d: { nodes: unknown[]; outbound?: unknown }): boolean {
+  return d.nodes.length > 0 || !!d.outbound;
+}
+
+/**
+ * The subscription line of one direction, as a COUNTRY to leave from.
+ *
+ * The flag is the direction's own country first, then its first node's, or,
+ * for a direction on a named outbound (phase 10), the outbound's. The name
+ * behind the arrow, shown only when there is no country, is the first node's
+ * or the outbound's: the operator's name for it, never its server address.
+ */
+function directionProfileLabel(
+  cascadeName: string,
+  d: {
+    countryCode: string | null;
+    nodes: { node: { name: string; countryCode: string | null } }[];
+    outbound?: { name: string; countryCode: string | null } | null;
+  },
+): string {
+  const exit = d.nodes[0]?.node ?? d.outbound!;
+  return cascadeProfileLabel(cascadeName, d.countryCode ?? exit.countryCode, exit.name);
 }
 
 export async function getRouteProfilesByEntryNode(
@@ -1047,6 +1078,10 @@ export async function getRouteProfilesByEntryNode(
         orderBy: { tag: 'asc' },
         include: {
           nodes: { select: { node: { select: { id: true, name: true, countryCode: true } } } },
+          // Phase 10: the country and the name of a direction on a named
+          // outbound. Never its config: the subscription names a way out, the
+          // server behind it is the node's business.
+          outbound: { select: { name: true, countryCode: true } },
         },
       },
     },
@@ -1193,7 +1228,7 @@ export async function getRouteProfilesByEntryNode(
          * Two directions minimum, matching the node side exactly: with one, Auto
          * resolves to the same single destination as the row above it.
          */
-        const usable = c.directions.filter((d) => d.nodes.length > 0);
+        const usable = c.directions.filter(directionServes);
         if (c.autoProfile && !allowed && usable.length > 1) {
           const autoLabel = cascadeAutoProfileLabel(c.name);
           profiles.push({ label: autoLabel, tag: autoRouteTag(0), cascadeId: c.id });
@@ -1209,14 +1244,19 @@ export async function getRouteProfilesByEntryNode(
           }
         }
         for (const d of c.directions) {
-          // A direction with no node serves nobody; offering it would hand out a
-          // config that cannot connect.
-          if (d.nodes.length === 0) continue;
+          // A direction with neither a node nor an outbound serves nobody;
+          // offering it would hand out a config that cannot connect.
+          if (!directionServes(d)) continue;
           // Squad ACL is keyed on exit NODES, so a direction survives if any of
           // its pool is allowed.
+          //
+          // ⚠ Phase 10: a direction on a named outbound has no node for an
+          // allow-list to name, so a squad that restricts this cascade's exits
+          // does not get it. Restriction is the smaller access, and granting a
+          // way out the list cannot express would walk past it, as Auto would.
+          // Opening it to such squads needs the ACL keyed by direction.
           if (allowed && !d.nodes.some((n) => allowed.has(n.node.id))) continue;
-          const first = d.nodes[0]!.node;
-          const label = cascadeProfileLabel(c.name, d.countryCode ?? first.countryCode, first.name);
+          const label = directionProfileLabel(c.name, d);
           profiles.push({ label, tag: routeTag(0, d.tag - 1), cascadeId: c.id });
           for (const p of policiesForDirection(d.nodes.map((n) => n.node.id))) {
             profiles.push({

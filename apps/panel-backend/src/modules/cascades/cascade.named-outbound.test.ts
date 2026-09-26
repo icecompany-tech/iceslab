@@ -9,8 +9,14 @@ import { prisma } from '../../prisma.js';
 import { closeRedis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
-import { getCascadeFragmentsForNode, getChainForNode } from './cascade.service.js';
+import {
+  getCascadeFragmentsForNode,
+  getChainForNode,
+  getHysteriaEntryLabels,
+  getRouteProfilesByEntryNode,
+} from './cascade.service.js';
 import { chainSocksPort } from './chain.ports.js';
+import { autoRouteTag, routeTag } from './cascade.config.js';
 
 /**
  * Phase 10 (2): a cascade direction that goes out through a named outbound.
@@ -290,5 +296,58 @@ describe('what the nodes are told', () => {
     ]);
     // The exit behind direction 1 is untouched by the outbound beside it.
     expect(await getChainForNode(nl)).not.toBeNull();
+  });
+});
+
+describe('what the subscription offers', () => {
+  async function cascadeWithOutbounds() {
+    const ru = await makeNode('ru');
+    const nl = await makeNode('nl');
+    await prisma.node.update({ where: { id: nl }, data: { countryCode: 'NL' } });
+    const ch = await makeOutbound('ch-exit', 'vless', VLESS_REALITY);
+    await req('PUT', `/api/named-outbounds/${ch}`, { countryCode: 'ch' });
+    const ge = await makeOutbound('tbilisi', 'socks', SOCKS);
+    const { body } = await create({
+      autoProfile: true,
+      positions: [entryPos([ru])],
+      directions: [{ nodeIds: [nl] }, { outboundId: ch }, { outboundId: ge }],
+    });
+    return { ru, nl, cascade: body as { id: string; name: string } };
+  }
+
+  it('offers a direction on an outbound as a country, by the outbound country, and Auto over all three', async () => {
+    const { ru, cascade } = await cascadeWithOutbounds();
+    const profiles = (await getRouteProfilesByEntryNode([ru])).get(ru)!;
+    expect(profiles.map((p) => [p.tag, p.label])).toEqual([
+      [autoRouteTag(0), `⚡ ${cascade.name} → Auto`],
+      [routeTag(0, 0), `🇳🇱 ${cascade.name} → NL`],
+      [routeTag(0, 1), `🇨🇭 ${cascade.name} → CH`],
+      // No country anywhere: the outbound's name, never its server.
+      [routeTag(0, 2), `${cascade.name} → tbilisi`],
+    ]);
+  });
+
+  it('the direction country wins over the outbound one, as it does over a node', async () => {
+    const { ru, cascade } = await cascadeWithOutbounds();
+    await prisma.cascadeDirection.updateMany({ where: { cascadeId: cascade.id, tag: 3 }, data: { countryCode: 'GE' } });
+    const profiles = (await getRouteProfilesByEntryNode([ru])).get(ru)!;
+    expect(profiles.find((p) => p.tag === routeTag(0, 2))!.label).toBe(`🇬🇪 ${cascade.name} → GE`);
+  });
+
+  it('keeps it from a squad that restricts the exits, which has no way to name it', async () => {
+    const { ru, nl, cascade } = await cascadeWithOutbounds();
+    const g = await prisma.group.create({ data: { name: 'nl-only' } });
+    await prisma.groupCascadeExit.create({ data: { groupId: g.id, cascadeId: cascade.id, exitNodeId: nl } });
+    const profiles = (await getRouteProfilesByEntryNode([ru], [g.id])).get(ru)!;
+    expect(profiles.map((p) => p.tag)).toEqual([routeTag(0, 0)]);
+  });
+
+  it('names a hysteria entry after its one way out when that is an outbound', async () => {
+    const ru = await makeNode('ru');
+    const ch = await makeOutbound('ch-exit', 'socks', SOCKS);
+    await req('PUT', `/api/named-outbounds/${ch}`, { countryCode: 'CH' });
+    const { body } = await create({ positions: [entryPos([ru])], directions: [{ outboundId: ch }] });
+    await prisma.cascadePosition.updateMany({ where: { cascadeId: body.id, position: 0 }, data: { entryProtocol: 'hysteria' } });
+    expect((await getHysteriaEntryLabels([ru])).get(ru)).toBe(`🇨🇭 ${body.name} → CH`);
   });
 });
