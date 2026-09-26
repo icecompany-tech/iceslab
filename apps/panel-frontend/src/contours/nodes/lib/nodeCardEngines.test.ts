@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeCoreInfo } from '@iceslab/shared';
-import { cardEngines, ENGINE_SHORT, engineVersionLines, fitEngineNames } from '@/contours/nodes/lib/nodeCardEngines';
+import { cardEngines, cardEngineSet, ENGINE_SHORT, engineVersionLines, fitEngineNames } from '@/contours/nodes/lib/nodeCardEngines';
 
 const SEVEN = ['mtproto', 'mieru', 'naive', 'amneziawg', 'singbox', 'hysteria', 'xray'] as const;
 
@@ -40,6 +40,31 @@ describe('fitEngineNames: сколько влезает, остальное «+N
   it('ширина ещё не измерена: показать всё, «+N» не выдумывать', () => {
     expect(fitEngineNames(names, 0)).toEqual({ shown: names, rest: 0 });
     expect(fitEngineNames(names, Number.NaN)).toEqual({ shown: names, rest: 0 });
+  });
+});
+
+describe('cardEngineSet: факт по отчёту, иначе намерение (E45)', () => {
+  it('намерение пустое, отчёт с xray и hysteria: оба ядра, не «без ядер»', () => {
+    expect(
+      cardEngineSet(
+        [],
+        [
+          { name: 'hysteria', engine: 'hysteria' },
+          { name: 'shadowsocks', engine: 'xray' },
+          { name: 'xray', engine: 'xray' },
+        ],
+      ),
+    ).toEqual(['xray', 'hysteria']);
+  });
+
+  it('installed false не рисуется; строка без engine: отчёт неполон, берётся намерение', () => {
+    expect(cardEngineSet(['xray'], [{ name: 'xray', engine: 'xray', installed: false }])).toEqual([]);
+    expect(cardEngineSet(['singbox', 'xray'], [{ name: 'xray' }])).toEqual(['xray', 'singbox']);
+  });
+
+  it('отчёта нет: намерение; нет ничего: undefined (сервер старше поля)', () => {
+    expect(cardEngineSet(['amneziawg'], null)).toEqual(['amneziawg']);
+    expect(cardEngineSet(undefined, undefined)).toBeUndefined();
   });
 });
 

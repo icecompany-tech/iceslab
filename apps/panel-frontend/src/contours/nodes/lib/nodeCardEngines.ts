@@ -30,6 +30,24 @@ export function cardEngines(engines: readonly EngineName[]): EngineName[] {
   return ENGINE_NAMES.filter((e) => engines.includes(e));
 }
 
+/**
+ * Чьи ядра рисует карточка: что стоит на машине по отчёту, когда отчёт полный
+ * (у каждой строки есть engine), иначе намерение. Нода, поставленная без
+ * --engines, держит пустое намерение при стоящих ядрах (E42, E45), и строка
+ * по намерению сказала бы «без ядер» про машину с xray. `undefined`: нет ни
+ * того, ни другого, сервер старше поля.
+ */
+export function cardEngineSet(
+  intent: readonly EngineName[] | undefined,
+  cores: readonly NodeCoreInfo[] | null | undefined,
+): EngineName[] | undefined {
+  if (cores && cores.every((c) => c.engine)) {
+    const onMachine = new Set(cores.filter((c) => c.installed !== false).map((c) => c.engine as EngineName));
+    return cardEngines([...onMachine]);
+  }
+  return intent ? cardEngines(intent) : undefined;
+}
+
 /** Разделитель между именами в строке карточки, в знаках. */
 const SEP = 1;
 

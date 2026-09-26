@@ -52,6 +52,7 @@ import { NodePayloadModal } from '@/contours/nodes/components/NodePayloadModal';
 import { NodeDeleteCascades } from '@/contours/nodes/components/NodeDelete';
 import { showNodeDeleteFailed } from '@/contours/nodes/components/nodeDeleteToast';
 import { nodeDeleteFacts } from '@/contours/nodes/lib/nodeDelete';
+import { cardEngineSet } from '@/contours/nodes/lib/nodeCardEngines';
 import { NodeCard } from '@/contours/nodes/components/NodeCard';
 import { CascadesPanel } from '@/contours/nodes/components/CascadesPanel';
 import type { CascadeLayout } from '@/contours/nodes/components/CascadesView';
@@ -999,8 +1000,9 @@ export function NodesPage() {
                   regionLabel,
                   cascadeLabel: cascade ? `${cascade.name} · ${cascade.role}` : null,
                   coreVersion: n.coreVersion ?? null,
-                  // Все ядра ноды в углу карточки (E44), версии из отчёта.
-                  engines: n.intendedEngines,
+                  // Все ядра ноды в углу карточки (E44): по отчёту, когда он
+                  // полный, иначе намерение (E45). Версии из отчёта.
+                  engines: cardEngineSet(n.intendedEngines, n.cores?.cores),
                   cores: n.cores?.cores,
                   // Restart tally + memory headroom of the core. Lives on
                   // /api/nodes, not on the overview blob, so it refreshes on
