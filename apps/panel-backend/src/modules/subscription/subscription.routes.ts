@@ -101,6 +101,40 @@ const QuerySchema = z.object({
  */
 const COMMENTED_FORMATS: ReadonlySet<Format> = new Set<Format>(['clash', 'wgconf', 'surge', 'quantumultx', 'loon']);
 
+/**
+ * Why a narrowed subscription gave this format nothing, in the terms the
+ * person can act on. Two different answers, and mixing them read as a
+ * contradiction on the stand (26.09): "no hosts of amneziawg ... it has
+ * hysteria, xray, amneziawg".
+ *   - a protocol the person does not have: "no hosts of", and what they have;
+ *   - a protocol they have and this format cannot carry (AmneziaWG in the
+ *     base64 list, MTProto in any config): the format is the reason, and the
+ *     page is where it lives.
+ */
+export function emptyNarrowingWords(
+  format: string,
+  asked: readonly string[],
+  available: readonly string[],
+): string {
+  const missing = asked.filter((p) => !available.includes(p));
+  const notCarried = asked.filter((p) => available.includes(p));
+  const parts: string[] = [];
+  if (missing.length > 0) {
+    parts.push(
+      `this subscription has no hosts of ${missing.join(', ')}` +
+        (available.length > 0 ? ` (it has ${available.join(', ')})` : ''),
+    );
+  }
+  if (notCarried.length > 0) {
+    const what = notCarried.every((p) => p === 'amneziawg') ? 'key' : 'link';
+    parts.push(
+      `the ${format} format does not carry ${notCarried.join(', ')}; ` +
+        `${notCarried.length === 1 ? 'its' : 'their'} ${what} is on the subscription page`,
+    );
+  }
+  return parts.join('; ');
+}
+
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
 
 function isFormat(value: string): value is Format {
@@ -742,9 +776,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         if (carriesNothing) {
           // Not a file to save: the sentence is the answer.
           reply.removeHeader('Content-Disposition');
-          const words =
-            `this subscription has no hosts of ${onlyProtocols.join(', ')} for the ${format} format` +
-            (availableProtocols.length > 0 ? `; it has ${availableProtocols.join(', ')}` : '');
+          const words = emptyNarrowingWords(format, onlyProtocols, availableProtocols);
           if (COMMENTED_FORMATS.has(format)) {
             return reply.type('text/plain; charset=utf-8').send(`# ${words}\n`);
           }

@@ -11,6 +11,7 @@ import { invalidateSrrCache } from '../srr/srr.service.js';
 import { deriveSsPassword } from '../../lib/auth/credentials.js';
 import { parseProtocolsParam, withProtocols } from './subscription.protocols.js';
 import { buildSubscriptionPage, type SubscriptionPageData } from './subscription.page.js';
+import { emptyNarrowingWords } from './subscription.routes.js';
 
 /**
  * `?protocols=`: a subscription that hands out one protocol or a few, on every
@@ -174,6 +175,29 @@ describe('?protocols= on the subscription', () => {
         available: ['hysteria', 'xray', 'shadowsocks'],
       });
     }
+  });
+
+  it('says the format is the reason when the person has the protocol and the format cannot carry it', async () => {
+    // Stand, 26.09: "no hosts of amneziawg ... it has hysteria, xray,
+    // amneziawg" read as a contradiction.
+    expect(emptyNarrowingWords('plain', ['amneziawg'], ['hysteria', 'xray', 'amneziawg'])).toBe(
+      'the plain format does not carry amneziawg; its key is on the subscription page',
+    );
+    expect(emptyNarrowingWords('singbox', ['tuic'], ['hysteria', 'xray'])).toBe(
+      'this subscription has no hosts of tuic (it has hysteria, xray)',
+    );
+    expect(emptyNarrowingWords('clash', ['tuic', 'mtproto'], ['mtproto'])).toBe(
+      'this subscription has no hosts of tuic (it has mtproto); the clash format does not carry mtproto; its link is on the subscription page',
+    );
+
+    const s = await subscriber();
+    const res = await get(`/sub/${s.subscriptionToken}?format=outline&protocols=hysteria`);
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body)).toMatchObject({
+      error: 'SUBSCRIPTION_PROTOCOL_EMPTY',
+      message: 'the outline format does not carry hysteria; its link is on the subscription page',
+      available: ['hysteria', 'xray', 'shadowsocks'],
+    });
   });
 
   it('leaves every existing contract alone without the parameter', async () => {
