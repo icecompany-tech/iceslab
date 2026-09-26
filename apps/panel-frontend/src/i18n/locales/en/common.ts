@@ -127,6 +127,10 @@ export const common = {
     gateRefused: 'The server refused: {{core}} {{version}} on {{node}} is refused by the panel.',
     gateAwg: 'Node {{node}} runs the {{nodeGen}} module, the profile needs {{profileGen}}.',
     gateAwgHow: 'The 3.1 module comes with a rerun of the AmneziaWG bootstrap on the node; it carries 1.x profiles too.',
+    gateAwgAgent:
+      'The agent on node {{node}} is older than the AmneziaWG 3.1 interface: rebuild the agent on the node, then bind the 3.1 profile.',
+    gateAwgSubnet:
+      'On node {{node}} subnet {{subnet}} overlaps {{otherSubnet}} of profile {{other}}: 1.x and 3.1 profiles on one node need different subnets.',
     gateAfterInstall: 'The panel runs nothing on the machine. Once installed, the node reports the core by itself and the save goes through.',
     unpinnedInstall: {
       'no-arch': 'Version not pinned: the node did not report its arch, and every file and its checksum are per arch. The script installs its own default.',

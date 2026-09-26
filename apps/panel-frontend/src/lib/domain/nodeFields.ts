@@ -28,6 +28,16 @@ export function nodeFieldKnown(
 }
 
 /**
+ * Отдаёт ли сервер `cores[].awgGenerations` (24b59b9). Ключ вложенный, поэтому
+ * по элементам ищется в строках ядер, а не у ноды: у сервера старше `fields`
+ * хватает одной строки с ключом.
+ */
+export function awgGenerationsKnown(list: Pick<NodesListResponse, 'nodes'> & { fields?: unknown } | undefined): boolean {
+  const rows = (list?.nodes ?? []).flatMap((n) => n.cores?.cores ?? []);
+  return listFieldKnown(list?.fields, rows, 'awgGenerations', 'cores[].awgGenerations');
+}
+
+/**
  * То же правило для любого списка с конвертом `fields` (у каскадов с Ф9.3,
  * CASCADE_DTO_FIELDS): сперва слово сервера, по элементам только у сервера
  * старше поля. Ответа ещё нет: не знает.

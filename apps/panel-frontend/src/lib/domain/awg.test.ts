@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
 import {
+  agentAwgFact,
   awgLabel,
   nodeAwgFact,
   profileAwgCreate,
@@ -27,6 +29,34 @@ describe('nodeAwgFact: факт модуля на ноде (227054e)', () => {
   it('подпись поколения', () => {
     expect(awgLabel(3)).toBe('3.1');
     expect(awgLabel(1)).toBe('1.x');
+  });
+});
+
+describe('agentAwgFact: что несёт агент (cores[].awgGenerations, 24b59b9)', () => {
+  it('сервер поля не отдаёт: строки нет, что бы ни лежало', () => {
+    expect(agentAwgFact(false, [1, 3])).toBeNull();
+  });
+
+  it('[1, 3]: интерфейсы 1.x и 3.1', () => {
+    expect(agentAwgFact(true, [1, 3])).toBe('both');
+  });
+
+  it('[1] или нет ключа: только 1.x, пересобрать (отсутствие здесь ответ)', () => {
+    expect(agentAwgFact(true, [1])).toBe('only1');
+    expect(agentAwgFact(true, undefined)).toBe('only1');
+    expect(agentAwgFact(true, 'junk')).toBe('only1');
+  });
+});
+
+describe('awgGenerationsKnown: вложенный ключ по fields или по строкам ядер', () => {
+  const node = (cores: object[]) => ({ cores: { observedAt: '', cores } }) as never;
+  it('fields сервера называет ключ: знает и на пустом парке', () => {
+    expect(awgGenerationsKnown({ nodes: [], fields: ['cores[].awgGenerations'] })).toBe(true);
+  });
+  it('сервер старше fields: по строке ядра с ключом', () => {
+    expect(awgGenerationsKnown({ nodes: [node([{ name: 'amneziawg', awgGenerations: [1] }])] })).toBe(true);
+    expect(awgGenerationsKnown({ nodes: [node([{ name: 'amneziawg' }])] })).toBe(false);
+    expect(awgGenerationsKnown(undefined)).toBe(false);
   });
 });
 

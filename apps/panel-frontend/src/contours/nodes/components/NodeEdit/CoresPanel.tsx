@@ -23,7 +23,7 @@ import {
   type HysteriaTlsFacts,
 } from '@/contours/nodes/lib/hysteriaTls';
 import { HysteriaTlsLine } from '@/contours/nodes/components/NodeEdit/HysteriaTlsLine';
-import { nodeAwgFact, type NodeAwgFact } from '@/lib/domain/awg';
+import { agentAwgFact, nodeAwgFact, type AgentAwgFact, type NodeAwgFact } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
 import {
   componentsOfCore,
@@ -102,8 +102,11 @@ export function CoresPanel({
   intent,
   onIntent,
   refusal,
+  awgGenerationsKnown = false,
 }: {
   node: Node;
+  /** Сервер отдаёт `cores[].awgGenerations` (24b59b9); нет: строки агента нет. */
+  awgGenerationsKnown?: boolean;
   /** Выбор версий в форме ноды (ещё не сохранённый). undefined: сервер поля
    *  не знает, и выбора нет. Судит строку СОХРАНЁННОЕ намерение ноды. */
   intent?: NodeCoreVersions;
@@ -214,6 +217,8 @@ export function CoresPanel({
               // Поколение AWG: факт модуля (227054e), у строки amneziawg и
               // только когда сервер поле отдаёт.
               awg={c.name === 'amneziawg' ? nodeAwgFact(node.awgProtocol) : null}
+              // Что несёт агент (24b59b9): вторая строка у amneziawg.
+              agentAwg={c.name === 'amneziawg' ? agentAwgFact(awgGenerationsKnown, c.awgGenerations) : null}
               tls={hysteriaTlsFacts(node, c)}
               onRotate={isNativeHysteria(c) && canRotateHysteriaTls(node) ? confirmRotate : undefined}
               rotating={rotateMutation.isPending}
@@ -262,6 +267,7 @@ function CoreRow({
   intent,
   onIntent,
   awg,
+  agentAwg,
   tls,
   onRotate,
   rotating,
@@ -283,6 +289,8 @@ function CoreRow({
   onIntent: ((next: NodeCoreVersions) => void) | undefined;
   /** Что говорит модуль AmneziaWG (nodeAwgFact); null: строки нет. */
   awg: NodeAwgFact | null;
+  /** Какие интерфейсы несёт агент (agentAwgFact); null: строки нет. */
+  agentAwg?: AgentAwgFact | null;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -579,6 +587,13 @@ function CoreRow({
           }}
         >
           {t(`nodeEdit.coresAwgFact.${awg}`)}
+        </Text>
+      )}
+      {/* Агент отдельной строкой: модуль 3.1 при старом агенте профиль 3.1
+          не поднимет, и сервер откажет (AWG_AGENT_TOO_OLD). */}
+      {agentAwg && (
+        <Text style={{ marginTop: 2, paddingLeft: 18, fontSize: 12, lineHeight: '17px', color: FAINT }}>
+          {t(`nodeEdit.coresAwgAgent.${agentAwg}`)}
         </Text>
       )}
 

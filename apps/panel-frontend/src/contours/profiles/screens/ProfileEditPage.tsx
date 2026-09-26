@@ -21,8 +21,7 @@ import { apiErrorMessage } from '@/lib/net/client';
 import { engineRefused } from '@/contours/profiles/lib/plainSubprotocol';
 import { singboxXrayMessage, singboxXrayRefusal, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
-import { coreGateRefusal, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
-import { awgLabel } from '@/lib/domain/awg';
+import { awgGateText, coreGateRefusal, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
 
 /**
  * Create / edit a profile as a page. A profile is a protocol template with a
@@ -78,22 +77,17 @@ export function ProfileEditPage() {
   // The form offers only what sing-box serves since 26680a8, so this is for a
   // profile saved before that, opened and saved again.
   const [refused, setRefused] = useState<SingboxXrayRefusal | null>(null);
-  // 409 AWG_PROTOCOL_MISMATCH (227054e): профиль переведён на 3.1, а нода, на
-  // которой он стоит, несёт модуль 1.x. Под выбором поколения и в тосте.
+  // Три 409 AmneziaWG: AWG_PROTOCOL_MISMATCH (227054e), AWG_AGENT_TOO_OLD и
+  // AWG_SUBNET_OVERLAP (24b59b9). Под выбором поколения и в тосте.
   const [awgRefusal, setAwgRefusal] = useState<CoreGateRefusal | null>(null);
   const saveError = (err: unknown): string => {
     const sb = singboxXrayRefusal(err);
     setRefused(sb);
     const gate = coreGateRefusal(err);
-    setAwgRefusal(gate?.kind === 'awg' ? gate : null);
+    const awgText = gate ? awgGateText(gate, t) : null;
+    setAwgRefusal(awgText !== null ? gate : null);
     if (sb) return singboxXrayMessage(sb, t);
-    if (gate?.kind === 'awg') {
-      return t('nodeCore.gateAwg', {
-        node: gate.nodeName,
-        nodeGen: awgLabel(gate.nodeAwgProtocol),
-        profileGen: awgLabel(gate.profileAwgProtocol),
-      });
-    }
+    if (awgText !== null) return awgText;
     return engineRefused(err) ? t('profileEdit.engineRefused') : apiErrorMessage(err);
   };
   // Знает ли сервер поколение у профиля: ключ у этого профиля, у нового по

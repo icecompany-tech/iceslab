@@ -20,7 +20,7 @@ import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
 import type { UseFormReturnType } from '@mantine/form';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { AWG_PROTOCOLS, awgLabel, type AwgProtocol } from '@/lib/domain/awg';
-import type { CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
+import { awgGateText, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
 
 export function AmneziawgSection({
   generateAwgKeys,
@@ -67,17 +67,16 @@ export function AmneziawgSection({
                       {t('profiles.form.cfg.awgGenerationPending')}
                     </Text>
                   )}
-                  {awgRefusal?.kind === 'awg' && (
-                    <Text size="xs" c="red">
-                      {t('nodeCore.gateAwg', {
-                        node: awgRefusal.nodeName,
-                        nodeGen: awgLabel(awgRefusal.nodeAwgProtocol),
-                        profileGen: awgLabel(awgRefusal.profileAwgProtocol),
-                      })}{' '}
-                      {t('nodeCore.gateAwgHow')}
-                    </Text>
-                  )}
                 </Stack>
+              )}
+              {/* Отказ AmneziaWG последнего сохранения (поколение, агент,
+                  подсеть), словами; вне выбора, потому что подсеть бывает и
+                  у сервера без поля поколения. */}
+              {awgRefusal && awgGateText(awgRefusal, t) !== null && (
+                <Text size="xs" c="red">
+                  {awgGateText(awgRefusal, t)}
+                  {awgRefusal.kind === 'awg' ? ` ${t('nodeCore.gateAwgHow')}` : ''}
+                </Text>
               )}
               {/* AmneziaWG-specific gotchas in one place. Per upstream
                   amnezia.org docs: (a) pre-4.8.12.9 AmneziaVPN clients

@@ -257,6 +257,10 @@
       awg1: 'AWG 1.x: 1.x profiles only',
       unreported: 'generation not reported',
     },
+    coresAwgAgent: {
+      both: 'the agent carries 1.x and 3.1 interfaces',
+      only1: 'the agent carries 1.x only, rebuild it',
+    },
     policyApplicability: {
       applies: 'the policy applies',
       'not-applicable': 'the policy is not applicable on this node',

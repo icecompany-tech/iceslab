@@ -41,6 +41,26 @@ export function nodeAwgFact(value: AwgProtocol | null | undefined): NodeAwgFact 
   return value === 3 ? 'awg3' : 'awg1';
 }
 
+/**
+ * Какие интерфейсы несёт АГЕНТ ноды (`cores[].awgGenerations`, 24b59b9), вторая
+ * часть строки amneziawg в «Ядрах». Не то же, что модуль: модуль 3.1 при старом
+ * агенте профиль 3.1 не поднимет.
+ *
+ *   known false        сервер поля не отдаёт (нет `cores[].awgGenerations` в
+ *                      `fields`): строки нет;
+ *   [1, 3]             «агент несёт интерфейсы 1.x и 3.1»;
+ *   [1] или нет ключа  «агент несёт только 1.x, пересоберите». Здесь, одном
+ *                      месте контракта, отсутствие это ответ: агент старше
+ *                      поля 3.1 не поднимет, и сервер отказывает так же
+ *                      (AWG_AGENT_TOO_OLD).
+ */
+export type AgentAwgFact = 'both' | 'only1';
+
+export function agentAwgFact(known: boolean, generations: unknown): AgentAwgFact | null {
+  if (!known) return null;
+  return Array.isArray(generations) && generations.includes(3) ? 'both' : 'only1';
+}
+
 /** Поколение профиля с null, прочитанным как 1, как читает сервер. */
 export function profileAwgGeneration(value: AwgProtocol | null | undefined): AwgProtocol {
   return value === 3 ? 3 : 1;

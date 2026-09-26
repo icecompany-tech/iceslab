@@ -145,6 +145,8 @@ export function nodeCoreFitText(fit: NodeCoreFit, t: T): { tone: NodeCoreTone; t
  *   CORE_VERSION_REFUSED  { nodeName, engine, component, version, verdict, reason }
  *   AWG_PROTOCOL_MISMATCH { nodeName, profileAwgProtocol, nodeAwgProtocol }
  *                         (227054e: также на PUT профиля при смене на 3.1)
+ *   AWG_AGENT_TOO_OLD     { nodeName }                          (24b59b9)
+ *   AWG_SUBNET_OVERLAP    { nodeName, subnet, otherProfileName, otherSubnet }
  *
  * The screen offers neither (nodeCoreFit closes the tick), so this is for a
  * screen older than the report it saw, or a report that changed under it.
@@ -166,9 +168,40 @@ export type CoreGateRefusal =
   | { kind: 'refused'; nodeName: string; engine: EngineName; version: string; reason: string }
   /** AWG_PROTOCOL_MISMATCH (227054e): профиль 3.1 на ноде с модулем 1.x. Без
    *  `engine` в теле: ядро одно, amneziawg. */
-  | { kind: 'awg'; nodeName: string; profileAwgProtocol: AwgProtocol; nodeAwgProtocol: AwgProtocol };
+  | { kind: 'awg'; nodeName: string; profileAwgProtocol: AwgProtocol; nodeAwgProtocol: AwgProtocol }
+  /** AWG_AGENT_TOO_OLD (24b59b9): агент на ноде старше интерфейса 3.1. */
+  | { kind: 'awgAgent'; nodeName: string }
+  /** AWG_SUBNET_OVERLAP (24b59b9): профили 1.x и 3.1 одной ноды с
+   *  пересекающимися подсетями. */
+  | { kind: 'awgSubnet'; nodeName: string; subnet: string; otherProfileName: string; otherSubnet: string };
 
 const WHY = new Set(['no-arch', 'no-asset', 'unpinned']);
+
+/**
+ * Три отказа AmneziaWG одной фразой: под нодой в форме хоста и «Развернуть»,
+ * под выбором поколения и в тосте профиля. null у отказов не про AWG.
+ */
+export function awgGateText(refusal: CoreGateRefusal, t: T): string | null {
+  switch (refusal.kind) {
+    case 'awg':
+      return t('nodeCore.gateAwg', {
+        node: refusal.nodeName,
+        nodeGen: refusal.nodeAwgProtocol === 3 ? '3.1' : '1.x',
+        profileGen: refusal.profileAwgProtocol === 3 ? '3.1' : '1.x',
+      });
+    case 'awgAgent':
+      return t('nodeCore.gateAwgAgent', { node: refusal.nodeName });
+    case 'awgSubnet':
+      return t('nodeCore.gateAwgSubnet', {
+        node: refusal.nodeName,
+        subnet: refusal.subnet,
+        otherSubnet: refusal.otherSubnet,
+        other: refusal.otherProfileName,
+      });
+    default:
+      return null;
+  }
+}
 
 function awgGeneration(v: unknown): AwgProtocol | null {
   return (AWG_PROTOCOLS as readonly unknown[]).includes(v) ? (v as AwgProtocol) : null;
@@ -188,6 +221,16 @@ export function coreGateRefusal(err: unknown): CoreGateRefusal | null {
     const nodeAwgProtocol = awgGeneration(d.nodeAwgProtocol);
     if (profileAwgProtocol === null || nodeAwgProtocol === null) return null;
     return { kind: 'awg', nodeName: d.nodeName, profileAwgProtocol, nodeAwgProtocol };
+  }
+  if (d.error === 'AWG_AGENT_TOO_OLD') return { kind: 'awgAgent', nodeName: d.nodeName };
+  // Все три строки обязательны: фраза без подсети или без имени профиля
+  // назвала бы не то, что пересеклось.
+  if (d.error === 'AWG_SUBNET_OVERLAP') {
+    const { subnet, otherProfileName, otherSubnet } = d;
+    if (typeof subnet !== 'string' || !subnet) return null;
+    if (typeof otherProfileName !== 'string' || !otherProfileName) return null;
+    if (typeof otherSubnet !== 'string' || !otherSubnet) return null;
+    return { kind: 'awgSubnet', nodeName: d.nodeName, subnet, otherProfileName, otherSubnet };
   }
   if (typeof d.engine !== 'string' || !(ENGINE_NAMES as readonly string[]).includes(d.engine)) return null;
   const engine = d.engine as EngineName;

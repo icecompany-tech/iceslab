@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
-import { coreGateRefusal, nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import { awgGateText, coreGateRefusal, nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const PIN = (c: CoreComponent) => CORE_VERSIONS[c].pinned as string;
@@ -179,6 +179,41 @@ describe('coreGateRefusal: the 409 of the BACK core gate', () => {
     expect(
       coreGateRefusal(res({ error: 'AWG_PROTOCOL_MISMATCH', profileAwgProtocol: 3, nodeAwgProtocol: 1 })),
     ).toBeNull();
+  });
+
+  it('AWG_AGENT_TOO_OLD (24b59b9): only the node', () => {
+    expect(coreGateRefusal(res({ error: 'AWG_AGENT_TOO_OLD', message: 'm', nodeName: 'se-01' }))).toEqual({
+      kind: 'awgAgent',
+      nodeName: 'se-01',
+    });
+    expect(coreGateRefusal(res({ error: 'AWG_AGENT_TOO_OLD' }))).toBeNull();
+  });
+
+  it('AWG_SUBNET_OVERLAP (24b59b9): all four fields, a missing one is not read', () => {
+    const body = { error: 'AWG_SUBNET_OVERLAP', nodeName: 'se-01', subnet: '10.66.66.0/24', otherProfileName: 'awg-1x', otherSubnet: '10.66.66.0/24' };
+    expect(coreGateRefusal(res(body))).toEqual({
+      kind: 'awgSubnet',
+      nodeName: 'se-01',
+      subnet: '10.66.66.0/24',
+      otherProfileName: 'awg-1x',
+      otherSubnet: '10.66.66.0/24',
+    });
+    for (const key of ['subnet', 'otherProfileName', 'otherSubnet']) {
+      expect(coreGateRefusal(res({ ...body, [key]: '' }))).toBeNull();
+      expect(coreGateRefusal(res({ ...body, [key]: 7 }))).toBeNull();
+    }
+  });
+
+  it('awgGateText: the three AmneziaWG refusals in words, others null', () => {
+    const t = (k: string, o?: Record<string, unknown>) => `${k} ${JSON.stringify(o ?? {})}`;
+    expect(awgGateText({ kind: 'awgAgent', nodeName: 'se-01' }, t)).toBe('nodeCore.gateAwgAgent {"node":"se-01"}');
+    expect(
+      awgGateText({ kind: 'awgSubnet', nodeName: 'n', subnet: 'a', otherProfileName: 'p', otherSubnet: 'b' }, t),
+    ).toBe('nodeCore.gateAwgSubnet {"node":"n","subnet":"a","otherSubnet":"b","other":"p"}');
+    expect(awgGateText({ kind: 'awg', nodeName: 'n', profileAwgProtocol: 3, nodeAwgProtocol: 1 }, t)).toBe(
+      'nodeCore.gateAwg {"node":"n","nodeGen":"1.x","profileGen":"3.1"}',
+    );
+    expect(awgGateText({ kind: 'refused', nodeName: 'n', engine: 'xray', version: 'v', reason: '' }, t)).toBeNull();
   });
 
   it('garbage and other answers: null', () => {

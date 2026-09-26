@@ -30,6 +30,7 @@ import {
 import { NodeDeleteCascades } from '@/contours/nodes/components/NodeDelete';
 import { showNodeDeleteFailed } from '@/contours/nodes/components/nodeDeleteToast';
 import { nodeDeleteFacts } from '@/contours/nodes/lib/nodeDelete';
+import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
 
 /**
  * A registered node, as a page with tabs. Parameters is what the panel stores
@@ -69,6 +70,7 @@ export function NodeEditPage() {
     coreRefusal,
     enginesKnown,
     enginesRefusal,
+    fleetQuery,
   } = useNodeEditForm();
 
   // `#cores`: the deploy window and the host form link here for a core the
@@ -315,6 +317,7 @@ export function NodeEditPage() {
                   intent={node.coreVersions !== undefined ? form.values.coreVersions : undefined}
                   onIntent={(next) => form.setFieldValue('coreVersions', next)}
                   refusal={coreRefusal}
+                  awgGenerationsKnown={awgGenerationsKnown(fleetQuery.data)}
                 />
               </Box>
             </Box>

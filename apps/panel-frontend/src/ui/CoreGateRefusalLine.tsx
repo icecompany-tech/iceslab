@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Box, Stack, Text } from '@mantine/core';
-import type { CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
-import { awgLabel } from '@/lib/domain/awg';
+import { awgGateText, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
 import { CopyButton } from '@/ui/CopyButton';
 import { AMBER, FAINT, GROUND, HAIRLINE, RED, SNOW } from '@/lib/ui/tokens';
 
@@ -31,24 +30,28 @@ export function CoreGateRefusalLine({
   arch?: string;
 }) {
   const { t } = useTranslation();
-  const core = refusal.kind === 'awg' ? 'amneziawg' : refusal.engine === 'singbox' ? 'sing-box' : refusal.engine;
+  const awgText = awgGateText(refusal, t);
+  const core =
+    refusal.kind === 'missing' || refusal.kind === 'refused'
+      ? refusal.engine === 'singbox'
+        ? 'sing-box'
+        : refusal.engine
+      : 'amneziawg';
   return (
     <Stack
       gap={8}
       style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: `${RED}14`, border: `1px solid ${RED}40` }}
     >
-      {refusal.kind === 'awg' ? (
+      {awgText !== null ? (
         <>
           <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, fontWeight: 500 }}>
-            {t('nodeCore.gateAwg', {
-              node: refusal.nodeName,
-              nodeGen: awgLabel(refusal.nodeAwgProtocol),
-              profileGen: awgLabel(refusal.profileAwgProtocol),
-            })}
+            {awgText}
           </Text>
-          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: FAINT }}>
-            {t('nodeCore.gateAwgHow')}
-          </Text>
+          {refusal.kind === 'awg' && (
+            <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: FAINT }}>
+              {t('nodeCore.gateAwgHow')}
+            </Text>
+          )}
         </>
       ) : refusal.kind === 'missing' ? (
         <>
@@ -84,7 +87,7 @@ export function CoreGateRefusalLine({
             {t('nodeCore.gateAfterInstall')}
           </Text>
         </>
-      ) : (
+      ) : refusal.kind === 'refused' ? (
         <>
           <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, fontWeight: 500 }}>
             {t('nodeCore.gateRefused', { node: refusal.nodeName, core, version: refusal.version })}
@@ -105,7 +108,7 @@ export function CoreGateRefusalLine({
             <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: SNOW }}>{refusal.reason}</Text>
           )}
         </>
-      )}
+      ) : null}
     </Stack>
   );
 }
