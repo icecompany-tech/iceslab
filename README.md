@@ -263,6 +263,15 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 - **Security**: vulnerabilities to `security@icecompany.tech`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
 - **Trademark**: the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected: fork freely, just rename if you ship publicly.
 
+## Support the project
+
+Iceslab is built by one person and stays AGPL. If it saves you time, a
+donation keeps the test nodes running:
+
+- **USDT (TRC-20):** `TM432rBBe3Eo5REkWn81ajJ9JLjGuuTjEJ`
+
+Check the network before sending: TRC-20 only, other networks are lost.
+
 ## License
 
 Copyright (C) 2026 Icecompany. Released under [AGPL-3.0-or-later](./LICENSE). If you run a modified Iceslab as a service, you have to offer the source to your users.

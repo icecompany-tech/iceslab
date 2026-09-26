@@ -1,25 +1,14 @@
-# Funding sources shown in the "❤ Sponsor" button on the GitHub repo page.
+# Funding sources shown in the "Sponsor" button on the GitHub repo page.
 # Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 #
-# Status: placeholders. Uncomment + fill in handles as you create accounts.
-# Until then the Sponsor button is hidden, repo ships with the file ready
-# so flipping it on later is a 1-line edit.
+# GitHub accepts only its own keys here and, under `custom`, up to four URLs.
+# A wallet address is not a URL, so the address itself lives in the README
+# (section "Support the project"), and the button points at that section.
+#
+# GitHub Sponsors is not available for this account's region without a fiscal
+# host, so the `github:` key stays out until that changes. Other platforms are
+# added only when an account really exists behind them: an empty handle turns
+# the button into a 404.
 
-# ───── Direct channels (no fiscal host, no approval, instant) ─────
-# custom:
-#   - https://boosty.to/iceslab               # RU audience, СБП/cards
-#   - https://t.me/iceslab_donate             # TG @wallet (TON), optional
-#   # USDT TRC-20: T<your-wallet-address>
-#   # TON:         UQ<your-wallet-address>
-#   # Monero:      4<your-wallet-address>
-
-# ───── GitHub Sponsors (requires Stripe Connect, not available in RU; use
-# Open Source Collective as fiscal host if you want to enable later) ─────
-# github: Taironpal
-
-# ───── Other platforms GitHub supports natively ─────
-# patreon: iceslab
-# ko_fi: iceslab
-# buy_me_a_coffee: iceslab
-# liberapay: iceslab
-# open_collective: iceslab
+custom:
+  - https://github.com/icecompany-tech/iceslab#support-the-project
