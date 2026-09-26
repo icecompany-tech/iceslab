@@ -1,6 +1,7 @@
 import type { GeoSetUse } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { parseGeoRef, type GeoRef, type GeoRefField } from './geo-names.js';
+import { splitPolicyEntries } from '../cascades/policy-entries.js';
 
 export { chainRuleSetFileName, nodeFileName, parseGeoRef, xrayGeoEntry } from './geo-names.js';
 export type { GeoRef, GeoRefField } from './geo-names.js';
@@ -65,7 +66,9 @@ export async function collectGeoUses(): Promise<GeoUseSite[]> {
   }
   for (const p of routePolicies) {
     const owner: GeoSetUse = { kind: 'route-policy', id: p.id, name: p.name };
-    for (const ref of refs([...p.directDomains, ...p.blockDomains], 'domain')) {
+    // E55: the lists hold addresses too (geoip:, ext-ip:), read as such.
+    const entries = splitPolicyEntries([...p.directDomains, ...p.blockDomains]);
+    for (const ref of [...refs(entries.domain, 'domain'), ...refs(entries.ip, 'ip')]) {
       out.push({ ref, owner, nodeIds: entryNodeIds });
     }
   }

@@ -598,9 +598,16 @@ function policyRules(policies: ChainPolicy[], tproxy?: { ordinal: number }): Jso
       if (!chainMatchIsEmpty(p.block)) {
         rules.push({ ...gate, ...p.block, action: 'reject', method: 'drop' });
       }
+      // E55: by ADDRESS, after the policy's names had their turn. sing-box
+      // matches an IP only on an IP, so a request that came in by name is
+      // resolved first, for this policy's holders only (the gate), the way
+      // xray's IPIfNonMatch resolves a name no domain rule took.
+      if (p.blockIp || p.directIp) rules.push({ ...gate, action: 'resolve' });
+      if (p.blockIp) rules.push({ ...gate, ...p.blockIp, action: 'reject', method: 'drop' });
       if (!chainMatchIsEmpty(p.direct)) {
         rules.push({ ...gate, ...p.direct, action: 'route', outbound: 'direct' });
       }
+      if (p.directIp) rules.push({ ...gate, ...p.directIp, action: 'route', outbound: 'direct' });
     }
   }
   return rules;

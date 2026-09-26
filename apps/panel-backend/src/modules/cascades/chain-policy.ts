@@ -1,5 +1,6 @@
 import { GEO_DIR_ON_NODE } from '@iceslab/shared';
 import { chainRuleSetFileName, parseGeoRef } from '../geo-sets/geo-names.js';
+import { splitPolicyEntries } from './policy-entries.js';
 import type { CascadePolicy } from './cascade.config.js';
 
 /**
@@ -26,6 +27,9 @@ export interface ChainPolicy {
   ordinal: number;
   block: ChainMatch;
   direct: ChainMatch;
+  /** E55: the address entries (geoip:, ext-ip:, CIDRs), their own rules. */
+  blockIp?: ChainIpMatch;
+  directIp?: ChainIpMatch;
 }
 
 /** One rule-set the chain config names: its tag in the config, the file it
@@ -101,7 +105,7 @@ export function chainMatchIsEmpty(m: ChainMatch): boolean {
 // carries the same rules, translated here, the way the entry carries A4.
 
 /** IP matchers of one rule, the half sing-box ORs with the domain half. */
-interface ChainIpMatch {
+export interface ChainIpMatch {
   ip_cidr?: string[];
   rule_set?: string[];
 }
@@ -225,12 +229,23 @@ export function chainPoliciesOf(policies: CascadePolicy[]): {
   ruleSets: ChainRuleSetRef[];
 } {
   const sets = new Map<string, ChainRuleSetRef>();
+  // E55: names and addresses apart. The address half used to be dropped here.
+  const ipOf = (entries: string[]): ChainIpMatch | undefined => {
+    const m = ipMatchOf(splitPolicyEntries(entries).ip, sets);
+    return Object.keys(m).length > 0 ? m : undefined;
+  };
   const out = [...policies]
     .sort((a, b) => a.ordinal - b.ordinal)
-    .map((p) => ({
-      ordinal: p.ordinal,
-      block: matchOf(p.blockDomains, sets),
-      direct: matchOf(p.directDomains, sets),
-    }));
+    .map((p) => {
+      const blockIp = ipOf(p.blockDomains);
+      const directIp = ipOf(p.directDomains);
+      return {
+        ordinal: p.ordinal,
+        block: matchOf(splitPolicyEntries(p.blockDomains).domain, sets),
+        direct: matchOf(splitPolicyEntries(p.directDomains).domain, sets),
+        ...(blockIp ? { blockIp } : {}),
+        ...(directIp ? { directIp } : {}),
+      };
+    });
   return { policies: out, ruleSets: [...sets.values()].sort((a, b) => a.tag.localeCompare(b.tag)) };
 }

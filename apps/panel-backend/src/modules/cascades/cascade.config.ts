@@ -13,6 +13,7 @@ import {
 import { getLogger } from '../../lib/infra/logger.js';
 import { chainSocksPort, chainSocksUser } from './chain.ports.js';
 import { xrayGeoEntry } from '../geo-sets/geo-names.js';
+import { splitPolicyEntries } from './policy-entries.js';
 import { generateLinkTls, type LinkTls } from './link-tls.js';
 import type { LegParams } from './direction-merge.js';
 import type { TopologyTunnel } from './cascade-tunnel.js';
@@ -1471,26 +1472,12 @@ export function buildTopologyFragmentsForNode(
       const vlessRoute = tags.join(',');
       // Spelled for xray on the node: an operator's geo set is the file it
       // was laid out as (phase 9.2).
-      if (p.blockDomains.length) {
-        routingRules.push({
-          type: 'field',
-          vlessRoute,
-          domain: p.blockDomains.map(xrayGeoEntry),
-          outboundTag: 'blocked',
-        });
-      }
-      if (p.directDomains.length) {
-        // DIRECT_TAG, not a link-out. The whole point of directDomains at an
-        // entry is to leave from here instead of entering the chain; pointing
-        // this at a link would mean the operator sold "these go direct" while
-        // they travel through every hop.
-        routingRules.push({
-          type: 'field',
-          vlessRoute,
-          domain: p.directDomains.map(xrayGeoEntry),
-          outboundTag: DIRECT_TAG,
-        });
-      }
+      routingRules.push(...xrayPolicyRules({ type: 'field', vlessRoute }, p.blockDomains, 'blocked', xrayGeoEntry));
+      // DIRECT_TAG, not a link-out. The whole point of directDomains at an
+      // entry is to leave from here instead of entering the chain; pointing
+      // this at a link would mean the operator sold "these go direct" while
+      // they travel through every hop.
+      routingRules.push(...xrayPolicyRules({ type: 'field', vlessRoute }, p.directDomains, DIRECT_TAG, xrayGeoEntry));
     }
   }
 
@@ -1730,22 +1717,8 @@ export function buildCascadeConfigs(
       // its direct/block domains win before traffic enters the link.
       for (const p of policies) {
         const tag = String(routeTag(p.ordinal, 0));
-        if (p.blockDomains.length) {
-          routingRules.push({
-            type: 'field',
-            vlessRoute: tag,
-            domain: p.blockDomains,
-            outboundTag: 'blocked',
-          });
-        }
-        if (p.directDomains.length) {
-          routingRules.push({
-            type: 'field',
-            vlessRoute: tag,
-            domain: p.directDomains,
-            outboundTag: DIRECT_TAG,
-          });
-        }
+        routingRules.push(...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.blockDomains, 'blocked'));
+        routingRules.push(...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.directDomains, DIRECT_TAG));
       }
       // User traffic -> link-out. Also the fall-through for the plain profile
       // and for any client whose UUID carries no tag we recognise.
@@ -1821,6 +1794,26 @@ export interface CascadePolicy {
   ordinal: number;
   directDomains: string[];
   blockDomains: string[];
+}
+
+/**
+ * One policy list as xray rules, E55: the names in `domain`, the addresses
+ * (geoip:, ext-ip:, CIDRs) in `ip`, two rules with the same gate. They used to
+ * go into `domain` together, where `geoip:ru` is a substring no hostname has.
+ * xray on the node routes with IPIfNonMatch, so the ip rule also takes a name
+ * that no domain rule took.
+ */
+function xrayPolicyRules(
+  gate: Record<string, unknown>,
+  entries: string[],
+  outboundTag: string,
+  spell: (e: string) => string = (e) => e,
+): Record<string, unknown>[] {
+  const { domain, ip } = splitPolicyEntries(entries);
+  return [
+    ...(domain.length > 0 ? [{ ...gate, domain: domain.map(spell), outboundTag }] : []),
+    ...(ip.length > 0 ? [{ ...gate, ip: ip.map(spell), outboundTag }] : []),
+  ];
 }
 
 /** A4 ad-split: vlessRoute tag (uint16) for a (policyOrdinal, exitIndex) profile.
@@ -1924,12 +1917,8 @@ export function buildBalancerCascadeConfigs(
         exits.flatMap((_, i) => {
           const tag = String(routeTag(p.ordinal, i));
           return [
-            ...(p.blockDomains.length
-              ? [{ type: 'field', vlessRoute: tag, domain: p.blockDomains, outboundTag: 'blocked' }]
-              : []),
-            ...(p.directDomains.length
-              ? [{ type: 'field', vlessRoute: tag, domain: p.directDomains, outboundTag: DIRECT_TAG }]
-              : []),
+            ...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.blockDomains, 'blocked'),
+            ...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.directDomains, DIRECT_TAG),
             { type: 'field', vlessRoute: tag, network: 'tcp,udp', outboundTag: `${LINK_OUT_TAG}-${i}` },
           ];
         }),
@@ -1944,12 +1933,8 @@ export function buildBalancerCascadeConfigs(
       ...policies.flatMap((p) => {
         const tag = String(autoRouteTag(p.ordinal));
         return [
-          ...(p.blockDomains.length
-            ? [{ type: 'field', vlessRoute: tag, domain: p.blockDomains, outboundTag: 'blocked' }]
-            : []),
-          ...(p.directDomains.length
-            ? [{ type: 'field', vlessRoute: tag, domain: p.directDomains, outboundTag: DIRECT_TAG }]
-            : []),
+          ...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.blockDomains, 'blocked'),
+          ...xrayPolicyRules({ type: 'field', vlessRoute: tag }, p.directDomains, DIRECT_TAG),
         ];
       }),
       { type: 'field', network: 'tcp,udp', balancerTag: BALANCER_TAG },

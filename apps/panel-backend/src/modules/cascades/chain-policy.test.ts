@@ -45,10 +45,18 @@ describe('route policy entries into sing-box matchers', () => {
           rule_set: ['geo-geosite-category-ads-all', 'geo-mylist-ads@cn'],
         },
         direct: {},
+        // E55: the addresses are no longer dropped, they are rules of their own.
+        blockIp: { rule_set: ['geo-geoip-ru', 'geo-mylist-ru'] },
       },
     ]);
     // Each rule-set once, with the file the geo push lays out for it.
-    expect(ruleSets).toEqual([
+    expect(ruleSets.map((r) => r.tag)).toEqual([
+      'geo-geoip-ru',
+      'geo-geosite-category-ads-all',
+      'geo-mylist-ads@cn',
+      'geo-mylist-ru',
+    ]);
+    expect(ruleSets.filter((r) => !r.tag.endsWith('-ru'))).toEqual([
       {
         tag: 'geo-geosite-category-ads-all',
         file: 'iceslab-geosite.category-ads-all.json',

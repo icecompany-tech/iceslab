@@ -96,8 +96,8 @@ export function chainTagsFor(nodeId: string, sites: GeoUseSite[], cascadeExit = 
     if (!s.nodeIds.includes(nodeId)) continue;
     // E53: the node policy of a cascade EXIT is carried out by its chain too,
     // domain lists and ip lists both (chainNodePolicyOf).
-    const read =
-      (s.owner.kind === 'route-policy' && s.ref.field === 'domain') || (cascadeExit && s.owner.kind === 'node-policy');
+    // E55: a route policy's address entries too (geoip rule-sets).
+    const read = s.owner.kind === 'route-policy' || (cascadeExit && s.owner.kind === 'node-policy');
     if (!read) continue;
     const tags = out.get(s.ref.set) ?? new Set<string>();
     tags.add(s.ref.tag.toLowerCase());
