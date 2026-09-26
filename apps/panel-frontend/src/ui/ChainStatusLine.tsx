@@ -4,6 +4,7 @@ import type { ChainFacts } from '@/lib/domain/chainStatus';
 import { coreReason } from '@/lib/domain/syncRefusal';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { MIST, MOSS, RED } from '@/lib/ui/tokens';
+import { relativeTime } from '@/lib/ui/relativeTime';
 
 // Краски из общих токенов; шрифт остаётся строкой на месте, строки шрифтов в
 // палитру не кладутся.
@@ -41,6 +42,20 @@ export function ChainStatusLine({ facts, compact = false }: { facts: ChainFacts;
 
   if (facts.state === 'unknown') {
     return <Dot color={MIST} text={t('chain.noData')} compact={compact} />;
+  }
+
+  // E57: связи с нодой нет, отчёт остался от последнего опроса. Серым и с
+  // подписью, а не зелёным «работает»: это не текущее знание.
+  if (facts.state === 'stale') {
+    const when = facts.since ? relativeTime(facts.since, t).text : null;
+    const key = facts.was === 'up' ? (facts.version ? 'chain.staleUpVersion' : 'chain.staleUp') : 'chain.staleDown';
+    return (
+      <Dot
+        color={MIST}
+        text={`${t(key, { version: facts.version ?? '' })}${when ? ` ${t('chain.staleSince', { when })}` : ''}`}
+        compact={compact}
+      />
+    );
   }
 
   return (

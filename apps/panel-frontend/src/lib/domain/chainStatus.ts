@@ -23,10 +23,22 @@ import type { Node } from '@/lib/domain/nodes';
 export type ChainFacts =
   | { state: 'unknown'; sentAt: string }
   | { state: 'down'; sentAt: string; error: string | null }
-  | { state: 'up'; sentAt: string; version: string | null };
+  | { state: 'up'; sentAt: string; version: string | null }
+  /**
+   * E57: связи с нодой нет (offline, unreachable), а отчёт о цепи остался от
+   * последнего опроса. Это не текущее знание: серым, «по последнему отчёту»,
+   * с временем потери связи (`since`, `lastStatusChange`).
+   */
+  | { state: 'stale'; sentAt: string; was: 'up' | 'down'; version: string | null; since: string | null };
+
+/** Статусы ноды, при которых панель с ней не говорит. */
+const UNREACHABLE = new Set(['offline', 'unreachable']);
 
 export function chainFacts(
-  node: Pick<Node, 'chainStatus' | 'chainSentAt'> | null | undefined,
+  node:
+    | (Pick<Node, 'chainStatus' | 'chainSentAt'> & Partial<Pick<Node, 'status' | 'lastStatusChange'>>)
+    | null
+    | undefined,
 ): ChainFacts | null {
   const sentAt = node?.chainSentAt ?? null;
   // Нода может отчитаться о цепи, которую мы не посылали (ручной конфиг,
@@ -36,6 +48,18 @@ export function chainFacts(
 
   const chain = node?.chainStatus ?? null;
   if (!chain) return { state: 'unknown', sentAt };
+
+  // Нода недоступна: отчёт старый, «работает» или «не работает» уже не факт.
+  if (node?.status && UNREACHABLE.has(node.status)) {
+    const v = typeof chain.version === 'string' ? chain.version.trim() : '';
+    return {
+      state: 'stale',
+      sentAt,
+      was: chain.running ? 'up' : 'down',
+      version: v === '' ? null : v,
+      since: node.lastStatusChange ?? null,
+    };
+  }
 
   if (chain.running) {
     const v = typeof chain.version === 'string' ? chain.version.trim() : '';

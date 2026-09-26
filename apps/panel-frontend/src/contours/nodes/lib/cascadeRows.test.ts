@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cascadePath } from '@/contours/nodes/lib/cascadeRows';
+import { cascadePath, directionWhere } from '@/contours/nodes/lib/cascadeRows';
 import type { Cascade } from '@/lib/domain/cascades';
 import type { Node } from '@/lib/domain/nodes';
 
@@ -75,6 +75,34 @@ describe('cascadePath: путь по positions и directions, hops только 
     ]);
     // Пустой пул направления: тег есть, ноды нет.
     expect(p.directions[2]).toMatchObject({ nodeName: null, node: null, nodes: [] });
+  });
+
+  it('E57: направление на именованном выходе: имя и адрес выхода, страна выхода, не «ноды нет»', () => {
+    const outbounds = new Map([['o1', { name: 'test-exit', address: 'ru.example.com:443', countryCode: 'RU' }]]);
+    const p = cascadePath(
+      v4(
+        [{ position: 0, nodeIds: ['a'], entryProtocol: 'xray', linkProtocol: 'vless' }],
+        [
+          { id: 'd1', tag: 1, countryCode: '', nodeIds: [], outboundId: 'o1' },
+          { id: 'd2', tag: 2, countryCode: 'NL', nodeIds: [], outboundId: 'o9' },
+          { id: 'd3', tag: 3, countryCode: 'SE', nodeIds: [], outboundId: null },
+          { id: 'd4', tag: 4, countryCode: 'DE', nodeIds: ['d'] },
+        ],
+      ),
+      byId,
+      overview,
+      outbounds,
+    );
+    expect(p.directions[0]).toMatchObject({
+      countryCode: 'RU',
+      outbound: { id: 'o1', name: 'test-exit', address: 'ru.example.com:443', countryCode: 'RU' },
+    });
+    expect(p.directions.map(directionWhere)).toEqual([
+      { kind: 'outbound', name: 'test-exit', address: 'ru.example.com:443' },
+      { kind: 'outboundGone' },
+      { kind: 'empty' },
+      { kind: 'pool' },
+    ]);
   });
 
   it('старый каскад без positions читается по hops: балансёр, выходы это хопы после входа', () => {

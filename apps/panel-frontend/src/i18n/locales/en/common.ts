@@ -297,6 +297,8 @@ export const common = {
     // A legitimate v4 state: the tag is issued, no node stands behind it yet,
     // and the direction is not handed to clients.
     directionNoNode: 'no node yet',
+    directionViaOutbound: 'outbound',
+    directionOutboundGone: 'outbound not found',
     directionDown: 'out',
     outShort: 'out',
     reaches: 'Reaches',
@@ -390,6 +392,10 @@ export const common = {
     noData: 'Chain sent, the node has not reported on it yet',
     up: 'Chain running',
     upVersion: 'Chain running · {{version}}',
+    staleUp: 'By the last report the chain was running',
+    staleUpVersion: 'By the last report the chain was running · {{version}}',
+    staleDown: 'By the last report the chain was not running',
+    staleSince: '(contact with the node lost {{when}})',
     // The position row names the node: it holds several, and without the name
     // the line does not say which one.
     noteDown: '{{name}}: the chain process is not running. {{reason}}',

@@ -5,7 +5,7 @@ import { getCascadeStatus, type Cascade } from '@/lib/domain/cascades';
 import { cascadeNodeChips, type CascadeLegs } from '@/lib/domain/cascadeChips';
 import { CoreChips } from '@/ui/CoreChips';
 import { countryFlag } from '@/lib/domain/countries';
-import type { CascadeRow, DirectionView, HopView } from '@/contours/nodes/lib/cascadeRows';
+import { directionWhere, type CascadeRow, type DirectionView, type HopView } from '@/contours/nodes/lib/cascadeRows';
 import { AMBER, CARD, CYAN, DIM, EDGE, FAINT, HAIRLINE, MIST, MOSS, RED, SNOW, WELL } from '@/contours/nodes/lib/colors';
 
 /**
@@ -495,6 +495,24 @@ function poolName(step: { nodeName: string | null; nodes: { name: string }[] }):
   return extra > 0 ? `${step.nodeName ?? ''} +${extra}` : (step.nodeName ?? '');
 }
 
+/**
+ * Что стоит под направлением, словами (E57): выход с адресом, пул, или «ноды
+ * пока нет» только когда нет ни нод, ни выхода.
+ */
+function whereWords(d: DirectionView, t: (k: string) => string): string {
+  const w = directionWhere(d);
+  if (w.kind === 'outbound') return w.address ? `${w.name} · ${w.address}` : w.name;
+  if (w.kind === 'outboundGone') return t('cascades.directionOutboundGone');
+  if (w.kind === 'pool') return poolName(d);
+  return t('cascades.directionNoNode');
+}
+
+/** Направление на пуле, у которого первая нода не online. У выхода статуса
+ *  ноды нет: он не «лежит», панель его не опрашивает. */
+function directionDead(d: DirectionView): boolean {
+  return !d.outbound && d.status !== 'online';
+}
+
 /** A leg in words: its cell, «in AWG» when it rides a tunnel. An unset cell is
  *  the entry's default leg, vless. */
 function legWords(cell: string | null, underlay: string | undefined, t: (k: string, o?: Record<string, unknown>) => string): string {
@@ -527,8 +545,8 @@ function ShapeChip({ row }: { row: CascadeRow }) {
  */
 function DirectionLine({ direction }: { direction: DirectionView }) {
   const { t } = useTranslation();
-  const tone = statusTone(direction.status);
-  const dead = direction.status !== 'online';
+  const tone = direction.outbound ? MIST : statusTone(direction.status);
+  const dead = directionDead(direction);
   return (
     <Box
       style={{
@@ -572,8 +590,9 @@ function DirectionLine({ direction }: { direction: DirectionView }) {
         {tagLabel(direction.tag)}
       </Text>
       {/* Нога ДО этого выхода: у веера она своя у каждого направления. */}
+      {/* У направления на выходе ноги нет: его набирает цепь последней позиции. */}
       <Text style={{ fontFamily: MONO, fontSize: 10, lineHeight: '12px', color: DIM, whiteSpace: 'nowrap' }}>
-        {legWords(direction.inCell, direction.inUnderlay, t)}
+        {direction.outbound ? '' : legWords(direction.inCell, direction.inUnderlay, t)}
       </Text>
       <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tone, flexShrink: 0 }} />
       <Text
@@ -586,7 +605,7 @@ function DirectionLine({ direction }: { direction: DirectionView }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {direction.nodeName ? poolName(direction) : t('cascades.directionNoNode')}
+        {whereWords(direction, t)}
         {dead && direction.nodeName ? ` · ${direction.status}` : ''}
       </Text>
       <Box style={{ flex: 1, minWidth: 0 }}>
@@ -609,7 +628,7 @@ function DirectionLine({ direction }: { direction: DirectionView }) {
 /** The same direction as a tile, for a cascade with a single way out. */
 function DirectionTile({ direction }: { direction: DirectionView }) {
   const { t } = useTranslation();
-  const tone = statusTone(direction.status);
+  const tone = direction.outbound ? MIST : statusTone(direction.status);
   return (
     <Stack
       gap={10}
@@ -642,13 +661,13 @@ function DirectionTile({ direction }: { direction: DirectionView }) {
               color: tone,
             }}
           >
-            {direction.status}
+            {direction.outbound ? t('cascades.directionViaOutbound') : direction.status}
           </Text>
         </Box>
       </Box>
       <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: '14px', color: FAINT }}>
-        {direction.nodeName ? poolName(direction) : t('cascades.directionNoNode')}
-        {direction.node?.address ? ` · ${direction.node.address}` : ''}
+        {whereWords(direction, t)}
+        {!direction.outbound && direction.node?.address ? ` · ${direction.node.address}` : ''}
       </Text>
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Chip tone={MOSS} small>
@@ -798,7 +817,7 @@ function CascadeLine({ row, onEdit, onDelete }: { row: CascadeRow; onEdit: () =>
 /** A direction in a row: flag, country, tag, and the node currently under it. */
 function DirectionPill({ direction }: { direction: DirectionView }) {
   const { t } = useTranslation();
-  const dead = direction.status !== 'online';
+  const dead = directionDead(direction);
   return (
     <Box style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
       {direction.countryCode && (
@@ -839,7 +858,7 @@ function DirectionPill({ direction }: { direction: DirectionView }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {direction.nodeName ?? t('cascades.directionNoNode')}
+        {whereWords(direction, t)}
         {dead && direction.nodeName ? ` · ${t('cascades.directionDown')}` : ''}
       </Text>
     </Box>

@@ -890,7 +890,8 @@ export function CascadeEditPage() {
                   const tone = f.state === 'down' ? RED : MIST;
                   return (
                     <Note key={`chain-${n.id}`} tone={tone} icon={<WarnIcon size={13} color={tone} />}>
-                      {f.state === 'unknown'
+                      {/* Нода недоступна (E57): старый отчёт не факт, серым как «нет данных». */}
+                      {f.state === 'unknown' || f.state === 'stale'
                         ? t('chain.noteNoData', { name: n.name })
                         : f.error
                           ? t('chain.noteDown', { name: n.name, reason: f.error })

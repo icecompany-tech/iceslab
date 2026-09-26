@@ -6,6 +6,25 @@ import { listRoutePolicies } from '@/lib/domain/routePolicies';
 import { listSquads } from '@/lib/domain/squads';
 import { type Node } from '@/lib/domain/nodes';
 import { useOverview } from '@/lib/domain/dashboard';
+import { listNamedOutbounds, outboundAddress } from '@/lib/domain/namedOutbounds';
+
+/**
+ * Что сказать на месте нод направления (E57): выход с адресом, пул, или
+ * «ноды пока нет» только когда нет ни нод, ни выхода. `outboundGone`: выход
+ * назван, но в списке его нет (удалён или список не пришёл).
+ */
+export type DirectionWhere =
+  | { kind: 'outbound'; name: string; address: string }
+  | { kind: 'outboundGone' }
+  | { kind: 'pool' }
+  | { kind: 'empty' };
+
+export function directionWhere(d: Pick<DirectionView, 'outbound' | 'nodeName'>): DirectionWhere {
+  if (d.outbound) {
+    return d.outbound.name ? { kind: 'outbound', name: d.outbound.name, address: d.outbound.address } : { kind: 'outboundGone' };
+  }
+  return d.nodeName ? { kind: 'pool' } : { kind: 'empty' };
+}
 
 /**
  * Каскад, собранный вместе со всем, что его объясняет.
@@ -88,7 +107,16 @@ export interface DirectionView {
   countryCode: string | null;
   inCell: string | null;
   inUnderlay?: string;
+  /**
+   * Фаза 10 (E57): направление стоит на именованном выходе, нод у него нет по
+   * построению. `null` у направления на пуле. Выход не найден в списке (удалён
+   * или список ещё не пришёл): `name` null, строка говорит «выход не найден».
+   */
+  outbound: { id: string; name: string | null; address: string; countryCode: string | null } | null;
 }
+
+/** Что выход направления несёт для строки каскада: имя, адрес, страна. */
+export type OutboundLookup = ReadonlyMap<string, { name: string; address: string; countryCode: string | null }>;
 
 type Overview = ReadonlyMap<string, { status?: string; todayBytes?: number | null }>;
 
@@ -121,6 +149,7 @@ export function cascadePath(
   cascade: Pick<Cascade, 'mode' | 'hops' | 'positions' | 'directions'>,
   nodeById: ReadonlyMap<string, Node>,
   overview: Overview,
+  outbounds: OutboundLookup = new Map(),
 ): { entry: HopView | null; transits: HopView[]; directions: DirectionView[] } {
   if (cascade.positions.length > 0) {
     const positions = [...cascade.positions].sort((a, b) => a.position - b.position);
@@ -145,6 +174,7 @@ export function cascadePath(
       const nodes = d.nodeIds.filter(Boolean).map((id) => stepNode(id, id, nodeById, overview));
       const first = nodes[0];
       const inUnderlay = d.linkParams?.underlay ?? last?.outUnderlay;
+      const o = d.outboundId ? outbounds.get(d.outboundId) : undefined;
       return {
         key: d.id,
         nodes,
@@ -153,9 +183,12 @@ export function cascadePath(
         status: first?.status ?? 'unknown',
         todayBytes: sumBytes(nodes),
         tag: d.tag,
-        countryCode: d.countryCode || first?.node?.countryCode || null,
+        countryCode: d.countryCode || first?.node?.countryCode || o?.countryCode || null,
         inCell: d.linkProtocol ?? last?.outCell ?? null,
         ...(inUnderlay ? { inUnderlay } : {}),
+        outbound: d.outboundId
+          ? { id: d.outboundId, name: o?.name ?? null, address: o?.address ?? '', countryCode: o?.countryCode ?? null }
+          : null,
       };
     });
     return { entry: steps[0] ?? null, transits: steps.slice(1), directions };
@@ -194,6 +227,7 @@ export function cascadePath(
     tag: i + 1,
     countryCode: h.node?.countryCode ?? null,
     inCell: feeder?.outCell ?? null,
+    outbound: null,
   }));
   return { entry, transits, directions };
 }
@@ -208,16 +242,24 @@ export function useCascadeRows(cascades: Cascade[], nodes: Node[]): CascadeRow[]
   const squadsQuery = useQuery({ queryKey: ['squads'], queryFn: listSquads });
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
   const bindingsQuery = useQuery({ queryKey: ['bindings'], queryFn: () => listBindings() });
+  // Фаза 10 (E57): имя и адрес выхода направления. DTO каскада несёт только
+  // outboundId; список выходов тот же, что у их экрана.
+  const outboundsQuery = useQuery({ queryKey: ['named-outbounds'], queryFn: listNamedOutbounds });
 
   return useMemo(() => {
     const nodeById = new Map(nodes.map((n) => [n.id, n] as const));
+    const outbounds: OutboundLookup = new Map(
+      (outboundsQuery.data?.outbounds ?? []).map(
+        (o) => [o.id, { name: o.name, address: outboundAddress(o), countryCode: o.countryCode }] as const,
+      ),
+    );
     const overviewById = new Map((overviewQuery.data?.nodes ?? []).map((n) => [n.id, n] as const));
     const bindings = bindingsQuery.data?.bindings ?? [];
     const squads = squadsQuery.data?.squads ?? [];
     const policies = policiesQuery.data?.policies ?? [];
 
     return cascades.map((cascade) => {
-      const { entry, transits, directions } = cascadePath(cascade, nodeById, overviewById);
+      const { entry, transits, directions } = cascadePath(cascade, nodeById, overviewById, outbounds);
 
       // Who can actually use this cascade: squads holding a profile that is
       // bound on a node of the entry pool, since that is the door clients dial.
@@ -239,5 +281,5 @@ export function useCascadeRows(cascades: Cascade[], nodes: Node[]): CascadeRow[]
         users: reaching.reduce((sum, s) => sum + s.memberCount, 0),
       };
     });
-  }, [cascades, nodes, overviewQuery.data, squadsQuery.data, policiesQuery.data, bindingsQuery.data]);
+  }, [cascades, nodes, overviewQuery.data, squadsQuery.data, policiesQuery.data, bindingsQuery.data, outboundsQuery.data]);
 }

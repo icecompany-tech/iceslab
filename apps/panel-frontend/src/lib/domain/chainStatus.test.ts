@@ -53,6 +53,25 @@ describe('chainFacts', () => {
     });
   });
 
+  it('7. E57: нода недоступна, отчёт старый: stale с тем, что было, и временем потери связи', () => {
+    const LOST = '2026-09-26T10:00:00.000Z';
+    expect(
+      chainFacts({
+        chainSentAt: SENT,
+        chainStatus: { running: true, version: '1.13.14' },
+        status: 'unreachable',
+        lastStatusChange: LOST,
+      }),
+    ).toEqual({ state: 'stale', sentAt: SENT, was: 'up', version: '1.13.14', since: LOST });
+    expect(chainFacts({ chainSentAt: SENT, chainStatus: { running: false }, status: 'offline' })).toEqual({
+      state: 'stale', sentAt: SENT, was: 'down', version: null, since: null,
+    });
+    // degraded и online с нодой говорят: отчёт текущий.
+    expect(chainFacts({ chainSentAt: SENT, chainStatus: { running: true }, status: 'degraded' })?.state).toBe('up');
+    // Отчёта нет вовсе: это «нет данных», не stale.
+    expect(chainFacts({ chainSentAt: SENT, chainStatus: null, status: 'unreachable' })?.state).toBe('unknown');
+  });
+
   it('6. работающая цепь не несёт error: зелёное состояние не спорит само с собой', () => {
     const f = chainFacts({ chainSentAt: SENT, chainStatus: { running: true, error: 'старое' } });
     expect(f).toEqual({ state: 'up', sentAt: SENT, version: null });
