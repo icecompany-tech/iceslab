@@ -80,6 +80,31 @@ export interface NodeEngines {
 }
 
 /**
+ * The three fields to write after a healthcheck, or null when there is nothing
+ * to write (E42, 26.09 on ru-01).
+ *
+ * The intent used to be written once, from the installer's --engines, and a
+ * bootstrap run later from the node page told the panel nothing: the cores ran,
+ * reported, and read "taken off the node's cores, yet on the machine". The
+ * node's env is the declaration now (its bootstraps write a block per core, a
+ * --remove takes it out), the agent reports it as `declaredEngines`, and the
+ * column follows it as a cache of the last report.
+ *
+ * `declared` undefined (an agent older than the field, or one that could not
+ * read its env) is no news, not "no cores": null, the column stays.
+ */
+export function intendedFromReport(
+  stored: { intendedEngines?: string[] | null; protocol: string; singboxEngine: boolean },
+  declared: readonly EngineName[] | undefined,
+): NodeEngines | null {
+  if (declared === undefined) return null;
+  const next = engineSet(declared);
+  const now = readIntendedEngines(stored);
+  if (next.length === now.length && next.every((e, i) => e === now[i])) return null;
+  return { intendedEngines: next, protocol: nodeProtocolOf(next), singboxEngine: next.includes('singbox') };
+}
+
+/**
  * The three fields as they will be stored, from a create (no `stored`) or an
  * update body. Absent means "no edit":
  *

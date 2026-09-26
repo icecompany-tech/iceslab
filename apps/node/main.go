@@ -127,6 +127,7 @@ func main() {
 		Chain:             chainMgr,
 		Geo:               geo.NewStore(geoDir),
 		ResolverProbe:     server.SystemResolverProbe,
+		EnvFile:           getenv("ICESLAB_NODE_ENV", "/etc/iceslab-node/env"),
 	})
 	if err != nil {
 		logger.Error("build server", "err", err)

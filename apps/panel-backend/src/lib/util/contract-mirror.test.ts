@@ -103,6 +103,27 @@ describe('the wire enumerations against the agent that fills them', () => {
     ).toEqual([]);
   });
 
+  it('names the same cores in the env blocks, the agent that reads them and EngineName (E42)', () => {
+    // The node's intended cores are the env blocks its bootstraps write, read
+    // by the agent (declared.go envBlockEngines) and stored as EngineName. A
+    // block named otherwise would be a core installed and never intended.
+    const scriptsDir = join(AGENT_CORES, '../../scripts');
+    const blocks = new Set<string>();
+    for (const f of readdirSync(scriptsDir).filter((n) => /^bootstrap-.*\.sh$/.test(n))) {
+      for (const m of readFileSync(join(scriptsDir, f), 'utf8').matchAll(/node_env_block ([a-z0-9]+)/g)) {
+        blocks.add(m[1]!);
+      }
+    }
+    expect(blocks.size, 'no node_env_block matched in the bootstraps: this test checks nothing').toBeGreaterThanOrEqual(7);
+    expect([...blocks].sort()).toEqual([...ENGINE_NAMES].sort());
+
+    const declared = readFileSync(join(AGENT_CORES, '../server/declared.go'), 'utf8');
+    const list = /^var envBlockEngines = \[\]string\{([^}]*)\}/m.exec(declared)?.[1];
+    expect(list, 'envBlockEngines was not found in declared.go').toBeDefined();
+    const agent = [...list!.matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]!);
+    expect(agent.sort()).toEqual([...ENGINE_NAMES].sort());
+  });
+
   it('does not check the other direction, and here is why', () => {
     // ProtocolName carries anytls and shadowtls, and NO adapter declares them:
     // the sing-box adapter's `const Name` says "tuic" while its Name() returns

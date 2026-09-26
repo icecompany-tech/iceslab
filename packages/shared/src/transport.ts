@@ -1769,6 +1769,17 @@ export interface HealthcheckResponse {
    * from an agent older than the field.
    */
   reason?: string;
+  /**
+   * The cores this node's env declares: the blocks its bootstraps write,
+   * `# >>> iceslab-node env:<core> >>>`, read on every healthcheck (E42). The
+   * panel stores it as the node's intended cores, so a core installed from the
+   * node page is intended and a --remove takes it out.
+   *
+   * ⚠ ABSENT is NOT "no cores": an agent older than the field, or one that
+   * could not read its env. The panel keeps what it had. An empty list is a
+   * node whose env declares none.
+   */
+  declaredEngines?: EngineName[];
 }
 
 /**

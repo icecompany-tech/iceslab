@@ -78,6 +78,9 @@ type Config struct {
 	// degrades the node with dto.ResolverDownReason. main wires
 	// SystemResolverProbe. Nil asks nothing, which is what tests get.
 	ResolverProbe func(ctx context.Context) error
+	// EnvFile is the agent's env, where the bootstraps declare their cores
+	// (E42, declaredEngines). Empty reports nothing, which is what tests get.
+	EnvFile string
 }
 
 type Server struct {
@@ -539,6 +542,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Arch:   core.MachineArch(),
 		Geo:    s.geoStatus(),
 		Reason: reason,
+		// The cores the env declares, read now: a bootstrap run or a --remove
+		// since the agent started shows on the next healthcheck (E42).
+		DeclaredEngines: declaredEngines(s.cfg.EnvFile),
 	})
 }
 

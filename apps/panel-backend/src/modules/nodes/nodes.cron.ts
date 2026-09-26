@@ -1,7 +1,8 @@
-import type { ChainStatus, GeoStatus, HostMetricsResponse, NodeGeoFact } from '@iceslab/shared';
+import type { ChainStatus, EngineName, GeoStatus, HostMetricsResponse, NodeGeoFact } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { redis } from '../../lib/infra/redis.js';
 import { NodeTransport, NodeRequestError } from './nodes.transport.js';
+import { intendedFromReport } from './node-intended-engines.js';
 import { inboundSyncQueue } from '../inbounds/inbounds.queue.js';
 import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-notify.js';
 import { getLogger } from '../../lib/infra/logger.js';
@@ -59,6 +60,9 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
       chainStatus: true,
       chainSentAt: true,
       geo: true,
+      intendedEngines: true,
+      protocol: true,
+      singboxEngine: true,
     },
   });
 
@@ -124,6 +128,10 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
         result.geo !== undefined &&
         JSON.stringify(result.geo) !==
           JSON.stringify(storedGeo ? { version: storedGeo.version, files: storedGeo.files } : null);
+      // The node's intended cores follow the env blocks its bootstraps wrote
+      // (E42). null = nothing to write: an older agent, an unreadable env, or
+      // the same set as stored.
+      const intended = intendedFromReport(node, result.declaredEngines);
       if (
         statusChanged ||
         messageChanged ||
@@ -131,11 +139,13 @@ export async function pollNodeStatuses(): Promise<{ ok: number; down: number }> 
         restartsChanged ||
         coresChanged ||
         chainChanged ||
-        geoChanged
+        geoChanged ||
+        intended
       ) {
         await prisma.node.update({
           where: { id: node.id },
           data: {
+            ...(intended ?? {}),
             status: result.status,
             lastStatusChange: statusChanged ? new Date() : undefined,
             lastStatusMessage: result.message,
@@ -241,6 +251,8 @@ interface PollResult {
    * an agent older than geo. Otherwise what lies on its disk.
    */
   geo?: GeoStatus | null;
+  /** E42: the cores the node's env declares. undefined keeps the stored intent. */
+  declaredEngines?: EngineName[];
   /**
    * `online`     - the agent answers and every configured core is serving.
    * `degraded`   - the agent answers, a configured core is not running. Still
@@ -498,6 +510,7 @@ async function checkOne(node: {
       // an unreachable node returns from the catch below.
       chain: res.chain ?? null,
       geo: res.geo ?? null,
+      declaredEngines: res.declaredEngines,
     };
   } catch (err) {
     if (err instanceof NodeRequestError) {

@@ -703,6 +703,13 @@ type HealthcheckResponse struct {
 	// Why the NODE is degraded when the cause is the machine and not a core or
 	// the chain: today only ResolverDownReason (E37). Empty otherwise.
 	Reason string `json:"reason,omitempty"`
+	// DeclaredEngines: the cores this node's env declares, read on every
+	// healthcheck from the blocks the bootstraps write (E42). The panel takes it
+	// as the node's intended cores, so a core installed from the node page shows
+	// as intended. A pointer so absence is a state: nil means the agent could
+	// not read its env (or is older than the field), NOT "no cores"; an empty
+	// list is a node whose env declares none.
+	DeclaredEngines *[]EngineName `json:"declaredEngines,omitempty"`
 }
 
 // ResolverDownReason: the host's own resolver did not answer the agent's probe
