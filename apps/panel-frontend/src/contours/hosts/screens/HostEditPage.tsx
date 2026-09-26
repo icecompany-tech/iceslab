@@ -50,6 +50,8 @@ import { profileTransport } from '@/lib/domain/profileTransport';
 import { singboxXrayMessage, singboxXrayRefusal } from '@/lib/domain/singboxXray';
 import {
   coreGateRefusal,
+  awgGateText,
+  awgProfilePrediction,
   nodeCoreBlocks,
   nodeCoreFit,
   nodeCoreFitText,
@@ -73,6 +75,7 @@ import {
   hostFormatFacts,
 } from '@/lib/domain/formats';
 import { listNodes } from '@/lib/domain/nodes';
+import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
 import { type Fingerprint } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES } from '@/lib/domain/countries';
@@ -130,6 +133,8 @@ export function HostEditPage() {
   // пересчитывается всегда, то есть мемоизация ниже перестаёт работать молча.
   const bindings = useMemo(() => bindingsQuery.data?.bindings ?? [], [bindingsQuery.data]);
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
+  // Знает ли сервер cores[].awgGenerations: без этого агента не судим.
+  const genKnown = awgGenerationsKnown(nodesQuery.data);
   const profiles = useMemo(() => profilesQuery.data?.profiles ?? [], [profilesQuery.data]);
 
   const [name, setName] = useState('');
@@ -381,16 +386,23 @@ export function HostEditPage() {
          */
         const fit = profile !== undefined ? nodeCoreFit(n, profile.effectiveEngine) : null;
         const coreBlock = fit && nodeCoreBlocks(fit) ? nodeCoreFitText(fit, t) : null;
+        // Профиль 3.1 на модуль 1.x или на агента без 3.1: отказ сервера,
+        // сказанный по факту ноды до сохранения (a4ad8bc).
+        const awgBlock = awgProfilePrediction(profile, n, genKnown);
+        const awgWhy = awgBlock ? awgGateText(awgBlock, t) : null;
         const taken = takenPort.get(n.id);
         return {
           node: n,
           fit,
+          awgWhy,
           selected: nodeId === n.id,
           reason: coreBlock
             ? // Before the port: a node without the core refuses on any port.
               // The line under the row says why; this column only says what it
               // means for the host, so the reason is not printed twice.
               { kind: 'core' as const, text: t('nodeCore.blockedShort'), why: coreBlock.blockWhy }
+            : awgWhy
+              ? { kind: 'core' as const, text: t('nodeCore.blockedShort'), why: awgWhy }
             : port === ''
               ? // Without a port there is nothing to check yet, and "- free"
                 // would be a claim the page cannot make.
@@ -421,6 +433,7 @@ export function HostEditPage() {
     host?.id,
     hostsQuery.data,
     portCheckTransport,
+    genKnown,
     t,
   ]);
 
@@ -1281,6 +1294,11 @@ export function HostEditPage() {
                   {r.fit && (
                     <Box style={{ padding: '0 14px 10px 46px' }}>
                       <NodeCoreLine fit={r.fit} nodeId={r.node.id} compact />
+                    </Box>
+                  )}
+                  {r.awgWhy && coreRefusal?.nodeName !== r.node.name && (
+                    <Box style={{ padding: '0 14px 10px 46px' }}>
+                      <Text style={{ fontSize: 11, lineHeight: '15px', color: RED }}>{r.awgWhy}</Text>
                     </Box>
                   )}
                   {coreRefusal?.nodeName === r.node.name && (

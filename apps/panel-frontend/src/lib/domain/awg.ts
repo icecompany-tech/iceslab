@@ -61,6 +61,15 @@ export function agentAwgFact(known: boolean, generations: unknown): AgentAwgFact
   return Array.isArray(generations) && generations.includes(3) ? 'both' : 'only1';
 }
 
+/**
+ * Значок поколения у имени профиля AmneziaWG (карточка профиля, хост): только
+ * у 3.1. 1.x это умолчание всего парка, и значок на каждом профиле был бы
+ * шумом, из-за которого перестают замечать 3.1.
+ */
+export function awgGenerationBadge(profile: { protocol: string; awgProtocol?: AwgProtocol | null } | null | undefined): string | null {
+  return profile?.protocol === 'amneziawg' && profile.awgProtocol === 3 ? awgLabel(3) : null;
+}
+
 /** Поколение профиля с null, прочитанным как 1, как читает сервер. */
 export function profileAwgGeneration(value: AwgProtocol | null | undefined): AwgProtocol {
   return value === 3 ? 3 : 1;

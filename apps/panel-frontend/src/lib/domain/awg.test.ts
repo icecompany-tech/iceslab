@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
 import {
   agentAwgFact,
+  awgGenerationBadge,
   awgLabel,
   nodeAwgFact,
   profileAwgCreate,
@@ -57,6 +58,16 @@ describe('awgGenerationsKnown: вложенный ключ по fields или п
     expect(awgGenerationsKnown({ nodes: [node([{ name: 'amneziawg', awgGenerations: [1] }])] })).toBe(true);
     expect(awgGenerationsKnown({ nodes: [node([{ name: 'amneziawg' }])] })).toBe(false);
     expect(awgGenerationsKnown(undefined)).toBe(false);
+  });
+});
+
+describe('awgGenerationBadge: значок только у профиля AmneziaWG 3.1', () => {
+  it('3.1 да; 1.x, null, другой протокол, нет профиля: нет', () => {
+    expect(awgGenerationBadge({ protocol: 'amneziawg', awgProtocol: 3 })).toBe('3.1');
+    expect(awgGenerationBadge({ protocol: 'amneziawg', awgProtocol: 1 })).toBeNull();
+    expect(awgGenerationBadge({ protocol: 'amneziawg', awgProtocol: null })).toBeNull();
+    expect(awgGenerationBadge({ protocol: 'xray', awgProtocol: 3 })).toBeNull();
+    expect(awgGenerationBadge(undefined)).toBeNull();
   });
 });
 

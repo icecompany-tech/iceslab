@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CORE_VERSIONS, type CoreComponent } from '@iceslab/shared';
-import { awgGateText, coreGateRefusal, nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
+import { awgGateText, awgProfilePrediction, coreGateRefusal, nodeCoreBlocks, nodeCoreFit, nodeCoreFitText } from '@/lib/domain/nodeCoreFit';
 import type { Node, NodeCore } from '@/lib/domain/nodes';
 
 const PIN = (c: CoreComponent) => CORE_VERSIONS[c].pinned as string;
@@ -214,6 +214,32 @@ describe('coreGateRefusal: the 409 of the BACK core gate', () => {
       'nodeCore.gateAwg {"node":"n","nodeGen":"1.x","profileGen":"3.1"}',
     );
     expect(awgGateText({ kind: 'refused', nodeName: 'n', engine: 'xray', version: 'v', reason: '' }, t)).toBeNull();
+  });
+
+  it('awgProfilePrediction (a4ad8bc): a 3.1 profile is refused by fact only', () => {
+    const p3 = { protocol: 'amneziawg', awgProtocol: 3 as const };
+    const row = (awgGenerations?: unknown) => ({ cores: { cores: [{ name: 'amneziawg', engine: 'amneziawg' as const, awgGenerations }] } });
+    // Module 1.x: the mismatch, whatever the agent says.
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 1, ...row([1, 3]) }, true)).toEqual({
+      kind: 'awg', nodeName: 'n', profileAwgProtocol: 3, nodeAwgProtocol: 1,
+    });
+    // Module 3.1, agent without 3 (or without the key): too old.
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 3, ...row([1]) }, true)).toEqual({ kind: 'awgAgent', nodeName: 'n' });
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 3, ...row(undefined) }, true)).toEqual({ kind: 'awgAgent', nodeName: 'n' });
+    // Both fine: offered.
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 3, ...row([1, 3]) }, true)).toBeNull();
+  });
+
+  it('awgProfilePrediction: silence is not a refusal', () => {
+    const p3 = { protocol: 'amneziawg', awgProtocol: 3 as const };
+    // Module not reported, server without awgGenerations, no amneziawg row.
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: null }, true)).toBeNull();
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 3, cores: { cores: [{ name: 'amneziawg' }] } }, false)).toBeNull();
+    expect(awgProfilePrediction(p3, { name: 'n', awgProtocol: 3, cores: { cores: [{ name: 'xray', engine: 'xray' }] } }, true)).toBeNull();
+    // Not a 3.1 profile: nothing to predict.
+    expect(awgProfilePrediction({ protocol: 'amneziawg', awgProtocol: null }, { name: 'n', awgProtocol: 1 }, true)).toBeNull();
+    expect(awgProfilePrediction({ protocol: 'xray' }, { name: 'n', awgProtocol: 1 }, true)).toBeNull();
+    expect(awgProfilePrediction(undefined, { name: 'n', awgProtocol: 1 }, true)).toBeNull();
   });
 
   it('garbage and other answers: null', () => {

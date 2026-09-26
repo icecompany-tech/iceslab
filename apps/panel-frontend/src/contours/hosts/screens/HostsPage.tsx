@@ -32,6 +32,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { deleteHost, hostHiddenFacts, listHosts, type HostHiddenFacts } from '@/lib/domain/hosts';
 import { HostHiddenLine } from '@/ui/HostHiddenLine';
+import { AwgGenerationBadge } from '@/ui/AwgGenerationBadge';
 import { listBindings, listProfiles } from '@/lib/domain/profiles';
 import { profilePairLabel, type EngineName } from '@/lib/domain/engines';
 import { listNodes } from '@/lib/domain/nodes';
@@ -441,6 +442,7 @@ function HostCard({
             <Text style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 500, color: SNOW }}>
               {row.profile.name}
             </Text>
+            <AwgGenerationBadge profile={row.profile} />
             <Text
               style={{
                 fontFamily: MONO,

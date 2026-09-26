@@ -42,6 +42,7 @@ import { type ProtocolName } from '@/lib/domain/protocols';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { ProfilesEmpty } from '@/contours/profiles/components/ProfilesEmpty';
 import { profilePairLabel } from '@/lib/domain/engines';
+import { AwgGenerationBadge } from '@/ui/AwgGenerationBadge';
 import {
   PLAIN_LABEL,
   plainSubprotocolOf,
@@ -488,9 +489,12 @@ function ProfileCard({
             <IconBolt size={18} />
           </ThemeIcon>
           <Stack gap={0} style={{ minWidth: 0 }}>
-            <Text fw={600} size="sm" truncate style={{ color: SNOW }}>
-              {profile.name}
-            </Text>
+            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Text fw={600} size="sm" truncate style={{ color: SNOW }}>
+                {profile.name}
+              </Text>
+              <AwgGenerationBadge profile={profile} />
+            </Group>
             {profile.description && (
               <Text size="xs" lineClamp={1} style={{ color: MIST }}>
                 {profile.description}

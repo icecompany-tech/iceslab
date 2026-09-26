@@ -178,6 +178,37 @@ export type CoreGateRefusal =
 const WHY = new Set(['no-arch', 'no-asset', 'unpinned']);
 
 /**
+ * Отказ, который сервер даст профилю AmneziaWG 3.1 на этой ноде, предсказанный
+ * по факту до сохранения (как E45): форма «Развернуть» и хоста не предлагает
+ * такую ноду. Тот же вид, что у отказа сервера, поэтому слова одни
+ * (awgGateText).
+ *
+ *   профиль не AmneziaWG или 1.x          null: 1.x несут оба модуля;
+ *   модуль ноды 1.x (awgProtocol 1)       AWG_PROTOCOL_MISMATCH; null у
+ *                                         ноды не отказ, как у сервера;
+ *   у строки amneziawg нет 3 в
+ *   awgGenerations, и сервер поле знает   AWG_AGENT_TOO_OLD: здесь отсутствие
+ *                                         ключа ответ, как у сервера;
+ *   строки amneziawg нет вовсе            null: это вопрос ядра (nodeCoreFit),
+ *                                         и о генерациях сказать нечего.
+ */
+export function awgProfilePrediction(
+  profile: { protocol: string; awgProtocol?: AwgProtocol | null } | undefined,
+  node: { name: string; awgProtocol?: AwgProtocol | null; cores?: { cores: { name: string; engine?: EngineName; awgGenerations?: unknown }[] } | null },
+  generationsKnown: boolean,
+): CoreGateRefusal | null {
+  if (!profile || profile.protocol !== 'amneziawg' || profile.awgProtocol !== 3) return null;
+  if (node.awgProtocol === 1) {
+    return { kind: 'awg', nodeName: node.name, profileAwgProtocol: 3, nodeAwgProtocol: 1 };
+  }
+  if (!generationsKnown) return null;
+  const row = node.cores?.cores.find((c) => c.engine === 'amneziawg' || c.name === 'amneziawg');
+  if (!row) return null;
+  const gens = row.awgGenerations;
+  return Array.isArray(gens) && gens.includes(3) ? null : { kind: 'awgAgent', nodeName: node.name };
+}
+
+/**
  * Три отказа AmneziaWG одной фразой: под нодой в форме хоста и «Развернуть»,
  * под выбором поколения и в тосте профиля. null у отказов не про AWG.
  */

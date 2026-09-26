@@ -48,7 +48,10 @@ import {
   type PortTakenCode,
 } from '@/lib/domain/portCheck';
 import { PortCheckHint, PortRefusalLine } from '@/ui/PortCheckHint';
+import { awgGenerationsKnown } from '@/lib/domain/nodeFields';
 import {
+  awgGateText,
+  awgProfilePrediction,
   coreGateRefusal,
   nodeCoreBlocks,
   nodeCoreFit,
@@ -326,6 +329,8 @@ export function DeployProfileModal({ profile, onClose }: Props) {
   }
 
   const nodes = nodesQuery.data?.nodes ?? [];
+  // Знает ли сервер cores[].awgGenerations: без этого агента не судим.
+  const genKnown = awgGenerationsKnown(nodesQuery.data);
   // Против того, что было при открытии, а не против живого ответа сервера:
   // привязка, появившаяся где-то ещё, правкой оператора не считается.
   const dirty = useMemo(() => {
@@ -413,6 +418,10 @@ export function DeployProfileModal({ profile, onClose }: Props) {
             {nodes.map((node) => {
               const fit = profile ? nodeCoreFit(node, profile.effectiveEngine) : null;
               const checked = selected.has(node.id);
+              // Профиль 3.1: модуль 1.x или агент без 3.1 откажут на сервере,
+              // сказано до сохранения по факту ноды (a4ad8bc).
+              const awgBlock = awgProfilePrediction(profile ?? undefined, node, genKnown);
+              const awgWhy = awgBlock ? awgGateText(awgBlock, t) : null;
               return (
                 <Stack key={node.id} gap={4}>
                   <NodeRow
@@ -422,10 +431,21 @@ export function DeployProfileModal({ profile, onClose }: Props) {
                     // No core, or a version the panel refuses: the save would be
                     // refused (CORE_NOT_ON_NODE / CORE_VERSION_REFUSED), so the
                     // tick is not offered. One already there can be taken off.
-                    blockedWhy={fit && nodeCoreBlocks(fit) && !checked ? nodeCoreFitText(fit, t).blockWhy : null}
+                    blockedWhy={
+                      checked
+                        ? null
+                        : fit && nodeCoreBlocks(fit)
+                          ? nodeCoreFitText(fit, t).blockWhy
+                          : awgWhy
+                    }
                     onToggle={() => toggle(node.id)}
                   />
                   {fit && <NodeCoreLine fit={fit} nodeId={node.id} compact />}
+                  {awgWhy && coreRefusal?.nodeName !== node.name && (
+                    <Text size="xs" c="red" style={{ lineHeight: '15px' }}>
+                      {awgWhy}
+                    </Text>
+                  )}
                   {coreRefusal?.nodeName === node.name && (
                     <CoreGateRefusalLine refusal={coreRefusal} nodeId={node.id} arch={node.cores?.arch} />
                   )}
