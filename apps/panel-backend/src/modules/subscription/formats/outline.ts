@@ -1,4 +1,5 @@
 import type { SubscriptionEndpoint } from '../subscription.formats.js';
+import { withQuery } from '../subscription.protocols.js';
 
 /**
  * Outline dynamic access key (`?format=outline`): ONE Shadowsocks server.
@@ -37,7 +38,7 @@ import type { SubscriptionEndpoint } from '../subscription.formats.js';
 export function outlineAccessKey(subUrl: string, nodeName: string): string | undefined {
   if (!subUrl.startsWith('https://')) return undefined;
   const node = encodeURIComponent(nodeName);
-  return `ssconf://${subUrl.slice('https://'.length)}?format=outline&node=${node}#${node}`;
+  return `ssconf://${withQuery(subUrl.slice('https://'.length), `format=outline&node=${node}`)}#${node}`;
 }
 
 export function buildOutlineJson(endpoints: SubscriptionEndpoint[], nodeName?: string): string {

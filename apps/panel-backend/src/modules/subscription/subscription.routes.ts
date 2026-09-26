@@ -1,6 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { FORMAT_NAMES, ROUTING_PRESET_IDS, type RoutingPresetId } from '@iceslab/shared';
+import {
+  FORMAT_NAMES,
+  PROTOCOL_NAMES,
+  ROUTING_PRESET_IDS,
+  type ProtocolName,
+  type RoutingPresetId,
+} from '@iceslab/shared';
+import { parseProtocolsParam, protocolsOf, withProtocols } from './subscription.protocols.js';
 import * as service from './subscription.service.js';
 import { buildClashYaml } from './formats/clash.js';
 import { buildSingboxJson } from './formats/singbox.js';
@@ -80,7 +87,19 @@ const QuerySchema = z.object({
   // contract nobody asked us to change. The download buttons on the human page
   // pass `&dl=1`; every existing address stays byte for byte what it was.
   dl: z.enum(['0', '1']).optional(),
+  // Only these protocols (subscription.protocols.ts), comma-separated. Read
+  // and checked by parseProtocolsParam before this schema runs, so an unknown
+  // name is answered by name; here it only has to be a string.
+  protocols: z.string().max(256).optional(),
 });
+
+/**
+ * Formats a comment can stand in, as the first line of an otherwise empty
+ * file. Everything else answers a narrowing that left nothing with a 404 in
+ * words: JSON has no comments, and a base64 list or a key with a stray line in
+ * it is a broken subscription rather than an empty one.
+ */
+const COMMENTED_FORMATS: ReadonlySet<Format> = new Set<Format>(['clash', 'wgconf', 'surge', 'quantumultx', 'loon']);
 
 const FORMAT_VALUES: ReadonlySet<Format> = new Set(FormatEnum.options);
 
@@ -372,6 +391,19 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           `${FORMAT_NAMES.join(', ')}`,
       });
     }
+    // Same for a protocol: by name, with the list it is not in.
+    const protocolFilter = parseProtocolsParam((raw as { protocols?: unknown }).protocols);
+    if (protocolFilter.kind === 'unknown') {
+      return reply.code(400).send({
+        error: 'SUBSCRIPTION_PROTOCOL_UNKNOWN',
+        message:
+          `unknown protocol ${JSON.stringify(protocolFilter.protocol)} in ?protocols=. ` +
+          `The panel's protocols are: ${PROTOCOL_NAMES.join(', ')}`,
+        protocol: protocolFilter.protocol,
+        known: [...PROTOCOL_NAMES],
+      });
+    }
+    const onlyProtocols = protocolFilter.kind === 'some' ? protocolFilter.protocols : null;
     const query = QuerySchema.parse(request.query);
     const userAgent = typeof request.headers['user-agent'] === 'string'
       ? request.headers['user-agent']
@@ -469,12 +501,22 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       const cfCountryRaw = (request.headers['cf-ipcountry'] ??
         request.headers['x-country-code']) as string | string[] | undefined;
       const cfCountry = Array.isArray(cfCountryRaw) ? cfCountryRaw[0] : cfCountryRaw;
-      const result = await service.generateSubscription(params.token, {
+      const generated = await service.generateSubscription(params.token, {
         ip: request.ip,
         userAgent,
         topN: query.topN,
         cfCountry,
       });
+      // ?protocols=: narrowed HERE, once, on what the subscription hands out,
+      // before any format or the page sees it. After the generation and not
+      // inside it, so what is cached per squad set (bindings-cache) stays the
+      // whole subscription and one person's narrowed link cannot become
+      // another's answer. A cascade line goes with its endpoint, whose
+      // protocol is the cascade entry's.
+      const availableProtocols = protocolsOf(generated.endpoints);
+      const result = onlyProtocols
+        ? { ...generated, endpoints: generated.endpoints.filter((e) => onlyProtocols.includes(e.protocol as ProtocolName)) }
+        : generated;
 
       // Slice 30: host-level format gating. Each endpoint carries an
       // optional `disableForFormats[]` from its originating host row; we
@@ -516,7 +558,9 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       // config, just links + copy + per-format download buttons.
       if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
         const settings = await getSubscriptionSettings();
-        const subUrl = await subscriptionUrl(params.token);
+        // The narrowing travels in every link the page prints, so what a
+        // person copies, scans or adds is what this page lists.
+        const subUrl = withProtocols(await subscriptionUrl(params.token), onlyProtocols ?? []);
         const protocols = [...new Set(result.endpoints.map((e) => e.protocol))];
         // One QR pair per AmneziaWG node (deduped by node name). wg-quick / vpn://
         // are single-tunnel-per-key, so a user with several AWG servers gets each
@@ -607,6 +651,7 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
             supportUrl: settings.supportUrl,
             user: result.json.user,
             protocols,
+            protocolSwitch: { available: availableProtocols, selected: onlyProtocols ?? [] },
             // A download row is offered exactly when its file would carry
             // something: the same gate and the same host switches the file
             // itself goes through.
@@ -672,6 +717,44 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
           'Content-Disposition',
           `attachment; filename="${downloadFilename(format, result.json.user.username, query.node)}"`,
         );
+      }
+
+      /**
+       * A narrowing that leaves this format nothing, said in words.
+       *
+       * Only under ?protocols=: without it every format keeps the contract it
+       * has (an empty wgconf body, an empty base64 list), because clients
+       * polling those addresses read them that way today. With it, the person
+       * asked for something specific, and an empty 200 would read as "the
+       * panel is broken" rather than "you have none of those".
+       */
+      if (onlyProtocols) {
+        const carriesNothing =
+          format === 'plain'
+            ? filteredPlain.every((u) => u.length === 0)
+            : format === 'wgconf'
+              ? buildWgQuickConf(served, query.node) === ''
+              : format === 'amneziavpn'
+                ? buildAwgVpnLink(served, query.node) === ''
+                : format === 'outline'
+                  ? buildOutlineJson(served, query.node) === ''
+                  : served.length === 0;
+        if (carriesNothing) {
+          // Not a file to save: the sentence is the answer.
+          reply.removeHeader('Content-Disposition');
+          const words =
+            `this subscription has no hosts of ${onlyProtocols.join(', ')} for the ${format} format` +
+            (availableProtocols.length > 0 ? `; it has ${availableProtocols.join(', ')}` : '');
+          if (COMMENTED_FORMATS.has(format)) {
+            return reply.type('text/plain; charset=utf-8').send(`# ${words}\n`);
+          }
+          return reply.code(404).send({
+            error: 'SUBSCRIPTION_PROTOCOL_EMPTY',
+            message: words,
+            protocols: onlyProtocols,
+            available: availableProtocols,
+          });
+        }
       }
 
       switch (format) {

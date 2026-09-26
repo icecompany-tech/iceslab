@@ -86,6 +86,13 @@ export interface Labels {
   noExpiry: string;
   unlimited: string;
   protocols: string;
+  /** The switcher's chip that takes the narrowing away. */
+  protocolsAll: string;
+  /** Under the switcher: what picking a chip does to the link. */
+  protocolsHint: string;
+  /** When the protocols picked leave this subscription with nothing. */
+  protocolsEmptyTitle: string;
+  protocolsEmpty: (list: string) => string;
   subLink: string;
   /**
    * Said on the refusal page, under the link.
@@ -274,6 +281,11 @@ export const L: Record<'ru' | 'en', Labels> = {
     noExpiry: 'no expiry',
     unlimited: 'unlimited',
     protocols: 'Protocols',
+    protocolsAll: 'all',
+    protocolsHint: 'Pick the ones to keep: the link, its code and the Add buttons then hand out only those.',
+    protocolsEmptyTitle: 'Nothing to hand out. ',
+    protocolsEmpty: (list) =>
+      `This subscription has no hosts of ${list}. Pick another protocol above, or all of them.`,
     subLink: 'Subscription link',
     deadLinkNote:
       'The link does not change. Keep it: it starts working again as soon as the subscription does.',
@@ -454,6 +466,11 @@ export const L: Record<'ru' | 'en', Labels> = {
     noExpiry: 'без срока',
     unlimited: 'безлимит',
     protocols: 'Протоколы',
+    protocolsAll: 'все',
+    protocolsHint: 'Отметьте нужные: ссылка, её код и кнопки «Добавить в» будут выдавать только их.',
+    protocolsEmptyTitle: 'Выдавать нечего. ',
+    protocolsEmpty: (list) =>
+      `У этой подписки нет хостов протоколов ${list}. Выберите выше другой протокол или все.`,
     subLink: 'Ссылка подписки',
     deadLinkNote:
       'Ссылка не меняется. Сохраните её: она заработает снова, как только заработает подписка.',

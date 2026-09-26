@@ -1,5 +1,6 @@
 import { config, subscriptionOrigin } from '../../config.js';
 import { getSubscriptionSettings } from '../settings/settings.service.js';
+import { withQuery } from './subscription.protocols.js';
 
 /**
  * The origin every subscription link is printed on.
@@ -41,5 +42,7 @@ export async function subscriptionUrl(token: string): Promise<string> {
  * could make it come back empty.
  */
 export function awgConfUrl(subUrl: string, nodeName: string): string {
-  return `${subUrl}?format=wgconf&node=${encodeURIComponent(nodeName)}`;
+  // Joined, not appended: a subscription address may already carry a query
+  // (`?protocols=`, the page's own).
+  return withQuery(subUrl, `format=wgconf&node=${encodeURIComponent(nodeName)}`);
 }

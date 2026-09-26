@@ -51,7 +51,9 @@ export function qrSidePx(side: number, perModule: number, minPx: number, maxPx: 
 const QR_DRAWER = `
 (function () {
   var sidePx = ${qrSidePx.toString()};
-  var boxes = document.querySelectorAll('[data-qr-text]');
+  // Named, so the protocols switcher can draw ONE box again after it changed
+  // the link that box carries, without re-encoding every code on the page.
+  function draw(boxes) {
   if (!boxes.length || typeof qrcodegen === 'undefined') return;
   for (var i = 0; i < boxes.length; i++) {
     var box = boxes[i];
@@ -80,6 +82,9 @@ const QR_DRAWER = `
       // text stays exactly as the server wrote it. Never leave an empty box.
     }
   }
+  }
+  if (typeof window !== 'undefined') window.iceslabDrawQr = draw;
+  draw(document.querySelectorAll('[data-qr-text]'));
 })();
 `;
 

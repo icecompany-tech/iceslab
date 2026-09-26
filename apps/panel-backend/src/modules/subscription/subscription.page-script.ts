@@ -6,6 +6,8 @@
  * значений, и ни одно из них не адрес конфига: тело конфига на странице не
  * печатается, за ним всегда идёт запрос.
  */
+import { withProtocols } from './subscription.protocols.js';
+
 export interface PageScriptOpts {
   /** Адрес подписки, его копируют кнопки и показывает окно переноса. */
   subUrl: string;
@@ -16,6 +18,8 @@ export interface PageScriptOpts {
   /** Подписи переключателя списка, свёрнуто и раскрыто. */
   hideAll: string;
   showAll: string;
+  /** Порядок протоколов панели: одна выборка пишется в ссылку одним способом. */
+  protocolOrder: readonly string[];
 }
 
 export function pageScript(o: PageScriptOpts): string {
@@ -23,6 +27,81 @@ export function pageScript(o: PageScriptOpts): string {
   (function () {
     var SUB_URL = ${JSON.stringify(o.subUrl)};
     var NO_TRANSFER = ${JSON.stringify(o.noTransfer)};
+    // Protocols switcher (?protocols=). Rewrites the subscription link where
+    // the page carries it, in the three spellings it is carried in (as is,
+    // percent-encoded inside a deep link, base64 inside another), redraws the
+    // one code that holds it, and keeps the page's own address in step so a
+    // reload shows the same choice. Nothing is fetched and nothing is rebuilt:
+    // the rule for the URL is the server's own function (withProtocols).
+    (function () {
+      var box = document.querySelector('[data-proto-switch]');
+      if (!box) return;
+      var ORDER = ${JSON.stringify(o.protocolOrder)};
+      var withProtocols = ${withProtocols.toString()};
+      var chips = [].slice.call(box.querySelectorAll('[data-proto]'));
+      var all = chips.filter(function (c) { return !c.getAttribute('data-proto'); })[0];
+      var picks = chips.filter(function (c) { return !!c.getAttribute('data-proto'); });
+      var hostPath = SUB_URL.replace(/^https?:\/\//, '').split('#')[0].split('?')[0];
+      var reEsc = function (s) { return s.replace(/[.*+?^$${'{'}}()|[\]\\]/g, '\\$&'); };
+      var raw = new RegExp(reEsc(hostPath) + '(\\?[^\\s#"<]*)?', 'g');
+      var enc = new RegExp(reEsc(encodeURIComponent(hostPath)) + '(%3F[^&#\\s"<]*)?', 'gi');
+      function b64(s) { try { return btoa(s); } catch (e) { return null; } }
+      function rewrite(v, list, from, to) {
+        if (!v) return v;
+        var a = b64(from), b = b64(to);
+        var out = a && b ? v.split(a).join(b) : v;
+        out = out.replace(enc, function (m) { return encodeURIComponent(withProtocols(decodeURIComponent(m), list)); });
+        return out.replace(raw, function (m) { return withProtocols(m, list); });
+      }
+      var ATTRS = ['href', 'data-app-add', 'data-copy-config', 'data-copy-text', 'data-qr-text'];
+      function apply(list) {
+        var next = withProtocols(SUB_URL, list);
+        if (next === SUB_URL) return;
+        var redraw = [];
+        ATTRS.forEach(function (name) {
+          [].slice.call(document.querySelectorAll('[' + name + ']')).forEach(function (el) {
+            if (box.contains(el)) return;
+            var v = el.getAttribute(name), w = rewrite(v, list, SUB_URL, next);
+            if (w === v) return;
+            el.setAttribute(name, w);
+            if (name === 'data-qr-text') redraw.push(el);
+          });
+        });
+        [].slice.call(document.querySelectorAll('.link-box__value, .step__field-value, .qbx__text')).forEach(function (el) {
+          el.textContent = rewrite(el.textContent, list, SUB_URL, next);
+        });
+        var input = document.getElementById('url');
+        if (input) input.value = next;
+        [].slice.call(document.querySelectorAll('.lng')).forEach(function (a) {
+          a.setAttribute('href', withProtocols(a.getAttribute('href') || '?', list));
+        });
+        if (redraw.length && window.iceslabDrawQr) window.iceslabDrawQr(redraw);
+        try { history.replaceState(null, '', withProtocols(location.href, list)); } catch (e) {}
+        SUB_URL = next;
+      }
+      function paint(list) {
+        if (all) { all.classList.toggle('is-on', list.length === 0); all.setAttribute('aria-pressed', list.length === 0 ? 'true' : 'false'); }
+        picks.forEach(function (c) {
+          var on = list.indexOf(c.getAttribute('data-proto')) !== -1;
+          c.classList.toggle('is-on', on);
+          c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+      chips.forEach(function (c) {
+        c.addEventListener('click', function (e) {
+          e.preventDefault();
+          var p = c.getAttribute('data-proto');
+          var cur = picks.filter(function (x) { return x.classList.contains('is-on'); }).map(function (x) { return x.getAttribute('data-proto'); });
+          var list = !p ? [] : cur.indexOf(p) === -1 ? cur.concat([p]) : cur.filter(function (x) { return x !== p; });
+          // Every protocol this person has is the same as none picked: say it
+          // the short way, the one the link without a narrowing has.
+          if (list.length === picks.length) list = [];
+          list = ORDER.filter(function (x) { return list.indexOf(x) !== -1; });
+          paint(list);
+          apply(list);
+        });
+      });
+    })();
     // Copy the subscription link.
     var b = document.getElementById('copy'), i = document.getElementById('url');
     if (b) {

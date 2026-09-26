@@ -145,6 +145,12 @@ export const PAGE_CSS = String.raw`
   .proto{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.08em;
     color:var(--cyan); background:rgba(125,211,252,.07); border:1px solid rgba(125,211,252,.18);
     border-radius:6px; padding:3px 8px;}
+  /* The protocols switcher: the same chip, pressable. Off is dim, on is the
+     chip as it always looked, so a page with no narrowing reads as before. */
+  a.proto--pick{text-decoration:none; cursor:pointer; opacity:.45; min-height:24px; display:inline-flex; align-items:center;}
+  a.proto--pick.is-on{opacity:1; border-color:rgba(125,211,252,.55);}
+  a.proto--pick:focus-visible{outline:2px solid var(--cyan); outline-offset:2px;}
+  .protos__hint{margin-top:8px; font-size:12px; color:var(--dim); line-height:1.4;}
 
   /* Subscription link */
   .linkrow{display:flex; gap:8px;}
