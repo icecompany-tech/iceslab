@@ -203,8 +203,9 @@ describe('the chain block against the agent that will decode it', () => {
     // engine. A key renamed on one side would decode into an empty half, and an
     // empty half on a hysteria entry is a core with no hand-off: every user out
     // of the entry country with a working connection.
-    // amneziawg joined in phase 7 with `tproxy`, ahead of the door.
-    expect(jsonKeysOf('ChainUserCore')).toEqual(['engine', 'fragments', 'socks', 'tproxy']);
+    // amneziawg joined in phase 7 with `tproxy`, ahead of the door, and the
+    // 3.1 interface's `tproxy3` in t07-6b.
+    expect(jsonKeysOf('ChainUserCore')).toEqual(['engine', 'fragments', 'socks', 'tproxy', 'tproxy3']);
   });
 
   it('carries the two tproxy keys on both sides', () => {

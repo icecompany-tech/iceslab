@@ -360,6 +360,17 @@ type ChainUserCore struct {
 	Fragments json.RawMessage      `json:"fragments,omitempty"`
 	Socks     *ChainUserCoreSocks  `json:"socks,omitempty"`
 	TProxy    *ChainUserCoreTProxy `json:"tproxy,omitempty"`
+	// TProxy3 is the 3.1 interface's hand-off (t07-6b), its own mark.
+	TProxy3 *ChainUserCoreTProxy `json:"tproxy3,omitempty"`
+}
+
+// AwgHandoff is what the amneziawg adapter is handed: the 1.x interface's
+// hand-off at the top level, where it has been since t07-wire, and the 3.1
+// interface's beside it.
+type AwgHandoff struct {
+	Port    int                  `json:"port,omitempty"`
+	Mark    uint32               `json:"mark,omitempty"`
+	TProxy3 *ChainUserCoreTProxy `json:"tproxy3,omitempty"`
 }
 
 // ChainUserCoreTProxy mirrors ChainUserCoreTProxy in shared/transport.ts: where
@@ -399,7 +410,7 @@ func (u *ChainUserCore) Payload() (json.RawMessage, error) {
 		if hasFragments {
 			return nil, fmt.Errorf("chain userCore: engine hysteria carries xray fragments")
 		}
-		if u.TProxy != nil {
+		if u.TProxy != nil || u.TProxy3 != nil {
 			return nil, fmt.Errorf("chain userCore: engine hysteria carries a tproxy hand-off")
 		}
 		return json.Marshal(u.Socks)
@@ -410,7 +421,7 @@ func (u *ChainUserCore) Payload() (json.RawMessage, error) {
 		if u.Socks != nil {
 			return nil, fmt.Errorf("chain userCore: engine xray carries a socks hand-off")
 		}
-		if u.TProxy != nil {
+		if u.TProxy != nil || u.TProxy3 != nil {
 			return nil, fmt.Errorf("chain userCore: engine xray carries a tproxy hand-off")
 		}
 		return u.Fragments, nil
@@ -418,13 +429,19 @@ func (u *ChainUserCore) Payload() (json.RawMessage, error) {
 		// Same failure shape as the other two: an awg entry told "nothing"
 		// draws no TPROXY rules, and its users leave by the host's own route,
 		// out of the entry country.
-		if u.TProxy == nil {
+		// One of the two interfaces at least (t07-6b): an entry that serves
+		// 3.1 alone has no 1.x hand-off.
+		if u.TProxy == nil && u.TProxy3 == nil {
 			return nil, fmt.Errorf("chain userCore: engine amneziawg carries no tproxy hand-off")
 		}
 		if hasFragments || u.Socks != nil {
 			return nil, fmt.Errorf("chain userCore: engine amneziawg carries another engine's hand-off")
 		}
-		return json.Marshal(u.TProxy)
+		h := AwgHandoff{TProxy3: u.TProxy3}
+		if u.TProxy != nil {
+			h.Port, h.Mark = u.TProxy.Port, u.TProxy.Mark
+		}
+		return json.Marshal(h)
 	default:
 		return nil, fmt.Errorf("chain userCore: engine %q draws no user core", u.Engine)
 	}

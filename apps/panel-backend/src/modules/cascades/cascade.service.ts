@@ -2280,8 +2280,11 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
   if (!input) return null;
   // t07-wire: an AmneziaWG entry's hand-off is minted from its interface's
   // listen port, so it is read here, where the database is.
-  const awgPort =
-    role === 'entry' && topology.entryProtocol === 'amneziawg' ? await awgInterfacePort(nodeId) : undefined;
+  // t07-6b: one per interface, the 1.x one and the 3.1 one.
+  const awgEntry = role === 'entry' && topology.entryProtocol === 'amneziawg';
+  const awgPorts = awgEntry
+    ? { one: await awgInterfacePort(nodeId, 1), three: await awgInterfacePort(nodeId, 3) }
+    : undefined;
 
   const config = renderChainConfig(input);
   // One listener per way out this node offers its user core. Only an entry has
@@ -2303,23 +2306,33 @@ export async function getChainForNode(nodeId: string): Promise<NodeChain | null>
     config: config as Record<string, unknown>,
     socks,
     socksPassword: secret,
-    ...userCoreFor(nodeId, topology, role, secret, awgPort),
+    ...userCoreFor(nodeId, topology, role, secret, awgPorts),
     ...(tunnels.length > 0 ? { tunnels } : {}),
   };
 }
 
 /**
- * The UDP port the AmneziaWG interface of this node listens on, or undefined
- * when the node serves no AmneziaWG binding (nothing to steer).
+ * The UDP port the AmneziaWG interface of one generation on this node listens
+ * on, or undefined when the node serves no AmneziaWG binding of it (nothing
+ * to steer).
  *
  * The port of the enabled binding with the HIGHEST port, which is not a
  * preference but what the agent ends up with: fetchEnabledInbounds sends the
- * bindings in port order, the adapter carries one interface, and each AWG
- * inbound it applies replaces the last. The mark has to be that interface's.
+ * bindings in port order, the adapter carries one interface per generation,
+ * and each AWG inbound it applies replaces the last of its generation. The
+ * mark has to be that interface's.
  */
-async function awgInterfacePort(nodeId: string): Promise<number | undefined> {
+async function awgInterfacePort(nodeId: string, generation: 1 | 3): Promise<number | undefined> {
   const b = await prisma.profileNodeBinding.findFirst({
-    where: { nodeId, enabled: true, profile: { enabled: true, protocol: 'amneziawg' } },
+    where: {
+      nodeId,
+      enabled: true,
+      profile: {
+        enabled: true,
+        protocol: 'amneziawg',
+        ...(generation === 3 ? { awgProtocol: 3 } : { OR: [{ awgProtocol: null }, { awgProtocol: 1 }] }),
+      },
+    },
     orderBy: { port: 'desc' },
     select: { port: true },
   });
@@ -2346,18 +2359,24 @@ function userCoreFor(
   topology: TopologyInput,
   role: ChainRole,
   secret: string,
-  awgPort?: number,
+  awgPorts?: { one?: number; three?: number },
 ): { userCore?: ChainUserCore } {
   if (role !== 'entry') return {};
   if (topology.entryProtocol === 'amneziawg') {
     // t07-wire: the agent steers the awg interface into the chain's tproxy
-    // listener. No AWG binding on this entry, no interface to steer: then
-    // nothing is handed over, and no xray drawing either (entersOnAnotherCore).
-    if (awgPort === undefined) return {};
+    // listener; t07-6b: each interface, 1.x and 3.1, with its own mark. No
+    // AWG binding on this entry, no interface to steer: then nothing is
+    // handed over, and no xray drawing either (entersOnAnotherCore).
+    const handoff = (port: number | undefined) =>
+      port === undefined ? undefined : { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(port) };
+    const tproxy = handoff(awgPorts?.one);
+    const tproxy3 = handoff(awgPorts?.three);
+    if (!tproxy && !tproxy3) return {};
     return {
       userCore: {
         engine: 'amneziawg',
-        tproxy: { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(awgPort) },
+        ...(tproxy ? { tproxy } : {}),
+        ...(tproxy3 ? { tproxy3 } : {}),
       },
     };
   }

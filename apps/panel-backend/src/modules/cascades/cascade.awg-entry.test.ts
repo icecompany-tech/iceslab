@@ -12,6 +12,7 @@ import { registerAndLogin } from '../../../tests/helpers/auth.js';
 import { getChainForNode, getHysteriaEntryLabels } from './cascade.service.js';
 import { renderChainConfig, TPROXY_IN_TAG } from './chain.config.js';
 import { CHAIN_TPROXY_PORT, chainTProxyMark } from './chain.ports.js';
+import { observedCores } from '../nodes/nodes.cron.js';
 
 /**
  * What the panel tells an AMNEZIAWG entry, t07-wire.
@@ -61,7 +62,7 @@ async function makeNode(name: string): Promise<string> {
   return JSON.parse(res.body).id as string;
 }
 
-async function bindAwg(nodeId: string, port: number) {
+async function bindAwg(nodeId: string, port: number, generation: 1 | 3 = 1) {
   seq += 1;
   const p = await app.inject({
     method: 'POST',
@@ -70,7 +71,13 @@ async function bindAwg(nodeId: string, port: number) {
     payload: {
       name: `awg-${seq}`,
       protocol: 'amneziawg',
-      config: { serverPrivateKey: 'a'.repeat(44), serverPublicKey: 'b'.repeat(44), subnet: '10.66.66.0/24', obfuscation: {} },
+      ...(generation === 3 ? { awgProtocol: 3 } : {}),
+      config: {
+        serverPrivateKey: 'a'.repeat(44),
+        serverPublicKey: 'b'.repeat(44),
+        subnet: generation === 3 ? '10.67.67.0/24' : '10.66.66.0/24',
+        obfuscation: {},
+      },
     },
   });
   expect(p.statusCode, p.body).toBe(201);
@@ -81,6 +88,23 @@ async function bindAwg(nodeId: string, port: number) {
     payload: { profileId: JSON.parse(p.body).id, nodeId, port },
   });
   expect(b.statusCode, b.body).toBe(201);
+}
+
+/** A node whose agent says it carries the 3.1 interface (AWG_AGENT_TOO_OLD). */
+async function carriesBoth(nodeId: string) {
+  await prisma.node.update({
+    where: { id: nodeId },
+    data: {
+      cores: observedCores(
+        [
+          { name: 'amneziawg', engine: 'amneziawg', running: true, installed: true, awgProtocol: 3, awgGenerations: [1, 3] },
+          // The chain runs on sing-box; an entry that reports none is refused.
+          { name: 'tuic', engine: 'singbox', running: true, installed: true },
+        ],
+        new Date().toISOString(),
+      ) as unknown as object,
+    },
+  });
 }
 
 /** One direction, Auto off: the shape where an xray entry renders no Auto. */
@@ -129,6 +153,32 @@ describe('the chain block of an amneziawg entry', () => {
     await makeCascade(entry, await makeNode('nl-exit'));
     const chain = await getChainForNode(entry);
     expect(chain?.userCore).toMatchObject({ tproxy: { mark: chainTProxyMark(51820) } });
+  });
+
+  it('hands each interface over with its own mark, 1.x and 3.1 (t07-6b)', async () => {
+    const entry = await makeNode('ru-entry');
+    await carriesBoth(entry);
+    await bindAwg(entry, 51820);
+    await bindAwg(entry, 51830, 3);
+    await makeCascade(entry, await makeNode('nl-exit'));
+    const chain = await getChainForNode(entry);
+    expect(chain?.userCore).toEqual({
+      engine: 'amneziawg',
+      tproxy: { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(51820) },
+      tproxy3: { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(51830) },
+    });
+  });
+
+  it('hands over the 3.1 interface alone on an entry that serves 3.1 alone', async () => {
+    const entry = await makeNode('ru-entry');
+    await carriesBoth(entry);
+    await bindAwg(entry, 51830, 3);
+    await makeCascade(entry, await makeNode('nl-exit'));
+    const chain = await getChainForNode(entry);
+    expect(chain?.userCore).toEqual({
+      engine: 'amneziawg',
+      tproxy3: { port: CHAIN_TPROXY_PORT, mark: chainTProxyMark(51830) },
+    });
   });
 
   it('hands nothing over when the entry serves no AmneziaWG at all', async () => {

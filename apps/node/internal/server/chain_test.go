@@ -274,6 +274,11 @@ func TestAUserCoreThatDoesNotMatchItsEngineReachesNobody(t *testing.T) {
 			TProxy:    &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
 		},
 		"amneziawg without tproxy": {Engine: "amneziawg"},
+		"xray with a 3.1 tproxy": {
+			Engine:    "xray",
+			Fragments: json.RawMessage(`{"outbounds":[]}`),
+			TProxy3:   &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51830},
+		},
 		"amneziawg with socks": {
 			Engine: "amneziawg",
 			TProxy: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
@@ -330,6 +335,33 @@ func TestAnAmneziawgHandOffReachesTheAwgCoreAlone(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "the chain is NOT applied") {
 		t.Fatalf("a hand-off the awg core took raised the alarm:\n%s", logs.String())
+	}
+}
+
+// t07-6b: the 3.1 interface's hand-off rides beside the 1.x one, and an entry
+// that serves 3.1 alone hands over that one alone.
+func TestAnAmneziawgHandOffCarriesBothInterfaces(t *testing.T) {
+	for name, c := range map[string]struct {
+		uc   *dto.ChainUserCore
+		want string
+	}{
+		"both": {&dto.ChainUserCore{Engine: "amneziawg",
+			TProxy:  &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51820},
+			TProxy3: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51830}},
+			`{"port":25000,"mark":117356,"tproxy3":{"port":25000,"mark":117366}}`},
+		"3.1 alone": {&dto.ChainUserCore{Engine: "amneziawg",
+			TProxy3: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51830}},
+			`{"tproxy3":{"port":25000,"mark":117366}}`},
+	} {
+		awg := &cascadeCore{fakeCore: fakeCore{name: "amneziawg", engine: "amneziawg", running: true}}
+		var logs strings.Builder
+		s, _ := serverWithChain(t, &logs, awg)
+		block := chainBlock()
+		block.UserCore = c.uc
+		s.applyPush(context.Background(), dto.ApplyInboundsRequest{Chain: block})
+		if len(awg.got) != 1 || string(awg.got[0]) != c.want {
+			t.Errorf("%s: the awg core got %q, want %s\n%s", name, awg.got, c.want, logs.String())
+		}
 	}
 }
 

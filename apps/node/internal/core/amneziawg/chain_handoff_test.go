@@ -396,6 +396,63 @@ func TestAHandOffThatWouldTakeTheHostDownIsRefusedAndChangesNothing(t *testing.T
 	}
 }
 
+func TestEachInterfaceTakesItsOwnHandOff(t *testing.T) {
+	// t07-6b: the 1.x hand-off at the top of the payload, the 3.1 one under
+	// tproxy3, each into its own interface's hooks.
+	a, _ := twoInterfaceAdapter(t)
+	if err := a.ApplyInbound(51820, inboundJSON(t, "b1", 1, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.ApplyInbound(51830, inboundJSON(t, "b3", 3, fixtureWire(t))); err != nil {
+		t.Fatal(err)
+	}
+	both := json.RawMessage(`{"port":25000,"mark":117356,"tproxy3":{"port":25000,"mark":117366}}`)
+	if err := a.ApplyCascade(both); err != nil {
+		t.Fatalf("ApplyCascade: %v", err)
+	}
+	if a.cfg.Inbound.Chain == nil || a.cfg.Inbound.Chain.Mark != 117356 {
+		t.Errorf("1.x interface holds %v", a.cfg.Inbound.Chain)
+	}
+	if a.v3.cfg.Inbound.Chain == nil || a.v3.cfg.Inbound.Chain.Mark != 117366 {
+		t.Errorf("3.1 interface holds %v", a.v3.cfg.Inbound.Chain)
+	}
+	blob3, _ := os.ReadFile(a.v3.cfg.ConfigPath)
+	if !strings.Contains(string(blob3), "--tproxy-mark 0x1ca76") || strings.Contains(string(blob3), "0x1ca6c") {
+		t.Errorf("awg3.conf does not carry its own mark alone:\n%s", blob3)
+	}
+
+	// 3.1 alone: the 1.x interface lets go of the chain, the 3.1 one keeps it.
+	if err := a.ApplyCascade(json.RawMessage(`{"tproxy3":{"port":25000,"mark":117366}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if a.cfg.Inbound.Chain != nil || a.v3.cfg.Inbound.Chain == nil {
+		t.Errorf("3.1 alone: 1.x %v, 3.1 %v", a.cfg.Inbound.Chain, a.v3.cfg.Inbound.Chain)
+	}
+	// nil: neither.
+	if err := a.ApplyCascade(nil); err != nil {
+		t.Fatal(err)
+	}
+	if a.cfg.Inbound.Chain != nil || a.v3.cfg.Inbound.Chain != nil {
+		t.Error("a push with no cascade left a hand-off")
+	}
+}
+
+func TestAHandOffThatWouldSetOneInterfaceAgainstTheOtherIsRefused(t *testing.T) {
+	a, _ := twoInterfaceAdapter(t)
+	for name, raw := range map[string]string{
+		"one mark for both": `{"port":25000,"mark":117356,"tproxy3":{"port":25000,"mark":117356}}`,
+		"neither":           `{}`,
+		"a bad 3.1 mark":    `{"port":25000,"mark":117356,"tproxy3":{"port":25000,"mark":254}}`,
+	} {
+		if err := a.ApplyCascade(json.RawMessage(raw)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+		if a.cfg.Inbound.Chain != nil || a.v3.cfg.Inbound.Chain != nil {
+			t.Errorf("%s: a refused hand-off was applied in part", name)
+		}
+	}
+}
+
 // wireFor is the inbound as the panel sends it, for ApplyInbound.
 func wireFor(t *testing.T, in InboundConfig) json.RawMessage {
 	t.Helper()

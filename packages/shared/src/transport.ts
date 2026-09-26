@@ -1410,7 +1410,16 @@ export interface ChainUserCoreHysteria {
  */
 export interface ChainUserCoreAmneziawg {
   engine: 'amneziawg';
-  tproxy: ChainUserCoreTProxy;
+  /** The 1.x interface's hand-off. Absent when the entry serves 3.1 alone. */
+  tproxy?: ChainUserCoreTProxy;
+  /**
+   * The 3.1 interface's hand-off (t07-6b): the same listener, its own mark
+   * (from the 3.1 interface's listen port). Absent when the entry serves no
+   * 3.1 profile. At least one of the two is present, or the agent refuses the
+   * block: an awg entry told nothing draws no rules and its users leave by
+   * the host's route.
+   */
+  tproxy3?: ChainUserCoreTProxy;
 }
 
 /**

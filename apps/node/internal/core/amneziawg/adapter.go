@@ -935,23 +935,59 @@ func (a *Adapter) syncFromSnapshot(ctx context.Context, inbound InboundConfig, p
 // its own hand-off (own mark) when the adapter learns to carry it.
 var _ core.CascadeReceiver = (*Adapter)(nil)
 
+// t07-6b: the payload carries the 3.1 interface's hand-off beside the 1.x one
+// (`tproxy3`, its own mark), and each goes to its own interface. Both are
+// read and checked before either is applied, so a bad half changes nothing.
 func (a *Adapter) ApplyCascade(raw json.RawMessage) error {
-	var next *ChainTProxy
+	var next1, next3 *ChainTProxy
 	if len(raw) > 0 && string(raw) != "null" {
 		var wire struct {
-			Port int    `json:"port"`
-			Mark uint32 `json:"mark"`
+			Port    int    `json:"port"`
+			Mark    uint32 `json:"mark"`
+			TProxy3 *struct {
+				Port int    `json:"port"`
+				Mark uint32 `json:"mark"`
+			} `json:"tproxy3"`
 		}
 		if err := json.Unmarshal(raw, &wire); err != nil {
 			return fmt.Errorf("amneziawg ApplyCascade: %w", err)
 		}
-		t := ChainTProxy{Port: wire.Port, Mark: wire.Mark}
-		if err := t.validate(); err != nil {
-			return fmt.Errorf("amneziawg ApplyCascade: %w", err)
+		if wire.Port != 0 || wire.Mark != 0 {
+			t := ChainTProxy{Port: wire.Port, Mark: wire.Mark}
+			if err := t.validate(); err != nil {
+				return fmt.Errorf("amneziawg ApplyCascade: %w", err)
+			}
+			next1 = &t
 		}
-		next = &t
+		if wire.TProxy3 != nil {
+			t := ChainTProxy{Port: wire.TProxy3.Port, Mark: wire.TProxy3.Mark}
+			if err := t.validate(); err != nil {
+				return fmt.Errorf("amneziawg ApplyCascade, 3.1 interface: %w", err)
+			}
+			if next1 != nil && next1.Mark == t.Mark {
+				// One mark is one ip rule: the PostDown of either interface
+				// would take the other's away.
+				return fmt.Errorf("amneziawg ApplyCascade: both interfaces are handed mark 0x%x", t.Mark)
+			}
+			next3 = &t
+		}
+		if next1 == nil && next3 == nil {
+			return fmt.Errorf("amneziawg ApplyCascade: a hand-off with neither interface in it")
+		}
 	}
+	if a.v3 == nil {
+		if next3 != nil {
+			return fmt.Errorf("amneziawg ApplyCascade: a 3.1 hand-off and no 3.1 interface to carry it")
+		}
+		return a.applyCascadeOne(next1)
+	}
+	if err := a.applyCascadeOne(next1); err != nil {
+		return err
+	}
+	return a.v3.applyCascadeOne(next3)
+}
 
+func (a *Adapter) applyCascadeOne(next *ChainTProxy) error {
 	a.restartMu.Lock()
 	defer a.restartMu.Unlock()
 
