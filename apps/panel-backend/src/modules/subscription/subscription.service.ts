@@ -12,7 +12,11 @@ import {
 // output.
 import { subscriptionServerName } from '../../lib/util/country-flag.js';
 import { allocatePeer } from '../amneziawg/amneziawg.service.js';
-import { getHiddenCascadeNodeIds, getRouteProfilesByEntryNode } from '../cascades/cascade.service.js';
+import {
+  getHiddenCascadeNodeIds,
+  getHysteriaEntryLabels,
+  getRouteProfilesByEntryNode,
+} from '../cascades/cascade.service.js';
 import { getSubscriptionSettings } from '../settings/settings.service.js';
 import { getCachedBindings, bindingsCacheKey } from './subscription.bindings-cache.js';
 import { buildNaiveUri } from '../../core-adapters/naive/index.js';
@@ -878,6 +882,13 @@ export async function generateSubscription(
     groupIds,
     entryReach,
   );
+  // E48: entries of cascades entered through hysteria, and the name their hy2
+  // hosts go out under: the cascade, not the entry machine.
+  const hysteriaEntryLabels = await getHysteriaEntryLabels(
+    [...new Set(bindings.filter((b) => b.profile.protocol === 'hysteria').map((b) => b.node.id))],
+    groupIds,
+    entryReach,
+  );
 
   const endpoints: SubscriptionEndpoint[] = [];
   for (const b of bindings) {
@@ -928,11 +939,17 @@ export async function generateSubscription(
       // `${node} · ${host}`, which put an internal node name in front of the
       // label the operator wrote, and carried no flag at all even though the
       // panel's own preview showed one.
-      const nodeName = subscriptionServerName({
-        hostRemark,
-        nodeName: b.node.name,
-        countryCode: b.node.countryCode,
-      });
+      // A hy2 host on the entry of a cascade entered through hysteria IS the
+      // cascade (E48): its users leave through the chain, not from this node.
+      const cascadeLabel =
+        b.profile.protocol === 'hysteria' ? hysteriaEntryLabels.get(b.node.id) : undefined;
+      const nodeName =
+        cascadeLabel ??
+        subscriptionServerName({
+          hostRemark,
+          nodeName: b.node.name,
+          countryCode: b.node.countryCode,
+        });
       const hostOverrides = hostRow ?? null;
 
     // Slice 30: common per-host metadata threaded onto each endpoint so

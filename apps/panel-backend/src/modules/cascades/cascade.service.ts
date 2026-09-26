@@ -851,6 +851,72 @@ export interface CascadeRouteProfile {
  *  the policy: an operator could define an ad-split policy, grant it to a squad,
  *  and get nothing at all on a chain. Chains now take part, with one guard below
  *  so an untouched chain keeps handing out exactly the links it does today. */
+/**
+ * E48: the name a hysteria host on the entry of a cascade entered through
+ * hysteria goes out under, per entry node.
+ *
+ * Such an entry takes its users in over hysteria and hands every one of them to
+ * the chain, which routes with the policy: the user picks no way out (a user is
+ * a password, there is no route tag). So the host is not a direct server any
+ * more, it IS the cascade, and it is named like one: the exit's flag and
+ * country when there is one direction, the Auto line when there are several.
+ * A squad that switched the cascade off keeps the host under its own name.
+ */
+export async function getHysteriaEntryLabels(
+  nodeIds: string[],
+  groupIds: string[] = [],
+  entryReach?: Map<string, Set<string>>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (nodeIds.length === 0) return out;
+  const cascades = await prisma.cascade.findMany({
+    where: {
+      enabled: true,
+      positions: {
+        some: { position: 0, entryProtocol: 'hysteria', nodes: { some: { nodeId: { in: nodeIds } } } },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      positions: { where: { position: 0 }, select: { nodes: { select: { nodeId: true } } } },
+      directions: {
+        orderBy: { tag: 'asc' },
+        select: { countryCode: true, nodes: { select: { node: { select: { name: true, countryCode: true } } } } },
+      },
+    },
+  });
+  if (cascades.length === 0) return out;
+  const offRows =
+    groupIds.length > 0
+      ? await prisma.groupCascadeOff.findMany({
+          where: { groupId: { in: groupIds }, cascadeId: { in: cascades.map((c) => c.id) } },
+          select: { groupId: true, cascadeId: true },
+        })
+      : [];
+  const offByCascade = new Map<string, Set<string>>();
+  for (const r of offRows) offByCascade.set(r.cascadeId, (offByCascade.get(r.cascadeId) ?? new Set()).add(r.groupId));
+
+  for (const c of [...cascades].sort((a, b) => a.name.localeCompare(b.name))) {
+    const usable = c.directions.filter((d) => d.nodes.length > 0);
+    if (usable.length === 0) continue;
+    let label: string;
+    if (usable.length === 1) {
+      const d = usable[0]!;
+      const exit = d.nodes[0]!.node;
+      label = cascadeProfileLabel(c.name, d.countryCode ?? exit.countryCode, exit.name);
+    } else {
+      label = cascadeAutoProfileLabel(c.name);
+    }
+    for (const n of c.positions[0]?.nodes ?? []) {
+      if (!nodeIds.includes(n.nodeId) || out.has(n.nodeId)) continue;
+      if (cascadeIsOffAt({ groupIds, entryNodeId: n.nodeId, entryReach, offGroups: offByCascade.get(c.id) })) continue;
+      out.set(n.nodeId, label);
+    }
+  }
+  return out;
+}
+
 export async function getRouteProfilesByEntryNode(
   nodeIds: string[],
   groupIds: string[] = [],
@@ -965,6 +1031,12 @@ export async function getRouteProfilesByEntryNode(
         nodeIds.includes(id),
       );
       if (entryNodeIds.length === 0) continue;
+      // E48, stand 26.09: a cascade entered through hysteria hands its users
+      // to the chain from hysteria (userCoreFor), and the entry's xray gets no
+      // drawing. vless profiles here would be ways in the cascade does not
+      // carry. The entry's hy2 host stands for the cascade instead
+      // (getHysteriaEntryLabels).
+      if (entryPos?.entryProtocol === 'hysteria') continue;
       const allowed = allowByCascade.get(c.id);
       /**
        * Policies that apply to THIS direction: only the ones granted by squads
