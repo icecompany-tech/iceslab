@@ -197,6 +197,43 @@ func TestPortsAreReportedUnderOneKey(t *testing.T) {
 	}
 }
 
+// The tproxy listener of an AmneziaWG entry: 25000 on TCP and UDP, measured
+// on se-02 (sing-box binds both), taken from the hand-off on the wire, and let
+// go with the chain.
+func TestTheTProxyListenerIsHeldOnBothTransports(t *testing.T) {
+	m, _ := newTestManager(t, func() ([]byte, error) { return nil, nil })
+	b := block(goldenConfig)
+	b.UserCore = &dto.ChainUserCore{Engine: "amneziawg", TProxy3: &dto.ChainUserCoreTProxy{Port: 25000, Mark: 65536 + 51830}}
+	_ = m.Apply(context.Background(), b)
+
+	got := map[string]bool{}
+	for _, p := range m.ReservedPorts() {
+		if p.Owner == PortOwnerTProxy {
+			got[p.Transport] = p.Port == 25000
+		}
+	}
+	if !got["tcp"] || !got["udp"] || len(got) != 2 {
+		t.Fatalf("tproxy ports held: %+v", m.ReservedPorts())
+	}
+	// Still two socks ports beside it, under their own key.
+	if n := len(m.ReservedPorts()); n != 4 {
+		t.Fatalf("held %d ports, want 2 socks + 2 tproxy: %+v", n, m.ReservedPorts())
+	}
+
+	// A block with no awg hand-off holds no tproxy port.
+	_ = m.Apply(context.Background(), block(goldenConfig))
+	for _, p := range m.ReservedPorts() {
+		if p.Owner == PortOwnerTProxy {
+			t.Fatalf("the tproxy port outlived the hand-off: %+v", m.ReservedPorts())
+		}
+	}
+	_ = m.Apply(context.Background(), b)
+	_ = m.Apply(context.Background(), nil)
+	if len(m.ReservedPorts()) != 0 {
+		t.Fatalf("ports held after the chain was withdrawn: %+v", m.ReservedPorts())
+	}
+}
+
 func TestAnEngineItDoesNotKnowIsRefused(t *testing.T) {
 	// Refused rather than attempted: the config is the engine's own JSON, so
 	// guessing means handing sing-box syntax to something that is not sing-box

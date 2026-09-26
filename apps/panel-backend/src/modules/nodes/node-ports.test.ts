@@ -211,6 +211,31 @@ describe('the port check', () => {
     ]);
   });
 
+  it('reads the chain tproxy listener on both sockets (t07-wire, measured on se-02)', async () => {
+    // An AmneziaWG entry's chain binds 25000 on TCP and on UDP. An AWG binding
+    // is UDP, so the UDP half is the one that would have gone unrefused.
+    const nodeId = await makeNode();
+    await reportCores(nodeId, [{ name: 'amneziawg', engine: 'amneziawg', reservedPorts: [] }]);
+    await prisma.node.update({
+      where: { id: nodeId },
+      data: {
+        chainStatus: {
+          running: true,
+          reservedPorts: [
+            { owner: 'chain-socks', port: 26000, transport: 'tcp' },
+            { owner: 'chain-tproxy', port: 25000, transport: 'tcp' },
+            { owner: 'chain-tproxy', port: 25000, transport: 'udp' },
+          ],
+        } as never,
+      },
+    });
+    for (const transport of ['tcp', 'udp'] as const) {
+      const answer = await check(nodeId, 25000, transport);
+      expect(answer.ok, transport).toBe(false);
+      expect(answer.conflicts).toEqual([{ kind: 'core-service', ownerKey: 'chain-tproxy', port: 25000, transport }]);
+    }
+  });
+
   it('names a core service by KEY, with no profile name to look for', async () => {
     const nodeId = await makeNode();
     await reportCores(nodeId, [

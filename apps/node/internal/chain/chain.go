@@ -48,6 +48,13 @@ const Engine = "singbox"
 // never a phrase: the panel is bilingual and turns it into words.
 const PortOwner = "chain-socks"
 
+// PortOwnerTProxy is the key of the chain's tproxy listener, where an
+// AmneziaWG entry's packets are steered (t07-wire). Measured on se-02, 26.09,
+// sing-box 1.13.14: the tproxy inbound binds its port on TCP AND on UDP, the
+// socks inbounds on TCP alone; both halves are reported, each with its own
+// transport, so a binding on 25000/udp is refused as one on 25000/tcp is.
+const PortOwnerTProxy = "chain-tproxy"
+
 // RunCmdFunc runs a command and returns its combined output. Injected so the
 // config check is testable without the binary, exactly as the xray adapter
 // does it.
@@ -104,6 +111,10 @@ type Manager struct {
 	// socks is the last accepted set of listeners, which is what the reserved
 	// ports are reported from. Cleared when the chain is stopped.
 	socks []dto.ChainSocks
+	// tproxyPort is the tproxy listener the last accepted block's hand-off
+	// points at (userCore.tproxy / tproxy3), 0 when it has none. Read off the
+	// wire like the socks ports, not off a constant here.
+	tproxyPort int
 	// held says whether a chain block has ever been accepted and not since
 	// withdrawn. It is what makes the healthcheck able to distinguish "no chain
 	// here" from "the chain is down", which the panel needs: reading absence as
@@ -234,7 +245,26 @@ func (m *Manager) reservedPortsLocked() []dto.ReservedPortDto {
 			Transport: "tcp",
 		})
 	}
+	if m.tproxyPort > 0 {
+		for _, tr := range []string{"tcp", "udp"} {
+			held = append(held, dto.ReservedPortDto{Owner: PortOwnerTProxy, Port: m.tproxyPort, Transport: tr})
+		}
+	}
 	return held
+}
+
+// tproxyPortOf is the port the block's AmneziaWG hand-off steers to, 0 for
+// none. The two interfaces share one listener.
+func tproxyPortOf(block *dto.NodeChain) int {
+	if block.UserCore == nil {
+		return 0
+	}
+	for _, t := range []*dto.ChainUserCoreTProxy{block.UserCore.TProxy, block.UserCore.TProxy3} {
+		if t != nil && t.Port > 0 {
+			return t.Port
+		}
+	}
+	return 0
 }
 
 /*
@@ -298,6 +328,7 @@ func (m *Manager) Apply(ctx context.Context, block *dto.NodeChain) error {
 	m.mu.Lock()
 	old := m.proc
 	m.socks = append([]dto.ChainSocks(nil), block.Socks...)
+	m.tproxyPort = tproxyPortOf(block)
 	m.held = true
 	m.lastErr = ""
 	m.mu.Unlock()
@@ -352,6 +383,7 @@ func (m *Manager) stop(why string) error {
 	was := m.held
 	m.proc = nil
 	m.socks = nil
+	m.tproxyPort = 0
 	m.held = false
 	m.lastErr = ""
 	m.mu.Unlock()
