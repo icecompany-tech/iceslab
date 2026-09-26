@@ -130,9 +130,11 @@
 #     # wipes prior state silently, then installs fresh
 #
 #   bash <(curl -fsSL .../install-iceslab-node.sh) --uninstall
-#     # stops + disables systemd unit, removes binary, /etc/iceslab-node,
-#     # /opt/iceslab-node, and the UFW allow-rule for $NODE_PORT/tcp.
-#     # Per-protocol services (xray.service, etc) are kept intact.
+#     # a clean machine: stops the agent and every core, takes each core off
+#     # with its bootstrap's --remove, then removes the unit, binary,
+#     # /etc/iceslab-node, /opt/iceslab-node and the UFW allow-rule for
+#     # $NODE_PORT/tcp. Ends with "Removed: agent, ...; kept: ...".
+#     # Add --keep-cores to leave the cores on the machine (the old behaviour).
 #
 # Without either flag, an existing install triggers an interactive prompt.
 
@@ -321,6 +323,7 @@ PANEL_URL=""
 BOOTSTRAP_TOKEN=""
 RESET=0
 UNINSTALL=0
+KEEP_CORES=0
 # UFW lock-down. When set, only this IP/CIDR (or comma-list) is allowed to
 # reach :NODE_PORT. Without it the mTLS port is open to the whole internet:
 # mTLS rejects everyone, but bots still spend our CPU on TLS handshakes and
@@ -383,9 +386,9 @@ XR_PORT="443"
 # Wipe everything install-iceslab-node.sh creates: systemd unit, binary, source
 # checkout, env dir, UFW allow-rule for the mTLS port, and the per-protocol
 # config the script generates (hysteria/xray service config).
-# Keep upstream binaries (the `hysteria` / `xray` exes from their official
-# installers); only the config files, which are tied to the panel's
-# domain/email/keys, get wiped so a re-install regenerates them cleanly.
+# The core binaries are not this function's: --uninstall takes them off first
+# (uninstall_all below, E41), and --reset and --keep-cores leave them, so only
+# the config files tied to the panel's domain/email/keys are wiped here.
 # Idempotent, safe on a half-installed VPS.
 do_uninstall() {
   log "Stopping iceslab-node service (if running)"
@@ -436,6 +439,130 @@ do_uninstall() {
     log "Removing UFW allow rule for ${NODE_PORT}/tcp"
     ufw --force delete allow "${NODE_PORT}/tcp" >/dev/null || true
   fi
+}
+
+# ───── --uninstall: the cores too ─────
+#
+# E41, 25.09 on ru-01: --uninstall stopped at the agent (do_uninstall above
+# keeps upstream binaries by design). xray, sing-box, hysteria and the AWG
+# module stayed on the machine, the next install without --engines found them,
+# the node came up "without cores" while everything stood there, and a host
+# bound to it by the fact. To an operator --uninstall means a clean machine.
+#
+# So --uninstall is now, in this order:
+#   1. stop the agent, so nothing starts a core again;
+#   2. stop every core our bootstraps put on a machine (stop_cores);
+#   3. run each bootstrap-*.sh --remove from the checkout while it is still
+#      there (remove_cores); a --remove refuses a running core, hence 2 first;
+#   4. do_uninstall, which removes the checkout last.
+# --keep-cores keeps the old behaviour (1 and 4 only), for an operator who
+# keeps the cores themselves.
+
+# The processes of the cores our bootstraps install, by name.
+CORE_PROCESSES="xray sing-box hysteria mtg caddy-naive mita"
+
+# stop_cores: every core down, whoever started it: the agent (its children),
+# systemd (units of older installs, mita, awg-quick@), or by hand.
+stop_cores() {
+  local u i p left
+  for u in hysteria hysteria-server mita xray caddy-naive mtg iceslab-hyhop; do
+    systemctl stop "$u" >/dev/null 2>&1 || true
+  done
+  for u in $(systemctl list-units --plain --no-legend 'xray@*' 'awg-quick@*' 2>/dev/null | awk '{print $1}' || true); do
+    systemctl stop "$u" >/dev/null 2>&1 || true
+  done
+  # Every AmneziaWG interface, the users' and a cascade leg's alike.
+  for i in $(ip -o link show type amneziawg 2>/dev/null | awk -F': ' '{print $2}' || true); do
+    i="${i%%@*}"
+    awg-quick down "$i" >/dev/null 2>&1 || ip link del "$i" >/dev/null 2>&1 || true
+  done
+  for p in $CORE_PROCESSES; do
+    pkill -TERM -x "$p" >/dev/null 2>&1 || true
+  done
+  for _ in 1 2 3 4 5; do
+    left=""
+    for p in $CORE_PROCESSES; do
+      if pgrep -x "$p" >/dev/null 2>&1; then left+="$p "; fi
+    done
+    [[ -z "$left" ]] && return 0
+    sleep 1
+  done
+  for p in $left; do
+    pkill -KILL -x "$p" >/dev/null 2>&1 || true
+  done
+}
+
+# core_present <engine>: something of this core is on the machine, the fact
+# the summary is written from.
+core_present() {
+  case "$1" in
+    xray)      [[ -e /usr/local/bin/xray ]] ;;
+    singbox)   [[ -e /usr/local/bin/sing-box ]] ;;
+    hysteria)  [[ -e /usr/local/bin/hysteria ]] ;;
+    mtproto)   [[ -e /usr/local/bin/mtg ]] ;;
+    naive)     [[ -e /usr/local/bin/caddy-naive ]] ;;
+    mieru)     [[ -e /usr/local/bin/mita ]] || dpkg -s mita >/dev/null 2>&1 ;;
+    amneziawg) command -v awg >/dev/null 2>&1 || [[ -n "$(dkms status amneziawg 2>/dev/null || true)" ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+# remove_cores <scripts dir>: each bootstrap's --remove, the present cores and
+# the absent ones alike (a --remove of nothing is quiet, and it sweeps what an
+# older install left). Sets REMOVED_CORES and KEPT_CORES for the summary, from
+# what was present before.
+remove_cores() {
+  local dir="$1" e script present
+  REMOVED_CORES=()
+  KEPT_CORES=()
+  for e in $KNOWN_ENGINES; do
+    present=0
+    core_present "$e" && present=1
+    script="$dir/$(bootstrap_of "$e")"
+    if [[ ! -f "$script" ]]; then
+      [[ $present -eq 1 ]] && KEPT_CORES+=("$e (no $script)")
+      continue
+    fi
+    # A bootstrap from before --remove takes the flag for an install: it would
+    # put the core BACK on the machine. Asked of the file, not a pipe.
+    if ! grep -q 'NODE_ENV_REMOVE' "$script"; then
+      [[ $present -eq 1 ]] && KEPT_CORES+=("$e (the checkout predates --remove)")
+      continue
+    fi
+    if bash "$script" --remove; then
+      [[ $present -eq 1 ]] && REMOVED_CORES+=("$e")
+    elif [[ $present -eq 1 ]]; then
+      KEPT_CORES+=("$e (its --remove refused, see above)")
+    fi
+  done
+  # Not the status of the last `[[ present ]] &&` above: under set -e a core
+  # that was simply absent would end the uninstall here.
+  return 0
+}
+
+# uninstall_all: --uninstall, in the order the block above explains.
+uninstall_all() {
+  local removed kept
+  log "Stopping iceslab-node service (if running)"
+  systemctl stop iceslab-node 2>/dev/null || true
+  REMOVED_CORES=()
+  KEPT_CORES=()
+  if [[ $KEEP_CORES -eq 1 ]]; then
+    log "--keep-cores: the cores stay on this machine"
+  else
+    log "Stopping every core"
+    stop_cores
+    log "Removing the cores (bootstrap-*.sh --remove)"
+    remove_cores "$ICESLAB_NODE_DIR/apps/node/scripts"
+  fi
+  do_uninstall
+  local e
+  removed="agent"
+  for e in "${REMOVED_CORES[@]}"; do removed+=", $e"; done
+  kept=""
+  for e in "${KEPT_CORES[@]}"; do kept+="${kept:+, }$e"; done
+  [[ $KEEP_CORES -eq 1 ]] && kept="every core (--keep-cores)"
+  log "Removed: ${removed}; kept: ${kept:-none}"
 }
 
 resolve_payload() {
@@ -717,6 +844,9 @@ while [[ $# -gt 0 ]]; do
     # "overwrite? [y/N]" prompt; non-interactive runs (no tty) abort.
     --reset)         RESET=1; shift ;;
     --uninstall)     UNINSTALL=1; shift ;;
+    # With --uninstall: leave the cores on the machine (the behaviour before
+    # E41), for an operator who keeps them themselves.
+    --keep-cores)    KEEP_CORES=1; shift ;;
     --panel-ip)      PANEL_IP="$2"; shift 2 ;;
     # Zashchita (hardening): see the HARDEN_UFW/FAIL2BAN block above.
     --harden-ufw)         HARDEN_UFW=1; shift ;;
@@ -740,13 +870,11 @@ done
 # Run BEFORE bootstrap-token redemption, otherwise `--uninstall` would
 # pointlessly consume a one-shot bootstrap token.
 if [[ $UNINSTALL -eq 1 ]]; then
-  if [[ -f /etc/iceslab-node/env || -x /usr/local/bin/iceslab-node ]]; then
-    log "Uninstalling previous iceslab-node"
-    do_uninstall
-    ok "Uninstall complete. Rerun install-iceslab-node.sh to set up a fresh agent."
-  else
-    log "Nothing to uninstall: no prior iceslab-node found."
-  fi
+  # Not gated on the agent any more: a machine an older --uninstall left with
+  # its cores has no agent and still is not clean (E41).
+  log "Uninstalling iceslab-node"
+  uninstall_all
+  ok "Uninstall complete. Rerun install-iceslab-node.sh to set up a fresh agent."
   exit 0
 fi
 
