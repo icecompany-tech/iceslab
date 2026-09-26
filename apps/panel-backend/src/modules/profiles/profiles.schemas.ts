@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { XRAY_PLAIN_SUBPROTOCOLS } from '@iceslab/shared';
+import { AWG_PROTOCOLS, XRAY_PLAIN_SUBPROTOCOLS } from '@iceslab/shared';
 import {
   PROTOCOL_CONFIG_SCHEMAS,
   type CreateInboundInput,
@@ -152,12 +152,22 @@ const ProfileConfigByProtocol = z.discriminatedUnion('protocol', [
   z.object({ protocol: z.literal('shadowtls'),   config: PROTOCOL_CONFIG_SCHEMAS.shadowtls }),
 ]);
 
+/**
+ * t07-1: the AmneziaWG generation a profile hands out, 1 (1.x) or 3 (3.1).
+ * null = 1, the generation of every AmneziaWG profile before phase 7.
+ */
+export const AwgProtocolSchema = z.literal([...AWG_PROTOCOLS]);
+
+/** The refusal of a generation on a profile that is not AmneziaWG. */
+export const AWG_PROTOCOL_NOT_AWG_MESSAGE = 'awgProtocol is for amneziawg profiles only';
+
 const ProfileBaseFields = z.object({
   name: NameSchema,
   description: z.string().max(500).nullish(),
   enabled: z.boolean().default(true),
   /** Engine-choice (EC5): null/omitted = native core, 'singbox' = sing-box. */
   engine: EngineEnum.nullish(),
+  awgProtocol: AwgProtocolSchema.nullish(),
 });
 
 export const CreateProfileSchema = z
@@ -186,6 +196,9 @@ export const CreateProfileSchema = z
         params: { code: SINGBOX_XRAY_FAMILY_CODE },
       });
     }
+    if (val.awgProtocol != null && val.protocol !== 'amneziawg') {
+      ctx.addIssue({ code: 'custom', message: AWG_PROTOCOL_NOT_AWG_MESSAGE, path: ['awgProtocol'] });
+    }
   });
 export type CreateProfileInput = z.infer<typeof CreateProfileSchema>;
 
@@ -197,6 +210,9 @@ export const UpdateProfileSchema = z.object({
   enabled: z.boolean().optional(),
   /** Engine-choice (EC5). Validated against the profile's protocol in service. */
   engine: EngineEnum.nullable().optional(),
+  /** t07-1. Absent = untouched, null = back to 1. amneziawg only, checked in
+   *  the service against the stored protocol. */
+  awgProtocol: AwgProtocolSchema.nullable().optional(),
   /** Must match the profile's existing protocol. Validated in service. */
   config: z.unknown().optional(),
 });

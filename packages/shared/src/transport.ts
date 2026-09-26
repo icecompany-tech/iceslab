@@ -1586,6 +1586,14 @@ export interface ReservedPort {
   transport: Transport;
 }
 
+/**
+ * AmneziaWG protocol generations the panel knows (Ф7): 1 is the 1.x the fleet
+ * runs, 3 is 3.1 (client AmneziaVPN 5.x). 2.0 is not one of them: nothing
+ * measured it, and the manifest refuses its module as known-bad.
+ */
+export const AWG_PROTOCOLS = [1, 3] as const;
+export type AwgProtocol = (typeof AWG_PROTOCOLS)[number];
+
 export interface CoreStatus {
   name: ProtocolName;
   running: boolean;
@@ -1631,6 +1639,21 @@ export interface CoreStatus {
    * than the field.
    */
   toolsVersion?: string;
+  /**
+   * The AmneziaWG protocol generation the loaded kernel module speaks (Ф7,
+   * t07-1). Only the amneziawg core reports it.
+   *
+   * The generation of the MODULE, not of an interface: a 3.1 module carries a
+   * 1.x interface beside a 3.1 one (Ф7.0 m1 on se-02, docs/plan/f70-results.md),
+   * so 3 means "can serve both", 1 means "1.x only". The agent reads it off the
+   * module version it reports as `version` (the bootstrap's tag while the
+   * loaded module is that build, Ф7.1).
+   *
+   * ⚠ Absent is NOT 1: an agent older than the field, no module loaded, or a
+   * module whose version does not tell (a raw build of either generation says
+   * 1.0.0). A gate refuses on a present value only.
+   */
+  awgProtocol?: AwgProtocol;
   /** Whether this core is CONFIGURED, i.e. has an inbound and is expected to
    *  run. The installer registers an adapter for every protocol the operator
    *  might switch on later, and an unconfigured one sits idle by design.
@@ -1836,6 +1859,8 @@ export interface NodeCoreInfo {
   version?: string;
   /** See CoreStatus.toolsVersion. */
   toolsVersion?: string;
+  /** See CoreStatus.awgProtocol. Inventory: it changes with a bootstrap. */
+  awgProtocol?: AwgProtocol;
   provisioned?: boolean;
   /** See CoreStatus.reason. Inventory: it changes with a push, not a tick. */
   reason?: string;

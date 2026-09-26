@@ -177,6 +177,8 @@ export const UpdateNodeSchema = z.object({
   // here would be written back within a poll. Not in this schema, so an older
   // screen that still sends them is stripped quietly, neither written nor
   // refused. A create still takes the set: the wizard's --engines needs it.
+  // No `awgProtocol` either (t07-1): the node's AmneziaWG generation is its
+  // module's, reported by the agent; a screen that sends one is stripped too.
   countryCode: CountryCodeSchema.nullish(),
   consumptionMultiplier: z.number().int().positive().optional(),
   regionId: z.uuid().nullable().optional(),

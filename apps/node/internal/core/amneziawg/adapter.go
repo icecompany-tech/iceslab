@@ -890,6 +890,36 @@ func (a *Adapter) CoreVersion() string {
 	return strings.TrimSpace(string(b))
 }
 
+// AwgProtocol implements core.AwgProtocolReporter: the generation of the loaded
+// module, read off the version CoreVersion reports. The major number is the
+// generation (3.1.20260906 is 3, 1.0.20260611 is 1); a 3.1 module built by
+// DKMS without the bootstrap's env says 3.1.20260812, still 3.
+//
+// 1.0.0 is not 1. It is what a raw build of EITHER generation writes to
+// /sys/module (Ф7.0 on se-02), and ru-02 carried such a module; reading it as 1
+// would refuse a 3.1 profile on a node that may well serve it. Unknown instead:
+// the panel refuses on a fact only. So is 2.x, which nothing here measured.
+var _ core.AwgProtocolReporter = (*Adapter)(nil)
+
+func (a *Adapter) AwgProtocol() int {
+	return awgProtocolOf(a.CoreVersion())
+}
+
+func awgProtocolOf(version string) int {
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if v == "" || v == "1.0.0" {
+		return 0
+	}
+	major, _, _ := strings.Cut(v, ".")
+	switch major {
+	case "1":
+		return 1
+	case "3":
+		return 3
+	}
+	return 0
+}
+
 // moduleVersionPath and moduleSrcVersionPath are variables so the tests can
 // point them at files.
 var (

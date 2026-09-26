@@ -355,3 +355,11 @@ type Versioner interface {
 type ToolsVersioner interface {
 	ToolsVersion() string
 }
+
+// AwgProtocolReporter is an OPTIONAL interface for the AmneziaWG core: the
+// protocol generation its loaded module speaks, 1 or 3, and 0 when that cannot
+// be told. The panel refuses a 3.1 profile on a node whose module is 1.x by it
+// (t07-1). Same contract as CoreVersion: goroutine-safe, cheap.
+type AwgProtocolReporter interface {
+	AwgProtocol() int
+}

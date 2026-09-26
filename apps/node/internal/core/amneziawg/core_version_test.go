@@ -62,3 +62,36 @@ func TestCoreVersionIsWhatTheBootstrapBuiltWhileItIsLoaded(t *testing.T) {
 		t.Fatalf("no env: CoreVersion = %q", got)
 	}
 }
+
+// t07-1: the generation is the major number of the reported module version,
+// and 1.0.0 (a raw build of either generation) tells nothing.
+func TestAwgProtocolIsTheModulesGeneration(t *testing.T) {
+	for _, c := range []struct {
+		version string
+		want    int
+	}{
+		{"3.1.20260906", 3}, // the bootstrap's tag, attested by srcversion
+		{"3.1.20260812", 3}, // what the DKMS 3.1 build writes to /sys
+		{"1.0.20260611", 1}, // the 1.x fleet (ru-01, se-01)
+		{"v1.0.20260611", 1},
+		{"1.0.0", 0}, // raw build of either generation, and ru-02
+		{"2.0.1", 0}, // nothing measured it
+		{"", 0},
+		{"garbage", 0},
+	} {
+		if got := awgProtocolOf(c.version); got != c.want {
+			t.Errorf("awgProtocolOf(%q) = %d, want %d", c.version, got, c.want)
+		}
+	}
+
+	file := filepath.Join(t.TempDir(), "version")
+	if err := os.WriteFile(file, []byte("1.0.20260611\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prev := moduleVersionPath
+	moduleVersionPath = file
+	t.Cleanup(func() { moduleVersionPath = prev })
+	if got := (&Adapter{}).AwgProtocol(); got != 1 {
+		t.Fatalf("AwgProtocol on a 1.x module = %d", got)
+	}
+}

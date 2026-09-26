@@ -1,4 +1,4 @@
-import type { EngineName, Transport } from '@iceslab/shared';
+import type { AwgProtocol, EngineName, Transport } from '@iceslab/shared';
 import type {
   Profile,
   ProfileNodeBinding,
@@ -23,6 +23,12 @@ export interface PublicProfileDto {
   description: string | null;
   config: unknown;
   enabled: boolean;
+  /**
+   * t07-1: the AmneziaWG generation this profile hands out, as stored. null =
+   * 1 (every AmneziaWG profile before phase 7), and always null on any other
+   * protocol. A 3 is refused onto a node whose module speaks 1.x only.
+   */
+  awgProtocol: AwgProtocol | null;
   /** Number of node bindings active for this profile. */
   bindingCount: number;
   /** Distinct users who can reach this profile via squad ACL (deduped across
@@ -83,6 +89,9 @@ export function mapProfile(
     description: profile.description,
     config: profile.config,
     enabled: profile.enabled,
+    // The column's CHECK holds it to 1 and 3; anything else would be a row
+    // written around the schema, read as the 1 that NULL means.
+    awgProtocol: profile.awgProtocol === 1 || profile.awgProtocol === 3 ? profile.awgProtocol : null,
     bindingCount,
     userCount,
     createdAt: profile.createdAt.toISOString(),

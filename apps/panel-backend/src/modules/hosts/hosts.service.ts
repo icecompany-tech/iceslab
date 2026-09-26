@@ -320,7 +320,7 @@ async function planHostCreate(input: CreateHostInput): Promise<{
 
   const profile = await prisma.profile.findUnique({
     where: { id: profileId },
-    select: { id: true, protocol: true, config: true, engine: true },
+    select: { id: true, protocol: true, config: true, engine: true, awgProtocol: true },
   });
   if (!profile) throw new ProfileNotFoundError(profileId);
 

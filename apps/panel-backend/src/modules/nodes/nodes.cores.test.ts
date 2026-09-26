@@ -86,6 +86,19 @@ describe('what the panel keeps from the healthcheck', () => {
     ]);
   });
 
+  it('keeps the AmneziaWG module generation the panel knows, and no other', () => {
+    // t07-1: the gate refuses a 3.1 profile on a 1.x module by this number.
+    const got = observedCores(
+      [
+        core({ name: 'amneziawg', engine: 'amneziawg', version: '3.1.20260906', awgProtocol: 3 }),
+        core({ name: 'xray', engine: 'xray', awgProtocol: 2 as never }),
+      ],
+      AT,
+    );
+    expect(got.cores[0]).toEqual({ name: 'amneziawg', engine: 'amneziawg', version: '3.1.20260906', awgProtocol: 3 });
+    expect('awgProtocol' in got.cores[1]!).toBe(false);
+  });
+
   it('keeps the machine arch the manifest names, and no other', () => {
     // The update command picks a release file and its sha256 by arch.
     expect(observedCores([], AT, 'arm64').arch).toBe('arm64');

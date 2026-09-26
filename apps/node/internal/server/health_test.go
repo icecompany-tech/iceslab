@@ -214,6 +214,30 @@ func TestToolsVersionTravelsBesideTheCoreVersion(t *testing.T) {
 	}
 }
 
+// generationCore answers the AmneziaWG module generation, as the adapter does.
+type generationCore struct {
+	fakeCore
+	generation int
+}
+
+func (g *generationCore) AwgProtocol() int { return g.generation }
+
+// t07-1: the module generation travels on the amneziawg row, and a core that
+// cannot tell (0) sends no key, so the panel reads "unknown" and not 1.
+func TestAwgProtocolTravelsOnlyWhenKnown(t *testing.T) {
+	body := healthBody(t,
+		&generationCore{fakeCore{name: "amneziawg", running: true}, 3},
+		&fakeCore{name: "hysteria", running: true},
+	)
+	if !strings.Contains(body, `"awgProtocol":3`) || strings.Count(body, `"awgProtocol"`) != 1 {
+		t.Errorf("the generation belongs on the amneziawg row alone: %s", body)
+	}
+	body = healthBody(t, &generationCore{fakeCore{name: "amneziawg", running: true}, 0})
+	if strings.Contains(body, `"awgProtocol"`) {
+		t.Errorf("an unknown generation must not travel: %s", body)
+	}
+}
+
 // The machine's arch travels with every health answer: the panel's update
 // command needs it to pick a release file and its sha256.
 func TestHealthNamesTheMachineArch(t *testing.T) {

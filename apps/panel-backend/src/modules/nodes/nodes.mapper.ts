@@ -1,5 +1,6 @@
 import type { Node } from '../../generated/prisma/client.js';
 import type {
+  AwgProtocol,
   DnsCfg,
   EngineName,
   NodeCoreRestarts,
@@ -10,6 +11,7 @@ import type {
 } from '@iceslab/shared';
 import { intendedEngines, reportedEngines } from './node-engines.js';
 import { readCoreVersions } from './node-core-versions.js';
+import { reportedAwgProtocol } from './node-core-gate.js';
 import type { CascadeEngineNeed } from './node-cascade-needs.js';
 import { publicHysteriaTls, type PublicHysteriaTls } from './hysteria-tls-shape.js';
 
@@ -197,6 +199,17 @@ export interface PublicNodeDto {
    *   createdAt   ISO time it was minted
    */
   hysteriaTls: PublicHysteriaTls | null;
+  /**
+   * t07-1: the AmneziaWG generation this node's kernel module speaks, a FACT
+   * lifted from `cores[].awgProtocol` on its amneziawg row. Not chosen and not
+   * taken on a save: the module is what the bootstrap built.
+   *
+   *   3     the module is 3.1 and serves 1.x and 3.1 profiles alike
+   *   1     1.x only: a 3.1 profile is refused (409 AWG_PROTOCOL_MISMATCH)
+   *   null  the report does not say (no AmneziaWG, an older agent, a module
+   *         version that does not tell). NOT 1: nothing is refused on it.
+   */
+  awgProtocol: AwgProtocol | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -214,11 +227,12 @@ export interface PublicNodeDto {
  * render at all (`intendedEngines`, `coreVersions`). A key inside the per-core
  * rows is spelled as its path, `cores[].reason`.
  *
- * Only what this server renders: `awgProtocol` is not here, because nothing on
- * this side writes or reads it yet. nodes.fields.test.ts holds the list to the
+ * Only what this server renders. nodes.fields.test.ts holds the list to the
  * DTO both ways.
  */
 export const NODE_DTO_FIELDS = [
+  'awgProtocol',
+  'cores[].awgProtocol',
   'intendedEngines',
   'coreVersions',
   'engines',
@@ -269,6 +283,7 @@ export function mapNodeToPublic(node: Node): PublicNodeDto {
     ...(engines !== undefined ? { engines } : {}),
     geo: (node.geo as NodeGeoFact | null) ?? null,
     hysteriaTls: publicHysteriaTls(node.hysteriaTls),
+    awgProtocol: reportedAwgProtocol((node.cores as NodeCores | null) ?? null),
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
   };

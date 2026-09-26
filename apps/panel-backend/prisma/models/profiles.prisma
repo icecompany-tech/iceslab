@@ -28,6 +28,10 @@ model Profile {
   // the protocol's native core; 'singbox' serves a shared protocol (vless/vmess/
   // trojan/ss/hy2) via the sing-box engine. tuic/anytls are singbox-only.
   engine      String?  @db.VarChar(16)
+  // t07-1: the AmneziaWG generation this profile hands out, 1 or 3 (3.1).
+  // NULL = 1, every AmneziaWG profile made before phase 7; always NULL on
+  // other protocols. A 3 is refused onto a node whose module speaks 1.x only.
+  awgProtocol Int?     @map("awg_protocol") @db.SmallInt
   description String?
   // Shared protocol config (for VLESS+REALITY: sni, publicKey, shortId,
   // flow, fingerprint, network; for Hysteria2: obfs, brutal CC, etc.).

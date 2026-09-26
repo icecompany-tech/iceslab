@@ -1,4 +1,6 @@
 import {
+  AWG_PROTOCOLS,
+  type AwgProtocol,
   componentsOfEngine,
   coreInstallCommand,
   CORE_VERSIONS,
@@ -58,7 +60,73 @@ export class CoreVersionRefusedError extends Error {
 }
 
 /**
- * The 409 either refusal answers with, or null for any other error. One shape
+ * A 3.1 AmneziaWG profile onto a node whose module speaks 1.x only (t07-1).
+ *
+ * One way only. A 3.1 module carries a 1.x interface beside a 3.1 one (Ф7.0 m1
+ * on se-02, and the 1.x interface set by tools 3.1 there on 26.09), so a 1.x
+ * profile on a 3.1 node is served and is not refused: refusing it would refuse
+ * every 1.x profile on a node the moment its bootstrap moved it to 3.1.
+ */
+export class AwgProtocolMismatchError extends Error {
+  readonly code = 'AWG_PROTOCOL_MISMATCH';
+  constructor(
+    public nodeName: string,
+    /** What the profile hands out. */
+    public profileAwgProtocol: AwgProtocol,
+    /** What the node's module speaks, from its report. */
+    public nodeAwgProtocol: AwgProtocol,
+  ) {
+    super(
+      `Node "${nodeName}" runs the AmneziaWG ${awgName(nodeAwgProtocol)} kernel module, which cannot serve ` +
+        `a ${awgName(profileAwgProtocol)} profile. Rerun the AmneziaWG bootstrap on the node to move it to 3.1.`,
+    );
+    this.name = 'AwgProtocolMismatchError';
+  }
+}
+
+function awgName(g: AwgProtocol): string {
+  return g === 3 ? '3.1' : '1.x';
+}
+
+/**
+ * The AmneziaWG generation a node's module speaks, by its report, or null when
+ * the report does not say: never reported, no amneziawg row, the core not
+ * installed, or a module version that does not tell (an agent older than the
+ * field, a raw 1.0.0 build). null is not 1, and nothing refuses on it.
+ */
+export function reportedAwgProtocol(cores: NodeCores | null): AwgProtocol | null {
+  const row = cores?.cores.find(
+    (c) => c.name === 'amneziawg' && (c.engine === undefined || c.engine === 'amneziawg') && c.installed !== false,
+  );
+  const g = row?.awgProtocol;
+  return g !== undefined && AWG_PROTOCOLS.includes(g) ? g : null;
+}
+
+/**
+ * The generation a profile hands out: its own, and 1 when it names none, which
+ * is every AmneziaWG profile made before phase 7. null for any other protocol.
+ */
+export function profileAwgProtocol(profile: { protocol: string; awgProtocol?: number | null }): AwgProtocol | null {
+  if (profile.protocol !== 'amneziawg') return null;
+  return profile.awgProtocol === 3 ? 3 : 1;
+}
+
+/**
+ * The generation half of the gate, on the same rule: a node that has not said
+ * which module it runs is let through.
+ */
+export function assertAwgProtocolOnNode(
+  node: { name: string; cores: unknown },
+  profile: { protocol: string; awgProtocol?: number | null },
+): void {
+  const wanted = profileAwgProtocol(profile);
+  if (wanted !== 3) return;
+  const has = reportedAwgProtocol((node.cores as NodeCores | null) ?? null);
+  if (has === 1) throw new AwgProtocolMismatchError(node.name, wanted, has);
+}
+
+/**
+ * The 409 each refusal above answers with, or null for any other error. One shape
  * for POST /api/hosts and POST /api/bindings, so one screen draws both.
  *
  * (E30b's HYSTERIA_NEEDS_HOSTNAME, f73ba50, stood here for one day: native
@@ -93,16 +161,30 @@ export function coreGateReply(err: unknown): { status: 409; body: Record<string,
       },
     };
   }
+  if (err instanceof AwgProtocolMismatchError) {
+    return {
+      status: 409,
+      body: {
+        error: err.code,
+        message: err.message,
+        nodeName: err.nodeName,
+        profileAwgProtocol: err.profileAwgProtocol,
+        nodeAwgProtocol: err.nodeAwgProtocol,
+      },
+    };
+  }
   return null;
 }
 
 /**
  * The gate. `profile` is what the host will be served by; its engine is the
- * one that has to be on the node.
+ * one that has to be on the node, and for AmneziaWG its generation the one the
+ * node's module has to speak (after the install and the version: those carry
+ * the command that fixes them).
  */
 export function assertCoreOnNode(
   node: { name: string; cores: unknown; coreVersions: unknown },
-  profile: { protocol: string; engine: string | null },
+  profile: { protocol: string; engine: string | null; awgProtocol?: number | null },
 ): void {
   const engine = effectiveEngineOf(profile);
   const cores = (node.cores as NodeCores | null) ?? null;
@@ -126,6 +208,7 @@ export function assertCoreOnNode(
       throw new CoreVersionRefusedError(node.name, engine, component, reported.trim(), verdict.kind, verdict.reason);
     }
   }
+  assertAwgProtocolOnNode(node, profile);
 }
 
 /**

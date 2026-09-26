@@ -63,13 +63,13 @@ async function makeNode(): Promise<string> {
   return JSON.parse(res.body).id as string;
 }
 
-async function makeProfile(protocol: string, config: unknown): Promise<string> {
+async function makeProfile(protocol: string, config: unknown, extra: Record<string, unknown> = {}): Promise<string> {
   seq += 1;
   const res = await app.inject({
     method: 'POST',
     url: '/api/profiles',
     headers: auth(),
-    payload: { name: `core-profile-${seq}`, protocol, config },
+    payload: { name: `core-profile-${seq}`, protocol, config, ...extra },
   });
   expect(res.statusCode, res.body).toBe(201);
   return JSON.parse(res.body).id as string;
@@ -201,6 +201,154 @@ describe('the core gate on putting a host on a node', () => {
       payload: { enabled: false },
     });
     expect(port.statusCode, port.body).toBe(200);
+  });
+});
+
+const AWG = {
+  serverPrivateKey: 'a'.repeat(44),
+  serverPublicKey: 'b'.repeat(44),
+  subnet: '10.66.66.0/24',
+  obfuscation: {},
+};
+
+/** An AmneziaWG row as the agent reports it after t07-1. */
+const awgRow = (awgProtocol?: 1 | 3, version = awgProtocol === 3 ? '3.1.20260906' : '1.0.20260611') => ({
+  name: 'amneziawg' as const,
+  engine: 'amneziawg' as const,
+  installed: true,
+  version,
+  ...(awgProtocol ? { awgProtocol } : {}),
+});
+
+const getNode = async (id: string) =>
+  JSON.parse((await app.inject({ method: 'GET', url: `/api/nodes/${id}`, headers: auth() })).body);
+
+describe('the AmneziaWG generation gate (t07-1)', () => {
+  it('a profile carries its generation: 3, null for one that names none, refused off AmneziaWG', async () => {
+    const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+    const plain = await makeProfile('amneziawg', AWG);
+    const get = async (id: string) =>
+      JSON.parse((await app.inject({ method: 'GET', url: `/api/profiles/${id}`, headers: auth() })).body);
+    expect((await get(three)).awgProtocol).toBe(3);
+    expect((await get(plain)).awgProtocol).toBeNull();
+
+    const onXray = await app.inject({
+      method: 'POST',
+      url: '/api/profiles',
+      headers: auth(),
+      payload: { name: 'x-awg', protocol: 'xray', config: REALITY, awgProtocol: 3 },
+    });
+    expect(onXray.statusCode, onXray.body).toBe(400);
+    const two = await app.inject({
+      method: 'POST',
+      url: '/api/profiles',
+      headers: auth(),
+      payload: { name: 'awg-2', protocol: 'amneziawg', config: AWG, awgProtocol: 2 },
+    });
+    expect(two.statusCode, two.body).toBe(400);
+  });
+
+  it('refuses a 3.1 profile on a node whose module speaks 1.x, on both doors, in machine form', async () => {
+    const nodeId = await makeNode();
+    await report(nodeId, [awgRow(1)], 'amd64');
+    const profileId = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+
+    for (const res of [await bind(profileId, nodeId, 51820), await host(profileId, nodeId, 51820)]) {
+      expect(res.statusCode, res.body).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({
+        error: 'AWG_PROTOCOL_MISMATCH',
+        nodeName: 'core-node-1',
+        profileAwgProtocol: 3,
+        nodeAwgProtocol: 1,
+      });
+    }
+    expect(await prisma.profileNodeBinding.count()).toBe(0);
+  });
+
+  it('lets a 1.x profile onto a 3.1 module, which serves both (Ф7.0 m1)', async () => {
+    const nodeId = await makeNode();
+    await report(nodeId, [awgRow(3)], 'amd64');
+    const legacy = await makeProfile('amneziawg', AWG);
+    const one = await makeProfile('amneziawg', AWG, { awgProtocol: 1 });
+    const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+    expect((await bind(legacy, nodeId, 51820)).statusCode).toBe(201);
+    expect((await bind(one, nodeId, 51821)).statusCode).toBe(201);
+    expect((await bind(three, nodeId, 51822)).statusCode).toBe(201);
+  });
+
+  it('lets through a node that did not say which module it runs', async () => {
+    const three = await makeProfile('amneziawg', AWG, { awgProtocol: 3 });
+    // An agent older than the field, or a raw build that says 1.0.0: no key.
+    const silent = await makeNode();
+    await report(silent, [awgRow(undefined, '1.0.0')], 'amd64');
+    expect((await bind(three, silent, 51820)).statusCode).toBe(201);
+    const never = await makeNode();
+    expect((await host(three, never, 51820)).statusCode).toBe(201);
+  });
+
+  it('refuses moving a deployed profile to 3.1 while one of its nodes runs 1.x, and back is free', async () => {
+    const nodeId = await makeNode();
+    await report(nodeId, [awgRow(1)], 'amd64');
+    const profileId = await makeProfile('amneziawg', AWG);
+    expect((await bind(profileId, nodeId, 51820)).statusCode).toBe(201);
+
+    const put = (payload: unknown) =>
+      app.inject({ method: 'PUT', url: `/api/profiles/${profileId}`, headers: auth(), payload });
+    const up = await put({ awgProtocol: 3 });
+    expect(up.statusCode, up.body).toBe(409);
+    expect(JSON.parse(up.body)).toMatchObject({ error: 'AWG_PROTOCOL_MISMATCH', nodeAwgProtocol: 1 });
+    expect((await prisma.profile.findUniqueOrThrow({ where: { id: profileId } })).awgProtocol).toBeNull();
+
+    // The module moves to 3.1: now it goes, and back to 1.x asks nothing.
+    await report(nodeId, [awgRow(3)], 'amd64');
+    expect((await put({ awgProtocol: 3 })).statusCode).toBe(200);
+    await report(nodeId, [awgRow(1)], 'amd64');
+    const back = await put({ awgProtocol: null });
+    expect(back.statusCode, back.body).toBe(200);
+    expect(JSON.parse(back.body).awgProtocol).toBeNull();
+    // A save that does not name it leaves it alone.
+    expect((await put({ awgProtocol: 3 })).statusCode).toBe(409);
+    expect(JSON.parse((await put({ description: 'x' })).body).awgProtocol).toBeNull();
+  });
+
+  it('refuses a generation on a profile that is not AmneziaWG', async () => {
+    const profileId = await makeProfile('xray', REALITY);
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/profiles/${profileId}`,
+      headers: auth(),
+      payload: { awgProtocol: 3 },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'INVALID', path: ['awgProtocol'] });
+  });
+
+  it('the node answers with its module generation, null when the report does not say', async () => {
+    const one = await makeNode();
+    await report(one, [awgRow(1)]);
+    const three = await makeNode();
+    await report(three, [awgRow(3)]);
+    const off = await makeNode();
+    await report(off, [{ ...awgRow(3), installed: false }]);
+    const never = await makeNode();
+    expect((await getNode(one)).awgProtocol).toBe(1);
+    expect((await getNode(three)).awgProtocol).toBe(3);
+    expect((await getNode(three)).cores.cores[0].awgProtocol).toBe(3);
+    expect((await getNode(off)).awgProtocol).toBeNull();
+    expect((await getNode(never)).awgProtocol).toBeNull();
+  });
+
+  it('a node save does not take a generation: it is the module, not a choice', async () => {
+    const nodeId = await makeNode();
+    await report(nodeId, [awgRow(1)]);
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/nodes/${nodeId}`,
+      headers: auth(),
+      payload: { awgProtocol: 3 },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await getNode(nodeId)).awgProtocol).toBe(1);
   });
 });
 

@@ -12,6 +12,7 @@ import {
   generateSsServerPsk,
 } from './ss-helpers.js';
 import {
+  AWG_PROTOCOL_NOT_AWG_MESSAGE,
   engineServesSubprotocol,
   engineValidForProtocol,
   SINGBOX_XRAY_FAMILY_CODE,
@@ -24,7 +25,7 @@ import {
   nodeRendersProfile,
   renderableAtSave,
 } from '../nodes/node-engines.js';
-import { assertCoreOnNode } from '../nodes/node-core-gate.js';
+import { assertAwgProtocolOnNode, assertCoreOnNode, profileAwgProtocol } from '../nodes/node-core-gate.js';
 import { stripInapplicableTransportFields } from '../inbounds/xray-transport-fields.js';
 import { transportForBinding } from './profiles.transport.js';
 import { portOwnersOnNode, type PortOwner } from '../nodes/node-ports.js';
@@ -71,6 +72,16 @@ export class ProfileEngineNotForSubprotocolError extends Error {
   constructor() {
     super('socks and http are served by the xray engine only');
     this.name = 'ProfileEngineNotForSubprotocolError';
+  }
+}
+/** An edit that gives a generation to a profile that is not AmneziaWG. The
+ *  create path refuses the same in the schema. */
+export class ProfileAwgProtocolNotAwgError extends Error {
+  readonly code = 'INVALID';
+  readonly path = ['awgProtocol'];
+  constructor() {
+    super(AWG_PROTOCOL_NOT_AWG_MESSAGE);
+    this.name = 'ProfileAwgProtocolNotAwgError';
   }
 }
 /** An xray-family profile on sing-box with a field sing-box cannot serve
@@ -344,6 +355,8 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
         name: input.name,
         protocol: input.protocol,
         engine: input.engine ?? null,
+        // The schema refuses a generation on any other protocol.
+        awgProtocol: input.protocol === 'amneziawg' ? (input.awgProtocol ?? null) : null,
         description: input.description ?? null,
         config: configToStore as never,
         enabled: input.enabled,
@@ -423,6 +436,23 @@ export async function updateProfile(
       for (const b of deployed) {
         assertNodeRendersProfile(b.node, { protocol: existing.protocol, engine: input.engine ?? null });
       }
+    }
+  }
+
+  // t07-1. Absent is no edit; null puts the profile back on 1.x.
+  if (input.awgProtocol !== undefined) {
+    if (existing.protocol !== 'amneziawg') throw new ProfileAwgProtocolNotAwgError();
+    data.awgProtocol = input.awgProtocol;
+    // Moving to 3.1 is the same save-time question as binding a 3.1 profile,
+    // asked of every node it is deployed on. Back to 1.x is served by both
+    // module generations and asks nothing.
+    const next = { protocol: existing.protocol, awgProtocol: input.awgProtocol };
+    if (profileAwgProtocol(next) === 3 && profileAwgProtocol(existing) !== 3) {
+      const deployed = await prisma.profileNodeBinding.findMany({
+        where: { profileId: id, node: { deletedAt: null } },
+        select: { node: { select: { name: true, cores: true } } },
+      });
+      for (const b of deployed) assertAwgProtocolOnNode(b.node, next);
     }
   }
 

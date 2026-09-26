@@ -425,6 +425,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 				if v, ok := adapter.(core.ToolsVersioner); ok {
 					cs.ToolsVersion = v.ToolsVersion()
 				}
+				if g, ok := adapter.(core.AwgProtocolReporter); ok {
+					cs.AwgProtocol = g.AwgProtocol()
+				}
 			}
 			// The certificate this core serves (E30a), for the panel's "Cores"
 			// beside the certificate it minted. Absent = unknown.

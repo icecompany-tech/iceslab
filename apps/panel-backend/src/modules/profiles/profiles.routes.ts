@@ -137,6 +137,13 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.ProfileEngineNotForSubprotocolError) {
         return reply.code(400).send({ error: err.code, message: err.message });
       }
+      if (err instanceof svc.ProfileAwgProtocolNotAwgError) {
+        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+      }
+      // Moving the profile to 3.1 while a node it is on runs a 1.x module:
+      // AWG_PROTOCOL_MISMATCH, the answer a binding gets.
+      const core = coreGateReply(err);
+      if (core) return reply.code(core.status).send(core.body);
       // The field sing-box cannot serve on an xray-family profile, with its
       // path, as the create path's schema issue carries it.
       if (err instanceof svc.ProfileEngineNotForTransportError) {
@@ -214,8 +221,10 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
       if (err instanceof svc.NodeAlreadyBoundError) {
         return reply.code(409).send({ error: 'CONFLICT', message: err.message });
       }
-      // The node's core for this profile is not installed, or runs a version
-      // this panel refuses: CORE_NOT_ON_NODE / CORE_VERSION_REFUSED.
+      // The node's core for this profile is not installed, runs a version this
+      // panel refuses, or its AmneziaWG module cannot speak the profile's
+      // generation: CORE_NOT_ON_NODE / CORE_VERSION_REFUSED /
+      // AWG_PROTOCOL_MISMATCH.
       const core = coreGateReply(err);
       if (core) return reply.code(core.status).send(core.body);
       if (err instanceof svc.ProfileEngineNotForTransportError) {

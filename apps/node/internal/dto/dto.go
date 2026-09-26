@@ -594,6 +594,12 @@ type CoreStatus struct {
 	// module, this is `awg --version`, from a different upstream tag. Empty on
 	// every other core.
 	ToolsVersion string `json:"toolsVersion,omitempty"`
+	// AwgProtocol is the AmneziaWG protocol generation the loaded kernel module
+	// speaks, 1 or 3 (Ф7, t07-1). The MODULE's, not an interface's: a 3.1
+	// module carries a 1.x interface beside a 3.1 one (Ф7.0 m1). Only the
+	// amneziawg core sets it. 0 (absent) is unknown, never 1: no module, or a
+	// version that does not tell the generation.
+	AwgProtocol int `json:"awgProtocol,omitempty"`
 	// Provisioned tells "this core has a config and should be running" apart
 	// from "nobody has configured this core yet". The installer registers an
 	// adapter for every protocol the operator might switch on later, so an

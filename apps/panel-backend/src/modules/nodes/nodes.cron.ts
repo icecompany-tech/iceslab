@@ -8,7 +8,7 @@ import { notifyTelegramAsync, escapeMarkdown } from '../../lib/notify/telegram-n
 import { getLogger } from '../../lib/infra/logger.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import { CORE_ARCHES, ENGINE_NAMES } from '@iceslab/shared';
+import { AWG_PROTOCOLS, CORE_ARCHES, ENGINE_NAMES } from '@iceslab/shared';
 import type { CoreArch, CoreStatus, NodeCoreRestarts, NodeCores } from '@iceslab/shared';
 
 const METRICS_KEY_PREFIX = 'node:metrics:';
@@ -369,6 +369,9 @@ export function observedCores(
       ...(c.engine !== undefined ? { engine: c.engine } : {}),
       ...(c.version ? { version: c.version } : {}),
       ...(c.toolsVersion ? { toolsVersion: c.toolsVersion } : {}),
+      // t07-1: the module generation. Only a value the panel knows is kept:
+      // the gate compares it, and a stray number would refuse on nothing.
+      ...(c.awgProtocol !== undefined && AWG_PROTOCOLS.includes(c.awgProtocol) ? { awgProtocol: c.awgProtocol } : {}),
       ...(c.provisioned !== undefined ? { provisioned: c.provisioned } : {}),
       ...(c.reason ? { reason: c.reason } : {}),
       ...(c.installed !== undefined ? { installed: c.installed } : {}),
