@@ -26,6 +26,7 @@ import { isRealisedLinkCell } from '@/lib/domain/engines';
 import { SyncRefusalStrip } from '@/ui/SyncRefusalStrip';
 import { ChainStatusLine } from '@/ui/ChainStatusLine';
 import { watchCascadeProvisioning } from '@/contours/cascades/lib/cascadeProvision';
+import { cascadeStatusView, hopBroken } from '@/contours/cascades/lib/cascadeStatus';
 import { useEntryBystanders } from '@/contours/cascades/lib/useEntryBystanders';
 import { MIN_CASCADE_CORE, isOlderThan } from '@/lib/domain/protocols';
 import { useOverview } from '@/lib/domain/dashboard';
@@ -449,6 +450,9 @@ export function CascadeEditPage() {
   // Когда цепь в последний раз ПЫТАЛИСЬ разослать. Считается по тем же нодам,
   // что уже загружены для селекторов, отдельного запроса это не стоит.
   const attempt = lastAttemptFacts(statusQuery.data?.hops ?? [], nodeById);
+  // Последний пуш одним решением (E46): broken сильнее done.
+  const pushView = cascadeStatusView(statusQuery.data);
+  const pushTone = pushView.kind === 'done' ? MOSS : pushView.kind === 'broken' ? RED : AMBER;
 
   const allIds = [...pools.flatMap((p) => p.nodeIds), ...directions.flatMap((d) => d.nodeIds)].filter(
     Boolean,
@@ -1205,8 +1209,24 @@ export function CascadeEditPage() {
             gap={12}
             style={{ padding: 20, borderRadius: 10, backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
           >
+            {/* Сломан (E46): фраза сервера «<нода>: <причина>» первой строкой
+                карточки, красным. Экран её не разбирает, только показывает. */}
+            {pushView.kind === 'broken' && (
+              <Box
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  backgroundColor: `${RED}14`,
+                  border: `1px solid ${RED}40`,
+                }}
+              >
+                <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, overflowWrap: 'anywhere' }}>
+                  {t('cascadeEdit.broken', { broken: pushView.broken })}
+                </Text>
+              </Box>
+            )}
             <Box style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-              <TickCircleIcon size={15} color={statusQuery.data?.done ? MOSS : AMBER} />
+              <TickCircleIcon size={15} color={pushTone} />
               <CardCaption>{t('cascadeEdit.pushTitle')}</CardCaption>
               <Box style={{ flex: 1, minWidth: 0 }} />
               {/* Время подписано тем, что оно есть. Голое «36 дней назад» под
@@ -1244,21 +1264,16 @@ export function CascadeEditPage() {
                 fontFamily: DISPLAY,
                 fontSize: 12,
                 lineHeight: '16px',
-                color: statusQuery.data?.done ? MOSS : AMBER,
+                color: pushTone,
               }}
             >
-              {!statusQuery.data
+              {pushView.kind === 'loading'
                 ? t('common.loading')
-                : statusQuery.data.done
+                : pushView.kind === 'done'
                   ? t('cascades.provisioned')
-                  : t('cascadeEdit.pushPending', {
-                      // The status endpoint can answer without a per-node list
-                      // (nothing pushed yet), and a missing list is not a crash.
-                      names: (statusQuery.data.hops ?? [])
-                        .filter((h) => !h.applied)
-                        .map((h) => h.name)
-                        .join(', '),
-                    })}
+                  : pushView.kind === 'broken'
+                    ? t('cascadeEdit.brokenShort')
+                    : t('cascadeEdit.pushPending', { names: pushView.waiting.join(', ') })}
             </Text>
 
             {(statusQuery.data?.hops ?? []).map((hop) => {
@@ -1271,12 +1286,15 @@ export function CascadeEditPage() {
               const hopNode = nodeById.get(hop.nodeId);
               const hopRefusal = hopNode ? refusalOf(hopNode) : null;
               const hopChain = chainFacts(hopNode);
+              const hopReason = hopBroken(hop);
               return (
                 <Stack key={hop.nodeId} gap={6} style={{ width: '100%' }}>
               <Box
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}
               >
-                {hop.applied ? (
+                {hopReason ? (
+                  <WarnIcon size={13} color={RED} />
+                ) : hop.applied ? (
                   <TickIcon size={13} color={MOSS} />
                 ) : (
                   <ClockIcon size={13} color={AMBER} />
@@ -1311,6 +1329,22 @@ export function CascadeEditPage() {
                       : t('cascadeEdit.hopOffline')}
                 </Text>
               </Box>
+                  {/* Причина хопа словами агента (E46): процесс цепи не
+                      поднялся или пуш отвергнут после сохранения. */}
+                  {hopReason && (
+                    <Text
+                      style={{
+                        fontFamily: MONO,
+                        fontSize: 11,
+                        lineHeight: '15px',
+                        color: RED,
+                        paddingLeft: 23,
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {hopReason}
+                    </Text>
+                  )}
                   {hopRefusal && <SyncRefusalStrip refusal={hopRefusal} compact />}
                   {hopChain && <ChainStatusLine facts={hopChain} compact />}
                 </Stack>

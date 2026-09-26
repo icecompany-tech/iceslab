@@ -349,10 +349,16 @@ export interface CascadeHopStatus {
   /** The node acknowledged an inbound push made after this cascade was saved. */
   applied: boolean;
   online: boolean;
+  /** Почему хоп не несёт каскад, словами агента (E46, 3962886), null = не
+   *  сломан. Нет ключа: сервер старше поля. */
+  broken?: string | null;
 }
 
 export interface CascadeStatus {
+  /** С E46 false при любом broken. */
   done: boolean;
+  /** Первый сломанный хоп одной фразой «<нода>: <причина>», null = нет. */
+  broken?: string | null;
   hops: CascadeHopStatus[];
 }
 

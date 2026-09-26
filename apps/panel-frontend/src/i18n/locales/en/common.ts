@@ -306,6 +306,7 @@ export const common = {
     provisioning: 'Applying the config on the nodes...',
     provisioned: 'Every node applied the new config.',
     provisionWaiting: 'Still no answer from: {{nodes}}',
+    provisionBroken: 'Cascade is broken: {{broken}}',
     provisionUnknown: 'Saved, but the panel could not read the provisioning status.',
     modeBalancer: 'Balancer (auto exit)',
   },

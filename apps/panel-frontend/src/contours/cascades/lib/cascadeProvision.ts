@@ -1,5 +1,6 @@
 import { notifications } from '@mantine/notifications';
 import { getCascadeStatus } from '@/lib/domain/cascades';
+import { cascadeStatusView } from '@/contours/cascades/lib/cascadeStatus';
 
 /**
  * A cascade save commits fast and reaches its hop nodes afterwards
@@ -46,12 +47,18 @@ export function watchCascadeProvisioning(id: string, t: Translate): void {
     try {
       const st = await getCascadeStatus(id);
       failures = 0;
-      if (st.done) {
+      const view = cascadeStatusView(st);
+      if (view.kind === 'done') {
         settle('green', t('cascades.provisioned'));
         return;
       }
+      // Сломан (E46): ждать дальше нечего, фраза сервера в тост как есть.
+      if (view.kind === 'broken') {
+        settle('red', t('cascades.provisionBroken', { broken: view.broken }));
+        return;
+      }
       if (polls >= MAX_POLLS) {
-        const waiting = st.hops.filter((h) => !h.applied).map((h) => h.name).join(', ');
+        const waiting = view.kind === 'pending' ? view.waiting.join(', ') : '';
         settle('yellow', t('cascades.provisionWaiting', { nodes: waiting }));
         return;
       }

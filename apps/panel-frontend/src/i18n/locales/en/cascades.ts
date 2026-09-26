@@ -238,6 +238,8 @@ export const cascades = {
     tunnelPortOpen: 'The leg port on {{node}} stays open to the internet: a leg from another node arrives directly.',
     tunnelsHint: 'A cascade save creates a tunnel when a leg rides inside AmneziaWG; a save never changes its keys, only a rotation does.',
     pushPending: 'Not applied yet: {{names}}',
+    broken: 'Broken: {{broken}}',
+    brokenShort: 'The cascade is not working, reason above',
     pushNote: 'Saving pushes the config to all {{n}} nodes again and briefly restarts the entry core.',
     hopApplied: 'applied',
     hopWaiting: 'waiting',

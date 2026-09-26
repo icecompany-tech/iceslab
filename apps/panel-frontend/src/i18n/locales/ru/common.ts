@@ -342,6 +342,8 @@ export const common = {
     provisioning: 'Применяем конфиг на узлах...',
     provisioned: 'Все узлы применили новый конфиг.',
     provisionWaiting: 'Пока не ответили: {{nodes}}',
+    // Каскад сломан (E46): фраза сервера «<нода>: <причина>» как есть.
+    provisionBroken: 'Каскад сломан: {{broken}}',
     provisionUnknown: 'Сохранено, но статус применения прочитать не удалось.',
     modeBalancer: 'Балансер (auto-выход)',
   },
