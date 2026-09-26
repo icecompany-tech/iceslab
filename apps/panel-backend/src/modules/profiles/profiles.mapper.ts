@@ -1,4 +1,4 @@
-import type { EngineName } from '@iceslab/shared';
+import type { EngineName, Transport } from '@iceslab/shared';
 import type {
   Profile,
   ProfileNodeBinding,
@@ -37,6 +37,13 @@ export interface PublicBindingDto {
   profileId: string;
   nodeId: string;
   port: number;
+  /**
+   * Which socket `port` is on (E40). The server has counted a port as taken by
+   * (port, transport) all along (hosts.service), and a screen that saw only the
+   * port closed 443 to a hy2 host because a vless host sat on 443/tcp. Derived
+   * from the protocol and, for xray, its network (kcp is udp); stored on the row.
+   */
+  transport: Transport;
   publicHost: string | null;
   publicPort: number | null;
   overrides: unknown | null;
@@ -92,6 +99,9 @@ export function mapBinding(
     profileId: binding.profileId,
     nodeId: binding.nodeId,
     port: binding.port,
+    // The column is VarChar(3), written only through transportOf; anything but
+    // 'udp' is the tcp it has always been.
+    transport: binding.transport === 'udp' ? 'udp' : 'tcp',
     publicHost: binding.publicHost,
     publicPort: binding.publicPort,
     overrides: binding.overrides,

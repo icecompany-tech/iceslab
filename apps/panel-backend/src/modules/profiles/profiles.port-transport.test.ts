@@ -178,6 +178,44 @@ describe('one port, two sockets', () => {
   });
 });
 
+/**
+ * E40, stand 25.09: the "New host" screen closed 443 to a hy2 host on ru-01 and
+ * ru-02 because a vless host sat on 443. The server has counted by (port,
+ * transport) all along; the screen could not, because the binding it read did
+ * not say which socket its port was on. It does now, in the list and alone.
+ */
+describe('a binding says which transport its port is on', () => {
+  it('hy2 udp, vless tcp, xray on kcp udp, in GET /api/bindings and GET /api/bindings/:id', async () => {
+    const node = await makeNode();
+    const vless = await makeProfile('xray', XRAY_CONFIG);
+    const hy2 = await makeProfile('hysteria', {});
+    const kcp = await makeProfile('xray', { ...XRAY_CONFIG, network: 'kcp' });
+    const b = {
+      vless: await bind(vless.id, node.id, 443),
+      hy2: await bind(hy2.id, node.id, 443),
+      kcp: await bind(kcp.id, node.id, 8443),
+    };
+    // The create answer carries it too: it is the same mapper.
+    expect(b.vless.transport).toBe('tcp');
+
+    const list = await app.inject({ method: 'GET', url: `/api/bindings?nodeId=${node.id}`, headers: auth() });
+    expect(list.statusCode, list.body).toBe(200);
+    const rows = JSON.parse(list.body).bindings as { id: string; transport: string }[];
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r.transport]));
+    expect(byId).toEqual({ [b.vless.id]: 'tcp', [b.hy2.id]: 'udp', [b.kcp.id]: 'udp' });
+
+    for (const [id, want] of [
+      [b.vless.id, 'tcp'],
+      [b.hy2.id, 'udp'],
+      [b.kcp.id, 'udp'],
+    ] as const) {
+      const one = await app.inject({ method: 'GET', url: `/api/bindings/${id}`, headers: auth() });
+      expect(one.statusCode, one.body).toBe(200);
+      expect(JSON.parse(one.body).transport).toBe(want);
+    }
+  });
+});
+
 describe('a profile edit that moves the socket', () => {
   it('moves every deployed binding with it', async () => {
     const a = await makeNode();
