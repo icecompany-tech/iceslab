@@ -38,6 +38,7 @@ import {
 } from '@/lib/domain/hosts';
 import { HostHiddenLine } from '@/ui/HostHiddenLine';
 import { HostFreshnessCard } from '@/contours/hosts/components/HostFreshnessCard';
+import { nodePortClaims } from '@/contours/hosts/lib/portClaims';
 import {
   getProfileHostFields,
   listBindings,
@@ -349,13 +350,10 @@ export function HostEditPage() {
    */
   const nodeRows = useMemo(() => {
     const profile = profiles.find((p) => p.id === profileId);
-    const takenPort = new Map<string, string>();
-    for (const b of bindings) {
-      if (port !== '' && b.port === Number(port)) {
-        const claimant = (hostsQuery.data?.hosts ?? []).find((h) => h.bindingId === b.id);
-        if (claimant && claimant.id !== host?.id) takenPort.set(b.nodeId, claimant.remark);
-      }
-    }
+    // Порт занят парой (порт, транспорт), как у сервера (E40): hy2 на 443/udp
+    // не закрыт vless на 443/tcp. Привязка без транспорта (сервер старше)
+    // закрывает по номеру, как раньше.
+    const takenPort = nodePortClaims(bindings, hostsQuery.data?.hosts ?? [], port, portCheckTransport, host?.id);
     const q = nodeSearch.trim().toLowerCase();
 
     return nodes
@@ -398,7 +396,7 @@ export function HostEditPage() {
                 // would be a claim the page cannot make.
                 { kind: 'free' as const, text: t('hostEdit.portUnset') }
               : taken
-                ? { kind: 'taken' as const, text: t('hostEdit.portTaken', { port, host: taken }) }
+                ? { kind: 'taken' as const, text: t('hostEdit.portTaken', { port: taken.label, host: taken.host }) }
                 : wrongCore
                   ? { kind: 'core' as const, text: t('hostEdit.wrongCore') }
                   : { kind: 'free' as const, text: t('hostEdit.portFree', { port }) },
@@ -422,6 +420,7 @@ export function HostEditPage() {
     nodeId,
     host?.id,
     hostsQuery.data,
+    portCheckTransport,
     t,
   ]);
 

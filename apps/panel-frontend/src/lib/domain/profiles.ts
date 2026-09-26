@@ -1,4 +1,4 @@
-import type { EngineName } from '@iceslab/shared';
+import type { EngineName, Transport } from '@iceslab/shared';
 import { api } from '@/lib/net/client';
 import type { ProtocolName } from '@/lib/domain/protocols';
 import type { InboundConfig } from '@/lib/domain/inbounds';
@@ -58,6 +58,10 @@ export interface Binding {
   profileId: string;
   nodeId: string;
   port: number;
+  /** Транспорт, на котором привязка держит порт (E40). Порт занят парой
+   *  (порт, транспорт): 443/udp стоит рядом с 443/tcp. Отсутствует у сервера
+   *  старше поля, и тогда экран считает порт занятым целиком, как раньше. */
+  transport?: Transport;
   publicHost: string | null;
   publicPort: number | null;
   overrides: Record<string, unknown> | null;
