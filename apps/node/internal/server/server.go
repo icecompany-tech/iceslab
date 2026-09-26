@@ -28,6 +28,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/dto"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/geo"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/hopguard"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/metrics"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
 )
@@ -81,6 +82,10 @@ type Config struct {
 	// EnvFile is the agent's env, where the bootstraps declare their cores
 	// (E42, declaredEngines). Empty reports nothing, which is what tests get.
 	EnvFile string
+	// HopGuard keeps a port-hopping redirect off the node's own UDP ports
+	// (E49), synced at the end of every applied push. Nil guards nothing,
+	// which is what tests get.
+	HopGuard *hopguard.Guard
 }
 
 type Server struct {
@@ -1059,6 +1064,13 @@ func (s *Server) applyPush(
 
 	if req.Geo != nil {
 		s.settleGeo(ctx, req.Geo, failed == 0)
+	}
+
+	// E49: whatever this push listens on over UDP stays off a hopping
+	// redirect, including an inbound that failed above: naming its port is
+	// harmless, and it is the one the next push brings up.
+	if s.cfg.HopGuard != nil {
+		s.cfg.HopGuard.Sync(ctx, udpPortsOf(req))
 	}
 
 	return applied, failed, reasons

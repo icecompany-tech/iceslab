@@ -166,6 +166,14 @@ port_hopping() {
     return 0
   fi
   local range_ipt="${start}:${end}"
+  # E49: the agent keeps its own UDP ports (leg tunnels, legs, AWG) off this
+  # redirect, and a flow the redirect already caught keeps it in conntrack for
+  # as long as packets flow, which for a WireGuard tunnel is forever. The agent
+  # drops those entries with `conntrack`, so the tool comes with the redirect.
+  if ! command -v conntrack >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y conntrack >/dev/null 2>&1 \
+      || warn "could not install conntrack; a flow caught by the redirect before the agent guards its port keeps it until it goes idle"
+  fi
   # The rule of the range it had, taken down by the helper that knows it: once
   # the helper below is rewritten, its `down` names the NEW range, and the old
   # rule would stay in PREROUTING for good.

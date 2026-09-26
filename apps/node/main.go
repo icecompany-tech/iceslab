@@ -23,6 +23,7 @@ import (
 	"github.com/icecompany-tech/iceslab/apps/node/internal/firewall"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/geo"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/heartbeat"
+	"github.com/icecompany-tech/iceslab/apps/node/internal/hopguard"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/metrics"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/payload"
 	"github.com/icecompany-tech/iceslab/apps/node/internal/server"
@@ -128,6 +129,7 @@ func main() {
 		Geo:               geo.NewStore(geoDir),
 		ResolverProbe:     server.SystemResolverProbe,
 		EnvFile:           getenv("ICESLAB_NODE_ENV", "/etc/iceslab-node/env"),
+		HopGuard:          hopguard.New(logger),
 	})
 	if err != nil {
 		logger.Error("build server", "err", err)
