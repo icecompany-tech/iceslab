@@ -1,6 +1,5 @@
 import type { EngineName, NodeCoreVersions } from '@iceslab/shared';
 import type { Node, NodeLabel, NodeProtocol } from '@/lib/domain/nodes';
-import type { AwgProtocol } from '@/lib/domain/awg';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
 export interface FormValues {
   name: string;
@@ -14,9 +13,6 @@ export interface FormValues {
   /** Э3 layer B: which node policy runs here. '' means none, and saving '' is
    *  a real detach, not a no-op: the config is rewritten without the rules. */
   policyId: string;
-  /** Поколение AmneziaWG (фаза 7). `null` = не задано, читается как 1. Уходит
-   *  на сервер только правленым (см. `awgPayload`). */
-  awgProtocol: AwgProtocol | null;
   /** Намерение по версиям ядер, как в `Node.coreVersions`: нет компонента =
    *  пин. На сервер уходит только разница с сохранённым (`coreVersionsPatch`). */
   coreVersions: NodeCoreVersions;
@@ -75,7 +71,6 @@ export function defaults(node: Node | null): FormValues {
     consumptionMultiplier: node ? Number(node.consumptionMultiplier) : 1,
     maxUsers: node?.maxUsers ?? '',
     policyId: node?.policyId ?? '',
-    awgProtocol: node?.awgProtocol ?? null,
     coreVersions: { ...(node?.coreVersions ?? {}) },
     engines: [...(node?.intendedEngines ?? [])],
   };

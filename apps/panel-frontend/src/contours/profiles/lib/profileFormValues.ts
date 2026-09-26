@@ -1,4 +1,4 @@
-import type { LinkCongestion, XraySubprotocol } from '@iceslab/shared';
+import type { AwgProtocol, LinkCongestion, XraySubprotocol } from '@iceslab/shared';
 import type { ProtocolName } from '@/lib/domain/protocols';
 
 export type Mode = 'create' | 'edit';
@@ -53,6 +53,9 @@ export interface FormValues {
   xrayGrpcMultiMode: boolean;
 
   // AmneziaWG
+  /** Поколение, которое профиль раздаёт (227054e): 1 = 1.x, 3 = 3.1. В форме
+   *  без null: сервер хранит 1 как null, и назад уходит null (profileAwgPatch). */
+  awgGeneration: AwgProtocol;
   awgSubnet: string;
   awgServerPriv: string;
   awgServerPub: string;

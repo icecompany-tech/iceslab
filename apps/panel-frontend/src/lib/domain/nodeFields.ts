@@ -2,8 +2,8 @@ import type { NodesListResponse } from '@/lib/domain/nodes';
 
 /**
  * Необязательные ключи DTO ноды, про которые экран спрашивает. Состав `fields`
- * решает сервер (NODE_DTO_FIELDS в nodes.mapper.ts); `awgProtocol` он сегодня
- * не рендерит вовсе, и мастер честно остаётся без выбора поколения AWG.
+ * решает сервер (NODE_DTO_FIELDS в nodes.mapper.ts). `awgProtocol` у ноды с
+ * 227054e факт модуля, а не выбор: мастер его не спрашивает.
  */
 export type OptionalNodeField = 'awgProtocol' | 'coreVersions' | 'intendedEngines' | 'cascadeNeedsEngines' | 'geo';
 

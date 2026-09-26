@@ -1,5 +1,5 @@
 import type { CoreComponent, EngineName, NodeCoreInfo, NodeCores, NodeCoreVersions } from '@iceslab/shared';
-import type { AwgProtocol, AwgRuntime } from '@/lib/domain/awg';
+import type { AwgProtocol } from '@/lib/domain/awg';
 import type { NodeGeoFact, NodeGeoIntended } from '@/lib/domain/geoSets';
 import { api } from '@/lib/net/client';
 
@@ -121,17 +121,13 @@ export interface Node {
    */
   policyId: string | null;
   /**
-   * Поколение AmneziaWG на этой ноде (фаза 7). См. `lib/domain/awg.ts`.
+   * Поколение AmneziaWG, которое говорит модуль ядра на этой ноде (227054e):
+   * ФАКТ из отчёта, не выбор, в PUT не уходит. См. `lib/domain/awg.ts`.
    *
-   * ⚠ Три значения: `undefined` это «сервер поля не отдаёт» (экран молчит про
-   * версию), `null` это «не задана» (читается как 1, так живут ноды до фазы
-   * 7), `1 | 3` это выбор оператора. Контракт объявлен ARCH 23.09 заранее,
-   * сервер отдаёт ключ всегда.
+   * ⚠ Три значения: `undefined` сервер поля не отдаёт; `null` нода не
+   * сообщила (как 1 НЕ читается); `1 | 3` модуль 1.x или 3.1.
    */
   awgProtocol?: AwgProtocol | null;
-  /** Как AWG исполняется на ноде (фаза 7): модуль ядра или отдельный процесс.
-   *  `undefined` пока сервер поле не отдаёт; тогда экран об этом молчит. */
-  awgRuntime?: AwgRuntime | null;
   /**
    * Самоподписанная пара нативной hysteria, которую выпустила панель (E30a,
    * 7fd101a): намерение, не факт. `null` у ноды с FQDN (ACME) или до первого
@@ -330,18 +326,12 @@ export interface CreateNodeInput {
    *  While the server still checks `protocol` against the first engine, the
    *  list goes ordered for it (engineListForLabel). 400 INVALID_ENGINES. */
   intendedEngines?: EngineName[];
-  /** Поколение AmneziaWG (фаза 7). Уходит ТОЛЬКО если оператор его выбирал:
-   *  до контракта сервер поля не знает, и ключ, которого он не ждёт, это отказ
-   *  сохранения. */
-  awgProtocol?: AwgProtocol | null;
   /** Версии ядер на установку, только выбранные; нет ключа = все пины.
    *  Отказ 400 CORE_VERSION_NOT_LISTED, см. `coreVersionRefusal`. */
   coreVersions?: NodeCoreVersions;
 }
 
 export interface UpdateNodeInput {
-  /** См. `CreateNodeInput.awgProtocol`: только при правке. */
-  awgProtocol?: AwgProtocol | null;
   name?: string;
   address?: string;
   protocol?: NodeProtocol;

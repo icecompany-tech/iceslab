@@ -125,6 +125,8 @@ export const common = {
     blockedShort: 'a host will not land here',
     gateMissing: 'The server refused: {{node}} has no {{core}} core. Install it on the machine over ssh:',
     gateRefused: 'The server refused: {{core}} {{version}} on {{node}} is refused by the panel.',
+    gateAwg: 'Node {{node}} runs the {{nodeGen}} module, the profile needs {{profileGen}}.',
+    gateAwgHow: 'The 3.1 module comes with a rerun of the AmneziaWG bootstrap on the node; it carries 1.x profiles too.',
     gateAfterInstall: 'The panel runs nothing on the machine. Once installed, the node reports the core by itself and the save goes through.',
     unpinnedInstall: {
       'no-arch': 'Version not pinned: the node did not report its arch, and every file and its checksum are per arch. The script installs its own default.',

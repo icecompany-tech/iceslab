@@ -10,8 +10,6 @@ import { useTranslation } from 'react-i18next';
 import { policyReachFacts, type PolicyReachFacts } from '@/contours/nodes/lib/policyReach';
 import { FAINT, MIST, MONO, MOSS } from '@/contours/nodes/lib/colors';
 import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEditForm';
-import { awgSelectorShown } from '@/lib/domain/awg';
-import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
 import { EngineChips } from '@/contours/nodes/components/EngineChips';
 
 /**
@@ -23,7 +21,6 @@ export function NodeParamsForm({
   node,
   nodePoliciesQuery,
   policyRefusal,
-  awgKnown,
   enginesKnown,
   enginesRefusal,
 }: Pick<
@@ -34,7 +31,6 @@ export function NodeParamsForm({
   | 'node'
   | 'nodePoliciesQuery'
   | 'policyRefusal'
-  | 'awgKnown'
   | 'enginesKnown'
   | 'enginesRefusal'
 >) {
@@ -81,21 +77,6 @@ export function NodeParamsForm({
                     набор тоже рисуется: нода без ядер. */}
                 {enginesKnown && (
                   <EngineChips engines={form.values.engines} error={enginesRefusal} readOnly />
-                )}
-
-                {/* Поколение AmneziaWG: свойство ноды, и от него зависит, каким
-                    клиентом к ней можно подключиться. Подсказка под селектором
-                    говорит это словами. Где выбор показывать, решает фабрика. */}
-                {awgSelectorShown(
-                  awgKnown,
-                  form.values.engines.includes('amneziawg') ? 'amneziawg' : form.values.protocol,
-                  node?.cores?.cores,
-                ) && (
-                  <AwgProtocolSelect
-                    value={form.values.awgProtocol}
-                    onChange={(g) => form.setFieldValue('awgProtocol', g)}
-                    runtime={node?.awgRuntime}
-                  />
                 )}
 
                 <Box style={{ display: 'flex', alignItems: 'flex-start', gap: 20, width: '100%' }}>

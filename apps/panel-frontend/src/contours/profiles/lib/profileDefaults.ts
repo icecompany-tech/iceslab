@@ -2,6 +2,7 @@ import { DEFAULT_LINK_CONGESTION, type XraySubprotocol } from '@iceslab/shared';
 import type { Profile } from '@/lib/domain/profiles';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
+import { profileAwgGeneration } from '@/lib/domain/awg';
 
 export function defaults(profile: Profile | null): FormValues {
   const base: FormValues = {
@@ -47,6 +48,7 @@ export function defaults(profile: Profile | null): FormValues {
     xrayXhttpPaddingBytes: '',
     xrayGrpcMultiMode: false,
 
+    awgGeneration: profileAwgGeneration(profile?.awgProtocol),
     awgSubnet: '10.66.66.0/24',
     awgServerPriv: '',
     awgServerPub: '',

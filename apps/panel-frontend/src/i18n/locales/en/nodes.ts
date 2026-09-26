@@ -80,15 +80,6 @@
       coreVersionsOthers_other: 'other cores ({{count}})',
       coreVersionsNote: 'These versions go into the install together with the bootstrap token. They can be changed on the node page afterwards.',
       singboxEngineDesc: 'Adds --with-singbox to the install command, so this node can also serve vless/vmess/trojan/hy2/ss profiles that use the sing-box engine.',
-      // The AmneziaWG generation: a property of the node, and it decides which
-      // client can connect. The generations are incompatible.
-      awgProtocol: 'AmneziaWG version',
-      // ARCH's wording from the primary sources, recon 2026-09-23.
-      awgHint1: 'AmneziaVPN 4.8.12.9 and newer, routers with amneziawg.',
-      awgHint3:
-        'AmneziaVPN 5.0.1.5 and newer only; 1.x and 2.0 configs do not fit, routers cannot run 3.1; client 5.0.2.1 sets the right parameters itself.',
-      // Only when the server sends awgRuntime (phase 7); until then, no line.
-      awgRuntimeNote: 'Version 3 runs as its own process on its own port; version 1 stays on the kernel module.',
       hardeningSection: 'Zashchita (hardening)',
       hardeningSectionDesc: 'Optional probe-resistance toggles applied at install. All off by default.',
       hardeningUfw: 'Firewall lockdown',
@@ -261,17 +252,10 @@
     coresInventoryNote:
       'This is the inventory, not liveness: whether a core is up right now is what the node status above says. An idle core is a normal state, the agent registers an adapter for every protocol.',
     coresRendersPolicy: 'applies the policy',
-    // The AmneziaWG generation on this core: intent (the operator's choice)
-    // against fact (what the machine runs). A mismatch is amber: clients given
-    // a config of one generation cannot reach a core of the other.
-    coresAwg: 'AmneziaWG {{version}}',
-    coresAwgNoReport: 'AmneziaWG {{version}} is set, the core did not report its protocol version',
-    coresAwgMismatch: 'AmneziaWG {{intended}} is set, but the interface is up as {{reported}}: {{intended}} clients cannot connect to it.',
-    coresAwgMismatchRuntime:
-      'AmneziaWG {{intended}} is set, but the interface is up as {{reported}} ({{runtime}}): {{intended}} clients cannot connect to it.',
-    coresAwgRuntime: {
-      kernel: 'kernel module',
-      userspace: 'own process',
+    coresAwgFact: {
+      awg3: 'AWG 3.1: carries 1.x and 3.1 profiles',
+      awg1: 'AWG 1.x: 1.x profiles only',
+      unreported: 'generation not reported',
     },
     policyApplicability: {
       applies: 'the policy applies',

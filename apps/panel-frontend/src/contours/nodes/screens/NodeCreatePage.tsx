@@ -43,7 +43,6 @@ export function NodeCreatePage() {
     isOnline,
     waited,
     profilesQuery,
-    awgKnown,
     coreVersionsKnown,
     coreRefusal,
     enginesKnown,
@@ -318,7 +317,6 @@ export function NodeCreatePage() {
       {step === 0 && (
         <StepParams
           form={form}
-          awgKnown={awgKnown}
           coreVersionsKnown={coreVersionsKnown}
           coreRefusal={coreRefusal}
           enginesKnown={enginesKnown}

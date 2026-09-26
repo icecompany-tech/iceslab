@@ -23,7 +23,7 @@ import {
   type HysteriaTlsFacts,
 } from '@/contours/nodes/lib/hysteriaTls';
 import { HysteriaTlsLine } from '@/contours/nodes/components/NodeEdit/HysteriaTlsLine';
-import { awgLabel, awgVersionFacts, readCoreAwg, type AwgVersionFacts } from '@/lib/domain/awg';
+import { nodeAwgFact, type NodeAwgFact } from '@/lib/domain/awg';
 import { coreVersionOf } from '@/lib/domain/coreVersion';
 import {
   componentsOfCore,
@@ -211,9 +211,9 @@ export function CoresPanel({
               storedIntent={node.coreVersions}
               intent={intent}
               onIntent={onIntent}
-              // Поколение AWG: намерение ноды против версии, которую сообщило
-              // ядро. Только у amneziawg и только когда сервер поле отдаёт.
-              awg={c.name === 'amneziawg' ? awgVersionFacts(node.awgProtocol, readCoreAwg(c)) : null}
+              // Поколение AWG: факт модуля (227054e), у строки amneziawg и
+              // только когда сервер поле отдаёт.
+              awg={c.name === 'amneziawg' ? nodeAwgFact(node.awgProtocol) : null}
               tls={hysteriaTlsFacts(node, c)}
               onRotate={isNativeHysteria(c) && canRotateHysteriaTls(node) ? confirmRotate : undefined}
               rotating={rotateMutation.isPending}
@@ -281,7 +281,8 @@ function CoreRow({
   /** The picker's value in the unsaved form; undefined = no picker. */
   intent: NodeCoreVersions | undefined;
   onIntent: ((next: NodeCoreVersions) => void) | undefined;
-  awg: AwgVersionFacts | null;
+  /** Что говорит модуль AmneziaWG (nodeAwgFact); null: строки нет. */
+  awg: NodeAwgFact | null;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -564,9 +565,9 @@ function CoreRow({
         </Stack>
       )}
 
-      {/* Поколение AmneziaWG. Расхождение намерения с фактом янтарным: клиенты
-          с конфигом одного поколения к ядру другого не подключатся, а на
-          экране это выглядело бы как исправное ядро. */}
+      {/* Поколение AmneziaWG как факт модуля: какие профили нода несёт.
+          Серым у всех трёх: модуль 1.x это обычное состояние парка, а не
+          беда, и «не сообщено» не читается как 1.x. */}
       {awg && (
         <Text
           style={{
@@ -574,26 +575,10 @@ function CoreRow({
             paddingLeft: 18,
             fontSize: 12,
             lineHeight: '17px',
-            color: awg.mismatch ? AMBER : FAINT,
+            color: FAINT,
           }}
         >
-          {/* Без `!`: расхождение и так подразумевает сообщённую версию, но
-              обещание в типе вчера уже роняло страницу, пусть проверит код. */}
-          {/* Как ядро исполняется, это третья часть строки, и только когда ядро
-              это сообщило. В строке расхождения она стоит в скобках у факта:
-              хвостом после «не подключатся» она читалась бы как продолжение
-              вывода, а это часть того, ЧТО стоит на машине. */}
-          {awg.mismatch && awg.reported !== null
-            ? t(awg.runtime ? 'nodeEdit.coresAwgMismatchRuntime' : 'nodeEdit.coresAwgMismatch', {
-                intended: awgLabel(awg.intended),
-                reported: awgLabel(awg.reported),
-                runtime: awg.runtime ? t(`nodeEdit.coresAwgRuntime.${awg.runtime}`) : '',
-              })
-            : awg.reported === null
-              ? t('nodeEdit.coresAwgNoReport', { version: awgLabel(awg.intended) })
-              : `${t('nodeEdit.coresAwg', { version: awgLabel(awg.intended) })}${
-                  awg.runtime ? ` · ${t(`nodeEdit.coresAwgRuntime.${awg.runtime}`)}` : ''
-                }`}
+          {t(`nodeEdit.coresAwgFact.${awg}`)}
         </Text>
       )}
 

@@ -7,6 +7,7 @@ import {
   NumberInput,
   PasswordInput,
   SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -18,6 +19,8 @@ import { randomAwgHeaders } from '@/contours/profiles/lib/awgPresets';
 import { useGenerateImpact } from '@/contours/profiles/lib/generateImpact';
 import type { UseFormReturnType } from '@mantine/form';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
+import { AWG_PROTOCOLS, awgLabel, type AwgProtocol } from '@/lib/domain/awg';
+import type { CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
 
 export function AmneziawgSection({
   generateAwgKeys,
@@ -26,6 +29,8 @@ export function AmneziawgSection({
   form,
   isEdit,
   profileId,
+  awgKnown,
+  awgRefusal,
 }: {
   generateAwgKeys: () => Promise<void>;
   applyAwgPreset: (preset: 'tspu' | 'mobile' | 'custom') => void;
@@ -33,11 +38,47 @@ export function AmneziawgSection({
   form: UseFormReturnType<FormValues>;
   isEdit: boolean;
   profileId: string | null;
+  /** Сервер знает поколение у профиля (227054e); нет: выбора нет. */
+  awgKnown: boolean;
+  /** 409 AWG_PROTOCOL_MISMATCH последнего сохранения. */
+  awgRefusal: CoreGateRefusal | null;
 }) {
   const { t } = useTranslation();
   const impact = useGenerateImpact(profileId);
   return (
             <Stack>
+              {/* Поколение, которое профиль раздаёт: выбор профиля, а не ноды
+                  (227054e). Модуль ноды это факт в её «Ядрах»; профиль 3.1
+                  сервер на модуль 1.x не поставит. */}
+              {awgKnown && (
+                <Stack gap={6} style={{ maxWidth: 520 }}>
+                  <Select
+                    label={t('profiles.form.cfg.awgGenerationLabel')}
+                    description={t('profiles.form.cfg.awgGenerationHint')}
+                    inputWrapperOrder={['label', 'input', 'description', 'error']}
+                    data={AWG_PROTOCOLS.map((g) => ({ value: String(g), label: awgLabel(g) }))}
+                    value={String(form.values.awgGeneration)}
+                    allowDeselect={false}
+                    onChange={(v) => v && form.setFieldValue('awgGeneration', Number(v) as AwgProtocol)}
+                  />
+                  {/* До t07-6 профиль 3.1 хранится, но раздаётся как раньше. */}
+                  {form.values.awgGeneration === 3 && (
+                    <Text size="xs" c="dimmed">
+                      {t('profiles.form.cfg.awgGenerationPending')}
+                    </Text>
+                  )}
+                  {awgRefusal?.kind === 'awg' && (
+                    <Text size="xs" c="red">
+                      {t('nodeCore.gateAwg', {
+                        node: awgRefusal.nodeName,
+                        nodeGen: awgLabel(awgRefusal.nodeAwgProtocol),
+                        profileGen: awgLabel(awgRefusal.profileAwgProtocol),
+                      })}{' '}
+                      {t('nodeCore.gateAwgHow')}
+                    </Text>
+                  )}
+                </Stack>
+              )}
               {/* AmneziaWG-specific gotchas in one place. Per upstream
                   amnezia.org docs: (a) pre-4.8.12.9 AmneziaVPN clients
                   silently don't recognize S3/S4 v2.0 fields - handshake

@@ -31,7 +31,6 @@ import { defaults, nodeEnginesPut, type FormValues } from '@/contours/nodes/lib/
 import { nodeEnginesRefusal, type NodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols';
-import { awgPayload } from '@/lib/domain/awg';
 import { coreVersionRefusal, coreVersionsPatch } from '@/lib/domain/coreVersions';
 export function useNodeEditForm() {
   const { t } = useTranslation();
@@ -163,10 +162,6 @@ export function useNodeEditForm() {
     [bindingsQuery.data],
   );
 
-  // Знает ли сервер поле `awgProtocol`: ключ в ответе про ноду. Пока его нет,
-  // экран молчит про версию и в запрос её не кладёт.
-  const awgKnown = node?.awgProtocol !== undefined && node !== null;
-
   // Что из версий ядер оператор поменял против сохранённого. undefined, если
   // ничего или если сервер поля не знает.
   const coreVersionsDiff = coreVersionsPatch(node?.coreVersions, form.values.coreVersions);
@@ -189,9 +184,7 @@ export function useNodeEditForm() {
           form.values.consumptionMultiplier === '' ? 1 : Number(form.values.consumptionMultiplier),
         maxUsers: form.values.maxUsers === '' ? null : Number(form.values.maxUsers),
         policyId: form.values.policyId || null,
-        // Поколение AWG уходит, только если сервер поле знает (ключ пришёл в
-        // ответе про ноду) и оператор его менял.
-        ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
+        // Поколения AWG нет: это факт модуля, не выбор (227054e).
         // Версии ядер: только изменённые компоненты, и только если сервер поле
         // знает (ключ пришёл в ответе про ноду).
         ...(coreVersionsDiff ? { coreVersions: coreVersionsDiff } : {}),
@@ -306,7 +299,6 @@ export function useNodeEditForm() {
     profileById,
     bindingById,
     saveMutation,
-    awgKnown,
     coreRefusal,
     enginesKnown,
     enginesRefusal,

@@ -1,4 +1,4 @@
-import { ENGINE_NAMES, type EngineName, type NodeCoreVersions } from '@iceslab/shared';
+import { AWG_PROTOCOLS, ENGINE_NAMES, type AwgProtocol, type EngineName, type NodeCoreVersions } from '@iceslab/shared';
 import type { Node } from '@/lib/domain/nodes';
 import { coreVersionFacts, type CoreVersionLine } from '@/lib/domain/coreVersions';
 
@@ -143,6 +143,8 @@ export function nodeCoreFitText(fit: NodeCoreFit, t: T): { tone: NodeCoreTone; t
  *
  *   CORE_NOT_ON_NODE      { nodeName, engine, howToInstall: { command, pinned, why? } }
  *   CORE_VERSION_REFUSED  { nodeName, engine, component, version, verdict, reason }
+ *   AWG_PROTOCOL_MISMATCH { nodeName, profileAwgProtocol, nodeAwgProtocol }
+ *                         (227054e: также на PUT профиля при смене на 3.1)
  *
  * The screen offers neither (nodeCoreFit closes the tick), so this is for a
  * screen older than the report it saw, or a report that changed under it.
@@ -161,9 +163,16 @@ export type CoreGateRefusal =
       pinned: boolean;
       why: 'no-arch' | 'no-asset' | 'unpinned' | null;
     }
-  | { kind: 'refused'; nodeName: string; engine: EngineName; version: string; reason: string };
+  | { kind: 'refused'; nodeName: string; engine: EngineName; version: string; reason: string }
+  /** AWG_PROTOCOL_MISMATCH (227054e): профиль 3.1 на ноде с модулем 1.x. Без
+   *  `engine` в теле: ядро одно, amneziawg. */
+  | { kind: 'awg'; nodeName: string; profileAwgProtocol: AwgProtocol; nodeAwgProtocol: AwgProtocol };
 
 const WHY = new Set(['no-arch', 'no-asset', 'unpinned']);
+
+function awgGeneration(v: unknown): AwgProtocol | null {
+  return (AWG_PROTOCOLS as readonly unknown[]).includes(v) ? (v as AwgProtocol) : null;
+}
 
 export function coreGateRefusal(err: unknown): CoreGateRefusal | null {
   if (!err || typeof err !== 'object') return null;
@@ -171,6 +180,15 @@ export function coreGateRefusal(err: unknown): CoreGateRefusal | null {
   if (!res || res.status !== 409 || !res.data || typeof res.data !== 'object') return null;
   const d = res.data as Record<string, unknown>;
   if (typeof d.nodeName !== 'string' || !d.nodeName) return null;
+  // 409 AWG_PROTOCOL_MISMATCH { nodeName, profileAwgProtocol, nodeAwgProtocol }:
+  // оба поколения обязаны быть из контракта, иначе не читается (тост с
+  // фразой сервера остаётся).
+  if (d.error === 'AWG_PROTOCOL_MISMATCH') {
+    const profileAwgProtocol = awgGeneration(d.profileAwgProtocol);
+    const nodeAwgProtocol = awgGeneration(d.nodeAwgProtocol);
+    if (profileAwgProtocol === null || nodeAwgProtocol === null) return null;
+    return { kind: 'awg', nodeName: d.nodeName, profileAwgProtocol, nodeAwgProtocol };
+  }
   if (typeof d.engine !== 'string' || !(ENGINE_NAMES as readonly string[]).includes(d.engine)) return null;
   const engine = d.engine as EngineName;
   if (d.error === 'CORE_NOT_ON_NODE') {

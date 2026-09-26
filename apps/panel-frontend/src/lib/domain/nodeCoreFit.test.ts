@@ -110,7 +110,7 @@ describe('nodeCoreFit: the four states the deploy window draws', () => {
   });
 });
 
-describe('coreGateRefusal: the two 409 of the BACK core gate', () => {
+describe('coreGateRefusal: the 409 of the BACK core gate', () => {
   const res = (data: unknown, status = 409) => ({ response: { status, data } });
   const cmd = 'sudo env SINGBOX_VERSION=1.13.14 SINGBOX_SHA256=ab bash /opt/iceslab-node/apps/node/scripts/bootstrap-singbox.sh --restart-agent';
 
@@ -157,6 +157,28 @@ describe('coreGateRefusal: the two 409 of the BACK core gate', () => {
         }),
       ),
     ).toEqual({ kind: 'refused', nodeName: 'ru-01', engine: 'xray', version: '26.9.8', reason: 'ML-KEM' });
+  });
+
+  it('AWG_PROTOCOL_MISMATCH (227054e): node and both generations, no engine in the body', () => {
+    expect(
+      coreGateRefusal(
+        res({ error: 'AWG_PROTOCOL_MISMATCH', message: 'm', nodeName: 'se-01', profileAwgProtocol: 3, nodeAwgProtocol: 1 }),
+      ),
+    ).toEqual({ kind: 'awg', nodeName: 'se-01', profileAwgProtocol: 3, nodeAwgProtocol: 1 });
+  });
+
+  it('AWG_PROTOCOL_MISMATCH with a generation outside the contract or missing: null', () => {
+    for (const d of [
+      { profileAwgProtocol: 2, nodeAwgProtocol: 1 },
+      { profileAwgProtocol: 3, nodeAwgProtocol: null },
+      { profileAwgProtocol: '3', nodeAwgProtocol: 1 },
+      { nodeAwgProtocol: 1 },
+    ]) {
+      expect(coreGateRefusal(res({ error: 'AWG_PROTOCOL_MISMATCH', nodeName: 'se-01', ...d }))).toBeNull();
+    }
+    expect(
+      coreGateRefusal(res({ error: 'AWG_PROTOCOL_MISMATCH', profileAwgProtocol: 3, nodeAwgProtocol: 1 })),
+    ).toBeNull();
   });
 
   it('garbage and other answers: null', () => {

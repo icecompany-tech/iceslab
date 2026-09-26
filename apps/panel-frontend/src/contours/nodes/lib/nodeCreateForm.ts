@@ -1,7 +1,6 @@
 import { CORE_COMPONENTS, type CoreComponent, type EngineName, type NodeCoreVersions } from '@iceslab/shared';
 import type { NodeProtocol } from '@/lib/domain/nodes';
 import { PROTOCOL_OPTIONS, SINGBOX_ENGINE_CAPABLE } from '@/contours/nodes/lib/nodeProtocols';
-import type { AwgProtocol } from '@/lib/domain/awg';
 import { nativeEngineOfIntent } from '@/lib/domain/engines';
 import { componentsOfEngine } from '@iceslab/shared';
 import { coreReleaseOptions } from '@/lib/domain/coreVersions';
@@ -9,8 +8,6 @@ import { coreReleaseOptions } from '@/lib/domain/coreVersions';
 export interface FormValues {
   /** Выбор версий ядер на установку: нет компонента = пин манифеста. */
   coreVersions: NodeCoreVersions;
-  /** Поколение AmneziaWG (фаза 7). `null` = не задано, сервер читает как 1. */
-  awgProtocol: AwgProtocol | null;
   name: string;
   host: string;
   port: number | '';

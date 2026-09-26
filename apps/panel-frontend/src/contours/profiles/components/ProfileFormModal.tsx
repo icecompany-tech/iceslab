@@ -45,6 +45,7 @@ import {
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { SINGBOX_XRAY_FORM_FIELD, singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports';
 import { singboxXrayMessage, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
+import type { CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
 import { EnginePicker } from '@/contours/profiles/components/ProfileForm/EnginePicker';
 import { TelegramPreviewCard } from '@/contours/profiles/components/ProfileForm/TelegramPreview';
 import { FormShell } from '@/contours/profiles/components/ProfileForm/FormShell';
@@ -91,6 +92,10 @@ interface Props {
    * overrides is not on this form, and the page's toast names it.
    */
   refused?: SingboxXrayRefusal | null;
+  /** Знает ли сервер поколение AWG у профиля (227054e); нет: выбора нет. */
+  awgKnown?: boolean;
+  /** 409 AWG_PROTOCOL_MISMATCH последнего сохранения: под выбором поколения. */
+  awgRefusal?: CoreGateRefusal | null;
 }
 
 export function ProfileFormModal({
@@ -102,6 +107,8 @@ export function ProfileFormModal({
   inline,
   onPreviewChange,
   refused,
+  awgKnown = false,
+  awgRefusal,
 }: Props) {
   const { t } = useTranslation();
   const isEdit = profile !== null;
@@ -408,6 +415,8 @@ export function ProfileFormModal({
               applyAwgPreset={applyAwgPreset}
               keypairPending={keypairPending}
               profileId={profile?.id ?? null}
+              awgKnown={awgKnown}
+              awgRefusal={awgRefusal ?? null}
             />
           )}
 

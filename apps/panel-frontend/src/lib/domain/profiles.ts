@@ -40,10 +40,9 @@ export interface Profile {
   config: InboundConfig;
   enabled: boolean;
   /**
-   * Поколение AmneziaWG у профиля amneziawg (фаза 7): то же поле, что у ноды,
-   * и сервер откажет привязке профиля одного поколения к ноде другого
-   * (409 AWG_PROTOCOL_MISMATCH). Три значения, как у ноды; экраном пока не
-   * читается.
+   * Поколение AmneziaWG, которое профиль раздаёт (227054e): ВЫБОР оператора,
+   * только у amneziawg. null = 1; `undefined` у сервера старше поля. Профиль
+   * 3.1 сервер не ставит на ноду с модулем 1.x (409 AWG_PROTOCOL_MISMATCH).
    */
   awgProtocol?: AwgProtocol | null;
   bindingCount: number;
@@ -78,6 +77,8 @@ export interface CreateProfileInput {
   engine?: PinnableEngine | null;
   config: InboundConfig;
   enabled?: boolean;
+  /** Только 3 и только у amneziawg (profileAwgCreate); 1.x это умолчание. */
+  awgProtocol?: AwgProtocol;
 }
 
 export interface UpdateProfileInput {
@@ -86,6 +87,8 @@ export interface UpdateProfileInput {
   enabled?: boolean;
   engine?: PinnableEngine | null;
   config?: InboundConfig;
+  /** Только при смене (profileAwgPatch); null возвращает на 1.x. */
+  awgProtocol?: AwgProtocol | null;
 }
 
 export interface CreateBindingInput {

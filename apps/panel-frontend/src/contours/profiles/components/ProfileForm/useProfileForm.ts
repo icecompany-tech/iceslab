@@ -22,6 +22,7 @@ import { settleXrayFields, xrayFieldReactions } from '@/contours/profiles/lib/xr
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds';
 import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
 import { saveThen } from '@/contours/profiles/lib/saveThen';
+import { profileAwgCreate, profileAwgPatch } from '@/lib/domain/awg';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -283,6 +284,8 @@ export function useProfileForm({
         ? 'singbox'
         : null;
 
+    // Поколение AWG (227054e): в PUT только при смене, в POST только 3.
+    const isAwg = values.protocol === 'amneziawg';
     const input: CreateProfileInput | UpdateProfileInput = isEdit
       ? {
           name: values.name,
@@ -290,6 +293,7 @@ export function useProfileForm({
           enabled: values.enabled,
           engine,
           config: config as never,
+          ...(isAwg ? profileAwgPatch(profile.awgProtocol, values.awgGeneration) : {}),
         }
       : {
           protocol: values.protocol,
@@ -298,6 +302,7 @@ export function useProfileForm({
           enabled: values.enabled,
           engine,
           config: config as never,
+          ...(isAwg ? profileAwgCreate(values.awgGeneration) : {}),
         };
     // A refusal is reported by the caller; the form stays open and keeps
     // what was typed, and nothing is thrown past it.

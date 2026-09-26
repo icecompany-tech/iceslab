@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Box, Stack, Text } from '@mantine/core';
 import type { CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
+import { awgLabel } from '@/lib/domain/awg';
 import { CopyButton } from '@/ui/CopyButton';
 import { AMBER, FAINT, GROUND, HAIRLINE, RED, SNOW } from '@/lib/ui/tokens';
 
@@ -30,13 +31,26 @@ export function CoreGateRefusalLine({
   arch?: string;
 }) {
   const { t } = useTranslation();
-  const core = refusal.engine === 'singbox' ? 'sing-box' : refusal.engine;
+  const core = refusal.kind === 'awg' ? 'amneziawg' : refusal.engine === 'singbox' ? 'sing-box' : refusal.engine;
   return (
     <Stack
       gap={8}
       style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: `${RED}14`, border: `1px solid ${RED}40` }}
     >
-      {refusal.kind === 'missing' ? (
+      {refusal.kind === 'awg' ? (
+        <>
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, fontWeight: 500 }}>
+            {t('nodeCore.gateAwg', {
+              node: refusal.nodeName,
+              nodeGen: awgLabel(refusal.nodeAwgProtocol),
+              profileGen: awgLabel(refusal.profileAwgProtocol),
+            })}
+          </Text>
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: FAINT }}>
+            {t('nodeCore.gateAwgHow')}
+          </Text>
+        </>
+      ) : refusal.kind === 'missing' ? (
         <>
           <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '17px', color: RED, fontWeight: 500 }}>
             {t('nodeCore.gateMissing', { node: refusal.nodeName, core })}

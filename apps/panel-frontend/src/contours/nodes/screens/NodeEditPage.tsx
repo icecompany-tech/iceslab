@@ -66,7 +66,6 @@ export function NodeEditPage() {
     nodePoliciesQuery,
     syncQuery,
     policyRefusal,
-    awgKnown,
     coreRefusal,
     enginesKnown,
     enginesRefusal,
@@ -299,7 +298,6 @@ export function NodeEditPage() {
                 node={node}
                 nodePoliciesQuery={nodePoliciesQuery}
                 policyRefusal={policyRefusal}
-                awgKnown={awgKnown}
                 enginesKnown={enginesKnown}
                 enginesRefusal={enginesRefusal}
               />

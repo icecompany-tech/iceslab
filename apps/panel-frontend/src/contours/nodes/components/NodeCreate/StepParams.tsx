@@ -9,8 +9,6 @@ import { ServerIcon, ShieldPinIcon } from '@/contours/nodes/components/NodeCreat
 import { ToggleRow } from '@/contours/nodes/components/NodeCreate/ToggleRow';
 import { useTranslation } from 'react-i18next';
 import type { useNodeCreateForm } from '@/contours/nodes/components/NodeCreate/useNodeCreateForm';
-import { awgSelectorShown } from '@/lib/domain/awg';
-import { AwgProtocolSelect } from '@/contours/nodes/components/AwgProtocolSelect';
 import { WizardCoreVersions } from '@/contours/nodes/components/NodeCreate/WizardCoreVersions';
 import { EngineChips } from '@/contours/nodes/components/EngineChips';
 
@@ -22,7 +20,6 @@ type Wizard = ReturnType<typeof useNodeCreateForm>;
  */
 export function StepParams({
   form,
-  awgKnown,
   coreVersionsKnown,
   coreRefusal,
   enginesKnown,
@@ -32,7 +29,6 @@ export function StepParams({
 }: Pick<
   Wizard,
   | 'form'
-  | 'awgKnown'
   | 'coreVersionsKnown'
   | 'coreRefusal'
   | 'enginesKnown'
@@ -107,15 +103,6 @@ export function StepParams({
                   value={form.values.coreVersions}
                   onChange={(next) => form.setFieldValue('coreVersions', next)}
                   refusal={coreRefusal}
-                />
-              )}
-
-              {/* Поколение AmneziaWG. У новой ноды ядер ещё нет, поэтому
-                  решает выбор: AmneziaWG среди ядер ноды. */}
-              {awgSelectorShown(awgKnown, engines.includes('amneziawg') ? 'amneziawg' : form.values.protocol, null) && (
-                <AwgProtocolSelect
-                  value={form.values.awgProtocol}
-                  onChange={(g) => form.setFieldValue('awgProtocol', g)}
                 />
               )}
 

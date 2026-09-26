@@ -13,7 +13,6 @@ import {
   listNodes,
   type NodeWithPayload,
 } from '@/lib/domain/nodes';
-import { awgPayload } from '@/lib/domain/awg';
 import {
   createCoreVersions,
   enginesPayload,
@@ -63,7 +62,6 @@ export function useNodeCreateForm() {
       hardenFail2ban: false,
       hardenRealisticFallback: false,
       hardenSshAllowlist: [],
-      awgProtocol: null,
       coreVersions: {},
     },
     validateInputOnBlur: true,
@@ -131,7 +129,7 @@ export function useNodeCreateForm() {
   });
 
   /**
-   * Знает ли сервер поля `awgProtocol`, `coreVersions`, `intendedEngines`.
+   * Знает ли сервер поля `coreVersions`, `intendedEngines`.
    * Сперва по `fields` конверта: сервер сам говорит, что отдаёт, и это
    * работает на пустом парке (E29: после удаления всех нод мастер показал
    * старую форму). По стоящим нодам только у сервера старше `fields`
@@ -139,7 +137,6 @@ export function useNodeCreateForm() {
    * может отвергнуть.
    */
   const fleetQuery = useQuery({ queryKey: ['nodes', 'all'], queryFn: () => listNodes({ limit: 100 }) });
-  const awgKnown = nodeFieldKnown(fleetQuery.data, 'awgProtocol');
   const coreVersionsKnown = nodeFieldKnown(fleetQuery.data, 'coreVersions');
   /** Строки отказа 400 CORE_VERSION_NOT_LISTED после «Зарегистрировать». */
   const [coreRefusal, setCoreRefusal] = useState<string[] | null>(null);
@@ -243,7 +240,6 @@ export function useNodeCreateForm() {
         // старше контракта.
         ...enginesPayload(enginesKnown, engines, form.values.protocol),
         // Только выбранное оператором и только если сервер поле знает.
-        ...awgPayload(awgKnown, form.isDirty('awgProtocol'), form.values.awgProtocol),
         // Версии ядер: только выбранные компоненты; ничего не выбрано = ключа
         // нет, и сервер ставит пины.
         ...(coreVersions ? { coreVersions } : {}),
@@ -358,7 +354,6 @@ export function useNodeCreateForm() {
     isOnline,
     waited,
     profilesQuery,
-    awgKnown,
     coreVersionsKnown,
     coreRefusal,
     enginesKnown,
