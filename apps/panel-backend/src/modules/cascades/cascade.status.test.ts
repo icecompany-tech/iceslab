@@ -108,6 +108,41 @@ describe('getCascadeStatus', () => {
     expect(st.done).toBe(false);
   });
 
+  it('reads a v4-only cascade from its topology: a direction on a named outbound waits on no node (E52)', async () => {
+    // The stand's cascade `test`: entry ru-01, transit ru-02, d1 on nl-01, d2
+    // on a named outbound. It never folds into hops, and the status read hops
+    // alone: `done: false, hops: []` while both directions gave their IP.
+    const [entry, transit, exit] = [await node(), await node(), await node()];
+    const outbound = await prisma.namedOutbound.create({
+      data: { id: '11111111-1111-4111-8111-111111111111', name: 'test-exit', type: 'socks', config: { server: '203.0.113.7', port: 1080 } },
+    });
+    seq += 1;
+    const c = await prisma.cascade.create({
+      data: {
+        name: `c-${seq}`,
+        enabled: true,
+        positions: {
+          create: [
+            { position: 0, entryProtocol: 'xray', linkProtocol: 'vless', nodes: { create: [{ nodeId: entry }] } },
+            { position: 1, linkProtocol: 'vless', nodes: { create: [{ nodeId: transit }] } },
+          ],
+        },
+        directions: {
+          create: [
+            { tag: 1, nodes: { create: [{ nodeId: exit }] } },
+            { tag: 2, outboundId: outbound.id },
+          ],
+        },
+      },
+    });
+    for (const n of [entry, transit, exit]) await acknowledgedAt(n, new Date(c.updatedAt.getTime() + 5000));
+
+    const st = await getCascadeStatus(c.id);
+    expect(st.hops.map((h) => h.nodeId)).toEqual([entry, transit, exit]);
+    expect(st.done).toBe(true);
+    expect(st.broken).toBeNull();
+  });
+
   it('throws for an unknown cascade', async () => {
     await expect(getCascadeStatus('00000000-0000-0000-0000-0000000000ff')).rejects.toThrow();
   });

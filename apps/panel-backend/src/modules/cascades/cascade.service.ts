@@ -1493,37 +1493,55 @@ export interface CascadeStatusDto {
  * honest answer: the push is queued and the cron re-pushes when it returns.
  */
 export async function getCascadeStatus(id: string): Promise<CascadeStatusDto> {
+  const nodeSelect = {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      lastInboundSyncAt: true,
+      lastInboundSyncError: true,
+      chainStatus: true,
+    },
+  } as const;
   const c = await prisma.cascade.findUnique({
     where: { id },
     include: {
-      hops: {
-        orderBy: { position: 'asc' },
-        include: {
-          node: {
-            select: {
-              id: true,
-              name: true,
-              status: true,
-              lastInboundSyncAt: true,
-              lastInboundSyncError: true,
-              chainStatus: true,
-            },
-          },
-        },
-      },
+      hops: { orderBy: { position: 'asc' }, include: { node: nodeSelect } },
+      positions: { orderBy: { position: 'asc' }, include: { nodes: { include: { node: nodeSelect } } } },
+      directions: { orderBy: { tag: 'asc' }, include: { nodes: { include: { node: nodeSelect } } } },
     },
   });
   if (!c) throw new CascadeNotFoundError(id);
 
+  /**
+   * The nodes the save pushed to, from the storage that describes the cascade.
+   *
+   * E52, stand 26.09: read from the legacy hop rows alone, and a v4-only shape
+   * has none. A cascade with a direction on a named outbound never folds into
+   * hops (a hop IS a node), so a live cascade whose two directions both gave
+   * their own IP answered `done: false, hops: []` forever. The v4 topology
+   * first, in path order (positions, then the nodes behind the directions); a
+   * direction on an outbound has no node here and waits on none. The hop rows
+   * only for a cascade written before the topology tables.
+   */
+  const v4Nodes = [
+    ...c.positions.flatMap((p) => p.nodes.map((n) => n.node)),
+    ...c.directions.flatMap((d) => d.nodes.map((n) => n.node)),
+  ];
+  const members =
+    c.positions.length > 0
+      ? v4Nodes.filter((n, i) => v4Nodes.findIndex((m) => m.id === n.id) === i)
+      : c.hops.map((h) => h.node);
+
   const savedAt = c.updatedAt;
-  const hops = c.hops.map((h) => ({
-    nodeId: h.node.id,
-    name: h.node.name,
+  const hops = members.map((node) => ({
+    nodeId: node.id,
+    name: node.name,
     // Same predicate the node card uses, from one place: two readings of
     // "applied" that could disagree is exactly the confusion this answers.
-    applied: isConfigApplied(h.node.lastInboundSyncAt, savedAt),
-    online: h.node.status === 'online',
-    broken: hopBrokenReason(h.node, savedAt),
+    applied: isConfigApplied(node.lastInboundSyncAt, savedAt),
+    online: node.status === 'online',
+    broken: hopBrokenReason(node, savedAt),
   }));
   const firstBroken = hops.find((h) => h.broken !== null);
   return {
