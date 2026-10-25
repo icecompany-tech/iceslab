@@ -94,19 +94,35 @@ server {
     # declare their own add_header, so the two cache locations below re-state
     # these.
     #
-    # I9 - CSP ships in REPORT-ONLY mode: it does NOT block anything, only logs
-    # violations to the browser console, so an operator can confirm the policy
-    # fits their deployment (Mantine injects runtime <style> tags -> the
-    # 'unsafe-inline' style-src; Vite prod scripts are external -> 'self').
-    # Once verified, switch the header name to `Content-Security-Policy` to
-    # enforce. `connect-src 'self'` assumes same-origin API only (the nginx
-    # /api proxy) - widen it if the SPA ever calls an external host directly.
+    # I9 - CSP for the panel, ENFORCED (it shipped report-only first). The SPA
+    # has no inline script: Vite emits external modules only (dist/index.html),
+    # the bundle has no eval or new Function, and it calls no host but its own
+    # (the GitHub and gist addresses in it are links and server-side fetches).
+    # Mantine writes style attributes and <style> tags at runtime, hence
+    # 'unsafe-inline' in style-src. Bull-board (/admin/queues) runs under this
+    # one too: its scripts are its own files, its config is a JSON <script>
+    # nothing executes; only its Google Fonts stylesheet is refused, and it
+    # falls back to a local face. `connect-src 'self'`: same-origin API only.
+    #
+    # ⚠ The subscription page is NOT under this policy: it is HTML with inline
+    # scripts the backend writes, and it gets its own, with a nonce ($csp_page
+    # below, the subscription and the preview locations).
     set $csp "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    # The subscription page's own: its two <script> and one <style> blocks get
+    # a nonce from sub_filter (the request id, 128 random bits, new on every
+    # request), nothing else inline runs. The one inline handler,
+    # onclick="this.select()" on the link field, is allowed by its hash
+    # ('unsafe-hashes' covers handlers only, by exact text). Style attributes
+    # (the icons, the progress marks) need style-src-attr. The page fetches a
+    # config body from its own origin to copy it, so connect-src 'self'. A
+    # new inline block the backend adds without the nonce is refused, loudly,
+    # in the browser console: that is the point.
+    set $csp_page "default-src 'none'; script-src 'nonce-$request_id' 'unsafe-hashes' 'sha256-biFQTroSCI3Z5BmsMGyEE2jFZdwjjG1Oe7JLytgH6jM='; style-src 'nonce-$request_id'; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'";
     server_tokens off;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy-Report-Only $csp always;
+    add_header Content-Security-Policy $csp always;
 
     # The variable in proxy_pass is what activates the runtime resolver
     # path. With a static upstream{} block (the previous setup), nginx
@@ -143,10 +159,37 @@ server {
         proxy_send_timeout 300s;
     }
 
+    # ───── The subscription page as a preview (settings, in an iframe) ─────
+    # The same HTML as the subscription page, so the same policy and the same
+    # nonce: under the panel's policy its inline scripts would not run and the
+    # preview would show a dead page. First of the regex locations, so it
+    # wins over the token one below. frame-ancestors 'self' is what lets the
+    # panel frame it.
+    location ~ ^/api/settings/subscription/preview/ {
+        error_log /var/log/nginx/error.log crit;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy $csp_page always;
+        # sub_filter reads the body as it is, so the backend must not compress
+        # it; gzip below compresses it again on the way out.
+        proxy_set_header Accept-Encoding "";
+        sub_filter_once off;
+        sub_filter '<script>' '<script nonce="$request_id">';
+        sub_filter '<style>' '<style nonce="$request_id">';
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
     # ───── API routes with a token in the path (A-267) ─────
     # The same proxy as /api/ (a regex location wins over that prefix), with
     # the error log at crit for the reason given at the subscription location.
-    location ~ ^/api/(internal/bootstrap|users/by-subscription-token|settings/subscription/preview)/ {
+    location ~ ^/api/(internal/bootstrap|users/by-subscription-token)/ {
         error_log /var/log/nginx/error.log crit;
         proxy_pass http://$backend;
         proxy_http_version 1.1;
@@ -187,11 +230,19 @@ server {
         # must not hand its URL to the next site): the server-level
         # strict-origin-when-cross-origin would otherwise come last and win.
         # An add_header here drops every server-level one, so the rest are
-        # re-stated.
+        # re-stated. The page's own CSP, not the panel's: see $csp_page.
         add_header Referrer-Policy "no-referrer" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
-        add_header Content-Security-Policy-Report-Only $csp always;
+        add_header Content-Security-Policy $csp_page always;
+        # The nonce goes into the page here (sub_filter, text/html only: the
+        # YAML, JSON and base64 bodies pass untouched). sub_filter reads the
+        # body as it is, so the backend must not compress it; gzip below
+        # compresses it again on the way out.
+        proxy_set_header Accept-Encoding "";
+        sub_filter_once off;
+        sub_filter '<script>' '<script nonce="$request_id">';
+        sub_filter '<style>' '<style nonce="$request_id">';
         proxy_pass http://$backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -245,9 +296,13 @@ server {
         expires -1;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         # Re-stated: this location's own add_header drops the server-level ones.
+        # The CSP above all: every SPA route ends here (try_files below), so
+        # without this line the panel's document carried no policy at all,
+        # and the report-only one it shipped with never saw the SPA.
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Content-Security-Policy $csp always;
     }
 
     # SPA fallback: client-side routes resolve to index.html.
