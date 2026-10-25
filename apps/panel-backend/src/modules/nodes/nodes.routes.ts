@@ -27,6 +27,7 @@ import * as bootstrap from './bootstrap.service.js';
 import { getPanelPublicIp } from './panel-ip.js';
 import { NodeCertRotationError, rotateNodeCert } from './node-cert-rotation.js';
 import { NodeConnLogError, clearNodeConnLog, readNodeConnLog } from './node-conn-log.js';
+import { nodeLingering } from '../stats/lingering.js';
 
 /**
  * Derive the panel URL the admin is currently using to talk to the API.
@@ -355,7 +356,10 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/nodes/:id', auth, async (request, reply) => {
     const params = NodeIdParamSchema.parse(request.params);
     try {
-      return reply.send(await nodesService.getNodeById(params.id));
+      const node = await nodesService.getNodeById(params.id);
+      // A-218: users taken off this node whose xray connections are still
+      // open; null when not checked (stats/lingering.ts).
+      return reply.send({ ...node, lingering: await nodeLingering(params.id) });
     } catch (err) {
       if (err instanceof nodesService.NodeNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });

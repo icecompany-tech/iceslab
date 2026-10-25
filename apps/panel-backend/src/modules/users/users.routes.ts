@@ -12,6 +12,7 @@ import {
 import * as usersService from './users.service.js';
 import { mapUserToPublic } from './users.mapper.js';
 import { getUserDelivery } from './users.delivery.js';
+import { userLiveAfterRemoval } from '../stats/lingering.js';
 import { prisma } from '../../prisma.js';
 import {
   generateSubscription,
@@ -352,7 +353,8 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     const params = UserIdParamSchema.parse(request.params);
     try {
       const user = await usersService.getUserById(params.id);
-      return reply.send(user);
+      // A-218: the nodes where this user, taken off, still holds a connection.
+      return reply.send({ ...user, liveAfterRemoval: await userLiveAfterRemoval(user) });
     } catch (err) {
       if (err instanceof usersService.UserNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
