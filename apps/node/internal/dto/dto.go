@@ -597,6 +597,17 @@ type GetStatsResponse struct {
 	// Cores (A-152): the total per adapter. Absent from an older agent, which
 	// leaves the panel on TotalBytesIn/Out with Cumulative.
 	Cores []CoreTrafficTotal `json:"cores,omitempty"`
+	// Lingering (A-218): users taken off this node whose connections are
+	// still open (xray keeps them after rmu). Absent: not known (an older
+	// agent, no xray running, the online query failed); [] asked, nobody.
+	Lingering *[]LingeringUser `json:"lingering,omitempty"`
+}
+
+// LingeringUser: the email as xray knows the user (the panel's user id, or
+// the login of a socks/http door) and the connections still open. No address.
+type LingeringUser struct {
+	Email    string `json:"email"`
+	Sessions int64  `json:"sessions"`
 }
 
 // ───── GET /healthz ─────

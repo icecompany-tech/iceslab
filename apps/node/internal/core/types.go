@@ -49,4 +49,15 @@ type Stats struct {
 	// the user's snapshot, and the next good poll billed the whole counter at
 	// once. A core that is not running and so was not asked is not NoData.
 	NoData bool
+	// Lingering (A-218): users this core no longer holds whose connections
+	// are still open, by the email the core knows them by. Nil when the core
+	// was not asked or did not answer: "not known", never "nobody"; an empty
+	// non-nil slice is "asked, nobody".
+	Lingering []LingeringUser
+}
+
+// LingeringUser is one such user and how many connections they still hold.
+type LingeringUser struct {
+	Email    string
+	Sessions int64
 }

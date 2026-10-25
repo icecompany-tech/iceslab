@@ -1232,7 +1232,43 @@ func (a *Adapter) GetStats() (*core.Stats, error) {
 		// Non-destructive read (no -reset): Users[] and the inbound total are
 		// cumulative, so the panel computes deltas against its snapshots.
 		Cumulative: true,
+		Lingering:  a.lingering(ctx, run, binary, apiPort, users, loginOf),
 	}, nil
+}
+
+// lingering (A-218): the emails with open connections that this core no
+// longer holds, by id or by socks/http login. rmu takes a user off an inbound
+// and leaves their open connections running (xray 26.3.27, checked live
+// 22.10), and restarting the core for them would cut everybody (P6), so the
+// panel is told instead. Nil when the query fails: not known, not "nobody".
+func (a *Adapter) lingering(ctx context.Context, run RunCmdFunc, binary string, apiPort int, users []core.UserStats, loginOf map[string]string) []core.LingeringUser {
+	online, err := queryOnlineEmails(ctx, run, binary, apiPort)
+	if err != nil {
+		a.logger.Warn("xray GetStats: online query failed, lingering sessions not known this poll", "err", err)
+		return nil
+	}
+	held := make(map[string]bool, len(users)+len(loginOf))
+	for _, u := range users {
+		held[u.UserID] = true
+	}
+	for _, login := range loginOf {
+		held[login] = true
+	}
+	out := []core.LingeringUser{}
+	for _, email := range online {
+		if held[email] {
+			continue
+		}
+		n, err := queryOnlineSessions(ctx, run, binary, apiPort, email)
+		if err != nil {
+			a.logger.Warn("xray GetStats: online count failed, lingering sessions not known this poll", "err", err)
+			return nil
+		}
+		if n > 0 {
+			out = append(out, core.LingeringUser{Email: email, Sessions: n})
+		}
+	}
+	return out
 }
 
 // Healthy reports whether the subprocess is running. In config-only mode

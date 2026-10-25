@@ -221,6 +221,63 @@ func parseInt64String(s string) (int64, error) {
 	return n, nil
 }
 
+// xrayOnlineUsersResponse mirrors `xray api statsgetallonlineusers`
+// (GetAllOnlineUsersResponse): the online map names with a count above zero,
+// `user>>><email>>>online`. The map counts a user's open connections, added
+// when one opens and removed when it closes, with no time-out (xray
+// app/stats/online_map.go, 26.3.27); rmu leaves it alone.
+type xrayOnlineUsersResponse struct {
+	Users []string `json:"users"`
+}
+
+// queryOnlineEmails returns the emails with at least one open connection.
+func queryOnlineEmails(ctx context.Context, run RunCmdFunc, binary string, apiPort int) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, statsQueryTimeout)
+	defer cancel()
+	out, err := run(ctx, binary, "api", "statsgetallonlineusers", "-server", fmt.Sprintf("127.0.0.1:%d", apiPort))
+	if err != nil {
+		return nil, fmt.Errorf("xray api statsgetallonlineusers: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	var resp xrayOnlineUsersResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return nil, fmt.Errorf("parse statsgetallonlineusers output: %w (raw: %s)", err, strings.TrimSpace(string(out)))
+	}
+	emails := make([]string, 0, len(resp.Users))
+	for _, name := range resp.Users {
+		parts := strings.Split(name, ">>>")
+		if len(parts) == 3 && parts[0] == "user" && parts[2] == "online" && parts[1] != "" {
+			emails = append(emails, parts[1])
+		}
+	}
+	return emails, nil
+}
+
+// queryOnlineSessions returns how many connections one email holds open
+// (`xray api statsonline`, a GetStatsResponse: {"stat":{"name":..,"value":N}}).
+func queryOnlineSessions(ctx context.Context, run RunCmdFunc, binary string, apiPort int, email string) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, statsQueryTimeout)
+	defer cancel()
+	out, err := run(ctx, binary, "api", "statsonline", "-server", fmt.Sprintf("127.0.0.1:%d", apiPort), "-email", email)
+	if err != nil {
+		return 0, fmt.Errorf("xray api statsonline: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	var resp struct {
+		Stat *xrayStatEntry `json:"stat"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil || resp.Stat == nil {
+		return 0, fmt.Errorf("parse statsonline output: %v (raw: %s)", err, strings.TrimSpace(string(out)))
+	}
+	// protojson leaves a zero out: the last connection closed in between.
+	if len(resp.Stat.Value) == 0 {
+		return 0, nil
+	}
+	n, ok := statEntryInt64(resp.Stat.Value)
+	if !ok {
+		return 0, fmt.Errorf("statsonline value %s", string(resp.Stat.Value))
+	}
+	return n, nil
+}
+
 type userByteCounters struct {
 	UplinkBytes   int64
 	DownlinkBytes int64
