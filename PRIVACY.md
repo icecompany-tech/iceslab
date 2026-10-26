@@ -22,8 +22,15 @@ section says what they may have left behind and how to clear it.
 | **Subscription events**: what an admin changed on the user (limits, expiry, status, before and after) and which admin. | **180 days**. |
 | **Erased imports**: for a user who was imported and later erased, the SHA-256 of their source-panel ID and the erase time, so the next import from that source does not bring them back. No name, token or other data. | Indefinitely. |
 
-The cleanup runs once a day. Backups you make of the database keep whatever
-the database held at that moment, for as long as you keep the backup.
+The cleanup runs once a day.
+
+**Backups.** A backup made with `./scripts/ops/iceslab.sh backup` (or
+`scripts/ops/iceslab-backup.sh`) holds the database as it was at that moment:
+a user erased since is still in every older archive, until that archive is
+removed. The archive also holds the panel's secrets (a copy of
+`.env.production`: the JWT secret, the database password, the node
+certificate authority), so keep it as you keep those: off public storage,
+readable only by you.
 
 ## In the panel's logs
 
