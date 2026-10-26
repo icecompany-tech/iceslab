@@ -85,6 +85,9 @@ export const TABLES = [
   // left behind would make the next test's save read "replaced".
   'operator_recipes',
   'recipe_hidden',
+  // The admin audit log. TRUNCATE admin_users CASCADE reaches it through the
+  // actor's foreign key anyway; listed so that stays true if the key goes.
+  'admin_audit_events',
   'api_tokens',
   'keygen_ca',
   'admin_users',
