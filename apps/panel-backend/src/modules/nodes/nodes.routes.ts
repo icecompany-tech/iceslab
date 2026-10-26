@@ -28,6 +28,8 @@ import { getPanelPublicIp } from './panel-ip.js';
 import { NodeCertRotationError, rotateNodeCert } from './node-cert-rotation.js';
 import { NodeConnLogError, clearNodeConnLog, readNodeConnLog } from './node-conn-log.js';
 import { nodeLingering } from '../stats/lingering.js';
+import { audit } from '../audit/audit.hook.js';
+import { nodeTarget, policyTarget } from '../audit/audit.targets.js';
 
 /**
  * Derive the panel URL the admin is currently using to talk to the API.
@@ -159,8 +161,12 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   // or did not answer: the node keeps or goes back to its old pair.
   app.post('/api/nodes/:id/cert/rotate', auth, async (request, reply) => {
     const params = NodeIdParamSchema.parse(request.params);
+    const target = await nodeTarget(params.id);
+    const entry = target ? audit(request, { action: 'node.cert.rotate', target }) : null;
     try {
-      return reply.send(await rotateNodeCert(params.id));
+      const rotated = await rotateNodeCert(params.id);
+      if (entry) entry.detail = { notAfter: new Date(rotated.notAfter).toISOString() };
+      return reply.send(rotated);
     } catch (err) {
       if (err instanceof NodeCertRotationError) {
         const status = err.code === 'NODE_NOT_FOUND' ? 404 : err.code === 'UPDATE_AGENT' || err.code === 'PENDING' ? 409 : 502;
@@ -191,8 +197,12 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   });
   app.post('/api/nodes/:id/conn-log/clear', auth, async (request, reply) => {
     const params = NodeIdParamSchema.parse(request.params);
+    const target = await nodeTarget(params.id);
+    const entry = target ? audit(request, { action: 'node.connLog.clear', target }) : null;
     try {
-      return reply.send(await clearNodeConnLog(params.id, request.admin?.id ?? null));
+      const cleared = await clearNodeConnLog(params.id, request.admin?.id ?? null);
+      if (entry) entry.detail = { outcome: cleared.results.map((r) => ({ source: r.source, state: r.state })) };
+      return reply.send(cleared);
     } catch (err) {
       return connLogRefusal(err, reply);
     }
@@ -410,6 +420,25 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   app.put('/api/nodes/:id', auth, async (request, reply) => {
     const params = NodeIdParamSchema.parse(request.params);
     const input = UpdateNodeSchema.parse(request.body);
+    // Э3 policy on a node: a change of policyId is a detach of the old one
+    // and an attach of the new one, a row each; the rest of a node save is
+    // not in wave 1.
+    if (input.policyId !== undefined) {
+      const node = await prisma.node.findUnique({
+        where: { id: params.id },
+        select: { name: true, policyId: true, policy: { select: { name: true } } },
+      });
+      if (node && node.policyId !== input.policyId) {
+        const target = { kind: 'node', id: params.id, label: node.name } as const;
+        if (node.policyId && node.policy) {
+          audit(request, { action: 'nodePolicy.detach', target, detail: { policyId: node.policyId, policyLabel: node.policy.name } });
+        }
+        const next = input.policyId ? await policyTarget(input.policyId) : null;
+        if (input.policyId && next) {
+          audit(request, { action: 'nodePolicy.attach', target, detail: { policyId: input.policyId, policyLabel: next.label } });
+        }
+      }
+    }
     try {
       return reply.send(await nodesService.updateNode(params.id, input));
     } catch (err) {

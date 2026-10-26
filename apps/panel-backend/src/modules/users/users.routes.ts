@@ -22,6 +22,9 @@ import {
 import { awgConfUrl, subscriptionUrl } from '../subscription/subscription.link.js';
 import { endpointId } from '../subscription/endpoint-identity.js';
 import { RoutingPresetNotFoundError } from '../routing-presets/routing-presets.assign.js';
+import { audit } from '../audit/audit.hook.js';
+import { userErasedAfter, userTarget } from '../audit/audit.targets.js';
+import { redactUsername } from '../../lib/notify/telegram-notify.js';
 
 // B12-tail - response schema for the paginated users list (Users page keeps it
 // warm via placeholderData). Compiles a fast-json-stringify serializer over the
@@ -165,7 +168,27 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // worse than doing the other hundred and ninety-seven.
   app.post('/api/users/bulk', auth, async (request, reply) => {
     const input = BulkUsersSchema.parse(request.body);
+    // A bulk delete leaves the row a single delete leaves, per user it erased:
+    // names read before, rows only for the ids that went (the answer is 200
+    // either way, so the outcome lives in which ids have a row).
+    const targets =
+      input.action === 'delete'
+        ? new Map(
+            (
+              await prisma.user.findMany({
+                where: { id: { in: input.userIds }, deletedAt: null },
+                select: { id: true, username: true },
+              })
+            ).map((u) => [u.id, redactUsername(u.username)]),
+          )
+        : null;
     const result = await usersService.bulkUsers(input);
+    if (targets) {
+      const erasedAfter = userErasedAfter();
+      for (const id of result.ok) {
+        audit(request, { action: 'user.delete', target: { kind: 'user', id, label: targets.get(id) ?? '[redacted]' }, detail: { erasedAfter } });
+      }
+    }
     return reply.send({
       action: input.action,
       requested: input.userIds.length,
@@ -455,8 +478,11 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/users/:id
   app.delete('/api/users/:id', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
+    const target = await userTarget(params.id);
+    const entry = target ? audit(request, { action: 'user.delete', target }) : null;
     try {
       await usersService.deleteUser(params.id);
+      if (entry) entry.detail = { erasedAfter: userErasedAfter() };
       return reply.code(204).send();
     } catch (err) {
       if (err instanceof usersService.UserNotFoundError) {

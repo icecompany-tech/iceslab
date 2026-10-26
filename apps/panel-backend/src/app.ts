@@ -38,6 +38,8 @@ import { recipesRoutes } from './modules/recipes/recipes.routes.js';
 import { geoSetsRoutes } from './modules/geo-sets/geo-sets.routes.js';
 import { routingPresetsRoutes } from './modules/routing-presets/routing-presets.routes.js';
 import { subscriptionTemplatesRoutes } from './modules/subscription-templates/templates.routes.js';
+import { auditRoutes } from './modules/audit/audit.routes.js';
+import { writeAuditOnSend } from './modules/audit/audit.hook.js';
 import { registerSecurityGate } from './lib/auth/security-gate.js';
 import { registry as metricsRegistry, httpRequestDuration, routeLabel } from './lib/infra/metrics.js';
 import { requireAuth } from './modules/auth/auth.hook.js';
@@ -192,6 +194,10 @@ export async function buildApp(opts: { log?: { level: string; stream: { write(li
   // every route below so it covers /metrics and all plugin routes.
   app.addHook('preHandler', enforceScopes);
 
+  // The admin audit log: a route marks its request (modules/audit audit()),
+  // the rows go in as the answer leaves, with the outcome it carries.
+  app.addHook('onSend', writeAuditOnSend);
+
   // /metrics: Prometheus scrape endpoint. Auth-gated so it isn't a free
   // info disclosure; Prometheus jobs use an `icp_*` API token in
   // Authorization: Bearer for scraping.
@@ -329,6 +335,7 @@ export async function buildApp(opts: { log?: { level: string; stream: { write(li
   await app.register(geoSetsRoutes);
   await app.register(routingPresetsRoutes);
   await app.register(subscriptionTemplatesRoutes);
+  await app.register(auditRoutes);
 
   return app;
 }

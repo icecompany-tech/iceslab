@@ -11,3 +11,4 @@ export * from './geo.js';
 export * from './adapters.js';
 export * from './hosts.js';
 export * from './retention.js';
+export * from './audit.js';

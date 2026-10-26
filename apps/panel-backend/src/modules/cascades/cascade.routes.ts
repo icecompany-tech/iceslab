@@ -8,6 +8,10 @@ import {
 } from './cascade.schemas.js';
 import { CASCADE_DTO_FIELDS } from './cascade.mapper.js';
 import * as svc from './cascade.service.js';
+import { prisma } from '../../prisma.js';
+import { audit } from '../audit/audit.hook.js';
+import { cascadeCounts } from '../audit/audit.targets.js';
+import type { AuditEntry } from '../audit/audit.service.js';
 import { CascadeNodeInOtherCascadeError } from './cascade-exclusive.js';
 import {
   CascadeDirectionShapeError,
@@ -179,8 +183,13 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/cascades', auth, async (req, reply) => {
     const input = CreateCascadeSchema.parse(req.body);
+    // No id until it exists: a refused create keeps the name it was given.
+    const entry = audit(req, { action: 'cascade.create', target: { kind: 'cascade', id: null, label: input.name } });
     try {
-      return reply.code(201).send(await svc.createCascade(input));
+      const created = await svc.createCascade(input);
+      entry.target.id = created.id;
+      entry.detail = cascadeCounts(created);
+      return reply.code(201).send(created);
     } catch (err) {
       return handleError(err, reply);
     }
@@ -189,8 +198,23 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
   app.put('/api/cascades/:id', auth, async (req, reply) => {
     const { id } = CascadeIdParamSchema.parse(req.params);
     const input = UpdateCascadeSchema.parse(req.body);
+    // Switching on or off is its own action; any other field sent is an
+    // update beside it. Both rows carry the cascade as the save left it.
+    const before = await prisma.cascade.findUnique({ where: { id }, select: { name: true, enabled: true } });
+    const entries: AuditEntry[] = [];
+    if (before) {
+      const target = { kind: 'cascade', id, label: before.name } as const;
+      if (input.enabled !== undefined && input.enabled !== before.enabled) {
+        entries.push(audit(req, { action: input.enabled ? 'cascade.enable' : 'cascade.disable', target }));
+      }
+      if (Object.keys(input).some((k) => k !== 'enabled' && (input as Record<string, unknown>)[k] !== undefined)) {
+        entries.push(audit(req, { action: 'cascade.update', target }));
+      }
+    }
     try {
-      return reply.send(await svc.updateCascade(id, input));
+      const updated = await svc.updateCascade(id, input);
+      for (const e of entries) e.detail = cascadeCounts(updated);
+      return reply.send(updated);
     } catch (err) {
       return handleError(err, reply);
     }
@@ -214,6 +238,18 @@ export async function cascadeRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/cascades/:id', auth, async (req, reply) => {
     const { id } = CascadeIdParamSchema.parse(req.params);
+    // Its size as it stood: after the delete there is nothing to count.
+    const standing = await svc.getCascade(id).catch((err: unknown) => {
+      if (err instanceof svc.CascadeNotFoundError) return null;
+      throw err;
+    });
+    if (standing) {
+      audit(req, {
+        action: 'cascade.delete',
+        target: { kind: 'cascade', id, label: standing.name },
+        detail: cascadeCounts(standing),
+      });
+    }
     try {
       await svc.deleteCascade(id);
       return reply.code(204).send();
