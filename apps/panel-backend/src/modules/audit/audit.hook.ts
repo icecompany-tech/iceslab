@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AdminAuditAction, AdminAuditOutcome } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
-import { redactUsername } from '../../lib/notify/telegram-notify.js';
 import { recordAudit, type AuditActor, type AuditEntry } from './audit.service.js';
 
 declare module 'fastify' {
@@ -27,9 +26,13 @@ async function actorOf(request: FastifyRequest): Promise<AuditActor> {
   // A token acts for the admin who issued it (null for a legacy token); the
   // label says it was a token, not that admin at the keyboard.
   if (request.apiToken) return { kind: 'api_token', id: request.admin?.id ?? null, label: 'api token' };
+  // The admin by full name, as of the action (ARCH 26.10): the log is read
+  // only in an admin session, and its point is who exactly; a mask cannot
+  // tell two similar logins apart. The mask stays where text leaves the
+  // panel (Telegram).
   if (request.admin) {
     const admin = await prisma.adminUser.findUnique({ where: { id: request.admin.id }, select: { username: true } });
-    return { kind: 'admin', id: request.admin.id, label: admin ? redactUsername(admin.username) : '[redacted]' };
+    return { kind: 'admin', id: request.admin.id, label: admin?.username ?? 'deleted admin' };
   }
   return { kind: 'system', id: null, label: 'system' };
 }

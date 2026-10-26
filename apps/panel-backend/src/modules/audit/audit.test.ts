@@ -20,9 +20,12 @@ import { pruneHistory } from '../maintenance/retention.cron.js';
 import { AUDIT_DETAIL_SCHEMAS, checkDetail, isForbiddenDetailKey, keysOf } from './audit.details.js';
 import { recordAudit } from './audit.service.js';
 
+const alerts: string[] = [];
 vi.mock('../../lib/notify/telegram-notify.js', async (real) => ({
   ...(await real<typeof import('../../lib/notify/telegram-notify.js')>()),
-  notifyTelegramAsync: () => undefined,
+  notifyTelegramAsync: (text: string) => {
+    alerts.push(text);
+  },
 }));
 
 /**
@@ -81,7 +84,7 @@ describe('user.delete', () => {
 
     const [row] = await rows();
     expect(row).toMatchObject({
-      actor: { kind: 'admin', label: 'ad***' },
+      actor: { kind: 'admin', label: 'admin' },
       action: 'user.delete',
       target: { kind: 'user', id, label: 'su***' },
       outcome: 'ok',
@@ -153,6 +156,21 @@ describe('node.connLog.clear: the three outcomes', () => {
     expect(row).toMatchObject({ action: 'node.connLog.clear', target: { kind: 'node', id, label: 'ru-01' }, outcome: 'ok' });
     expect(row!.detail).toEqual({ outcome: [{ source: 'journal', state: 'cleared' }, { source: 'syslog', state: 'absent' }] });
     expect(JSON.stringify(row)).not.toMatch(/journalctl|198\.51\.100/);
+  });
+
+  // ARCH 26.10: the log names the admin in full, text that leaves the panel
+  // keeps the mask.
+  it('the row has the admin by full name, the Telegram notice by the mask', async () => {
+    const id = await node();
+    vi.spyOn(NodeTransport.prototype, 'clearConnLog').mockResolvedValue(cleared);
+    alerts.length = 0;
+    expect((await call('POST', `/api/nodes/${id}/conn-log/clear`, {})).statusCode).toBe(200);
+    const [stored] = await prisma.adminAuditEvent.findMany({ select: { actorLabel: true } });
+    expect(stored!.actorLabel).toBe('admin');
+    const notice = alerts.find((a) => a.includes('Connection log cleared'));
+    // Markdown-escaped on the way out: ad*** is sent as ad\*\*\*.
+    expect(notice).toContain('by: `ad\\*\\*\\*`');
+    expect(notice).not.toContain('`admin`');
   });
 
   it('an old agent is refused, and the row keeps the code, never the message', async () => {
