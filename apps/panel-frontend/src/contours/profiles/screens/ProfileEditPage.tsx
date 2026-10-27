@@ -21,6 +21,7 @@ import { apiErrorMessage } from '@/lib/net/client';
 import { editGate } from '@/lib/ui/loadView';
 import { LoadFailed } from '@/ui/LoadFailed';
 import { engineRefused } from '@/contours/profiles/lib/plainSubprotocol';
+import { portHopRefusal, portHopWords, type PortHopField } from '@/contours/profiles/lib/portHopRange';
 import { singboxXrayMessage, singboxXrayRefusal, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 import { awgGateText, coreGateRefusal, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
@@ -83,9 +84,14 @@ export function ProfileEditPage() {
   // Три 409 AmneziaWG: AWG_PROTOCOL_MISMATCH (227054e), AWG_AGENT_TOO_OLD и
   // AWG_SUBNET_OVERLAP (24b59b9). Под выбором поколения и в тосте.
   const [awgRefusal, setAwgRefusal] = useState<CoreGateRefusal | null>(null);
+  // A-284: a half or reversed port hopping range refused on its field.
+  const [portHopRefused, setPortHopRefused] = useState<PortHopField | null>(null);
   const saveError = (err: unknown): string => {
     const sb = singboxXrayRefusal(err);
     setRefused(sb);
+    const hop = portHopRefusal(err);
+    setPortHopRefused(hop);
+    if (hop) return portHopWords(hop, t);
     const gate = coreGateRefusal(err);
     const awgText = gate ? awgGateText(gate, t) : null;
     setAwgRefusal(awgText !== null ? gate : null);
@@ -261,6 +267,7 @@ export function ProfileEditPage() {
         onClose={() => navigate('/profiles')}
         onPreviewChange={handlePreviewChange}
         refused={refused}
+        portHopRefused={portHopRefused}
         awgKnown={awgKnown}
         awgRefusal={awgRefusal}
         profile={profile}

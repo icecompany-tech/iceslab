@@ -352,6 +352,8 @@ export const profiles = {
     portRangeStartDesc: 'UDP port-hopping to evade RU TSPU. Empty = single port.',
     portRangeEnd: 'Port range end',
     portRangeEndDesc: 'Must be > start. The node\'s iptables range must cover this.',
+    portRangeNoStart: 'Only the end of the range is set: give the start or clear both fields.',
+    portRangeBadEnd: 'The range needs an end above its start, or clear both fields.',
   },
   recipes: {
     searchPlaceholder: 'Search recipes…',

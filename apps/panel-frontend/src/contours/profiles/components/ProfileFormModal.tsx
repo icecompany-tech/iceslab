@@ -55,6 +55,7 @@ import { IdentitySection } from '@/contours/profiles/components/ProfileForm/Iden
 import { XrayConfigWarnings } from '@/contours/profiles/components/ProfileForm/XrayConfigWarnings';
 import { XraySection } from '@/contours/profiles/components/ProfileForm/XraySection';
 import { HysteriaSection } from '@/contours/profiles/components/ProfileForm/HysteriaSection';
+import { portHopWords, type PortHopField } from '@/contours/profiles/lib/portHopRange';
 import { AmneziawgSection } from '@/contours/profiles/components/ProfileForm/AmneziawgSection';
 import { NaiveSection } from '@/contours/profiles/components/ProfileForm/NaiveSection';
 import { ShadowsocksSection } from '@/contours/profiles/components/ProfileForm/ShadowsocksSection';
@@ -93,6 +94,8 @@ interface Props {
    * overrides is not on this form, and the page's toast names it.
    */
   refused?: SingboxXrayRefusal | null;
+  /** A-284: the port hopping field the server refused on the last save. */
+  portHopRefused?: PortHopField | null;
   /** Знает ли сервер поколение AWG у профиля (227054e); нет: выбора нет. */
   awgKnown?: boolean;
   /** 409 AWG_PROTOCOL_MISMATCH последнего сохранения: под выбором поколения. */
@@ -108,6 +111,7 @@ export function ProfileFormModal({
   inline,
   onPreviewChange,
   refused,
+  portHopRefused,
   awgKnown = false,
   awgRefusal,
 }: Props) {
@@ -142,6 +146,9 @@ export function ProfileFormModal({
     if (!refused || refused.where !== 'config') return;
     setFieldError(SINGBOX_XRAY_FORM_FIELD[refused.field], singboxXrayMessage(refused, t));
   }, [refused, setFieldError, t]);
+  useEffect(() => {
+    if (portHopRefused) setFieldError(portHopRefused, portHopWords(portHopRefused, t));
+  }, [portHopRefused, setFieldError, t]);
   // The tile the form is on: recipes are chosen by it, not by the protocol.
   const kindKey = profileKindKey(form.values.protocol, form.values.engine, form.values.xraySubprotocol);
   // The WEB card's draft: beside the form, never in it (TelegramPreviewCard).

@@ -25,6 +25,12 @@ import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/pla
 import { saveThen } from '@/contours/profiles/lib/saveThen';
 import { profileAwgCreate, profileAwgPatch } from '@/lib/domain/awg';
 import { ssConfigPatch } from '@/contours/profiles/lib/ssServerKey';
+import {
+  portHopConfig,
+  portHopProblem,
+  portHopWords,
+  type PortHopField,
+} from '@/contours/profiles/lib/portHopRange';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -67,8 +73,17 @@ export function useProfileForm({
         }
         return null;
       },
+      // Both bounds or neither, the end above the start (A-284): the words
+      // the server's refusal on the same field gets.
+      hyPortHopStart: (_v, values) => portHopError(values, 'hyPortHopStart'),
+      hyPortHopEnd: (_v, values) => portHopError(values, 'hyPortHopEnd'),
     },
   });
+
+  function portHopError(values: FormValues, field: PortHopField): string | null {
+    if (values.protocol !== 'hysteria') return null;
+    return portHopProblem(values.hyPortHopStart, values.hyPortHopEnd) === field ? portHopWords(field, t) : null;
+  }
 
   // Засев при открытии и при смене профиля, но не при новом объекте того же
   // профиля: refetch списка приносит новый объект с тем же id, и пересев
@@ -157,12 +172,9 @@ export function useProfileForm({
           ...(values.hyMasqueradeUrl ? { masqueradeUrl: values.hyMasqueradeUrl } : {}),
           ...(values.hyBrutalUp ? { brutalUpMbps: Number(values.hyBrutalUp) } : {}),
           ...(values.hyBrutalDown ? { brutalDownMbps: Number(values.hyBrutalDown) } : {}),
-          ...(values.hyPortHopStart && values.hyPortHopEnd
-            ? {
-                portHoppingStart: Number(values.hyPortHopStart),
-                portHoppingEnd: Number(values.hyPortHopEnd),
-              }
-            : {}),
+          // Every bound filled is sent: a half range is the form's to refuse
+          // (validate below) and the server's after it, never dropped (A-284).
+          ...portHopConfig(values.hyPortHopStart, values.hyPortHopEnd),
         };
         break;
       case 'xray':

@@ -364,6 +364,8 @@ export const profiles = {
     portRangeStartDesc: 'UDP port-hopping для обхода РФ TSPU. Пусто - один порт.',
     portRangeEnd: 'Конец диапазона портов',
     portRangeEndDesc: 'Должен быть > начала. iptables-диапазон на ноде должен покрывать этот.',
+    portRangeNoStart: 'Задан только конец диапазона: укажите начало или очистите оба поля.',
+    portRangeBadEnd: 'Нужен конец диапазона больше начала, или очистите оба поля.',
   },
   recipes: {
     searchPlaceholder: 'Поиск рецептов…',
