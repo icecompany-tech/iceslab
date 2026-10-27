@@ -58,9 +58,14 @@ readable only by you.
   and tunnel address there. A user removed from the node is removed from these
   files on the next push.
 - **In the journal**: no line per connection. Xray's access log is off,
-  Hysteria runs at `warn`, NaiveProxy leaves the proxy's error lines (which
-  named the client and the destination) out. MTProto (mtg) still logs the
-  client's IP when a connection fails; it has no quieter level.
+  Hysteria runs at `error`, where it names no client (a certificate it fails
+  to get or renew is still logged), NaiveProxy leaves the proxy's error lines
+  (which named the client and the destination) out. The agent writes nothing
+  for an accepted Hysteria login; a refused one keeps the client's address,
+  which fail2ban reads. MTProto (mtg) still logs the client's IP when a
+  connection fails; it has no quieter level. A cascade's chain process notes
+  the destination it could not reach when a connection through it fails,
+  without the client or the user.
 - **Traffic counters** are kept in memory and read by the panel; the node keeps
   no history of them.
 
@@ -70,19 +75,30 @@ Versions before v0.3.0 kept more, and it stays on your servers until you
 remove it:
 
 - **Node journals**: a line per connection (the client's IP, and for Xray the
-  destination and the user). The node page shows whether a node still has
-  such lines and can clear them. journald and syslog cannot be cleared line by
+  destination and the user), Hysteria's lines per connect, disconnect and
+  failed connection (the client's IP, the user, for a failure the
+  destination), and the agent's line per accepted Hysteria login (the
+  client's IP and the user). The node page shows whether a node still has
+  such lines, and since when, and can clear them. journald and syslog cannot be cleared line by
   line, so this removes the node's whole journal and syslog. By hand, as root:
   `journalctl --rotate && journalctl --vacuum-time=1s` and
   `truncate -c -s 0 /var/log/syslog && rm -f /var/log/syslog.*`.
 - **Panel logs**: every subscription fetch with the full token and the
-  subscriber's IP, in the backend log, the frontend log and the host Caddy's
-  `access.log`. Updating recreates the panel's containers, which removes their
-  old logs. Clear the host Caddy's log as root:
-  `truncate -s 0 /var/log/caddy/access.log && rm -f /var/log/caddy/access-*.log`.
-  If those logs may have left your hands, reissue the subscription links of
-  the users concerned.
+  subscriber's IP, and the node bootstrap token, in the backend log, the
+  frontend log and the host Caddy's `access.log`. Updating recreates the
+  panel's containers, which removes their old logs (unless Docker on the host
+  sends container logs elsewhere, such as journald); to clear them without
+  updating, as root:
+  `truncate -s 0 "$(docker inspect --format '{{.LogPath}}' iceslab-prod-backend)"`
+  and the same for `iceslab-prod-frontend`. Clear the host Caddy's old log as
+  root: `truncate -s 0 /var/log/caddy/access.log && rm -f /var/log/caddy/access-2*`
+  (the rotated copies only). Never remove a log file Caddy has open, such as
+  `access-masked.log`: a reload keeps writing into the removed file, and only
+  `systemctl restart caddy` reopens it. Caddy's old error lines are in
+  journald, which clears only whole (the command above). If those logs may
+  have left your hands, reissue the subscription links of the users
+  concerned.
 - **Deleted users and old devices**: before v0.3.0 a deleted user stayed in
   the database for good, and devices were never forgotten. The first daily
-  cleanup after the update erases every user deleted more than 30 days before
-  it and every device unseen for 90 days.
+  cleanup after the update (03:30, panel server time) erases every user
+  deleted more than 30 days before it and every device unseen for 90 days.
