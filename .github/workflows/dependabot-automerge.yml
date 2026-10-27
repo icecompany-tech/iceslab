@@ -33,6 +33,15 @@ name: Dependabot auto-merge
 #
 # `workflow_dispatch` in ci.yml stays as the way to run CI by hand if this ever
 # stops doing it.
+#
+# The switch: the repository variable DEPENDABOT_AUTOMERGE. Only `on` merges.
+# It is off from the PR develop -> main until the branches held for after the
+# release are in (27.10: two bot PRs landed in develop two minutes after the
+# v0.3.0-rc.1 merge, and would have ridden into main had that PR still been
+# open). `on`, not "anything but off": if a Dependabot run were ever given no
+# variables, as it is given no Actions secrets, the switch fails shut instead
+# of merging during a release.
+#   gh variable set DEPENDABOT_AUTOMERGE --body off   (or on)
 
 on:
   pull_request:
@@ -45,7 +54,7 @@ permissions:
 
 jobs:
   automerge:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && vars.DEPENDABOT_AUTOMERGE == 'on'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
