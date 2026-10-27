@@ -22,6 +22,7 @@ import { editGate } from '@/lib/ui/loadView';
 import { LoadFailed } from '@/ui/LoadFailed';
 import { engineRefused } from '@/contours/profiles/lib/plainSubprotocol';
 import { portHopRefusal, portHopWords, type PortHopField } from '@/contours/profiles/lib/portHopRange';
+import { awgHeaderRefusal, type AwgHField } from '@/contours/profiles/lib/awgHeaders';
 import { singboxXrayMessage, singboxXrayRefusal, type SingboxXrayRefusal } from '@/lib/domain/singboxXray';
 import { CARD, CYAN, HAIRLINE, MIST, SNOW, WELL } from '@/contours/profiles/lib/colors';
 import { awgGateText, coreGateRefusal, type CoreGateRefusal } from '@/lib/domain/nodeCoreFit';
@@ -86,15 +87,22 @@ export function ProfileEditPage() {
   const [awgRefusal, setAwgRefusal] = useState<CoreGateRefusal | null>(null);
   // A-284: a half or reversed port hopping range refused on its field.
   const [portHopRefused, setPortHopRefused] = useState<PortHopField | null>(null);
+  // A-286: the H1..H4 fields the server refused on the last save.
+  const [awgHRefused, setAwgHRefused] = useState<AwgHField[]>([]);
   const saveError = (err: unknown): string => {
+    // Every mark of the last save first, then the words: an early return
+    // must not leave the previous save's mark standing.
     const sb = singboxXrayRefusal(err);
     setRefused(sb);
     const hop = portHopRefusal(err);
     setPortHopRefused(hop);
-    if (hop) return portHopWords(hop, t);
+    const awgH = awgHeaderRefusal(err);
+    setAwgHRefused(awgH);
     const gate = coreGateRefusal(err);
     const awgText = gate ? awgGateText(gate, t) : null;
     setAwgRefusal(awgText !== null ? gate : null);
+    if (hop) return portHopWords(hop, t);
+    if (awgH.length > 0) return `${awgH.map((f) => f.replace('awg', '')).join(', ')}: ${t('profiles.form.cfg.awgHDesc')}`;
     if (sb) return singboxXrayMessage(sb, t);
     // A bound profile moved onto an adapter a node already holds, or a mieru
     // MTU the node's process does not run: the server names the node.
@@ -268,6 +276,7 @@ export function ProfileEditPage() {
         onPreviewChange={handlePreviewChange}
         refused={refused}
         portHopRefused={portHopRefused}
+        awgHRefused={awgHRefused}
         awgKnown={awgKnown}
         awgRefusal={awgRefusal}
         profile={profile}

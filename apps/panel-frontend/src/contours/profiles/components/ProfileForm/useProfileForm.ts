@@ -31,6 +31,7 @@ import {
   portHopWords,
   type PortHopField,
 } from '@/contours/profiles/lib/portHopRange';
+import { awgHeaderConfig, awgHeaderProblems, type AwgHField } from '@/contours/profiles/lib/awgHeaders';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -77,8 +78,19 @@ export function useProfileForm({
       // the server's refusal on the same field gets.
       hyPortHopStart: (_v, values) => portHopError(values, 'hyPortHopStart'),
       hyPortHopEnd: (_v, values) => portHopError(values, 'hyPortHopEnd'),
+      // H1..H4 above 4 and distinct (A-286), before the request and on the
+      // field, in the words under the fields.
+      awgH1: (_v, values) => awgHError(values, 'awgH1'),
+      awgH2: (_v, values) => awgHError(values, 'awgH2'),
+      awgH3: (_v, values) => awgHError(values, 'awgH3'),
+      awgH4: (_v, values) => awgHError(values, 'awgH4'),
     },
   });
+
+  function awgHError(values: FormValues, field: AwgHField): string | null {
+    if (values.protocol !== 'amneziawg') return null;
+    return awgHeaderProblems(values).has(field) ? t('profiles.form.cfg.awgHDesc') : null;
+  }
 
   function portHopError(values: FormValues, field: PortHopField): string | null {
     if (values.protocol !== 'hysteria') return null;
@@ -244,10 +256,8 @@ export function useProfileForm({
             s2: numOr(values.awgS2, 56),
             s3: numOr(values.awgS3, 32),
             s4: numOr(values.awgS4, 16),
-            h1: numOr(values.awgH1, 0),
-            h2: numOr(values.awgH2, 0),
-            h3: numOr(values.awgH3, 0),
-            h4: numOr(values.awgH4, 0),
+            // Never 0: an empty header is the validator's to refuse (A-286).
+            ...awgHeaderConfig(values),
             // I1-I5: optional v2.0 mimicry signature packets (hex).
             // Empty disables that slot. Trimmed defensively to avoid
             // accidental whitespace breaking awg-quick parser.

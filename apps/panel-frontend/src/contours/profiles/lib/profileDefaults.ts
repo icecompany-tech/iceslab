@@ -1,10 +1,13 @@
 import { DEFAULT_LINK_CONGESTION, type XraySubprotocol } from '@iceslab/shared';
 import type { Profile } from '@/lib/domain/profiles';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
-import { TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
+import { randomAwgHeaders, TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
 import { profileAwgGeneration } from '@/lib/domain/awg';
 
 export function defaults(profile: Profile | null): FormValues {
+  // A new profile gets its own H1..H4 (A-286): left empty they were sent as
+  // 0 and refused. An edit seeds what is stored, below.
+  const headers = profile ? null : randomAwgHeaders();
   const base: FormValues = {
     // New profiles default to xray (REALITY): it's the lead protocol and the
     // first entry in the dropdown. Editing keeps the profile's real protocol.
@@ -60,10 +63,10 @@ export function defaults(profile: Profile | null): FormValues {
     awgS2: TSPU_PRESET.s2,
     awgS3: TSPU_PRESET.s3,
     awgS4: TSPU_PRESET.s4,
-    awgH1: '',
-    awgH2: '',
-    awgH3: '',
-    awgH4: '',
+    awgH1: headers?.h1 ?? '',
+    awgH2: headers?.h2 ?? '',
+    awgH3: headers?.h3 ?? '',
+    awgH4: headers?.h4 ?? '',
     awgI1: '',
     awgI2: '',
     awgI3: '',
