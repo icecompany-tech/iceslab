@@ -13,6 +13,7 @@ import type { NodeEditor } from '@/contours/nodes/components/NodeEdit/useNodeEdi
 import type { Node } from '@/lib/domain/nodes';
 import { CertRow } from '@/contours/nodes/components/NodeEdit/CertRow';
 import { ConnLogBlock } from '@/contours/nodes/components/NodeEdit/ConnLogBlock';
+import { LingeringBlock } from '@/contours/nodes/components/NodeEdit/LingeringBlock';
 import { confirmCertRotate } from '@/contours/nodes/components/nodeConfirm';
 import { certTerm } from '@/contours/nodes/lib/nodeCert';
 import { useNow } from '@/lib/ui/useNow';
@@ -114,6 +115,8 @@ export function SystemPanel({
                     (dashboard.service `_count.profileBindings`), said as such; it
                     was labelled «user reach», which the answer does not carry. */}
                 <FactRow label={t('nodeEdit.bindings')} value={countOrDash(dashNode?.inboundCount)} />
+                {/* A-218: taken off, but a connection opened before is still live. */}
+                <LingeringBlock nodeId={node.id} />
                 <Divider />
 
                 <Box style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>

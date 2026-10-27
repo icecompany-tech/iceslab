@@ -435,6 +435,18 @@ export const nodes = {
     today: 'Сегодня',
     hosts: 'Хосты',
     bindings: 'Привязки',
+    // A-218: сняты с ноды, а соединение, открытое до снятия, ещё живо.
+    lingering: {
+      label: 'Сняты, но на связи',
+      unchecked: 'не проверено',
+      none: 'никого',
+      unknownUser: 'неизвестный пользователь',
+      sessions_one: '{{count}} соединение',
+      sessions_few: '{{count}} соединения',
+      sessions_many: '{{count}} соединений',
+      sessions_other: '{{count}} соединения',
+      hint: 'Опрос {{time}}. xray не рвёт соединения, открытые до снятия: они живут, пока их не закроет клиент. Перезапуск ядра оборвал бы всех на ноде.',
+    },
     exposure: 'Открытые порты',
     exposureCheck: 'Проверить порты',
     // A-274: ключи nodes.notify.updated и nodes.form.warpError ушли со старым окном ноды.
