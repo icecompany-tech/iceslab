@@ -319,6 +319,38 @@ async function userReachForProfile(profileId: string): Promise<number> {
   return rows[0]?.user_count ?? 0;
 }
 
+/**
+ * A-284: the port hopping range of a hysteria profile. Both bounds or
+ * neither, and the end above the start. The schema cannot say it (a
+ * `.refine()` would take the config out of the discriminated union), and the
+ * check lived only in the per-node inbound service, unmounted since slice 27:
+ * a reversed or half range was saved and every format handed it to clients
+ * as it was. A schema issue on the field, so create and edit answer alike
+ * (400 VALIDATION_ERROR, path config.portHoppingStart or .portHoppingEnd).
+ *
+ * Whether the range lies inside the one the node redirects is NOT checked:
+ * that range is given to bootstrap-hysteria.sh (--hysteria-port-range) and
+ * kept on the node (/etc/hysteria/port-range); no agent report carries it to
+ * the panel. If one ever does, the check belongs here.
+ */
+export function assertPortHoppingRange(protocol: string, config: unknown): void {
+  if (protocol !== 'hysteria') return;
+  const c = (config ?? {}) as { portHoppingStart?: unknown; portHoppingEnd?: unknown };
+  const start = typeof c.portHoppingStart === 'number' ? c.portHoppingStart : undefined;
+  const end = typeof c.portHoppingEnd === 'number' ? c.portHoppingEnd : undefined;
+  const issue = (field: 'portHoppingStart' | 'portHoppingEnd', message: string) =>
+    new ZodError([{ code: 'custom', message, path: ['config', field], input: config }]);
+  if (start === undefined && end !== undefined) {
+    throw issue('portHoppingStart', 'port hopping needs both ends of the range: the start is missing');
+  }
+  if (start !== undefined && end === undefined) {
+    throw issue('portHoppingEnd', 'port hopping needs both ends of the range: the end is missing');
+  }
+  if (start !== undefined && end !== undefined && end <= start) {
+    throw issue('portHoppingEnd', `the end of the port hopping range (${end}) must be above its start (${start})`);
+  }
+}
+
 // ───── Profile CRUD ─────
 
 export async function createProfile(input: CreateProfileInput): Promise<PublicProfileDto> {
@@ -356,6 +388,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
   if (input.protocol === 'xray') {
     configToStore = stripInapplicableTransportFields(configToStore);
   }
+  assertPortHoppingRange(input.protocol, configToStore);
 
   const created = await prisma.$transaction(async (tx) => {
     const p = await tx.profile.create({
@@ -552,6 +585,9 @@ export async function updateProfile(
         ? stripInapplicableTransportFields(parsed as Record<string, unknown>)
         : parsed
     ) as never;
+    // The config as it will be stored: an edit sends the whole config, so one
+    // bound changed against the other stored is the pair checked here.
+    assertPortHoppingRange(existing.protocol, data.config);
   }
 
   // The pair as it will be stored: an edit may change either half alone, and a
