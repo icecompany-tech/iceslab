@@ -48,7 +48,6 @@ export const TABLES = [
   'group_members',
   'group_profiles',
   'group_hosts',
-  'group_inbounds',
   'groups',
   'hwid_user_devices',
   'user_traffic',
@@ -62,7 +61,6 @@ export const TABLES = [
   'hosts',
   'profile_node_bindings',
   'profiles',
-  'inbounds',
   'node_bootstrap_tokens',
   // Two of the additions here were REAL leaks, not bookkeeping. Nothing
   // cascades into either, so rows survived every truncate:
