@@ -8,9 +8,14 @@
 -- WRITTEN BY HAND: `migrate dev --create-only` exits on "Drift detected"
 -- before drafting. `migrate status` clean before and after.
 --
+-- Named 20261027034521 at the merge into develop (it was 20261025233956 on
+-- its branch, which would have sorted before 20261026100207, already on
+-- develop and on the shared databases). Applied nowhere shared under the old
+-- name.
+--
 -- Rollback:
 --   DROP TABLE "admin_audit_events";
---   DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261025233956_admin_audit_events';
+--   DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261027034521_admin_audit_events';
 --
 -- The test that holds this file: src/modules/audit/audit-migration.test.ts
 -- (forward, back, forward).

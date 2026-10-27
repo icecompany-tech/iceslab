@@ -12,7 +12,7 @@ import { closeRedis } from '../../lib/infra/redis.js';
  */
 const MIGRATION = join(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../prisma/migrations/20261025233956_admin_audit_events/migration.sql',
+  '../../../prisma/migrations/20261027034521_admin_audit_events/migration.sql',
 );
 const sql = readFileSync(MIGRATION, 'utf8');
 
@@ -57,7 +57,7 @@ const shape = async (t: typeof prisma) => {
   return `${tables}/${indexes}`;
 };
 
-describe('20261025233956_admin_audit_events', () => {
+describe('20261027034521_admin_audit_events', () => {
   it('reads its own statements: a table and three indexes forward, one drop back', () => {
     expect(forward).toHaveLength(4);
     expect(forward[0]).toMatch(/^CREATE TABLE "admin_audit_events"/);
