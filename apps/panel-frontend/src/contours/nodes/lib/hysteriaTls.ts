@@ -12,14 +12,16 @@ import { coreEngine } from '@/contours/nodes/lib/coreRemove';
  *   факт       `cores[].tls` у строки hysteria: что агент реально отдаёт;
  *              undefined у агента старше поля, это «не сообщил», а не «нет».
  *
- *   acme        ACME на адресе ноды, отпечатка нет;
+ *   acme        ACME на адресе ноды, отпечатка нет; `notAfter` из хранилища
+ *               hysteria (6ee4638c), null = срок неизвестен (агент старше
+ *               поля или сертификата в хранилище нет), а не «нет сертификата»;
  *   self-signed самоподписанный; `match` true/false только когда отпечатки
  *               есть с обеих сторон, иначе null: сравнивать нечего;
  *   unreported  панель выпустила пару, агент о сертификате не сказал;
  *   null        сказать нечего: ни намерения, ни факта.
  */
 export type HysteriaTlsFacts =
-  | { kind: 'acme'; host: string }
+  | { kind: 'acme'; host: string; notAfter: string | null }
   | { kind: 'self-signed'; fingerprint: string | null; match: boolean | null; notAfter: string | null }
   | { kind: 'unreported' };
 
@@ -50,7 +52,8 @@ export function hysteriaTlsFacts(
   const intent = node.hysteriaTls;
   const tls = core.tls;
   if (tls && typeof tls === 'object') {
-    if (tls.source === 'acme') return { kind: 'acme', host: hostOfAddress(node.address) };
+    const notAfter = typeof tls.notAfter === 'string' && tls.notAfter ? tls.notAfter : null;
+    if (tls.source === 'acme') return { kind: 'acme', host: hostOfAddress(node.address), notAfter };
     if (tls.source === 'self-signed') {
       const served = typeof tls.certSha256 === 'string' ? tls.certSha256.toLowerCase() : null;
       const minted = intent?.certSha256?.toLowerCase() ?? null;
@@ -58,7 +61,7 @@ export function hysteriaTlsFacts(
         kind: 'self-signed',
         fingerprint: shortFingerprint(served),
         match: served && minted ? served === minted : null,
-        notAfter: typeof tls.notAfter === 'string' && tls.notAfter ? tls.notAfter : null,
+        notAfter,
       };
     }
   }

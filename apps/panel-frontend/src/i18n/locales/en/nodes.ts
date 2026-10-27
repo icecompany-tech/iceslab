@@ -350,6 +350,7 @@ export const nodes = {
       match: 'matches the panel',
       mismatch: 'does not match: the node is on the old certificate, waiting for a push',
       until: 'until {{date}}',
+      termUnknown: 'expiry unknown',
       unreported: 'the agent did not report its certificate',
       rotate: 'Rotate certificate',
       rotateConfirm: 'Every hy2 link handed out stops connecting until clients refresh their subscription. Rotate?',

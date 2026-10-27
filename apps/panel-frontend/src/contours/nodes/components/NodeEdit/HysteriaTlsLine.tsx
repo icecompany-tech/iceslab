@@ -20,10 +20,13 @@ export function HysteriaTlsLine({
   rotating?: boolean;
 }) {
   const { t } = useTranslation();
-  const until = facts.kind === 'self-signed' && facts.notAfter ? fmtDate(facts.notAfter) : null;
+  const until = facts.kind !== 'unreported' && facts.notAfter ? fmtDate(facts.notAfter) : null;
   const text =
     facts.kind === 'acme'
-      ? t('nodeEdit.hyTls.acme', { host: facts.host })
+      ? [
+          t('nodeEdit.hyTls.acme', { host: facts.host }),
+          until ? t('nodeEdit.hyTls.until', { date: until }) : t('nodeEdit.hyTls.termUnknown'),
+        ].join(', ')
       : facts.kind === 'unreported'
         ? t('nodeEdit.hyTls.unreported')
         : [

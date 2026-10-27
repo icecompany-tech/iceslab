@@ -14,11 +14,22 @@ const hy = (tls?: NodeCore['tls']) => ({ name: 'hysteria', engine: 'hysteria', t
 const minted = { certSha256: SHA, host: '1.2.3.4', createdAt: '2026-09-25T07:00:00Z' };
 
 describe('hysteriaTlsFacts: какой сертификат отдаёт нода (E30a)', () => {
-  it('ACME: адрес ноды, без отпечатка', () => {
-    expect(hysteriaTlsFacts({ hysteriaTls: null, address: 'hy.example.com:1337' }, hy({ source: 'acme' }))).toEqual({
-      kind: 'acme',
-      host: 'hy.example.com',
-    });
+  it('ACME: адрес ноды, без отпечатка; срок из хранилища hysteria', () => {
+    expect(
+      hysteriaTlsFacts(
+        { hysteriaTls: null, address: 'hy.example.com:1337' },
+        hy({ source: 'acme', notAfter: '2027-01-25T07:00:00Z' }),
+      ),
+    ).toEqual({ kind: 'acme', host: 'hy.example.com', notAfter: '2027-01-25T07:00:00Z' });
+  });
+
+  it('ACME без срока: срок неизвестен (null), сертификат при этом есть', () => {
+    // Агент старше 6ee4638c или в хранилище certmagic пусто: не «нет сертификата».
+    for (const notAfter of [undefined, '']) {
+      expect(
+        hysteriaTlsFacts({ hysteriaTls: null, address: 'hy.example.com:1337' }, hy({ source: 'acme', notAfter })),
+      ).toEqual({ kind: 'acme', host: 'hy.example.com', notAfter: null });
+    }
   });
 
   it('самоподписанный: совпадает с панелью; не совпадает (ждёт пуша); срок', () => {
