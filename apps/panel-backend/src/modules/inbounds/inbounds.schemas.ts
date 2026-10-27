@@ -39,9 +39,10 @@ export const HysteriaConfigSchema = z.object({
    * otherwise the redirect won't catch the rotating ports.
    *
    * Both fields must be set together (or both empty) and `end > start`.
-   * Cross-field validation lives in `inbounds.service.ts` rather than as
-   * a schema-level `.refine()` so this stays a plain `ZodObject` and can
-   * participate in the InboundConfigByProtocol discriminated union.
+   * Not a schema-level `.refine()`, so this stays a plain `ZodObject` and can
+   * take part in the InboundConfigByProtocol discriminated union. The check
+   * lived in inbounds.service.ts, unmounted since slice 27 and removed with
+   * A-281; the profile path does not run it today.
    */
   portHoppingStart: z.number().int().min(1024).max(65535).optional(),
   portHoppingEnd: z.number().int().min(1024).max(65535).optional(),
