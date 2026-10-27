@@ -165,10 +165,12 @@ export const CORE_VERSIONS: Record<CoreComponent, CoreVersionEntry> = {
       {
         version: '1.13.14',
         // A-212 (decisions.md 22.10): our build of the upstream v1.13.14 with
-        // v2ray_api, released in our repository; the archive holds
-        // sing-box-1.13.14-iceslab-linux-<arch>/ with the binary and LICENSE.
+        // v2ray_api; the archive holds sing-box-1.13.14-iceslab-linux-<arch>/
+        // with the binary and LICENSE. Built and released in core-builds since
+        // 27.10 (the same bytes as the iceslab release it replaces, which
+        // stays only for installs of v0.3.0-rc.1).
         tag: 'core-singbox-v1.13.14',
-        repo: 'icecompany-tech/iceslab',
+        repo: 'icecompany-tech/core-builds',
         assets: {
           amd64: {
             file: 'sing-box-1.13.14-iceslab-linux-amd64.tar.gz',

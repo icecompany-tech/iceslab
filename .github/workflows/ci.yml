@@ -283,7 +283,7 @@ jobs:
           set -euo pipefail
           for attempt in 1 2 3; do
             if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/sing-box.tar.gz \
-              https://github.com/icecompany-tech/iceslab/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
+              https://github.com/icecompany-tech/core-builds/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
             then break; fi
             echo "sing-box download failed (attempt ${attempt}/3)"
             [ "$attempt" = 3 ] && exit 1
@@ -294,7 +294,7 @@ jobs:
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-iceslab-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
-          # Our build (cores.yml): the official tags plus with_v2ray_api. A
+          # Our build (core-builds): the official tags plus with_v2ray_api. A
           # binary without it would let a config with v2ray_api pass nowhere.
           ver=$(/tmp/sing-box-bin/sing-box version)
           head -1 <<<"$ver"
@@ -716,7 +716,7 @@ jobs:
           set -euo pipefail
           for attempt in 1 2 3; do
             if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/sing-box.tar.gz \
-              https://github.com/icecompany-tech/iceslab/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
+              https://github.com/icecompany-tech/core-builds/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
             then break; fi
             echo "sing-box download failed (attempt ${attempt}/3)"
             [ "$attempt" = 3 ] && exit 1
@@ -727,7 +727,7 @@ jobs:
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-iceslab-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
-          # Our build (cores.yml): the official tags plus with_v2ray_api. A
+          # Our build (core-builds): the official tags plus with_v2ray_api. A
           # binary without it would let a config with v2ray_api pass nowhere.
           ver=$(/tmp/sing-box-bin/sing-box version)
           head -1 <<<"$ver"

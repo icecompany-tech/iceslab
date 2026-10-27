@@ -163,7 +163,7 @@ func TestNoWorkflowPipesIntoAnEarlyReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A glob that found nothing would pass for the wrong reason.
-	for _, want := range []string{"ci.yml", "cores.yml", "release.yml"} {
+	for _, want := range []string{"ci.yml", "release.yml"} {
 		if !slices.Contains(files, filepath.Join(dir, want)) {
 			t.Fatalf("the glob missed .github/workflows/%s", want)
 		}
