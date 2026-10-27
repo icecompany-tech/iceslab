@@ -86,7 +86,7 @@ bash <(curl -fsSL .../install-iceslab-node.sh) \
 
 The panel fills in the installer's address and version: the agent it installs matches the panel. Each core is installed by its own bootstrap and starts idle; its settings (keys, domain, masquerade, ports) come from the panel's profiles on the first push, so the install takes no per-protocol settings. Cores can also be added later from the node page.
 
-Installer flags, for reading or adjusting the command:
+The flags a panel's command uses, for reading or adjusting it:
 
 | Flag | Effect |
 |---|---|
@@ -99,13 +99,13 @@ Installer flags, for reading or adjusting the command:
 | `--hysteria-email <address>` | Optional: the contact of the ACME account. The certificate is issued without it; an `example.*` or `localhost` address is refused, as Let's Encrypt refuses it. |
 | `--hysteria-port-range <a-b>` | Port hopping range, default `20000-50000`; `""` turns it off. |
 | `--harden-ufw` | Rate-limit SSH and tighten the firewall. |
-| `--fail2ban` | Install fail2ban with an sshd jail. |
+| `--fail2ban` | Install fail2ban with jails for sshd and Hysteria auth. |
 | `--ssh-allowlist <csv>` | Allow 22/tcp only from these IPs or CIDRs. |
 | `--realistic-fallback` | A real-looking fallback for probes. |
 | `--reset` | Wipe a previous install on this VPS first. |
 | `--uninstall` | Remove the agent and its cores (`--keep-cores` leaves the cores). |
 
-Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
+The installer accepts a few more, which a panel's command does not use: `--payload` and `--payload-file <path>` (the node's payload instead of a bootstrap token, for example a file copied over with scp), `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
 Per core:
 
