@@ -17,7 +17,8 @@ import type { ProtocolName } from './transport.js';
  *    the security or the network that uses them);
  *  - `keptByServer`: no field; an edit without it keeps the stored value
  *    (profiles.service.ts, updateProfile);
- *  - `setByPush`: never stored on the profile; the push sets it for each node.
+ *  - `setByPush`: no field in the form; the push sets it for each node and
+ *    overrides whatever the profile holds (the schema lets the API store one).
  */
 export interface ProfileConfigKeys {
   form: readonly string[];
