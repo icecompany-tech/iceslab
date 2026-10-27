@@ -40,9 +40,9 @@ export const HysteriaConfigSchema = z.object({
    *
    * Both fields must be set together (or both empty) and `end > start`.
    * Not a schema-level `.refine()`, so this stays a plain `ZodObject` and can
-   * take part in the InboundConfigByProtocol discriminated union. The check
-   * lived in inbounds.service.ts, unmounted since slice 27 and removed with
-   * A-281; the profile path does not run it today.
+   * take part in the InboundConfigByProtocol discriminated union. The check is
+   * assertPortHoppingRange in profiles.service.ts, on create and on edit
+   * (A-284).
    */
   portHoppingStart: z.number().int().min(1024).max(65535).optional(),
   portHoppingEnd: z.number().int().min(1024).max(65535).optional(),
