@@ -31,6 +31,7 @@ import {
 import { LockIcon, PlusIcon, TickIcon } from '@/contours/traffic/components/Routes/icons';
 import { GlobeIcon, TrashIcon } from '@/contours/traffic/components/NodePolicy/icons';
 import { nodeCountOf, nodeCountWords } from '@/contours/traffic/lib/nodePolicyCount';
+import { refreshAfterNodePolicyChange } from '@/contours/traffic/lib/nodePolicyRefresh';
 import {
   ACTION_W,
   MATCH_W,
@@ -78,10 +79,8 @@ export function NodePolicyEditor({
   const dragRef = useRef<{ from: number; to: number } | null>(null);
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['node-policies'] });
-    qc.invalidateQueries({ queryKey: ['nodes'] });
-  };
+  // A-283: the node pages and their policy drawings too, not only the lists.
+  const invalidate = () => refreshAfterNodePolicyChange(qc);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

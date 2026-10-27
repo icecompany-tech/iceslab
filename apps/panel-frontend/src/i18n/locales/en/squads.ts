@@ -170,6 +170,8 @@ export const squads = {
     cascadeNodePolicyGated: "Node policy rules leading into this cascade do not apply to this squad's users either.",
     cascadeNodePolicyGatedExceptChain:
       "Node policy rules leading into this cascade do not apply to this squad's users either, except on hysteria and AmneziaWG entries: users cannot be told apart there.",
+    cascadeNodePolicyLoadFailed: 'node policies, without them it cannot be told whether their rules lead into this cascade',
+    cascadeNodePolicyUnknown: "The entry node's policy is unknown: it cannot be told whether its rules lead into this cascade.",
     cascadeSwitch: 'Hand out cascade "{{name}}"',
     cascadeOffMeans:
       'The entry host {{nodes}}, if handed out, stays a plain server: the squad members come out in the entry country, {{countries}}.',
