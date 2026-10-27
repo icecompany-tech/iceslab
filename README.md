@@ -269,6 +269,7 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 
 - **Contributing**: see [CONTRIBUTING.md](./CONTRIBUTING.md). PRs accepted under AGPL-3.0 inbound = outbound; commits squashed on merge.
 - **Security**: vulnerabilities to `security@icecompany.tech`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
+- **Privacy**: what the panel and the nodes keep about the people you serve, for how long, and what earlier versions left behind, in [PRIVACY.md](./PRIVACY.md). Iceslab sends none of it to us.
 - **Trademark**: the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected: fork freely, just rename if you ship publicly.
 
 ## Support the project
