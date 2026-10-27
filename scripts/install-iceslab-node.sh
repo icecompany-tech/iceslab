@@ -214,6 +214,63 @@ banner() {
 
 [[ $EUID -eq 0 ]] || fail "Must run as root (sudo bash $0)"
 
+ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
+ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.1}
+# Exported, so the installer handed over to installs exactly the ref it was
+# fetched for, whatever its own default is.
+export ICESLAB_NODE_REF
+
+# ───── The installer of the version being installed ─────
+# The panel prints this script's URL on main (a v0.2.1 panel always did),
+# and main moves on: on 27.10 main carried the v0.3.0-rc.1 installer while
+# the default checkout was still v0.2.1, so a node got one version's steps
+# over another version's tree, and the e-mail a v0.2.1 panel prints was
+# refused by a check v0.2.1 never had. When ICESLAB_NODE_REF names another
+# version than this script's own, the script of THAT ref runs instead,
+# before anything is touched here (the bootstrap token included).
+#
+# A ref that is not a tag (main, develop, a commit) is handed over as well:
+# the script of that branch or commit installs that branch or commit. Its
+# own check (ICESLAB_NODE_REF_SHA) runs there, on the environment it
+# inherits. $0 is /dev/fd/N under `bash <(curl ...)`, so the script is
+# always fetched, never read back from itself.
+#
+# ICESLAB_SCRIPT_REF is the tag this script is released with, not the
+# default ref above: it moves with every tag (RELEASING §4b), the default
+# moves only with a final. The same function is in install-iceslab.sh
+# (apps/node/installer_handover_test.go holds the two together).
+ICESLAB_SCRIPT_REF="v0.3.0-rc.1"
+
+# handover_to_ref <ref> <repo url> <path in repo> [args...]: exec that ref's
+# copy of <path> with the same arguments and environment, once
+# (ICESLAB_HANDOVER marks the second run). Stdin stays the terminal: exec
+# keeps every descriptor. A copy that cannot be fetched stops the install
+# here, in words: running this version over that tree is what this prevents.
+handover_to_ref() {
+  local ref="$1" repo="$2" path="$3" owner_name url tmp
+  shift 3
+  [[ -n "${ICESLAB_HANDOVER:-}" || "$ref" == "$ICESLAB_SCRIPT_REF" ]] && return 0
+  owner_name="${repo%/}"
+  owner_name="${owner_name%.git}"
+  if [[ ! "$owner_name" =~ ^https://github\.com/([^/]+/[^/]+)$ ]]; then
+    fail "This installer is $ICESLAB_SCRIPT_REF and you asked for $ref from $repo, which is not a GitHub repository it can fetch $path from. Run $path from $ref of that repository, or set ICESLAB_HANDOVER=off to run this one over it."
+  fi
+  url="https://raw.githubusercontent.com/${BASH_REMATCH[1]}/${ref}/${path}"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/iceslab-installer.XXXXXX")" || fail "cannot create a temp file for the $ref installer"
+  if ! curl -fsSL --proto '=https' --retry 3 -o "$tmp" "$url"; then
+    rm -f "$tmp"
+    fail "This installer is $ICESLAB_SCRIPT_REF and you asked for $ref, but its installer could not be fetched from $url. Check the ref, or run that installer yourself. Nothing was changed."
+  fi
+  if [[ "$(head -c 2 "$tmp")" != '#!' ]]; then
+    rm -f "$tmp"
+    fail "$url is not an installer script. Nothing was changed."
+  fi
+  log "Handing over to the installer of $ref ($url)"
+  export ICESLAB_HANDOVER="$ref"
+  exec bash "$tmp" "$@"
+}
+handover_to_ref "$ICESLAB_NODE_REF" "$ICESLAB_NODE_REPO" scripts/install-iceslab-node.sh "$@"
+
 banner
 
 # ───── Concurrency + apt lock hygiene ─────
@@ -304,8 +361,7 @@ wait_for_apt() {
 wait_for_apt
 
 ICESLAB_NODE_DIR=${ICESLAB_NODE_DIR:-/opt/iceslab-node}
-ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.1}
+# ICESLAB_NODE_REPO and ICESLAB_NODE_REF are set above, before the handover.
 
 # ───── Cores ─────
 #
