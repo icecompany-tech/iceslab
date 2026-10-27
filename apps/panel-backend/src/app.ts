@@ -14,11 +14,9 @@ import { usersRoutes } from './modules/users/users.routes.js';
 import { nodesRoutes } from './modules/nodes/nodes.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { srrRoutes } from './modules/srr/srr.routes.js';
-// Slice 27: `inboundsRoutes` retired. The new /api/profiles + /api/bindings
-// pair from `profilesRoutes` replaces it. The inbounds module file is kept
-// in the tree for now because its config schemas are reused by profiles, but
-// no routes are mounted.
-// import { inboundsRoutes } from './modules/inbounds/inbounds.routes.js';
+// Slice 27 retired /api/inbounds for /api/profiles + /api/bindings; A-281
+// dropped its routes, service and tables. The config schemas in
+// modules/inbounds/inbounds.schemas.ts live on, profiles use them.
 import { squadsRoutes } from './modules/squads/squads.routes.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
 import { profilesRoutes } from './modules/profiles/profiles.routes.js';

@@ -101,10 +101,17 @@ describe('server secrets and restricted tokens', () => {
     expect(stored.realityShortIds).toEqual(['89abcdef']);
   });
 
-  it('the legacy inbounds PUT is not mounted, so no restricted token writes an inbound config at all', async () => {
-    // inbounds.routes.ts carries the same keep-the-stored-keys guard for the
-    // day it is mounted again (slice 27 retired it in app.ts).
-    const writer = await mint('inb', ['inbounds:read', 'inbounds:write']);
+  it('the legacy inbounds PUT is not mounted, so no token writes an inbound config at all', async () => {
+    // Slice 27 retired the route, A-281 removed it, its table and its scope:
+    // a token can no longer be minted with it.
+    const refused = await app.inject({
+      method: 'POST',
+      url: '/api/api-tokens',
+      headers: { authorization: `Bearer ${session}` },
+      payload: { name: 'inb', scopes: ['inbounds:read', 'inbounds:write'] },
+    });
+    expect(refused.statusCode).toBe(400);
+    const writer = await mint('full');
     const res = await app.inject({
       method: 'PUT',
       url: '/api/inbounds/00000000-0000-4000-8000-000000000001',

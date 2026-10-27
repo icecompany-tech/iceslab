@@ -1,0 +1,49 @@
+-- A-281: the per-node `inbounds` table and its squad join `group_inbounds` go.
+--
+-- Slice 27 replaced them with profiles and profile_node_bindings, and
+-- 20260508120000 copied their rows over (:85-113). Since then nothing read
+-- them: the routes were retired in app.ts, and the push, the subscription and
+-- the screens are built from bindings and profiles. What they still did was
+-- keep a deleted node's inbound config, with the keys in it, in the database.
+--
+-- group_inbounds first: it points at inbounds.
+--
+-- WRITTEN BY HAND: `migrate dev --create-only` exits on "Drift detected"
+-- (CLAUDE.local.md). `migrate status` was clean on the database it was run on
+-- before and after.
+--
+-- ROLLBACK (run by hand on a scratch database, then the forward migration
+-- again). It brings the tables back as they were, EMPTY: the rows are not
+-- restored, their content lives in profiles and bindings.
+--   CREATE TABLE "inbounds" (
+--     "id" UUID NOT NULL,
+--     "node_id" UUID NOT NULL,
+--     "protocol" VARCHAR(32) NOT NULL,
+--     "name" VARCHAR(64) NOT NULL,
+--     "port" INTEGER NOT NULL,
+--     "config" JSONB NOT NULL,
+--     "enabled" BOOLEAN NOT NULL DEFAULT true,
+--     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     "updated_at" TIMESTAMPTZ(6) NOT NULL,
+--     "public_host" VARCHAR(253),
+--     "public_port" INTEGER,
+--     "transport" VARCHAR(3) NOT NULL,
+--     CONSTRAINT "inbounds_pkey" PRIMARY KEY ("id")
+--   );
+--   CREATE INDEX "inbounds_node_id_idx" ON "inbounds"("node_id");
+--   CREATE UNIQUE INDEX "inbounds_node_id_port_transport_key" ON "inbounds"("node_id", "port", "transport");
+--   CREATE INDEX "inbounds_protocol_idx" ON "inbounds"("protocol");
+--   ALTER TABLE "inbounds" ADD CONSTRAINT "inbounds_node_id_fkey" FOREIGN KEY ("node_id") REFERENCES "nodes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+--   CREATE TABLE "group_inbounds" (
+--     "group_id" UUID NOT NULL,
+--     "inbound_id" UUID NOT NULL,
+--     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     CONSTRAINT "group_inbounds_pkey" PRIMARY KEY ("group_id", "inbound_id")
+--   );
+--   CREATE INDEX "group_inbounds_inbound_id_idx" ON "group_inbounds"("inbound_id");
+--   ALTER TABLE "group_inbounds" ADD CONSTRAINT "group_inbounds_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+--   ALTER TABLE "group_inbounds" ADD CONSTRAINT "group_inbounds_inbound_id_fkey" FOREIGN KEY ("inbound_id") REFERENCES "inbounds"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+--   DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261027041625_drop_inbounds';
+
+DROP TABLE "group_inbounds";
+DROP TABLE "inbounds";

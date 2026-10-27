@@ -54,7 +54,8 @@ export const SCOPEABLE_RESOURCES = [
   'squads',
   'srr',
   'regions',
-  'inbounds',
+  // 'inbounds' left with its routes and tables (A-281). A token minted with it
+  // before keeps the scope on its row; nothing answers to it.
   'cascades',
   'hwid-devices',
   'settings',

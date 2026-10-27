@@ -237,7 +237,6 @@ model Node {
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  inbounds          Inbound[]
   profileBindings   ProfileNodeBinding[]
   connectedUsers    UserTraffic[]
   userUsageHistory  NodeUserUsageHistory[]
