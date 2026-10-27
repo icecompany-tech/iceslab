@@ -365,7 +365,8 @@ func (c *Checker) firstSyslogMatch(f syslogFile) (*time.Time, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer fh.Close()
+	// Read only: a failed close loses nothing, the scan has answered by then.
+	defer func() { _ = fh.Close() }()
 	info, err := fh.Stat()
 	if err != nil {
 		return nil, err
@@ -376,7 +377,7 @@ func (c *Checker) firstSyslogMatch(f syslogFile) (*time.Time, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.path, err)
 		}
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 		r = gz
 	}
 	sc := bufio.NewScanner(r)
