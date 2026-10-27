@@ -24,7 +24,6 @@ import { endpointId } from '../subscription/endpoint-identity.js';
 import { RoutingPresetNotFoundError } from '../routing-presets/routing-presets.assign.js';
 import { audit } from '../audit/audit.hook.js';
 import { userErasedAfter, userTarget } from '../audit/audit.targets.js';
-import { redactUsername } from '../../lib/notify/telegram-notify.js';
 
 // B12-tail - response schema for the paginated users list (Users page keeps it
 // warm via placeholderData). Compiles a fast-json-stringify serializer over the
@@ -168,29 +167,23 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // worse than doing the other hundred and ninety-seven.
   app.post('/api/users/bulk', auth, async (request, reply) => {
     const input = BulkUsersSchema.parse(request.body);
-    // A bulk delete leaves the row a single delete leaves, per user it erased:
-    // names read before, rows only for the ids that went (the answer is 200
-    // either way, so the outcome lives in which ids have a row). Masked on
-    // purpose, as in audit.targets.ts userTarget: A-268 erases the user at 30
-    // days, the log keeps 365 (ARCH 26.10).
-    const targets =
-      input.action === 'delete'
-        ? new Map(
-            (
-              await prisma.user.findMany({
-                where: { id: { in: input.userIds }, deletedAt: null },
-                select: { id: true, username: true },
-              })
-            ).map((u) => [u.id, redactUsername(u.username)]),
-          )
-        : null;
+    // One row for the request, whatever the action (wave 2, decision 27.10):
+    // the ids of the users it was done to, so each one's history shows it, and
+    // counts. No names: the request is the object, and a deleted user's name
+    // has no business outliving A-268's 30 days in a year-long log.
+    const entry = audit(request, {
+      action: 'users.bulk',
+      target: { kind: 'user', id: null, label: `${input.userIds.length} users` },
+    });
     const result = await usersService.bulkUsers(input);
-    if (targets) {
-      const erasedAfter = userErasedAfter();
-      for (const id of result.ok) {
-        audit(request, { action: 'user.delete', target: { kind: 'user', id, label: targets.get(id) ?? '[redacted]' }, detail: { erasedAfter } });
-      }
-    }
+    entry.detail = {
+      action: input.action,
+      requested: input.userIds.length,
+      succeeded: result.ok.length,
+      failed: result.failed.length,
+      ...(input.action === 'extend' && input.expireDays !== undefined ? { expireDays: input.expireDays } : {}),
+      userIds: result.ok,
+    };
     return reply.send({
       action: input.action,
       requested: input.userIds.length,

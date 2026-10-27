@@ -24,8 +24,13 @@ export function audit<A extends AdminAuditAction>(request: FastifyRequest, entry
 
 async function actorOf(request: FastifyRequest): Promise<AuditActor> {
   // A token acts for the admin who issued it (null for a legacy token); the
-  // label says it was a token, not that admin at the keyboard.
-  if (request.apiToken) return { kind: 'api_token', id: request.admin?.id ?? null, label: 'api token' };
+  // label says it was a token, not that admin at the keyboard, and which one
+  // by its name (ARCH 27.10: two tokens of one admin read apart; a name is not
+  // a secret, the token's id stays out). Cut to the column with the rest of
+  // the label in recordAudit.
+  if (request.apiToken) {
+    return { kind: 'api_token', id: request.admin?.id ?? null, label: `api token: ${request.apiToken.name}` };
+  }
   // The admin by full name, as of the action (ARCH 26.10): the log is read
   // only in an admin session, and its point is who exactly; a mask cannot
   // tell two similar logins apart. The mask stays where text leaves the

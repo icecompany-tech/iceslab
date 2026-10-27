@@ -15,6 +15,17 @@ import {
   invalidateSubscriptionSettingsCache,
 } from './settings.service.js';
 import { readCapped, subscriptionProbeAnswered } from './settings.probe.js';
+import { audit } from '../audit/audit.hook.js';
+
+/** JSON with object keys sorted: jsonb hands an object back in its own key
+ *  order, so a plain stringify would call an unchanged object changed. */
+function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, x: unknown) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : x,
+  );
+}
 
 /**
  * When the certificate on that address runs out, or null when there is none
@@ -255,6 +266,24 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     admin.put('/api/settings', async (req, reply) => {
       const input = UpsertInput.parse(req.body);
       const entries = Object.entries(input).filter(([, v]) => v !== undefined);
+      // The audit log keeps which settings changed, never their values (the
+      // announce template, the support URL and the routing rules are the
+      // operator's own text). The screen sends every key on each save, so a
+      // key counts only when its value differs from the stored one; a save
+      // that changes nothing leaves no row.
+      const stored = new Map(
+        (await prisma.appSetting.findMany({ where: { key: { in: entries.map(([k]) => k) } }, select: { key: true, value: true } })).map(
+          (r) => [r.key, stableJson(r.value)],
+        ),
+      );
+      const changed = entries.filter(([k, v]) => stored.get(k) !== stableJson(v)).map(([k]) => k);
+      if (changed.length > 0) {
+        audit(req, {
+          action: 'settings.update',
+          target: { kind: 'settings', id: null, label: 'panel settings' },
+          detail: { changed },
+        });
+      }
       for (const [key, value] of entries) {
         // Prisma's `Json` column accepts any JSON-serialisable value at the
         // SQL layer, but the TS surface insists on `Prisma.InputJsonValue`.

@@ -10,8 +10,27 @@ import type { AdminAuditAction, AdminAuditDetails } from '@iceslab/shared';
 const counts = z.strictObject({ directions: z.number().int().min(0), nodes: z.number().int().min(0) });
 const policyCounts = z.strictObject({ rules: z.number().int().min(0), nodes: z.number().int().min(0) });
 const policyRef = z.strictObject({ policyId: z.uuid(), policyLabel: z.string().max(128) });
+const scopes = z.strictObject({ scopes: z.array(z.string().max(64)).max(32) });
+const count = z.number().int().min(0);
 
 export const AUDIT_DETAIL_SCHEMAS = {
+  'auth.login': z.strictObject({ twoFactor: z.boolean(), locked: z.literal(true).optional() }),
+  'admin.register': z.null(),
+  'admin.2fa.enable': z.null(),
+  'admin.2fa.disable': z.null(),
+  'apiToken.create': scopes,
+  'apiToken.revoke': scopes,
+  'settings.update': z.strictObject({ changed: z.array(z.string().max(64)).max(64) }),
+  'users.bulk': z.strictObject({
+    action: z.enum(['extend', 'reset-traffic', 'revoke', 'delete', 'enable', 'disable']),
+    requested: count,
+    succeeded: count,
+    failed: count,
+    expireDays: count.optional(),
+    // MAX_BULK_USERS (users.schemas.ts) is 500; ids as the route takes them
+    // (PermissiveUuid), so the shape only.
+    userIds: z.array(z.string().regex(/^[0-9a-f-]{36}$/i)).max(500),
+  }),
   'user.delete': z.strictObject({ erasedAfter: z.iso.datetime() }),
   'node.connLog.clear': z.strictObject({
     outcome: z

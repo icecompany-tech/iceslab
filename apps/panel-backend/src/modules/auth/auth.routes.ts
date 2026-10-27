@@ -10,6 +10,8 @@ import { notifyTelegramAsync, escapeMarkdown, redactIp, redactUsername } from '.
 import { loginAttempts } from '../../lib/infra/metrics.js';
 import { config } from '../../config.js';
 import { subscriptionLinkOrigin } from '../subscription/subscription.link.js';
+import { audit } from '../audit/audit.hook.js';
+import { signInTarget } from '../audit/audit.targets.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/status - public discovery: tells the frontend which auth
@@ -56,8 +58,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const input = LoginSchema.parse(request.body);
       const peerIp = request.ip;
+      // The audit log (wave 2, decision 27.10): the network, never the
+      // address, the same mask the Telegram notice below sends. request.ip,
+      // so behind a proxy the panel does not trust (TRUST_PROXY_HOPS) it is
+      // the proxy's network.
+      const network = redactIp(peerIp);
+      const anonymous = { kind: 'anonymous', id: null, label: 'anonymous' } as const;
       try {
         const admin = await authService.login(input, peerIp);
+        const self = { kind: 'admin', id: admin.id, label: admin.username } as const;
+        audit(request, {
+          action: 'auth.login',
+          actor: self,
+          target: self,
+          detail: { twoFactor: admin.totpEnabled },
+          sourceNetwork: network,
+        });
         const token = await reply.jwtSign({
           sub: admin.id,
           role: admin.role,
@@ -109,6 +125,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             retryAfterSeconds: err.retryAfterSeconds,
           });
         }
+        // A refusal is written with no actor (nobody signed in) and the
+        // account it was made against. The 429s while a lock holds are not
+        // written: the refusal that locked it says so, and a flood of them
+        // would bury it. TOTP_REQUIRED is a step, not an outcome.
+        if (err instanceof authService.InvalidCredentialsError || err instanceof authService.InvalidTotpError) {
+          audit(request, {
+            action: 'auth.login',
+            actor: anonymous,
+            target: await signInTarget(input.username),
+            detail: {
+              twoFactor: err instanceof authService.InvalidTotpError,
+              ...(err.locked ? { locked: true as const } : {}),
+            },
+            sourceNetwork: network,
+          });
+        }
         if (err instanceof authService.InvalidCredentialsError) {
           loginAttempts.inc({ result: 'invalid' });
           return reply.code(401).send({
@@ -153,6 +185,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const input = RegisterSchema.parse(request.body);
       try {
         const admin = await adminService.bootstrapFirstAdmin(input);
+        // The first admin, by themselves. A refusal (registration closed) is
+        // not written: there is no account and nobody to name.
+        const self = { kind: 'admin', id: admin.id, label: admin.username } as const;
+        audit(request, { action: 'admin.register', actor: self, target: self });
         return reply.code(201).send(admin);
       } catch (err) {
         if (err instanceof adminService.RegistrationDisabledError) {
@@ -189,6 +225,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   // A-123: a session only, never an API token (requireSession says why).
   const sessionAuth = { onRequest: [requireAuth, requireSession] };
+
+  // The admin whose second factor changes, who is also the one changing it.
+  // setup is not written: a pending secret changes nothing until enable.
+  const selfTarget = async (id: string) => {
+    const admin = await findAdminById(id);
+    return { kind: 'admin', id, label: admin?.username ?? 'deleted admin' } as const;
+  };
 
   // Map twofa service errors to HTTP. Shared by enable/disable/setup.
   //
@@ -243,6 +286,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     sessionAuth,
     async (request, reply) => {
       const { code } = TotpCodeSchema.parse(request.body);
+      audit(request, { action: 'admin.2fa.enable', target: await selfTarget(request.admin!.id) });
       try {
         await twofa.enableTotp(request.admin!.id, code);
         return reply.send({ ok: true, enabled: true });
@@ -257,6 +301,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     sessionAuth,
     async (request, reply) => {
       const { code } = TotpCodeSchema.parse(request.body);
+      audit(request, { action: 'admin.2fa.disable', target: await selfTarget(request.admin!.id) });
       try {
         await twofa.disableTotp(request.admin!.id, code);
         return reply.send({ ok: true, enabled: false });

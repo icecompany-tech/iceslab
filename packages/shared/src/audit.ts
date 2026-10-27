@@ -4,15 +4,26 @@
  * writes it and the screen that reads it (GET /api/audit).
  *
  * What it never carries: tokens, keys, passwords, request bodies, core
- * configs, IP addresses (A-267). The detail of an action is a short summary
- * by a list of fields per action, checked by the server before it is written.
+ * configs, IP addresses (A-267). A sign-in keeps the network it came from, a
+ * /24 or /48 in a column of its own (decision 27.10), and nothing finer. The
+ * detail of an action is a short summary by a list of fields per action,
+ * checked by the server before it is written.
  */
 
 /** Days an audit row is kept (RETENTION_DAYS.adminAudit). */
 export const ADMIN_AUDIT_RETENTION_DAYS = 365;
 
-/** Wave 1, decisions 26.10. */
+/** Wave 1, decisions 26.10; wave 2 (sign-in, admins, tokens, settings, bulk
+ *  user actions), decisions 27.10. */
 export const ADMIN_AUDIT_ACTIONS = [
+  'auth.login',
+  'admin.register',
+  'admin.2fa.enable',
+  'admin.2fa.disable',
+  'apiToken.create',
+  'apiToken.revoke',
+  'settings.update',
+  'users.bulk',
   'user.delete',
   'node.connLog.clear',
   'node.cert.rotate',
@@ -29,16 +40,41 @@ export const ADMIN_AUDIT_ACTIONS = [
 ] as const;
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number];
 
-export const ADMIN_AUDIT_TARGET_KINDS = ['user', 'node', 'cascade', 'node_policy'] as const;
+export const ADMIN_AUDIT_TARGET_KINDS = ['user', 'node', 'cascade', 'node_policy', 'admin', 'api_token', 'settings'] as const;
 export type AdminAuditTargetKind = (typeof ADMIN_AUDIT_TARGET_KINDS)[number];
 
-export type AdminAuditActorKind = 'admin' | 'api_token' | 'system';
+/** anonymous: a refused sign-in, where nobody is signed in yet. */
+export type AdminAuditActorKind = 'admin' | 'api_token' | 'system' | 'anonymous';
+
+/** What users.bulk did to each user it reached (POST /api/users/bulk). */
+export type AdminAuditBulkAction = 'extend' | 'reset-traffic' | 'revoke' | 'delete' | 'enable' | 'disable';
 export type AdminAuditOutcome = 'ok' | 'refused' | 'failed';
 
 /** What each action keeps as its detail. A refused or failed action keeps
  *  only what was known before it: the policy of an attach, nothing (null) for
  *  the rest, since their summary is of what was done. */
 export interface AdminAuditDetails {
+  /** twoFactor: the second step was asked; locked: this refusal locked the
+   *  account (the refusals while it stays locked are not written). */
+  'auth.login': { twoFactor: boolean; locked?: true };
+  'admin.register': null;
+  'admin.2fa.enable': null;
+  'admin.2fa.disable': null;
+  /** ['*'] for a full token. */
+  'apiToken.create': { scopes: string[] };
+  'apiToken.revoke': { scopes: string[] };
+  /** The setting names whose value changed, never the values. */
+  'settings.update': { changed: string[] };
+  /** One row for the whole request; userIds only of the users it was done
+   *  to, so a user's history shows it only where it touched them. */
+  'users.bulk': {
+    action: AdminAuditBulkAction;
+    requested: number;
+    succeeded: number;
+    failed: number;
+    expireDays?: number;
+    userIds: string[];
+  };
   'user.delete': { erasedAfter: string };
   'node.connLog.clear': { outcome: { source: 'journal' | 'syslog'; state: 'cleared' | 'absent' | 'failed' }[] };
   'node.cert.rotate': { notAfter: string };
@@ -68,6 +104,11 @@ export interface AdminAuditEventDto {
   /** On refused only: the route's refusal code, never its message. */
   refusal: string | null;
   detail: AdminAuditDetails[AdminAuditAction] | null;
+  /** auth.login only: the network the attempt came from, IPv4 /24 or IPv6
+   *  /48 ("203.0.113.0/24"), never the address; null on every other action.
+   *  Behind a proxy the panel does not trust (TRUST_PROXY_HOPS) it is the
+   *  proxy's network. */
+  sourceNetwork: string | null;
 }
 
 export interface AdminAuditListResponse {

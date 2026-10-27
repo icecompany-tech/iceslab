@@ -22,6 +22,16 @@ export async function userTarget(id: string): Promise<AuditTarget | null> {
   return u ? { kind: 'user', id, label: redactUsername(u.username) } : null;
 }
 
+/**
+ * The admin account a sign-in was made against, by the name typed. A name no
+ * admin has is not kept as typed: people type a password into it, and a log
+ * that keeps a year of those keeps passwords (wave 2, decision 27.10).
+ */
+export async function signInTarget(username: string): Promise<AuditTarget> {
+  const a = await prisma.adminUser.findFirst({ where: { username, deletedAt: null }, select: { id: true, username: true } });
+  return a ? { kind: 'admin', id: a.id, label: a.username } : { kind: 'admin', id: null, label: 'unknown account' };
+}
+
 /** A-268: the day the cron erases a user deleted now, and everything theirs. */
 export const userErasedAfter = (now = Date.now()) =>
   new Date(now + DELETED_USER_RETENTION_DAYS * 86_400_000).toISOString();

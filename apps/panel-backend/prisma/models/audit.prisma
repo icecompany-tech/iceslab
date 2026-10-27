@@ -7,7 +7,8 @@
 //
 // Never in it: tokens, keys, passwords, request bodies, core configs, IP
 // addresses (A-267). detail is a summary by a list of fields per action,
-// checked before it is written (modules/audit).
+// checked before it is written (modules/audit). A sign-in keeps the network
+// it came from in source_network, /24 or /48 (wave 2, decision 27.10).
 
 model AdminAuditEvent {
   id          BigInt     @id @default(autoincrement())
@@ -22,11 +23,15 @@ model AdminAuditEvent {
   outcome     String     @db.VarChar(16)
   refusal     String?    @db.VarChar(64)
   detail      Json?
+  sourceNetwork String?  @map("source_network") @db.VarChar(64)
 
   actor AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([at(sort: Desc), id(sort: Desc)])
   @@index([targetKind, targetId, at(sort: Desc)])
   @@index([action, at(sort: Desc)])
+  // A user's history finds the bulk actions that reached them by
+  // detail @> {"userIds":[id]}.
+  @@index([detail(ops: JsonbPathOps)], type: Gin, map: "admin_audit_events_detail_idx")
   @@map("admin_audit_events")
 }

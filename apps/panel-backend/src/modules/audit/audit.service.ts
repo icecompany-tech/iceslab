@@ -30,6 +30,11 @@ export interface AuditEntry<A extends AdminAuditAction = AdminAuditAction> {
   action: A;
   target: AuditTarget;
   detail?: AdminAuditDetails[A] | null;
+  /** Who did it, where the request's own actor is not it: a sign-in, made
+   *  before anybody is signed in. */
+  actor?: AuditActor;
+  /** auth.login only: the network the attempt came from (redactIp). */
+  sourceNetwork?: string | null;
 }
 
 // The columns' widths (audit.prisma): a longer name is cut, not refused.
@@ -57,11 +62,12 @@ export async function recordAudit(
     if (dropped) {
       getLogger().warn({ event: 'audit.detail.dropped', action: e.action, reason: dropped }, '[audit] detail does not fit its action, row kept without it');
     }
+    const who = e.actor ?? actor;
     return {
       at,
-      actorKind: actor.kind,
-      actorId: actor.id,
-      actorLabel: cut(actor.label, 64),
+      actorKind: who.kind,
+      actorId: who.id,
+      actorLabel: cut(who.label, 64),
       action: e.action,
       targetKind: e.target.kind,
       targetId: e.target.id,
@@ -69,6 +75,7 @@ export async function recordAudit(
       outcome,
       refusal: outcome === 'refused' && refusal ? cut(refusal, 64) : null,
       detail: (detail ?? undefined) as Prisma.InputJsonValue | undefined,
+      sourceNetwork: e.action === 'auth.login' && e.sourceNetwork ? cut(e.sourceNetwork, 64) : null,
     };
   });
   await prisma.adminAuditEvent.createMany({ data });
@@ -112,15 +119,41 @@ function mapEvent(r: Row): AdminAuditEventDto {
     outcome: r.outcome as AdminAuditOutcome,
     refusal: r.refusal,
     detail: (r.detail ?? null) as AdminAuditEventDto['detail'],
+    sourceNetwork: r.sourceNetwork,
   };
+}
+
+/**
+ * The users.bulk rows that reached a user: one row per request carries the
+ * ids of the users it was done to (wave 2, decision 27.10), so the user's
+ * history asks the detail as well as the target. By @>, which the GIN index
+ * on detail (jsonb_path_ops) answers.
+ */
+async function bulkRowsOf(userId: string): Promise<bigint[]> {
+  const rows = await prisma.$queryRaw<{ id: bigint }[]>`
+    SELECT id FROM admin_audit_events
+    WHERE action = 'users.bulk' AND detail @> ${JSON.stringify({ userIds: [userId] })}::jsonb`;
+  return rows.map((r) => r.id);
 }
 
 /** Newest first, (at, id) descending, one page past the cursor. */
 export async function listAudit(q: AuditListQuery): Promise<AdminAuditListResponse> {
   const and: Prisma.AdminAuditEventWhereInput[] = [];
   if (q.action) and.push(q.action.endsWith('.') ? { action: { startsWith: q.action } } : { action: q.action });
-  if (q.targetKind) and.push({ targetKind: q.targetKind });
-  if (q.targetId) and.push({ targetId: q.targetId });
+  if (q.targetId && (q.targetKind === undefined || q.targetKind === 'user')) {
+    // A user's history: the rows naming them, and the bulk rows that reached
+    // them (users.bulk names no single target).
+    const bulk = await bulkRowsOf(q.targetId);
+    and.push({
+      OR: [
+        { targetId: q.targetId, ...(q.targetKind ? { targetKind: q.targetKind } : {}) },
+        ...(bulk.length > 0 ? [{ id: { in: bulk } }] : []),
+      ],
+    });
+  } else {
+    if (q.targetKind) and.push({ targetKind: q.targetKind });
+    if (q.targetId) and.push({ targetId: q.targetId });
+  }
   if (q.actorId) and.push({ actorId: q.actorId });
   if (q.from) and.push({ at: { gte: new Date(q.from) } });
   if (q.to) and.push({ at: { lt: new Date(q.to) } });
