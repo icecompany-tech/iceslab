@@ -72,75 +72,55 @@ SPA на `http://<vps-ip>:8080`. JWT летят открытым текстом,
 
 ### Нода
 
-В панели: Nodes → Create node → имя + адрес → submit. Модалка покажет одноразовую bootstrap-команду с 15-минутным токеном. Запусти её на VPS ноды с флагами протокола ниже.
-
-#### Xray
-
-REALITY использует SNI-spoofing, домен не нужен. Сначала создай inbound в панели (Inbounds → Create, Generate для keypair), потом на ноде:
+В панели: Nodes → Create node, имя и адрес, ядра для ноды, submit. Панель покажет команду установки с одноразовым bootstrap-токеном (живёт 15 минут; Refresh bootstrap в строке ноды выпускает новый). Запусти её на VPS ноды от root как есть:
 
 ```bash
 sudo -i
-bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \
+bash <(curl -fsSL .../install-iceslab-node.sh) \
   --panel-url https://panel.example.com \
   --bootstrap bs_xxx \
-  --protocol xray \
-  --xray-reality-private-key sI_p9bg-7cy... \
-  --xray-reality-short-ids   abc123 \
-  --xray-reality-server-names www.cloudflare.com \
-  --xray-reality-dest        www.cloudflare.com:443
-```
-
-#### Hysteria 2
-
-A-запись `hy2-01.example.com` → IP VPS (DNS only; UDP/443 через Cloudflare всё равно не пройдёт).
-
-```bash
-sudo -i
-bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \
-  --panel-url https://panel.example.com \
-  --bootstrap bs_xxx \
-  --protocol hysteria \
+  --engines xray,hysteria \
+  --panel-ip 203.0.113.10 \
   --hysteria-domain hy2-01.example.com
 ```
 
-Необязательно: `--hysteria-email you@your-domain`, контакт ACME-аккаунта. Сертификат выпускается и без него; адрес на `example.*` или `localhost` установщик отвергает, как отвергает его Let's Encrypt.
+Адрес и версию установщика панель подставляет сама: агент ставится той же версии, что панель. Каждое ядро ставит свой bootstrap, и оно стартует пустым; настройки (ключи, домен, маскировка, порты) приходят из профилей панели при первом пуше, поэтому при установке настройки протоколов не нужны. Ядра можно добавить и позже, со страницы ноды.
 
-Скрипт ставит Hysteria и её systemd-юнит; агент пишет `/etc/hysteria/config.yaml` и получает LE-сертификат через HTTP-01 при первом пуше панели.
+Флаги установщика, чтобы прочитать или поправить команду:
 
-#### AmneziaWG
+| Флаг | Что делает |
+|---|---|
+| `--panel-url <url>` | Панель, к которой относится агент. Только `https://`. |
+| `--bootstrap <token>` | Одноразовый токен из панели. `--bootstrap-file <path>` читает его из файла, тогда он не виден в списке процессов. |
+| `--engines <список>` | Ядра через запятую, в любом порядке: `xray`, `singbox`, `hysteria`, `amneziawg`, `mtproto`, `mieru`, `naive`. Пусто: только агент. |
+| `--panel-ip <ip>[,<ip>]` | Порт агента доступен только с этих адресов (ufw). |
+| `--port <n>` | mTLS-порт агента, по умолчанию `1337`. |
+| `--hysteria-domain <имя>` | Имя, на которое Hysteria получает сертификат (ACME, HTTP-01). Панель берёт его из адреса ноды, если это имя. |
+| `--hysteria-email <адрес>` | Необязательно: контакт ACME-аккаунта. Сертификат выпускается и без него; адрес на `example.*` или `localhost` установщик отвергает, как отвергает его Let's Encrypt. |
+| `--hysteria-port-range <a-b>` | Диапазон port hopping, по умолчанию `20000-50000`; `""` выключает. |
+| `--harden-ufw` | Ограничение частоты SSH и более строгий firewall. |
+| `--fail2ban` | fail2ban с jail для sshd. |
+| `--ssh-allowlist <csv>` | 22/tcp только с этих IP или CIDR. |
+| `--realistic-fallback` | Правдоподобный ответ на пробы. |
+| `--reset` | Сначала снести прежнюю установку на этом VPS. |
+| `--uninstall` | Удалить агента и его ядра (`--keep-cores` оставляет ядра). |
 
-```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol amneziawg
-```
+Команды, которые печатали старые панели, продолжают работать: установщик принимает их написание (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
-Ставит amnezia-vpn DKMS kernel-модуль + `awg` / `awg-quick`. Открывает UDP 443 и 1234 в ufw, флипает `DEFAULT_FORWARD_POLICY=ACCEPT`, включает `ip_forward`.
+По ядрам:
 
-Пара вещей которые ловят людей врасплох:
+- **Hysteria 2**: A-запись на имя ноды, только DNS (UDP через Cloudflare не проходит). Агент пишет `/etc/hysteria/config.yaml` и получает сертификат при первом пуше панели; нода на IP получает самоподписанный от панели.
+- **NaiveProxy**: A-запись на `hostname` профиля. Сборке нужно 2 GB RAM.
+- **AmneziaWG**: DKMS-модуль ядра amnezia и `awg` / `awg-quick`. Подсеть по умолчанию `10.66.66.0/24`, потому что `10.0.0.0/24` совпадает с host-gateway у некоторых бюджетных провайдеров. Порт ниже 9999: мобильные операторы в РФ режут исходящий UDP/443 по DPI, а 51820 как порт WireGuard по умолчанию ловят специально. Клиенты: AmneziaVPN ≥ 4.8.12.9 или Hiddify Next ≥ 2.4; ненулевые S3/S4 в AmneziaVPN рвут трафик ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)), поэтому пресеты держат `S3=0 S4=0`.
+- **Xray (REALITY), Shadowsocks 2022 (на Xray), MTProto, Mieru**: публичный домен не нужен; домен маскировки MTProto выбирается в профиле.
 
-- Default подсеть `10.66.66.0/24`. Очевидная `10.0.0.0/24` коллизит с внутренним host-gateway у некоторых бюджетных VPS-провайдеров.
-- Порт меньше 9999. RU мобильные ISP DPI-дропают исходящий UDP/443, а 51820 это default WireGuard который таргетят специально. 1234 или 51280 нормально.
-- Клиент: AmneziaVPN ≥ 4.8.12.9 или Hiddify Next ≥ 2.4. Есть upstream-баг ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)) когда ненулевые S3/S4 молча дропают трафик, поэтому пресеты по умолчанию `S3=0 S4=0`.
-
-#### NaiveProxy / Shadowsocks 2022 / MTProto / Mieru
-
-```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol naive
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol shadowsocks
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol mtproto
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol mieru
-```
-
-Bootstrap ставит апстрим-бинарь: xcaddy fork для Naive (нужно 2 GB RAM), xray-core для SS2022, `9seconds/mtg` для MTProto, `enfein/mieru` для Mieru.
-
-Эти протоколы не принимают флагов домена или cert при установке. Стартуют idle и ждут пока панель пушнёт inbound config через `applyInbounds`. Domain, email, masquerade и прочие protocol-specific поля живут в panel-side Profile (задаётся в UI один раз) и потом распространяются на все ноды куда профиль задеплоен. Naive требует A-запись (`hostname` в профиле); MTProto выбирает masquerade-домен там же; SS2022 и Mieru не требуют публичного домена.
-
-Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 1337 по умолчанию начиная с v0.1.2; 8443 на pre-v0.1.2 установках). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) это голый IP. Задавай правильно при создании ноды, потому что менять потом можно только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
+Про `node.address`: это mTLS-эндпоинт, через который панель ходит на агента (порт 1337 по умолчанию). Для routed-style ядер (Hysteria, Naive, MTProto) это тот же FQDN на котором клиенты будут стучаться в :443; для IP-style (Xray REALITY, AmneziaWG) это голый IP. Задавай правильно при создании ноды, потому что менять потом можно только через Refresh bootstrap (key-иконка в строке ноды) с перевыпуском cert под новый SAN.
 
 ### Несколько протоколов на одной ноде
 
 Один node-agent может держать сразу несколько протоколов. Модель: Profile несёт один протокол + его конфиг; Binding деплоит профиль на ноду на конкретный порт. Чтобы поднять, например, Xray + Hysteria + Shadowsocks на одном VPS:
 
-1. Поставь node-agent один раз (с любым одним `--protocol`, или без него: агент просто бутстрапит себя + те бинарники, что попросишь).
+1. Поставь node-agent один раз, с ядрами в `--engines` (или без них, и добавь их позже со страницы ноды).
 2. Создай по одному Profile на каждый протокол (Profiles → Create).
 3. В Nodes → редактирование ноды задеплой каждый профиль как binding. Каждый binding получает свой listen-порт; чипы quick-deploy сами берут первый свободный из `[443, 8443, 2053, 2083, 2087, 2096]`, либо впиши вручную.
 
@@ -189,11 +169,12 @@ Hysteria 2 умеет отдавать и xray, и sing-box. У профиля �
 задано - протокол обслуживает его родное ядро, задано `singbox` - тот же профиль
 рендерит sing-box.
 
-Движок должен стоять на ноде до того, как профиль его выберет: ставится флагом
-`--with-singbox`, так же как `--protocol` ставит родное ядро.
+Движок должен стоять на ноде до того, как профиль его выберет: назови его в
+`--engines` рядом с родным ядром (выбери оба ядра при создании ноды) или добавь
+позже со страницы ноды.
 
 ```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol xray --with-singbox
+bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --engines xray,singbox
 ```
 
 **TUIC, AnyTLS и ShadowTLS** обслуживает только этот движок, и своего `engine`
