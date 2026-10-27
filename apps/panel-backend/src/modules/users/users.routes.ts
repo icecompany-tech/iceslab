@@ -170,7 +170,9 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     const input = BulkUsersSchema.parse(request.body);
     // A bulk delete leaves the row a single delete leaves, per user it erased:
     // names read before, rows only for the ids that went (the answer is 200
-    // either way, so the outcome lives in which ids have a row).
+    // either way, so the outcome lives in which ids have a row). Masked on
+    // purpose, as in audit.targets.ts userTarget: A-268 erases the user at 30
+    // days, the log keeps 365 (ARCH 26.10).
     const targets =
       input.action === 'delete'
         ? new Map(

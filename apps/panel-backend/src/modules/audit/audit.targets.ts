@@ -14,6 +14,11 @@ import type { AuditTarget } from './audit.service.js';
  */
 export async function userTarget(id: string): Promise<AuditTarget | null> {
   const u = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { username: true } });
+  // The mask is a decision (ARCH 26.10), not a leftover to fix: A-268
+  // promises the user erased after 30 days, and a full name kept here for
+  // 365 would break that promise. The id (a uuid that says nothing about the
+  // person) and the mask are enough to trace a row while the user exists.
+  // The ADMIN is named in full (audit.hook.ts actorOf), this is not that.
   return u ? { kind: 'user', id, label: redactUsername(u.username) } : null;
 }
 
