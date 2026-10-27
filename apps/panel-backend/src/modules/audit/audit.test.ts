@@ -31,7 +31,8 @@ vi.mock('../../lib/notify/telegram-notify.js', async (real) => ({
 /**
  * The admin audit log, wave 1 (decisions 26.10): each marked route leaves its
  * row with the outcome its answer carried, GET /api/audit reads them back
- * newest first, and nothing in a row is a secret or an address.
+ * newest first, and nothing in a row is a secret or an address. Wave 2 lives
+ * in audit-wave2.test.ts.
  */
 let app: FastifyInstance;
 let admin: string;
@@ -56,10 +57,14 @@ afterAll(async () => {
 const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: unknown, bearer = admin) =>
   app.inject({ method, url, headers: { authorization: `Bearer ${bearer}` }, ...(payload !== undefined ? { payload } : {}) });
 
+// The rows of what a test does: the sign-up and sign-in of beforeEach leave
+// rows of their own since wave 2 (audit-wave2.test.ts holds those).
 async function rows(): Promise<AdminAuditEventDto[]> {
   const res = await call('GET', '/api/audit?limit=200');
   expect(res.statusCode, res.body).toBe(200);
-  return (JSON.parse(res.body) as AdminAuditListResponse).events;
+  return (JSON.parse(res.body) as AdminAuditListResponse).events.filter(
+    (e) => e.action !== 'auth.login' && e.action !== 'admin.register',
+  );
 }
 
 async function user(name = `audit-user-${++seq}`): Promise<string> {
@@ -106,7 +111,9 @@ describe('user.delete', () => {
     expect(await rows()).toEqual([]);
   });
 
-  it('a bulk delete leaves one row per user it deleted', async () => {
+  // Wave 2 (27.10): one row for the request, the users it reached in detail;
+  // audit-wave2.test.ts holds the rest of users.bulk.
+  it('a bulk delete leaves one users.bulk row, with the users it deleted', async () => {
     const a = await user();
     const b = await user();
     const res = await call('POST', '/api/users/bulk', {
@@ -115,8 +122,11 @@ describe('user.delete', () => {
     });
     expect(res.statusCode, res.body).toBe(200);
     const got = await rows();
-    expect(got.map((r) => r.target.id).sort()).toEqual([a, b].sort());
-    expect(got.every((r) => r.action === 'user.delete' && r.outcome === 'ok')).toBe(true);
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ action: 'users.bulk', outcome: 'ok', target: { kind: 'user', id: null, label: '3 users' } });
+    const detail = got[0]!.detail as AdminAuditDetails['users.bulk'];
+    expect(detail).toMatchObject({ action: 'delete', requested: 3, succeeded: 2, failed: 1 });
+    expect([...detail.userIds].sort()).toEqual([a, b].sort());
   });
 
   it('an API token is named as one, for the admin who issued it', async () => {
@@ -126,7 +136,7 @@ describe('user.delete', () => {
     expect((await call('DELETE', `/api/users/${id}`, undefined, token)).statusCode).toBe(204);
     const [row] = await rows();
     expect(row!.actor.kind).toBe('api_token');
-    expect(row!.actor.label).toBe('api token');
+    expect(row!.actor.label).toBe('api token: billing-bot');
     expect(row!.actor.id).toBe((await prisma.adminUser.findFirstOrThrow()).id);
     expect(JSON.stringify(row)).not.toContain(token);
   });
@@ -271,6 +281,8 @@ describe('GET /api/audit', () => {
   };
 
   it('pages newest first by a cursor, through a tie in at, with no row twice and none lost', async () => {
+    // The sign-up and sign-in of beforeEach leave rows too (wave 2).
+    await prisma.adminAuditEvent.deleteMany();
     await seed(5);
     const seen: string[] = [];
     let cursor: string | null = null;
@@ -334,7 +346,8 @@ describe('retention', () => {
       data: [row(ADMIN_AUDIT_RETENTION_DAYS + 1, 'old'), row(ADMIN_AUDIT_RETENTION_DAYS - 1, 'kept')],
     });
     expect((await pruneHistory()).adminAudit).toBe(1);
-    expect((await prisma.adminAuditEvent.findMany()).map((r) => r.targetLabel)).toEqual(['kept']);
+    const left = await prisma.adminAuditEvent.findMany({ where: { targetLabel: { in: ['old', 'kept'] } } });
+    expect(left.map((r) => r.targetLabel)).toEqual(['kept']);
   });
 });
 
@@ -342,6 +355,21 @@ describe('the detail of a row', () => {
   // One valid detail per action, typed by the shared contract: a new action
   // without its schema or its sample does not compile.
   const samples: { [A in (typeof ADMIN_AUDIT_ACTIONS)[number]]: AdminAuditDetails[A] } = {
+    'auth.login': { twoFactor: true, locked: true },
+    'admin.register': null,
+    'admin.2fa.enable': null,
+    'admin.2fa.disable': null,
+    'apiToken.create': { scopes: ['users:read'] },
+    'apiToken.revoke': { scopes: ['*'] },
+    'settings.update': { changed: ['brandName'] },
+    'users.bulk': {
+      action: 'extend',
+      requested: 2,
+      succeeded: 1,
+      failed: 1,
+      expireDays: 30,
+      userIds: ['00000000-0000-4000-8000-000000000004'],
+    },
     'user.delete': { erasedAfter: '2026-11-25T10:00:00.000Z' },
     'node.connLog.clear': { outcome: [{ source: 'journal', state: 'cleared' }] },
     'node.cert.rotate': { notAfter: '2027-10-26T10:00:00.000Z' },

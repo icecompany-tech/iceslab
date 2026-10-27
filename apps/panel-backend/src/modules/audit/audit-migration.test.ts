@@ -51,8 +51,10 @@ const shape = async (t: typeof prisma) => {
   const [{ tables }] = await t.$queryRawUnsafe<{ tables: number }[]>(
     `SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_name = 'admin_audit_events'`,
   );
+  // This file's indexes: the GIN on detail is wave 2's migration (its own
+  // test, audit-wave2-migration.test.ts).
   const [{ indexes }] = await t.$queryRawUnsafe<{ indexes: number }[]>(
-    `SELECT count(*)::int AS indexes FROM pg_indexes WHERE tablename = 'admin_audit_events'`,
+    `SELECT count(*)::int AS indexes FROM pg_indexes WHERE tablename = 'admin_audit_events' AND indexname <> 'admin_audit_events_detail_idx'`,
   );
   return `${tables}/${indexes}`;
 };
