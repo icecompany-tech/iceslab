@@ -1,10 +1,21 @@
-# Iceslab
+<div align="center">
+  <img src=".github/assets/iceslab-icon.svg" width="88" alt="Iceslab">
+  <h1>Iceslab</h1>
+  <p>Self-hosted панель для прокси, где каждый протокол работает на своём настоящем ядре.</p>
+  <p>
+    <a href="#установка"><img src="https://img.shields.io/badge/%D0%9D%D0%B0%D1%87%D0%B0%D1%82%D1%8C_%E2%86%92-7DD3FC?style=for-the-badge" alt="Начать"></a>
+  </p>
+  <p>
+    <a href="https://github.com/icecompany-tech/iceslab/releases/latest"><img src="https://img.shields.io/github/v/release/icecompany-tech/iceslab?label=release" alt="Последний релиз"></a>
+    <a href="https://github.com/icecompany-tech/iceslab/stargazers"><img src="https://img.shields.io/github/stars/icecompany-tech/iceslab?label=stars" alt="Звёзды на GitHub"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="Лицензия: AGPL-3.0"></a>
+    <img src="https://img.shields.io/badge/status-alpha-orange" alt="Статус: alpha">
+  </p>
+  <p><a href="./README.md">English</a> · Русский</p>
+  <a href="docs/image/dashboard.png"><img src="docs/image/dashboard.png" width="900" alt="Панель оператора Iceslab: флот, трафик, пользователи и живая телеметрия хоста"></a>
+</div>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
-[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#)
-[![GitHub stars](https://img.shields.io/github/stars/icecompany-tech/iceslab?style=social)](https://github.com/icecompany-tech/iceslab)
-
-[English](./README.md) · Русский
+<br>
 
 Self-hosted панель для прокси, которая запускает настоящий апстрим-бинарник каждого протокола вместо того чтобы оборачивать всё через Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru и движок sing-box для TUIC / AnyTLS / ShadowTLS: каждый это реальный бинарь проекта, под управлением Go node-agent через общий интерфейс `CoreAdapter`.
 
@@ -18,10 +29,6 @@ Self-hosted панель для прокси, которая запускает 
 - Self-hosted, AGPL-3.0 - твои ноды, твои данные. Установка одной командой через Docker Compose.
 
 ## Скриншоты
-
-[![Панель оператора](docs/image/dashboard.png)](docs/image/dashboard.png)
-
-<sub>Обзор оператора - флот, трафик, пользователи и живая телеметрия хоста, обновление каждые 10 секунд.</sub>
 
 <table>
   <tr>

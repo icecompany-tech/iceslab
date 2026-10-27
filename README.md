@@ -1,10 +1,21 @@
-# Iceslab
+<div align="center">
+  <img src=".github/assets/iceslab-icon.svg" width="88" alt="Iceslab">
+  <h1>Iceslab</h1>
+  <p>Self-hosted proxy panel that runs every protocol on its own upstream core.</p>
+  <p>
+    <a href="#install"><img src="https://img.shields.io/badge/Get_started_%E2%86%92-7DD3FC?style=for-the-badge" alt="Get started"></a>
+  </p>
+  <p>
+    <a href="https://github.com/icecompany-tech/iceslab/releases/latest"><img src="https://img.shields.io/github/v/release/icecompany-tech/iceslab?label=release" alt="Latest release"></a>
+    <a href="https://github.com/icecompany-tech/iceslab/stargazers"><img src="https://img.shields.io/github/stars/icecompany-tech/iceslab?label=stars" alt="GitHub stars"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
+    <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha">
+  </p>
+  <p>English · <a href="./README.ru.md">Русский</a></p>
+  <a href="docs/image/dashboard.png"><img src="docs/image/dashboard.png" width="900" alt="Iceslab operator dashboard: fleet, traffic, users and live host telemetry"></a>
+</div>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
-[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#)
-[![GitHub stars](https://img.shields.io/github/stars/icecompany-tech/iceslab?style=social)](https://github.com/icecompany-tech/iceslab)
-
-English · [Русский](./README.ru.md)
+<br>
 
 Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru, and a sing-box engine for TUIC / AnyTLS / ShadowTLS: each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
 
@@ -18,10 +29,6 @@ Self-hosted proxy management panel that runs the real upstream binary for each p
 - Self-hosted, AGPL-3.0 - your nodes, your data. One-command install via Docker Compose.
 
 ## Screenshots
-
-[![Operator dashboard](docs/image/dashboard.png)](docs/image/dashboard.png)
-
-<sub>Operator overview - fleet, traffic, users and live host telemetry, refreshed every 10s.</sub>
 
 <table>
   <tr>
