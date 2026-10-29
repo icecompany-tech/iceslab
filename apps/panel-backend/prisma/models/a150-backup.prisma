@@ -1,0 +1,21 @@
+// A-150's rollback record: the port overrides and public ports its data
+// migrations cleared (20261022*). No code reads or writes them. Described here,
+// ignored by the client, so that a schema diff does not propose dropping them
+// before their time: v0.3.1 drops both tables with a migration of its own and
+// this file goes with it.
+
+model binding_public_port_a150_backup {
+  binding_id  String   @id @db.Uuid
+  public_port Int
+  saved_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@ignore
+}
+
+model host_port_override_a150_backup {
+  host_id       String   @id @db.Uuid
+  port_override Int
+  saved_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@ignore
+}

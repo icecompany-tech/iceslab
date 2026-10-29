@@ -28,8 +28,8 @@ model RoutePolicy {
   name          String   @unique @db.VarChar(64)
   // Tag band (1..255). Unique so tags never collide across policies. 0 = implicit plain.
   ordinal       Int      @unique
-  directDomains String[] @map("direct_domains")
-  blockDomains  String[] @map("block_domains")
+  directDomains String[] @default([]) @map("direct_domains")
+  blockDomains  String[] @default([]) @map("block_domains")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

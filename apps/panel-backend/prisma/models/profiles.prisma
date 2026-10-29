@@ -20,7 +20,7 @@
 model Profile {
   // See User.sourceId. Partial unique index lives in the raw migration.
   sourceId    String?  @map("source_id") @db.VarChar(128)
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // Globally unique within the panel. Becomes the user-facing label of the
   // logical inbound (replaces the per-node Inbound.name when N nodes share
   // the same template).
@@ -41,7 +41,7 @@ model Profile {
   config      Json
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   // A-122: when what goes into a client's link last changed (not any write to the row, as updatedAt is); the host card's "who holds the old link" reads it.
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
 
@@ -54,7 +54,7 @@ model Profile {
 }
 
 model ProfileNodeBinding {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profileId  String   @map("profile_id") @db.Uuid
   nodeId     String   @map("node_id") @db.Uuid
   // Listening port on this node. Different bindings of the same profile
@@ -80,7 +80,7 @@ model ProfileNodeBinding {
   transport  String   @map("transport") @db.VarChar(3)
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   // A-122: when what goes into a client's link last changed (not any write to the row, as updatedAt is); the host card's "who holds the old link" reads it.
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
 
@@ -122,7 +122,7 @@ model ProfileNodeBinding {
 model Host {
   // See User.sourceId. Partial unique index lives in the raw migration.
   sourceId  String? @map("source_id") @db.VarChar(128)
-  id        String  @id @default(uuid()) @db.Uuid
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   bindingId String  @map("binding_id") @db.Uuid
 
   // Human label shown next to the URL in the admin UI ("Direct", "EU-CDN",

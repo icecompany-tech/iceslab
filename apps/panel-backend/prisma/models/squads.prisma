@@ -104,7 +104,7 @@ model GroupMember {
 // (squad, cascade) means "restricted", so a row with neither key restricts to
 // nothing rather than to everything. See the migration header.
 model GroupCascadeExit {
-  id          String  @id @default(uuid()) @db.Uuid
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   groupId     String  @map("group_id") @db.Uuid
   cascadeId   String  @map("cascade_id") @db.Uuid
   directionId String? @map("direction_id") @db.Uuid

@@ -230,6 +230,19 @@ jobs:
           pnpm exec prisma generate
           pnpm exec prisma migrate deploy
 
+      # The database the migrations just built against the schema: any
+      # difference fails the job (exit 2), with the SQL that would close it in
+      # the log. The two drifted apart for a month (22.09 to 29.10) until
+      # `migrate dev` would not draft a migration at all; a migration written by
+      # hand that leaves the schema behind, or the reverse, now stops here.
+      # An index the schema cannot express (A-288's partial index on an
+      # expression) is not seen by the diff at all, so it does not trip this.
+      # Once, in the first part: the database is the same in all four.
+      - name: Migrations and schema agree
+        if: matrix.shard == 1
+        working-directory: apps/panel-backend
+        run: pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma --script --exit-code
+
       # An xray binary so the cascade suite can ask the CORE whether the config
       # we generate actually loads. Every other cascade test checks structure
       # and none can answer that; on 2026-08-08 the gap cost both cascade

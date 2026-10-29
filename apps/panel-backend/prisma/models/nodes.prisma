@@ -272,7 +272,7 @@ model Node {
 // Plain identity table; smart server-side selection (slice 28) will
 // score nodes by `region.code` against the user's GeoIP lookup.
 model Region {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // Free-text label shown in the admin UI ("Europe", "RU TSPU-zone").
   name      String   @unique @db.VarChar(64)
   // ISO 3166-2-ish short code for matching ("EU", "RU", "AS"). Free-form
