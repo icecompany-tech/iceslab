@@ -39,6 +39,9 @@ declare module '@fastify/jwt' {
 
 const API_TOKEN_PREFIX = 'icp_';
 
+/** admin_users.id is a uuid (auth.prisma); a JWT sub of any other shape names no admin. */
+const ADMIN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function hashApiToken(plaintext: string): string {
   return createHash('sha256').update(plaintext).digest('hex');
 }
@@ -139,6 +142,12 @@ export async function requireAuth(
   }
 
   const payload = request.user;
+  // A-290: the signature says who signed, not that the token names anyone. A
+  // sub that is not an admin id is refused here, before it reaches a lookup.
+  if (typeof payload.sub !== 'string' || !ADMIN_ID.test(payload.sub)) {
+    reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Missing or invalid token' });
+    return;
+  }
   const admin = await findAdminById(payload.sub);
   if (!admin) {
     reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Admin no longer exists' });
