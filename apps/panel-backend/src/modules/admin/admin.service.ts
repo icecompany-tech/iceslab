@@ -103,9 +103,12 @@ export async function findAdminByUsername(username: string) {
 }
 
 export async function findAdminById(id: string) {
-  return prisma.adminUser.findFirst({
-    where: { id, deletedAt: null },
-  });
+  // By key, not findFirst: findFirst drops a filter whose value is undefined,
+  // and `{ id: undefined, deletedAt: null }` is the first live admin there is
+  // (A-290). findUnique refuses a missing key instead of matching anything.
+  if (!id) return null;
+  const admin = await prisma.adminUser.findUnique({ where: { id } });
+  return admin && admin.deletedAt === null ? admin : null;
 }
 
 export async function verifyPassword(plaintext: string, hash: string): Promise<boolean> {

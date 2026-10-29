@@ -1,0 +1,24 @@
+-- A-288 (AUDT): one summary row of refused sign-ins per hour and key.
+--
+-- The summary of the refusals past the hour's cap (modules/audit/login-cap.ts)
+-- was found and then created or updated in two steps, so two refusals past the
+-- cap at once could create two summaries for the same hour and key. This index
+-- makes the second one a conflict, and the writer turns it into an update of
+-- detail.suppressed (INSERT ... ON CONFLICT DO UPDATE, the larger count wins).
+--
+-- Partial (detail ? 'suppressed'): only summary rows; every other row of the
+-- log is untouched by it. On an expression of detail, which Prisma's schema
+-- cannot say, so the schema (audit.prisma) names it in a comment only.
+--
+-- WRITTEN BY HAND: `migrate dev --create-only` exits on "Drift detected"
+-- before drafting (CLAUDE.local.md). `migrate status` clean before and after
+-- on the branch's database.
+--
+-- Rollback:
+--   DROP INDEX "admin_audit_events_login_summary_key";
+--   DELETE FROM "_prisma_migrations" WHERE "migration_name" = '20261029063532_audit_login_summary_unique';
+--
+-- The test that holds this file: src/modules/audit/login-cap-migration.test.ts
+-- (forward, back, forward).
+
+CREATE UNIQUE INDEX "admin_audit_events_login_summary_key" ON "admin_audit_events" ("action", "target_label", ("detail" ->> 'windowStart')) WHERE "detail" ? 'suppressed';

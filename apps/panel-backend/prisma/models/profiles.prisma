@@ -12,14 +12,15 @@
 //   GroupProfile          - squad ACL at the profile level (replaces
 //                           GroupInbound / group_inbounds)
 //
-// During the migration window both old (`inbounds`, `group_inbounds`) and new
-// tables coexist. Final cleanup migration drops the old ones once all callers
-// are switched over.
+// The old tables (`inbounds`, `group_inbounds`) were dropped by
+// 20261027*_drop_inbounds (A-281): their rows had been copied into profiles
+// and bindings by 20260508120000, nothing read them since, and a deleted
+// node's row still carried its config with the keys in it.
 
 model Profile {
   // See User.sourceId. Partial unique index lives in the raw migration.
   sourceId    String?  @map("source_id") @db.VarChar(128)
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // Globally unique within the panel. Becomes the user-facing label of the
   // logical inbound (replaces the per-node Inbound.name when N nodes share
   // the same template).
@@ -40,7 +41,7 @@ model Profile {
   config      Json
   enabled     Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   // A-122: when what goes into a client's link last changed (not any write to the row, as updatedAt is); the host card's "who holds the old link" reads it.
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
 
@@ -53,7 +54,7 @@ model Profile {
 }
 
 model ProfileNodeBinding {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profileId  String   @map("profile_id") @db.Uuid
   nodeId     String   @map("node_id") @db.Uuid
   // Listening port on this node. Different bindings of the same profile
@@ -79,7 +80,7 @@ model ProfileNodeBinding {
   transport  String   @map("transport") @db.VarChar(3)
   enabled    Boolean  @default(true)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   // A-122: when what goes into a client's link last changed (not any write to the row, as updatedAt is); the host card's "who holds the old link" reads it.
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
 
@@ -121,7 +122,7 @@ model ProfileNodeBinding {
 model Host {
   // See User.sourceId. Partial unique index lives in the raw migration.
   sourceId  String? @map("source_id") @db.VarChar(128)
-  id        String  @id @default(uuid()) @db.Uuid
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   bindingId String  @map("binding_id") @db.Uuid
 
   // Human label shown next to the URL in the admin UI ("Direct", "EU-CDN",
@@ -181,38 +182,4 @@ model Host {
 
   @@index([bindingId, priority])
   @@map("hosts")
-}
-
-model Inbound {
-  id         String   @id @default(uuid()) @db.Uuid
-  nodeId     String   @map("node_id") @db.Uuid
-  protocol   String   @db.VarChar(32)
-  name       String   @db.VarChar(64)
-  port       Int
-  config     Json
-  enabled    Boolean  @default(true)
-  // publicHost / publicPort: slice 25. Until now the panel emitted client
-  // URIs using `hostFromAddress(node.address)` and `inbound.port` directly,
-  // which forced admins to overload `node.address` (the mTLS control-plane
-  // endpoint) with a public-facing FQDN. That broke the panel→node mTLS
-  // cert SAN every time the address changed and required a Refresh-bootstrap
-  // dance. With these two columns the public client-URL host can diverge
-  // from the control-plane endpoint. NULL → keep the historic behaviour
-  // (fallback to node.address).
-  publicHost String?  @map("public_host") @db.VarChar(253)
-  publicPort Int?     @map("public_port")
-  // Same meaning as on ProfileNodeBinding, and cheaper here: this row carries
-  // its own protocol and config, so nothing has to be joined to know which
-  // socket it takes.
-  transport  String   @map("transport") @db.VarChar(3)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  node          Node           @relation(fields: [nodeId], references: [id], onDelete: Restrict)
-  groupInbounds GroupInbound[]
-
-  @@unique([nodeId, port, transport])
-  @@index([nodeId])
-  @@index([protocol])
-  @@map("inbounds")
 }

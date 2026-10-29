@@ -9,6 +9,7 @@ import {
   snapshotKey,
   type StatsUserEntry,
 } from './stats.compute.js';
+import { storeLingering } from './lingering.js';
 
 /**
  * Per-node in-memory snapshot of the last seen cumulative `totalBytesIn/Out`
@@ -104,6 +105,10 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
       try {
         const transport = new NodeTransport(node);
         const res = await transport.getStats();
+        // A-218: before the traffic writes, so a failed write does not lose it.
+        await storeLingering(node.id, res.lingering).catch((err: unknown) =>
+          getLogger().warn({ node: node.id, err: String(err) }, '[cron] node-stats-poll: lingering not kept'),
+        );
         let userList: StatsUserEntry[] = res.users ?? [];
         const rawTotal = userList.reduce(
           (acc, u) => acc + (u.bytesIn || 0) + (u.bytesOut || 0),

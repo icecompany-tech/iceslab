@@ -21,8 +21,10 @@ import { verifyTotpStep } from '../../lib/auth/totp.js';
 // only the cost factor (12) matters and must match admin.service BCRYPT_COST.
 const DUMMY_HASH = '$2b$12$C6UzMDM.H6dfI/f/IKcEeO3jKxHnL9Q8vLpJ9wq0r0aYzX1tVbW3K';
 
+// `locked`: this failure is the one that locked the (IP, username) out. The
+// audit log writes that moment, and not the refusals while the lock holds.
 export class InvalidCredentialsError extends Error {
-  constructor() {
+  constructor(public locked = false) {
     super('Invalid username or password');
     this.name = 'InvalidCredentialsError';
   }
@@ -47,7 +49,7 @@ export class TotpRequiredError extends Error {
 
 // K8 - 2FA enabled and a code was supplied but it didn't verify.
 export class InvalidTotpError extends Error {
-  constructor() {
+  constructor(public locked = false) {
     super('Invalid two-factor code');
     this.name = 'InvalidTotpError';
   }
@@ -81,7 +83,8 @@ async function checkLocked(clientIp: string, username: string): Promise<void> {
   }
 }
 
-async function recordFailure(clientIp: string, username: string): Promise<void> {
+/** Counts a failure; true when this one locked the (IP, username) out. */
+async function recordFailure(clientIp: string, username: string): Promise<boolean> {
   const key = FAIL_KEY(clientIp, username);
   const newCount = await redis.incr(key);
   if (newCount === 1) {
@@ -93,6 +96,7 @@ async function recordFailure(clientIp: string, username: string): Promise<void> 
     // Threshold tripped, switch to the long lockout TTL.
     await redis.expire(key, config.LOGIN_LOCKOUT_DURATION_MIN * 60);
   }
+  return newCount === config.LOGIN_LOCKOUT_FAILURES;
 }
 
 async function clearFailures(clientIp: string, username: string): Promise<void> {
@@ -119,14 +123,12 @@ export async function login(input: LoginInput, clientIp: string): Promise<AdminU
     // is expected to fail; we ignore its result and fail the same way as a
     // real wrong password below.
     await bcrypt.compare(input.password, DUMMY_HASH);
-    await recordFailure(clientIp, input.username);
-    throw new InvalidCredentialsError();
+    throw new InvalidCredentialsError(await recordFailure(clientIp, input.username));
   }
 
   const ok = await verifyPassword(input.password, admin.passwordHash);
   if (!ok) {
-    await recordFailure(clientIp, input.username);
-    throw new InvalidCredentialsError();
+    throw new InvalidCredentialsError(await recordFailure(clientIp, input.username));
   }
 
   // K8 - second factor. Only enforced when the admin enabled 2FA. A missing
@@ -144,8 +146,7 @@ export async function login(input: LoginInput, clientIp: string): Promise<AdminU
       step === null ||
       (admin.totpLastUsedStep !== null && step <= admin.totpLastUsedStep)
     ) {
-      await recordFailure(clientIp, input.username);
-      throw new InvalidTotpError();
+      throw new InvalidTotpError(await recordFailure(clientIp, input.username));
     }
     await recordTotpStep(admin.id, step);
   }

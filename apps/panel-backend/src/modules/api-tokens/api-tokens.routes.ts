@@ -4,6 +4,8 @@ import { requireAuth } from '../auth/auth.hook.js';
 import { PermissiveUuid } from '../../lib/util/uuid-schema.js';
 import * as svc from './api-tokens.service.js';
 import { isKnownScope } from '../auth/scope.hook.js';
+import { prisma } from '../../prisma.js';
+import { audit } from '../audit/audit.hook.js';
 
 const CreateInput = z.object({
   name: z.string().min(1).max(64),
@@ -18,6 +20,9 @@ const CreateInput = z.object({
 });
 
 const IdParam = z.object({ id: PermissiveUuid });
+
+/** A token's scopes as the audit log keeps them: none is a full token, '*'. */
+const scopesOf = (scopes: string[]) => (scopes.length === 0 ? ['*'] : scopes);
 
 /**
  * API-tokens management endpoints are admin-JWT-only, a leaked API token
@@ -52,12 +57,20 @@ export async function apiTokensRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/api-tokens', auth, async (req, reply) => {
     const input = CreateInput.parse(req.body);
+    // The token by its name and what it may do; never the token, its hash or
+    // a prefix. No id until it exists: a refused create keeps the name.
+    const entry = audit(req, {
+      action: 'apiToken.create',
+      target: { kind: 'api_token', id: null, label: input.name },
+      detail: { scopes: scopesOf(input.scopes) },
+    });
     try {
       const { token, plaintext } = await svc.createToken(
         input.name,
         input.scopes,
         req.admin?.id ?? null,
       );
+      entry.target.id = token.id;
       return reply.code(201).send({ ...token, token: plaintext });
     } catch (err) {
       if (err instanceof svc.ApiTokenNameTakenError) {
@@ -69,6 +82,15 @@ export async function apiTokensRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete('/api/api-tokens/:id', auth, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
+    // As it stood: its name and scopes are gone with it.
+    const standing = await prisma.apiToken.findUnique({ where: { id }, select: { name: true, scopes: true } });
+    if (standing) {
+      audit(req, {
+        action: 'apiToken.revoke',
+        target: { kind: 'api_token', id, label: standing.name },
+        detail: { scopes: scopesOf(Array.isArray(standing.scopes) ? (standing.scopes as string[]) : []) },
+      });
+    }
     try {
       await svc.deleteToken(id);
       return reply.code(204).send();

@@ -47,6 +47,7 @@ export const app = {
     notWiredTag: 'no screen',
     systemGroup: 'System',
     insights: 'Insights',
+    auditLog: 'Activity log',
     updateAvailable: 'Update available: {{version}}',
   },
 

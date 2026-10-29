@@ -1,6 +1,5 @@
 import { api } from '@/lib/net/client';
 import type { XraySubprotocol } from '@iceslab/shared';
-import type { ProtocolName } from '@/lib/domain/protocols';
 
 export type ShadowsocksMethod =
   | '2022-blake3-aes-128-gcm'
@@ -104,64 +103,6 @@ export type InboundConfig =
   | ShadowsocksInboundConfig
   | MtprotoInboundConfig
   | MieruInboundConfig;
-
-export interface Inbound {
-  id: string;
-  nodeId: string;
-  protocol: ProtocolName;
-  name: string;
-  port: number;
-  /** Override of the public host emitted in client URIs. NULL → fall back
-   *  to `node.address`. Slice 25, separates control-plane endpoint from
-   *  client-facing FQDN. */
-  publicHost: string | null;
-  /** Override of the public port. NULL → use `port`. */
-  publicPort: number | null;
-  config: InboundConfig;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateInboundInput {
-  nodeId: string;
-  protocol: ProtocolName;
-  name: string;
-  port: number;
-  enabled?: boolean;
-  publicHost?: string;
-  publicPort?: number;
-  config: InboundConfig;
-}
-
-export interface UpdateInboundInput {
-  name?: string;
-  port?: number;
-  enabled?: boolean;
-  /** `null` clears the override, `undefined` keeps the current value. */
-  publicHost?: string | null;
-  publicPort?: number | null;
-  config?: InboundConfig;
-}
-
-export async function listInbounds(): Promise<{ inbounds: Inbound[] }> {
-  const { data } = await api.get<{ inbounds: Inbound[] }>('/api/inbounds');
-  return data;
-}
-
-export async function createInbound(input: CreateInboundInput): Promise<Inbound> {
-  const { data } = await api.post<Inbound>('/api/inbounds', input);
-  return data;
-}
-
-export async function updateInbound(id: string, input: UpdateInboundInput): Promise<Inbound> {
-  const { data } = await api.put<Inbound>(`/api/inbounds/${id}`, input);
-  return data;
-}
-
-export async function deleteInbound(id: string): Promise<void> {
-  await api.delete(`/api/inbounds/${id}`);
-}
 
 export interface KeypairResponse {
   privateKey: string;

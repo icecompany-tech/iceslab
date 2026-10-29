@@ -443,6 +443,7 @@ const BREADCRUMB_KEYS: Record<string, string> = {
   '/subscription/delivery': 'breadcrumb.subscriptionDelivery',
   '/subscription/templates': 'breadcrumb.subscriptionTemplates',
   '/insights': 'breadcrumb.insights',
+  '/audit': 'breadcrumb.audit',
   '/settings': 'breadcrumb.settings',
 };
 
@@ -947,6 +948,7 @@ function AppLayoutInner() {
             <GroupHeader label={t('sidebar.toolsGroup')} tick={AMBER} />
             <Stack gap={2} px={8}>
               <NavItem to="/insights" label={t('sidebar.insights')} icon={<NavInsightsIcon />} />
+              <NavItem to="/audit" label={t('sidebar.auditLog')} icon={<NavTemplateIcon />} />
               <NavItem
                 label={t('sidebar.hwidInspector')}
                 icon={<NavHwidIcon />}

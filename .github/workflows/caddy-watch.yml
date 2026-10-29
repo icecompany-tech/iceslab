@@ -1,0 +1,84 @@
+name: Caddy release watch
+
+# Once a day: has Caddy released the commit that the naive fork's head needs?
+#
+# caddy-naive is built from a pinned set (apps/node/scripts/bootstrap-naive.sh,
+# ci.yml node-agent): xcaddy, Caddy v2.11.7 and the fork at c096d6a00cb2. The
+# fork's head calls caddyhttp.IdleTimeoutsFromContext, which Caddy added in
+# 8f549e6df151 (#8121), after the v2.11.7 tag; on v2.11.7 the head does not
+# build (A-216). The set moves once a Caddy release contains that commit, and
+# this job says when, so nobody has to look.
+#
+# It says so with ONE issue, not a red run. A scheduled run that fails is mailed
+# to whoever last touched this file and looks like a broken pipeline in the
+# Actions list; an issue is the work item itself, sits where the rest of the
+# work is tracked, and is opened once: the title is looked up first, open or
+# closed. The repository is public, so the issue says only what was found.
+#
+# ⚠ Schedules run from the default branch: this starts once it is on main.
+# GitHub also disables a schedule after 60 days without activity in the
+# repository. Remove this file together with the move of the set.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only say what would happen, open nothing'
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: caddy-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Caddy release with IdleTimeoutsFromContext
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NEEDED: 8f549e6df151f6a947bc183200c5d26baefa8666
+      # The part of the title the lookup matches, whatever the tag.
+      MARKER: 'includes IdleTimeoutsFromContext: move the naive build set'
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - name: Compare the latest Caddy release with the commit
+        run: |
+          set -euo pipefail
+          tag=$(gh api repos/caddyserver/caddy/releases/latest --jq .tag_name)
+          # ahead: the release has the commit and more; identical: it is the
+          # commit; behind or diverged: not in it.
+          status=$(gh api "repos/caddyserver/caddy/compare/${NEEDED}...${tag}" --jq .status)
+          echo "- latest Caddy release ${tag} against ${NEEDED:0:12}: ${status}" >> "$GITHUB_STEP_SUMMARY"
+          case "$status" in
+            ahead|identical) ;;
+            *) echo "Caddy ${tag} does not contain ${NEEDED:0:12} yet (${status})"; exit 0 ;;
+          esac
+
+          found=$(gh issue list --state all --search "\"${MARKER}\" in:title" --json number --jq 'length')
+          if [ "$found" != 0 ]; then
+            echo "- the issue is already there, nothing opened" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          title="Caddy ${tag} ${MARKER}"
+          body=$(cat <<EOF
+          Caddy ${tag} contains ${NEEDED} (caddyhttp.IdleTimeoutsFromContext), so the naive build set can move off v2.11.7: Caddy ${tag} with the head of the klzgrad/forwardproxy naive branch, xcaddy pinned as before.
+
+          Where the set is pinned: apps/node/scripts/bootstrap-naive.sh and the node-agent job in .github/workflows/ci.yml, held together by TestTheNaiveBuildIsAPinnedSet. Remove .github/workflows/caddy-watch.yml in the same change.
+          EOF
+          )
+          if [ "$DRY_RUN" = true ]; then
+            echo "dry run, would open: ${title}"
+            printf '%s\n' "$body"
+            exit 0
+          fi
+          gh issue create --title "$title" --body "$body"
+          echo "- opened: ${title}" >> "$GITHUB_STEP_SUMMARY"

@@ -36,9 +36,9 @@ export function requiredScopeFor(method: string, url: string | undefined): strin
  * Resources a scoped API token can legitimately be granted, i.e. the first
  * path segment after `/api/` for every token-reachable route (see
  * requiredScopeFor). Kept in sync with the routes by hand. `api-tokens`,
- * `auth` and `internal` are omitted on purpose: tokens can never reach those
- * (blockApiTokenAccess / login / node-only), so granting them would be a
- * dead scope.
+ * `auth`, `internal` and `audit` are omitted on purpose: tokens can never
+ * reach those (blockApiTokenAccess / login / node-only / AUDIT_ADMIN_ONLY),
+ * so granting them would be a dead scope.
  *
  * "By hand" went wrong (A-040, 22.10): route-policies, node-policies,
  * named-outbounds and geo-sets were never added, so no scoped token could be
@@ -54,7 +54,8 @@ export const SCOPEABLE_RESOURCES = [
   'squads',
   'srr',
   'regions',
-  'inbounds',
+  // 'inbounds' left with its routes and tables (A-281). A token minted with it
+  // before keeps the scope on its row; nothing answers to it.
   'cascades',
   'hwid-devices',
   'settings',
@@ -70,7 +71,7 @@ export const SCOPEABLE_RESOURCES = [
 ] as const;
 
 /** First segments a token can never reach, so no scope is offered for them. */
-export const UNSCOPED_RESOURCES = ['api-tokens', 'auth', 'internal'] as const;
+export const UNSCOPED_RESOURCES = ['api-tokens', 'auth', 'internal', 'audit'] as const;
 
 /**
  * The set of scopes a token may carry: `*` (full), the special `sub:read`

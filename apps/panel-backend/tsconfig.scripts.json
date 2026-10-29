@@ -1,0 +1,11 @@
+{
+  // A-291: scripts/ outside the build's rootDir, checked with src so a script
+  // that drifts from the code it imports fails typecheck instead of its next run.
+  // Check only: the build (tsconfig.json) still emits src alone to dist.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "scripts/**/*.ts"]
+}

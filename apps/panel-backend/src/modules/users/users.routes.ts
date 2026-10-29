@@ -12,6 +12,7 @@ import {
 import * as usersService from './users.service.js';
 import { mapUserToPublic } from './users.mapper.js';
 import { getUserDelivery } from './users.delivery.js';
+import { userLiveAfterRemoval } from '../stats/lingering.js';
 import { prisma } from '../../prisma.js';
 import {
   generateSubscription,
@@ -21,6 +22,8 @@ import {
 import { awgConfUrl, subscriptionUrl } from '../subscription/subscription.link.js';
 import { endpointId } from '../subscription/endpoint-identity.js';
 import { RoutingPresetNotFoundError } from '../routing-presets/routing-presets.assign.js';
+import { audit } from '../audit/audit.hook.js';
+import { userErasedAfter, userTarget } from '../audit/audit.targets.js';
 
 // B12-tail - response schema for the paginated users list (Users page keeps it
 // warm via placeholderData). Compiles a fast-json-stringify serializer over the
@@ -164,7 +167,23 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // worse than doing the other hundred and ninety-seven.
   app.post('/api/users/bulk', auth, async (request, reply) => {
     const input = BulkUsersSchema.parse(request.body);
+    // One row for the request, whatever the action (wave 2, decision 27.10):
+    // the ids of the users it was done to, so each one's history shows it, and
+    // counts. No names: the request is the object, and a deleted user's name
+    // has no business outliving A-268's 30 days in a year-long log.
+    const entry = audit(request, {
+      action: 'users.bulk',
+      target: { kind: 'user', id: null, label: `${input.userIds.length} users` },
+    });
     const result = await usersService.bulkUsers(input);
+    entry.detail = {
+      action: input.action,
+      requested: input.userIds.length,
+      succeeded: result.ok.length,
+      failed: result.failed.length,
+      ...(input.action === 'extend' && input.expireDays !== undefined ? { expireDays: input.expireDays } : {}),
+      userIds: result.ok,
+    };
     return reply.send({
       action: input.action,
       requested: input.userIds.length,
@@ -352,7 +371,8 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     const params = UserIdParamSchema.parse(request.params);
     try {
       const user = await usersService.getUserById(params.id);
-      return reply.send(user);
+      // A-218: the nodes where this user, taken off, still holds a connection.
+      return reply.send({ ...user, liveAfterRemoval: await userLiveAfterRemoval(user) });
     } catch (err) {
       if (err instanceof usersService.UserNotFoundError) {
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
@@ -453,8 +473,11 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/users/:id
   app.delete('/api/users/:id', auth, async (request, reply) => {
     const params = UserIdParamSchema.parse(request.params);
+    const target = await userTarget(params.id);
+    const entry = target ? audit(request, { action: 'user.delete', target }) : null;
     try {
       await usersService.deleteUser(params.id);
+      if (entry) entry.detail = { erasedAfter: userErasedAfter() };
       return reply.code(204).send();
     } catch (err) {
       if (err instanceof usersService.UserNotFoundError) {

@@ -123,6 +123,11 @@ func TestRenderConfigShape(t *testing.T) {
 	if level0["statsUserUplink"] != true || level0["statsUserDownlink"] != true {
 		t.Errorf("policy.levels.0 missing per-user stats flags: %v", level0)
 	}
+	// A-218: without it xray keeps no online map and a removed user's open
+	// connection is invisible.
+	if level0["statsUserOnline"] != true {
+		t.Errorf("policy.levels.0 missing statsUserOnline: %v", level0)
+	}
 }
 
 func TestRenderConfigEmptyClients(t *testing.T) {

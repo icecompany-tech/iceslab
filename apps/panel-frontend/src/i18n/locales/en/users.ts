@@ -137,6 +137,12 @@ export const users = {
     devicesForget_one: 'A device not seen for {{count}} day is forgotten and frees its slot.',
     devicesForget_other: 'A device not seen for {{count}} days is forgotten and frees its slot.',
     devicesFull: 'Every slot is taken. A new device cannot connect until one of these is reset.',
+    liveAfterRemoval: {
+      title: 'Taken off, still connected',
+      sessions_one: '{{count}} connection',
+      sessions_other: '{{count}} connections',
+      hint: 'xray does not cut connections opened before the removal: they close when the client closes them. Restarting the core would cut everyone on the node.',
+    },
     devicesError: 'the device list',
     deviceReset: 'Device reset',
     deviceResetHint: 'Reset this device and free its slot',

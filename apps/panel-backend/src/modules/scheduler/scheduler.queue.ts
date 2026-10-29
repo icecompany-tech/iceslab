@@ -11,6 +11,7 @@ import {
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { renewExpiringNodeCerts } from '../nodes/node-cert-rotation.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
+import { ADMIN_AUDIT_RETENTION_DAYS } from '@iceslab/shared';
 import { DELETED_USER_RETENTION_DAYS, HWID_DEVICE_RETENTION_DAYS, pruneHistory } from '../maintenance/retention.cron.js';
 import { queueDueUrlFetches } from '../geo-sets/geo-sets.queue.js';
 import { checkNodeDrawings } from '../inbounds/inbounds.queue.js';
@@ -162,10 +163,10 @@ export function startCronTasksWorker(): Worker {
           const r = await pruneHistory();
           const total =
             r.subscriptionRequests + r.nodeUserUsage + r.nodeUsage + r.subscriptionEvents + r.bootstrapTokens +
-            r.deletedUsers + r.hwidDevices;
+            r.deletedUsers + r.hwidDevices + r.adminAudit;
           if (total > 0) {
             getLogger().info(
-              `[cron] prune-history - deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.subscriptionEvents} sub-event, ${r.bootstrapTokens} bootstrap-token rows, ${r.deletedUsers} users deleted over ${DELETED_USER_RETENTION_DAYS} days ago, ${r.hwidDevices} devices unseen for ${HWID_DEVICE_RETENTION_DAYS} days`,
+              `[cron] prune-history - deleted ${r.subscriptionRequests} sub-req, ${r.nodeUserUsage} user-usage, ${r.nodeUsage} node-usage, ${r.subscriptionEvents} sub-event, ${r.bootstrapTokens} bootstrap-token rows, ${r.deletedUsers} users deleted over ${DELETED_USER_RETENTION_DAYS} days ago, ${r.hwidDevices} devices unseen for ${HWID_DEVICE_RETENTION_DAYS} days, ${r.adminAudit} audit rows over ${ADMIN_AUDIT_RETENTION_DAYS} days old`,
             );
           }
           break;

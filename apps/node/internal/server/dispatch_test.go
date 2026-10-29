@@ -242,6 +242,33 @@ func TestStatsTagsTheMtprotoEntryOnAMixedNode(t *testing.T) {
 	}
 }
 
+// A-218: lingering on the wire is absent unless a core said it; [] when it
+// said nobody. Absence is "not known", which the panel must not read as none.
+func TestStatsLingeringIsAbsentUnlessACoreSaidIt(t *testing.T) {
+	read := func(adapters ...core.CoreAdapter) map[string]json.RawMessage {
+		t.Helper()
+		srv := newServerWith(t, adapters...)
+		rr := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/stats", nil))
+		raw := map[string]json.RawMessage{}
+		if err := json.NewDecoder(rr.Body).Decode(&raw); err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	if _, ok := read(&fakeAdapter{name: "hysteria", stats: &core.Stats{}})["lingering"]; ok {
+		t.Fatal("no core said it: the field must be absent")
+	}
+	nobody := &fakeAdapter{name: "xray", stats: &core.Stats{Lingering: []core.LingeringUser{}}}
+	if got := string(read(&fakeAdapter{name: "hysteria", stats: &core.Stats{}}, nobody)["lingering"]); got != "[]" {
+		t.Fatalf("asked, nobody: want [], got %s", got)
+	}
+	some := &fakeAdapter{name: "xray", stats: &core.Stats{Lingering: []core.LingeringUser{{Email: "u-1", Sessions: 2}}}}
+	if got := string(read(some)["lingering"]); got != `[{"email":"u-1","sessions":2}]` {
+		t.Fatalf("got %s", got)
+	}
+}
+
 func TestStatsContinuesPastFailingAdapter(t *testing.T) {
 	failing := &fakeAdapter{name: "broken", failOnStats: true}
 	working := &fakeAdapter{

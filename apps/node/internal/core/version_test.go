@@ -14,7 +14,7 @@ import (
 func TestParseVersionOnWhatTheBinariesActuallySay(t *testing.T) {
 	cases := map[string]string{
 		"Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1)\nA unified platform.\n": "26.3.27",
-		"Xray 25.9.5 (Xray) abc\n": "25.9.5",
+		"Xray 25.9.5 (Xray) abc\n":                                                                               "25.9.5",
 		"sing-box version 1.13.14\n\nEnvironment: go1.26.4 linux/amd64\n":                                        "1.13.14",
 		"Version:\tv2.12.3\nBuildDate:\t2026-08-01\n":                                                            "2.12.3",
 		"2.2.8 (go1.26.1: 2026-04-07T16:10:41Z on 83a31e04585aa7d9249cf5118a7a418c809ada5f, modules checksum X)": "2.2.8",

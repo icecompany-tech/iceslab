@@ -251,8 +251,6 @@ export const profiles = {
         awgServerPubPlaceholder: 'появится после генерации',
         awgPresetLabel: 'Пресет обфускации',
         awgKeepZero: 'держать 0',
-        awgS1Desc: 'должен отличаться',
-        awgJDesc: 'попарно уникален',
         awgHDesc: '> 4 и уникальны',
         awgHWarning:
           'H1-H4 должны быть попарно уникальны, сейчас есть дубликаты. Жми «Re-roll» чтобы сгенерировать заново.',
@@ -364,6 +362,8 @@ export const profiles = {
     portRangeStartDesc: 'UDP port-hopping для обхода РФ TSPU. Пусто - один порт.',
     portRangeEnd: 'Конец диапазона портов',
     portRangeEndDesc: 'Должен быть > начала. iptables-диапазон на ноде должен покрывать этот.',
+    portRangeNoStart: 'Задан только конец диапазона: укажите начало или очистите оба поля.',
+    portRangeBadEnd: 'Нужен конец диапазона больше начала, или очистите оба поля.',
   },
   recipes: {
     searchPlaceholder: 'Поиск рецептов…',

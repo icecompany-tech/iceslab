@@ -211,7 +211,14 @@ func userBytes(t *testing.T, a *Adapter, id string) int64 {
 
 // socksDial opens a SOCKS5 CONNECT with username/password auth (RFC 1929).
 func socksDial(port int, user, pass, target string) (net.Conn, error) {
-	c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
+	return socksDialFrom(nil, port, user, pass, target)
+}
+
+// socksDialFrom is socksDial from a given local address: xray's online map
+// leaves 127.0.0.1 out (A-218), so a test that reads it comes from another.
+func socksDialFrom(local net.Addr, port int, user, pass, target string) (net.Conn, error) {
+	d := net.Dialer{Timeout: time.Second, LocalAddr: local}
+	c, err := d.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return nil, err
 	}

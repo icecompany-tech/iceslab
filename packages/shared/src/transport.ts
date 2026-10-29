@@ -1705,6 +1705,19 @@ export interface GetStatsResponse {
   /** A-152: the total per adapter. Absent from an older agent, which leaves
    *  the panel on totalBytesIn/Out with `cumulative`. */
   cores?: CoreTrafficTotal[];
+  /**
+   * A-218: users taken off this node whose connections are still open (xray
+   * keeps them after rmu). Absent: not known (an older agent, no xray
+   * running, the online query failed); [] asked, nobody.
+   */
+  lingering?: LingeringUser[];
+}
+
+/** The email as xray knows the user (the panel's user id, or the login of a
+ *  socks/http door) and the connections still open. No address. */
+export interface LingeringUser {
+  email: string;
+  sessions: number;
 }
 
 // ───── GET /healthz ─────

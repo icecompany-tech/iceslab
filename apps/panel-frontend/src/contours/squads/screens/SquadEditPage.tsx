@@ -37,11 +37,12 @@ import { userScopeGap } from '@iceslab/shared';
 import { listCascades } from '@/lib/domain/cascades';
 import { listHosts } from '@/lib/domain/hosts';
 import { listAllNodes } from '@/lib/domain/nodes';
+import { listNodePolicies } from '@/lib/domain/nodePolicies';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
 import { COUNTRIES, countryName } from '@/lib/domain/countries';
 import { assignedPresetGone, presetChoiceOf, presetChoicePatch, presetChoiceRows, presetKey } from '@/lib/domain/routingPresets';
 import { apiErrorMessage } from '@/lib/net/client';
-import { editGate, loadView } from '@/lib/ui/loadView';
+import { editGate, loadFailure, loadView } from '@/lib/ui/loadView';
 import { LoadFailed, LoadFailedLine } from '@/ui/LoadFailed';
 import { sectionState } from '@/contours/squads/lib/squadView';
 import {
@@ -116,6 +117,8 @@ export function SquadEditPage() {
   const profilesQuery = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() });
   const cascadesQuery = useQuery({ queryKey: ['cascades'], queryFn: listCascades });
   const policiesQuery = useQuery({ queryKey: ['route-policies'], queryFn: listRoutePolicies });
+  // A-283: whether an entry node's policy has a rule into a cascade.
+  const nodePoliciesQuery = useQuery({ queryKey: ['node-policies'], queryFn: listNodePolicies });
   // The operator's own presets for the routing picker (A-229).
   const presetsQuery = useQuery({ queryKey: ['routing-presets'], queryFn: listRoutingPresets });
 
@@ -508,6 +511,7 @@ export function SquadEditPage() {
           nodes: nodesQuery.data?.nodes ?? [],
           squads: squadsQuery.data?.squads ?? [],
           policies: policiesQuery.data?.policies ?? [],
+          nodePolicies: Array.isArray(nodePoliciesQuery.data?.policies) ? nodePoliciesQuery.data.policies : null,
         },
       ),
     [
@@ -526,8 +530,13 @@ export function SquadEditPage() {
       nodesQuery.data,
       squadsQuery.data,
       policiesQuery.data,
+      nodePoliciesQuery.data,
     ],
   );
+  // A-283: the node policy line when it cannot be told: still on its way says
+  // nothing, a failed list says so with the server's words and a retry.
+  const nodePolicyPending = loadView(nodePoliciesQuery) === 'loading' || loadView(nodesQuery) === 'loading';
+  const nodePolicyFailure = [nodePoliciesQuery, nodesQuery].map((q) => loadFailure(q, apiErrorMessage)).find((f) => f !== null) ?? null;
   /** A direction that would be the last one taken off: said instead of done. */
   const [lastExitRefused, setLastExitRefused] = useState<string | null>(null);
 
@@ -1392,8 +1401,22 @@ export function SquadEditPage() {
                     );
                   })}
                   {/* A-277: off or narrowed, the node policy's rules into this
-                      cascade do not take the squad's users either. */}
-                  {c.nodePolicyNote && (
+                      cascade do not take the squad's users either. A-283: only
+                      when such a rule is known; not known is said as such. */}
+                  {c.nodePolicyNote === 'unknown' && nodePolicyFailure && (
+                    <Box style={{ padding: '8px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+                      <LoadFailedLine
+                        message={`${t('squadEdit.cascadeNodePolicyLoadFailed')}: ${nodePolicyFailure.message}`}
+                        onRetry={nodePolicyFailure.onRetry}
+                      />
+                    </Box>
+                  )}
+                  {c.nodePolicyNote === 'unknown' && !nodePolicyFailure && !nodePolicyPending && (
+                    <Text style={{ padding: '8px 14px', fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: AMBER, borderTop: `1px solid ${HAIRLINE}` }}>
+                      {t('squadEdit.cascadeNodePolicyUnknown')}
+                    </Text>
+                  )}
+                  {(c.nodePolicyNote === 'gated' || c.nodePolicyNote === 'gated-except-chain') && (
                     <Text style={{ padding: '8px 14px', fontFamily: DISPLAY, fontSize: 11, lineHeight: '15px', color: MIST, borderTop: `1px solid ${HAIRLINE}` }}>
                       {c.nodePolicyNote === 'gated-except-chain'
                         ? t('squadEdit.cascadeNodePolicyGatedExceptChain')

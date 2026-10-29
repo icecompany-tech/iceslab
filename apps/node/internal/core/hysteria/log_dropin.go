@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/icecompany-tech/iceslab/apps/node/internal/atomicfile"
 )
@@ -72,8 +74,21 @@ func (a *Adapter) ensureUnitLogLevel(ctx context.Context) {
 		a.logger.Warn("hysteria: could not read the unit's environment, log level left as it is", "unit", unit, "err", err)
 		return
 	}
-	for _, kv := range strings.Fields(string(out)) {
+	env := strings.Fields(string(out))
+	a.noteUnitACMEDir(env)
+	for _, kv := range env {
 		if kv == LogLevelEnv {
+			// The unit carries the level, but a process started before it
+			// got it does not: a try-restart that failed after the drop-in
+			// was written left it on the old level, and from then on the
+			// check above found the level and stopped (AUDT, A-265).
+			if why := a.processLacksLevel(ctx, unit); why != "" {
+				if err := a.cfg.RunCmd(ctx, "systemctl", "try-restart", unit); err != nil {
+					a.logger.Warn("hysteria: systemctl try-restart for the log level failed", "unit", unit, "why", why, "err", err)
+					return
+				}
+				a.logger.Info(fmt.Sprintf("hysteria: %s restarted to run with %s (%s)", unit, LogLevelEnv, why))
+			}
 			return
 		}
 	}
@@ -94,4 +109,46 @@ func (a *Adapter) ensureUnitLogLevel(ctx context.Context) {
 		}
 	}
 	a.logger.Info(fmt.Sprintf("hysteria: %s now runs with %s (runtime drop-in %s)", unit, LogLevelEnv, path))
+}
+
+// processLacksLevel says why the unit's running process does not run with
+// LogLevelEnv, or "" when it does, is not running, or cannot be told.
+//
+// The process's own environment first (/proc/<MainPID>/environ, what it was
+// started with). Where that cannot be read (another mount of /proc, a kernel
+// that hides it), the start time against the drop-in: a process started
+// before the drop-in was written cannot have the level from it.
+func (a *Adapter) processLacksLevel(ctx context.Context, unit string) string {
+	out, err := a.cfg.CmdOutput(ctx, "systemctl", "show", "-p", "MainPID", "--value", unit)
+	if err != nil {
+		return ""
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil || pid <= 0 {
+		return "" // not running: it starts with the unit's environment
+	}
+	if environ, err := os.ReadFile(filepath.Join(a.cfg.ProcRoot, strconv.Itoa(pid), "environ")); err == nil {
+		for _, kv := range strings.Split(string(environ), "\x00") {
+			if kv == LogLevelEnv {
+				return ""
+			}
+		}
+		return fmt.Sprintf("process %d runs without %s", pid, LogLevelEnv)
+	}
+	st, err := os.Stat(filepath.Join(a.cfg.RuntimeUnitDir, unit+".d", logDropInName))
+	if err != nil {
+		return "" // no drop-in of ours: the level is the unit's own
+	}
+	out, err = a.cfg.CmdOutput(ctx, "systemctl", "show", "-p", "ExecMainStartTimestamp", "--value", "--timestamp=unix", unit)
+	if err != nil {
+		return ""
+	}
+	sec, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimSpace(string(out)), "@"), 10, 64)
+	if err != nil || sec <= 0 {
+		return ""
+	}
+	if started := time.Unix(sec, 0); started.Before(st.ModTime().Truncate(time.Second)) {
+		return fmt.Sprintf("process %d started %s, before the drop-in of %s", pid, started.UTC().Format(time.RFC3339), st.ModTime().UTC().Format(time.RFC3339))
+	}
+	return ""
 }

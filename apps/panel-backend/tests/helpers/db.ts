@@ -48,7 +48,6 @@ export const TABLES = [
   'group_members',
   'group_profiles',
   'group_hosts',
-  'group_inbounds',
   'groups',
   'hwid_user_devices',
   'user_traffic',
@@ -62,7 +61,6 @@ export const TABLES = [
   'hosts',
   'profile_node_bindings',
   'profiles',
-  'inbounds',
   'node_bootstrap_tokens',
   // Two of the additions here were REAL leaks, not bookkeeping. Nothing
   // cascades into either, so rows survived every truncate:
@@ -85,6 +83,9 @@ export const TABLES = [
   // left behind would make the next test's save read "replaced".
   'operator_recipes',
   'recipe_hidden',
+  // The admin audit log. TRUNCATE admin_users CASCADE reaches it through the
+  // actor's foreign key anyway; listed so that stays true if the key goes.
+  'admin_audit_events',
   'api_tokens',
   'keygen_ca',
   'admin_users',

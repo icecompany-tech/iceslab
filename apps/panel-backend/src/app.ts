@@ -14,11 +14,9 @@ import { usersRoutes } from './modules/users/users.routes.js';
 import { nodesRoutes } from './modules/nodes/nodes.routes.js';
 import { subscriptionRoutes } from './modules/subscription/subscription.routes.js';
 import { srrRoutes } from './modules/srr/srr.routes.js';
-// Slice 27: `inboundsRoutes` retired. The new /api/profiles + /api/bindings
-// pair from `profilesRoutes` replaces it. The inbounds module file is kept
-// in the tree for now because its config schemas are reused by profiles, but
-// no routes are mounted.
-// import { inboundsRoutes } from './modules/inbounds/inbounds.routes.js';
+// Slice 27 retired /api/inbounds for /api/profiles + /api/bindings; A-281
+// dropped its routes, service and tables. The config schemas in
+// modules/inbounds/inbounds.schemas.ts live on, profiles use them.
 import { squadsRoutes } from './modules/squads/squads.routes.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes.js';
 import { profilesRoutes } from './modules/profiles/profiles.routes.js';
@@ -38,6 +36,8 @@ import { recipesRoutes } from './modules/recipes/recipes.routes.js';
 import { geoSetsRoutes } from './modules/geo-sets/geo-sets.routes.js';
 import { routingPresetsRoutes } from './modules/routing-presets/routing-presets.routes.js';
 import { subscriptionTemplatesRoutes } from './modules/subscription-templates/templates.routes.js';
+import { auditRoutes } from './modules/audit/audit.routes.js';
+import { writeAuditOnSend } from './modules/audit/audit.hook.js';
 import { registerSecurityGate } from './lib/auth/security-gate.js';
 import { registry as metricsRegistry, httpRequestDuration, routeLabel } from './lib/infra/metrics.js';
 import { requireAuth } from './modules/auth/auth.hook.js';
@@ -192,6 +192,10 @@ export async function buildApp(opts: { log?: { level: string; stream: { write(li
   // every route below so it covers /metrics and all plugin routes.
   app.addHook('preHandler', enforceScopes);
 
+  // The admin audit log: a route marks its request (modules/audit audit()),
+  // the rows go in as the answer leaves, with the outcome it carries.
+  app.addHook('onSend', writeAuditOnSend);
+
   // /metrics: Prometheus scrape endpoint. Auth-gated so it isn't a free
   // info disclosure; Prometheus jobs use an `icp_*` API token in
   // Authorization: Bearer for scraping.
@@ -329,6 +333,7 @@ export async function buildApp(opts: { log?: { level: string; stream: { write(li
   await app.register(geoSetsRoutes);
   await app.register(routingPresetsRoutes);
   await app.register(subscriptionTemplatesRoutes);
+  await app.register(auditRoutes);
 
   return app;
 }

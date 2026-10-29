@@ -94,6 +94,14 @@ type Config struct {
 	// (A-265). Default: RuntimeUnitDir, /run/systemd/system.
 	RuntimeUnitDir string
 
+	// ProcRoot is where a process's environment is read from, to tell the
+	// level the unit's process actually runs with. Default: /proc.
+	ProcRoot string
+
+	// ACMEDir is hysteria's certmagic storage, where the ACME certificate it
+	// obtained lives (acme_cert.go). Empty: found the way hysteria finds it.
+	ACMEDir string
+
 	// TrafficStatsListen is the `host:port` where hysteria-server's traffic
 	// API listens (e.g. "127.0.0.1:9999"). When set, renderConfig emits a
 	// `trafficStats:` block in /etc/hysteria/config.yaml and GetStats polls
@@ -159,6 +167,10 @@ type Adapter struct {
 	// tls: the certificate the last written config serves (E30a), reported in
 	// the healthcheck. nil until a config is written.
 	tls *core.TLSFact
+
+	// unitACMEDir: HYSTERIA_ACME_DIR from the unit's environment, read with
+	// the log level (log_dropin.go); "" when the unit sets none.
+	unitACMEDir string
 }
 
 type userEntry struct {
@@ -185,6 +197,9 @@ func New(cfg Config, logger *slog.Logger) *Adapter {
 	}
 	if cfg.RuntimeUnitDir == "" {
 		cfg.RuntimeUnitDir = RuntimeUnitDir
+	}
+	if cfg.ProcRoot == "" {
+		cfg.ProcRoot = "/proc"
 	}
 	return &Adapter{
 		cfg:    cfg,
@@ -822,14 +837,26 @@ func (a *Adapter) rewriteLocked(inbound InboundConfig, handoff *ChainHandoff, wh
 }
 
 // TLSFact implements core.TLSReporter: the certificate the last written config
-// serves. nil until one is written.
+// serves. nil until one is written. For ACME, the notAfter of the certificate
+// hysteria holds in its storage (acme_cert.go); zero, "unknown", while there
+// is none there yet.
 func (a *Adapter) TLSFact() *core.TLSFact {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
 	if a.tls == nil {
+		a.mu.RUnlock()
 		return nil
 	}
 	f := *a.tls
+	host := a.inbound.Hostname
+	if host == "" {
+		host = a.cfg.Hostname
+	}
+	a.mu.RUnlock()
+	if f.Source == "acme" && host != "" {
+		if notAfter, ok := acmeNotAfter(a.acmeDir(), host); ok {
+			f.NotAfter = notAfter
+		}
+	}
 	return &f
 }
 

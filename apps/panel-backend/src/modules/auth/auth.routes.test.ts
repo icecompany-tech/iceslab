@@ -152,4 +152,34 @@ describe('GET /api/auth/me', () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  // A-290: a signed token whose sub names no admin is no admin. findFirst
+  // drops a filter whose value is undefined, so a token without sub used to
+  // come back as the first admin there is.
+  it.each([
+    ['without sub', { role: 'admin' }],
+    ['with an empty sub', { sub: '', role: 'admin' }],
+    ['with a sub that is not an id', { sub: 'admin', role: 'admin' }],
+    ['with a sub of no admin', { sub: '00000000-0000-4000-8000-000000000000', role: 'admin' }],
+  ])('returns 401 for a signed token %s', async (_, payload) => {
+    await registerAdmin(app);
+    const token = app.jwt.sign(payload as { sub: string; role: string });
+
+    for (const url of ['/api/auth/me', '/api/audit?limit=5']) {
+      const res = await app.inject({ method: 'GET', url, headers: { authorization: `Bearer ${token}` } });
+      expect(res.statusCode, url).toBe(401);
+    }
+  });
+
+  it('returns 401 for the token of an admin who was deleted', async () => {
+    const token = await registerAndLogin(app);
+    await prisma.adminUser.updateMany({ data: { deletedAt: new Date() } });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });

@@ -1911,6 +1911,8 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		// does not read Cores.
 		in, out    int64
 		cumulative bool
+		// lingering: nil when this adapter did not say (A-218).
+		lingering []core.LingeringUser
 	}
 	results := make([]statResult, len(s.cfg.Adapters))
 	var wg sync.WaitGroup
@@ -1942,7 +1944,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 				results[i] = statResult{core: total}
 				return
 			}
-			res := statResult{core: total, cumulative: stats.Cumulative, in: stats.TotalBytesIn, out: stats.TotalBytesOut}
+			res := statResult{core: total, cumulative: stats.Cumulative, in: stats.TotalBytesIn, out: stats.TotalBytesOut, lingering: stats.Lingering}
 			var sumIn, sumOut int64
 			for _, u := range stats.Users {
 				sumIn += u.BytesIn
@@ -1981,6 +1983,8 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	cores := []dto.CoreTrafficTotal{}
 	var totalIn, totalOut int64
 	var cumulative bool
+	// A-218: absent unless a core answered; only xray does today.
+	var lingering *[]dto.LingeringUser
 	for _, res := range results {
 		if res.core == nil {
 			continue
@@ -1995,6 +1999,14 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		// cumulative+delta node bill each user correctly, and the per-adapter
 		// totals in Cores for the node's own history (A-152).
 		cumulative = cumulative || res.cumulative
+		if res.lingering != nil {
+			if lingering == nil {
+				lingering = &[]dto.LingeringUser{}
+			}
+			for _, l := range res.lingering {
+				*lingering = append(*lingering, dto.LingeringUser{Email: l.Email, Sessions: l.Sessions})
+			}
+		}
 	}
 	uptime := int64(time.Since(s.startedAt).Seconds())
 	writeJSON(w, http.StatusOK, dto.GetStatsResponse{
@@ -2004,6 +2016,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		TotalBytesOut: totalOut,
 		Cumulative:    cumulative,
 		Cores:         cores,
+		Lingering:     lingering,
 	})
 }
 

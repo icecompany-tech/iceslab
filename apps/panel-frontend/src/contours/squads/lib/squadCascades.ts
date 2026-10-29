@@ -105,9 +105,14 @@ export interface SquadCascade {
    * A-277: off or narrowed, the node policy's rules into this cascade do not
    * take the squad's users either (BACK-2 5465a512): `gated`. An entry on
    * hysteria or AmneziaWG cannot tell users apart, a rule there acts on all:
-   * `gated-except-chain`. Null when the squad takes every exit.
+   * `gated-except-chain`.
+   *
+   * A-283: said only when an entry node's policy has such a rule
+   * (`nodePolicyLeadsInto`); with none, null. `unknown` when the node policies
+   * or the entry nodes' policy are not known: not «no rule», the warning stays
+   * as «cannot tell». Null when the squad takes every exit.
    */
-  nodePolicyNote: 'gated' | 'gated-except-chain' | null;
+  nodePolicyNote: 'gated' | 'gated-except-chain' | 'unknown' | null;
 }
 
 /**
@@ -131,10 +136,53 @@ interface World {
   cascades: Cascade[];
   hosts: Pick<Host, 'id' | 'bindingId' | 'enabled' | 'portOverride'>[];
   bindings: Pick<Binding, 'id' | 'nodeId' | 'profileId' | 'port' | 'publicPort'>[];
-  nodes: { id: string; name: string; countryCode: string | null }[];
+  /** `policyId` absent: the list did not say which node policy the node runs. */
+  nodes: { id: string; name: string; countryCode: string | null; policyId?: string | null }[];
   /** Every squad, for the policies granted on a cascade; the edited one is skipped by id. */
   squads: Pick<Squad, 'id' | 'profileIds' | 'hostIds' | 'policyIds'>[];
   policies: { id: string; name: string; ordinal: number }[];
+  /** The node policies (`/api/node-policies`); null while not known (pending or failed). */
+  nodePolicies: NodePolicyRules[] | null;
+}
+
+export interface NodePolicyRules {
+  id: string;
+  rules: { enabled: boolean; action: { kind: string; directionId: string | null } }[];
+}
+
+/**
+ * A-283: does a node policy on an entry node send traffic into one of these
+ * directions (an enabled `cascade` rule). A «yes» needs one such rule; a «no»
+ * needs every entry node's policy known: a node missing from the list, a list
+ * without `policyId`, a policy not among the loaded ones or no list at all is
+ * null, «cannot tell».
+ */
+export function nodePolicyLeadsInto(
+  entryNodeIds: string[],
+  directionIds: string[],
+  nodes: World['nodes'],
+  nodePolicies: NodePolicyRules[] | null,
+): boolean | null {
+  const into = new Set(directionIds);
+  const policyOf = (id: string) => nodePolicies?.find((p) => p.id === id);
+  let complete = nodePolicies !== null;
+  for (const id of entryNodeIds) {
+    const node = nodes.find((n) => n.id === id);
+    if (!node || node.policyId === undefined) {
+      complete = false;
+      continue;
+    }
+    if (node.policyId === null) continue;
+    const policy = policyOf(node.policyId);
+    if (!policy) {
+      complete = false;
+      continue;
+    }
+    if (policy.rules.some((r) => r.enabled && r.action.kind === 'cascade' && r.action.directionId !== null && into.has(r.action.directionId))) {
+      return true;
+    }
+  }
+  return complete ? false : null;
 }
 
 /** Entry node ids and directions of a cascade, v4 first, hops for the old ones. */
@@ -169,6 +217,21 @@ export function cascadeShape(c: Pick<Cascade, 'hops' | 'positions' | 'directions
 function chainOnlyEntry(c: Pick<Cascade, 'positions'>): boolean {
   const entry = c.positions.find((p) => p.position === 0);
   return entry?.entryProtocol != null && CHAIN_ONLY_ENTRIES.includes(entry.entryProtocol);
+}
+
+function nodePolicyNoteOf(
+  gated: boolean,
+  c: Pick<Cascade, 'positions'>,
+  shape: ReturnType<typeof cascadeShape>,
+  world: World,
+): SquadCascade['nodePolicyNote'] {
+  if (!gated) return null;
+  // A legacy hop cascade has no directions a rule could name: its keys are hops.
+  const directionIds = shape.byDirection ? shape.directions.map((d) => d.key) : [];
+  const leads = nodePolicyLeadsInto(shape.entryNodeIds, directionIds, world.nodes, world.nodePolicies);
+  if (leads === null) return 'unknown';
+  if (!leads) return null;
+  return chainOnlyEntry(c) ? 'gated-except-chain' : 'gated';
 }
 
 /** Does this squad hand out an enabled host on one of these nodes. */
@@ -281,7 +344,7 @@ export function squadCascades(squadId: string | null, state: SquadState, world: 
           .filter((p) => offered.has(p.id))
           .sort((a, b) => a.ordinal - b.ordinal)
           .map((p) => ({ id: p.id, name: p.name })),
-        nodePolicyNote: acl === undefined ? null : chainOnlyEntry(c) ? 'gated-except-chain' : 'gated',
+        nodePolicyNote: nodePolicyNoteOf(acl !== undefined, c, shape, world),
       };
     });
 }

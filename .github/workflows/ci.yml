@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.33.2
 
@@ -210,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.33.2
 
@@ -229,6 +229,19 @@ jobs:
         run: |
           pnpm exec prisma generate
           pnpm exec prisma migrate deploy
+
+      # The database the migrations just built against the schema: any
+      # difference fails the job (exit 2), with the SQL that would close it in
+      # the log. The two drifted apart for a month (22.09 to 29.10) until
+      # `migrate dev` would not draft a migration at all; a migration written by
+      # hand that leaves the schema behind, or the reverse, now stops here.
+      # An index the schema cannot express (A-288's partial index on an
+      # expression) is not seen by the diff at all, so it does not trip this.
+      # Once, in the first part: the database is the same in all four.
+      - name: Migrations and schema agree
+        if: matrix.shard == 1
+        working-directory: apps/panel-backend
+        run: pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma --script --exit-code
 
       # An xray binary so the cascade suite can ask the CORE whether the config
       # we generate actually loads. Every other cascade test checks structure
@@ -283,7 +296,7 @@ jobs:
           set -euo pipefail
           for attempt in 1 2 3; do
             if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/sing-box.tar.gz \
-              https://github.com/icecompany-tech/iceslab/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
+              https://github.com/icecompany-tech/core-builds/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
             then break; fi
             echo "sing-box download failed (attempt ${attempt}/3)"
             [ "$attempt" = 3 ] && exit 1
@@ -294,7 +307,7 @@ jobs:
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-iceslab-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
-          # Our build (cores.yml): the official tags plus with_v2ray_api. A
+          # Our build (core-builds): the official tags plus with_v2ray_api. A
           # binary without it would let a config with v2ray_api pass nowhere.
           ver=$(/tmp/sing-box-bin/sing-box version)
           head -1 <<<"$ver"
@@ -396,11 +409,13 @@ jobs:
           echo "GEO_DLC_DAT=/tmp/geo/dlc.dat" >> "$GITHUB_ENV"
           echo "SING_GEOSITE_DB=/tmp/geo/geosite.db" >> "$GITHUB_ENV"
 
-      # Once, in the first part: the types are the same in all four.
+      # Once, in the first part: the types are the same in all four. The
+      # package's own typecheck, so scripts/ is checked here too (A-291,
+      # tsconfig.scripts.json) and the step cannot drift from the local gate.
       - name: Typecheck backend
         if: matrix.shard == 1
         working-directory: apps/panel-backend
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
 
       # `github-actions` puts a failing assertion on the diff as an annotation,
       # so a red suite is readable without opening the log; `json` is what the
@@ -535,7 +550,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.33.2
 
@@ -716,7 +731,7 @@ jobs:
           set -euo pipefail
           for attempt in 1 2 3; do
             if curl -fsSL --retry 2 --retry-delay 3 -o /tmp/sing-box.tar.gz \
-              https://github.com/icecompany-tech/iceslab/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
+              https://github.com/icecompany-tech/core-builds/releases/download/core-singbox-v1.13.14/sing-box-1.13.14-iceslab-linux-amd64.tar.gz
             then break; fi
             echo "sing-box download failed (attempt ${attempt}/3)"
             [ "$attempt" = 3 ] && exit 1
@@ -727,7 +742,7 @@ jobs:
           mkdir -p /tmp/sing-box-bin
           install -m 0755 /tmp/sing-box-1.13.14-iceslab-linux-amd64/sing-box /tmp/sing-box-bin/sing-box
           echo "SINGBOX_BIN=/tmp/sing-box-bin/sing-box" >> "$GITHUB_ENV"
-          # Our build (cores.yml): the official tags plus with_v2ray_api. A
+          # Our build (core-builds): the official tags plus with_v2ray_api. A
           # binary without it would let a config with v2ray_api pass nowhere.
           ver=$(/tmp/sing-box-bin/sing-box version)
           head -1 <<<"$ver"
@@ -1070,11 +1085,21 @@ jobs:
       #   docker buildx imagetools inspect zricethezav/gitleaks:vX.Y.Z
       # (the "Digest:" line, the index, not one platform's manifest), put both
       # here, and check this job still reports the same findings as before.
+      #
+      # --log-opts: the history of the commit under test, not of every branch.
+      # Without it gitleaks reads `git log --all`, and the checkout above
+      # fetches every branch, so a run judged each branch by the
+      # .gitleaks.toml of the commit it happened to test: on 25.10 main,
+      # with its own older allowlist, went red on two develop commits it did
+      # not contain. The commit's own history is what it ships: for a pull
+      # request github.sha is the merge commit, the PR and its base together.
+      # --full-history keeps every merged branch's commits in that history.
       - name: gitleaks
         run: |
           docker run --rm -v "$PWD:/repo" \
             zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             detect --source=/repo --config=/repo/.gitleaks.toml \
+            --log-opts="--full-history ${GITHUB_SHA}" \
             --redact --verbose --no-banner \
             --report-format sarif --report-path /repo/gitleaks.sarif
 

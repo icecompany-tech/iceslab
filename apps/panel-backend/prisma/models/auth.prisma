@@ -18,6 +18,7 @@ model AdminUser {
 
   performedEvents SubscriptionEvent[]
   apiTokens       ApiToken[]
+  auditEvents     AdminAuditEvent[]
 
   @@map("admin_users")
 }

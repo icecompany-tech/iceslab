@@ -1,10 +1,21 @@
-# Iceslab
+<div align="center">
+  <img src=".github/assets/iceslab-icon.svg" width="88" alt="Iceslab">
+  <h1>Iceslab</h1>
+  <p>Self-hosted proxy panel that runs every protocol on its own upstream core.</p>
+  <p>
+    <a href="#install"><img src="https://img.shields.io/badge/Get_started_%E2%86%92-7DD3FC?style=for-the-badge" alt="Get started"></a>
+  </p>
+  <p>
+    <a href="https://github.com/icecompany-tech/iceslab/releases/latest"><img src="https://img.shields.io/github/v/release/icecompany-tech/iceslab?label=release" alt="Latest release"></a>
+    <a href="https://github.com/icecompany-tech/iceslab/stargazers"><img src="https://img.shields.io/github/stars/icecompany-tech/iceslab?label=stars" alt="GitHub stars"></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0"></a>
+    <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha">
+  </p>
+  <p>English · <a href="./README.ru.md">Русский</a></p>
+  <a href="docs/image/dashboard.png"><img src="docs/image/dashboard.png" width="900" alt="Iceslab operator dashboard: fleet, traffic, users and live host telemetry"></a>
+</div>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
-[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#)
-[![GitHub stars](https://img.shields.io/github/stars/icecompany-tech/iceslab?style=social)](https://github.com/icecompany-tech/iceslab)
-
-English · [Русский](./README.ru.md)
+<br>
 
 Self-hosted proxy management panel that runs the real upstream binary for each protocol instead of wrapping everything through Xray-core. Hysteria 2, Xray (VLESS / VMess / Trojan + REALITY), AmneziaWG kernel module, NaiveProxy (Caddy fork), Shadowsocks 2022, MTProto, Mieru, and a sing-box engine for TUIC / AnyTLS / ShadowTLS: each one is the actual project binary, managed by a Go node-agent under a unified `CoreAdapter` interface.
 
@@ -18,10 +29,6 @@ Self-hosted proxy management panel that runs the real upstream binary for each p
 - Self-hosted, AGPL-3.0 - your nodes, your data. One-command install via Docker Compose.
 
 ## Screenshots
-
-[![Operator dashboard](docs/image/dashboard.png)](docs/image/dashboard.png)
-
-<sub>Operator overview - fleet, traffic, users and live host telemetry, refreshed every 10s.</sub>
 
 <table>
   <tr>
@@ -65,75 +72,55 @@ The SPA comes up on `http://<vps-ip>:8080`. JWTs travel in cleartext, so don't e
 
 ### Node
 
-In the panel: Nodes → Create node → fill name + address → submit. The modal shows a one-time bootstrap command with a 15-minute token. Run it on the node VPS with the protocol flags below.
-
-#### Xray
-
-REALITY uses SNI spoofing, no domain needed. Create the inbound in the panel first (Inbounds → Create, Generate for the keypair), then on the node:
+In the panel: Nodes → Create node, fill in the name and the address, pick the cores the node gets, submit. The panel shows the install command with a one-time bootstrap token (valid 15 minutes; Refresh bootstrap on the node row mints a new one). Run it on the node VPS as root, as it is:
 
 ```bash
 sudo -i
-bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \
+bash <(curl -fsSL .../install-iceslab-node.sh) \
   --panel-url https://panel.example.com \
   --bootstrap bs_xxx \
-  --protocol xray \
-  --xray-reality-private-key sI_p9bg-7cy... \
-  --xray-reality-short-ids   abc123 \
-  --xray-reality-server-names www.cloudflare.com \
-  --xray-reality-dest        www.cloudflare.com:443
-```
-
-#### Hysteria 2
-
-A-record `hy2-01.example.com` → VPS IP (DNS only; UDP/443 doesn't pass through Cloudflare anyway).
-
-```bash
-sudo -i
-bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab-node.sh) \
-  --panel-url https://panel.example.com \
-  --bootstrap bs_xxx \
-  --protocol hysteria \
+  --engines xray,hysteria \
+  --panel-ip 203.0.113.10 \
   --hysteria-domain hy2-01.example.com
 ```
 
-Optional: `--hysteria-email you@your-domain`, the contact of the ACME account. The certificate is issued without it; an `example.*` or `localhost` address is refused, as Let's Encrypt refuses it.
+The panel fills in the installer's address and version: the agent it installs matches the panel. Each core is installed by its own bootstrap and starts idle; its settings (keys, domain, masquerade, ports) come from the panel's profiles on the first push, so the install takes no per-protocol settings. Cores can also be added later from the node page.
 
-The script installs Hysteria and its systemd unit; the agent writes `/etc/hysteria/config.yaml` and obtains the LE cert over HTTP-01 on the panel's first push.
+The flags a panel's command uses, for reading or adjusting it:
 
-#### AmneziaWG
+| Flag | Effect |
+|---|---|
+| `--panel-url <url>` | The panel the agent belongs to. `https://` only. |
+| `--bootstrap <token>` | The one-time token from the panel. `--bootstrap-file <path>` reads it from a file instead, so it never shows in the process list. |
+| `--engines <list>` | The cores, comma-separated, in any order: `xray`, `singbox`, `hysteria`, `amneziawg`, `mtproto`, `mieru`, `naive`. None: the agent alone. |
+| `--panel-ip <ip>[,<ip>]` | Only these addresses may reach the agent's port (ufw). |
+| `--port <n>` | The agent's mTLS port, default `1337`. |
+| `--hysteria-domain <name>` | The name Hysteria's certificate is issued for (ACME, HTTP-01). The panel sets it from the node's address when that is a name. |
+| `--hysteria-email <address>` | Optional: the contact of the ACME account. The certificate is issued without it; an `example.*` or `localhost` address is refused, as Let's Encrypt refuses it. |
+| `--hysteria-port-range <a-b>` | Port hopping range, default `20000-50000`; `""` turns it off. |
+| `--harden-ufw` | Rate-limit SSH and tighten the firewall. |
+| `--fail2ban` | Install fail2ban with jails for sshd and Hysteria auth. |
+| `--ssh-allowlist <csv>` | Allow 22/tcp only from these IPs or CIDRs. |
+| `--realistic-fallback` | A real-looking fallback for probes. |
+| `--reset` | Wipe a previous install on this VPS first. |
+| `--uninstall` | Remove the agent and its cores (`--keep-cores` leaves the cores). |
 
-```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol amneziawg
-```
+The installer accepts a few more, which a panel's command does not use: `--payload` and `--payload-file <path>` (the node's payload instead of a bootstrap token, for example a file copied over with scp), `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
-Installs the amnezia-vpn DKMS kernel module plus `awg` / `awg-quick`. The installer opens UDP 443 and 1234 in ufw, flips `DEFAULT_FORWARD_POLICY=ACCEPT`, enables `ip_forward`.
+Per core:
 
-A few things that catch people:
+- **Hysteria 2**: an A-record for the node's name, DNS only (UDP does not pass through Cloudflare). The agent writes `/etc/hysteria/config.yaml` and obtains the certificate on the panel's first push; a node on an IP gets the panel's self-signed one.
+- **NaiveProxy**: an A-record for the profile's `hostname`. Building it needs 2 GB RAM.
+- **AmneziaWG**: the amnezia DKMS kernel module plus `awg` / `awg-quick`. The default subnet is `10.66.66.0/24`, since `10.0.0.0/24` collides with the host gateway on some budget providers. Pick a port below 9999: RU mobile carriers DPI-drop outbound UDP/443, and 51820 is targeted as the WireGuard default. Clients: AmneziaVPN ≥ 4.8.12.9 or Hiddify Next ≥ 2.4; non-zero S3/S4 drop traffic in AmneziaVPN ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)), so presets keep `S3=0 S4=0`.
+- **Xray (REALITY), Shadowsocks 2022 (on Xray), MTProto, Mieru**: no public domain needed; MTProto picks its masquerade domain in the profile.
 
-- Default subnet is `10.66.66.0/24`. The more obvious `10.0.0.0/24` collides with the internal host gateway on some budget VPS providers.
-- Pick a port below 9999. RU mobile carriers DPI-drop outbound UDP/443, and 51820 is the WireGuard default that gets specifically targeted. 1234 or 51280 are fine.
-- Client compatibility: AmneziaVPN ≥ 4.8.12.9 or Hiddify Next ≥ 2.4. There's an upstream bug ([amnezia-client#2582](https://github.com/amnezia-vpn/amnezia-client/issues/2582)) where non-zero S3/S4 silently drops traffic; presets default to `S3=0 S4=0`.
-
-#### NaiveProxy / Shadowsocks 2022 / MTProto / Mieru
-
-```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol naive
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol shadowsocks
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol mtproto
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol mieru
-```
-
-Bootstrap installs the upstream binary: xcaddy fork for Naive (needs 2 GB RAM), xray-core for SS2022, `9seconds/mtg` for MTProto, `enfein/mieru` for Mieru.
-
-These protocols take no install-time flags for domain or cert. They start idle and wait for the panel to push their inbound config via `applyInbounds`. Domain, email, masquerade and other protocol-specific fields live on the panel-side Profile (set once via UI), then propagate to every node the profile is deployed to. Naive needs an A-record (set in the profile's `hostname` field); MTProto picks its masquerade domain in the profile; SS2022 and Mieru don't need a public domain.
-
-A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default since v0.1.2; 8443 on pre-v0.1.2 installs). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node: changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
+A note on `node.address`: this is the mTLS endpoint the panel uses to reach the agent (port 1337 by default). For routed-style cores (Hysteria, Naive, MTProto) it's the same FQDN clients hit on :443; for IP-style cores (Xray REALITY, AmneziaWG) it's the bare VPS IP. Set it correctly when creating the node: changing it later means using Refresh bootstrap (key icon on the node row) to re-issue the agent cert with the matching SAN.
 
 ### Running multiple protocols on one node
 
 One node-agent can host several protocols at once. The model is: a Profile carries one protocol + its config; a Binding deploys that profile onto a node at a specific port. To run, say, Xray + Hysteria + Shadowsocks on the same VPS:
 
-1. Install the node-agent once (any single `--protocol` flag, or none, it just bootstraps the agent + the binaries you ask for).
+1. Install the node-agent once, with the cores in `--engines` (or none, and add them later from the node page).
 2. Create one Profile per protocol in the panel (Profiles → Create).
 3. In Nodes → edit the node, deploy each profile as a binding. Each binding gets its own listen port; the quick-deploy chips auto-pick the first free port from `[443, 8443, 2053, 2083, 2087, 2096]`, or you can type one inline.
 
@@ -182,11 +169,12 @@ Hysteria 2 can be served by either xray or sing-box. The profile carries an `eng
 field: leave it unset and the protocol's native core handles it, set it to `singbox`
 and the same profile is rendered by sing-box instead.
 
-The engine has to be on the node before a profile can pick it: install with
-`--with-singbox`, the same way `--protocol` installs a native core.
+The engine has to be on the node before a profile can pick it: name it in
+`--engines` beside the native core (pick both cores when creating the node), or
+add it later from the node page.
 
 ```bash
-bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --protocol xray --with-singbox
+bash <(curl -fsSL .../install-iceslab-node.sh) --panel-url ... --bootstrap ... --engines xray,singbox
 ```
 
 **TUIC, AnyTLS and ShadowTLS** are served only by this engine, and a profile for
@@ -262,6 +250,7 @@ pnpm --filter @iceslab/panel-frontend exec tsc --noEmit
 
 - **Contributing**: see [CONTRIBUTING.md](./CONTRIBUTING.md). PRs accepted under AGPL-3.0 inbound = outbound; commits squashed on merge.
 - **Security**: vulnerabilities to `security@icecompany.tech`. Details + disclosure timeline in [SECURITY.md](./SECURITY.md).
+- **Privacy**: what the panel and the nodes keep about the people you serve, for how long, and what earlier versions left behind, in [PRIVACY.md](./PRIVACY.md). Iceslab sends none of it to us.
 - **Trademark**: the name "Iceslab" is restricted; full policy in [TRADEMARK.md](./TRADEMARK.md). AGPL rights to the code are unaffected: fork freely, just rename if you ship publicly.
 
 ## Support the project

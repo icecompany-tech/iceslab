@@ -1,12 +1,15 @@
 /**
- * Scale seeder: grows an already-seeded demo database up to a target user and
- * node count so the panel can be judged at the size a real operator runs, not
- * at the ten-row size a screenshot needs.
+ * Scale seeder: grows a database up to a target user and node count so the
+ * panel can be judged at the size a real operator runs, not at the ten-row
+ * size a screenshot needs.
  *
- * Runs ON TOP of seed-demo (it never wipes): the demo's profiles, squads,
- * cascade and history stay, and this only appends nodes, users, traffic rows
- * and bindings until the totals are reached. Re-running is safe, it tops up to
- * the target instead of adding another full batch.
+ * Needs a migrated database and nothing else: the "All" squad comes from the
+ * migrations, and the four profiles the fleet is deployed with are its own,
+ * created on first run when missing (scale-xray, scale-hy2, scale-awg,
+ * scale-ss, see SCALE_PROFILES). It never wipes: what is already there stays,
+ * and this only appends profiles, nodes, users, traffic rows and bindings
+ * until the totals are reached. Re-running is safe, it tops up to the target
+ * instead of adding another full batch.
  *
  * Run (against a LOCAL/demo db, never prod):
  *   DEMO=1 SCALE_USERS=10000 SCALE_NODES=30 \
@@ -22,7 +25,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import { prisma } from '../src/prisma.js';
 import { redis } from '../src/lib/infra/redis.js';
+import { generateRealityKeyPair, generateWireguardKeyPair } from '../src/lib/auth/credentials.js';
 import { nodeMetricsKey } from '../src/modules/nodes/nodes.cron.js';
+import { CreateBindingSchema, CreateProfileSchema } from '../src/modules/profiles/profiles.schemas.js';
+import { createBinding, createProfile } from '../src/modules/profiles/profiles.service.js';
 
 const GiB = 1024 ** 3;
 const TARGET_USERS = Number(process.env['SCALE_USERS'] ?? 10000);
@@ -58,7 +64,7 @@ function assertSafe(): void {
   }
 }
 
-// ───── Deterministic helpers (mirrors seed-demo so ids line up) ──────────────
+// ───── Deterministic helpers (stable ids, so a re-run tops up) ───────────────
 
 function detUuid(seed: string): string {
   const b = Buffer.from(createHash('sha256').update(seed).digest().subarray(0, 16));
@@ -89,8 +95,10 @@ function pick<T>(xs: readonly T[]): T {
 
 // ───── Fleet definition for the extra nodes ─────────────────────────────────
 
-// Countries an operator plausibly rents in, paired with the region the demo
-// seed already created. Protocol rotates so every core is represented.
+// Countries an operator plausibly rents in, paired with a region code. A node
+// gets the region only when a region with that code exists; a fresh database
+// has none, and the nodes are created without one. Protocol rotates so every
+// core is represented.
 const FLEET: { cc: string; region: string }[] = [
   { cc: 'DE', region: 'EU' }, { cc: 'NL', region: 'EU' }, { cc: 'FR', region: 'EU' },
   { cc: 'SE', region: 'EU' }, { cc: 'FI', region: 'EU' }, { cc: 'PL', region: 'EU' },
@@ -107,12 +115,57 @@ const PROTO_PREFIX: Record<string, string> = {
   amneziawg: 'awg',
   shadowsocks: 'ss',
 };
-// Which demo profile lands on a node of each protocol, and on which port.
-const PROFILE_FOR_PROTO: Record<string, { key: string; port: number }> = {
-  xray: { key: 'vless-reality', port: 443 },
-  hysteria: { key: 'hy2', port: 443 },
-  amneziawg: { key: 'awg', port: 51820 },
-  shadowsocks: { key: 'ss2022', port: 8388 },
+/**
+ * The profile a node of each protocol is deployed with, and on which port.
+ *
+ * The script's own, by name: it used to look up the profiles of seed-demo,
+ * which was removed in 3b810dc ("drop the demo build and its seeded fleet"),
+ * and on any database without those names every node came out deployed to
+ * nothing. A missing one is created through CreateProfileSchema and
+ * createProfile, the API's own path, so the config is the shape the panel
+ * stores (PROTOCOL_CONFIG_SCHEMAS) and the profile joins the "All" squad like
+ * any other: a scale database must not grow a second demo set outside the
+ * schema. An existing profile of that name is used as it is.
+ */
+const SCALE_PROFILES: Record<(typeof PROTOS)[number], { name: string; port: number; config: () => unknown }> = {
+  xray: {
+    name: 'scale-xray',
+    port: 443,
+    config: () => {
+      const keys = generateRealityKeyPair();
+      return {
+        subprotocol: 'vless',
+        security: 'reality',
+        network: 'raw',
+        flow: 'xtls-rprx-vision',
+        realityDest: 'www.cloudflare.com:443',
+        realityServerNames: ['www.cloudflare.com'],
+        realityShortIds: [randomBytes(4).toString('hex')],
+        realityPrivateKey: keys.privateKey,
+        realityPublicKey: keys.publicKey,
+      };
+    },
+  },
+  hysteria: {
+    name: 'scale-hy2',
+    port: 443,
+    config: () => ({ masqueradeUrl: 'https://www.bing.com' }),
+  },
+  amneziawg: {
+    name: 'scale-awg',
+    port: 51820,
+    config: () => {
+      const keys = generateWireguardKeyPair();
+      return {
+        subnet: '10.66.66.0/24',
+        serverPrivateKey: keys.privateKey,
+        serverPublicKey: keys.publicKey,
+        obfuscation: {},
+      };
+    },
+  },
+  // serverPsk is left out: createProfile generates one for the method.
+  shadowsocks: { name: 'scale-ss', port: 8388, config: () => ({ method: '2022-blake3-aes-256-gcm' }) },
 };
 
 // A few boxes that are not healthy, so the fleet page has something to show
@@ -169,6 +222,26 @@ function buildSnapshot(idx: number): Snap {
   };
 }
 
+// ───── Profiles ─────────────────────────────────────────────────────────────
+
+/** The id of each protocol's SCALE_PROFILES entry, creating the missing ones. */
+async function ensureProfiles(): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  for (const proto of PROTOS) {
+    const want = SCALE_PROFILES[proto];
+    const existing = await prisma.profile.findUnique({ where: { name: want.name }, select: { id: true } });
+    if (existing) {
+      ids.set(proto, existing.id);
+      continue;
+    }
+    const input = CreateProfileSchema.parse({ name: want.name, protocol: proto, config: want.config() });
+    const created = await createProfile(input);
+    ids.set(proto, created.id);
+    console.log(`[profiles] created ${want.name}`);
+  }
+  return ids;
+}
+
 // ───── Nodes ────────────────────────────────────────────────────────────────
 
 async function growNodes(): Promise<string[]> {
@@ -182,47 +255,13 @@ async function growNodes(): Promise<string[]> {
 
   const regions = await prisma.region.findMany();
   const regionByCode = new Map(regions.map((r) => [r.code, r.id] as const));
-  const profiles = await prisma.profile.findMany({ select: { id: true, name: true } });
-  const profileByName = new Map(profiles.map((p) => [p.name, p.id] as const));
-
-  /**
-   * Stop here rather than build a fleet with nothing deployed on it.
-   *
-   * This script was written to run ON TOP of seed-demo, looking its profiles up
-   * by name. seed-demo was removed on 2026-09-12 (commit 3b810dc, "drop the
-   * demo build and its seeded fleet"), so those names now resolve to nothing and
-   * the binding block below is skipped silently: hundreds of nodes appear, every
-   * profile and host page reports zero reach, and the only clue is that the
-   * numbers are wrong.
-   *
-   * That matters most exactly when it costs most. The migration rehearsal for an
-   * operator with ~30k users is the reason to run this at all, and somebody
-   * would spend a day on the panel before realising they were looking at
-   * emptiness rather than at a bug in the panel.
-   *
-   * Loud, and it names what to do: creating the profiles is a decision (which
-   * transports, which keys), not something a scale seeder should invent.
-   */
-  const wanted = [...new Set(Object.values(PROFILE_FOR_PROTO).map((p) => p.key))];
-  const found = wanted.filter((k) => profileByName.has(k));
-  if (found.length === 0) {
-    throw new Error(
-      `[nodes] none of the profiles this script binds exist: ${wanted.join(', ')}.\n` +
-        `They came from seed-demo, which was removed in 3b810dc. Without them every node ` +
-        `added here would be deployed to nothing, and the panel would look empty rather ` +
-        `than broken.\nCreate profiles with those names first (any config), or edit ` +
-        `PROFILE_FOR_PROTO to the names you do have.`,
-    );
-  }
-  if (found.length < wanted.length) {
-    console.warn(
-      `[nodes] ⚠ only ${found.length} of ${wanted.length} profiles found (${found.join(', ')}). ` +
-        `Nodes of the other protocols will be created with nothing deployed on them.`,
-    );
-  }
+  const profileByProto = await ensureProfiles();
 
   const added: string[] = [];
-  for (let i = 0; i < missing; i++) {
+  // Numbered on from the nodes already there, as users are: counting from 0
+  // again on a top-up run gave the first new node the id of the first old one,
+  // and the run died on nodes_pkey instead of topping up.
+  for (let i = have; i < have + missing; i++) {
     const slot = FLEET[i % FLEET.length]!;
     const proto = PROTOS[i % PROTOS.length]!;
     // Two digits keep the name stable and readable even past the fleet length.
@@ -256,27 +295,21 @@ async function growNodes(): Promise<string[]> {
     });
     added.push(id);
 
-    // Put the matching demo profile on the node so hosts/profiles pages count
-    // real reach instead of showing a fleet nothing is deployed to.
-    const want = PROFILE_FOR_PROTO[proto]!;
-    const profileId = profileByName.get(want.key);
-    if (profileId) {
-      const bindingId = detUuid(`scale-binding:${key}`);
-      await prisma.profileNodeBinding.create({
-        data: {
-          id: bindingId,
-          profileId,
-          nodeId: id,
-          port: want.port,
-          publicHost: host,
-          publicPort: want.port,
-          enabled: status === 'online',
-        },
-      });
-      await prisma.host.create({
-        data: { id: detUuid(`scale-host:${key}`), bindingId, remark: 'Direct', priority: 0, enabled: true },
-      });
-    }
+    // Put the protocol's profile on the node so hosts/profiles pages count
+    // real reach instead of showing a fleet nothing is deployed to. Through
+    // createBinding, the API's path: it derives the binding's transport (a
+    // required column the hand-written insert here lacked) and adds the
+    // default host.
+    const port = SCALE_PROFILES[proto].port;
+    await createBinding(
+      CreateBindingSchema.parse({
+        profileId: profileByProto.get(proto)!,
+        nodeId: id,
+        port,
+        publicHost: host,
+        enabled: status === 'online',
+      }),
+    );
   }
   return added;
 }
@@ -318,7 +351,7 @@ async function growUsers(): Promise<void> {
   const allNodes = await prisma.node.findMany({ where: { deletedAt: null }, select: { id: true } });
   const homePool = allNodes.map((n) => n.id);
   if (homePool.length === 0) {
-    refuse('no nodes in the database. Run seed-demo first: users need a node to be attached to.');
+    refuse('no nodes in the database. Set SCALE_NODES above 0: users need a node to be attached to.');
   }
   const groups = await prisma.group.findMany({ select: { id: true, name: true } });
 

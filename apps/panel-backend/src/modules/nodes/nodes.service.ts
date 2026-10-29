@@ -600,6 +600,18 @@ export async function updateNode(id: string, input: UpdateNodeInput): Promise<Pu
   return mapNodeToPublic(updated);
 }
 
+/**
+ * A-279: what a deleted node no longer keeps, the fields of models/nodes.prisma
+ * that are secrets or key material. The migration
+ * 20261026100207_deleted_node_secrets clears the same on rows deleted before.
+ */
+export const TOMBSTONE_CLEARS = {
+  chainSecret: null,
+  hysteriaTls: Prisma.DbNull,
+  warpAccount: Prisma.DbNull,
+  publicKey: null,
+} satisfies Prisma.NodeUpdateInput;
+
 export async function deleteNode(id: string): Promise<void> {
   const node = await prisma.node.findFirst({
     where: { id, deletedAt: null },
@@ -650,9 +662,15 @@ export async function deleteNode(id: string): Promise<void> {
   // One transaction: hard-delete this node's profile bindings (leaving them
   // made a re-install look double-bound), and soft-delete the node row (kept
   // for audit history).
+  //
+  // A-279: the row that stays is a tombstone. Its secrets go in the same
+  // write (models/nodes.prisma: chain_secret, hysteria_tls, warp_account,
+  // public_key); the id and heartbeat_secret stay for good, since the agent
+  // removes itself only on the 410 a valid heartbeat token gets
+  // (heartbeat.routes.ts), and an agent offline at the delete needs it later.
   await prisma.$transaction([
     prisma.profileNodeBinding.deleteMany({ where: { nodeId: id } }),
-    prisma.node.update({ where: { id }, data: { deletedAt: new Date() } }),
+    prisma.node.update({ where: { id }, data: { deletedAt: new Date(), ...TOMBSTONE_CLEARS } }),
   ]);
 
   // Stop serving this node's endpoints now, or the subscription keeps

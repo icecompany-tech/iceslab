@@ -1,0 +1,41 @@
+// ───── Admin audit log (after v0.3.0-rc.1, decisions 26.10) ─────────────
+//
+// Who did what to which object, when, and how it ended. The labels are taken
+// at the time of the action and the target has no foreign key: the object may
+// be erased (A-268) and the row has to stay readable. The actor's admin is
+// SET NULL when the admin is deleted, as on subscription_events.
+//
+// Never in it: tokens, keys, passwords, request bodies, core configs, IP
+// addresses (A-267). detail is a summary by a list of fields per action,
+// checked before it is written (modules/audit). A sign-in keeps the network
+// it came from in source_network, /24 or /48 (wave 2, decision 27.10).
+
+model AdminAuditEvent {
+  id          BigInt     @id @default(autoincrement())
+  at          DateTime   @default(now()) @db.Timestamptz(6)
+  actorKind   String     @map("actor_kind") @db.VarChar(16)
+  actorId     String?    @map("actor_id") @db.Uuid
+  actorLabel  String     @map("actor_label") @db.VarChar(64)
+  action      String     @db.VarChar(64)
+  targetKind  String     @map("target_kind") @db.VarChar(32)
+  targetId    String?    @map("target_id") @db.Uuid
+  targetLabel String     @map("target_label") @db.VarChar(128)
+  outcome     String     @db.VarChar(16)
+  refusal     String?    @db.VarChar(64)
+  detail      Json?
+  sourceNetwork String?  @map("source_network") @db.VarChar(64)
+
+  actor AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([at(sort: Desc), id(sort: Desc)])
+  @@index([targetKind, targetId, at(sort: Desc)])
+  @@index([action, at(sort: Desc)])
+  // A user's history finds the bulk actions that reached them by
+  // detail @> {"userIds":[id]}.
+  @@index([detail(ops: JsonbPathOps)], type: Gin, map: "admin_audit_events_detail_idx")
+  // Not expressible here, in the migration only (A-288): the unique partial
+  // index admin_audit_events_login_summary_key on (action, target_label,
+  // detail->>'windowStart') WHERE detail ? 'suppressed', one summary of
+  // refused sign-ins per hour and key (20261029063532).
+  @@map("admin_audit_events")
+}

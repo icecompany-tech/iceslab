@@ -1,4 +1,4 @@
-import { DELETED_USER_RETENTION_DAYS, HWID_DEVICE_RETENTION_DAYS } from '@iceslab/shared';
+import { ADMIN_AUDIT_RETENTION_DAYS, DELETED_USER_RETENTION_DAYS, HWID_DEVICE_RETENTION_DAYS } from '@iceslab/shared';
 import { prisma } from '../../prisma.js';
 import { purgeExpiredBootstrapTokens } from '../nodes/bootstrap.service.js';
 import { sourceIdSha256 } from '../users/erased-sources.js';
@@ -34,6 +34,9 @@ const RETENTION_DAYS = {
   // dialog and the device list say them too, from the same constant.
   deletedUsers: DELETED_USER_RETENTION_DAYS,
   hwidDevices: HWID_DEVICE_RETENTION_DAYS,
+  // The admin audit log keeps a year; the screen names the window from the
+  // same constant.
+  adminAudit: ADMIN_AUDIT_RETENTION_DAYS,
 } as const;
 
 export { DELETED_USER_RETENTION_DAYS, HWID_DEVICE_RETENTION_DAYS };
@@ -94,6 +97,7 @@ export interface PruneResult {
   bootstrapTokens: number;
   deletedUsers: number;
   hwidDevices: number;
+  adminAudit: number;
 }
 
 /**
@@ -107,7 +111,7 @@ export interface PruneResult {
  */
 export async function pruneHistory(): Promise<PruneResult> {
   const now = Date.now();
-  const [subscriptionRequests, nodeUserUsage, nodeUsage, subscriptionEvents, bootstrapTokens, deletedUsers, hwidDevices] =
+  const [subscriptionRequests, nodeUserUsage, nodeUsage, subscriptionEvents, bootstrapTokens, deletedUsers, hwidDevices, adminAudit] =
     await Promise.all([
       prisma.subscriptionRequestHistory.deleteMany({
         where: { requestedAt: { lt: new Date(now - RETENTION_DAYS.subscriptionRequests * DAY_MS) } },
@@ -127,6 +131,9 @@ export async function pruneHistory(): Promise<PruneResult> {
       prisma.hwidUserDevice.deleteMany({
         where: { lastSeenAt: { lt: new Date(now - RETENTION_DAYS.hwidDevices * DAY_MS) } },
       }),
+      prisma.adminAuditEvent.deleteMany({
+        where: { at: { lt: new Date(now - RETENTION_DAYS.adminAudit * DAY_MS) } },
+      }),
     ]);
   return {
     subscriptionRequests: subscriptionRequests.count,
@@ -136,5 +143,6 @@ export async function pruneHistory(): Promise<PruneResult> {
     bootstrapTokens,
     deletedUsers,
     hwidDevices: hwidDevices.count,
+    adminAudit: adminAudit.count,
   };
 }

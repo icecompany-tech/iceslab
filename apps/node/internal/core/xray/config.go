@@ -1072,6 +1072,11 @@ func renderMultiConfigInto(
 				"0": map[string]any{
 					"statsUserUplink":   true,
 					"statsUserDownlink": true,
+					// A-218: open connections counted per email, for
+					// statsgetallonlineusers. rmu takes a user off an inbound
+					// and leaves their open connections running; this is how
+					// the panel sees them.
+					"statsUserOnline": true,
 				},
 			},
 			"system": map[string]any{

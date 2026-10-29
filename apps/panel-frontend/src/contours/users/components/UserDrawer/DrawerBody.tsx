@@ -5,6 +5,7 @@ import { DeviceList } from '@/contours/users/components/UserDrawer/DeviceList';
 import { DialCard } from '@/contours/users/components/UserDrawer/DialCard';
 import { SubscriptionCard } from '@/contours/users/components/UserDrawer/SubscriptionCard';
 import { FormColumn } from '@/contours/users/components/UserDrawer/FormColumn';
+import { LiveAfterRemovalCard } from '@/contours/users/components/UserDrawer/LiveAfterRemovalCard';
 import { PreviewCard } from '@/contours/users/components/UserDrawer/PreviewCard';
 import { WELL } from '@/contours/users/lib/colors';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -127,6 +128,8 @@ export function DrawerBody({
               call can be answered with a single URI instead of the whole
               subscription. */}
           {ui.isEdit && <DialCard query={ui.endpointsQuery} />}
+          {/* A-218: taken off a node, a connection opened before is still live. */}
+          {ui.isEdit && user && <LiveAfterRemovalCard userId={user.id} />}
         </Box>
       </Box>
 

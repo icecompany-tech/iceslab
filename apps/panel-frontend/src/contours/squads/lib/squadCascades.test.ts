@@ -4,10 +4,12 @@ import {
   cascadeShape,
   exitAclInvalid,
   isDuplicateExitAcl,
+  nodePolicyLeadsInto,
   setCascadeOn,
   squadCascades,
   squadExitsSummary,
   toggleCascadeExit,
+  type NodePolicyRules,
   type SquadState,
 } from '@/contours/squads/lib/squadCascades';
 import type { Cascade } from '@/lib/domain/cascades';
@@ -36,12 +38,22 @@ const world = {
     { id: 'b-other', nodeId: 'elsewhere', profileId: 'p1', port: 8443, publicPort: null },
   ],
   nodes: [
-    { id: 'entry', name: 'ru-01', countryCode: 'RU' },
-    { id: 'de', name: 'de-01', countryCode: 'DE' },
-    { id: 'nl', name: 'nl-01', countryCode: 'NL' },
+    { id: 'entry', name: 'ru-01', countryCode: 'RU', policyId: 'np1' },
+    { id: 'de', name: 'de-01', countryCode: 'DE', policyId: null },
+    { id: 'nl', name: 'nl-01', countryCode: 'NL', policyId: null },
   ],
   squads: [{ id: 'other', profileIds: ['p1'], hostIds: [], policyIds: ['noads'] }],
   policies: [{ id: 'noads', name: 'Без рекламы', ordinal: 1 }],
+  // The entry node's policy sends youtube into direction d1.
+  nodePolicies: [
+    {
+      id: 'np1',
+      rules: [
+        { enabled: true, action: { kind: 'direct', directionId: null } },
+        { enabled: true, action: { kind: 'cascade', directionId: 'd1' } },
+      ],
+    },
+  ] as NodePolicyRules[] | null,
 };
 const state = (s: Partial<SquadState> = {}): SquadState => ({
   profileIds: ['p1'],
@@ -199,6 +211,45 @@ describe('три состояния каскада для сквада', () => {
       const r = squadCascades('me', state({ exitAcl: [{ cascadeId: 'c1', directionIds: ['d1'] }] }), { ...world, cascades: [c] })[0]!;
       expect(r.nodePolicyNote).toBe('gated-except-chain');
     }
+  });
+
+  it('A-283: у политики ноды входа нет правила в этот каскад (или политики нет): строки нет', () => {
+    const narrowed = state({ exitAcl: [{ cascadeId: 'c1', directionIds: ['d2'] }] });
+    const noRule = { ...world, nodePolicies: [{ id: 'np1', rules: [{ enabled: true, action: { kind: 'direct', directionId: null } }] }] };
+    expect(squadCascades('me', narrowed, noRule)[0]!.nodePolicyNote).toBeNull();
+    // Rule switched off: not drawn by the server, does not count.
+    const off = { ...world, nodePolicies: [{ id: 'np1', rules: [{ enabled: false, action: { kind: 'cascade', directionId: 'd1' } }] }] };
+    expect(squadCascades('me', narrowed, off)[0]!.nodePolicyNote).toBeNull();
+    // The policy deleted: the node runs none.
+    const none = { ...world, nodes: world.nodes.map((n) => ({ ...n, policyId: null })) };
+    expect(squadCascades('me', narrowed, none)[0]!.nodePolicyNote).toBeNull();
+  });
+
+  it('A-283: не известно, ведут ли правила в каскад: «unknown», не «нет»', () => {
+    const narrowed = state({ exitAcl: [{ cascadeId: 'c1', directionIds: ['d2'] }] });
+    // Node policies did not arrive.
+    expect(squadCascades('me', narrowed, { ...world, nodePolicies: null })[0]!.nodePolicyNote).toBe('unknown');
+    // The node list did not say which policy the entry runs.
+    const noField = { ...world, nodes: world.nodes.map((n) => ({ id: n.id, name: n.name, countryCode: n.countryCode })) };
+    expect(squadCascades('me', narrowed, noField)[0]!.nodePolicyNote).toBe('unknown');
+    // The entry runs a policy the loaded list does not have.
+    expect(squadCascades('me', narrowed, { ...world, nodePolicies: [] })[0]!.nodePolicyNote).toBe('unknown');
+    // The node list did not arrive at all.
+    expect(squadCascades('me', narrowed, { ...world, nodes: [] })[0]!.nodePolicyNote).toBe('unknown');
+    // Every exit: no line, whatever is known.
+    expect(squadCascades('me', state(), { ...world, nodePolicies: null })[0]!.nodePolicyNote).toBeNull();
+  });
+
+  it('nodePolicyLeadsInto: «да» по одному правилу даже при неполном знании, «нет» только при полном', () => {
+    const nodes = [
+      { id: 'a', name: 'a', countryCode: null, policyId: 'np1' },
+      { id: 'b', name: 'b', countryCode: null },
+    ];
+    const policies = [{ id: 'np1', rules: [{ enabled: true, action: { kind: 'cascade', directionId: 'd1' } }] }];
+    expect(nodePolicyLeadsInto(['a', 'b'], ['d1'], nodes, policies)).toBe(true);
+    expect(nodePolicyLeadsInto(['a', 'b'], ['d9'], nodes, policies)).toBeNull();
+    expect(nodePolicyLeadsInto(['a'], ['d9'], nodes, policies)).toBe(false);
+    expect(nodePolicyLeadsInto(['a'], [], nodes, policies)).toBe(false);
   });
 
   it('страна входа неизвестна хотя бы у одной ноды: страны нет вовсе', () => {
