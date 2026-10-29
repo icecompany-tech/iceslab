@@ -10,28 +10,17 @@ import type {
   Profile,
   UpdateProfileInput,
 } from '@/lib/domain/profiles';
-import {
-  csvList,
-  numOr,
-  renameAwg,
-  type FormValues,
-  type Mode,
-} from '@/contours/profiles/lib/profileFormValues';
+import { renameAwg, type FormValues, type Mode } from '@/contours/profiles/lib/profileFormValues';
+import { profileConfigOf } from '@/contours/profiles/lib/profileConfig';
 import { defaults } from '@/contours/profiles/lib/profileDefaults';
 import { MOBILE_PRESET, randomAwgHeaders, TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
 import { settleXrayFields, xrayFieldReactions } from '@/contours/profiles/lib/xrayFieldReactions';
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds';
-import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
 import { saveThen } from '@/contours/profiles/lib/saveThen';
 import { profileAwgCreate, profileAwgPatch } from '@/lib/domain/awg';
 import { ssConfigPatch } from '@/contours/profiles/lib/ssServerKey';
-import {
-  portHopConfig,
-  portHopProblem,
-  portHopWords,
-  type PortHopField,
-} from '@/contours/profiles/lib/portHopRange';
-import { awgHeaderConfig, awgHeaderProblems, type AwgHField } from '@/contours/profiles/lib/awgHeaders';
+import { portHopProblem, portHopWords, type PortHopField } from '@/contours/profiles/lib/portHopRange';
+import { awgHeaderProblems, type AwgHField } from '@/contours/profiles/lib/awgHeaders';
 
 /**
  * Everything the profile form owns that is not markup: the Mantine form, the
@@ -176,132 +165,9 @@ export function useProfileForm({
   }
 
   async function handleSubmit(values: FormValues) {
-    let config: Record<string, unknown>;
-    switch (values.protocol) {
-      case 'hysteria':
-        config = {
-          ...(values.hyObfsPassword ? { obfsPassword: values.hyObfsPassword } : {}),
-          ...(values.hyMasqueradeUrl ? { masqueradeUrl: values.hyMasqueradeUrl } : {}),
-          ...(values.hyBrutalUp ? { brutalUpMbps: Number(values.hyBrutalUp) } : {}),
-          ...(values.hyBrutalDown ? { brutalDownMbps: Number(values.hyBrutalDown) } : {}),
-          // Every bound filled is sent: a half range is the form's to refuse
-          // (validate below) and the server's after it, never dropped (A-284).
-          ...portHopConfig(values.hyPortHopStart, values.hyPortHopEnd),
-        };
-        break;
-      case 'xray':
-        // SOCKS5 / HTTP: a reality or transport key left from a vless draft
-        // would be refused by the server, so none of them is sent.
-        if (isPlainSubprotocol(values.xraySubprotocol)) {
-          config = plainXrayConfig(values.xraySubprotocol);
-          break;
-        }
-        config = {
-          realityDest: values.xrayDest,
-          realityServerNames: csvList(values.xrayServerNames),
-          realityShortIds: csvList(values.xrayShortIds),
-          realityPrivateKey: values.xrayPrivateKey,
-          realityPublicKey: values.xrayPublicKey,
-          realityMode: values.xrayRealityMode,
-          // G1: realistic-fallback upstream is only meaningful for self-steal;
-          // send '' otherwise so a stale value never trips the URL validation.
-          realityFallbackUpstream:
-            values.xrayRealityMode === 'self-steal' ? values.xrayRealityFallbackUpstream.trim() : '',
-          flow: values.xrayFlow,
-          fingerprint: values.xrayFingerprint,
-          network: values.xrayNetwork,
-          subprotocol: values.xraySubprotocol,
-          security: values.xraySecurity,
-          tlsServerName: values.xrayTlsServerName,
-          tlsCert: values.xrayTlsCert,
-          tlsKey: values.xrayTlsKey,
-          ...(values.xrayPath ? { path: values.xrayPath } : {}),
-          ...(values.xrayHostHeader ? { host: values.xrayHostHeader } : {}),
-          ...(values.xrayServiceName ? { serviceName: values.xrayServiceName } : {}),
-          // B3 advanced options - only emit the ones relevant to the chosen
-          // security/network, mirroring how each tab gates its controls.
-          ...(values.xraySecurity === 'reality'
-            ? {
-                realityXver: Number(values.xrayRealityXver),
-                realityMaxTimeDiff: numOr(values.xrayRealityMaxTimeDiff, 0),
-                // G: probe-resistance fallback rate-limit (bytes/sec, 0 = off).
-                realityLimitFallbackUploadBytesPerSec: numOr(values.xrayRealityLimitFallbackUpload, 0),
-                realityLimitFallbackDownloadBytesPerSec: numOr(values.xrayRealityLimitFallbackDownload, 0),
-              }
-            : {}),
-          ...(values.xraySecurity === 'tls'
-            ? { tlsRejectUnknownSni: values.xrayTlsRejectUnknownSni }
-            : {}),
-          ...(values.xrayNetwork === 'xhttp'
-            ? {
-                xhttpMode: values.xrayXhttpMode,
-                xhttpPaddingBytes: values.xrayXhttpPaddingBytes.trim(),
-              }
-            : {}),
-          ...(values.xrayNetwork === 'grpc'
-            ? { grpcMultiMode: values.xrayGrpcMultiMode }
-            : {}),
-        };
-        break;
-      case 'amneziawg':
-        config = {
-          subnet: values.awgSubnet,
-          serverPrivateKey: values.awgServerPriv,
-          serverPublicKey: values.awgServerPub,
-          obfuscation: {
-            jc: numOr(values.awgJc, 4),
-            jmin: numOr(values.awgJmin, 64),
-            jmax: numOr(values.awgJmax, 128),
-            s1: numOr(values.awgS1, 32),
-            s2: numOr(values.awgS2, 56),
-            s3: numOr(values.awgS3, 32),
-            s4: numOr(values.awgS4, 16),
-            // Never 0: an empty header is the validator's to refuse (A-286).
-            ...awgHeaderConfig(values),
-            // I1-I5: optional v2.0 mimicry signature packets (hex).
-            // Empty disables that slot. Trimmed defensively to avoid
-            // accidental whitespace breaking awg-quick parser.
-            i1: (values.awgI1 ?? '').trim(),
-            i2: (values.awgI2 ?? '').trim(),
-            i3: (values.awgI3 ?? '').trim(),
-            i4: (values.awgI4 ?? '').trim(),
-            i5: (values.awgI5 ?? '').trim(),
-          },
-        };
-        break;
-      case 'naive':
-        config = {
-          hostname: values.naiveHostname,
-          tlsEmail: values.naiveTlsEmail,
-          masqueradeRoot: values.naiveMasquerade,
-        };
-        break;
-      case 'shadowsocks':
-        // The real payload is ssConfigPatch below; this is only the create shape.
-        config = { method: values.ssMethod };
-        break;
-      case 'mtproto':
-        config = { domain: values.mtgDomain };
-        break;
-      case 'mieru':
-        config = { mtu: values.mieruMtu === '' ? 1400 : Number(values.mieruMtu) };
-        break;
-      case 'tuic':
-        config = {
-          serverName: values.tuicServerName,
-          congestionControl: values.tuicCongestion,
-        };
-        break;
-      case 'anytls':
-        config = { serverName: values.anytlsServerName };
-        break;
-      case 'shadowtls':
-        config = {
-          handshake: values.shadowtlsHandshake,
-          ssMethod: values.shadowtlsSsMethod,
-        };
-        break;
-    }
+    // Shadowsocks: the real payload is ssConfigPatch below; this is only the
+    // create shape.
+    const config = profileConfigOf(values);
 
     // Engine-choice: only the shared protocols carry a non-native engine;
     // everything else stays null (native). A 'native' selection -> null.
