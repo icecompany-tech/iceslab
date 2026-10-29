@@ -10,10 +10,23 @@ import { getLogger } from '../../lib/infra/logger.js';
  * that did not lock an account come here: a success and a refusal that locked
  * one are written whatever the count, and sign-in itself is not limited.
  *
- * The summary is ONE row, updated in place as its count grows (its
- * detail.suppressed), not written when the hour closes: a log read during an
- * attack shows it at once, and no job has to close the hour. It is found by
- * its key (target label) and windowStart (detail @>, the GIN index on detail).
+ * The counter "all" counts only the refusals that passed their network's cap:
+ * the 300 are rows written, not attempts made.
+ *
+ * The summary is ONE row, updated in place as its count grows, not written
+ * when the hour closes: a log read during an attack shows it at once, and no
+ * job has to close the hour. The update is the only one the log ever makes,
+ * and a narrow one (AUDT):
+ *   - only detail.suppressed changes, and only upwards: the count comes from
+ *     the window's counter, which only grows, and the larger of the stored and
+ *     the new one is kept;
+ *   - at, actor, target and windowStart stay as the first refusal past the
+ *     cap wrote them;
+ *   - after the window ends nothing touches the row: its counter is gone and
+ *     a refusal of the next hour counts into the next hour's summary.
+ * One row per hour and key is held by a unique partial index
+ * (20261029063532_audit_login_summary_unique) and INSERT ... ON CONFLICT DO
+ * UPDATE, so two refusals past the cap at once do not make two.
  *
  * The counters live in Redis with the window's TTL. Redis down: the row is
  * written and a warning logged; a log that loses refusals because a counter is
@@ -80,34 +93,22 @@ export async function admitRefusedSignIn(network: string, now = Date.now()): Pro
 }
 
 async function summarise(key: string, network: string | null, suppressed: number, windowStart: Date): Promise<void> {
-  const ws = windowStart.toISOString();
+  const detail = JSON.stringify({ suppressed, windowStart: windowStart.toISOString() });
   try {
-    const [row] = await prisma.$queryRaw<{ id: bigint }[]>`
-      SELECT id FROM admin_audit_events
-      WHERE action = 'auth.login' AND target_label = ${key}
-        AND detail @> ${JSON.stringify({ windowStart: ws })}::jsonb
-      ORDER BY id LIMIT 1`;
-    const detail = { suppressed, windowStart: ws };
-    if (row) {
-      await prisma.adminAuditEvent.update({ where: { id: row.id }, data: { detail } });
-      return;
-    }
-    await prisma.adminAuditEvent.create({
-      data: {
-        at: new Date(),
-        actorKind: 'anonymous',
-        actorId: null,
-        actorLabel: 'anonymous',
-        action: 'auth.login',
-        targetKind: 'admin',
-        targetId: null,
-        targetLabel: key,
-        outcome: 'refused',
-        refusal: null,
-        detail,
-        sourceNetwork: network,
-      },
-    });
+    // One statement, so a summary another refusal is writing at the same time
+    // is a conflict here and not a second row. On conflict only suppressed
+    // moves, to the larger count (see the header).
+    await prisma.$executeRaw`
+      INSERT INTO admin_audit_events
+        (at, actor_kind, actor_id, actor_label, action, target_kind, target_id, target_label, outcome, refusal, detail, source_network)
+      VALUES
+        (${new Date()}, 'anonymous', NULL, 'anonymous', 'auth.login', 'admin', NULL, ${key}, 'refused', NULL, ${detail}::jsonb, ${network})
+      ON CONFLICT (action, target_label, (detail ->> 'windowStart')) WHERE detail ? 'suppressed'
+      DO UPDATE SET detail = jsonb_set(
+        admin_audit_events.detail,
+        '{suppressed}',
+        to_jsonb(GREATEST((admin_audit_events.detail ->> 'suppressed')::int, (EXCLUDED.detail ->> 'suppressed')::int))
+      )`;
   } catch (err) {
     getLogger().warn({ err, event: 'audit.login-cap.summary' }, '[audit] the summary of refused sign-ins was not written');
   }

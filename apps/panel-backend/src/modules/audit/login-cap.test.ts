@@ -96,6 +96,39 @@ describe('refused sign-ins past the cap of their hour', () => {
     expect(logins.some((r) => (r.detail as { locked?: boolean }).locked === true)).toBe(true);
   });
 
+  // AUDT: the one update the log makes moves detail.suppressed up and nothing
+  // else.
+  it('a second update of the same hour changes only suppressed', async () => {
+    setLoginCapLimitsForTest({ perNetwork: 1, all: 300, windowSeconds: 3600 });
+    expect((await signIn('192.0.2.21', 'nobody', 'x')).statusCode).toBe(401);
+    expect((await signIn('192.0.2.22', 'nobody', 'x')).statusCode).toBe(401);
+    const summaryOf = async () =>
+      (await refusals()).filter((r) => (r.detail as { suppressed?: number }).suppressed !== undefined);
+    const [first] = await summaryOf();
+    expect((first!.detail as { suppressed: number }).suppressed).toBe(1);
+
+    expect((await signIn('192.0.2.23', 'nobody', 'x')).statusCode).toBe(401);
+    const after = await summaryOf();
+    expect(after).toHaveLength(1);
+    const [second] = after;
+    expect((second!.detail as { suppressed: number }).suppressed).toBe(2);
+    const { detail: d1, ...rest1 } = first!;
+    const { detail: d2, ...rest2 } = second!;
+    expect(rest2).toEqual(rest1);
+    expect((d2 as { windowStart: string }).windowStart).toBe((d1 as { windowStart: string }).windowStart);
+  });
+
+  // AUDT, the race: two refusals past the cap at once made two summaries.
+  it('two refusals past the cap at once leave one summary with both counted', async () => {
+    setLoginCapLimitsForTest({ perNetwork: 1, all: 300, windowSeconds: 3600 });
+    expect((await signIn('192.0.2.31', 'nobody', 'x')).statusCode).toBe(401);
+    const both = await Promise.all([signIn('192.0.2.32', 'nobody', 'x'), signIn('192.0.2.33', 'nobody', 'x')]);
+    expect(both.map((r) => r.statusCode)).toEqual([401, 401]);
+    const summaries = (await refusals()).filter((r) => (r.detail as { suppressed?: number }).suppressed !== undefined);
+    expect(summaries).toHaveLength(1);
+    expect((summaries[0]!.detail as { suppressed: number }).suppressed).toBe(2);
+  });
+
   it('with Redis away every refusal is written', async () => {
     setLoginCapLimitsForTest({ perNetwork: 1, all: 1, windowSeconds: 3600 });
     setLoginCapCounterForTest(async () => {

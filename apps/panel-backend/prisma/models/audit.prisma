@@ -33,5 +33,9 @@ model AdminAuditEvent {
   // A user's history finds the bulk actions that reached them by
   // detail @> {"userIds":[id]}.
   @@index([detail(ops: JsonbPathOps)], type: Gin, map: "admin_audit_events_detail_idx")
+  // Not expressible here, in the migration only (A-288): the unique partial
+  // index admin_audit_events_login_summary_key on (action, target_label,
+  // detail->>'windowStart') WHERE detail ? 'suppressed', one summary of
+  // refused sign-ins per hour and key (20261029063532).
   @@map("admin_audit_events")
 }
