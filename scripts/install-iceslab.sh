@@ -156,7 +156,7 @@ export ICESLAB_REF
 # default ref above: it moves with every tag (RELEASING §4b), the default
 # moves only with a final. The same function is in install-iceslab-node.sh
 # (apps/node/installer_handover_test.go holds the two together).
-ICESLAB_SCRIPT_REF="v0.3.0-rc.1"
+ICESLAB_SCRIPT_REF="v0.3.0-rc.2"
 
 # handover_to_ref <ref> <repo url> <path in repo> [args...]: exec that ref's
 # copy of <path> with the same arguments and environment, once
