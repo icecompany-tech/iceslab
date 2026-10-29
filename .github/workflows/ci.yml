@@ -409,11 +409,13 @@ jobs:
           echo "GEO_DLC_DAT=/tmp/geo/dlc.dat" >> "$GITHUB_ENV"
           echo "SING_GEOSITE_DB=/tmp/geo/geosite.db" >> "$GITHUB_ENV"
 
-      # Once, in the first part: the types are the same in all four.
+      # Once, in the first part: the types are the same in all four. The
+      # package's own typecheck, so scripts/ is checked here too (A-291,
+      # tsconfig.scripts.json) and the step cannot drift from the local gate.
       - name: Typecheck backend
         if: matrix.shard == 1
         working-directory: apps/panel-backend
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
 
       # `github-actions` puts a failing assertion on the diff as an annotation,
       # so a red suite is readable without opening the log; `json` is what the
