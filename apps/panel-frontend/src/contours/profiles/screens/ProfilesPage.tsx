@@ -54,6 +54,7 @@ import {
   type PlainSubprotocol,
 } from '@/contours/profiles/lib/plainSubprotocol';
 import { AMBER, CARD, CYAN, CYAN_HI, HAIRLINE, MIST, MOSS, PINK, PURPLE, SNOW, VIOLET } from '@/contours/profiles/lib/colors';
+import { profileFacts } from '@/contours/profiles/lib/profileFacts';
 
 const PROTOCOL_ACCENT: Record<string, string> = {
   hysteria: CYAN,
@@ -398,61 +399,11 @@ function BarDot() {
   );
 }
 
-/**
- * The three settings that actually distinguish one profile of a protocol from
- * another: the ones an operator would ask about before deploying it. Anything
- * else lives in the editor.
- */
-function protocolFacts(profile: Profile): { label: string; value: string }[] {
-  const cfg = (profile.config ?? {}) as Record<string, unknown>;
-  const str = (v: unknown): string | null =>
-    typeof v === 'string' && v.length > 0 ? v : typeof v === 'number' ? String(v) : null;
-  const pick = (...keys: string[]): string | null => {
-    for (const k of keys) {
-      const v = str(cfg[k]);
-      if (v) return v;
-    }
-    return null;
-  };
-
-  // SOCKS5 / HTTP: the server fills the xray defaults (fingerprint, Vision
-  // flow) into their config too, and none of them applies. What tells one
-  // apart is that there is nothing to tell: login per user, no TLS, no
-  // obfuscation.
-  if (plainSubprotocolOf(profile)) {
-    return [
-      { label: 'auth', value: 'per user' },
-      { label: 'security', value: 'none' },
-      { label: 'transport', value: 'tcp' },
-    ];
-  }
-
-  switch (profile.protocol) {
-    case 'xray':
-      return [
-        { label: 'fingerprint', value: pick('fingerprint', 'fp') ?? '-' },
-        { label: 'sni', value: pick('serverName', 'sni', 'dest') ?? '-' },
-        { label: 'flow', value: pick('flow') ?? '-' },
-      ];
-    case 'hysteria':
-      return [
-        { label: 'alpn', value: pick('alpn') ?? '-' },
-        { label: 'obfs', value: pick('obfs', 'obfsType') ?? '-' },
-        { label: 'cc', value: pick('congestion', 'cc') ?? '-' },
-      ];
-    case 'amneziawg':
-      return [
-        { label: 'mtu', value: pick('mtu') ?? '-' },
-        { label: 'subnet', value: pick('subnet', 'address') ?? '-' },
-        { label: 'jc', value: pick('jc') ?? '-' },
-      ];
-    default:
-      return [
-        { label: 'port', value: pick('port') ?? '-' },
-        { label: 'security', value: pick('security', 'securityLayer') ?? '-' },
-        { label: 'transport', value: pick('network', 'transport') ?? '-' },
-      ];
-  }
+/** The facts under the card's name, from keys the config holds (A-287,
+ *  profileFacts). SOCKS5 / HTTP: the server fills the xray defaults into
+ *  their config too, so they get their own three. */
+function protocolFacts(profile: Profile) {
+  return profileFacts(profile.protocol, profile.config, plainSubprotocolOf(profile) !== null);
 }
 
 function ProfileCard({

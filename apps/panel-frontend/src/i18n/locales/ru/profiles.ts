@@ -251,8 +251,6 @@ export const profiles = {
         awgServerPubPlaceholder: 'появится после генерации',
         awgPresetLabel: 'Пресет обфускации',
         awgKeepZero: 'держать 0',
-        awgS1Desc: 'должен отличаться',
-        awgJDesc: 'попарно уникален',
         awgHDesc: '> 4 и уникальны',
         awgHWarning:
           'H1-H4 должны быть попарно уникальны, сейчас есть дубликаты. Жми «Re-roll» чтобы сгенерировать заново.',

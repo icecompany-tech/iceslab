@@ -3,6 +3,7 @@ import { PROFILE_CONFIG_KEYS, PROTOCOL_NAMES, type ProtocolName } from '@iceslab
 import type { Profile } from '@/lib/domain/profiles';
 import { defaults } from '@/contours/profiles/lib/profileDefaults';
 import { profileConfigOf } from '@/contours/profiles/lib/profileConfig';
+import { SEEDED } from '@/contours/profiles/lib/seededConfigs';
 
 /**
  * A-285: a profile whose stored config holds every key the form looks after
@@ -16,86 +17,6 @@ import { profileConfigOf } from '@/contours/profiles/lib/profileConfig';
  * xray is seeded twice (reality over xhttp, tls over grpc) and the keys are the
  * union of both saves; each save alone sends only listed keys.
  */
-const SEEDED: Record<ProtocolName, Record<string, unknown>[]> = {
-  hysteria: [
-    {
-      obfsPassword: 'obfs-secret',
-      masqueradeUrl: 'https://www.bing.com',
-      brutalUpMbps: 100,
-      brutalDownMbps: 200,
-      portHoppingStart: 20000,
-      portHoppingEnd: 50000,
-    },
-  ],
-  xray: [
-    {
-      security: 'reality',
-      network: 'xhttp',
-      subprotocol: 'vless',
-      tlsServerName: 'tls.example.com',
-      tlsCert: 'CERT',
-      tlsKey: 'KEY',
-      realityDest: 'www.microsoft.com:443',
-      realityServerNames: ['www.microsoft.com'],
-      realityShortIds: ['abcd'],
-      realityPrivateKey: 'priv',
-      realityPublicKey: 'pub',
-      realityXver: 1,
-      realityMaxTimeDiff: 60000,
-      realityLimitFallbackUploadBytesPerSec: 1000,
-      realityLimitFallbackDownloadBytesPerSec: 2000,
-      realityMode: 'self-steal',
-      realityFallbackUpstream: 'https://example.com',
-      flow: 'xtls-rprx-vision',
-      fingerprint: 'firefox',
-      path: '/x',
-      host: 'cdn.example.com',
-      serviceName: 'svc',
-      xhttpMode: 'packet-up',
-      xhttpPaddingBytes: '100-1000',
-    },
-    {
-      security: 'tls',
-      network: 'grpc',
-      subprotocol: 'vless',
-      tlsServerName: 'tls.example.com',
-      tlsCert: 'CERT',
-      tlsKey: 'KEY',
-      tlsRejectUnknownSni: true,
-      realityDest: 'www.microsoft.com:443',
-      realityServerNames: ['www.microsoft.com'],
-      realityShortIds: ['abcd'],
-      realityPrivateKey: 'priv',
-      realityPublicKey: 'pub',
-      realityMode: 'self-steal',
-      realityFallbackUpstream: 'https://example.com',
-      flow: '',
-      fingerprint: 'firefox',
-      serviceName: 'svc',
-      grpcMultiMode: true,
-    },
-  ],
-  amneziawg: [
-    {
-      subnet: '10.77.0.0/24',
-      serverPrivateKey: 'priv',
-      serverPublicKey: 'pub',
-      obfuscation: {
-        jc: 5, jmin: 50, jmax: 1000, s1: 20, s2: 30, s3: 0, s4: 0,
-        h1: 1001, h2: 1002, h3: 1003, h4: 1004,
-        i1: 'aa', i2: 'bb', i3: 'cc', i4: 'dd', i5: 'ee',
-      },
-    },
-  ],
-  naive: [{ hostname: 'naive.example.com', tlsEmail: 'ops@example.com', masqueradeRoot: '/srv/www' }],
-  shadowsocks: [{ method: '2022-blake3-aes-128-gcm' }],
-  mtproto: [{ domain: 'www.google.com' }],
-  mieru: [{ mtu: 1300 }],
-  tuic: [{ serverName: 'tuic.example.com', congestionControl: 'bbr' }],
-  anytls: [{ serverName: 'anytls.example.com' }],
-  shadowtls: [{ handshake: 'www.apple.com', ssMethod: '2022-blake3-chacha20-poly1305' }],
-};
-
 const profileOf = (protocol: ProtocolName, config: Record<string, unknown>) =>
   ({ id: 'p1', protocol, name: 'p', description: null, enabled: true, engine: null, config }) as unknown as Profile;
 

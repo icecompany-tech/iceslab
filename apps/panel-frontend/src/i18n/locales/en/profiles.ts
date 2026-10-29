@@ -243,8 +243,6 @@ export const profiles = {
         awgServerPubPlaceholder: 'derived after generate',
         awgPresetLabel: 'Obfuscation preset',
         awgKeepZero: 'keep 0',
-        awgS1Desc: 'must differ',
-        awgJDesc: 'pairwise-unique',
         awgHDesc: '> 4 and unique',
         awgHWarning:
           'H1-H4 must be pairwise-unique, there are duplicates. Click Re-roll to regenerate.',

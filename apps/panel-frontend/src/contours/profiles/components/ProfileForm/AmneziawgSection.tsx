@@ -193,7 +193,7 @@ export function AmneziawgSection({
                 <NumberInput
                   flex={1}
                   label="H1"
-                  description="magic header byte"
+                  description={t('profiles.form.cfg.awgHDesc')}
                   min={5}
                   max={2147483647}
                   {...form.getInputProps('awgH1')}
@@ -201,7 +201,7 @@ export function AmneziawgSection({
                 <NumberInput
                   flex={1}
                   label="H2"
-                  description={t('profiles.form.cfg.awgS1Desc')}
+                  description={t('profiles.form.cfg.awgHDesc')}
                   min={5}
                   max={2147483647}
                   {...form.getInputProps('awgH2')}
@@ -209,7 +209,7 @@ export function AmneziawgSection({
                 <NumberInput
                   flex={1}
                   label="H3"
-                  description={t('profiles.form.cfg.awgJDesc')}
+                  description={t('profiles.form.cfg.awgHDesc')}
                   min={5}
                   max={2147483647}
                   {...form.getInputProps('awgH3')}
