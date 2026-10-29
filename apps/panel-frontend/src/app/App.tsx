@@ -66,6 +66,7 @@ const GeoSetsPage = lazy(() =>
 const NamedOutboundsPage = lazy(() =>
   import('@/contours/traffic/screens/NamedOutboundsPage').then((m) => ({ default: m.NamedOutboundsPage })),
 );
+const AuditPage = lazy(() => import('@/contours/audit/screens/AuditPage').then((m) => ({ default: m.AuditPage })));
 const TemplateEditPage = lazy(() =>
   import('@/contours/subscription/screens/TemplateEditPage').then((m) => ({ default: m.TemplateEditPage })),
 );
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="/traffic/geo-sets" element={<GeoSetsPage />} />
           <Route path="/traffic/named-outbounds" element={<NamedOutboundsPage />} />
           <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/subscription/metadata" element={<SubscriptionMetadataPage />} />
           {/* Вторая вкладка тех же «Настроек», а не сосед в меню: заголовки

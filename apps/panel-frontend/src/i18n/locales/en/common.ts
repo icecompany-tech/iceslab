@@ -212,6 +212,7 @@ export const common = {
     subscriptionDelivery: '/ SUBSCRIPTION · DELIVERY',
     subscriptionTemplates: '/ SUBSCRIPTION · TEMPLATES',
     insights: '/ SYSTEM · INSIGHTS',
+    audit: '/ TOOLS · ACTIVITY LOG',
     settings: '/ SETTINGS',
   },
 

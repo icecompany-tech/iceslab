@@ -9,7 +9,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 // импортировать нельзя. Список правится здесь и только здесь.
 const contours = [
   'users', 'nodes', 'hosts', 'profiles', 'cascades', 'squads',
-  'traffic', 'subscription', 'dashboard', 'settings', 'login',
+  'traffic', 'subscription', 'dashboard', 'settings', 'login', 'audit',
 ]
 
 const noParent = { regex: '^\\.\\./', message: 'Импорт через @/, не через ../' }

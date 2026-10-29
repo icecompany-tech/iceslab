@@ -47,6 +47,7 @@ export const app = {
     notWiredTag: 'нет экрана',
     systemGroup: 'Система',
     insights: 'Аналитика',
+    auditLog: 'Журнал действий',
     updateAvailable: 'Доступно обновление: {{version}}',
   },
 

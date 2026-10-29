@@ -247,6 +247,7 @@ export const common = {
     subscriptionDelivery: '/ ПОДПИСКА · ВЫДАЧА',
     subscriptionTemplates: '/ ПОДПИСКА · ШАБЛОНЫ',
     insights: '/ СИСТЕМА · АНАЛИТИКА',
+    audit: '/ ИНСТРУМЕНТЫ · ЖУРНАЛ ДЕЙСТВИЙ',
     settings: '/ НАСТРОЙКИ',
   },
 

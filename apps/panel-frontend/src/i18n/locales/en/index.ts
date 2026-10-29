@@ -18,6 +18,7 @@ import { squads } from './squads';
 import { traffic } from './traffic';
 import { subscription } from './subscription';
 import { settings } from './settings';
+import { audit } from './audit';
 
 export default {
   ...common,
@@ -33,4 +34,5 @@ export default {
   ...traffic,
   ...subscription,
   ...settings,
+  ...audit,
 };
