@@ -13,6 +13,20 @@
 /** Days an audit row is kept (RETENTION_DAYS.adminAudit). */
 export const ADMIN_AUDIT_RETENTION_DAYS = 365;
 
+/**
+ * A-288: how many refused sign-ins the log writes row by row in an hour; past
+ * that, one summary row per hour and key counts the rest. Sign-in itself is
+ * not limited by this, only the log: the login route keeps its own rate limit
+ * per address, and guessing spread over many addresses (5 a minute from each)
+ * would otherwise write a row per guess for a year.
+ *
+ * 20 per network (/24 or /48): an admin who mistypes does not come near it,
+ * a guesser from one network does in minutes. 300 in all: past it the log
+ * keeps the sign-ins that matter (every success and every refusal that locked
+ * an account, both written whatever the count) and a count of the rest.
+ */
+export const ADMIN_AUDIT_LOGIN_REFUSAL_CAP = { perNetwork: 20, all: 300, windowSeconds: 3600 } as const;
+
 /** Wave 1, decisions 26.10; wave 2 (sign-in, admins, tokens, settings, bulk
  *  user actions), decisions 27.10. */
 export const ADMIN_AUDIT_ACTIONS = [
@@ -55,8 +69,11 @@ export type AdminAuditOutcome = 'ok' | 'refused' | 'failed';
  *  the rest, since their summary is of what was done. */
 export interface AdminAuditDetails {
   /** twoFactor: the second step was asked; locked: this refusal locked the
-   *  account (the refusals while it stays locked are not written). */
-  'auth.login': { twoFactor: boolean; locked?: true };
+   *  account (the refusals while it stays locked are not written). The
+   *  second shape is the summary of the refusals past the cap of their hour
+   *  (ADMIN_AUDIT_LOGIN_REFUSAL_CAP, A-288): how many were not written, in the
+   *  hour that began at windowStart. */
+  'auth.login': { twoFactor: boolean; locked?: true } | { suppressed: number; windowStart: string };
   'admin.register': null;
   'admin.2fa.enable': null;
   'admin.2fa.disable': null;

@@ -12,6 +12,7 @@ import { config } from '../../config.js';
 import { subscriptionLinkOrigin } from '../subscription/subscription.link.js';
 import { audit } from '../audit/audit.hook.js';
 import { signInTarget } from '../audit/audit.targets.js';
+import { admitRefusedSignIn } from '../audit/login-cap.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/status - public discovery: tells the frontend which auth
@@ -128,8 +129,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // A refusal is written with no actor (nobody signed in) and the
         // account it was made against. The 429s while a lock holds are not
         // written: the refusal that locked it says so, and a flood of them
-        // would bury it. TOTP_REQUIRED is a step, not an outcome.
-        if (err instanceof authService.InvalidCredentialsError || err instanceof authService.InvalidTotpError) {
+        // would bury it. TOTP_REQUIRED is a step, not an outcome. A refusal
+        // that did not lock is written up to the hour's cap (A-288,
+        // audit/login-cap.ts), past it counted into a summary row; one that
+        // locked is always written.
+        if (
+          (err instanceof authService.InvalidCredentialsError || err instanceof authService.InvalidTotpError) &&
+          (err.locked || (await admitRefusedSignIn(network)))
+        ) {
           audit(request, {
             action: 'auth.login',
             actor: anonymous,

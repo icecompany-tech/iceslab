@@ -14,7 +14,11 @@ const scopes = z.strictObject({ scopes: z.array(z.string().max(64)).max(32) });
 const count = z.number().int().min(0);
 
 export const AUDIT_DETAIL_SCHEMAS = {
-  'auth.login': z.strictObject({ twoFactor: z.boolean(), locked: z.literal(true).optional() }),
+  'auth.login': z.union([
+    z.strictObject({ twoFactor: z.boolean(), locked: z.literal(true).optional() }),
+    // A-288: the refusals past the cap of their hour, counted.
+    z.strictObject({ suppressed: z.number().int().min(1), windowStart: z.iso.datetime() }),
+  ]),
   'admin.register': z.null(),
   'admin.2fa.enable': z.null(),
   'admin.2fa.disable': z.null(),

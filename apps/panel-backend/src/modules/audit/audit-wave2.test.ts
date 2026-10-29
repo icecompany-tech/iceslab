@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import { generateTotp } from '../../lib/auth/totp.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAndLogin } from '../../../tests/helpers/auth.js';
+import { resetLoginCapCountersForTest } from './login-cap.js';
 
 vi.mock('../../lib/notify/telegram-notify.js', async (real) => ({
   ...(await real<typeof import('../../lib/notify/telegram-notify.js')>()),
@@ -27,6 +28,8 @@ beforeEach(async () => {
   app = await buildApp();
   await cleanDatabase();
   await redis.del('auth:fail:127.0.0.1:admin');
+  // A-288: the hour's counters of refused sign-ins outlive a run.
+  await resetLoginCapCountersForTest();
   admin = await registerAndLogin(app);
 });
 
