@@ -34,7 +34,7 @@ import { listNodePolicies, policyFitRefusal as readPolicyRefusal } from '@/lib/d
 import { listSquads } from '@/lib/domain/squads';
 import { useOverview } from '@/lib/domain/dashboard';
 import { usePageMeta } from '@/lib/ui/usePageMeta';
-import { defaults, egressOf, nodeEnginesPut, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
+import { defaults, domainOk, domainPatch, egressOf, nodeEnginesPut, type FormValues } from '@/contours/nodes/lib/nodeEditForm';
 import { loadFailure, loadView } from '@/lib/ui/loadView';
 import { nodeEnginesRefusal, type NodeEnginesRefusal } from '@/contours/nodes/lib/nodeCreateForm';
 import { AMBER, DIM, MOSS } from '@/contours/nodes/lib/colors';
@@ -108,6 +108,7 @@ export function useNodeEditForm() {
         return e === 'required' ? t('nodeEdit.multiplierRequired') : e === 'bad' ? t('nodeEdit.multiplierBad') : null;
       },
       maxUsers: (v) => (parseMaxUsers(v).ok ? null : t('nodeEdit.maxUsersDesc')),
+      domain: (v) => (domainOk(v) ? null : t('nodeEdit.domainBad')),
       name: (v) => {
         const trimmed = v.trim();
         if (trimmed.length === 0) return t('validation.nameRequired');
@@ -205,6 +206,8 @@ export function useNodeEditForm() {
         address: `${form.values.host.trim()}:${port}`,
         countryCode: form.values.countryCode || null,
         regionId: form.values.regionId || null,
+        // A-057: only when changed, the server re-pushes the node on a new one.
+        ...domainPatch(node?.domain, form.values.domain),
         // Validated before the save is offered; a value that does not parse here is not sent.
         ...multiplierPatch(form.values.consumptionMultiplier, true),
         ...maxUsersPatch(form.values.maxUsers),

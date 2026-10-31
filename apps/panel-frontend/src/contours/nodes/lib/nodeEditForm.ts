@@ -9,6 +9,9 @@ export interface FormValues {
   protocol: NodeProtocol;
   countryCode: string;
   regionId: string;
+  /** A-057: the node's own FQDN (self-steal serverName). '' means none; sent
+   *  only when changed (domainPatch). */
+  domain: string;
   /** Typed text, comma or dot (A-143, parseMultiplier); never a rounded number. */
   consumptionMultiplier: string;
   maxUsers: number | '';
@@ -51,6 +54,24 @@ export function formProtocolOf(label: NodeLabel | undefined): NodeProtocol {
   return label === 'singbox' ? 'tuic' : label;
 }
 
+/**
+ * The domain in the node's PUT (A-057). The server takes it and, when it
+ * changes, pushes the node again: self-steal serverNames and every link's SNI
+ * follow it (nodes.service.ts, domainChanged). So it goes only when it differs
+ * from the stored one; a cleared field is null, which takes the domain off.
+ */
+export function domainPatch(stored: string | null | undefined, typed: string): { domain?: string | null } {
+  const next = typed.trim() || null;
+  return next === (stored ?? null) ? {} : { domain: next };
+}
+
+/** The server's shape for a domain: a bare FQDN, no scheme, no port, at most
+ *  255 (nodes.schemas.ts DomainSchema). Empty is no domain and passes. */
+export function domainOk(typed: string): boolean {
+  const v = typed.trim();
+  return v === '' || (v.length <= 255 && /^[a-zA-Z0-9.-]+$/.test(v));
+}
+
 export function splitAddress(address: string): { host: string; port: number } {
   const idx = address.lastIndexOf(':');
   if (idx === -1) return { host: address, port: DEFAULT_NODE_PORT };
@@ -70,6 +91,7 @@ export function defaults(node: Node | null, decimalComma = false): FormValues {
     protocol: formProtocolOf(node?.protocol),
     countryCode: node?.countryCode ?? '',
     regionId: node?.regionId ?? '',
+    domain: node?.domain ?? '',
     consumptionMultiplier: multiplierInput(node ? node.consumptionMultiplier : 1, decimalComma),
     maxUsers: node?.maxUsers ?? '',
     policyId: node?.policyId ?? '',
