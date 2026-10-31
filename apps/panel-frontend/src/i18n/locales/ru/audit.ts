@@ -7,6 +7,7 @@ export const audit = {
     action: {
       auth_login: 'Вход',
       admin_register: 'Регистрация админа',
+      admin_password_change: 'Смена пароля админа',
       admin_2fa_enable: 'Включение 2FA',
       admin_2fa_disable: 'Отключение 2FA',
       apiToken_create: 'Выпуск API-токена',

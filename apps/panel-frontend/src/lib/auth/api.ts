@@ -58,6 +58,17 @@ export async function logout(timeoutMs = 3000): Promise<void> {
   }
 }
 
+/** A-039: the admin's own password. 204 ends every session of the admin,
+ *  this one too; the caller signs out. Refusals are 400, 403 and 429, never
+ *  401 (passwordRefusal). */
+export async function changePassword(body: {
+  currentPassword: string;
+  newPassword: string;
+  totpCode?: string;
+}): Promise<void> {
+  await api.put('/api/auth/password', body);
+}
+
 // ───── K8: 2FA (TOTP) ─────
 
 export interface TotpStatus {
