@@ -3,7 +3,7 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
-## v0.3.0
+## v0.3.0 (2026-11-01)
 
 The audit release. A full audit of the panel, the agent and the installers
 raised 180 findings, and a second wave followed on the two release candidates
@@ -12,7 +12,7 @@ against the code, some by a run on the stand as well. Around them: subscription 
 routing presets, one profile on several ports of a node, several inbounds of
 one core on a node, an admin audit log with its screen, a view of the users
 still connected to a node after they were taken off it, and nodes and panel
-logs that no longer keep what they should not. 480 commits since v0.2.1.
+logs that no longer keep what they should not. 483 commits since v0.2.1.
 
 ### Security
 
@@ -25,7 +25,13 @@ logs that no longer keep what they should not. 480 commits since v0.2.1.
 - **Signing out ends the session on the server** (A-038). The panel asks the
   server to end the session before it clears the browser, and the server
   clears the session cookie with the attributes the sign-in set it with, so
-  the browser drops it.
+  the browser drops it. Signing out ends the session on the server too: the
+  session token is revoked until it would have expired, so a copy taken before
+  signing out is refused.
+- **An admin changes their own password in the settings** (A-039); the change
+  ends every earlier session of that admin, the current one too. API tokens
+  are separate credentials and stay valid: if the password leaked, review them
+  in the settings and revoke any you do not recognize.
 - **A deleted node keeps only what its agent's refusal needs** (A-279): its id
   and heartbeat secret, so the old agent is told 410. The chain password, the
   self-signed pair, the WARP credentials and the key material go with the
@@ -226,7 +232,9 @@ As root, from the panel's compose root (usually `/opt/iceslab`):
    name is missing, do not update: open an issue at
    https://github.com/icecompany-tech/iceslab/issues with the output of both
    queries.
-1. **Panel:** `ICESLAB_REF=v0.3.0 ./scripts/ops/deploy.sh`.
+1. **Panel:** `ICESLAB_REF=v0.3.0 ./scripts/ops/deploy.sh`. After the update
+   every admin signs in once more, because a session token from before
+   carries no id that sign-out can revoke.
 2. **From v0.2.1 only:** `./scripts/ops/deploy.sh --caddy-only`. The v0.2.1
    script that performs the update fetches the new code but finishes with its
    own old steps, so it cannot run the step that rewrites the host Caddyfile;
@@ -239,9 +247,10 @@ As root, from the panel's compose root (usually `/opt/iceslab`):
    backend:
    `docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend`.
    A host Caddyfile edited by hand is not re-rendered: carry the `servers`
-   block with `trusted_proxies` (and, from v0.2.1, the masked logs) over by
-   hand from `write_caddyfile` in `scripts/ops/_lib.sh`, then
-   `systemctl reload caddy`.
+   block with `trusted_proxies` and `trusted_proxies_strict` (and, from
+   v0.2.1, the masked logs) over by hand from `write_caddyfile` in
+   `scripts/ops/_lib.sh`, then `systemctl reload caddy`.
+   `trusted_proxies_strict` needs Caddy 2.8 or newer.
 4. **Every node agent**, over SSH. The agent has no self-update; do not run the
    node installer again (it issues a new mTLS pair):
    ```
@@ -258,6 +267,12 @@ As root, from the panel's compose root (usually `/opt/iceslab`):
    the agent for "no change", and the core kept the old settings. The new
    agent compares the whole inbound. After the rebuild, save such an inbound
    once more so the core picks it up (A-027).
+   Nodes installed with `ICESLAB_NODE_REF=v0.3.0-rc.1` can no longer fetch
+   sing-box: the core moved to icecompany-tech/core-builds. Install or update
+   such nodes with v0.3.0.
+   After the update every cascade node gets one push: the panel now reads
+   the cascade in a fixed order (A-293), so the first drift check redraws
+   each cascade node once, and xray or the chain restarts its core once.
 5. **From v0.2.1: what older versions left on your servers.** Old connection
    lines in the nodes' journals and subscription tokens in the panel's logs;
    see the privacy items under Security for what to clear and how. If those logs may have left
@@ -301,6 +316,9 @@ row per user and AmneziaWG profile) holds that table while it reads it.
 - With an entry pool size set, a user is given that many nodes of each profile, not of each country, so a profile served from several countries can hand a user nodes in one country only. Use one profile per country, or a pool size that covers every node of the profile.
 - If the panel's database refuses a write during a traffic poll, the traffic that poll read from cores that reset their counters on each read (Hysteria and others) is not counted. This happens only on database errors and undercounts, never overcounts.
 - REALITY on port 443 can connect worse than a non-standard port on some mobile networks in Russia; the defaults are unchanged in v0.3.0. If clients on mobile data fail on a REALITY host at 443, give that profile a second host on another port.
+- Disabling a user is not in the user drawer in this version: use PUT
+  /api/users/:id with status "disabled", or reissue the user's credentials
+  and then revoke the link.
 - The agent does not update itself: after a panel deploy, rebuild it on each
   node over SSH.
 
