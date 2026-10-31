@@ -104,6 +104,13 @@ if [[ ! -f "${STAGE}/manifest.json" ]]; then
     log_err "archive missing manifest.json, not produced by iceslab-backup.sh?"
     exit 1
 fi
+# The dump is checked here, before the first destructive command: step 3 drops
+# the schema first and only then reads the file, so an archive without it used
+# to leave an empty database (A-015).
+if [[ ! -s "${STAGE}/postgres.sql" ]]; then
+    log_err "archive has no postgres.sql or it is empty, nothing was changed"
+    exit 1
+fi
 step_done
 
 log_info "manifest:"
@@ -129,11 +136,27 @@ source <(grep -E '^(POSTGRES_USER|POSTGRES_DB)=' "$ENV_FILE")
 
 # ───── Step 2: stop panel services ─────
 # Service names are `backend` and `frontend`, not the container_names
-# iceslab-prod-backend / iceslab-prod-frontend. We once stopped the wrong
-# names, it failed silently via `|| true`, and the DB restore ran while the
-# backend kept writing. Use the real compose service names.
+# iceslab-prod-backend / iceslab-prod-frontend. The restore goes on only with
+# both services in the compose file and neither running after the stop, so the
+# database is dropped with nothing writing to it (A-013). The names are checked
+# first because `docker compose stop` exits 0 for a service the file does not
+# have (Docker Compose v5.4.0, 31.10): a stop alone proves nothing.
 step 2 "stop panel services (backend, frontend)"
-"${DC[@]}" stop backend frontend 2>/dev/null || true
+services="$("${DC[@]}" config --services)"
+for svc in backend frontend; do
+    if ! grep -qxF "$svc" <<<"$services"; then
+        log_err "$COMPOSE_FILE has no service '$svc' (it has: ${services//$'\n'/, }); nothing was changed"
+        exit 1
+    fi
+done
+"${DC[@]}" stop backend frontend
+running="$("${DC[@]}" ps --status running --services)"
+for svc in backend frontend; do
+    if grep -qxF "$svc" <<<"$running"; then
+        log_err "'$svc' is still running after the stop; nothing was changed"
+        exit 1
+    fi
+done
 step_done
 
 # ───── Step 3: postgres restore ─────
