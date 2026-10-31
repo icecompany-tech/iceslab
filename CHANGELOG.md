@@ -3,6 +3,306 @@
 All notable changes to Iceslab are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are git tags.
 
+## v0.3.0
+
+The audit release. A full audit of the panel, the agent and the installers
+raised 180 findings, and a second wave followed on the two release candidates
+run on a live stand; each finding is closed by a commit with a test checked
+against the code, some by a run on the stand as well. Around them: subscription templates and the operator's own
+routing presets, one profile on several ports of a node, several inbounds of
+one core on a node, an admin audit log with its screen, a view of the users
+still connected to a node after they were taken off it, and nodes and panel
+logs that no longer keep what they should not. 480 commits since v0.2.1.
+
+### Security
+
+- **The panel's idea of a client's address is right in every install mode.** The installer wrote `TRUST_PROXY_HOPS=2` for every panel. Without a domain there is one proxy in front of the backend, so a client could put any address in `X-Forwarded-For` and dodge the per-address limits, the sign-in one included, with a new address per request (A-008). On a domain behind Cloudflare, the host Caddy replaced Cloudflare's header, so every client counted as Cloudflare's address and shared one limit (A-009). New installs set 1 without a domain and 3 with one; the host Caddy now keeps `X-Forwarded-For` only from Cloudflare's addresses, so 3 is right with or without Cloudflare. On a panel installed before: without a domain set `TRUST_PROXY_HOPS=1`, on a domain run `./scripts/ops/deploy.sh` (it re-renders the host Caddyfile, unless you edited it by hand) and then set `TRUST_PROXY_HOPS=3`, then recreate the backend: `docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend`.
+- **A session token must name an admin** (A-290). A token signed with the
+  panel's JWT secret but without an admin id in `sub` was let in as the first
+  live admin. It is now refused with 401 before any lookup, and the lookup
+  goes by key. Only a holder of `JWT_SECRET` could make such a token; if yours
+  may have left your hands, rotate it.
+- **Signing out ends the session on the server** (A-038). The panel asks the
+  server to end the session before it clears the browser, and the server
+  clears the session cookie with the attributes the sign-in set it with, so
+  the browser drops it.
+- **A deleted node keeps only what its agent's refusal needs** (A-279): its id
+  and heartbeat secret, so the old agent is told 410. The chain password, the
+  self-signed pair, the WARP credentials and the key material go with the
+  delete, and a migration clears them from nodes deleted before.
+- **The node's mTLS certificate can be renewed** from the node page, and the
+  panel renews it before it expires. An agent from before v0.3.0 cannot rotate
+  it: the node page says so.
+- **The panel's Content Security Policy is enforced** on its own pages; the
+  subscription page runs under a policy of its own with a per-request nonce.
+- `follow-redirects` is pinned past the advisory on credentials following a
+  redirect.
+- **Privacy: nodes and the panel kept more about users than they should.**
+  All of it is closed by the items below; what earlier versions left behind
+  stays on your servers until you remove it (Upgrading, step 5).
+- **Nodes no longer journal connections.** Earlier agents let Xray write a
+  line per connection (the client's IP, the destination and the user), and
+  Hysteria a line per connect, disconnect and failed connection. The agent
+  turns the Xray access log off, writes nothing for an accepted login (a
+  refused one keeps the address, which fail2ban reads), and runs Hysteria at
+  `error`, where it names no client. NaiveProxy leaves the proxy's error lines
+  out of its log. MTProto (mtg) still names the client's IP when a connection
+  fails; it has no quieter level.
+- **Clearing what older agents left.** The node page tells whether the node's
+  journal still holds such lines, and since when, and can clear it. journald
+  and syslog cannot be cleared selectively: this removes the node's whole
+  journal and syslog. By hand, as root:
+  `journalctl --rotate && journalctl --vacuum-time=1s` and
+  `truncate -c -s 0 /var/log/syslog && rm -f /var/log/syslog.*`.
+- **The panel's logs no longer hold subscription tokens.** Earlier versions
+  logged every subscription poll with the full token and the subscriber's IP,
+  and the node bootstrap token, in the backend log, the frontend's nginx log
+  and the host Caddy's access log. The backend now masks any `:token` path
+  segment and cuts the requester's address to /24 or /48; nginx and Caddy
+  write those requests to a masked log. Container logs are capped at 10 MB x
+  3, and the update recreates the containers, which removes their old logs.
+  The host Caddy's old logs are yours to clear:
+  `truncate -s 0 /var/log/caddy/access.log && rm -f /var/log/caddy/access-2*`
+  (never remove a log file Caddy has open, such as `access-masked.log`).
+- **Deleting a user deletes it.** A deleted user is erased for good 30 days
+  later, with their traffic history, devices, keys and subscription polls.
+- **Devices are forgotten** after 90 days unseen, and stop counting towards
+  the device limit.
+- **The subscription page sends no referrer,** and its links out carry
+  `noreferrer`.
+
+### Added
+
+- **Subscription templates.** Templates for mihomo, Stash, legacy Clash,
+  sing-box and Xray JSON live under Subscription, Templates, with a dry run
+  and an import of templates from another panel as a draft. With no template
+  in force the output is byte for byte what it was. `?template=<name>` picks
+  one, `/sub/<token>/<client>` names the format in the path, `?format=raw`
+  gives the share links without base64, and a User-Agent rule can name the
+  template its clients get.
+- **The operator's own routing presets** beside the built-in ones.
+- **A host can carry a description** shown by the apps that support it, and
+  can be hidden from every public output unless a template asks for hidden
+  hosts.
+- **One profile on several ports of a node.** A host can put its profile on a
+  port the node does not serve it on yet, and that becomes a binding of its
+  own.
+- **Several inbounds of one core on a node** for Xray, mieru, and the sing-box
+  tuic, AnyTLS, Hysteria 2, Shadowsocks, ShadowTLS and Xray-protocol adapters.
+  A second inbound of a single-inbound adapter is refused in words before the
+  save.
+- **Admin audit log.** The panel keeps who deleted a user, reissued their
+  keys, cleared a node's log, rotated a node's certificate, or changed a
+  cascade or a node policy, with how it ended; sign-ins with the network they
+  came from (never the address), the second factor, API tokens, panel
+  settings, and bulk actions. No token, key, password, request body or address
+  is kept. Refused sign-ins past 20 an hour from one network, or 300 in all,
+  are counted in one summary row per hour. The **Activity log** screen under
+  Tools reads it, and `GET /api/audit` for an admin session (an API token gets
+  `403 AUDIT_ADMIN_ONLY`). Entries are kept for 365 days.
+- **Users still connected after they were taken off a node** (A-218). Xray
+  refuses a removed user's new connections but lets the open ones run; the
+  node's System block lists those users, and the user's drawer names the
+  nodes where they are. With an older agent, or on another core, the panel
+  says "not checked" and never "nobody".
+- **Reissue a user's keys in one action** (A-053): a new uuid, passwords,
+  AmneziaWG key and subscription link, rolled out to the nodes and written to
+  the audit log; the AmneziaWG address is kept. The user card asks first and
+  says that the old configs and link stop working.
+- **The Hysteria certificate line shows when the ACME certificate ends.**
+- **A new panel reaches the nodes by itself.** The panel records what it last
+  sent each node; at start and every hour it pushes to any node whose drawing
+  differs, so a panel upgrade takes effect without an unrelated edit.
+
+### Changed
+
+- **Every format that carries VLESS hands out the cascade routes.** Clash,
+  mihomo and Stash, sing-box, Loon and Quantumult X clients receive one line
+  per exit, as the share links and the xray-json array already did; before,
+  traffic left from the entry's country. Only VLESS selects an exit: a trojan
+  or vmess host on a cascade entry now comes as one plain line, and the
+  cascade screen names such profiles.
+- **A node stands in one enabled cascade.** A second one is refused with
+  `409 NODE_IN_OTHER_CASCADE`. Overlaps saved before stay saved, but the
+  oldest cascade keeps the node and every younger one sharing a node is
+  treated as switched off; the panel log at start and a Telegram notice name
+  them.
+- **Cascade exits for a user in several squads** are granted by the squads
+  that hand that entry out; a narrow squad no longer takes exits away.
+- **The Clash family answers by core:** `mihomo`, `stash` and `clash-legacy`
+  are formats of their own, and `clash` stays mihomo byte for byte.
+- **Changing a host's port moves that host alone by default** (`portMove:
+  "host"`); `portMove: "binding"` moves the binding with its hosts.
+- **Refusals name what they hit:** `USERNAME_TAKEN`,
+  `SUBSCRIPTION_TOKEN_TAKEN`, `SOURCE_ID_TAKEN`, `SHORT_ID_TAKEN` or
+  `UNIQUE_CONFLICT` with `field`, and a name race or a foreign key refusal is
+  a 409, not a 500.
+- **Delivery numbers** count a change by the link's own stamp and only active
+  users, and a poll is only a request from a client app.
+- **The panel's own sing-box 1.13.14 build** (needed for per-user traffic on
+  every sing-box protocol) comes from
+  [icecompany-tech/core-builds](https://github.com/icecompany-tech/core-builds),
+  same tag and same bytes, with its own signing key.
+- **Each installer hands over to the installer of the ref it installs**
+  (A-282) before it touches anything. `ICESLAB_HANDOVER=off` turns it off.
+- **The agent opens and closes ufw ports with its inbounds,** and opens 80/tcp
+  for a Hysteria or NaiveProxy core added after the install, so it gets its
+  certificate. The Hysteria e-mail is optional.
+- **Cron jobs are job schedulers by name** (A-042): a changed pattern replaces
+  the old one and a job taken out of the list stops firing; the repeatables of
+  earlier versions are taken off on the first boot.
+- `?node=` in wgconf, AmneziaVPN and Outline links is the endpoint id; old
+  links by label are still accepted.
+
+### Fixed
+
+- **A new AmneziaWG profile can be created again** (A-286, also in v0.2.1).
+  The form sent an empty H1..H4 header as 0, which the server refused.
+- **A cascade cannot hand out a direction tag past 255** (A-001). Tag 257
+  shared its route byte with tag 1 and sent users through another country; a
+  save that needs one is now refused with `409 DIRECTION_TAGS_EXHAUSTED`
+  before anything is written. Tags are still never reused.
+- **A transit with two or more directions on a leg that is not VLESS** sent
+  every direction out of the first one. It now carries no traffic and is
+  named in the panel log and a Telegram notice: move that hop to VLESS or keep
+  one direction.
+- **Turning WARP on or off pushes the node** (A-049), instead of leaving the
+  old egress until an unrelated change.
+- **Node policies refuse what a node cannot read** (an address among domains,
+  `ip:`/`cidr:` prefixes, a bad port range, an unknown protocol) with the
+  field path, and a rule saved before goes out with its readable conditions
+  only, never as a rule on all traffic.
+- **The profile card shows each protocol's settings** (A-287), every key of a
+  profile config has an owner held by tests (A-285), and a Hysteria port
+  hopping range needs both ends in order (A-284).
+- **A node's domain is edited on its page** and sent only when it changes
+  (A-057).
+- **A saved or deleted node policy refreshes the node page** (A-283).
+- **Restore** checks the dump and `redis.rdb` are in the archive before
+  anything changes, stops only containers it finds, rebuilds Redis' AOF from
+  the snapshot, and keeps the archive's env beside `.env.production`
+  (A-012, A-013, A-014, A-015).
+- **The installers no longer fail on Ubuntu with automatic updates running.**
+- MTProto users no longer show online.
+
+### Removed
+
+- `/api/inbounds`, the `inbounds:read` / `inbounds:write` token scopes and the
+  `inbounds` and `group_inbounds` tables. A token minted with the scope keeps
+  it and it grants nothing; a new token with it is refused with 400.
+- `409 HOST_PORT_SHARED` (`confirmSharedPort` is read as `portMove:
+  "binding"`), and `rewrittenKeys` from the template import answer.
+- The old release of the sing-box build in this repository is removed with
+  this release; the build lives in core-builds.
+
+### Upgrading
+
+Update the panel and every node agent together. The new agent reports its
+cores per adapter and the old panel cannot read that; the new panel pushes
+users in batches an old agent does not have. Coming from rc.1 or rc.2, the
+steps are the same; the ones marked "from v0.2.1" are already done.
+
+As root, from the panel's compose root (usually `/opt/iceslab`):
+
+0. **Before the update: check six key names and one index name.** The
+   migration `20261029064640_reconcile_drift` drops six foreign keys and
+   renames one index by their exact names. A database where one of them
+   carries another name stops that migration halfway through the update.
+   ```
+   docker exec -i iceslab-prod-postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+   select conname from pg_constraint where conname in (
+     'amneziawg_peers_profile_id_fkey',
+     'api_tokens_created_by_admin_id_fkey',
+     'group_profiles_group_id_fkey',
+     'group_profiles_profile_id_fkey',
+     'profile_node_bindings_node_id_fkey',
+     'profile_node_bindings_profile_id_fkey'
+   ) order by 1;
+   select indexname from pg_indexes
+     where indexname = 'cascade_links_cascade_id_from_to_direction_key';
+   SQL
+   ```
+   The first query answers all six names, the second the one index. If any
+   name is missing, do not update: open an issue at
+   https://github.com/icecompany-tech/iceslab/issues with the output of both
+   queries.
+1. **Panel:** `ICESLAB_REF=v0.3.0 ./scripts/ops/deploy.sh`.
+2. **From v0.2.1 only:** `./scripts/ops/deploy.sh --caddy-only`. The v0.2.1
+   script that performs the update fetches the new code but finishes with its
+   own old steps, so it cannot run the step that rewrites the host Caddyfile;
+   this runs only that step. It says what it did: re-rendered and reloaded,
+   `already current`, `no host Caddy here`, or that the file `was edited by
+   hand … not rewritten` (see step 3).
+3. **The address the panel trusts** (see Security). Without a domain, set
+   `TRUST_PROXY_HOPS=1` in `.env.production`. On a domain, after steps 1 and 2
+   re-rendered the host Caddyfile, set `TRUST_PROXY_HOPS=3`. Then recreate the
+   backend:
+   `docker compose -f docker-compose.prod.yml --env-file .env.production up -d backend`.
+   A host Caddyfile edited by hand is not re-rendered: carry the `servers`
+   block with `trusted_proxies` (and, from v0.2.1, the masked logs) over by
+   hand from `write_caddyfile` in `scripts/ops/_lib.sh`, then
+   `systemctl reload caddy`.
+4. **Every node agent**, over SSH. The agent has no self-update; do not run the
+   node installer again (it issues a new mTLS pair):
+   ```
+   cd /opt/iceslab-node && git fetch --tags origin && git checkout --force v0.3.0
+   cd apps/node && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$(git describe --tags --always)" -o /usr/local/bin/iceslab-node .
+   systemctl restart iceslab-node
+   ```
+   The build needs Go 1.27.3. With the default `GOTOOLCHAIN=auto` it fetches
+   it by itself; where proxy.golang.org is unreachable, install Go 1.27.3
+   first (the node installer pins its archive by sha256, `GO_PINNED_SHA256`).
+   **Rebuild the agent on rc.2 nodes too.** An Xray inbound edit that changed
+   only REALITY xver or maxTimeDiff, the fallback rate limits,
+   rejectUnknownSni, the XHTTP mode or padding, or gRPC multiMode was taken by
+   the agent for "no change", and the core kept the old settings. The new
+   agent compares the whole inbound. After the rebuild, save such an inbound
+   once more so the core picks it up (A-027).
+5. **From v0.2.1: what older versions left on your servers.** Old connection
+   lines in the nodes' journals and subscription tokens in the panel's logs;
+   see the privacy items under Security for what to clear and how. If those logs may have left
+   your hands, reissue the subscription links of the users concerned.
+
+Expect these once, right after the update from v0.2.1:
+
+- The first restart of the new agent reconnects AmneziaWG clients one time.
+- The first push to an updated node restarts Xray one time and rewrites the
+  sing-box config.
+- The first stats poll does not count about one poll interval of traffic per
+  user and node.
+- Users of Clash-family, sing-box, Loon and Quantumult X apps see new lines
+  after their next refresh where a cascade entry is in their subscription.
+- The first daily cleanup (03:30, panel server time) erases every user deleted
+  more than 30 days before it.
+
+Migrations: twenty-three of them run with the panel update, from
+`20261022054807_group_cascade_exits_by_direction` to
+`20261029064640_reconcile_drift`. Each carries its rollback in its header,
+with three exceptions:
+
+- `20261026100207_deleted_node_secrets` clears the secrets of nodes deleted
+  before. It changes no schema and has no data rollback: what it clears is
+  gone.
+- `20261027041625_drop_inbounds` drops the `inbounds` and `group_inbounds`
+  tables, unused since profiles replaced them; its rollback brings them back
+  empty.
+- `20261025164819_binding_many_ports` rolls back only while no profile holds a
+  second port on any node; this answers 0 while it can:
+  `select count(*) from (select profile_id, node_id from profile_node_bindings group by 1, 2 having count(*) > 1) x;`
+
+`20261029064640_reconcile_drift` runs as one transaction and keeps each
+table's lock until it ends, so the check of the key on `amneziawg_peers` (a
+row per user and AmneziaWG profile) holds that table while it reads it.
+
+### Known limitations
+
+- A node installed on the same server as the panel shows as unreachable: the node's firewall lets the agent port in only from the panel's public address, and on one host the panel connects from its Docker network. Allow that network on the node, for example `ufw allow from 172.16.0.0/12 to any port <agent port> proto tcp`. 172.16.0.0/12 covers Docker's default networks; the panel's own one is printed on the panel by
+  `docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' $(docker inspect -f '{{range $n, $_ := .NetworkSettings.Networks}}{{$n}}{{end}}' iceslab-prod-backend)`.
+- With an entry pool size set, a user is given that many nodes of each profile, not of each country, so a profile served from several countries can hand a user nodes in one country only. Use one profile per country, or a pool size that covers every node of the profile.
+- If the panel's database refuses a write during a traffic poll, the traffic that poll read from cores that reset their counters on each read (Hysteria and others) is not counted. This happens only on database errors and undercounts, never overcounts.
+- The agent does not update itself: after a panel deploy, rebuild it on each
+  node over SSH.
+
 ## v0.2.1 (2026-09-26)
 
 The routing release. Everything that leaves a node now goes through one policy
