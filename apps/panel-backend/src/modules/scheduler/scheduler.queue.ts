@@ -32,7 +32,7 @@ export const cronTasksQueue = new Queue(QUEUE_NAME, {
 
 // ───── Job names + schedule (mirrors the panel operators migrate from) ─────
 
-interface CronJobSpec {
+export interface CronJobSpec {
   name: string;
   pattern: string; // cron-выражение
 }
@@ -57,19 +57,32 @@ const CRON_JOBS: CronJobSpec[] = [
 
 // ───── Регистрация (вызывается один раз при бутстрапе) ─────
 
-export async function registerCronJobs(): Promise<void> {
-  for (const job of CRON_JOBS) {
-    await cronTasksQueue.add(
-      job.name,
-      {},
-      {
-        repeat: { pattern: job.pattern },
-        // jobId фиксирован, чтобы повторный запуск не дублировал расписание
-        jobId: `cron:${job.name}`,
-      },
-    );
+/**
+ * One job scheduler per name in the list, with the list's pattern, and nothing
+ * else in the queue's schedule.
+ *
+ * A-042: this used to be queue.add with repeat and a fixed jobId. The key of
+ * such a repeatable carries its pattern, so a pattern changed in CRON_JOBS
+ * added a second entry and the old one went on firing beside it; a name taken
+ * out of the list fired for ever. upsertJobScheduler keys by name and replaces
+ * the pattern; what the queue holds under any other key (the old repeatables
+ * of every earlier boot, a name since removed) is taken off here, once per
+ * boot, which also clears the old entries on the first boot of this version.
+ */
+export async function registerCronJobs(queue: Queue = cronTasksQueue, jobs: CronJobSpec[] = CRON_JOBS): Promise<void> {
+  const wanted = new Set(jobs.map((j) => j.name));
+  let removed = 0;
+  for (const entry of await queue.getRepeatableJobs()) {
+    if (wanted.has(entry.key)) continue;
+    // A scheduler and an old repeatable sit in one list; either call takes
+    // its own kind off, the second only runs when the first found nothing.
+    if (!(await queue.removeJobScheduler(entry.key))) await queue.removeRepeatableByKey(entry.key);
+    removed++;
   }
-  getLogger().info(`[scheduler] registered ${CRON_JOBS.length} cron jobs`);
+  for (const job of jobs) {
+    await queue.upsertJobScheduler(job.name, { pattern: job.pattern }, { name: job.name, data: {} });
+  }
+  getLogger().info(`[scheduler] registered ${jobs.length} cron jobs${removed > 0 ? `, removed ${removed} stale` : ''}`);
 }
 
 // ───── Worker ─────
