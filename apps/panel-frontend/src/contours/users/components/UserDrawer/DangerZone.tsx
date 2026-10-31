@@ -5,9 +5,10 @@ import { LABEL } from '@/contours/users/lib/userForm';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@/lib/domain/users';
 import { deleteRetentionText } from '@/contours/users/lib/retentionWords';
+import { ReissueKeysRow } from '@/contours/users/components/UserDrawer/ReissueKeysRow';
 
 /**
- * The three actions that change what the person on the other end experiences,
+ * The four actions that change what the person on the other end experiences,
  * gathered where they can be read before they are taken.
  *
  * They were spread across the row menu, where a click sits one pixel away from
@@ -20,11 +21,14 @@ export function DangerZone({
   onResetTraffic,
   onRevoke,
   onDelete,
+  onReissued,
 }: {
   user: User;
   onResetTraffic: (user: User) => void;
   onRevoke: (user: User) => void;
   onDelete: (user: User) => void;
+  /** A-053: the user read again after new keys, for the drawer. */
+  onReissued?: (fresh: User) => void;
 }) {
   const { t } = useTranslation();
 
@@ -62,6 +66,7 @@ export function DangerZone({
         accent={RED}
         onClick={() => onRevoke(user)}
       />
+      <ReissueKeysRow user={user} onReissued={onReissued} />
       <Row
         title={t('userDrawer.deleteTitle')}
         body={`${t('userDrawer.deleteBody')} ${deleteRetentionText(t)}`}

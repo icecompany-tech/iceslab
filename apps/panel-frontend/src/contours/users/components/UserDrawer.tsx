@@ -33,6 +33,8 @@ export interface Props {
   onResetTraffic?: (user: User) => void;
   onRevoke?: (user: User) => void;
   onDelete?: (user: User) => void;
+  /** A-053: the user read again after new keys, so the drawer shows the new link. */
+  onReissued?: (fresh: User) => void;
 }
 
 export function UserDrawer({
@@ -44,6 +46,7 @@ export function UserDrawer({
   onResetTraffic,
   onRevoke,
   onDelete,
+  onReissued,
 }: Props) {
   const ui = useUserForm({ opened, user, onSubmit, onClose });
 
@@ -84,6 +87,7 @@ export function UserDrawer({
           onResetTraffic={onResetTraffic}
           onRevoke={onRevoke}
           onDelete={onDelete}
+          onReissued={onReissued}
         />
         <DrawerFooter
           isEdit={ui.isEdit}
