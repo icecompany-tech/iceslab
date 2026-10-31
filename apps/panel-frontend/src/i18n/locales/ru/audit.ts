@@ -14,6 +14,7 @@ export const audit = {
       settings_update: 'Правка настроек',
       users_bulk: 'Массовое действие с юзерами',
       user_delete: 'Удаление юзера',
+      user_credentials_reissue: 'Перевыпуск ключей юзера',
       node_connLog_clear: 'Очистка журнала соединений ноды',
       node_cert_rotate: 'Перевыпуск сертификата ноды',
       cascade_create: 'Создание каскада',
