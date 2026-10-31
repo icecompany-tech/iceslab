@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { revokeToken } from './revoked-tokens.js';
 import { requireAuth, requireSession } from './auth.hook.js';
 import { findAdminById } from '../admin/admin.service.js';
 import { LoginSchema, RegisterSchema, TotpCodeSchema } from './auth.schemas.js';
@@ -98,6 +100,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const token = await reply.jwtSign({
           sub: admin.id,
           role: admin.role,
+          // A-038: what sign-out revokes.
+          jti: randomUUID(),
         });
         // Slice 37 - also drop a same-origin cookie so server-rendered admin
         // tooling (Bull-board at /admin/queues) inherits the session without
@@ -189,11 +193,29 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/auth/logout (A-038): the browser's session cookie is cleared
-  // with the attributes it was set with. No auth: a signed-out or expired
-  // session has to be able to clear its cookie too. The bearer token in the
-  // SPA's storage is the SPA's to drop; a stolen token lives to its expiry.
-  app.post('/api/auth/logout', async (_request, reply) => {
+  // POST /api/auth/logout (A-038): the session's token, from the Bearer
+  // header or the cookie, is revoked until its expiry, so a copy of it is
+  // refused from now on (requireAuth); the cookie is cleared with the
+  // attributes it was set with. No auth: a signed-out or expired session has
+  // to be able to clear its cookie too, and an invalid token has nothing to
+  // revoke. Redis not answering fails the sign-out (500): a 204 would tell
+  // the operator the copy is dead while it is not.
+  app.post('/api/auth/logout', async (request, reply) => {
+    // Both places, not the first found: the SPA sends the header and the
+    // browser the cookie, and after a re-login in another tab they can differ.
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? '')?.[1];
+    for (const token of new Set([bearer, request.cookies[AUTH_COOKIE]])) {
+      if (!token) continue;
+      let verified: { jti?: unknown; exp?: unknown };
+      try {
+        verified = app.jwt.verify(token);
+      } catch {
+        continue; // expired, foreign or an API token: nothing to revoke
+      }
+      if (typeof verified.jti === 'string' && typeof verified.exp === 'number') {
+        await revokeToken(verified.jti, verified.exp);
+      }
+    }
     reply.clearCookie(AUTH_COOKIE, authCookieOptions());
     return reply.code(204).send();
   });

@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { findAdminById } from '../admin/admin.service.js';
 import { prisma } from '../../prisma.js';
+import { isRevoked } from './revoked-tokens.js';
 
 interface JwtSignPayload {
   sub: string;
   role: string;
+  /** A-038: the token's own id, what sign-out revokes (revoked-tokens.ts). */
+  jti: string;
 }
 
 interface JwtVerifiedPayload extends JwtSignPayload {
@@ -146,6 +149,28 @@ export async function requireAuth(
   // sub that is not an admin id is refused here, before it reaches a lookup.
   if (typeof payload.sub !== 'string' || !ADMIN_ID.test(payload.sub)) {
     reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Missing or invalid token' });
+    return;
+  }
+  // A-038: a token that cannot be revoked is not taken. Every sign-in since
+  // this version carries a jti; one signed before it is refused once, and the
+  // admin signs in again.
+  if (typeof payload.jti !== 'string' || payload.jti === '') {
+    reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Missing or invalid token' });
+    return;
+  }
+  // Redis not answering is a refusal, not a pass: a pass would bring back
+  // every signed-out session for as long as Redis is away, and the operator
+  // would not know. 503, so it reads as the panel's trouble and not a
+  // sign-out; the panel's queues stop with Redis anyway.
+  let revoked: boolean;
+  try {
+    revoked = await isRevoked(payload.jti);
+  } catch {
+    reply.code(503).send({ error: 'AUTH_UNAVAILABLE', message: 'Session check unavailable, try again' });
+    return;
+  }
+  if (revoked) {
+    reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Signed out' });
     return;
   }
   const admin = await findAdminById(payload.sub);

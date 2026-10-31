@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../app.js';
 import { prisma } from '../../prisma.js';
-import { closeRedis } from '../../lib/infra/redis.js';
+import { closeRedis, redis } from '../../lib/infra/redis.js';
 import { cleanDatabase } from '../../../tests/helpers/db.js';
 import { registerAdmin } from '../../../tests/helpers/auth.js';
 
@@ -19,6 +19,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await app.close();
 });
 
@@ -92,11 +93,86 @@ describe('POST /api/auth/logout', () => {
     expect(none.statusCode).toBe(204);
 
     const expired = app.jwt.sign(
-      { sub: '00000000-0000-4000-8000-000000000000', role: 'admin' },
+      { sub: '00000000-0000-4000-8000-000000000000', role: 'admin', jti: 'expired' },
       { expiresIn: -60 },
     );
     const res = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie: `iceslab_auth=${expired}` } });
     expect(res.statusCode).toBe(204);
     expect(parseSetCookie(res.headers['set-cookie']).some((c) => c.name === 'iceslab_auth')).toBe(true);
+  });
+});
+
+/**
+ * A-038, the tail: clearing the browser's cookie left the token itself alive
+ * to its expiry, so a copy of it (stolen, or kept in another place) still
+ * signed in. Sign-out now revokes the token's jti until then.
+ */
+describe('a token after sign-out', () => {
+  async function signIn(): Promise<string> {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'admin', password: 'password123' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return JSON.parse(res.body).token as string;
+  }
+  const get = (url: string, headers: Record<string, string>) => app.inject({ method: 'GET', url, headers });
+
+  it('a cookie copied before sign-out is refused after it, on the API and on /admin/queues', async () => {
+    await registerAdmin(app);
+    const copy = { cookie: `iceslab_auth=${await signIn()}` };
+    expect((await get('/api/users', copy)).statusCode).toBe(200);
+    expect((await get('/admin/queues', copy)).statusCode, 'bull-board takes the cookie').not.toBe(401);
+
+    expect((await app.inject({ method: 'POST', url: '/api/auth/logout', headers: copy })).statusCode).toBe(204);
+
+    expect((await get('/api/users', copy)).statusCode).toBe(401);
+    expect((await get('/admin/queues', copy)).statusCode).toBe(401);
+  });
+
+  it('the same for a Bearer token signed out by its header', async () => {
+    await registerAdmin(app);
+    const bearer = { authorization: `Bearer ${await signIn()}` };
+    expect((await get('/api/users', bearer)).statusCode).toBe(200);
+    await app.inject({ method: 'POST', url: '/api/auth/logout', headers: bearer });
+    expect((await get('/api/users', bearer)).statusCode).toBe(401);
+    // And as a cookie: one token, one revocation.
+    expect((await get('/api/users', { cookie: `iceslab_auth=${bearer.authorization.slice(7)}` })).statusCode).toBe(401);
+  });
+
+  it('another session of the same admin, not signed out, goes on working', async () => {
+    await registerAdmin(app);
+    const here = { authorization: `Bearer ${await signIn()}` };
+    const there = { authorization: `Bearer ${await signIn()}` };
+    await app.inject({ method: 'POST', url: '/api/auth/logout', headers: here });
+    expect((await get('/api/users', here)).statusCode).toBe(401);
+    expect((await get('/api/users', there)).statusCode).toBe(200);
+  });
+
+  it('the revocation lives until the token would have expired, and no longer', async () => {
+    await registerAdmin(app);
+    const token = await signIn();
+    const { jti, exp } = app.jwt.decode<{ jti: string; exp: number }>(token)!;
+    await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { authorization: `Bearer ${token}` } });
+    const ttl = await redis.ttl(`auth:revoked:${jti}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(exp - Math.floor(Date.now() / 1000) + 1);
+  });
+
+  it('a token without a jti (signed before this version) is refused', async () => {
+    await registerAdmin(app);
+    const admin = await prisma.adminUser.findFirstOrThrow({ select: { id: true } });
+    const old = app.jwt.sign({ sub: admin.id, role: 'admin' } as never);
+    expect((await get('/api/users', { authorization: `Bearer ${old}` })).statusCode).toBe(401);
+  });
+
+  it('Redis not answering at the check is a 503, not a pass', async () => {
+    await registerAdmin(app);
+    const bearer = { authorization: `Bearer ${await signIn()}` };
+    vi.spyOn(redis, 'exists').mockRejectedValue(new Error('Connection is closed.'));
+    const res = await get('/api/users', bearer);
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toBe('AUTH_UNAVAILABLE');
   });
 });
