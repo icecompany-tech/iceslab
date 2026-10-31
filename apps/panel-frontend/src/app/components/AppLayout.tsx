@@ -34,6 +34,7 @@ import {
   NavUsersIcon,
 } from '@/ui/NavIcons';
 import { useAuth } from '@/lib/auth/session';
+import { logout } from '@/lib/auth/api';
 import { useBrandName } from '@/lib/ui/useBrandName';
 import { getSystemVersion } from '@/lib/domain/settings';
 import { useOverview } from '@/lib/domain/dashboard';
@@ -520,7 +521,11 @@ function AppLayoutInner() {
   const [nodesOpen, setNodesOpen] = useState(() => nodesSectionActive);
   const notWired = t('sidebar.notWired');
 
-  function handleLogout() {
+  async function handleLogout() {
+    // A-038: the server first, while the session still signs the request; its
+    // failure is not shown and does not keep the operator in (logout never
+    // throws, and gives up after a few seconds).
+    await logout();
     clearSession();
     // Drop cached queries, otherwise next admin on this browser sees the
     // previous session's data flash before refetch.
@@ -994,7 +999,7 @@ function AppLayoutInner() {
           >
             <NavItem to="/settings" label={t('sidebar.settings')} icon={<NavSettingsIcon />} />
             <UnstyledButton
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               style={{
                 display: 'flex',
                 alignItems: 'center',

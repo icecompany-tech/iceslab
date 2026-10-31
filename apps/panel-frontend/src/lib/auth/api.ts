@@ -43,6 +43,21 @@ export async function login(
   return data;
 }
 
+/**
+ * A-038: the server ends the session (POST /api/auth/logout, no body, 2xx), so
+ * the cookie and token stop working there, not only in this browser. Never
+ * throws and never waits long: a network error or a slow server must not keep
+ * the operator signed in on this screen, so the caller clears the session
+ * after it whatever happened.
+ */
+export async function logout(timeoutMs = 3000): Promise<void> {
+  try {
+    await api.post('/api/auth/logout', undefined, { timeout: timeoutMs });
+  } catch {
+    // The local sign-out goes on; the server's answer is not said.
+  }
+}
+
 // ───── K8: 2FA (TOTP) ─────
 
 export interface TotpStatus {
