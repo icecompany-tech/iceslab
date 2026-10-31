@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { findAdminById } from '../admin/admin.service.js';
 import { prisma } from '../../prisma.js';
-import { isRevoked } from './revoked-tokens.js';
+import { sessionState, type SessionState } from './revoked-tokens.js';
 
 interface JwtSignPayload {
   sub: string;
   role: string;
   /** A-038: the token's own id, what sign-out revokes (revoked-tokens.ts). */
   jti: string;
+  /** A-039: when it was signed, in ms, what a password change compares. */
+  iatMs: number;
 }
 
 interface JwtVerifiedPayload extends JwtSignPayload {
@@ -158,19 +160,27 @@ export async function requireAuth(
     reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Missing or invalid token' });
     return;
   }
-  // Redis not answering is a refusal, not a pass: a pass would bring back
-  // every signed-out session for as long as Redis is away, and the operator
+  // Redis not answering (or not within the check's wait) is a refusal, not a
+  // pass: a pass would bring back every signed-out session, and every session
+  // a password change ended, for as long as Redis is away, and the operator
   // would not know. 503, so it reads as the panel's trouble and not a
   // sign-out; the panel's queues stop with Redis anyway.
-  let revoked: boolean;
+  // A-039: iatMs where the token has it; iat is whole seconds, and a token
+  // signed in the second of a password change would be refused with it.
+  const issuedMs = typeof payload.iatMs === 'number' ? payload.iatMs : payload.iat * 1000;
+  let state: SessionState;
   try {
-    revoked = await isRevoked(payload.jti);
+    state = await sessionState(payload.jti, payload.sub, issuedMs);
   } catch {
     reply.code(503).send({ error: 'AUTH_UNAVAILABLE', message: 'Session check unavailable, try again' });
     return;
   }
-  if (revoked) {
+  if (state === 'signed-out') {
     reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Signed out' });
+    return;
+  }
+  if (state === 'ended') {
+    reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Session ended by a password change' });
     return;
   }
   const admin = await findAdminById(payload.sub);

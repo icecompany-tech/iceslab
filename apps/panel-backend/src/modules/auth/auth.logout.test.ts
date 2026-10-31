@@ -170,9 +170,20 @@ describe('a token after sign-out', () => {
   it('Redis not answering at the check is a 503, not a pass', async () => {
     await registerAdmin(app);
     const bearer = { authorization: `Bearer ${await signIn()}` };
-    vi.spyOn(redis, 'exists').mockRejectedValue(new Error('Connection is closed.'));
+    vi.spyOn(redis, 'mget').mockRejectedValue(new Error('Connection is closed.'));
     const res = await get('/api/users', bearer);
     expect(res.statusCode).toBe(503);
     expect(JSON.parse(res.body).error).toBe('AUTH_UNAVAILABLE');
+  });
+
+  it('Redis that holds the check without answering is a 503 after the wait, not a hang', async () => {
+    await registerAdmin(app);
+    const bearer = { authorization: `Bearer ${await signIn()}` };
+    // ioredis queues commands while it reconnects and never gives up on them.
+    vi.spyOn(redis, 'mget').mockReturnValue(new Promise(() => {}) as never);
+    const t0 = Date.now();
+    const res = await get('/api/users', bearer);
+    expect(res.statusCode).toBe(503);
+    expect(Date.now() - t0).toBeLessThan(5000);
   });
 });

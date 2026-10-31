@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { revokeToken } from './revoked-tokens.js';
+import { endSessionsBefore, revokeToken } from './revoked-tokens.js';
 import { requireAuth, requireSession } from './auth.hook.js';
-import { findAdminById } from '../admin/admin.service.js';
-import { LoginSchema, RegisterSchema, TotpCodeSchema } from './auth.schemas.js';
+import { findAdminById, setAdminPassword } from '../admin/admin.service.js';
+import { ChangePasswordSchema, LoginSchema, RegisterSchema, TotpCodeSchema } from './auth.schemas.js';
 import * as authService from './auth.service.js';
 import * as twofa from './twofa.service.js';
 import * as adminService from '../admin/admin.service.js';
@@ -102,6 +102,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           role: admin.role,
           // A-038: what sign-out revokes.
           jti: randomUUID(),
+          // A-039: what a password change compares, to the ms.
+          iatMs: Date.now(),
         });
         // Slice 37 - also drop a same-origin cookie so server-rendered admin
         // tooling (Bull-board at /admin/queues) inherits the session without
@@ -358,6 +360,56 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         return twofaError(reply, err) ?? Promise.reject(err);
       }
+    },
+  );
+
+  // PUT /api/auth/password (A-039): the admin's own password. A session only,
+  // as 2FA. Refusals are 403 and not 401: the panel reads a 401 as a session
+  // gone and would sign the admin out mid-typing. On success every session of
+  // this admin issued until now ends, this one too (204, cookie cleared): a
+  // password changed because it leaked must not leave the session that used
+  // it alive, and the SPA takes the admin to sign-in.
+  app.put(
+    '/api/auth/password',
+    { ...sessionAuth, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const input = ChangePasswordSchema.parse(request.body);
+      const admin = await findAdminById(request.admin!.id);
+      if (!admin) return reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Admin no longer exists' });
+      audit(request, { action: 'admin.password.change', target: { kind: 'admin', id: admin.id, label: admin.username } });
+      try {
+        await authService.checkPasswordChange(admin, input, request.ip);
+      } catch (err) {
+        if (err instanceof authService.AccountLockedError) {
+          reply.header('Retry-After', err.retryAfterSeconds.toString());
+          return reply.code(429).send({
+            error: 'ACCOUNT_LOCKED',
+            message: err.message,
+            retryAfterSeconds: err.retryAfterSeconds,
+          });
+        }
+        if (err instanceof authService.InvalidCurrentPasswordError) {
+          return reply.code(403).send({ error: 'INVALID_CURRENT_PASSWORD', message: err.message });
+        }
+        if (err instanceof authService.TotpRequiredError) {
+          return reply.code(403).send({ error: 'TOTP_REQUIRED', message: err.message, requires2fa: true });
+        }
+        if (err instanceof authService.InvalidTotpError) {
+          return reply.code(403).send({ error: 'INVALID_TOTP', message: err.message });
+        }
+        if (err instanceof authService.PasswordUnchangedError) {
+          return reply.code(400).send({ error: 'PASSWORD_UNCHANGED', message: err.message });
+        }
+        throw err;
+      }
+      // Sessions first, then the hash (checkPasswordChange says why). The
+      // mark lives as long as a token does (JWT_EXPIRES_IN, read off this
+      // one), so it outlives every session it can refuse.
+      const { iat, exp } = request.user;
+      await endSessionsBefore(admin.id, Date.now(), exp - iat + 60);
+      await setAdminPassword(admin.id, input.newPassword);
+      reply.clearCookie(AUTH_COOKIE, authCookieOptions());
+      return reply.code(204).send();
     },
   );
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PasswordSchema } from '../admin/admin.schemas.js';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -14,6 +15,16 @@ export const TotpCodeSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'A 6-digit code is required'),
 });
 export type TotpCodeInput = z.infer<typeof TotpCodeSchema>;
+
+// A-039: the admin's own password, changed by the admin. The new one takes
+// the rules register takes (PasswordSchema); the code is asked only of an
+// admin with 2FA on.
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: PasswordSchema,
+  totpCode: z.string().regex(/^\d{6}$/).optional(),
+});
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 
 // Register uses the same shape as CreateAdmin
 export { CreateAdminSchema as RegisterSchema } from '../admin/admin.schemas.js';

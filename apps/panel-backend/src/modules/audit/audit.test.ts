@@ -357,6 +357,7 @@ describe('the detail of a row', () => {
   const samples: { [A in (typeof ADMIN_AUDIT_ACTIONS)[number]]: AdminAuditDetails[A] } = {
     'auth.login': { twoFactor: true, locked: true },
     'admin.register': null,
+    'admin.password.change': null,
     'admin.2fa.enable': null,
     'admin.2fa.disable': null,
     'apiToken.create': { scopes: ['users:read'] },

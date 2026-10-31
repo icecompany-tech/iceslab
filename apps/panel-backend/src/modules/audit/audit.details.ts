@@ -20,6 +20,7 @@ export const AUDIT_DETAIL_SCHEMAS = {
     z.strictObject({ suppressed: z.number().int().min(1), windowStart: z.iso.datetime() }),
   ]),
   'admin.register': z.null(),
+  'admin.password.change': z.null(),
   'admin.2fa.enable': z.null(),
   'admin.2fa.disable': z.null(),
   'apiToken.create': scopes,

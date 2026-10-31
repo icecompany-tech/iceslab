@@ -32,6 +32,7 @@ export const ADMIN_AUDIT_LOGIN_REFUSAL_CAP = { perNetwork: 20, all: 300, windowS
 export const ADMIN_AUDIT_ACTIONS = [
   'auth.login',
   'admin.register',
+  'admin.password.change',
   'admin.2fa.enable',
   'admin.2fa.disable',
   'apiToken.create',
@@ -76,6 +77,8 @@ export interface AdminAuditDetails {
    *  hour that began at windowStart. */
   'auth.login': { twoFactor: boolean; locked?: true } | { suppressed: number; windowStart: string };
   'admin.register': null;
+  /** A-039: the admin's own password; never the password, nothing else. */
+  'admin.password.change': null;
   'admin.2fa.enable': null;
   'admin.2fa.disable': null;
   /** ['*'] for a full token. */

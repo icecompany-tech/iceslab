@@ -5,7 +5,7 @@ import {
   verifyPassword,
   recordTotpStep,
 } from '../admin/admin.service.js';
-import type { LoginInput } from './auth.schemas.js';
+import type { ChangePasswordInput, LoginInput } from './auth.schemas.js';
 import { redis } from '../../lib/infra/redis.js';
 import { config } from '../../config.js';
 import { verifyTotpStep } from '../../lib/auth/totp.js';
@@ -153,4 +153,51 @@ export async function login(input: LoginInput, clientIp: string): Promise<AdminU
 
   await clearFailures(clientIp, input.username);
   return admin;
+}
+
+// A-039: refusals of a password change. A wrong current password is a failed
+// sign-in for the lock (else this route would be a way around it); `locked`
+// as on InvalidCredentialsError.
+export class InvalidCurrentPasswordError extends Error {
+  constructor(public locked = false) {
+    super('Current password is wrong');
+    this.name = 'InvalidCurrentPasswordError';
+  }
+}
+
+export class PasswordUnchangedError extends Error {
+  constructor() {
+    super('The new password is the current one');
+    this.name = 'PasswordUnchangedError';
+  }
+}
+
+/**
+ * A-039: may the admin change their own password? The same checks as a
+ * sign-in, in the same order and against the same lock of (IP, username):
+ * the lock, the current password, then the second factor when it is on.
+ * Returns when all passed; nothing is written but the lock's count. The
+ * route then ends the sessions and only after that stores the new hash, so
+ * a Redis that fails in between leaves the old password, not a new one with
+ * the old sessions alive.
+ */
+export async function checkPasswordChange(
+  admin: AdminUser,
+  input: ChangePasswordInput,
+  clientIp: string,
+): Promise<void> {
+  await checkLocked(clientIp, admin.username);
+  if (!(await verifyPassword(input.currentPassword, admin.passwordHash))) {
+    throw new InvalidCurrentPasswordError(await recordFailure(clientIp, admin.username));
+  }
+  if (admin.totpEnabled && admin.totpSecret) {
+    if (!input.totpCode) throw new TotpRequiredError();
+    const step = verifyTotpStep(admin.totpSecret, input.totpCode);
+    if (step === null || (admin.totpLastUsedStep !== null && step <= admin.totpLastUsedStep)) {
+      throw new InvalidTotpError(await recordFailure(clientIp, admin.username));
+    }
+    await recordTotpStep(admin.id, step);
+  }
+  if (input.newPassword === input.currentPassword) throw new PasswordUnchangedError();
+  await clearFailures(clientIp, admin.username);
 }
