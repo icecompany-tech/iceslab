@@ -36,6 +36,7 @@ export const AUDIT_DETAIL_SCHEMAS = {
     userIds: z.array(z.string().regex(/^[0-9a-f-]{36}$/i)).max(500),
   }),
   'user.delete': z.strictObject({ erasedAfter: z.iso.datetime() }),
+  'user.credentials.reissue': z.null(),
   'node.connLog.clear': z.strictObject({
     outcome: z
       .array(

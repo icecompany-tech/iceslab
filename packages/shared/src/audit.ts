@@ -39,6 +39,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   'settings.update',
   'users.bulk',
   'user.delete',
+  'user.credentials.reissue',
   'node.connLog.clear',
   'node.cert.rotate',
   'cascade.create',
@@ -93,6 +94,8 @@ export interface AdminAuditDetails {
     userIds: string[];
   };
   'user.delete': { erasedAfter: string };
+  /** A-053: nothing beyond the fact; what is issued is the same every time. */
+  'user.credentials.reissue': null;
   'node.connLog.clear': { outcome: { source: 'journal' | 'syslog'; state: 'cleared' | 'absent' | 'failed' }[] };
   'node.cert.rotate': { notAfter: string };
   /** The cascade after the action; for delete, before it. */

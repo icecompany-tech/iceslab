@@ -568,6 +568,55 @@ export async function rotateSubscription(id: string): Promise<PublicUserDto> {
 }
 
 /**
+ * A-053: everything a client signs in with, issued again. A leaked config or
+ * a shared device used to cost the operator a new user: revoke and rotate
+ * touch only the link, and the identities on the nodes were the ones minted
+ * at creation, for good.
+ *
+ * New: the xray uuid (TUIC, AnyTLS, ShadowTLS and Shadowsocks keys are derived
+ * from it, so they change with it), the hysteria and naive passwords, the
+ * AmneziaWG key pair and the subscription token. Kept: the AmneziaWG address
+ * (allocated per user and profile, not per key), the REALITY shortId, which
+ * is no credential, and everything else about the user. Any prior revoke is
+ * cleared, as by rotate: the new link is the working one.
+ *
+ * The nodes get the user again through the ordinary edit event; each adapter
+ * keys users by id and replaces a changed identity (xray live, without a
+ * restart). Connections already open stay up until they close, as after any
+ * removal (A-218 shows them as lingering).
+ */
+export async function reissueCredentials(id: string): Promise<PublicUserDto> {
+  const existing = await repo.findActiveById(id);
+  if (!existing) {
+    throw new UserNotFoundError(id);
+  }
+  // The token is the one unique column here; retry a collision as rotate does.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const creds = generateUserCredentials();
+    try {
+      const updated = await repo.updateById(id, {
+        xrayUuid: creds.xrayUuid,
+        hysteriaPassword: creds.hysteriaPassword,
+        naivePassword: creds.naivePassword,
+        amneziawgPrivateKey: creds.amneziawgPrivateKey,
+        amneziawgPublicKey: creds.amneziawgPublicKey,
+        subscriptionToken: creds.subscriptionToken,
+        subRevokedAt: null,
+      });
+      eventBus.emit('user.updated', {
+        userId: id,
+        changes: ['credentials', 'subscriptionToken', 'subRevokedAt'],
+      });
+      return mapUserToPublic(updated, updated.traffic);
+    } catch (err) {
+      if (isUniqueViolation(err)) continue;
+      throw err;
+    }
+  }
+  throw new Error('Failed to reissue credentials after retries');
+}
+
+/**
  * On-demand traffic reset (period-billing top-up): zero usedTrafficBytes and
  * stamp lastTrafficResetAt, then emit user.traffic-reset. The existing handler
  * (users.events.ts) lifts a traffic limit (limited -> active) and re-provisions

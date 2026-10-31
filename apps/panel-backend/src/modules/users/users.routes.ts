@@ -517,6 +517,24 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // POST /api/users/:id/reissue-credentials (A-053): new uuid, passwords,
+  // AmneziaWG key and subscription token; the old link and every old identity
+  // on the nodes stop working. No body. Answers the user as GET does.
+  app.post('/api/users/:id/reissue-credentials', auth, async (request, reply) => {
+    const params = UserIdParamSchema.parse(request.params);
+    const target = await userTarget(params.id);
+    if (target) audit(request, { action: 'user.credentials.reissue', target });
+    try {
+      const user = await usersService.reissueCredentials(params.id);
+      return reply.send(user);
+    } catch (err) {
+      if (err instanceof usersService.UserNotFoundError) {
+        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      }
+      throw err;
+    }
+  });
+
   // POST /api/users/:id/reset-traffic: zero used traffic + stamp the reset;
   // the user.traffic-reset cascade lifts a traffic limit and re-provisions
   // nodes. For period-billing ("bought a period -> counter reset").

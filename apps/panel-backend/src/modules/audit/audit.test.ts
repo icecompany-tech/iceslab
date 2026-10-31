@@ -371,6 +371,7 @@ describe('the detail of a row', () => {
       userIds: ['00000000-0000-4000-8000-000000000004'],
     },
     'user.delete': { erasedAfter: '2026-11-25T10:00:00.000Z' },
+    'user.credentials.reissue': null,
     'node.connLog.clear': { outcome: [{ source: 'journal', state: 'cleared' }] },
     'node.cert.rotate': { notAfter: '2027-10-26T10:00:00.000Z' },
     'cascade.create': { directions: 1, nodes: 2 },
