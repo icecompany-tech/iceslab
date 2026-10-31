@@ -572,17 +572,22 @@ else
     if [[ -n "$PANEL_DOMAIN" ]]; then FRONTEND_BIND=127.0.0.1; else FRONTEND_BIND=0.0.0.0; fi
   fi
   # How many proxies in front of the backend add to X-Forwarded-For: the
-  # frontend's nginx always, the host Caddy too in domain mode. One more than
-  # there are lets a client name any address in that header and have the
-  # panel take it as theirs, so every per-address limit (the sign-in one
-  # included) can be dodged with a new value per request. Until A-008 this was
-  # 2 everywhere, which a bare-IP panel did not have. A Cloudflare in front
-  # adds no hop: the host Caddy replaces the X-Forwarded-For it is handed with
-  # the address it got the request from, so behind Cloudflare the panel sees
-  # Cloudflare's address, whatever the count. An operator's own extra proxy
-  # sets TRUST_PROXY_HOPS for the install.
+  # frontend's nginx always; in domain mode the host Caddy too, and a
+  # Cloudflare in front of it. One more than there are lets a client name any
+  # address in that header and have the panel take it as theirs, so every
+  # per-address limit (the sign-in one included) can be dodged with a new
+  # value per request. Until A-008 this was 2 everywhere, which a bare-IP
+  # panel did not have.
+  # Domain mode is 3 with or without Cloudflare (A-009). Caddy keeps the
+  # header only from Cloudflare's addresses (trusted_proxies, write_caddyfile)
+  # and replaces it with the address it got the request from otherwise. So
+  # behind Cloudflare the third hop is Cloudflare and the panel sees the
+  # client; straight to the origin there are two, and the count past the end
+  # of the chain stops at the address Caddy wrote. Either way a client cannot
+  # choose what the panel takes as their address (checked live, 31.10).
+  # An operator's own extra proxy sets TRUST_PROXY_HOPS for the install.
   if [[ -z "${TRUST_PROXY_HOPS:-}" ]]; then
-    if [[ -n "$PANEL_DOMAIN" ]]; then TRUST_PROXY_HOPS=2; else TRUST_PROXY_HOPS=1; fi
+    if [[ -n "$PANEL_DOMAIN" ]]; then TRUST_PROXY_HOPS=3; else TRUST_PROXY_HOPS=1; fi
   fi
   # The backend refuses to start on anything outside 0..8 (config.ts); say so
   # here, before the panel is half up.
@@ -610,9 +615,9 @@ FRONTEND_BIND=${FRONTEND_BIND}
 
 # ───── security & alerts ─────
 # TRUST_PROXY_HOPS: proxies that add to X-Forwarded-For in front of the
-# backend. 1 = the frontend's nginx alone (no domain), 2 = the host Caddy and
-# nginx (domain). A Cloudflare in front does not count: Caddy replaces the
-# header. Higher than the real count = clients can spoof their address.
+# backend. 1 = the frontend's nginx alone (no domain). 3 = domain: nginx, the
+# host Caddy and a Cloudflare if there is one (Caddy keeps the header only
+# from Cloudflare's addresses). Higher = clients can spoof their address.
 TRUST_PROXY_HOPS=${TRUST_PROXY_HOPS}
 
 # Per-route rate limits + login lockout (defaults are fine for small panel).
@@ -758,6 +763,14 @@ write_caddyfile() {
       request>client_ip ip_mask 24 48
       request>remote_ip ip_mask 24 48
     }
+  }
+  # Cloudflare's addresses (A-009), from https://www.cloudflare.com/ips-v4 and
+  # /ips-v6 as of 2026-10-31. A request from one of them keeps the
+  # X-Forwarded-For Cloudflare sends, so the panel sees the client behind it;
+  # from anywhere else Caddy replaces the header with the address it got the
+  # request from. The list changes with this file: a deploy re-renders it.
+  servers {
+    trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
   }
 }
 
