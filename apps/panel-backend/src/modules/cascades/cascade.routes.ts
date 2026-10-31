@@ -77,6 +77,9 @@ function handleError(err: unknown, reply: FastifyReply): FastifyReply {
       cascadeName: err.cascadeName,
     });
   }
+  if (err instanceof svc.CascadeDirectionTagsExhaustedError) {
+    return reply.code(409).send({ error: err.code, message: err.message, needed: err.needed, available: err.available });
+  }
   if (err instanceof svc.CascadeNameTakenError) {
     return reply.code(409).send({ error: 'CONFLICT', message: err.message });
   }

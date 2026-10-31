@@ -69,6 +69,7 @@ import type {
   CreateCascadeInput,
   UpdateCascadeInput,
 } from './cascade.schemas.js';
+import { MAX_DIRECTION_TAG } from './cascade.schemas.js';
 import { mapCascade, type CascadeDto } from './cascade.mapper.js';
 import {
   renderChainConfig,
@@ -127,6 +128,26 @@ export class DirectionInUseByPolicyError extends Error {
         `Remove the rule there first, or the nodes running it would lose the route.`,
     );
     this.name = 'DirectionInUseByPolicyError';
+  }
+}
+/**
+ * A-001: the save needs a direction tag past MAX_DIRECTION_TAG.
+ *
+ * The tag is the low byte of the route tag, so 256 would read as 0 of the next
+ * route policy, and 257 as tag 1: a user sent to one country would leave
+ * through another and nothing would say so. Tags are never reused either,
+ * because clients hold links that carry them, so the only way on is a new
+ * cascade. 409: the save is well-formed and conflicts with what this cascade
+ * has already spent.
+ */
+export class CascadeDirectionTagsExhaustedError extends Error {
+  readonly code = 'DIRECTION_TAGS_EXHAUSTED';
+  constructor(public needed: number, public available: number) {
+    super(
+      `This cascade has ${available} direction tag(s) left of ${MAX_DIRECTION_TAG} and the save needs ${needed}. ` +
+        `A tag is never handed out twice, since clients hold links that name it: create a new cascade for more ways out.`,
+    );
+    this.name = 'CascadeDirectionTagsExhaustedError';
   }
 }
 export class CascadeNameTakenError extends Error {
@@ -1885,6 +1906,13 @@ async function writeTopologyV4(
     }
     return { ...d, tag: nextTag++, keepId: undefined as string | undefined };
   });
+  // Before anything is written: the last tag handed out is nextTag - 1.
+  if (nextTag - 1 > MAX_DIRECTION_TAG) {
+    throw new CascadeDirectionTagsExhaustedError(
+      nextTag - cascade.nextDirectionTag,
+      Math.max(0, MAX_DIRECTION_TAG + 1 - cascade.nextDirectionTag),
+    );
+  }
 
   /**
    * What the legs are configured with TODAY, read before they are dropped.
