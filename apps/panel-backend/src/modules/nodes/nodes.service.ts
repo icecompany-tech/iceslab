@@ -448,6 +448,9 @@ export async function registerNodeWarp(id: string): Promise<PublicNodeDto> {
     warpEnabled: true,
     warpAccount: creds as unknown as Prisma.InputJsonValue,
   });
+  // A-049: the warp block is part of the pushed config; without the event the
+  // node kept its old egress until some unrelated edit pushed it.
+  eventBus.emit('node.updated', { nodeId: id, nodeName: node.name });
   return mapNodeToPublic(node);
 }
 
@@ -459,6 +462,8 @@ export async function disableNodeWarp(id: string): Promise<PublicNodeDto> {
   const existing = await repo.findActiveById(id);
   if (!existing) throw new NodeNotFoundError(id);
   const node = await repo.updateById(id, { warpEnabled: false });
+  // A-049, as on register: the node drops the warp block on the push this starts.
+  if (existing.warpEnabled) eventBus.emit('node.updated', { nodeId: id, nodeName: node.name });
   return mapNodeToPublic(node);
 }
 
