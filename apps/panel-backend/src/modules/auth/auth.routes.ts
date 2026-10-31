@@ -14,6 +14,26 @@ import { audit } from '../audit/audit.hook.js';
 import { signInTarget } from '../audit/audit.targets.js';
 import { admitRefusedSignIn } from '../audit/login-cap.js';
 
+/**
+ * The auth cookie's attributes, one list for setting it and clearing it: a
+ * browser keeps a cookie that a Set-Cookie with another path or domain was
+ * meant to clear (A-038). No domain: the cookie is host-only, and so is the
+ * clearing.
+ */
+const AUTH_COOKIE = 'iceslab_auth';
+const authCookieOptions = () =>
+  ({
+    httpOnly: true,
+    sameSite: 'strict',
+    path: '/',
+    // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
+    // from .env but the actual process.env is empty (e.g. dotenv-only
+    // setup with no shell-level export), this evaluated to false in
+    // prod and the auth cookie shipped without Secure, JWT over
+    // plain HTTP on MITM. Always read through config.
+    secure: config.NODE_ENV === 'production',
+  }) as const;
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/status - public discovery: tells the frontend which auth
   // methods are enabled and whether bootstrap registration is still open.
@@ -85,17 +105,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // HttpOnly + SameSite=Strict, cookie is unreadable to JS and only
         // travels with first-party requests, so XSS can't exfil it and
         // CSRF can't ride it cross-site.
-        reply.setCookie('iceslab_auth', token, {
-          httpOnly: true,
-          sameSite: 'strict',
-          path: '/',
+        reply.setCookie(AUTH_COOKIE, token, {
+          ...authCookieOptions(),
           maxAge: 60 * 60 * 24, // 24h, matches default JWT_EXPIRES_IN.
-          // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
-          // from .env but the actual process.env is empty (e.g. dotenv-only
-          // setup with no shell-level export), this evaluated to false in
-          // prod and the auth cookie shipped without Secure → JWT over
-          // plain HTTP on MITM. Always read through config.
-          secure: config.NODE_ENV === 'production',
         });
         if (config.TELEGRAM_NOTIFY_LOGIN_EVENTS) {
           notifyTelegramAsync(
@@ -176,6 +188,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // POST /api/auth/logout (A-038): the browser's session cookie is cleared
+  // with the attributes it was set with. No auth: a signed-out or expired
+  // session has to be able to clear its cookie too. The bearer token in the
+  // SPA's storage is the SPA's to drop; a stolen token lives to its expiry.
+  app.post('/api/auth/logout', async (_request, reply) => {
+    reply.clearCookie(AUTH_COOKIE, authCookieOptions());
+    return reply.code(204).send();
+  });
 
   // POST /api/auth/register: bootstrap only (no admins exist) + strict rate limit
   app.post(
