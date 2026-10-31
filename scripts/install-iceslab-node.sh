@@ -208,14 +208,14 @@ banner() {
   printf '  | | (__| _|\\__ \\| |__ / _ \\| _ \\\n'
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m  node-agent\n'
   printf '\n'
-  printf '  v0.2.1  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.3.0  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
 [[ $EUID -eq 0 ]] || fail "Must run as root (sudo bash $0)"
 
 ICESLAB_NODE_REPO=${ICESLAB_NODE_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.2.1}
+ICESLAB_NODE_REF=${ICESLAB_NODE_REF:-v0.3.0}
 # Exported, so the installer handed over to installs exactly the ref it was
 # fetched for, whatever its own default is.
 export ICESLAB_NODE_REF
@@ -239,7 +239,7 @@ export ICESLAB_NODE_REF
 # default ref above: it moves with every tag (RELEASING §4b), the default
 # moves only with a final. The same function is in install-iceslab.sh
 # (apps/node/installer_handover_test.go holds the two together).
-ICESLAB_SCRIPT_REF="v0.3.0-rc.2"
+ICESLAB_SCRIPT_REF="v0.3.0"
 
 # handover_to_ref <ref> <repo url> <path in repo> [args...]: exec that ref's
 # copy of <path> with the same arguments and environment, once
