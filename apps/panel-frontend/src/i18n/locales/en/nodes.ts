@@ -153,7 +153,8 @@ export const nodes = {
     savedIt: 'I have saved it',
     onceTitle: 'Shown once, the panel will not surface it again',
     onceBody:
-      'This token grants the installer one-time access to mint a private mTLS key. If it expires before you redeem it, use Re-issue bootstrap on the node.',
+      // The node key is issued by the panel (keygen.service.ts, issueNodeCert), not the agent.
+      'This token lets the installer fetch, once, the node certificate and key the panel issued; the panel keeps no copy. If the token expires before you redeem it, use Re-issue bootstrap on the node.',
     tokenTitle: 'Bootstrap token',
     expiresIn: 'expires in {{min}} min',
     expired: 'expired',
@@ -188,7 +189,7 @@ export const nodes = {
     tl1: 'Node record created',
     tl1Hint: 'Visible on the Nodes page as offline until the agent checks in.',
     tl2: 'Installer redeems the token',
-    tl2Hint: 'The agent mints its mTLS key locally, the private key never leaves the VPS.',
+    tl2Hint: 'The panel issues the node certificate and key and hands them over once, over https; the panel keeps no copy.',
     tl2Payload: 'The installer sets the node up from the payload',
     tl2PayloadHint: 'The node key comes in the payload: the panel issued it at create and keeps no copy.',
     tl3: 'First heartbeat, node turns online',
@@ -635,7 +636,7 @@ export const nodes = {
   nodePayloadModal: {
     title: 'Node "{{name}}" - provisioning',
     warning:
-      'This token grants the node-installer one-time access to mint a private mTLS key. The panel won\'t surface it again on subsequent reads - if the token expires before you redeem it, click "Refresh bootstrap" on the node row.',
+      'This token lets the installer fetch, once, the node certificate and key the panel issued; the panel keeps no copy. The panel will not show the token itself again: if it expires before you redeem it, click "Re-issue bootstrap" on the node row.',
     bootstrapToken: 'Bootstrap token',
     expiresIn: 'expires in {{min}} min',
     runOnNode: 'Run on the node',

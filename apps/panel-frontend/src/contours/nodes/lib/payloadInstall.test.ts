@@ -51,11 +51,27 @@ describe('A-295: установка ноды из payload на панели бе
       'nodeCreate.tl2PayloadHint',
       'nodeEdit.bootstrapPayloadOnly',
       'nodeEdit.bootstrapPayloadOnlyShown',
+      'nodeCreate.tl2Hint',
+      'nodeCreate.onceBody',
+      'nodePayloadModal.warning',
     ];
     const missing = keys.flatMap((k) => [
       ...(typeof at(ru, k) === 'string' ? [] : [`ru ${k}`]),
       ...(typeof at(en, k) === 'string' ? [] : [`en ${k}`]),
     ]);
     expect(missing).toEqual([]);
+  });
+
+  it('ключ ноды выпускает панель (keygen.service.ts, issueNodeCert), и окна говорят именно это', () => {
+    const keys = ['nodeCreate.tl2Hint', 'nodeCreate.onceBody', 'nodePayloadModal.warning'];
+    const byPanel = { ru: /(выпустила панель|Панель выпускает)/, en: /(the panel issued|The panel issues)/ };
+    const noCopy = { ru: /панель не хранит/, en: /the panel keeps no copy/ };
+    const off = keys.flatMap((k) =>
+      (['ru', 'en'] as const).flatMap((l) => {
+        const s = String(at(l === 'ru' ? ru : en, k));
+        return byPanel[l].test(s) && noCopy[l].test(s) ? [] : [`${l} ${k}`];
+      }),
+    );
+    expect(off).toEqual([]);
   });
 });
