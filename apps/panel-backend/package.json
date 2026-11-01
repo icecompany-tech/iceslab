@@ -1,6 +1,6 @@
 {
   "name": "@iceslab/panel-backend",
-  "version": "0.3.0",
+  "version": "0.3.0+dev",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
