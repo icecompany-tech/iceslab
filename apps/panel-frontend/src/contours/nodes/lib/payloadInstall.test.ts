@@ -45,6 +45,12 @@ describe('A-295: установка ноды из payload на панели бе
       'nodePayloadModal.payloadAtCreateOnly',
       'nodePayloadModal.payloadOnlyWarning',
       'nodePayloadModal.runOnNodeHintPayload',
+      'nodePayloadModal.runIfKept',
+      'nodeCreate.step3HintPayload',
+      'nodeCreate.tl2Payload',
+      'nodeCreate.tl2PayloadHint',
+      'nodeEdit.bootstrapPayloadOnly',
+      'nodeEdit.bootstrapPayloadOnlyShown',
     ];
     const missing = keys.flatMap((k) => [
       ...(typeof at(ru, k) === 'string' ? [] : [`ru ${k}`]),

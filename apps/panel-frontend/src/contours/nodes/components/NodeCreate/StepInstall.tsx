@@ -284,8 +284,8 @@ export function StepInstall({
                 />
                 <TimelineStep
                   state={isOnline ? 'done' : 'current'}
-                  title={t('nodeCreate.tl2')}
-                  hint={t('nodeCreate.tl2Hint')}
+                  title={t(payloadOnly ? 'nodeCreate.tl2Payload' : 'nodeCreate.tl2')}
+                  hint={t(payloadOnly ? 'nodeCreate.tl2PayloadHint' : 'nodeCreate.tl2Hint')}
                 />
                 <TimelineStep
                   state={isOnline ? 'done' : 'pending'}

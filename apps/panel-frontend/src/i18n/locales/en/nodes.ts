@@ -114,6 +114,8 @@ export const nodes = {
     step2Hint: 'Attach {{count}}',
     step3: 'Install',
     step3Hint: 'Bootstrap token plus one-liner',
+    // A-295: a panel without https, step three is the payload, no token.
+    step3HintPayload: 'Payload, scp and the command',
     paramsTitle: 'Parameters',
     countryPlaceholder: 'not set',
     createWithHosts_one: 'Create node + {{count}} host',
@@ -176,7 +178,8 @@ export const nodes = {
       'The installer takes a bootstrap token over https only, so there is no token here. Three steps: download the payload, put it on the node, run the command. The payload is handed out only now; without it the node has to be created again.',
     payloadStepTitle: '1. Download the payload',
     scpTitle: '2. Put it on the node',
-    scpHint: 'From the machine the file was downloaded to. The path on the node is the one the command below reads.',
+    scpHint:
+      'From the machine the file was downloaded to. The path on the node is the one the command below reads. If the browser saved the file under another name (say, with "(1)"), fix the name in the line.',
     copyScp: 'Copy scp',
     runStepTitle: '3. Run on the node',
     runHintPayload:
@@ -186,6 +189,8 @@ export const nodes = {
     tl1Hint: 'Visible on the Nodes page as offline until the agent checks in.',
     tl2: 'Installer redeems the token',
     tl2Hint: 'The agent mints its mTLS key locally, the private key never leaves the VPS.',
+    tl2Payload: 'The installer sets the node up from the payload',
+    tl2PayloadHint: 'The node key comes in the payload: the panel issued it at create and keeps no copy.',
     tl3: 'First heartbeat, node turns online',
     tl3Hint: 'Metrics start arriving within 15 seconds of the first poll.',
     tl4_zero: 'No hosts attached',
@@ -206,6 +211,9 @@ export const nodes = {
     reissue: 'Re-issue bootstrap',
     bootstrapIssued: 'New bootstrap token issued',
     bootstrapShown: 'The install command is in the window. The old token is dead.',
+    // A-295: a panel without https, the token is no use to the installer.
+    bootstrapPayloadOnly: 'Token issued, but the installer will not take it',
+    bootstrapPayloadOnlyShown: 'The panel has no https: the node installs only from the payload of create. The window says what to do.',
     tabParams: 'Parameters',
     tabRoutes: 'Routes',
     paramsTitle: 'Parameters',
@@ -646,8 +654,8 @@ export const nodes = {
     // A-295: a re-issue carries no payload; a panel without https.
     payloadAtCreateOnly: 'The payload is handed out only when the node is created: the panel keeps no node key and cannot issue it again.',
     payloadOnlyWarning:
-      'The panel has no https: the installer will not take the token, and this window has no payload. The payload is handed out only when the node is created. If you kept it, put it on the node and run the command below. If it is lost, create the node again or install the panel with a domain.',
-    runIfKept: 'Only if the payload from create was kept',
+      'The panel has no https: the installer will not take the token, and this window has no payload. The payload is handed out only when the node is created. If you kept it and the node address has not changed since, put it on the node and run the command below. If it is lost or the address changed (the certificate in the payload names the old address), create the node again or install the panel with a domain.',
+    runIfKept: 'Only if the payload from create was kept and the node address has not changed',
     runOnNodeHintPayload:
       'The command reads the payload from a file, the path is in it. Paste over SSH as root once the file downloaded at node create is on the node.',
   },

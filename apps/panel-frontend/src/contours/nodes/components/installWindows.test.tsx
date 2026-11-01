@@ -91,6 +91,19 @@ describe('окно создания ноды (StepInstall)', () => {
     expect(screen.queryByText(at('nodeCreate.tokenTitle'))).toBeNull();
   });
 
+  it('payloadOnly: шаги идут по порядку, команда с --payload-file на месте, таймлайн не про токен', () => {
+    step(true);
+    const order = ['nodeCreate.payloadStepTitle', 'nodeCreate.scpTitle', 'nodeCreate.runStepTitle'].map((k) =>
+      screen.getByText(at(k)),
+    );
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    expect(screen.getByText(/--payload-file \/root\/iceslab-node\.payload/)).toBeTruthy();
+    expect(screen.getByText(at('nodeCreate.tl2Payload'))).toBeTruthy();
+    expect(screen.queryByText(at('nodeCreate.tl2'))).toBeNull();
+  });
+
   it('с https: токен со сроком и команда bootstrap; payload рядом, со словами «один раз, сейчас»', () => {
     step(false);
     expect(screen.getByText(at('nodeCreate.onceTitle'))).toBeTruthy();
