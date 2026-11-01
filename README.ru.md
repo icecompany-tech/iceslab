@@ -134,7 +134,7 @@ bash <(curl -fsSL .../install-iceslab-node.sh) \
 
 | Env | По умолчанию | Эффект |
 |---|---|---|
-| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.0` | Git-тег/ветка/sha для установки. Пинь на тег релиза для воспроизводимости. |
+| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.1` | Git-тег/ветка/sha для установки. Пинь на тег релиза для воспроизводимости. |
 | `SKIP_SWAP` | `0` | Поставь `1` чтобы пропустить авто-создание swapfile 4 ГБ на VPS с малым RAM. На <3.5 ГБ RAM без swap сборка может словить OOM; отключай только если управляешь swap сам. |
 | `NODE_PORT` | `1337` | mTLS listen-порт node-agent. Меняй per-node чтобы уходить от сканеров портов. |
 | `FRONTEND_PORT` | `8080` | Порт SPA панели в bare-IP режиме (игнорируется когда задан `PANEL_DOMAIN`, тогда Caddy на 443). |
