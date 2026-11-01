@@ -131,6 +131,9 @@ export function UsersPage() {
         onResetTraffic={handleResetTraffic}
         onRevoke={handleRevoke}
         onDelete={handleDelete}
+        // A-053: the user as the server has it after new keys; the drawer
+        // builds the link from its token, and seeds the form from it again.
+        onReissued={(fresh) => setEditing((cur) => (cur?.id === fresh.id ? fresh : cur))}
         onSubmit={async (input) => {
           if (!editing) return;
           await updateMutation.mutateAsync({ id: editing.id, input: input as UpdateUserInput });

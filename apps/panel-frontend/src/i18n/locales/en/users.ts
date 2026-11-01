@@ -253,6 +253,14 @@ export const users = {
     revokeTitle: 'Revoke subscription',
     revokeBody:
       'The current link starts answering 403. Configs already imported keep working until the client refreshes.',
+    // A-053: new keys for every protocol of the user; confirmed on the card itself.
+    reissueTitle: 'Reissue keys',
+    reissueBody: 'New keys for every protocol and a new link. For a leaked config, when revoking the link is not enough.',
+    reissueAction: 'Reissue',
+    reissueConfirm:
+      'The old configs and the link stop working on every device. The user has to import the subscription again.',
+    reissueConfirmAction: 'Yes, reissue',
+    reissueDone: 'Keys reissued: the old configs and link no longer work',
     deleteTitle: 'Delete user',
     deleteBody:
       'Credentials are pulled from every node, the link dies.',

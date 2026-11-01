@@ -26,8 +26,9 @@ export function DrawerBody({
   onResetTraffic,
   onRevoke,
   onDelete,
+  onReissued,
   ...ui
-}: UserForm & Pick<Props, 'user' | 'onResetTraffic' | 'onRevoke' | 'onDelete'>) {
+}: UserForm & Pick<Props, 'user' | 'onResetTraffic' | 'onRevoke' | 'onDelete' | 'onReissued'>) {
   const { t } = useTranslation();
   // The preview's pencils point back at the field they describe. Both live in
   // the form column now, so the button focuses rather than opens anything.
@@ -141,6 +142,7 @@ export function DrawerBody({
           onResetTraffic={onResetTraffic}
           onRevoke={onRevoke}
           onDelete={onDelete}
+          onReissued={onReissued}
         />
       )}
     </Box>

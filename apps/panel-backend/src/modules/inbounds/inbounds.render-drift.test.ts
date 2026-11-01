@@ -119,41 +119,58 @@ async function stand(): Promise<{ ru: string }> {
 
 const sha = async (nodeId: string) => requestFingerprint((await applyInboundsRequestForNode(nodeId))!);
 
-/** Rewrite every row of a table in reverse of its current scan order: each
- *  UPDATE puts a new tuple at the end, so a query with no ORDER BY reads
- *  them the other way round. */
-async function reverseScanOrder(table: string, column: string): Promise<void> {
-  const rows = await prisma.$queryRawUnsafe<{ c: string }[]>(`SELECT ctid::text AS c FROM ${table}`);
-  for (const { c } of rows.reverse()) {
-    await prisma.$executeRawUnsafe(`UPDATE ${table} SET ${column} = ${column} WHERE ctid = '${c}'::tid`);
+/**
+ * A-293: every list a query reads without a full order comes back reversed.
+ *
+ * Shuffling the table did not do it: which order a query without ORDER BY
+ * returns is the plan's, a sequential scan gives the heap's and an index scan
+ * the index's (cascade_links: its unique index, by node uuid), and the plan
+ * changes with the table's statistics. In CI it changed between two builds
+ * of one test (41182326613, attempt 1); here it never did. So the order is
+ * taken from the database's hands: a findMany with no orderBy, and a relation
+ * list read with no orderBy of its own, answer backwards, which is an order
+ * the database may give any day. A list read in a full order is left alone.
+ */
+function readUnorderedListsBackwards(): void {
+  const reverseUnordered = (spec: unknown, value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      const list = value.map((row) => reverseUnordered(spec, row));
+      const ordered = spec !== null && typeof spec === 'object' && 'orderBy' in spec;
+      return ordered ? list : list.reverse();
+    }
+    if (value === null || typeof value !== 'object' || spec === null || typeof spec !== 'object') return value;
+    const s = spec as { select?: Record<string, unknown>; include?: Record<string, unknown> };
+    const fields = { ...(s.include ?? {}), ...(s.select ?? {}) };
+    const row = { ...(value as Record<string, unknown>) };
+    for (const [k, sub] of Object.entries(fields)) {
+      if (k in row && sub && typeof sub === 'object') row[k] = reverseUnordered(sub, row[k]);
+      else if (k in row && sub === true && Array.isArray(row[k])) row[k] = [...(row[k] as unknown[])].reverse();
+    }
+    return row;
+  };
+  for (const key of Object.keys(prisma)) {
+    const delegate = (prisma as unknown as Record<string, { findMany?: (args?: unknown) => Promise<unknown[]> }>)[key];
+    if (key.startsWith('$') || key.startsWith('_') || typeof delegate?.findMany !== 'function') continue;
+    const original = delegate.findMany.bind(delegate);
+    vi.spyOn(delegate, 'findMany').mockImplementation((async (args?: unknown) =>
+      reverseUnordered(args ?? {}, await original(args))) as never);
   }
 }
 
 describe('the fingerprint', () => {
-  it('two builds in a row give one sha, and so does a build after the rows are read in another order', async () => {
+  it('two builds in a row give one sha, and so does a build when every unordered list is read the other way', async () => {
     const { ru } = await stand();
-    const first = await sha(ru);
-    expect(await sha(ru)).toBe(first);
-
-    const before = await prisma.$queryRawUnsafe<{ id: string }[]>('SELECT id::text AS id FROM users');
-    for (const [table, column] of [
-      ['users', 'username'],
-      ['group_members', 'user_id'],
-      ['groups', 'name'],
-      ['profile_node_bindings', 'port'],
-      ['hosts', 'remark'],
-      ['node_policy_rules', 'position'],
-      ['cascade_directions', 'tag'],
-      ['cascade_direction_nodes', 'node_id'],
-      ['cascade_position_nodes', 'node_id'],
-      ['cascade_links', 'direction_tag'],
-    ] as const) {
-      await reverseScanOrder(table, column);
+    // Rows created in one instant: an order by created_at alone is a tie.
+    for (const table of ['users', 'groups', 'group_members', 'profile_node_bindings', 'hosts', 'nodes', 'cascades']) {
+      await prisma.$executeRawUnsafe(`UPDATE ${table} SET created_at = '2026-01-01T00:00:00Z'`).catch(() => undefined);
     }
-    const after = await prisma.$queryRawUnsafe<{ id: string }[]>('SELECT id::text AS id FROM users');
-    // The shuffle took: the same rows, read in another order.
-    expect(after.map((r) => r.id)).not.toEqual(before.map((r) => r.id));
-    expect(await sha(ru)).toBe(first);
+    const nodes = await prisma.node.findMany({ select: { id: true, name: true } });
+    const first = new Map<string, string>();
+    for (const n of nodes) first.set(n.id, await sha(n.id));
+    expect(await sha(ru)).toBe(first.get(ru));
+
+    readUnorderedListsBackwards();
+    for (const n of nodes) expect(await sha(n.id), n.name).toBe(first.get(n.id));
   });
 
   it('is a sha, not the request: no secret of the push is in what is kept', async () => {

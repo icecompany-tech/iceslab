@@ -210,6 +210,7 @@ export const nodes = {
     multiplierRequired: 'Enter a multiplier, 1: as is',
     maxUsers: 'User ceiling',
     maxUsersDesc: 'Empty: no ceiling. Otherwise a whole number from 1',
+    domainBad: 'A host name only: letters, digits, dots and hyphens, no scheme or port',
     policy: 'Node policy',
     policyDesc:
       'The ordered rules this node uses to decide which door traffic leaves by. One policy can sit on several nodes.',

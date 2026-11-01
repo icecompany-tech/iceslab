@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -1432,8 +1433,7 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	}
 
 	a.mu.Lock()
-	// Idempotency check, same config → noop. Compare struct fields
-	// instead of byte-marshalling for speed; slice equality via reflect.
+	// Idempotency check, same config → noop (inboundEqual, whole struct).
 	// C3: a cascade change alone (same inbound) must still trigger a restart,
 	// so factor the cascade fragments into the gate.
 	//
@@ -1514,36 +1514,43 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 	return err
 }
 
+// inboundEqual compares the whole struct, so a field added to InboundConfig is
+// in the comparison without anyone remembering to list it (A-027: eight fields
+// were left out of a hand-written list, and a change to any of them was taken
+// for "no change" and never reached the core).
 func inboundEqual(a, b InboundConfig) bool {
-	if a.RealityDest != b.RealityDest ||
-		a.RealityPrivateKey != b.RealityPrivateKey ||
-		a.Flow != b.Flow ||
-		a.Tag != b.Tag ||
-		a.ListenHost != b.ListenHost ||
-		a.ListenPort != b.ListenPort ||
-		a.Network != b.Network ||
-		a.Path != b.Path ||
-		a.HostHeader != b.HostHeader ||
-		a.ServiceName != b.ServiceName ||
-		a.Subprotocol != b.Subprotocol ||
-		a.Security != b.Security ||
-		a.TLSServerName != b.TLSServerName ||
-		a.TLSCert != b.TLSCert ||
-		a.TLSKey != b.TLSKey ||
-		a.RealityMode != b.RealityMode ||
-		a.RealityFallbackUpstream != b.RealityFallbackUpstream {
-		return false
+	return reflect.DeepEqual(a.forCompare(), b.forCompare())
+}
+
+// inboundCompareExempt names the fields inboundEqual leaves out, with why.
+// The guard test reads it, so a field goes out of the comparison only here.
+var inboundCompareExempt = map[string]string{
+	// The node's stats port, not the inbound's: every push copies it from the
+	// install-time config, and one port serves all inbounds of the core.
+	"ApiPort": "node level",
+}
+
+// forCompare is the copy inboundEqual compares: the exempt fields zeroed, and
+// an empty list the same as an absent one, as the hand-written comparison had
+// it (the panel may send [] where the install-time config has nothing).
+func (c InboundConfig) forCompare() InboundConfig {
+	c.ApiPort = 0
+	c.RealityServerNames = nilIfEmpty(c.RealityServerNames)
+	c.RealityShortIDs = nilIfEmpty(c.RealityShortIDs)
+	if c.Warp != nil {
+		w := *c.Warp
+		w.Address = nilIfEmpty(w.Address)
+		w.Reserved = nilIfEmpty(w.Reserved)
+		c.Warp = &w
 	}
-	if !stringSliceEqual(a.RealityServerNames, b.RealityServerNames) {
-		return false
+	return c
+}
+
+func nilIfEmpty[T any](s []T) []T {
+	if len(s) == 0 {
+		return nil
 	}
-	if !stringSliceEqual(a.RealityShortIDs, b.RealityShortIDs) {
-		return false
-	}
-	if !warpEqual(a.Warp, b.Warp) {
-		return false
-	}
-	return true
+	return s
 }
 
 // dnsEqual reports whether two resolver settings are the same, so a push that
@@ -1558,42 +1565,6 @@ func dnsEqual(a, b *dto.DnsCfg) bool {
 		return false
 	}
 	return same
-}
-
-// warpEqual reports whether two WARP egress configs are equivalent, so
-// ApplyInbound can skip a restart when the WARP creds didn't change. nil == nil.
-func warpEqual(a, b *WarpConfig) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.SecretKey != b.SecretKey || a.PublicKey != b.PublicKey ||
-		a.Endpoint != b.Endpoint || a.MTU != b.MTU {
-		return false
-	}
-	if !stringSliceEqual(a.Address, b.Address) {
-		return false
-	}
-	if len(a.Reserved) != len(b.Reserved) {
-		return false
-	}
-	for i := range a.Reserved {
-		if a.Reserved[i] != b.Reserved[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // cascadeEqual reports whether two cascade fragment sets are byte-identical, so

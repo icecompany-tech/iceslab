@@ -312,6 +312,20 @@ write_caddyfile() {
       request>remote_ip ip_mask 24 48
     }
   }
+  # Cloudflare's addresses (A-009), from https://www.cloudflare.com/ips-v4 and
+  # /ips-v6 as of 2026-10-31. A request from one of them keeps the
+  # X-Forwarded-For Cloudflare sends, so the panel sees the client behind it;
+  # from anywhere else Caddy replaces the header with the address it got the
+  # request from. The list changes with this file: a deploy re-renders it.
+  # trusted_proxies_strict (Caddy 2.8+) reads that header from the right, so
+  # client_ip in the access log is the address Cloudflare appended, not the
+  # leftmost one the client may have written itself. Without it Caddy took the
+  # first untrusted address from the left, and fail2ban, which bans client_ip,
+  # banned whatever a client put in the header (seen live 31.10).
+  servers {
+    trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+    trusted_proxies_strict
+  }
 }
 
 ${PANEL_DOMAIN} {

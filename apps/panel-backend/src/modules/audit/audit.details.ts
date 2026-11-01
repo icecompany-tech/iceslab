@@ -20,6 +20,7 @@ export const AUDIT_DETAIL_SCHEMAS = {
     z.strictObject({ suppressed: z.number().int().min(1), windowStart: z.iso.datetime() }),
   ]),
   'admin.register': z.null(),
+  'admin.password.change': z.null(),
   'admin.2fa.enable': z.null(),
   'admin.2fa.disable': z.null(),
   'apiToken.create': scopes,
@@ -36,6 +37,7 @@ export const AUDIT_DETAIL_SCHEMAS = {
     userIds: z.array(z.string().regex(/^[0-9a-f-]{36}$/i)).max(500),
   }),
   'user.delete': z.strictObject({ erasedAfter: z.iso.datetime() }),
+  'user.credentials.reissue': z.null(),
   'node.connLog.clear': z.strictObject({
     outcome: z
       .array(

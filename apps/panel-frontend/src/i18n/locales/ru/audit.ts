@@ -7,6 +7,7 @@ export const audit = {
     action: {
       auth_login: 'Вход',
       admin_register: 'Регистрация админа',
+      admin_password_change: 'Смена пароля админа',
       admin_2fa_enable: 'Включение 2FA',
       admin_2fa_disable: 'Отключение 2FA',
       apiToken_create: 'Выпуск API-токена',
@@ -14,6 +15,7 @@ export const audit = {
       settings_update: 'Правка настроек',
       users_bulk: 'Массовое действие с юзерами',
       user_delete: 'Удаление юзера',
+      user_credentials_reissue: 'Перевыпуск ключей юзера',
       node_connLog_clear: 'Очистка журнала соединений ноды',
       node_cert_rotate: 'Перевыпуск сертификата ноды',
       cascade_create: 'Создание каскада',

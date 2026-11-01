@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { endSessionsBefore, revokeToken } from './revoked-tokens.js';
 import { requireAuth, requireSession } from './auth.hook.js';
-import { findAdminById } from '../admin/admin.service.js';
-import { LoginSchema, RegisterSchema, TotpCodeSchema } from './auth.schemas.js';
+import { findAdminById, setAdminPassword } from '../admin/admin.service.js';
+import { ChangePasswordSchema, LoginSchema, RegisterSchema, TotpCodeSchema } from './auth.schemas.js';
 import * as authService from './auth.service.js';
 import * as twofa from './twofa.service.js';
 import * as adminService from '../admin/admin.service.js';
@@ -13,6 +15,26 @@ import { subscriptionLinkOrigin } from '../subscription/subscription.link.js';
 import { audit } from '../audit/audit.hook.js';
 import { signInTarget } from '../audit/audit.targets.js';
 import { admitRefusedSignIn } from '../audit/login-cap.js';
+
+/**
+ * The auth cookie's attributes, one list for setting it and clearing it: a
+ * browser keeps a cookie that a Set-Cookie with another path or domain was
+ * meant to clear (A-038). No domain: the cookie is host-only, and so is the
+ * clearing.
+ */
+const AUTH_COOKIE = 'iceslab_auth';
+const authCookieOptions = () =>
+  ({
+    httpOnly: true,
+    sameSite: 'strict',
+    path: '/',
+    // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
+    // from .env but the actual process.env is empty (e.g. dotenv-only
+    // setup with no shell-level export), this evaluated to false in
+    // prod and the auth cookie shipped without Secure, JWT over
+    // plain HTTP on MITM. Always read through config.
+    secure: config.NODE_ENV === 'production',
+  }) as const;
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/auth/status - public discovery: tells the frontend which auth
@@ -78,6 +100,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const token = await reply.jwtSign({
           sub: admin.id,
           role: admin.role,
+          // A-038: what sign-out revokes.
+          jti: randomUUID(),
+          // A-039: what a password change compares, to the ms.
+          iatMs: Date.now(),
         });
         // Slice 37 - also drop a same-origin cookie so server-rendered admin
         // tooling (Bull-board at /admin/queues) inherits the session without
@@ -85,17 +111,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         // HttpOnly + SameSite=Strict, cookie is unreadable to JS and only
         // travels with first-party requests, so XSS can't exfil it and
         // CSRF can't ride it cross-site.
-        reply.setCookie('iceslab_auth', token, {
-          httpOnly: true,
-          sameSite: 'strict',
-          path: '/',
+        reply.setCookie(AUTH_COOKIE, token, {
+          ...authCookieOptions(),
           maxAge: 60 * 60 * 24, // 24h, matches default JWT_EXPIRES_IN.
-          // Wave-14 #6: was process.env.NODE_ENV. If config loads NODE_ENV
-          // from .env but the actual process.env is empty (e.g. dotenv-only
-          // setup with no shell-level export), this evaluated to false in
-          // prod and the auth cookie shipped without Secure → JWT over
-          // plain HTTP on MITM. Always read through config.
-          secure: config.NODE_ENV === 'production',
         });
         if (config.TELEGRAM_NOTIFY_LOGIN_EVENTS) {
           notifyTelegramAsync(
@@ -176,6 +194,33 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  // POST /api/auth/logout (A-038): the session's token, from the Bearer
+  // header or the cookie, is revoked until its expiry, so a copy of it is
+  // refused from now on (requireAuth); the cookie is cleared with the
+  // attributes it was set with. No auth: a signed-out or expired session has
+  // to be able to clear its cookie too, and an invalid token has nothing to
+  // revoke. Redis not answering fails the sign-out (500): a 204 would tell
+  // the operator the copy is dead while it is not.
+  app.post('/api/auth/logout', async (request, reply) => {
+    // Both places, not the first found: the SPA sends the header and the
+    // browser the cookie, and after a re-login in another tab they can differ.
+    const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? '')?.[1];
+    for (const token of new Set([bearer, request.cookies[AUTH_COOKIE]])) {
+      if (!token) continue;
+      let verified: { jti?: unknown; exp?: unknown };
+      try {
+        verified = app.jwt.verify(token);
+      } catch {
+        continue; // expired, foreign or an API token: nothing to revoke
+      }
+      if (typeof verified.jti === 'string' && typeof verified.exp === 'number') {
+        await revokeToken(verified.jti, verified.exp);
+      }
+    }
+    reply.clearCookie(AUTH_COOKIE, authCookieOptions());
+    return reply.code(204).send();
+  });
 
   // POST /api/auth/register: bootstrap only (no admins exist) + strict rate limit
   app.post(
@@ -315,6 +360,56 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       } catch (err) {
         return twofaError(reply, err) ?? Promise.reject(err);
       }
+    },
+  );
+
+  // PUT /api/auth/password (A-039): the admin's own password. A session only,
+  // as 2FA. Refusals are 403 and not 401: the panel reads a 401 as a session
+  // gone and would sign the admin out mid-typing. On success every session of
+  // this admin issued until now ends, this one too (204, cookie cleared): a
+  // password changed because it leaked must not leave the session that used
+  // it alive, and the SPA takes the admin to sign-in.
+  app.put(
+    '/api/auth/password',
+    { ...sessionAuth, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const input = ChangePasswordSchema.parse(request.body);
+      const admin = await findAdminById(request.admin!.id);
+      if (!admin) return reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Admin no longer exists' });
+      audit(request, { action: 'admin.password.change', target: { kind: 'admin', id: admin.id, label: admin.username } });
+      try {
+        await authService.checkPasswordChange(admin, input, request.ip);
+      } catch (err) {
+        if (err instanceof authService.AccountLockedError) {
+          reply.header('Retry-After', err.retryAfterSeconds.toString());
+          return reply.code(429).send({
+            error: 'ACCOUNT_LOCKED',
+            message: err.message,
+            retryAfterSeconds: err.retryAfterSeconds,
+          });
+        }
+        if (err instanceof authService.InvalidCurrentPasswordError) {
+          return reply.code(403).send({ error: 'INVALID_CURRENT_PASSWORD', message: err.message });
+        }
+        if (err instanceof authService.TotpRequiredError) {
+          return reply.code(403).send({ error: 'TOTP_REQUIRED', message: err.message, requires2fa: true });
+        }
+        if (err instanceof authService.InvalidTotpError) {
+          return reply.code(403).send({ error: 'INVALID_TOTP', message: err.message });
+        }
+        if (err instanceof authService.PasswordUnchangedError) {
+          return reply.code(400).send({ error: 'PASSWORD_UNCHANGED', message: err.message });
+        }
+        throw err;
+      }
+      // Sessions first, then the hash (checkPasswordChange says why). The
+      // mark lives as long as a token does (JWT_EXPIRES_IN, read off this
+      // one), so it outlives every session it can refuse.
+      const { iat, exp } = request.user;
+      await endSessionsBefore(admin.id, Date.now(), exp - iat + 60);
+      await setAdminPassword(admin.id, input.newPassword);
+      reply.clearCookie(AUTH_COOKIE, authCookieOptions());
+      return reply.code(204).send();
     },
   );
 }

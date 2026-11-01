@@ -7,6 +7,7 @@ export const audit = {
     action: {
       auth_login: 'Sign-in',
       admin_register: 'Admin registered',
+      admin_password_change: 'Admin password changed',
       admin_2fa_enable: '2FA turned on',
       admin_2fa_disable: '2FA turned off',
       apiToken_create: 'API token issued',
@@ -14,6 +15,7 @@ export const audit = {
       settings_update: 'Settings changed',
       users_bulk: 'Bulk user action',
       user_delete: 'User deleted',
+      user_credentials_reissue: 'User keys reissued',
       node_connLog_clear: 'Node connection log cleared',
       node_cert_rotate: 'Node certificate renewed',
       cascade_create: 'Cascade created',

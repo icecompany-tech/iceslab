@@ -22,8 +22,11 @@ export function registerUserEventHandlers(): void {
     // A-022: the squads decide which nodes and inbounds the user is on, so a
     // change of squads rolls the user out again (addUser takes them off the
     // nodes they no longer reach). Pure metadata needs no node sync; status
-    // changes have their own event below.
-    if (changes.includes('groupIds')) await nodeUsersQueue.add('addUser', { userId });
+    // changes have their own event below. A-053: so do reissued credentials,
+    // the nodes replace the identity they hold for this user id.
+    if (changes.includes('groupIds') || changes.includes('credentials')) {
+      await nodeUsersQueue.add('addUser', { userId });
+    }
   });
 
   // A-022: a squad that changed what it grants (profiles, hosts) moves its

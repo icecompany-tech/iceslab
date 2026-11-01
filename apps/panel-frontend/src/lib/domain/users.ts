@@ -202,6 +202,21 @@ export async function rotateUserSubscription(id: string): Promise<User> {
   return data;
 }
 
+/** A-053: new keys for every protocol of the user (POST
+ *  /api/users/:id/reissue-credentials, no body). Every config and the link
+ *  handed out before stop working; the answer's shape is not read, the screen
+ *  reads the user again (getUser). */
+export async function reissueUserCredentials(id: string): Promise<void> {
+  await api.post(`/api/users/${id}/reissue-credentials`);
+}
+
+/** One user as the server has it now (GET /api/users/:id). Checked before it
+ *  is taken: an answer that is not this user is null, never a half user. */
+export async function getUser(id: string): Promise<User | null> {
+  const { data } = await api.get<unknown>(`/api/users/${id}`);
+  return data && typeof data === 'object' && (data as { id?: unknown }).id === id ? (data as User) : null;
+}
+
 /** Zero used traffic + lift a traffic limit (period-billing top-up). */
 export async function resetUserTraffic(id: string): Promise<User> {
   const { data } = await api.post<User>(`/api/users/${id}/reset-traffic`);

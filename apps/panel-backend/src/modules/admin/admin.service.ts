@@ -115,6 +115,12 @@ export async function verifyPassword(plaintext: string, hash: string): Promise<b
   return bcrypt.compare(plaintext, hash);
 }
 
+/** A-039: the admin's new password, hashed at the cost every other one is. */
+export async function setAdminPassword(adminId: string, plaintext: string): Promise<void> {
+  const passwordHash = await bcrypt.hash(plaintext, BCRYPT_COST);
+  await prisma.adminUser.update({ where: { id: adminId }, data: { passwordHash } });
+}
+
 /**
  * #14 - record the time-step of the last accepted TOTP code so a subsequent
  * login can reject a replayed code (any step <= the stored one).

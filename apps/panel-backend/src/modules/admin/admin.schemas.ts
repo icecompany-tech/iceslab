@@ -6,7 +6,8 @@ const UsernameSchema = z
   .max(64)
   .regex(/^[a-zA-Z0-9_-]+$/);
 
-const PasswordSchema = z
+/** One rule for every admin password: register and change (A-039). */
+export const PasswordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
   .max(128);

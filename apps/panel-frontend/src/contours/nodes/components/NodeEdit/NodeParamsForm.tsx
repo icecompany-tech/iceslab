@@ -156,6 +156,15 @@ export function NodeParamsForm({
                     {...form.getInputProps('maxUsers')}
                   />
                 </Box>
+                {/* A-057: the node's own domain. Saving a new one re-pushes the
+                    node, so self-steal and every link's SNI follow it. */}
+                <TextInput
+                  {...FIELD}
+                  label={t('nodes.form.domain')}
+                  description={t('nodes.form.domainDesc')}
+                  placeholder="node.example.com"
+                  {...form.getInputProps('domain')}
+                />
                 {/* The region list did not arrive: said, not an empty picker. */}
                 {regionsFailure && <LoadFailedLine message={regionsFailure.message} onRetry={regionsFailure.onRetry} />}
 

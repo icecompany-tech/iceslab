@@ -36,6 +36,19 @@ cd apps/node && go build ./... && go test ./...
 
 If you touched the wire format between panel and node (`packages/shared/src/transport.ts`), mirror the change in `apps/node/internal/dto/dto.go` with matching `json:` tags. The two sides have no version negotiation; mismatched fields surface as `INVALID_BODY` 400s.
 
+## How we write code
+
+The goal is code that rarely needs touching: a change lands where the requirement changed, and nowhere else.
+
+- **Extend by adding.** A new protocol, client format or check is a new adapter or package plugged into an existing registry, not another branch in a `switch` spread across the codebase.
+- **Keep a module's public surface small.** Use another module only through what it exports for others; do not reach into its internals or its tables.
+- **Public contracts only grow.** What clients and nodes already read (subscription output, API responses) can gain fields; do not rename or remove one in place. The panel-node wire format has no version negotiation yet, so change both of its sides in the same commit, as described above.
+- **Errors are values.** Handle an error or return it with context. No empty `catch`, no `_ = err`. A refusal tells the user what happened and carries a code.
+- **No new global state.** Pass dependencies in through constructors.
+- **Test through the public surface.** Output formats are covered by golden files; anything an engine accepts silently (`check` passes) is proven by a live test.
+- **Abstract on the third repetition**, not the first. A little copying is cheaper than the wrong abstraction.
+- **Make code easy to delete.** Temporary flags and compatibility branches carry a removal date.
+
 ## Commit messages
 
 Lowercase prefix + short description. Examples:

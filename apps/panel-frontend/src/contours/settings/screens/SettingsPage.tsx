@@ -8,6 +8,7 @@ import {
   Code,
   Group,
   Modal,
+  PasswordInput,
   Select,
   Stack,
   Switch,
@@ -19,6 +20,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { copyToClipboard } from '@/lib/ui/clipboard';
 import { apiErrorMessage } from '@/lib/net/client';
 import { loadView } from '@/lib/ui/loadView';
@@ -40,8 +42,18 @@ import {
   updateRegion,
   type Region,
 } from '@/lib/domain/nodes';
-import { disable2fa, enable2fa, get2faStatus, setup2fa, type TotpSetup } from '@/lib/auth/api';
+import { changePassword, disable2fa, enable2fa, get2faStatus, setup2fa, type TotpSetup } from '@/lib/auth/api';
+import { useAuth } from '@/lib/auth/session';
 import { isTotpRefusal } from '@/contours/settings/lib/totpRefusal';
+import {
+  PASSWORD_PROBLEM_KEY,
+  passwordBody,
+  passwordFormProblems,
+  passwordRefusal,
+  type PasswordField,
+  type PasswordForm,
+  type PasswordRefusal,
+} from '@/contours/settings/lib/passwordChange';
 import {
   getRecipeSources,
   addRecipeSource,
@@ -148,6 +160,7 @@ export function SettingsPage() {
 
         <Box className="page-rail">
           <TwoFactorCard />
+          <PasswordCard />
           <RecipeSourcesCard />
         </Box>
       </Box>
@@ -879,6 +892,121 @@ function RegionEditRow({
 }
 
 /* ───── Two-factor ──────────────────────────────────────────────────────── */
+
+/* ───── Password (A-039) ─────────────────────────────────────────────────── */
+
+/**
+ * The admin's own password. The form refuses what the server would before the
+ * request (passwordFormProblems); the server's refusals land on their field,
+ * the lock under the form. A change ends every session of the admin, this one
+ * too, so on 204 the panel signs out here and goes to the sign-in.
+ */
+function PasswordCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const clearSession = useAuth((s) => s.clearSession);
+  const statusQuery = useQuery({ queryKey: ['2fa-status'], queryFn: get2faStatus });
+  const twofaKnown = statusQuery.data !== undefined;
+  const twofaOn = statusQuery.data?.enabled ?? false;
+
+  const empty: PasswordForm = { current: '', next: '', repeat: '', totp: '' };
+  const [v, setV] = useState<PasswordForm>(empty);
+  // Problems show after the first try, and an edit takes its field's away.
+  const [tried, setTried] = useState(false);
+  const [refusal, setRefusal] = useState<PasswordRefusal | null>(null);
+  const edit = (field: keyof PasswordForm, value: string) => {
+    setV((cur) => ({ ...cur, [field]: field === 'totp' ? value.replace(/\D/g, '') : value }));
+    setRefusal((r) => (r && (r.field === field || r.field === 'form') ? null : r));
+  };
+
+  const problems = passwordFormProblems(v, twofaOn);
+  const mutation = useMutation({
+    mutationFn: () => changePassword(passwordBody(v, twofaOn)),
+    onSuccess: () => {
+      notifications.show({ color: 'green', message: t('settings.password.changed') });
+      clearSession();
+      qc.clear();
+      navigate('/login', { replace: true });
+    },
+    onError: (err) => {
+      const r = passwordRefusal(err);
+      if (r) setRefusal(r);
+      else notifications.show({ color: 'red', title: t('common.saveError'), message: apiErrorMessage(err) });
+    },
+  });
+  const submit = () => {
+    setTried(true);
+    setRefusal(null);
+    if (Object.keys(problems).length === 0) mutation.mutate();
+  };
+  const errorOf = (field: PasswordField): string | undefined => {
+    if (refusal?.field === field) return t(PASSWORD_PROBLEM_KEY[refusal.problem]);
+    const p = tried ? problems[field] : undefined;
+    return p ? t(PASSWORD_PROBLEM_KEY[p]) : undefined;
+  };
+
+  return (
+    <SectionCard
+      tone={CYAN}
+      icon={<KeyIcon size={16} color={CYAN} />}
+      title={t('settings.password.title')}
+      hint={t('settings.password.subtitle')}
+    >
+      <Stack gap={10}>
+        <PasswordInput
+          label={t('settings.password.current')}
+          autoComplete="current-password"
+          value={v.current}
+          error={errorOf('current')}
+          onChange={(e) => edit('current', e.currentTarget.value)}
+        />
+        <PasswordInput
+          label={t('settings.password.next')}
+          description={t('settings.password.nextDesc')}
+          autoComplete="new-password"
+          value={v.next}
+          error={errorOf('next')}
+          onChange={(e) => edit('next', e.currentTarget.value)}
+        />
+        <PasswordInput
+          label={t('settings.password.repeat')}
+          autoComplete="new-password"
+          value={v.repeat}
+          error={errorOf('repeat')}
+          onChange={(e) => edit('repeat', e.currentTarget.value)}
+        />
+        {twofaOn && (
+          <TextInput
+            label={t('settings.twofa.codeLabel')}
+            placeholder="000000"
+            inputMode="numeric"
+            maxLength={6}
+            value={v.totp}
+            error={errorOf('totp')}
+            onChange={(e) => edit('totp', e.currentTarget.value)}
+            styles={{ input: { fontFamily: MONO, letterSpacing: '0.3em' } }}
+          />
+        )}
+        {refusal?.field === 'form' && (
+          <Text style={{ fontFamily: DISPLAY, fontSize: 12, lineHeight: '16px', color: RED }}>
+            {refusal.retryAfterSeconds
+              ? t('settings.password.lockedFor', { minutes: Math.ceil(refusal.retryAfterSeconds / 60) })
+              : t(PASSWORD_PROBLEM_KEY[refusal.problem])}
+          </Text>
+        )}
+        <Hint>{t('settings.password.signOutHint')}</Hint>
+        <Box>
+          {/* Without the 2FA status the form cannot know whether to ask for a
+              code; it waits rather than sending a request that may be refused. */}
+          <Action icon="tick" disabled={!twofaKnown || mutation.isPending} onClick={submit}>
+            {t('settings.password.save')}
+          </Action>
+        </Box>
+      </Stack>
+    </SectionCard>
+  );
+}
 
 function TwoFactorCard() {
   const { t } = useTranslation();

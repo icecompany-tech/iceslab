@@ -32,6 +32,7 @@ export const ADMIN_AUDIT_LOGIN_REFUSAL_CAP = { perNetwork: 20, all: 300, windowS
 export const ADMIN_AUDIT_ACTIONS = [
   'auth.login',
   'admin.register',
+  'admin.password.change',
   'admin.2fa.enable',
   'admin.2fa.disable',
   'apiToken.create',
@@ -39,6 +40,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   'settings.update',
   'users.bulk',
   'user.delete',
+  'user.credentials.reissue',
   'node.connLog.clear',
   'node.cert.rotate',
   'cascade.create',
@@ -75,6 +77,8 @@ export interface AdminAuditDetails {
    *  hour that began at windowStart. */
   'auth.login': { twoFactor: boolean; locked?: true } | { suppressed: number; windowStart: string };
   'admin.register': null;
+  /** A-039: the admin's own password; never the password, nothing else. */
+  'admin.password.change': null;
   'admin.2fa.enable': null;
   'admin.2fa.disable': null;
   /** ['*'] for a full token. */
@@ -93,6 +97,8 @@ export interface AdminAuditDetails {
     userIds: string[];
   };
   'user.delete': { erasedAfter: string };
+  /** A-053: nothing beyond the fact; what is issued is the same every time. */
+  'user.credentials.reissue': null;
   'node.connLog.clear': { outcome: { source: 'journal' | 'syslog'; state: 'cleared' | 'absent' | 'failed' }[] };
   'node.cert.rotate': { notAfter: string };
   /** The cascade after the action; for delete, before it. */
