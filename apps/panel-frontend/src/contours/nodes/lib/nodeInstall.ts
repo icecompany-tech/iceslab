@@ -44,6 +44,11 @@ export function expiryLabel(iso: string, t: (k: string, o?: Record<string, unkno
  * command reads as four lines instead of one wrapped smear.
  */
 export function splitCommand(cmd: string): string[] {
+  // A command the server already broke into lines is shown as it broke it.
+  // Re-splitting it at every `--` tore its leading comment (`# optional:
+  // --hysteria-email ...`) in two and glued the second half onto the curl
+  // line (A-295 frames).
+  if (cmd.includes('\n')) return cmd.split('\n').map((l) => l.trimEnd()).filter(Boolean);
   const parts = cmd
     .split(/\s+(?=--)/)
     // The command may already carry its own line continuations; strip them so

@@ -167,6 +167,20 @@ export const nodes = {
     downloadPayload: 'Download payload',
     manualHint:
       'Use this when the node cannot reach the panel HTTP endpoint at install time (air-gapped, strict firewall). Download the file, scp it to the node, run install-iceslab-node.sh --payload-file /path.',
+    // A-295: the payload leaves the panel once, in the answer to node create.
+    payloadOnce:
+      'The payload is handed out once, now: the panel keeps no node key and will not show it again. Download it before you close this window.',
+    // A-295: a panel without https, the installer takes no token over http.
+    payloadOnlyTitle: 'The panel has no https: the node installs from the payload',
+    payloadOnlyBody:
+      'The installer takes a bootstrap token over https only, so there is no token here. Three steps: download the payload, put it on the node, run the command. The payload is handed out only now; without it the node has to be created again.',
+    payloadStepTitle: '1. Download the payload',
+    scpTitle: '2. Put it on the node',
+    scpHint: 'From the machine the file was downloaded to. The path on the node is the one the command below reads.',
+    copyScp: 'Copy scp',
+    runStepTitle: '3. Run on the node',
+    runHintPayload:
+      'Paste over SSH as root once the file is on the node. The cores come from --engines; without the flag only the agent is installed.',
     nextTitle: 'What happens next',
     tl1: 'Node record created',
     tl1Hint: 'Visible on the Nodes page as offline until the agent checks in.',
@@ -629,6 +643,13 @@ export const nodes = {
     downloadPayload: 'Download payload',
     copyPayload: 'Copy payload',
     iSavedIt: 'I have saved it',
+    // A-295: a re-issue carries no payload; a panel without https.
+    payloadAtCreateOnly: 'The payload is handed out only when the node is created: the panel keeps no node key and cannot issue it again.',
+    payloadOnlyWarning:
+      'The panel has no https: the installer will not take the token, and this window has no payload. The payload is handed out only when the node is created. If you kept it, put it on the node and run the command below. If it is lost, create the node again or install the panel with a domain.',
+    runIfKept: 'Only if the payload from create was kept',
+    runOnNodeHintPayload:
+      'The command reads the payload from a file, the path is in it. Paste over SSH as root once the file downloaded at node create is on the node.',
   },
 
   nodeConfirm: {

@@ -32,6 +32,8 @@ import { apiErrorMessage } from '@/lib/net/client';
 import { loadFailure, loadView } from '@/lib/ui/loadView';
 import { adapterRefusal, adapterRefusalWords, addOnePerSlot, slotHeldBy } from '@/lib/domain/adapterSlot';
 import { buildHardening } from '@/contours/nodes/lib/nodeInstall';
+import { isPayloadOnly, payloadFileName } from '@/contours/nodes/lib/payloadInstall';
+import { copyToClipboard } from '@/lib/ui/clipboard';
 import { nodeFieldKnown } from '@/lib/domain/nodeFields';
 import { installIntentLabel, nodeIntentWords } from '@/lib/domain/engines';
 
@@ -51,7 +53,7 @@ export function useNodeCreateForm() {
   const [registered, setRegistered] = useState<Registered | null>(null);
   const [creating, setCreating] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
-  const [copied, setCopied] = useState<'token' | 'command' | null>(null);
+  const [copied, setCopied] = useState<'token' | 'command' | 'scp' | null>(null);
 
   const form = useForm<FormValues>({
     initialValues: {
@@ -341,6 +343,7 @@ export function useNodeCreateForm() {
         expiresAt: node.bootstrap.expiresAt,
         command: node.bootstrap.command,
         payload: node.payload,
+        payloadOnly: isPayloadOnly(node.bootstrap),
         hosts,
       });
       setStep(2);
@@ -370,12 +373,14 @@ export function useNodeCreateForm() {
     }
   }
 
-  async function copy(text: string, what: 'token' | 'command') {
-    try {
-      await navigator.clipboard.writeText(text);
+  // Through copyToClipboard (A-147, A-295): a panel without https, the one
+  // that installs from the payload, has no navigator.clipboard, and the copy
+  // of its command used to fail every time.
+  async function copy(text: string, what: 'token' | 'command' | 'scp') {
+    if (await copyToClipboard(text)) {
       setCopied(what);
       window.setTimeout(() => setCopied(null), 1600);
-    } catch {
+    } else {
       notifications.show({ color: 'red', message: t('nodeCreate.copyFailed') });
     }
   }
@@ -386,7 +391,7 @@ export function useNodeCreateForm() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${registered.name}-payload.txt`;
+    a.download = payloadFileName(registered.name);
     a.click();
     URL.revokeObjectURL(url);
   }

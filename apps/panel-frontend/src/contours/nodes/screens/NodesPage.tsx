@@ -41,6 +41,7 @@ import {
   listAllNodes,
   listRegions,
   refreshNodeBootstrap,
+  type BootstrapInfo,
   type Node,
 } from '@/lib/domain/nodes';
 import { listCascades } from '@/lib/domain/cascades';
@@ -418,7 +419,7 @@ export function NodesPage() {
   const [payload, setPayload] = useState<{
     name: string;
     payload: string;
-    bootstrap?: { token: string; expiresAt: string; command: string };
+    bootstrap?: BootstrapInfo;
   } | null>(null);
   const [layout, setLayout] = useState<LayoutMode>(
     (typeof window !== 'undefined' &&

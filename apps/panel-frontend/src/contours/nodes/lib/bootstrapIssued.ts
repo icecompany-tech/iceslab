@@ -14,11 +14,10 @@
  * toast says only what is true: a token was issued. Nothing here touches the
  * clipboard, so nothing here can throw.
  */
-export interface BootstrapInfo {
-  token: string;
-  expiresAt: string;
-  command: string;
-}
+// The domain's own shape, payloadOnly included (A-295): a copy here would drop
+// the flag on the way to the modal.
+import type { BootstrapInfo } from '@/lib/domain/nodes';
+export type { BootstrapInfo };
 
 export function onBootstrapIssued(
   info: BootstrapInfo,
