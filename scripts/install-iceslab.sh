@@ -769,8 +769,14 @@ write_caddyfile() {
   # X-Forwarded-For Cloudflare sends, so the panel sees the client behind it;
   # from anywhere else Caddy replaces the header with the address it got the
   # request from. The list changes with this file: a deploy re-renders it.
+  # trusted_proxies_strict (Caddy 2.8+) reads that header from the right, so
+  # client_ip in the access log is the address Cloudflare appended, not the
+  # leftmost one the client may have written itself. Without it Caddy took the
+  # first untrusted address from the left, and fail2ban, which bans client_ip,
+  # banned whatever a client put in the header (seen live 31.10).
   servers {
     trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+    trusted_proxies_strict
   }
 }
 
@@ -859,19 +865,23 @@ if [[ -n "$PANEL_DOMAIN" ]]; then
   # per-(IP+username) lockout handle the request-level cases; fail2ban kicks in
   # earlier (drops packets at iptables/nft) so sustained bot traffic doesn't
   # cost us CPU/IO. Caveat: an iptables-level ban only works for direct
-  # connections. If Cloudflare or another reverse proxy fronts Caddy, fail2ban
-  # sees CF IPs in the log (or client_ip via the upstream-restored field) and
-  # can't block CF at the firewall. For CF deploys, add a CF WAF rule instead
-  # (docs/SECURITY.md, TODO).
+  # connections. Behind Cloudflare the log's client_ip is the client
+  # (trusted_proxies + trusted_proxies_strict in write_caddyfile), so the ban
+  # names the right address, but that client's requests reach this host from
+  # Cloudflare's addresses, which the ban does not drop: it stops the same
+  # client only when it comes straight to the origin. For CF deploys, add a CF
+  # WAF rule as well (docs/SECURITY.md, TODO).
   step "fail2ban (auth brute-force + probe scanner jails)"
   "${APT_ENV[@]}" apt-get "${APT_OPTS[@]}" install -y fail2ban
   install -d -m 0755 /etc/fail2ban/filter.d /etc/fail2ban/jail.d
   cat > /etc/fail2ban/filter.d/iceslab-auth-bf.conf <<'EOF'
 # Match 401/429 responses on /api/auth/login in Caddy's JSON access log.
-# <HOST> binds to client_ip so banned addr is the real upstream IP when
-# trusted_proxies is set; with direct (no proxy) traffic it's the same as
-# remote_ip. Order of "uri" vs "status" in JSON is stable inside one Caddy
-# release; .* between them tolerates field reordering across versions.
+# <HOST> binds to client_ip: behind Cloudflare the address Cloudflare
+# appended to X-Forwarded-For (read from the right, trusted_proxies_strict),
+# never one the client wrote; straight to the origin the header is not
+# trusted and it is remote_ip. Order of "uri" vs "status" in JSON is stable
+# inside one Caddy release; .* between them tolerates field reordering across
+# versions.
 [Definition]
 failregex = "client_ip":"<HOST>".*"uri":"/api/auth/login".*"status":(401|429)
 ignoreregex =

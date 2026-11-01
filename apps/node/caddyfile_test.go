@@ -142,6 +142,8 @@ func assertRewritten(t *testing.T, what string, r caddyRefresh, prefix string) {
 		"log iceslab_secret_paths",
 		"@secret_paths path " + prefix + "/* /api/internal/bootstrap/* /api/users/by-subscription-token/* /api/settings/subscription/preview/*",
 		"include http.log.error",
+		"trusted_proxies static 173.245.48.0/20 ",
+		"trusted_proxies_strict\n",
 	} {
 		if !strings.Contains(r.file, want) {
 			t.Errorf("%s: the new file has no %q:\n%s", what, want, r.file)
@@ -269,6 +271,44 @@ func TestTheRefreshChecksForRemovedLogsOnBothPaths(t *testing.T) {
 	body := fnBody(t, strings.ReplaceAll(string(blob), "\r\n", "\n"), "refresh_host_caddyfile")
 	if n := strings.Count(body, `caddy_restart_if_stale_logs "$file"`); n != 2 {
 		t.Errorf("refresh_host_caddyfile calls caddy_restart_if_stale_logs %d times, want 2 (after the reload, and when already current)", n)
+	}
+}
+
+// A-009: the file write_caddyfile renders is one the real Caddy loads, with
+// trusted_proxies and trusted_proxies_strict in it. The refresh tests stub
+// `caddy validate`; this one asks caddy-naive, a Caddy 2.11 with one more
+// module, which CI builds for the naive adapter anyway. The log paths move
+// into the test's directory: validate opens every log the file names.
+func TestTheHostCaddyfileValidatesWithTheRealCaddy(t *testing.T) {
+	bin := os.Getenv("CADDY_NAIVE_BIN")
+	if bin == "" {
+		t.Skip("CADDY_NAIVE_BIN not set: the host Caddyfile is not validated by a real caddy here")
+	}
+	bash := needBash(t)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Caddyfile")
+	prog := "set -euo pipefail\nLIB_PREFIX=test\nsource '" + opsLib + "'\nPANEL_DOMAIN=panel.example.com FRONTEND_PORT=8080 write_caddyfile '" + file + "'\n"
+	if out, err := exec.Command(bash, "-c", prog).CombinedOutput(); err != nil {
+		t.Fatalf("write_caddyfile: %v\n%s", err, out)
+	}
+	blob, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(blob)
+	for _, want := range []string{"    trusted_proxies static 173.245.48.0/20 ", "    trusted_proxies_strict\n"} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("the rendered Caddyfile has no %q", want)
+		}
+	}
+	local := strings.ReplaceAll(rendered, "/var/log/caddy/", dir+"/")
+	if err := os.WriteFile(file, []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "validate", "--config", file, "--adapter", "caddyfile")
+	cmd.Env = append(os.Environ(), "HOME="+dir, "XDG_DATA_HOME="+dir, "XDG_CONFIG_HOME="+dir)
+	if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "Valid configuration") {
+		t.Errorf("caddy validate refused the host Caddyfile: %v\n%s", err, out)
 	}
 }
 
