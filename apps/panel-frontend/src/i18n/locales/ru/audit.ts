@@ -48,6 +48,11 @@ export const audit = {
       admin: 'админ',
       api_token: 'токен',
       settings: 'настройки',
+      // A-294: цель массового действия, «<n> users» сервера.
+      usersCount_one: '{{count}} юзер',
+      usersCount_few: '{{count}} юзера',
+      usersCount_many: '{{count}} юзеров',
+      usersCount_other: '{{count}} юзера',
     },
     actor: {
       anonymous: 'аноним',

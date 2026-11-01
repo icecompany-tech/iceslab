@@ -8,7 +8,8 @@ import type { UpdateUserInput, User, UserFilters, UserSort } from '@/lib/domain/
 import type { ColumnPin, ColumnView, UserColumnId } from '@/contours/users/lib/usersTable';
 import type { RowDensity } from '@/contours/users/lib/usersTable';
 import { DENSITY_ORDER, DENSITY_STORAGE_KEY, USER_COLUMN_BY_ID, loadColumnView, loadDensity, saveColumnView } from '@/contours/users/lib/usersTable';
-import { createUser, deleteUser, listUserTags, listUsers, resetUserTraffic, revokeUserSubscription, rotateUserSubscription, updateUser } from '@/lib/domain/users';
+import { bulkUsers, createUser, deleteUser, listUserTags, listUsers, resetUserTraffic, revokeUserSubscription, rotateUserSubscription, updateUser } from '@/lib/domain/users';
+import { bulkReport, type BulkAccessAction } from '@/contours/users/lib/userAccess';
 import { fetchAuthStatus } from '@/lib/auth/api';
 import { listSquads } from '@/lib/domain/squads';
 import { modals } from '@mantine/modals';
@@ -413,6 +414,53 @@ export function useUsersPage() {
     });
   }
 
+  /**
+   * Bulk enable / disable of the ticked rows (A-294), the only bulk actions the
+   * screen offers. The server answers 200 with a report per user; the ids it
+   * reached leave the selection, the ones it did not stay ticked, so the
+   * operator sees which to look at.
+   */
+  const bulkMutation = useMutation({
+    mutationFn: ({ ids, action }: { ids: string[]; action: BulkAccessAction }) => bulkUsers(ids, action),
+    onSuccess: (data, { action }) => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['dashboard', 'overview'] });
+      const report = bulkReport(data);
+      if (!report) {
+        notifications.show({ color: 'red', message: t('usersTable.bulkUnreadable') });
+        return;
+      }
+      setSelected((s) => {
+        const next = new Set(s);
+        for (const id of report.ok) next.delete(id);
+        return next;
+      });
+      const done = t(`usersTable.bulkDone.${action}`, { succeeded: report.succeeded, requested: report.requested });
+      const first = report.failed[0];
+      notifications.show(
+        first
+          ? {
+              color: 'yellow',
+              message: `${done}. ${t('usersTable.bulkFailed', { count: report.failed.length, error: first.error })}`,
+            }
+          : { color: 'green', message: done },
+      );
+    },
+    onError: (err) => notifications.show({ color: 'red', message: apiErrorMessage(err) }),
+  });
+
+  function handleBulk(action: BulkAccessAction) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    modals.openConfirmModal({
+      title: t(`usersTable.bulkTitle.${action}`, { count: ids.length }),
+      children: <Text size="sm">{t(`usersTable.bulkBody.${action}`)}</Text>,
+      labels: { confirm: t(`usersTable.bulkConfirm.${action}`), cancel: t('common.cancel') },
+      confirmProps: action === 'disable' ? { color: 'red' } : {},
+      onConfirm: () => bulkMutation.mutate({ ids, action }),
+    });
+  }
+
   function handleDelete(user: User) {
     modals.openConfirmModal({
       title: t('users.deleteTitle', { name: user.username }),
@@ -477,6 +525,8 @@ export function useUsersPage() {
     handleRotate,
     handleResetTraffic,
     handleDelete,
+    handleBulk,
+    bulkMutation,
     editing,
     setEditing,
     search,

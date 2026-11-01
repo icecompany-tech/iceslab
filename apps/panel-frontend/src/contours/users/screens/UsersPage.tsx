@@ -75,10 +75,12 @@ export function UsersPage() {
     clearFilterParams,
     usersFailure,
     sideFailure,
+    handleBulk,
+    bulkMutation,
   } = useUsersPage();
 
   const table = (
-    <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} usersFailure={usersFailure} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} statusFilter={statusFilter} setStatusFilter={setStatusFilter} colFilters={colFilters} setColFilter={setColFilter} selected={selected} setSelected={setSelected} toggleSelected={toggleSelected} activeFilters={activeFilters} columnView={columnView} setColumnView={setColumnView} visibleColumns={visibleColumns} toggleColumn={toggleColumn} pinColumn={pinColumn} moveColumn={moveColumn} density={density} cycleDensity={cycleDensity} fullscreen={fullscreen} setFullscreen={setFullscreen} openCreate={openCreate} colParams={colParams} setFilterParam={setFilterParam} clearFilterParams={clearFilterParams} />
+    <UsersTable toggleSort={toggleSort} authStatusQuery={authStatusQuery} squadNameById={squadNameById} pagedUsers={pagedUsers} totalUsers={totalUsers} stats={stats} usersFailure={usersFailure} totalPages={totalPages} safePage={safePage} rangeStart={rangeStart} rangeEnd={rangeEnd} handleRevoke={handleRevoke} handleRotate={handleRotate} handleResetTraffic={handleResetTraffic} handleDelete={handleDelete} setEditing={setEditing} setPage={setPage} rowsPerPage={rowsPerPage} setRowsPerPage={setRowsPerPage} sort={sort} order={order} statusFilter={statusFilter} setStatusFilter={setStatusFilter} colFilters={colFilters} setColFilter={setColFilter} selected={selected} setSelected={setSelected} toggleSelected={toggleSelected} activeFilters={activeFilters} columnView={columnView} setColumnView={setColumnView} visibleColumns={visibleColumns} toggleColumn={toggleColumn} pinColumn={pinColumn} moveColumn={moveColumn} density={density} cycleDensity={cycleDensity} fullscreen={fullscreen} setFullscreen={setFullscreen} openCreate={openCreate} colParams={colParams} setFilterParam={setFilterParam} clearFilterParams={clearFilterParams} handleBulk={handleBulk} bulkMutation={bulkMutation} />
   );
 
   // Full screen is the same table with the room the rest of the page was

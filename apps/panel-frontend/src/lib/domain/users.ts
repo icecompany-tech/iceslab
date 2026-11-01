@@ -217,6 +217,14 @@ export async function getUser(id: string): Promise<User | null> {
   return data && typeof data === 'object' && (data as { id?: unknown }).id === id ? (data as User) : null;
 }
 
+/** One action on many users (POST /api/users/bulk). Always 200 with a report
+ *  per user; raw here, `bulkReport` reads it. The screen sends only enable
+ *  and disable (A-294). */
+export async function bulkUsers(userIds: string[], action: 'enable' | 'disable'): Promise<unknown> {
+  const { data } = await api.post<unknown>('/api/users/bulk', { userIds, action });
+  return data;
+}
+
 /** Zero used traffic + lift a traffic limit (period-billing top-up). */
 export async function resetUserTraffic(id: string): Promise<User> {
   const { data } = await api.post<User>(`/api/users/${id}/reset-traffic`);
