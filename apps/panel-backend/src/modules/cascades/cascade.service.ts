@@ -3296,11 +3296,16 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
       // to hand its users to the chain, and the two answers are different
       // payloads (xray fragments, or one socks hand-off for hysteria).
       // linkParams since phase 8: the underlay of each leg is read off them.
+      // A-293: every list below in an order of its own full key. The node's
+      // drawing is built from them in the order they come (outbounds, link
+      // clients, the pool's tags: which tag dials which exit), and its sha is
+      // compared with the last push (render-drift.ts): an order left to the
+      // table drew the same cascade two ways and pushed it again for nothing.
       select: {
         position: true,
         entryProtocol: true,
         linkParams: true,
-        nodes: { select: { nodeId: true } },
+        nodes: { select: { nodeId: true }, orderBy: { nodeId: 'asc' } },
       },
     }),
     prisma.cascadeDirection.findMany({
@@ -3309,19 +3314,22 @@ async function readTopologyForNode(nodeId: string): Promise<TopologyInput | null
       select: {
         tag: true,
         linkParams: true,
-        nodes: { select: { nodeId: true } },
+        nodes: { select: { nodeId: true }, orderBy: { nodeId: 'asc' } },
         outbound: { select: { type: true, config: true } },
       },
     }),
     prisma.cascadeLink.findMany({
       where: { cascadeId: link.cascadeId },
+      orderBy: [{ directionTag: 'asc' }, { fromNodeId: 'asc' }, { toNodeId: 'asc' }, { id: 'asc' }],
       select: { fromNodeId: true, toNodeId: true, directionTag: true, config: true },
     }),
     prisma.routePolicy.findMany({
+      orderBy: { ordinal: 'asc' },
       select: { ordinal: true, directDomains: true, blockDomains: true },
     }),
     prisma.cascadeTunnel.findMany({
       where: { cascadeId: link.cascadeId },
+      orderBy: { index: 'asc' },
       select: { fromNodeId: true, toNodeId: true, index: true, port: true, config: true },
     }),
   ]);
