@@ -309,14 +309,22 @@ export interface BootstrapInfo {
   expiresAt: string;
   /** Pre-rendered single-line install command, ready for copy-paste. */
   command: string;
+  /**
+   * A-295: the panel URL is not https, and the installer redeems a token over
+   * https only. `command` is then the --payload-file one, and the node is
+   * installed from the payload file, which the panel hands out only in the
+   * answer to node create.
+   */
+  payloadOnly: boolean;
 }
 
 export interface CreateNodeResponseDto extends PublicNodeDto {
   /**
-   * Base64url-encoded one-time payload containing the node's mTLS cert+key
-   * and the panel CA. Kept for the manual / air-gapped flow (Download +
-   * scp + `--payload-file`), most admins should use the bootstrap-token
-   * flow below instead.
+   * Base64url-encoded one-time payload: the node's mTLS cert+key, the panel
+   * CA, the pinned panel-client fingerprint and the heartbeat credentials
+   * (A-295, node-payload.ts, the same set the bootstrap redeem gives). For
+   * the manual flow (Download + scp + `--payload-file`), and the only way on
+   * a panel without https. Here only: the panel keeps no node key.
    */
   payload: string;
   /**

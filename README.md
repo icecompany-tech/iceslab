@@ -105,7 +105,9 @@ The flags a panel's command uses, for reading or adjusting it:
 | `--reset` | Wipe a previous install on this VPS first. |
 | `--uninstall` | Remove the agent and its cores (`--keep-cores` leaves the cores). |
 
-The installer accepts a few more, which a panel's command does not use: `--payload` and `--payload-file <path>` (the node's payload instead of a bootstrap token, for example a file copied over with scp), `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
+`--payload-file <path>` (or `--payload`) installs from the node's payload instead of a bootstrap token, for example a file copied over with scp. The panel shows the payload once, when the node is created: download it then. A panel whose `PUBLIC_URL` is not https prints this command instead of the bootstrap one, since the installer redeems a token over https only.
+
+The installer accepts a few more, which a panel's command does not use: `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
 Per core:
 

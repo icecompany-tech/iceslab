@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Prisma } from '../../generated/prisma/client.js';
-import { issueNodeCert, encodeNodePayload } from '../keygen/keygen.service.js';
+import { bootstrapUsable, buildNodePayload } from './node-payload.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { anyChanged } from '../../lib/util/same-value.js';
@@ -93,13 +93,6 @@ export class NodeInUseByCascadeError extends Error {
 
 // ───── Helpers ─────
 
-const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-
-function buildSans(address: string): { type: 'dns' | 'ip'; value: string }[] {
-  const host = address.split(':')[0]!;
-  return [{ type: IPV4_RE.test(host) ? 'ip' : 'dns', value: host }];
-}
-
 /**
  * A write that passed the app-level checks and met a unique index: two saves
  * at once. The indexes are partial (`WHERE deleted_at IS NULL`, 20260506), so
@@ -177,25 +170,16 @@ export async function createNode(
     throw nodeClashOf(err, input) ?? err;
   }
 
-  const cert = await issueNodeCert({
-    commonName: input.name,
-    sans: buildSans(input.address),
-  });
-  // The same core versions the bootstrap redeem hands out, for the operator who
-  // pastes this payload instead of using the token.
-  const payload = encodeNodePayload({ ...cert, coreVersions: resolveCoreVersions(coreVersions) });
+  // A-295: the payload the bootstrap redeem hands out, built by the same
+  // function, for the operator who pastes or downloads it instead of using
+  // the token. Only here: the panel keeps no node key to issue it again.
+  const payload = await buildNodePayload(node, resolveCoreVersions(coreVersions));
 
   const tokenInfo = await issueBootstrapToken(node.id);
   const bootstrap: BootstrapInfo = {
     token: tokenInfo.token,
     expiresAt: tokenInfo.expiresAt.toISOString(),
-    command: await renderBootstrapCommand(
-      ctx.panelUrl,
-      tokenInfo.token,
-      node.address,
-      input.hardening,
-      intendedEngines(node),
-    ),
+    ...(await installOf(ctx.panelUrl, tokenInfo.token, node.address, input.hardening, intendedEngines(node))),
   };
 
   // Trigger backfill so existing active users land on this fresh node.
@@ -258,6 +242,9 @@ export function enginesFlag(engines: readonly EngineName[]): string | null {
 export interface InstallCommandInput {
   panelUrl: string;
   token: string;
+  /** A-295: install from this payload file instead of redeeming the token,
+   *  for a panel whose URL the installer will not redeem over (not https). */
+  payloadFile?: string;
   nodeAddress?: string;
   hardening?: HardeningInput | null;
   engines: readonly EngineName[];
@@ -302,7 +289,10 @@ export function installRefOf(panelVersion: string | undefined): string | null {
  */
 export function buildInstallCommand(input: InstallCommandInput): string {
   const notes: string[] = [];
-  const flags = [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`];
+  // The payload carries the panel URL itself, so the file needs no --panel-url.
+  const flags = input.payloadFile
+    ? [`--payload-file ${input.payloadFile}`]
+    : [`--panel-url ${input.panelUrl}`, `--bootstrap ${input.token}`];
   const engines = enginesFlag(input.engines);
   if (engines) flags.push(engines);
 
@@ -361,22 +351,38 @@ export function panelInstallCommand(input: Omit<InstallCommandInput, 'panelVersi
   return buildInstallCommand({ ...input, panelVersion: readCurrentVersion() });
 }
 
-async function renderBootstrapCommand(
+/** Where the payload-file command expects the operator to put the file. */
+export const NODE_PAYLOAD_FILE = '/root/iceslab-node.payload';
+
+/**
+ * The install command and how it gets the payload, for node create and for a
+ * refreshed bootstrap alike.
+ *
+ * A-295: the installer redeems a bootstrap token over https only. A panel whose
+ * URL is plain http (no domain yet) gets the --payload-file command and
+ * `payloadOnly: true`, so the screen asks for the payload file instead of
+ * showing a command the installer would refuse. The token is still issued:
+ * it is the same row either way, and http is not let into the redeem.
+ */
+export async function installOf(
   panelUrl: string,
   token: string,
   nodeAddress: string | undefined,
   hardening: HardeningInput | null | undefined,
   engines: readonly EngineName[],
-): Promise<string> {
-  return panelInstallCommand({
+): Promise<{ command: string; payloadOnly: boolean }> {
+  const payloadOnly = !bootstrapUsable(panelUrl);
+  const command = panelInstallCommand({
     panelUrl,
     token,
+    ...(payloadOnly ? { payloadFile: NODE_PAYLOAD_FILE } : {}),
     nodeAddress,
     hardening,
     engines,
     panelIp: await getPanelPublicIp(),
     acmeEmail: (process.env.ACME_DEFAULT_EMAIL ?? '').trim(),
   });
+  return { command, payloadOnly };
 }
 export async function listNodes(query: ListNodesQuery): Promise<{
   nodes: PublicNodeDto[];

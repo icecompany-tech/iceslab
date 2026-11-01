@@ -270,10 +270,12 @@ describe('node hardening (Zashchita) → install command', () => {
     const enginesLine = (s: string) => s.split('\n').filter((l) => l.includes('--engines'));
     expect(enginesLine(body.bootstrap.command)).toEqual(['  --engines xray,hysteria,singbox \\']);
     expect(enginesLine(JSON.parse(refreshed.body).command)).toEqual(enginesLine(body.bootstrap.command));
-    // Right after the token, carrying its own continuation, and no --protocol:
+    // Right after the payload source (the token, or the payload file on a panel
+    // without https, A-295), carrying its own continuation, and no --protocol:
     // the cores are a set, none of them the main one (25.09).
-    expect(body.bootstrap.command).toContain('--bootstrap ');
-    expect(body.bootstrap.command).toMatch(/--bootstrap \S+ \\\n {2}--engines xray,hysteria,singbox \\\n/);
+    const source = body.bootstrap.payloadOnly ? '--payload-file' : '--bootstrap';
+    expect(body.bootstrap.command).toContain(`${source} `);
+    expect(body.bootstrap.command).toMatch(new RegExp(`${source} \\S+ \\\\\\n {2}--engines xray,hysteria,singbox \\\\\\n`));
     for (const cmd of [body.bootstrap.command, JSON.parse(refreshed.body).command]) {
       expect(cmd).not.toContain('--protocol');
     }
