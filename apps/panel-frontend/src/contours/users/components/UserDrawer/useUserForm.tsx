@@ -6,7 +6,8 @@ import type { ExpirySpan } from '@/contours/users/lib/userExpiry';
 import { ALL_SQUAD_ID, listRoutingPresets } from '@/lib/domain/routePolicies';
 import { isRoutingPresetId, presetChoiceName, presetChoiceOf, presetChoicePatch, presetKey } from '@/lib/domain/routingPresets';
 import { routingRow, type DeliveryView } from '@/contours/users/lib/routingRow';
-import { defaultValues, trafficLimitInput, trafficLimitProblem, userUpdatePatch } from '@/contours/users/lib/userForm';
+import { GiB, defaultValues, trafficLimitInput, trafficLimitProblem, userUpdatePatch } from '@/contours/users/lib/userForm';
+import { accessNoteKey, accessOutcome, storedAccessFacts } from '@/contours/users/lib/userAccess';
 import { expiryDays } from '@/contours/users/lib/userExpiry';
 import { endpointsWhy } from '@/contours/users/lib/endpointsWhy';
 import { effectiveDeviceCap } from '@/contours/users/lib/deviceLimit';
@@ -473,8 +474,33 @@ export function useUserForm({ opened, user, onSubmit, onClose }: Props) {
       ? new Date(user.expireAt)
       : null;
 
+  /**
+   * Where the access control lands this user on save (A-294, userAccess): the
+   * date and the quota as the form stands now, the stored ones until touched.
+   * The limit is read from the user while the field keeps its seed, because
+   * the field holds whole GiB and the stored limit may not.
+   */
+  const accessSeed = seedValues?.status ?? 'active';
+  const formLimitGb = trafficLimitInput(form.values.trafficLimitGb);
+  const access = user
+    ? accessOutcome(
+        form.values.status,
+        {
+          ...storedAccessFacts(user),
+          expiresAt,
+          ...(form.values.trafficLimitGb !== seedValues?.trafficLimitGb
+            ? { limitBytes: formLimitGb === null ? null : formLimitGb * GiB }
+            : {}),
+        },
+        now,
+      )
+    : null;
+  const accessNote = access ? accessNoteKey(accessSeed, access) : null;
+
   return {
     now,
+    access,
+    accessNote,
     isEdit,
     presets,
     form,

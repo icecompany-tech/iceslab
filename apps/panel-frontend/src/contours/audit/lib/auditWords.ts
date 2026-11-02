@@ -74,7 +74,19 @@ export function actionWords(a: string, t: T): string {
   return (ADMIN_AUDIT_ACTIONS as readonly string[]).includes(a) ? t(actionKey(a)) : a;
 }
 
-export function targetWords(e: Pick<AdminAuditEventDto, 'target'>, t: T): string {
+export function targetWords(
+  e: Pick<AdminAuditEventDto, 'target'> & Partial<Pick<AdminAuditEventDto, 'action' | 'detail'>>,
+  t: T,
+): string {
+  // A bulk row names its target «<n> users» in the server's words (A-294):
+  // the count is read from the detail, or from that label on a row without
+  // one, and said in the panel's.
+  if (e.action === 'users.bulk') {
+    const d = e.detail && typeof e.detail === 'object' ? (e.detail as Record<string, unknown>) : {};
+    const fromLabel = /^(\d+) users$/.exec(e.target.label ?? '')?.[1];
+    const count = num(d.requested) ?? (fromLabel ? Number(fromLabel) : null);
+    if (count !== null) return t('audit.target.usersCount', { count });
+  }
   const known = (ADMIN_AUDIT_TARGET_KINDS as readonly string[]).includes(e.target.kind);
   const kind = known ? t(targetKey(e.target.kind)) : e.target.kind;
   return e.target.label ? `${kind} ${e.target.label}` : kind;

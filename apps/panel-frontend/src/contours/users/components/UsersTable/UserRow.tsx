@@ -1,5 +1,5 @@
 import { presetChoiceName, presetChoiceOf } from '@/lib/domain/routingPresets';
-import { ACTIONS_COL, ROW_SELECTION, SELECT_COL } from '@/contours/users/lib/usersTable';
+import { ACTIONS_COL, SELECT_COL } from '@/contours/users/lib/usersTable';
 import { AMBER, CARD, HAIRLINE, MIST, MOSS, RED, SNOW, VIOLET } from '@/contours/users/lib/colors';
 import { DISPLAY, MONO } from '@/contours/users/lib/textStyles';
 import { ActionIcon, Box, Menu, Text, Tooltip } from '@mantine/core';
@@ -323,24 +323,21 @@ export function UserRow({
         borderBottom: `1px solid ${HAIRLINE}`,
       }}
     >
-      {/* Row selection waits for bulk actions (ROW_SELECTION): a tick that does
-          nothing reads as a promise the screen does not keep. */}
-      {ROW_SELECTION && (
-        <Box
-          style={{
-            width: SELECT_COL,
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            position: 'sticky',
-            left: 0,
-            zIndex: 3,
-            backgroundColor: rowTint ?? CARD,
-          }}
-        >
-          <SelectBox checked={selected.has(u.id)} onChange={() => toggleSelected(u.id)} />
-        </Box>
-        )}
+      {/* The tick feeds bulk enable and disable (A-294). */}
+      <Box
+        style={{
+          width: SELECT_COL,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          position: 'sticky',
+          left: 0,
+          zIndex: 3,
+          backgroundColor: rowTint ?? CARD,
+        }}
+      >
+        <SelectBox checked={selected.has(u.id)} onChange={() => toggleSelected(u.id)} />
+      </Box>
 
       {visibleColumns.map((column, i) => (
         <Box

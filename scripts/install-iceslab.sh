@@ -15,12 +15,12 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab.sh)
 #
 # Or with a specific tag/branch:
-#   ICESLAB_REF=v0.3.0 bash <(curl ...)
+#   ICESLAB_REF=v0.3.1 bash <(curl ...)
 #
 # Customisation via env:
 #   ICESLAB_DIR        Install dir (default /opt/iceslab)
 #   ICESLAB_REPO       Git URL (default https://github.com/icecompany-tech/iceslab.git)
-#   ICESLAB_REF        Branch/tag/sha (default v0.3.0, pinned for alpha)
+#   ICESLAB_REF        Branch/tag/sha (default v0.3.1, pinned for alpha)
 #   ICESLAB_REF_SHA    Optional commit SHA to verify after checkout. Defeats
 #                      upstream tag re-pointing. Recommended for prod.
 #   FRONTEND_PORT        Host port the SPA listens on (default 8080)
@@ -126,14 +126,14 @@ banner() {
   printf ' |___\\___|___|___/|____/_/ \\_\\___/\033[0m\n'
   printf '\n'
   printf '  Self-hosted multi-core proxy panel\n'
-  printf '  v0.3.0  ·  github.com/icecompany-tech/iceslab\n'
+  printf '  v0.3.1  ·  github.com/icecompany-tech/iceslab\n'
   printf '\n'
 }
 
 [[ $EUID -eq 0 ]] || fail "Must run as root (sudo bash $0)"
 
 ICESLAB_REPO=${ICESLAB_REPO:-https://github.com/icecompany-tech/iceslab.git}
-ICESLAB_REF=${ICESLAB_REF:-v0.3.0}
+ICESLAB_REF=${ICESLAB_REF:-v0.3.1}
 # Exported, so the installer handed over to installs exactly the ref it was
 # fetched for, whatever its own default is.
 export ICESLAB_REF
@@ -156,7 +156,7 @@ export ICESLAB_REF
 # default ref above: it moves with every tag (RELEASING §4b), the default
 # moves only with a final. The same function is in install-iceslab-node.sh
 # (apps/node/installer_handover_test.go holds the two together).
-ICESLAB_SCRIPT_REF="v0.3.0"
+ICESLAB_SCRIPT_REF="v0.3.1"
 
 # handover_to_ref <ref> <repo url> <path in repo> [args...]: exec that ref's
 # copy of <path> with the same arguments and environment, once

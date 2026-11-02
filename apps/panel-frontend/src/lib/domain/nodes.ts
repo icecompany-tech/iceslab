@@ -266,6 +266,13 @@ export interface BootstrapInfo {
   expiresAt: string;
   /** Pre-rendered single-line install command, ready to copy-paste on the node. */
   command: string;
+  /**
+   * A-295: the panel URL is not https, and the installer redeems a token over
+   * https only. `command` is then the --payload-file one, and the node is
+   * installed from the payload handed out only in the answer to node create.
+   * Absent on an older server: read as false (`isPayloadOnly`).
+   */
+  payloadOnly?: boolean;
 }
 
 /** The create response carries the one-time payload + a bootstrap token. */

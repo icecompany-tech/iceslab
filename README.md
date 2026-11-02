@@ -105,7 +105,9 @@ The flags a panel's command uses, for reading or adjusting it:
 | `--reset` | Wipe a previous install on this VPS first. |
 | `--uninstall` | Remove the agent and its cores (`--keep-cores` leaves the cores). |
 
-The installer accepts a few more, which a panel's command does not use: `--payload` and `--payload-file <path>` (the node's payload instead of a bootstrap token, for example a file copied over with scp), `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
+`--payload-file <path>` (or `--payload`) installs from the node's payload instead of a bootstrap token, for example a file copied over with scp. The panel shows the payload once, when the node is created: download it then. A panel whose `PUBLIC_URL` is not https prints this command instead of the bootstrap one, since the installer redeems a token over https only.
+
+The installer accepts a few more, which a panel's command does not use: `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Commands printed by older panels keep working: the installer still accepts their spellings (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
 Per core:
 
@@ -132,7 +134,7 @@ Both installers read env overrides. The ones people reach for most:
 
 | Env | Default | Effect |
 |---|---|---|
-| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.0` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
+| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.1` | Git tag/branch/sha to install. Pin to a release tag for reproducibility. |
 | `SKIP_SWAP` | `0` | Set `1` to skip the auto 4 GB swapfile on small-RAM VPS. The build may OOM on <3.5 GB RAM without swap; only opt out if you manage swap yourself. |
 | `NODE_PORT` | `1337` | node-agent mTLS listen port. Change per-node to dodge port scanners. |
 | `FRONTEND_PORT` | `8080` | Panel SPA port in bare-IP mode (ignored when `PANEL_DOMAIN` is set, Caddy fronts 443). |

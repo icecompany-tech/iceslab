@@ -1,12 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../../prisma.js';
-import {
-  issueNodeCert,
-  encodeNodePayload,
-  getPanelClientFingerprint,
-} from '../keygen/keygen.service.js';
-import { config } from '../../config.js';
-import { signHeartbeatToken } from './heartbeat-token.js';
+import { buildNodePayload } from './node-payload.js';
 import { resolveCoreVersions, type BootstrapCoreVersions } from '@iceslab/shared';
 import { readCoreVersions } from './node-core-versions.js';
 
@@ -91,33 +85,8 @@ export async function redeemBootstrapToken(token: string): Promise<string> {
     throw new BootstrapTokenError('CONSUMED', 410);
   }
 
-  const cert = await issueNodeCert({
-    commonName: row.node.name,
-    sans: buildSans(row.node.address),
-  });
-  // Slice 38: bundle heartbeat-self-destruct credentials. The agent will
-  // poll PANEL_URL/api/internal/nodes/me/status with this token and exit
-  // on 410 Gone. heartbeat_secret was generated at node-create time (or
-  // backfilled by the migration) and never leaves the panel, only the
-  // HMAC of it does.
-  const secretBuf = Buffer.from(row.node.heartbeatSecret as Uint8Array);
-  const panelClientFingerprint = await getPanelClientFingerprint();
-  return encodeNodePayload({
-    ...cert,
-    panelUrl: config.PUBLIC_URL,
-    nodeId: row.node.id,
-    heartbeatToken: signHeartbeatToken(row.node.id, secretBuf),
-    panelClientFingerprint,
-    // The installer's defaults for the bootstrap scripts (explicit env wins),
-    // read through `iceslab-node core-env`.
-    coreVersions,
-  });
-}
-
-const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-function buildSans(address: string): { type: 'dns' | 'ip'; value: string }[] {
-  const host = address.split(':')[0]!;
-  return [{ type: IPV4_RE.test(host) ? 'ip' : 'dns', value: host }];
+  // A-295: the same build as node create's (node-payload.ts).
+  return buildNodePayload(row.node, coreVersions);
 }
 
 /**

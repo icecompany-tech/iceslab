@@ -111,6 +111,17 @@ export const users = {
     nameTaken: 'TAKEN',
     nameUnchecked: 'NOT CHECKED',
     generateName: 'Generate a name',
+    // A-294: the user's access. "On" does not promise an expired user their
+    // subscription: the line under the choice says what brings it back.
+    access: 'Access',
+    accessOn: 'On',
+    accessOff: 'Off',
+    accessDisableNote:
+      "Once saved, the user's configs stop working on every node, and the subscription page says the subscription is off.",
+    accessExpiredNote:
+      'Expired: the subscription is not served even when on. A later expiry date brings it back.',
+    accessLimitedNote:
+      'Traffic spent: the subscription is not served even when on. A traffic reset or a limit above what is used brings it back.',
     squads: 'Squads',
     previewTitle: 'What the client gets',
     previewEmpty: 'Nothing yet: the picked squads have no deployed profiles.',
@@ -330,6 +341,31 @@ export const users = {
     viewSortedBy: 'sorted by {{column}}',
     selectedCount_one: '{{count}} selected',
     selectedCount_other: '{{count}} selected',
+    // A-294: bulk offers only switching off and on (POST /api/users/bulk).
+    bulkTitle: {
+      disable_one: 'Switch off {{count}} user?',
+      disable_other: 'Switch off {{count}} users?',
+      enable_one: 'Switch on {{count}} user?',
+      enable_other: 'Switch on {{count}} users?',
+    },
+    bulkBody: {
+      disable:
+        'Their configs stop working on every node, and the subscription page says the subscription is off. They can be switched back on here.',
+      enable:
+        'Only the switch-off is lifted. Users past their date or out of traffic stay expired and limited: an extension or a traffic reset brings them back.',
+    },
+    bulkConfirm: {
+      disable: 'Switch off',
+      enable: 'Switch on',
+    },
+    bulkDone: {
+      disable: 'Switched off: {{succeeded}} of {{requested}}',
+      enable: 'Switched on: {{succeeded}} of {{requested}}',
+    },
+    bulkFailed_one: '{{count}} failed, the server said: {{error}}',
+    bulkFailed_other: '{{count}} failed, the first answer: {{error}}',
+    bulkUnreadable: 'The server answered, but its report could not be read: reload the list and check the statuses.',
+    bulkClear: 'Clear selection',
     filterBy: 'Filter by...',
     filterOn: 'Narrowed',
     filterClear: 'Clear filter',

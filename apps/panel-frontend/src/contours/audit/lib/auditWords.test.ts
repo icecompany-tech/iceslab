@@ -85,6 +85,14 @@ describe('строка журнала словами', () => {
     expect(outcomeWords(ev({ outcome: 'failed' }), t)).toBe('audit.outcome.failed');
     expect(outcomeWords(ev({}), t)).toBe('audit.outcome.ok');
   });
+  it('A-294: цель users.bulk числом юзеров словами панели, из detail или из старой подписи', () => {
+    const bulk = (detail: unknown, label = '2 users') =>
+      targetWords(ev({ action: 'users.bulk', target: { kind: 'user', id: null, label }, detail: detail as never }), t);
+    expect(bulk({ action: 'disable', requested: 2, succeeded: 2, failed: 0, userIds: ['a', 'b'] })).toBe('audit.target.usersCount {"count":2}');
+    expect(bulk(null)).toBe('audit.target.usersCount {"count":2}');
+    expect(bulk(null, 'odd')).toBe('audit.target.user odd');
+    expect(has(ru, 'audit.target.usersCount') && has(en, 'audit.target.usersCount')).toBe(true);
+  });
 });
 
 describe('detailLines: подробности по полям действия', () => {

@@ -239,15 +239,13 @@ export function saveColumnView(view: ColumnView): void {
   }
 }
 
-/** The selection gutter and the trailing actions cell, neither of them data. */
 /**
- * Row selection is hidden until bulk actions arrive (spec frontend-users,
- * ARCH 22.10: after rc). A tick column whose only effect was a counter read
- * as a promise of an action the screen does not have. The server takes bulk
- * already (POST /api/users/bulk); turning this on is the first step of that work.
+ * The selection gutter and the trailing actions cell, neither of them data.
+ * Ticked rows serve bulk enable and disable only (A-294): the bar over the
+ * table offers those two and nothing else, so a tick never promises an action
+ * the screen does not have.
  */
-export const ROW_SELECTION = false;
-export const SELECT_COL = ROW_SELECTION ? 44 : 0;
+export const SELECT_COL = 44;
 export const ACTIONS_COL = 44;
 
 /**

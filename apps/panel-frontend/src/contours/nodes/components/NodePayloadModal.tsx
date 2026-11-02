@@ -22,12 +22,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { copyToClipboard } from '@/lib/ui/clipboard';
 import { useNow } from '@/lib/ui/useNow';
-
-interface BootstrapInfo {
-  token: string;
-  expiresAt: string;
-  command: string;
-}
+import type { BootstrapInfo } from '@/lib/domain/nodes';
+import { isPayloadOnly } from '@/contours/nodes/lib/payloadInstall';
 
 interface Props {
   opened: boolean;
@@ -57,6 +53,10 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
   // дойти до ssh. Раньше она снималась один раз при отрисовке и застывала:
   // «через 12 мин» держалось на экране и тогда, когда прошло двадцать.
   const now = useNow();
+  // A-295: a panel without https. The token is useless to the installer, the
+  // command is the --payload-file one, and the payload is not here: it left
+  // the panel once, at node create.
+  const payloadOnly = isPayloadOnly(bootstrap);
 
   async function handleCopy(key: 'cmd' | 'payload', value: string) {
     try {
@@ -92,12 +92,12 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
     >
       <Stack>
         <Alert color="yellow" icon={<IconAlertTriangle size={18} />}>
-          {t('nodePayloadModal.warning')}
+          {t(payloadOnly ? 'nodePayloadModal.payloadOnlyWarning' : 'nodePayloadModal.warning')}
         </Alert>
 
         {bootstrap ? (
           <>
-            <Stack gap={4}>
+            {!payloadOnly && <Stack gap={4}>
               <Group justify="space-between">
                 <Text fw={600}>{t('nodePayloadModal.bootstrapToken')}</Text>
                 <Badge color="blue" variant="light">
@@ -110,12 +110,15 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
                 </Badge>
               </Group>
               <Code style={{ wordBreak: 'break-all' }}>{bootstrap.token}</Code>
-            </Stack>
+            </Stack>}
 
             <Stack gap={4}>
-              <Text fw={600}>{t('nodePayloadModal.runOnNode')}</Text>
+              {/* Without https the command is not an install ready to go: it
+                  needs the payload from create, which this window does not
+                  have (AUDT 01.11). Its heading says so. */}
+              <Text fw={600}>{t(payloadOnly ? 'nodePayloadModal.runIfKept' : 'nodePayloadModal.runOnNode')}</Text>
               <Text size="xs" c="dimmed">
-                {t('nodePayloadModal.runOnNodeHint')}
+                {t(payloadOnly ? 'nodePayloadModal.runOnNodeHintPayload' : 'nodePayloadModal.runOnNodeHint')}
               </Text>
               <ScrollArea h={120} type="auto">
                 <Code block style={{ whiteSpace: 'pre' }}>
@@ -137,6 +140,14 @@ export function NodePayloadModal({ opened, onClose, nodeName, payload, bootstrap
         ) : null}
 
         {payload ? <Divider /> : null}
+
+        {/* A-295: a re-issue carries no payload. Said, not an empty block and
+            a download of nothing; without https the warning above says it. */}
+        {!payload && !payloadOnly ? (
+          <Text size="xs" c="dimmed">
+            {t('nodePayloadModal.payloadAtCreateOnly')}
+          </Text>
+        ) : null}
 
         {payload ? <Stack gap={4}>
           <Group justify="space-between" wrap="nowrap">

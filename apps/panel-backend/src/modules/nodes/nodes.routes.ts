@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { TRANSPORTS, type EngineName } from '@iceslab/shared';
+import { TRANSPORTS } from '@iceslab/shared';
 import { requireAuth } from '../auth/auth.hook.js';
 import { config } from '../../config.js';
 import {
@@ -8,10 +8,8 @@ import {
   UpdateNodeSchema,
   ListNodesQuerySchema,
   NodeIdParamSchema,
-  type HardeningInput,
 } from './nodes.schemas.js';
 import * as nodesService from './nodes.service.js';
-import { panelInstallCommand } from './nodes.service.js';
 import { checkNodePortExposure } from './nodes.exposure.js';
 import { getNodeSyncStatus } from './nodes.sync-status.js';
 import { portClaimsOnNode } from './node-ports.js';
@@ -24,7 +22,6 @@ import {
 import { cascadeXrayDrawingForNode } from '../inbounds/inbounds.queue.js';
 import { prisma } from '../../prisma.js';
 import * as bootstrap from './bootstrap.service.js';
-import { getPanelPublicIp } from './panel-ip.js';
 import { NodeCertRotationError, rotateNodeCert } from './node-cert-rotation.js';
 import { NodeConnLogError, clearNodeConnLog, readNodeConnLog } from './node-conn-log.js';
 import { nodeLingering } from '../stats/lingering.js';
@@ -50,27 +47,6 @@ function publicUrlFromRequest(request: FastifyRequest): string {
 const BootstrapTokenParam = z.object({ token: z.string().regex(/^bs_[A-Za-z0-9_-]+$/).max(64) });
 const auth = { onRequest: [requireAuth] };
 
-// The /api/nodes/:id/bootstrap endpoint renders the command without going
-// through the service path; the renderer itself is the service's, so the two
-// commands cannot drift.
-async function renderRefreshBootstrapCommand(
-  panelUrl: string,
-  token: string,
-  nodeAddress: string,
-  hardening: HardeningInput | null | undefined,
-  engines: readonly EngineName[],
-): Promise<string> {
-  // A-270: the agent of this panel's release, as on node create.
-  return panelInstallCommand({
-    panelUrl,
-    token,
-    nodeAddress,
-    hardening,
-    engines,
-    panelIp: await getPanelPublicIp(),
-    acmeEmail: (process.env.ACME_DEFAULT_EMAIL ?? '').trim(),
-  });
-}
 
 export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   // Public bootstrap-redeem route: the token IS the credential (single-use,
@@ -213,16 +189,19 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
     try {
       const node = await nodesService.getNodeById(params.id);
       const tokenInfo = await bootstrap.issueBootstrapToken(node.id);
+      // The command and its payload source are the service's (installOf), as
+      // on node create, so the two cannot drift (A-270 release pin, A-295
+      // payload-file on a panel without https).
       return reply.code(201).send({
         token: tokenInfo.token,
         expiresAt: tokenInfo.expiresAt.toISOString(),
-        command: await renderRefreshBootstrapCommand(
+        ...(await nodesService.installOf(
           publicUrlFromRequest(request),
           tokenInfo.token,
           node.address,
           node.hardening,
           node.intendedEngines,
-        ),
+        )),
       });
     } catch (err) {
       if (err instanceof nodesService.NodeNotFoundError) {

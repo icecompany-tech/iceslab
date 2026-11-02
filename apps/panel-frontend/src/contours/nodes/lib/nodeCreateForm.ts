@@ -215,6 +215,8 @@ export interface Registered {
   expiresAt: string;
   command: string;
   payload: string;
+  /** A-295: the panel is not https, the node installs from the payload file. */
+  payloadOnly: boolean;
   /** Profile name and port per host that was attached, for the timeline. */
   hosts: { name: string; port: number }[];
 }

@@ -14,18 +14,24 @@
  * toast says only what is true: a token was issued. Nothing here touches the
  * clipboard, so nothing here can throw.
  */
-export interface BootstrapInfo {
-  token: string;
-  expiresAt: string;
-  command: string;
-}
+// The domain's own shape, payloadOnly included (A-295): a copy here would drop
+// the flag on the way to the modal.
+import type { BootstrapInfo } from '@/lib/domain/nodes';
+import { isPayloadOnly } from '@/contours/nodes/lib/payloadInstall';
+export type { BootstrapInfo };
 
 export function onBootstrapIssued(
   info: BootstrapInfo,
   show: (info: BootstrapInfo) => void,
-  notify: (n: { title: string; message: string }) => void,
+  notify: (n: { title: string; message: string; color?: string }) => void,
   t: (key: string) => string,
 ): void {
   show(info);
+  // A-295: without https the new token installs nothing, so the toast is not
+  // a green «ready»: it points at the window, which says what is needed.
+  if (isPayloadOnly(info)) {
+    notify({ color: 'yellow', title: t('nodeEdit.bootstrapPayloadOnly'), message: t('nodeEdit.bootstrapPayloadOnlyShown') });
+    return;
+  }
   notify({ title: t('nodeEdit.bootstrapIssued'), message: t('nodeEdit.bootstrapShown') });
 }

@@ -48,6 +48,9 @@ export const audit = {
       admin: 'admin',
       api_token: 'token',
       settings: 'settings',
+      // A-294: the target of a bulk action, the server's «<n> users».
+      usersCount_one: '{{count}} user',
+      usersCount_other: '{{count}} users',
     },
     actor: {
       anonymous: 'anonymous',

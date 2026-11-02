@@ -105,7 +105,9 @@ bash <(curl -fsSL .../install-iceslab-node.sh) \
 | `--reset` | Сначала снести прежнюю установку на этом VPS. |
 | `--uninstall` | Удалить агента и его ядра (`--keep-cores` оставляет ядра). |
 
-Установщик принимает и ещё несколько, которых в команде панели нет: `--payload` и `--payload-file <path>` (payload ноды вместо bootstrap-токена, например файл, скопированный через scp), `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Команды, которые печатали старые панели, продолжают работать: установщик принимает их написание (`--protocol`, `--with-singbox`, `--xray-reality-*`).
+`--payload-file <path>` (или `--payload`) ставит ноду из её payload вместо bootstrap-токена, например из файла, скопированного через scp. Панель показывает payload один раз, при создании ноды: скачайте его тогда. Панель, у которой `PUBLIC_URL` не https, печатает эту команду вместо bootstrap: установщик выкупает токен только по https.
+
+Установщик принимает и ещё несколько, которых в команде панели нет: `--hysteria-masquerade-url`, `--hysteria-obfs-password`, `--xray-port`, `--xray-reality-public-key`. Команды, которые печатали старые панели, продолжают работать: установщик принимает их написание (`--protocol`, `--with-singbox`, `--xray-reality-*`).
 
 По ядрам:
 
@@ -132,7 +134,7 @@ bash <(curl -fsSL .../install-iceslab-node.sh) \
 
 | Env | По умолчанию | Эффект |
 |---|---|---|
-| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.0` | Git-тег/ветка/sha для установки. Пинь на тег релиза для воспроизводимости. |
+| `ICESLAB_REF` / `ICESLAB_NODE_REF` | `v0.3.1` | Git-тег/ветка/sha для установки. Пинь на тег релиза для воспроизводимости. |
 | `SKIP_SWAP` | `0` | Поставь `1` чтобы пропустить авто-создание swapfile 4 ГБ на VPS с малым RAM. На <3.5 ГБ RAM без swap сборка может словить OOM; отключай только если управляешь swap сам. |
 | `NODE_PORT` | `1337` | mTLS listen-порт node-agent. Меняй per-node чтобы уходить от сканеров портов. |
 | `FRONTEND_PORT` | `8080` | Порт SPA панели в bare-IP режиме (игнорируется когда задан `PANEL_DOMAIN`, тогда Caddy на 443). |

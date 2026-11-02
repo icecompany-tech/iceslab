@@ -1,9 +1,9 @@
-import { ACTIONS_COL, ROW_SELECTION, SELECT_COL, USER_COLUMNS } from '@/contours/users/lib/usersTable';
+import { ACTIONS_COL, SELECT_COL, USER_COLUMNS } from '@/contours/users/lib/usersTable';
 import { ColumnsPanel } from '@/contours/users/components/UsersTable/ColumnsPanel';
 import { columnStyles } from '@/contours/users/lib/columnLayout';
 import { UserRow } from '@/contours/users/components/UsersTable/UserRow';
 import { ActionIcon, ThemeIcon } from '@mantine/core';
-import { CARD, CYAN, GROUND, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
+import { AMBER, CARD, CYAN, GROUND, HAIRLINE, MIST, SNOW, WELL } from '@/contours/users/lib/colors';
 import { UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -35,7 +35,7 @@ export function UsersTable(props: Pick<UsersPageState,
   | 'setStatusFilter' | 'selected' | 'setSelected' | 'toggleSelected' | 'activeFilters'
   | 'columnView' | 'setColumnView' | 'visibleColumns' | 'toggleColumn' | 'pinColumn'
   | 'moveColumn' | 'density' | 'cycleDensity' | 'fullscreen' | 'setFullscreen' | 'openCreate'
-  | 'colParams' | 'setFilterParam' | 'clearFilterParams'>) {
+  | 'colParams' | 'setFilterParam' | 'clearFilterParams' | 'handleBulk' | 'bulkMutation'>) {
   const { t } = useTranslation();
   const {
     pagedUsers, totalUsers, stats, totalPages, safePage, rangeStart, rangeEnd,
@@ -140,10 +140,27 @@ export function UsersTable(props: Pick<UsersPageState,
           {t('usersTable.viewSortedBy', { column: t(`users.table.${sort === 'expireAt' ? 'expires' : sort === 'traffic' ? 'used' : 'username'}`) })}
         </Text>
         <Box style={{ flex: 1 }} />
-        {ROW_SELECTION && selected.size > 0 && (
-          <Text style={{ ...MONO_LABEL, color: SNOW }}>
-            {t('usersTable.selectedCount', { count: selected.size })}
-          </Text>
+        {/* A-294: what ticked rows can have done to them, and only that:
+            switch off, switch on, or let go of the selection. */}
+        {selected.size > 0 && (
+          <>
+            <Text style={{ ...MONO_LABEL, color: SNOW }}>
+              {t('usersTable.selectedCount', { count: selected.size })}
+            </Text>
+            <BulkButton
+              label={t('usersTable.bulkConfirm.disable')}
+              tone={AMBER}
+              disabled={props.bulkMutation.isPending}
+              onClick={() => props.handleBulk('disable')}
+            />
+            <BulkButton
+              label={t('usersTable.bulkConfirm.enable')}
+              tone={CYAN}
+              disabled={props.bulkMutation.isPending}
+              onClick={() => props.handleBulk('enable')}
+            />
+            <BulkButton label={t('usersTable.bulkClear')} tone={MIST} onClick={() => setSelected(new Set())} />
+          </>
         )}
         {/* One button, three stages: it carries its own state in its icon so
             the row height is adjusted by looking rather than by remembering. */}
@@ -211,34 +228,32 @@ export function UsersTable(props: Pick<UsersPageState,
               ...(fullscreen ? { position: 'sticky', top: 0, zIndex: 4 } : {}),
             }}
           >
-            {ROW_SELECTION && (
-              <Box
-                style={{
-                  width: SELECT_COL,
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  position: 'sticky',
-                  left: 0,
-                  zIndex: 3,
-                  backgroundColor: WELL,
-                }}
-              >
-                <SelectBox
-                  checked={allOnPage}
-                  onChange={() =>
-                    setSelected((s) => {
-                      const next = new Set(s);
-                      for (const u of pagedUsers) {
-                        if (allOnPage) next.delete(u.id);
-                        else next.add(u.id);
-                      }
-                      return next;
-                    })
-                  }
-                />
-              </Box>
-              )}
+            <Box
+              style={{
+                width: SELECT_COL,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                position: 'sticky',
+                left: 0,
+                zIndex: 3,
+                backgroundColor: WELL,
+              }}
+            >
+              <SelectBox
+                checked={allOnPage}
+                onChange={() =>
+                  setSelected((s) => {
+                    const next = new Set(s);
+                    for (const u of pagedUsers) {
+                      if (allOnPage) next.delete(u.id);
+                      else next.add(u.id);
+                    }
+                    return next;
+                  })
+                }
+              />
+            </Box>
             {visibleColumns.map((column, i) => (
               <HeadCell key={column.id} column={column} cellStyle={headStyles[i]!} {...props} />
             ))}
@@ -346,6 +361,38 @@ export function UsersTable(props: Pick<UsersPageState,
         </Box>
       )}
     </Box>
+  );
+}
+
+function BulkButton({
+  label,
+  tone,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  tone: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        height: 28,
+        padding: '0 10px',
+        borderRadius: 6,
+        flexShrink: 0,
+        ...MONO_LABEL,
+        color: tone,
+        backgroundColor: WELL,
+        border: `1px solid ${tone}55`,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {label}
+    </UnstyledButton>
   );
 }
 

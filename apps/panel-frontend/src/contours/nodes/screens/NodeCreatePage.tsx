@@ -311,7 +311,10 @@ export function NodeCreatePage() {
                     {t(s.label)}
                   </Text>
                   <Text style={{ fontFamily: DISPLAY, fontSize: 11, lineHeight: '14px', color: FAINT }}>
-                    {t(s.hint, { count: selected.length })}
+                    {/* A-295: without https step three is the payload, not a token. */}
+                    {t(s.key === 'install' && registered?.payloadOnly ? 'nodeCreate.step3HintPayload' : s.hint, {
+                      count: selected.length,
+                    })}
                   </Text>
                 </Stack>
               </Box>

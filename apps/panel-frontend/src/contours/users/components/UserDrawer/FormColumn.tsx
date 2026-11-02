@@ -28,9 +28,11 @@ export function FormColumn({
   now,
   expiresAt,
   setExpiry,
+  accessNote,
   trafficRef,
 }: Pick<
   UserForm,
+  | 'accessNote'
   | 'isEdit'
   | 'presets'
   | 'form'
@@ -175,6 +177,54 @@ export function FormColumn({
           </Box>
           {form.errors.username && (
             <Text style={{ fontSize: 11, color: RED, marginTop: 4 }}>{form.errors.username}</Text>
+          )}
+        </Section>
+      )}
+
+      {/* A-294: switching the account off, lost in the move to the drawer.
+          Two words, not a switch: «on» for an expired user would read as a
+          promise the server does not keep, so the line under it says what
+          the choice leads to. */}
+      {isEdit && (
+        <Section label={t('userDrawer.access')}>
+          <Box style={{ display: 'flex', gap: 8 }}>
+            {(['active', 'disabled'] as const).map((choice) => {
+              const active = form.values.status === choice;
+              const tone = choice === 'disabled' ? AMBER : CYAN;
+              return (
+                <UnstyledButton
+                  key={choice}
+                  onClick={() => form.setFieldValue('status', choice)}
+                  aria-pressed={active}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: 32,
+                    padding: '0 14px',
+                    borderRadius: 8,
+                    backgroundColor: active ? `${tone}14` : CARD,
+                    border: `1px solid ${active ? tone : HAIRLINE}`,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: DISPLAY,
+                      fontSize: 12,
+                      lineHeight: '16px',
+                      fontWeight: active ? 500 : 400,
+                      color: active ? SNOW : MIST,
+                    }}
+                  >
+                    {t(choice === 'active' ? 'userDrawer.accessOn' : 'userDrawer.accessOff')}
+                  </Text>
+                </UnstyledButton>
+              );
+            })}
+          </Box>
+          {accessNote && (
+            <Text style={{ fontSize: 11, lineHeight: '15px', color: accessNote === 'accessDisableNote' ? MIST : AMBER }}>
+              {t(`userDrawer.${accessNote}`)}
+            </Text>
           )}
         </Section>
       )}

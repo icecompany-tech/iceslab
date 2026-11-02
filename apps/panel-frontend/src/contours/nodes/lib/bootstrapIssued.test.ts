@@ -15,6 +15,14 @@ describe('onBootstrapIssued (A-147)', () => {
     expect(notes).toEqual([{ title: 'nodeEdit.bootstrapIssued', message: 'nodeEdit.bootstrapShown' }]);
   });
 
+  it('A-295: панель без https: тост не зелёный «готово», а «токен установщик не возьмёт»', () => {
+    const notes: { title: string; message: string; color?: string }[] = [];
+    onBootstrapIssued({ ...info, payloadOnly: true }, () => undefined, (n) => notes.push(n), (k) => k);
+    expect(notes).toEqual([
+      { color: 'yellow', title: 'nodeEdit.bootstrapPayloadOnly', message: 'nodeEdit.bootstrapPayloadOnlyShown' },
+    ]);
+  });
+
   it('буфер не трогается вовсе: «скопировано» здесь не говорится', () => {
     const writeText = vi.fn();
     vi.stubGlobal('navigator', { clipboard: { writeText } });

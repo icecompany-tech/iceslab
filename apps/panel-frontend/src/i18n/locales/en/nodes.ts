@@ -114,6 +114,8 @@ export const nodes = {
     step2Hint: 'Attach {{count}}',
     step3: 'Install',
     step3Hint: 'Bootstrap token plus one-liner',
+    // A-295: a panel without https, step three is the payload, no token.
+    step3HintPayload: 'Payload, scp and the command',
     paramsTitle: 'Parameters',
     countryPlaceholder: 'not set',
     createWithHosts_one: 'Create node + {{count}} host',
@@ -151,7 +153,8 @@ export const nodes = {
     savedIt: 'I have saved it',
     onceTitle: 'Shown once, the panel will not surface it again',
     onceBody:
-      'This token grants the installer one-time access to mint a private mTLS key. If it expires before you redeem it, use Re-issue bootstrap on the node.',
+      // The node key is issued by the panel (keygen.service.ts, issueNodeCert), not the agent.
+      'This token lets the installer fetch, once, the node certificate and key the panel issued; the panel keeps no copy. If the token expires before you redeem it, use Re-issue bootstrap on the node.',
     tokenTitle: 'Bootstrap token',
     expiresIn: 'expires in {{min}} min',
     expired: 'expired',
@@ -167,11 +170,28 @@ export const nodes = {
     downloadPayload: 'Download payload',
     manualHint:
       'Use this when the node cannot reach the panel HTTP endpoint at install time (air-gapped, strict firewall). Download the file, scp it to the node, run install-iceslab-node.sh --payload-file /path.',
+    // A-295: the payload leaves the panel once, in the answer to node create.
+    payloadOnce:
+      'The payload is handed out once, now: the panel keeps no node key and will not show it again. Download it before you close this window.',
+    // A-295: a panel without https, the installer takes no token over http.
+    payloadOnlyTitle: 'The panel has no https: the node installs from the payload',
+    payloadOnlyBody:
+      'The installer takes a bootstrap token over https only, so there is no token here. Three steps: download the payload, put it on the node, run the command. The payload is handed out only now; without it the node has to be created again.',
+    payloadStepTitle: '1. Download the payload',
+    scpTitle: '2. Put it on the node',
+    scpHint:
+      'From the machine the file was downloaded to. The path on the node is the one the command below reads. If the browser saved the file under another name (say, with "(1)"), fix the name in the line.',
+    copyScp: 'Copy scp',
+    runStepTitle: '3. Run on the node',
+    runHintPayload:
+      'Paste over SSH as root once the file is on the node. The cores come from --engines; without the flag only the agent is installed.',
     nextTitle: 'What happens next',
     tl1: 'Node record created',
     tl1Hint: 'Visible on the Nodes page as offline until the agent checks in.',
     tl2: 'Installer redeems the token',
-    tl2Hint: 'The agent mints its mTLS key locally, the private key never leaves the VPS.',
+    tl2Hint: 'The panel issues the node certificate and key and hands them over once, over https; the panel keeps no copy.',
+    tl2Payload: 'The installer sets the node up from the payload',
+    tl2PayloadHint: 'The node key comes in the payload: the panel issued it at create and keeps no copy.',
     tl3: 'First heartbeat, node turns online',
     tl3Hint: 'Metrics start arriving within 15 seconds of the first poll.',
     tl4_zero: 'No hosts attached',
@@ -192,6 +212,9 @@ export const nodes = {
     reissue: 'Re-issue bootstrap',
     bootstrapIssued: 'New bootstrap token issued',
     bootstrapShown: 'The install command is in the window. The old token is dead.',
+    // A-295: a panel without https, the token is no use to the installer.
+    bootstrapPayloadOnly: 'Token issued, but the installer will not take it',
+    bootstrapPayloadOnlyShown: 'The panel has no https: the node installs only from the payload of create. The window says what to do.',
     tabParams: 'Parameters',
     tabRoutes: 'Routes',
     paramsTitle: 'Parameters',
@@ -613,7 +636,7 @@ export const nodes = {
   nodePayloadModal: {
     title: 'Node "{{name}}" - provisioning',
     warning:
-      'This token grants the node-installer one-time access to mint a private mTLS key. The panel won\'t surface it again on subsequent reads - if the token expires before you redeem it, click "Refresh bootstrap" on the node row.',
+      'This token lets the installer fetch, once, the node certificate and key the panel issued; the panel keeps no copy. The panel will not show the token itself again: if it expires before you redeem it, click "Re-issue bootstrap" on the node row.',
     bootstrapToken: 'Bootstrap token',
     expiresIn: 'expires in {{min}} min',
     runOnNode: 'Run on the node',
@@ -629,6 +652,13 @@ export const nodes = {
     downloadPayload: 'Download payload',
     copyPayload: 'Copy payload',
     iSavedIt: 'I have saved it',
+    // A-295: a re-issue carries no payload; a panel without https.
+    payloadAtCreateOnly: 'The payload is handed out only when the node is created: the panel keeps no node key and cannot issue it again.',
+    payloadOnlyWarning:
+      'The panel has no https: the installer will not take the token, and this window has no payload. The payload is handed out only when the node is created. If you kept it and the node address has not changed since, put it on the node and run the command below. If it is lost or the address changed (the certificate in the payload names the old address), create the node again or install the panel with a domain.',
+    runIfKept: 'Only if the payload from create was kept and the node address has not changed',
+    runOnNodeHintPayload:
+      'The command reads the payload from a file, the path is in it. Paste over SSH as root once the file downloaded at node create is on the node.',
   },
 
   nodeConfirm: {
