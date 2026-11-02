@@ -27,6 +27,8 @@ describe('isNewer', () => {
   it('does not offer the tag to the develop build after it', () => {
     expect(isNewer('v0.3.0', '0.3.0+dev')).toBe(false);
     expect(isNewer('v0.3.1', '0.3.0+dev')).toBe(true);
+    expect(isNewer('v0.3.1', '0.3.1+dev')).toBe(false);
+    expect(isNewer('v0.3.2', '0.3.1+dev')).toBe(true);
   });
 
   // semver 2.0 §11: a panel on a release candidate has to hear of the final.
