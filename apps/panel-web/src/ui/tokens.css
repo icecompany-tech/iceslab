@@ -1,0 +1,83 @@
+/*
+ * Design tokens. The only file with literal colours and sizes (codex F6).
+ *
+ * First block: the tokens of the Paper file Iceslab-BlackHole, as get_tokens returns
+ * them, except the two font stacks (below).
+ * Second block: values the frames use and Paper has no token for, taken from
+ * get_jsx of the named layers. Each needs a token in Paper or a decision.
+ */
+:root {
+  --color-text: #F2F3EE;
+  --color-amber: #F2C14E;
+  --color-danger: #FF5D4F;
+  --color-unknown: var(--color-text-muted);
+  --color-accent: #A8E6FF;
+  --color-accent-text: #E4F7FF;
+  --color-accent-soft: rgb(168 230 255 / 12%);
+  --color-accent-edge: rgb(200 240 255 / 40%);
+  --color-bg: #05070A;
+  --color-surface: #0B0F13;
+  --color-surface-raised: #121820;
+  --color-border: #1C2430;
+  --color-text-muted: #8893A0;
+
+  /* Paper holds "Segoe UI" and "Cascadia Mono", the faces the frames are drawn in.
+     The panel ships system stacks and no web fonts: DECISIONS 2026-11-01. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-display: 40px;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --tracking-tight: -0.02em;
+  --tracking-caps: 0.08em;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+}
+
+:root {
+  /* ui/SquadSelect, ui/Popover/сквады, ui/Check, срок в ui/UserWindow/новый */
+  --spacing-half: 2px;
+  --spacing-1-5: 6px;
+  --spacing-2-5: 10px;
+  --leading-tight: 16px;
+  --leading-base: 18px;
+  --size-icon-sm: 12px;
+  --size-icon-md: 14px;
+  --size-icon-lg: 16px;
+  --size-check: 16px;
+  --size-tag: 24px;
+  --size-row: 32px;
+  --size-field: 36px;
+  --size-bar: 38px;
+  --size-popover-list: 288px;
+  --size-calendar: 280px;
+  --border-hairline: 1px;
+  --border-check: 1.5px;
+  --radius-check: 5px;
+  --color-hover: #FFFFFF0D;
+  --color-check-well: #00000033;
+  --color-check-edge: color-mix(in srgb, var(--color-text-muted) 65%, transparent);
+  --color-check-ink: var(--color-bg);
+  --stroke-icon: 2;
+
+  /* Scrollbar, design-handoff snapshot "Прокрутка": its own gutter, a 4 px thumb. */
+  --scrollbar-gutter: 14px;
+  --scrollbar-inset: 5px;
+  --color-scroll-thumb: #A8E6FF33;
+}
