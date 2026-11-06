@@ -1,0 +1,29 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Отчёты, которые пишет CI, чтобы посчитать тесты и правила линта. Локально
+# появляются, если прогнать с GITHUB_ACTIONS=1, и в дерево им не надо.
+eslint-report.json
+vitest-report.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

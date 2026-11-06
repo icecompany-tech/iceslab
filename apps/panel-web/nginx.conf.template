@@ -1,0 +1,326 @@
+# nginx config for the panel-web container. A copy of apps/panel-frontend's while both
+# live; a fix here belongs there too.
+#
+# Two responsibilities:
+#   1. Serve the Vite-built SPA with client-side-routing fallback.
+#   2. Reverse-proxy `/api`, the subscription prefix, `/health` to the backend
+#      service so the browser sees a single origin (no CORS).
+#
+# ⚠ A TEMPLATE, not a config. The image's entrypoint renders it with envsubst
+# into /etc/nginx/conf.d/default.conf at start, and the only variable it
+# substitutes is ${SUBSCRIPTION_PATH_PREFIX} (NGINX_ENVSUBST_FILTER in the
+# Dockerfile): every other `$name` here is an nginx variable and stays as it
+# is. The prefix is the backend's own setting, so the two cannot disagree:
+# until 2026-10-22 (A-137) this file proxied a hard-coded /sub/, and a panel
+# with its own prefix answered every subscription with the SPA's index.html
+# and a 200.
+#
+# The upstream `backend` resolves via Docker Compose's service DNS, that
+# means this image is opinionated for our compose topology. If you front
+# the panel with Traefik/Caddy/your-own-nginx, mount your own conf over
+# this file or override via a volume.
+
+# Docker's embedded DNS resolver. Without an explicit `resolver` directive,
+# nginx resolves upstreams via gethostbyname() ONCE at startup and caches
+# the IP forever, so when the backend container gets a fresh IP after a
+# restart, every proxied request 502s until nginx itself is restarted.
+# Combined with `set $backend ... ; proxy_pass http://$backend` below, this
+# forces a runtime lookup with a 10-second cache. ipv6=off because Compose
+# networks don't ship IPv6 records and lookups would block on AAAA.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+# A-267: no path that carries a token is logged with it. The default access log
+# wrote every such request whole, with the caller's address, into the
+# container's log: a list of who holds which subscription. The paths: the
+# subscription (the prefix), the node bootstrap, and the two admin routes that
+# take a subscription token in the path. The log is kept, not switched off:
+# its status codes and timings are what a broken subscription is debugged with,
+# and nothing reads it (fail2ban reads the host Caddy's log, not this one).
+#
+# On those paths the token becomes <token> (whatever follows it, a format or a
+# query, stays), the address its /24 (anything but IPv4: a dash), and the
+# X-Forwarded-For the host Caddy adds (the real client) a dash. Every other
+# request is logged as nginx's own `main` format would, except that a Referer
+# naming one of those paths is masked the same way: a page served at a
+# preview URL sends it with each asset it loads. Outside server{}: this file
+# is included at http level.
+map $request_uri $iceslab_secret_uri {
+    "~^(${SUBSCRIPTION_PATH_PREFIX}/|/api/internal/bootstrap/|/api/users/by-subscription-token/|/api/settings/subscription/preview/)[^/?]+(.*)$" "$1<token>$2";
+    default "";
+}
+map $iceslab_secret_uri $iceslab_log_uri {
+    "" $request_uri;
+    default $iceslab_secret_uri;
+}
+map $iceslab_secret_uri $iceslab_is_secret {
+    "" 0;
+    default 1;
+}
+map "$iceslab_is_secret $remote_addr" $iceslab_log_addr {
+    "~^0 (.*)$" "$1";
+    "~^1 (\d+\.\d+\.\d+)\.\d+$" "$1.0/24";
+    default "-";
+}
+map "$iceslab_is_secret $http_x_forwarded_for" $iceslab_log_xff {
+    "~^0 (.*)$" "$1";
+    default "-";
+}
+map $http_referer $iceslab_log_referer {
+    "~^(https?://[^/]+)?(${SUBSCRIPTION_PATH_PREFIX}/|/api/internal/bootstrap/|/api/users/by-subscription-token/|/api/settings/subscription/preview/)[^/?]+(.*)$" "$1$2<token>$3";
+    default $http_referer;
+}
+log_format iceslab '$iceslab_log_addr - $remote_user [$time_local] "$request_method $iceslab_log_uri $server_protocol" '
+                   '$status $body_bytes_sent "$iceslab_log_referer" "$http_user_agent" "$iceslab_log_xff"';
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The masked format above, for every request of this server.
+    access_log /var/log/nginx/access.log iceslab;
+
+    # I9 - bound request bodies. The panel's API payloads (user/profile/node
+    # forms, raw configs) are small; 2m is generous headroom while capping the
+    # hysteria auth-callback / any proxied POST so an oversized body can't be
+    # used to pressure the backend. Applies to proxied locations too.
+    client_max_body_size 2m;
+
+    # ───── Security headers ─────
+    # Defence-in-depth for the admin panel. `always` sends them on error
+    # responses too. nginx does NOT merge add_header into child locations that
+    # declare their own add_header, so the two cache locations below re-state
+    # these.
+    #
+    # I9 - CSP for the panel, ENFORCED (it shipped report-only first). The SPA
+    # has no inline script: Vite emits external modules only (dist/index.html),
+    # the bundle has no eval or new Function, and it calls no host but its own
+    # (the GitHub and gist addresses in it are links and server-side fetches).
+    # React Aria appends two <style> tags at runtime (react-aria-components 1.22.1,
+    # blocked under a bare style-src 'self', seen live 2026-11-06), hence
+    # 'unsafe-inline' in style-src. Bull-board (/admin/queues) runs under this
+    # one too: its scripts are its own files, its config is a JSON <script>
+    # nothing executes; only its Google Fonts stylesheet is refused, and it
+    # falls back to a local face. `connect-src 'self'`: same-origin API only.
+    #
+    # ⚠ The subscription page is NOT under this policy: it is HTML with inline
+    # scripts the backend writes, and it gets its own, with a nonce ($csp_page
+    # below, the subscription and the preview locations).
+    set $csp "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    # The subscription page's own: its two <script> and one <style> blocks get
+    # a nonce from sub_filter (the request id, 128 random bits, new on every
+    # request), nothing else inline runs. The one inline handler,
+    # onclick="this.select()" on the link field, is allowed by its hash
+    # ('unsafe-hashes' covers handlers only, by exact text). Style attributes
+    # (the icons, the progress marks) need style-src-attr. The page fetches a
+    # config body from its own origin to copy it, so connect-src 'self'. A
+    # new inline block the backend adds without the nonce is refused, loudly,
+    # in the browser console: that is the point.
+    set $csp_page "default-src 'none'; script-src 'nonce-$request_id' 'unsafe-hashes' 'sha256-biFQTroSCI3Z5BmsMGyEE2jFZdwjjG1Oe7JLytgH6jM='; style-src 'nonce-$request_id'; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'";
+    server_tokens off;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy $csp always;
+
+    # The variable in proxy_pass is what activates the runtime resolver
+    # path. With a static upstream{} block (the previous setup), nginx
+    # short-circuits the resolver entirely, leading to the stale-IP bug.
+    set $backend "backend:3000";
+
+    # ───── API proxy ─────
+    location /api/ {
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # ───── Geo set uploads (phase 9.1g) ─────
+    # The one place a body may be large: a geo list of up to 64 MB
+    # (GEO_FILE_MAX_BYTES), plus the multipart framing, so 65m. Only these two
+    # routes; every other request keeps the 2m above. Not buffered to disk
+    # here, and a longer read timeout, because the backend checks the file
+    # (and writes it to the database) inside the request.
+    location ~ ^/api/geo-sets/(upload|[0-9a-f-]+/file)$ {
+        client_max_body_size 65m;
+        proxy_request_buffering off;
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # ───── The subscription page as a preview (settings, in an iframe) ─────
+    # The same HTML as the subscription page, so the same policy and the same
+    # nonce: under the panel's policy its inline scripts would not run and the
+    # preview would show a dead page. First of the regex locations, so it
+    # wins over the token one below. frame-ancestors 'self' is what lets the
+    # panel frame it.
+    location ~ ^/api/settings/subscription/preview/ {
+        error_log /var/log/nginx/error.log crit;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy $csp_page always;
+        # sub_filter reads the body as it is, so the backend must not compress
+        # it; gzip below compresses it again on the way out.
+        proxy_set_header Accept-Encoding "";
+        sub_filter_once off;
+        sub_filter '<script>' '<script nonce="$request_id">';
+        sub_filter '<style>' '<style nonce="$request_id">';
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # ───── API routes with a token in the path (A-267) ─────
+    # The same proxy as /api/ (a regex location wins over that prefix), with
+    # the error log at crit for the reason given at the subscription location.
+    location ~ ^/api/(internal/bootstrap|users/by-subscription-token)/ {
+        error_log /var/log/nginx/error.log crit;
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # ───── Honeypot scanner paths ─────
+    # Cycle #6 reality-check 2026-05-12: honeypot trap in backend's
+    # security-gate (lib/security-gate.ts) never fired in production because
+    # scanner paths like /.env, /wp-admin, /xmlrpc.php were caught by the
+    # SPA fallback below and served index.html (200 OK) instead of reaching
+    # the backend at all. Forward known scanner prefixes to the backend so
+    # the Tier-1 trap (404 fake HTML + IP blacklist + Telegram alert) can
+    # actually fire. Case-insensitive so /Wp-Admin / /.GIT/ don't dodge.
+    location ~* ^/(\.env(\b|$)|\.git/|\.aws/|wp-admin|wp-login|wp-config\.php|xmlrpc\.php|phpinfo\.php|server-status|phpmyadmin|wordpress) {
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 10s;
+    }
+
+    # The subscription endpoint, at the prefix the backend registered it on.
+    # Default /sub; checked against the backend's own rule before rendering
+    # (docker-entrypoint.d/15-subscription-prefix.sh).
+    location ${SUBSCRIPTION_PATH_PREFIX}/ {
+        # The error log prints the request line as it came, token included,
+        # when the backend cannot be reached; that failure shows on /api too,
+        # so here only crit and above.
+        error_log /var/log/nginx/error.log crit;
+        # no-referrer, as the backend says too (the subscription page's links
+        # must not hand its URL to the next site): the server-level
+        # strict-origin-when-cross-origin would otherwise come last and win.
+        # An add_header here drops every server-level one, so the rest are
+        # re-stated. The page's own CSP, not the panel's: see $csp_page.
+        add_header Referrer-Policy "no-referrer" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy $csp_page always;
+        # The nonce goes into the page here (sub_filter, text/html only: the
+        # YAML, JSON and base64 bodies pass untouched). sub_filter reads the
+        # body as it is, so the backend must not compress it; gzip below
+        # compresses it again on the way out.
+        proxy_set_header Accept-Encoding "";
+        sub_filter_once off;
+        sub_filter '<script>' '<script nonce="$request_id">';
+        sub_filter '<style>' '<style nonce="$request_id">';
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location = /health {
+        proxy_pass http://$backend;
+    }
+
+    # Bull-board UI mounted by panel-backend at /admin/queues. Without
+    # this rule the SPA fallback below catches the path and serves
+    # index.html, React Router doesn't know /admin/queues and bounces
+    # the user to /. Proxy the whole /admin/ prefix so backend tooling
+    # (current: Bull-board; future: any server-rendered admin page)
+    # reaches the user's browser.
+    #
+    # ^~ modifier is mandatory: bull-board fetches its own bundle from
+    # /admin/queues/static/js/*.js and *.css. Without ^~, the regex
+    # location below (\.(?:js|css|...)$) wins by nginx priority rules
+    # and tries `try_files $uri =404` against the SPA disk root,
+    # all bull-board assets return 404, the dashboard freezes on
+    # "Loading...". ^~ tells nginx "if this prefix matches, skip the
+    # regex round entirely".
+    location ^~ /admin/ {
+        proxy_pass http://$backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    # ───── Static assets ─────
+    # Vite emits content-hashed filenames, so we can cache them aggressively.
+    location ~* \.(?:js|css|woff2?|ttf|eot|svg|ico|png|jpg|jpeg|gif|webp)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        # Re-stated: this location's own add_header drops the server-level ones.
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        access_log off;
+        try_files $uri =404;
+    }
+
+    # index.html is the cache-bust point, never cache it.
+    location = /index.html {
+        expires -1;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        # Re-stated: this location's own add_header drops the server-level ones.
+        # The CSP above all: every SPA route ends here (try_files below), so
+        # without this line the panel's document carried no policy at all,
+        # and the report-only one it shipped with never saw the SPA.
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Content-Security-Policy $csp always;
+    }
+
+    # SPA fallback: client-side routes resolve to index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml;
+}
