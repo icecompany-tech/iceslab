@@ -21,4 +21,6 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  // Read by scripts/budget.mjs: which files a screen loads. The image leaves it out.
+  build: { manifest: true },
 })

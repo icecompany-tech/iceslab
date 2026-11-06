@@ -31,7 +31,7 @@ RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
 COPY apps/panel-web apps/panel-web
 
 WORKDIR /repo/apps/panel-web
-RUN pnpm build
+RUN pnpm build && rm -rf dist/.vite
 
 FROM nginx:${NGINX_VERSION} AS runtime
 COPY --from=builder /repo/apps/panel-web/dist /usr/share/nginx/html
