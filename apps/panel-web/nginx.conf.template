@@ -99,17 +99,23 @@ server {
     # has no inline script: Vite emits external modules only (dist/index.html),
     # the bundle has no eval or new Function, and it calls no host but its own
     # (the GitHub and gist addresses in it are links and server-side fetches).
-    # React Aria appends two <style> tags at runtime (react-aria-components 1.22.1,
-    # blocked under a bare style-src 'self', seen live 2026-11-06), hence
-    # 'unsafe-inline' in style-src. Bull-board (/admin/queues) runs under this
-    # one too: its scripts are its own files, its config is a JSON <script>
+    # 'unsafe-inline' in style-src is for Bull-board (/admin/queues), which runs
+    # under this one: its scripts are its own files, its config is a JSON <script>
     # nothing executes; only its Google Fonts stylesheet is refused, and it
     # falls back to a local face. `connect-src 'self'`: same-origin API only.
+    # The panel's own document does not take this policy, see $csp_spa.
     #
     # ⚠ The subscription page is NOT under this policy: it is HTML with inline
     # scripts the backend writes, and it gets its own, with a nonce ($csp_page
     # below, the subscription and the preview locations).
     set $csp "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    # The panel's document: no 'unsafe-inline'. Its stylesheets are files, and the
+    # two <style> tags React Aria appends at runtime (touch-action in usePress,
+    # overscroll in usePreventScroll on iOS, react-aria-components 1.22.1) take the
+    # nonce it reads from <meta property="csp-nonce"> in index.html. Style props go
+    # through CSSOM, which style-src does not govern. Seen live in Chromium, Firefox
+    # and WebKit, 2026-11-06.
+    set $csp_spa "default-src 'self'; script-src 'self'; style-src 'self' 'nonce-$request_id'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
     # The subscription page's own: its two <script> and one <style> blocks get
     # a nonce from sub_filter (the request id, 128 random bits, new on every
     # request), nothing else inline runs. The one inline handler,
@@ -315,7 +321,10 @@ server {
         add_header X-Frame-Options "SAMEORIGIN" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Content-Security-Policy $csp always;
+        add_header Content-Security-Policy $csp_spa always;
+        # A new nonce on every load: this document is never cached, see above.
+        sub_filter_once on;
+        sub_filter '__CSP_NONCE__' '$request_id';
     }
 
     # SPA fallback: client-side routes resolve to index.html.

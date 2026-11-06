@@ -1471,7 +1471,9 @@ jobs:
           expect_spa() {
             local body
             body=$(curl -fsS "$1")
-            if [[ "$body" == BACKEND* || "$body" != *'<div id="root">'* ]]; then
+            # __CSP_NONCE__ left in place: nginx did not write the nonce, and panel-web's
+            # style tags would be refused with nothing else to say so.
+            if [[ "$body" == BACKEND* || "$body" != *'<div id="root">'* || "$body" == *__CSP_NONCE__* ]]; then
               echo "::error::$1 should be the SPA, got: ${body:0:120}"
               exit 1
             fi
