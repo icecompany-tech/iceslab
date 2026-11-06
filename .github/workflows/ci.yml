@@ -7,7 +7,9 @@ on:
     # one their test server deploys from, so it has to be gated exactly like
     # main. Without it a merge into develop reached that server having passed
     # nothing but whatever the PR happened to run.
-    branches: [main, develop]
+    # `blackhole` is the rewrite's branch, and the stand runs its images
+    # (docs: 01-target, "Поставка"), so it is gated and published the same way.
+    branches: [main, develop, blackhole]
     # ⚠ Release tags too. With `branches` alone a tag push starts nothing:
     # GitHub runs a push workflow only for the ref kinds it lists, so from
     # 2026-07-30 until this line no tag ran CI, the `docker` job's semver tags
@@ -53,6 +55,7 @@ jobs:
     outputs:
       backend: ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.backend }}
       frontend: ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.frontend }}
+      web: ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.web }}
       node: ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.node }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +84,9 @@ jobs:
               - *common
               - 'apps/panel-frontend/**'
               - 'packages/shared/**'
+            web:
+              - *common
+              - 'apps/panel-web/**'
             node:
               - *common
               - 'apps/node/**'
@@ -96,6 +102,7 @@ jobs:
             echo "| --- | --- |"
             echo "| backend | ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.backend }} |"
             echo "| frontend | ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.frontend }} |"
+            echo "| panel-web | ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.web }} |"
             echo "| node-agent | ${{ (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') || steps.filter.outputs.node }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -647,6 +654,56 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # The new frontend, its own light: the codex and the weight budgets are red here
+  # without touching the old panel's result.
+  panel-web:
+    name: panel-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: needs.changes.outputs.web == 'true'
+    defaults:
+      run:
+        working-directory: apps/panel-web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc -b
+
+      # The proofs first: a lint rule that stopped firing looks like clean code, and
+      # the budget script decides the fate of its step.
+      - name: Test the lint rules, the codex checks and the budget script
+        run: pnpm run test:tools
+
+      - name: Lint (codex F1-F9)
+        run: |
+          pnpm exec eslint . -f json -o eslint-report.json || true
+          node "$GITHUB_WORKSPACE/.github/scripts/eslint-annotations.mjs" eslint-report.json
+
+      - name: Lint stylesheets (codex F6, F7)
+        run: pnpm exec stylelint "src/**/*.css"
+
+      - name: Test
+        run: pnpm exec vitest run
+
+      - name: Build
+        run: pnpm exec vite build
+
+      - name: Budgets (entry, all JS, no web fonts)
+        run: node scripts/budget.mjs dist
+
   node-agent:
     name: node-agent (Go)
     runs-on: ubuntu-latest
@@ -898,7 +955,7 @@ jobs:
     # server pulled it. A pipeline that ships past its own alarm is not a
     # pipeline. go-lint is in the list for the same reason while it is still
     # report-only: the day it starts failing is the day it must stop a publish.
-    needs: [changes, audit, backend, backend-files, frontend, node-agent, secrets-scan, go-lint]
+    needs: [changes, audit, backend, backend-files, frontend, panel-web, node-agent, secrets-scan, go-lint]
     # Runs on a pull request too, but only BUILDS there (see `push:` below).
     # A Dockerfile break used to surface after merge, when the job first ran on
     # develop - which is also the branch the operator's test server pulls from,
@@ -923,6 +980,7 @@ jobs:
        (github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' ||
          github.ref == 'refs/heads/develop' ||
+         github.ref == 'refs/heads/blackhole' ||
          startsWith(github.ref, 'refs/tags/v'))) ||
        (github.event_name == 'workflow_dispatch' &&
         (github.ref == 'refs/heads/main' ||
@@ -945,6 +1003,9 @@ jobs:
           - name: iceslab-frontend
             context: .
             dockerfile: apps/panel-frontend/Dockerfile
+          - name: iceslab-panel-web
+            context: .
+            dockerfile: apps/panel-web/Dockerfile
           - name: iceslab-node
             context: apps/node
             dockerfile: apps/node/Dockerfile
@@ -1329,6 +1390,15 @@ jobs:
     permissions:
       contents: read
       packages: read
+    # panel-web's nginx config is a copy of the frontend's, held by the same check.
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: iceslab-frontend
+            dockerfile: apps/panel-frontend/Dockerfile
+          - name: iceslab-panel-web
+            dockerfile: apps/panel-web/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1348,7 +1418,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          ref="ghcr.io/${{ github.repository_owner }}/iceslab-frontend:sha-$(echo "${{ github.sha }}" | cut -c1-7)"
+          ref="ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}:sha-$(echo "${{ github.sha }}" | cut -c1-7)"
           docker pull "$ref"
           docker tag "$ref" iceslab-frontend:proxy
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
@@ -1358,11 +1428,11 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: apps/panel-frontend/Dockerfile
+          file: ${{ matrix.image.dockerfile }}
           push: false
           load: true
           tags: iceslab-frontend:proxy
-          cache-from: type=gha,scope=iceslab-frontend
+          cache-from: type=gha,scope=${{ matrix.image.name }}
 
       # The stand-in answers every request with the path it received, so the
       # check reads where a request went, not just that something answered.
@@ -1431,7 +1501,7 @@ jobs:
               exit 1
             fi
             out=$(cat /tmp/bad.log)
-            if [[ "$out" != *"iceslab-frontend: SUBSCRIPTION_PATH_PREFIX=\"$bad\""* ]]; then
+            if [[ "$out" != *"${{ matrix.image.name }}: SUBSCRIPTION_PATH_PREFIX=\"$bad\""* ]]; then
               echo "$out"
               echo "::error::$bad was refused, but not by the prefix check"
               exit 1
@@ -1448,7 +1518,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "### smoke (frontend proxies the subscription prefix)"
+            echo "### smoke (${{ matrix.image.name }} proxies the subscription prefix)"
             echo ""
             if [ "${{ github.event_name }}" != "pull_request" ]; then
               echo "- ran the PUBLISHED image: \`${{ steps.image.outputs.ref }}\`"
@@ -1482,13 +1552,14 @@ jobs:
     timeout-minutes: 5
     if: always()
     needs:
-      [changes, audit, secrets-scan, backend, backend-files, frontend, node-agent, go-lint, docker, smoke, frontend-proxy]
+      [changes, audit, secrets-scan, backend, backend-files, frontend, panel-web, node-agent, go-lint, docker, smoke, frontend-proxy]
     steps:
       - name: Every check accounted for
         env:
           RESULTS: ${{ toJSON(needs) }}
           RUNS_BACKEND: ${{ needs.changes.outputs.backend }}
           RUNS_FRONTEND: ${{ needs.changes.outputs.frontend }}
+          RUNS_WEB: ${{ needs.changes.outputs.web }}
           RUNS_NODE: ${{ needs.changes.outputs.node }}
           EVENT: ${{ github.event_name }}
           SAME_REPO: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -1524,6 +1595,7 @@ jobs:
           check backend "$([ "$RUNS_BACKEND" = "true" ] && echo no || echo yes)"
           check backend-files "$([ "$RUNS_BACKEND" = "true" ] && echo no || echo yes)"
           check frontend "$([ "$RUNS_FRONTEND" = "true" ] && echo no || echo yes)"
+          check panel-web "$([ "$RUNS_WEB" = "true" ] && echo no || echo yes)"
           check node-agent "$([ "$RUNS_NODE" = "true" ] && echo no || echo yes)"
           check go-lint "$([ "$RUNS_NODE" = "true" ] && echo no || echo yes)"
 
@@ -1533,7 +1605,7 @@ jobs:
           docker_may_skip=yes
           if [ "$EVENT" = "push" ]; then
             case "$REF" in
-              refs/heads/main|refs/heads/develop|refs/tags/v*) docker_may_skip=no ;;
+              refs/heads/main|refs/heads/develop|refs/heads/blackhole|refs/tags/v*) docker_may_skip=no ;;
             esac
           elif [ "$EVENT" = "workflow_dispatch" ]; then
             case "$REF" in
