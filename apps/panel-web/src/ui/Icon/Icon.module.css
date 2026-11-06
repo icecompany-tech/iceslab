@@ -1,0 +1,24 @@
+.icon {
+  display: block;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: var(--stroke-icon);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sm {
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+}
+
+.md {
+  width: var(--size-icon-md);
+  height: var(--size-icon-md);
+}
+
+.lg {
+  width: var(--size-icon-lg);
+  height: var(--size-icon-lg);
+}

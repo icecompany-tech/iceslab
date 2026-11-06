@@ -1,0 +1,184 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1-5);
+}
+
+.label {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  height: var(--size-field);
+  padding-left: var(--spacing-3);
+  padding-right: var(--spacing-2-5);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.field[data-focus-within] {
+  border-color: var(--color-text-muted);
+}
+
+.field[data-invalid] {
+  border-color: var(--color-danger);
+}
+
+.input {
+  display: flex;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+
+.segment {
+  padding-inline: var(--spacing-half);
+  border-radius: var(--radius-sm);
+  outline: 0;
+}
+
+/* The separator of date and time is ", ": a flex item would lose the space. */
+.segment[data-type="literal"] {
+  padding-inline: 0;
+  white-space: pre;
+}
+
+.segment[data-placeholder] {
+  color: var(--color-text-muted);
+}
+
+.segment[data-focused] {
+  background: var(--color-accent);
+  color: var(--color-check-ink);
+}
+
+.open {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.open[data-hovered] {
+  color: var(--color-text);
+}
+
+.open[data-focus-visible],
+.step[data-focus-visible] {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.popover {
+  width: var(--size-calendar);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.dialog {
+  padding: var(--spacing-3);
+  outline: 0;
+}
+
+.month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.heading {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* Not text-transform: capitalize, that also makes "г." a "Г.". */
+.heading::first-letter {
+  text-transform: uppercase;
+}
+
+.step {
+  display: flex;
+  padding: var(--spacing-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.step[data-hovered] {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.weekday {
+  padding-bottom: var(--spacing-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--leading-tight);
+  text-transform: capitalize;
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--size-row);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  cursor: default;
+}
+
+.day[data-outside-month] {
+  display: none;
+}
+
+.day[data-hovered],
+.day[data-focused] {
+  background: var(--color-hover);
+}
+
+.day[data-focus-visible] {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: calc(var(--border-check) * -1);
+}
+
+.day[data-selected] {
+  background: var(--color-accent);
+  color: var(--color-check-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+.day[data-disabled] {
+  color: var(--color-text-muted);
+}
