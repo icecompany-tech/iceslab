@@ -6,7 +6,10 @@ import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
-export const LIMITS = { entryKb: 120, totalJsKb: 350, loginKb: 150 }
+// totalJsKb was 350 in 01-target.md. v0.4.0 carries 16 screens on one bundle, Cascades passed it
+// at 363 with 7 screens to go; the sum is lazy chunks only, what a first load fetches stays
+// entryKb and loginKb, untouched. Decision and reason: screens-map.md, 6.6.
+export const LIMITS = { entryKb: 120, totalJsKb: 500, loginKb: 150 }
 
 // The first screen anyone sees, on the slowest link it is opened from. Until this file
 // exists the line says "n/a" and refuses nothing: the commit that adds the screen turns

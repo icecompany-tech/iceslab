@@ -1,0 +1,31 @@
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+
+.points {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  background: linear-gradient(var(--color-border-strong), var(--color-border-strong)) center / 100% var(--border-hairline) no-repeat;
+}
+
+.point,
+.on {
+  box-sizing: border-box;
+  width: var(--size-dot-xs);
+  height: var(--size-dot-xs);
+  border: var(--border-hairline) solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+
+.on {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}

@@ -1,0 +1,1362 @@
+import { CHAIN_ENTRY_PROTOCOLS as SHARED_CHAIN_ENTRY_PROTOCOLS, MAX_CASCADE_HOPS, type XraySubprotocol } from '@iceslab/shared';
+import type { CascadeDirectionInput, CascadeProtocol } from '@/lib/old/cascades';
+import { linkCellPair, nativeEngineOfIntent, type EnginePair, type EngineName } from '@/lib/old/engines';
+import { DEFAULT_LINK_CONGESTION, DEFAULT_LINK_UNDERLAY, LINK_CONGESTIONS } from '@/lib/old/cascades';
+import type { LinkCell, LinkCongestion, LinkParams, LinkUnderlay } from '@/lib/old/cascades';
+import type { Node } from '@/lib/old/nodes';
+import { nodeCoreFit } from '@/lib/old/nodeCoreFit';
+
+/**
+ * The shape of a cascade draft and the small functions that read it.
+ *
+ * These live beside the components rather than inside them: both cascade pages
+ * and the editor itself need them, and a file that exports components can
+ * export nothing else without the dev server losing hot reload for the whole
+ * module.
+ */
+
+// The server's cap, read from the contract (A-175): each step adds latency and
+// one more inter-hop link port to open.
+export const MAX_POSITIONS = MAX_CASCADE_HOPS;
+
+/** Entries multiplied by directions, each pair being one link with its own
+ *  credentials. Mirrors the backend ceiling. */
+export const MAX_LINKS = 64;
+
+// The seven cores a hop link can speak. Narrower than the node protocol enum on
+// purpose: tuic / anytls / shadowtls exist as node protocols but not as cascade
+// links.
+export const LINK_PROTOCOLS: { value: CascadeProtocol; label: string }[] = [
+  { value: 'xray', label: 'xray' },
+  { value: 'hysteria', label: 'hysteria2' },
+  { value: 'shadowsocks', label: 'shadowsocks' },
+  { value: 'amneziawg', label: 'amneziawg' },
+  { value: 'naive', label: 'naive' },
+  { value: 'mtproto', label: 'mtproto' },
+  { value: 'mieru', label: 'mieru' },
+];
+export const LINK_PROTOCOL_VALUES = LINK_PROTOCOLS.map((p) => p.value) as string[];
+
+/** The hop columns are free strings in the database, and the demo seed writes
+ *  `vless` there, so a stored protocol is not guaranteed to be one the API will
+ *  accept back. */
+export function isKnownProtocol(v: string | null | undefined): boolean {
+  return Boolean(v) && LINK_PROTOCOL_VALUES.includes(v as string);
+}
+
+/** Options for a protocol field, keeping an unknown stored value visible rather
+ *  than rendering an empty select over data the operator cannot see. */
+export function protocolOptions(current: string | null): { value: string; label: string }[] {
+  if (!current || isKnownProtocol(current)) return LINK_PROTOCOLS;
+  return [...LINK_PROTOCOLS, { value: current, label: current }];
+}
+
+/**
+ * Через какие протоколы вход каскада действительно пускает трафик В ЦЕПЬ.
+ *
+ * ⚠ Список ОДИН и лежит в контракте (`packages/shared/src/transport.ts`): его
+ * читает и отказ сохранения на сервере (`ENTRY_NOT_CHAINABLE`), и этот экран.
+ * Своей копии здесь нет и быть не должно: вторая копия это ровно тот способ,
+ * которым форма начинает предлагать вариант, отвергаемый сервером.
+ *
+ * Сегодня в нём один xray: вход на hy2 приедет с фазой 6, на AmneziaWG с
+ * фазой 7. До этой правки экран обещал их обе: оператор выбирал hysteria2,
+ * видел рядом «VLESS · ядро xray» и сохранял каскад, который не повезёт ни
+ * одного клиента.
+ */
+export const CHAIN_ENTRY_PROTOCOLS: string[] = [...SHARED_CHAIN_ENTRY_PROTOCOLS];
+
+/**
+ * Протокол входа по умолчанию, когда оператор выбрал первую ноду входа.
+ *
+ * Раньше брался `node.protocol`, а это с 25.09 выведенная метка: у ноды
+ * только с sing-box она `singbox`, входа с таким именем нет. Вход поднимает
+ * родное ядро протокола, как считает и сервер (cascadeNeedsEngines).
+ *
+ * Судит ФАКТ, отчёт ноды `cores[]` (E45, 26.09): нода, поставленная без
+ * --engines, держит пустой intendedEngines при стоящем xray, и отказ по
+ * намерению отказывал ей по пустому списку. Намерение теперь только порядок
+ * предпочтения, когда кандидатов несколько. Отчёта нет: намерение может
+ * сказать «да» (первое найденное), но не «нет».
+ *
+ *   protocol  умолчание найдено;
+ *   none      отчёт полный (у каждой строки есть engine), и ни одно ядро на
+ *             машине не поднимает вход: экран говорит, что эта нода входом
+ *             быть не может;
+ *   unknown   сказать нечего: у строки отчёта нет engine, либо отчёта нет и
+ *             намерение кандидата не дало, либо сервер старше
+ *             `intendedEngines` и метка не протокол ноги.
+ */
+export type EntryDefault =
+  | { kind: 'protocol'; protocol: CascadeProtocol }
+  | { kind: 'none' }
+  | { kind: 'unknown' };
+
+export function entryProtocolDefault(
+  node: Pick<Node, 'intendedEngines' | 'protocol' | 'cores'>,
+): EntryDefault {
+  const intent = node.intendedEngines;
+  const rows = node.cores?.cores;
+  if (rows) {
+    // Хоть у одной строки engine не назван: список неполон, «нет» из него не
+    // выводится (CLAUDE.local, «ворота отказывают только по факту»).
+    if (rows.some((r) => !r.engine)) return { kind: 'unknown' };
+    // installed отсутствует у агента старше поля и читается как «стоит».
+    const onMachine = new Set(rows.filter((r) => r.installed !== false).map((r) => r.engine));
+    const candidates = CHAIN_ENTRY_PROTOCOLS.filter((x) => onMachine.has(nativeEngineOfIntent(x)));
+    if (candidates.length === 0) return { kind: 'none' };
+    const p = candidates.find((x) => intent?.includes(nativeEngineOfIntent(x))) ?? candidates[0];
+    return { kind: 'protocol', protocol: p as CascadeProtocol };
+  }
+  if (intent === undefined) {
+    return LINK_PROTOCOL_VALUES.includes(node.protocol)
+      ? { kind: 'protocol', protocol: node.protocol as CascadeProtocol }
+      : { kind: 'unknown' };
+  }
+  const p = CHAIN_ENTRY_PROTOCOLS.find((x) => intent.includes(nativeEngineOfIntent(x)));
+  return p ? { kind: 'protocol', protocol: p as CascadeProtocol } : { kind: 'unknown' };
+}
+
+/** Поддержанные входы строкой для текста отказа: имена как на проводе
+ *  (`hysteria`, не подпись «hysteria2»), тем же списком, что читает сервер. */
+export function chainEntryList(): string {
+  return CHAIN_ENTRY_PROTOCOLS.join(', ');
+}
+
+/**
+ * Пускает ли цепь трафик, зашедший этим протоколом.
+ *
+ * `null` это «сказать нечего»: протокол не выбран. Иначе ответ всегда есть, и
+ * он про ФАКТ, а не про вкус: список умений приходит снаружи.
+ */
+export interface EntryChainFacts {
+  protocol: string;
+  carried: boolean;
+  /**
+   * Может ли КЛИЕНТ этого входа выбирать выход сам.
+   *
+   * Выбор выхода по пользователю это трюк xray: направление едет в байтах
+   * UUID, которым клиент авторизуется. У входа на hysteria такого канала нет,
+   * поэтому его клиенты выходят через «Авто» или по правилам политики. Это
+   * граница фазы 6, и молчать о ней нельзя: оператор, выбравший hy2-вход,
+   * иначе узнает о ней от пользователя, который «не может выбрать страну».
+   *
+   * Отдельное поле, а не вывод из `carried`: с фазой 7 приедет AmneziaWG, и он
+   * будет таким же, то есть несомым, но без выбора по пользователю.
+   */
+  perUserExit: boolean;
+}
+
+/**
+ * Сегодня выбор выхода по пользователю умеет один xray. Список короткий и
+ * лежит здесь, а не в контракте: сервер по нему ничего не решает, это свойство
+ * КЛИЕНТСКОГО протокола, о котором панель рассказывает оператору.
+ */
+const PER_USER_EXIT_PROTOCOLS = ['xray'];
+
+export function entryChainFacts(
+  entryProtocol: string | null | undefined,
+  supported: string[] = CHAIN_ENTRY_PROTOCOLS,
+): EntryChainFacts | null {
+  const p = entryProtocol && entryProtocol.trim() !== '' ? entryProtocol : null;
+  if (!p) return null;
+  return {
+    protocol: p,
+    carried: supported.includes(p),
+    perUserExit: PER_USER_EXIT_PROTOCOLS.includes(p),
+  };
+}
+
+/**
+ * Что сказать под селектором входа.
+ *
+ * `notCarried` это отказ: цепь такой трафик не несёт, сохранять нельзя.
+ * `autoOnly` это граница, а не ошибка: вход несётся, но его клиенты не
+ * выбирают выход сами, только «Авто» или правила политики. С фазы 6 это
+ * hysteria, с фазы 7 будет и AmneziaWG. `null` это «сказать нечего».
+ *
+ * Порядок проверок важен: у несомого-с-ограничением сначала должно
+ * срабатывать «несётся ли вообще». Пока `CHAIN_ENTRY_PROTOCOLS` держит один
+ * xray, у hysteria стоит отказ, а про «Авто» молчание: обещать выбор через
+ * «Авто» у входа, который никуда не ведёт, значит врать дважды.
+ */
+export type EntryNoteKind = 'notCarried' | 'autoOnly';
+
+export function entryNoteKind(facts: EntryChainFacts | null): EntryNoteKind | null {
+  if (!facts) return null;
+  if (!facts.carried) return 'notCarried';
+  if (!facts.perUserExit) return 'autoOnly';
+  return null;
+}
+
+/**
+ * Профили на входной ноде, которые в каскад НЕ входят.
+ *
+ * На каскаде один протокол входа (фаза 6). Всё, что привязано к входной ноде
+ * другим протоколом, живёт мимо каскада, и его пользователи выходят напрямую из
+ * страны этой ноды. Это факт модели, а не поломка, и оператор должен видеть
+ * его в момент выбора входа, а не когда пользователь hy2 спросит, почему у
+ * него IP входа.
+ *
+ * `undefined` это «сказать нечего», и его два разных повода: вход не выбран,
+ * или привязки с профилями ещё не пришли. Во втором случае строка про «нет
+ * чужих профилей» соврала бы, поэтому молчание, а не пустой список.
+ *
+ * Сравнение идёт по ПРОТОКОЛУ профиля, тем же правилом, что у сервера: при
+ * смене входа он снимал с каскада профиль `hy2` именно как hysteria-профиль.
+ * Выключенная привязка в счёт не идёт: пользователей через неё нет.
+ *
+ * A-264: протокол xray на входе xray ещё не значит «в каскаде». Вход
+ * раскладывает юзеров по выходам только через vlessRoute (UUID vless), и
+ * профиль xray с subprotocol trojan или vmess мимо него выходит из страны
+ * входа. Такой профиль назван своим subprotocol. Subprotocol берётся из
+ * конфига профиля в списке; профиль без известного subprotocol не назван:
+ * неполный факт фактом не считается.
+ */
+/**
+ * Подпротоколы xray, которые вход каскада не раскладывает (A-264): у них нет
+ * UUID vless, по которому vlessRoute выбирает выход. socks и http входят по
+ * логину и тоже идут мимо.
+ */
+const OFF_ROUTE_SUBPROTOCOLS: readonly XraySubprotocol[] = ['trojan', 'vmess', 'socks', 'http'];
+
+/** Подпротокол xray мимо vlessRoute, по конфигу профиля; иначе null (vless или не известно). */
+function xrayOffRouteSubprotocol(profile: { protocol: string; config?: unknown }): XraySubprotocol | null {
+  if (profile.protocol !== 'xray' || !profile.config || typeof profile.config !== 'object') return null;
+  const sub = (profile.config as { subprotocol?: unknown }).subprotocol;
+  return OFF_ROUTE_SUBPROTOCOLS.find((s) => s === sub) ?? null;
+}
+
+export interface EntryBystander {
+  nodeId: string;
+  nodeName: string;
+  countryCode: string | null;
+  protocols: string[];
+}
+
+export function entryBystanders(
+  entryProtocol: string | null | undefined,
+  entryNodes: { id: string; name: string; countryCode: string | null }[],
+  bindings: { profileId: string; nodeId: string; enabled: boolean }[] | undefined,
+  profiles: { id: string; protocol: string; config?: unknown }[] | undefined,
+): EntryBystander[] | undefined {
+  if (!entryProtocol || !bindings || !profiles) return undefined;
+  const byId = new Map(profiles.map((p) => [p.id, p]));
+  const out: EntryBystander[] = [];
+  for (const node of entryNodes) {
+    const foreign = new Set<string>();
+    for (const b of bindings) {
+      if (b.nodeId !== node.id || !b.enabled) continue;
+      const profile = byId.get(b.profileId);
+      // Профиль, которого нет в списке, ничего не говорит о протоколе: его не
+      // считаем, чтобы не назвать чужим то, чего мы просто не видим.
+      if (!profile) continue;
+      if (profile.protocol !== entryProtocol) {
+        foreign.add(profile.protocol);
+        continue;
+      }
+      const sub = xrayOffRouteSubprotocol(profile);
+      if (sub) foreign.add(sub);
+    }
+    if (foreign.size > 0) {
+      out.push({ nodeId: node.id, nodeName: node.name, countryCode: node.countryCode, protocols: [...foreign].sort() });
+    }
+  }
+  return out;
+}
+
+export type HopRole = 'entry' | 'transit' | 'exit';
+
+/**
+ * The newer shape of the same idea. A POSITION is one step of the path and
+ * holds a pool of nodes that all do the same job; a DIRECTION is a way out and
+ * owns a tag for good, whatever nodes currently sit under it.
+ *
+ * The exit position is not a pool: it is the list of directions, which is why
+ * the counter on the page adds one to the pools.
+ */
+
+export interface PositionDraft {
+  key: number;
+  nodeIds: string[];
+  entryProtocol: CascadeProtocol;
+  /**
+   * ЯЧЕЙКА ноги, а не протокол ноды, и это разные словари.
+   *
+   * Тип был `CascadeProtocol`, и совпадал он случайно: пока ячеек было две,
+   * `xray` и `shadowsocks` нашлись и среди протоколов. С четырьмя ячейками
+   * `hy2` и `tuic` в этот тип не лезут, а экраны и так приводили значение
+   * кастом. Здесь строка, потому что колонка в базе строка и может держать
+   * значение, которого панель не знает; что из этого сервер примет, решает
+   * `isRealisedLinkCell` и схема на бэкенде.
+   */
+  linkProtocol: string;
+  /**
+   * Настройки ноги ЭТОЙ позиции. То же поле и то же правило, что у
+   * направления: три значения на чтении, и на записи отсутствие ключа значит
+   * «не трогай».
+   */
+  linkParams?: LinkParams | null;
+  /** Правил ли оператор ногу этой позиции. Без флага сохранение экрана, на
+   *  котором поля никто не трогал, отправило бы `null` и сбросило бы выбор. */
+  linkTouched?: boolean;
+}
+
+export interface DirectionDraft {
+  key: number;
+  countryCode: string;
+  nodeIds: string[];
+  /**
+   * Server identity of a direction that already exists. This is what carries
+   * the tag across an edit, so it is threaded through the draft untouched and
+   * sent back on save. Null means the row is new and the panel will issue it a
+   * fresh tag.
+   */
+  id: string | null;
+  /** Issued by the backend on first save, and never reused. Null while drafting. */
+  tag: number | null;
+  /**
+   * Нога направления, фаза 5. Три значения, как в контракте: `undefined` это
+   * «сервер поля не отдаёт», `null` это «ячейка не выбрана, идём ячейкой
+   * входа».
+   */
+  linkProtocol?: LinkCell | null;
+  linkParams?: LinkParams | null;
+  /** Только для показа: назначает сервер, обратно не уходит никогда. */
+  linkPort?: number | null;
+  /**
+   * Правил ли оператор ногу этого направления.
+   *
+   * Отдельный флаг, а не сравнение значений: PUT шлёт ногу ТОЛЬКО когда её
+   * трогали. Без флага сохранение экрана, который поля даже не показывал,
+   * отправило бы `null` и стёрло бы ячейку на сервере, ровно как сохранение
+   * сквада стёрло profileIds 2026-07-31.
+   */
+  linkTouched?: boolean;
+  /**
+   * Фаза 10 (d28cc14): куда направление выходит, пул своих нод или
+   * именованный выход. `undefined`: читается по `outboundId`.
+   */
+  via?: DirectionVia;
+  /** Выход направления; `null` = на пуле. `undefined` у сервера старше поля. */
+  outboundId?: string | null;
+  /** Переключал ли оператор пул и выход: тогда `outboundId` уходит и при
+   *  переводе на пул, `null`-ом, иначе сервер счёл бы это «оба сразу». */
+  outboundTouched?: boolean;
+}
+
+export type DirectionVia = 'pool' | 'outbound';
+
+/** Куда выходит направление: явный выбор формы, иначе по сохранённому. */
+export function directionVia(d: Pick<DirectionDraft, 'via' | 'outboundId'>): DirectionVia {
+  return d.via ?? (d.outboundId ? 'outbound' : 'pool');
+}
+
+/** Ни нод, ни выхода: сервер откажет DIRECTION_EMPTY. Экран говорит это до
+ *  кнопки строкой, кнопку не гасит. */
+export function directionEmpty(d: Pick<DirectionDraft, 'via' | 'outboundId' | 'nodeIds'>): boolean {
+  return directionVia(d) === 'outbound' ? !d.outboundId : d.nodeIds.filter(Boolean).length === 0;
+}
+
+/** Номер (с 1) более раннего направления на том же выходе, или null: один
+ *  выход у двух направлений сервер не принимает. */
+export function outboundTakenBy(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId'>[],
+  index: number,
+): number | null {
+  const d = directions[index];
+  if (!d || directionVia(d) !== 'outbound' || !d.outboundId) return null;
+  const j = directions.findIndex((x, k) => k < index && directionVia(x) === 'outbound' && x.outboundId === d.outboundId);
+  return j === -1 ? null : j + 1;
+}
+
+/** Pools are the entry and whatever transits follow it; the exit is the
+ *  directions block, so it is never a pool. */
+export function poolRoleAt(index: number): HopRole {
+  return index === 0 ? 'entry' : 'transit';
+}
+
+/**
+ * 400 POSITION_MOVED_WITHOUT_LINK_PARAMS (8072de8): позиция пришла на другом
+ * номере, чем хранится, без `linkParams`, и сервер не стал подставлять их по
+ * номеру. После `reorderedPositions` экран его получать не должен; если всё же
+ * пришёл, номера для слов. Вход проверяется первым; номера с сервера с нуля,
+ * на экран с единицы (вход первый).
+ */
+export function refusedPositionMoved(err: unknown): { position: number; stored: number } | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: unknown }).response;
+  if (!res || typeof res !== 'object') return null;
+  const { status, data } = res as { status?: unknown; data?: unknown };
+  if (status !== 400 || !data || typeof data !== 'object') return null;
+  const d = data as { error?: unknown; position?: unknown; storedPosition?: unknown };
+  if (d.error !== 'POSITION_MOVED_WITHOUT_LINK_PARAMS') return null;
+  if (!Number.isInteger(d.position) || !Number.isInteger(d.storedPosition)) return null;
+  return { position: (d.position as number) + 1, stored: (d.storedPosition as number) + 1 };
+}
+
+/**
+ * Позиции после перестановки или удаления (A-140).
+ *
+ * Сервер подставляет неприсланный `linkParams` из хранимой позиции С ТЕМ ЖЕ
+ * НОМЕРОМ (`positionsForSave`, cascade.service.ts:1637-1653): ключа у
+ * позиции нет, номер и есть ключ. Поэтому позиция, сменившая номер, шлёт свои
+ * настройки ноги явно, иначе подложка AWG и congestion остаются на старом
+ * номере и уезжают к соседней ноге. Позиция, у которой сервер поля не отдал
+ * (`undefined`), не помечается: прислать за неё нечего, а `null` стёр бы
+ * хранимое.
+ */
+export function reorderedPositions(before: PositionDraft[], after: PositionDraft[]): PositionDraft[] {
+  return after.map((p, i) =>
+    before[i]?.key !== p.key && p.linkParams !== undefined && !p.linkTouched ? { ...p, linkTouched: true } : p,
+  );
+}
+
+export function movePosition(pools: PositionDraft[], idx: number, dir: -1 | 1): PositionDraft[] {
+  const j = idx + dir;
+  if (j < 0 || j >= pools.length) return pools;
+  const next = [...pools];
+  [next[idx], next[j]] = [next[j]!, next[idx]!];
+  return reorderedPositions(pools, next);
+}
+
+/**
+ * A new transit at the end. It carries `linkParams: null` and counts as
+ * touched, so the save says "nothing" for it out loud: left absent, the server
+ * fills it from the stored position with the same number, and after "delete
+ * B, add C" that is B's AWG underlay handed to C.
+ */
+export function appendPosition(pools: PositionDraft[], key: number): PositionDraft[] {
+  return [...pools, { key, nodeIds: [''], entryProtocol: 'xray', linkProtocol: 'xray', linkParams: null, linkTouched: true }];
+}
+
+export function removePosition(pools: PositionDraft[], idx: number): PositionDraft[] {
+  return reorderedPositions(pools, pools.filter((_, j) => j !== idx));
+}
+
+/**
+ * ⚠ `linkParams` уходит ТОЛЬКО если оператор его правил.
+ *
+ * То же правило, что у направления, и по той же причине: у сервера отсутствие
+ * ключа значит «не трогай», а `null` значит «сбросить». Экран, который поля не
+ * показывал или показывал, но не трогал, отправив `null`, стёр бы чужой выбор
+ * (инцидент 2026-07-31 со сквадом, и он же в новом месте 2026-09-22, когда
+ * правка ноги одного направления снимала ногу соседнему).
+ */
+export function toPositionInputs(pools: PositionDraft[]) {
+  return pools.map((p, i) => ({
+    nodeIds: p.nodeIds.filter(Boolean),
+    position: i,
+    ...(i === 0 ? { entryProtocol: p.entryProtocol } : {}),
+    linkProtocol: p.linkProtocol,
+    ...(p.linkTouched ? { linkParams: p.linkParams ?? null } : {}),
+  }));
+}
+
+/**
+ * ⚠ The `id` is the whole point of this function. A direction that goes back
+ * without one is a NEW direction to the API: it gets a fresh tag, and every
+ * client whose UUID carries the old tag quietly starts leaving through another
+ * country. The API does fall back to matching on the node set, but that stops
+ * working exactly when the pool is edited, which is the ordinary reason to open
+ * this form at all.
+ *
+ * `tag` is deliberately not sent. The panel issues tags and never reuses them,
+ * so a tag from the client could only contradict the server.
+ */
+export function toDirectionInputs(directions: DirectionDraft[]): CascadeDirectionInput[] {
+  return directions.map((d): CascadeDirectionInput => {
+    // Фаза 10: направление на выходе уходит без пула и без ноги (ноги у него
+    // нет: выход набирает цепь последней позиции). Оба ключа, у пула `[]`.
+    if (directionVia(d) === 'outbound') {
+      return {
+        ...(d.id ? { id: d.id } : {}),
+        countryCode: d.countryCode,
+        nodeIds: [],
+        outboundId: d.outboundId ?? null,
+      };
+    }
+    return poolDirectionInput(d);
+  });
+}
+
+function poolDirectionInput(d: DirectionDraft): CascadeDirectionInput {
+  return {
+    ...(d.id ? { id: d.id } : {}),
+    countryCode: d.countryCode,
+    nodeIds: d.nodeIds.filter(Boolean),
+    // Переведено с выхода на пул: `outboundId: null` рядом с пулом, иначе
+    // сервер оставит выход и откажет «оба сразу».
+    ...(d.outboundTouched ? { outboundId: null } : {}),
+    // Нога уходит ТОЛЬКО если её правили. До фазы 5 полей нет вовсе, и
+    // отправленный `null` означал бы «сбрось ячейку», а не «я про неё ничего
+    // не знаю». `linkPort` не отправляется никогда: его назначает сервер.
+    ...(d.linkTouched
+      ? { linkProtocol: d.linkProtocol ?? null, linkParams: d.linkParams ?? null }
+      : {}),
+  };
+}
+
+/**
+ * Отказ сервера про направление и его выход (фаза 10, d28cc14), или null:
+ *
+ *   400 DIRECTION_OUTBOUND_AND_NODES / DIRECTION_EMPTY { directionIndex, directionTag }
+ *   400 NAMED_OUTBOUND_NOT_FOUND { outboundId }
+ *   409 NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION { outboundId, type }
+ *   409 NAMED_OUTBOUND_NEEDS_CHAIN { conflicts[{ nodeName, engines }] }
+ *
+ * Вход проверяется первым: это разбор сетевой ошибки.
+ */
+export type DirectionRefusal =
+  | { kind: 'shape'; code: 'DIRECTION_OUTBOUND_AND_NODES' | 'DIRECTION_EMPTY'; index: number | null; tag: number | null }
+  | { kind: 'notFound'; outboundId: string }
+  | { kind: 'type'; outboundId: string; type: string }
+  | { kind: 'needsChain'; conflicts: EntryChainConflict[] };
+
+export function refusedDirection(err: unknown): DirectionRefusal | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: unknown; data?: unknown } }).response;
+  if (!res || !res.data || typeof res.data !== 'object') return null;
+  const d = res.data as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+  if (res.status === 400 && (d.error === 'DIRECTION_OUTBOUND_AND_NODES' || d.error === 'DIRECTION_EMPTY')) {
+    return { kind: 'shape', code: d.error, index: num(d.directionIndex), tag: num(d.directionTag) };
+  }
+  if (res.status === 400 && d.error === 'NAMED_OUTBOUND_NOT_FOUND' && typeof d.outboundId === 'string') {
+    return { kind: 'notFound', outboundId: d.outboundId };
+  }
+  if (res.status === 409 && d.error === 'NAMED_OUTBOUND_TYPE_NOT_FOR_DIRECTION' && typeof d.outboundId === 'string') {
+    return { kind: 'type', outboundId: d.outboundId, type: typeof d.type === 'string' ? d.type : '' };
+  }
+  if (res.status === 409 && d.error === 'NAMED_OUTBOUND_NEEDS_CHAIN' && Array.isArray(d.conflicts)) {
+    const conflicts: EntryChainConflict[] = [];
+    for (const raw of d.conflicts) {
+      if (!raw || typeof raw !== 'object') continue;
+      const c = raw as Record<string, unknown>;
+      if (typeof c.nodeName !== 'string') continue;
+      conflicts.push({ nodeName: c.nodeName, engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [] });
+    }
+    return { kind: 'needsChain', conflicts };
+  }
+  return null;
+}
+
+/**
+ * Какому направлению формы принадлежит отказ: сперва по тегу (он у
+ * сохранённого направления и не меняется), иначе по месту в запросе; порядок
+ * направлений в запросе тот же, что в форме. `-1`: отказ не про направление.
+ */
+export function directionOfRefusal(
+  r: DirectionRefusal | null,
+  directions: Pick<DirectionDraft, 'tag' | 'outboundId' | 'via'>[],
+): number {
+  if (!r) return -1;
+  if (r.kind === 'shape') {
+    if (r.tag !== null) {
+      const byTag = directions.findIndex((d) => d.tag === r.tag);
+      if (byTag !== -1) return byTag;
+    }
+    return r.index !== null && r.index < directions.length ? r.index : -1;
+  }
+  if (r.kind === 'notFound' || r.kind === 'type') {
+    return directions.findIndex((d) => directionVia(d) === 'outbound' && d.outboundId === r.outboundId);
+  }
+  return -1;
+}
+
+/**
+ * Строки под направлением `index` (фаза 10), по порядку: пустое (до кнопки),
+ * выход уже у другого направления, отказ сервера про это направление. Отказ
+ * DIRECTION_EMPTY о направлении, которое экран уже назвал пустым, второй раз
+ * не пишется.
+ */
+export function directionLines(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId' | 'nodeIds' | 'tag'>[],
+  index: number,
+  refusal: DirectionRefusal | null,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string[] {
+  const d = directions[index];
+  if (!d) return [];
+  const n = index + 1;
+  const out: string[] = [];
+  const empty = directionEmpty(d);
+  if (empty) out.push(t('cascadeCreate.directionEmpty', { n }));
+  const taken = outboundTakenBy(directions, index);
+  if (taken !== null) out.push(t('cascadeCreate.outboundTaken', { n: taken }));
+  if (refusal && directionOfRefusal(refusal, directions) === index) {
+    if (refusal.kind === 'shape' && !(refusal.code === 'DIRECTION_EMPTY' && empty)) {
+      out.push(t(`cascadeCreate.directionRefused.${refusal.code}`, { n }));
+    }
+    if (refusal.kind === 'notFound') out.push(t('cascadeCreate.directionRefused.notFound'));
+    if (refusal.kind === 'type') out.push(t('cascadeCreate.directionRefused.type', { type: refusal.type }));
+  }
+  return out;
+}
+
+/**
+ * Ноды последней позиции, которые ТОЧНО не наберут выход направления: выход
+ * набирает цепь, цепь это sing-box (NAMED_OUTBOUND_NEEDS_CHAIN, по тому же
+ * чтению, что вход без sing-box). Пусто, пока ни одно направление не на выходе.
+ */
+export function outboundChainGaps(
+  directions: Pick<DirectionDraft, 'via' | 'outboundId'>[],
+  lastPosition: Parameters<typeof entryChainGaps>[0],
+): EntryChainConflict[] {
+  return directions.some((d) => directionVia(d) === 'outbound') ? entryChainGaps(lastPosition) : [];
+}
+
+/**
+ * E58: есть ли на нодах входа инбаунд AmneziaWG 3.1, то есть привязка профиля
+ * amneziawg с `awgProtocol: 3`. `undefined`: ответы ещё не пришли, и тогда
+ * «· 3.1» не пишется (незнание не факт).
+ */
+export function entryHasAwg31(
+  bindings: readonly { profileId: string }[] | undefined,
+  profiles: readonly { id: string; protocol: string; awgProtocol?: number | null }[] | undefined,
+): boolean | undefined {
+  if (!bindings || !profiles) return undefined;
+  const awg31 = new Set(profiles.filter((p) => p.protocol === 'amneziawg' && p.awgProtocol === 3).map((p) => p.id));
+  return bindings.some((b) => awg31.has(b.profileId));
+}
+
+/**
+ * Что показать в строке пула на месте выбора ноды.
+ *
+ * Три случая, и третий выглядел как первый. Строка держит `nodeId`, а ноды с
+ * таким id в списке нет: её удалили после того, как каскад сохранили. Селектор
+ * не находит значение среди опций и рисуется ПУСТЫМ, то есть говорит «оператор
+ * не выбрал ноду». Это ложь о причине, и она дорогая: человек идёт выбирать
+ * ноду заново вместо того, чтобы понять, что направление осталось без машины.
+ *
+ * `missing` несёт сам id: он единственная зацепка, по которой пропажу можно
+ * найти в логах и в чужих каскадах.
+ */
+export type PoolRowState = 'empty' | 'known' | 'missing';
+
+export interface PoolRowFacts {
+  state: PoolRowState;
+  /** Есть у `known` и `missing`. */
+  nodeId?: string;
+  /** Первые восемь знаков id, чтобы строка не расползалась. Только у `missing`:
+   *  у известной ноды показывается имя, а не идентификатор. */
+  shortId?: string;
+}
+
+export function poolRowFacts(nodeId: string, nodes: { id: string }[]): PoolRowFacts {
+  // Пустая строка это «оператор ещё не выбрал», и селектор тут прав.
+  if (!nodeId) return { state: 'empty' };
+  if (nodes.some((n) => n.id === nodeId)) return { state: 'known', nodeId };
+  return { state: 'missing', nodeId, shortId: nodeId.slice(0, 8) };
+}
+
+/**
+ * Когда каскад в последний раз ПЫТАЛИСЬ разослать, и чем это кончилось.
+ *
+ * Карточка «последний пуш» показывала время сохранения каскада и слово «ещё не
+ * применено». По отдельности верно, вместе врёт: «36 дней назад, не
+ * применено» читается как «давно ничего не делали», тогда как сегодня пытались
+ * трижды и трижды получили отказ. Отвергнутый пуш не двигает
+ * `lastInboundSyncAt`, потому что тот штампуется только при успехе, и время
+ * попытки лежит в `lastInboundSyncError.at`.
+ *
+ * Попытка хопа это ПОЗДНЕЙШЕЕ из двух. Попытка каскада это позднейшая по
+ * хопам: цепь рассылается разом, и последняя из них и есть «когда пробовали».
+ *
+ * `null` означает «сказать нечего»: ни один хоп не отчитался ни успехом, ни
+ * отказом. Строки тогда нет вовсе, потому что пустое время хуже молчания.
+ */
+export interface LastAttemptFacts {
+  /** ISO позднейшей попытки по всем хопам. */
+  at: string;
+  /** Сколько хопов отвергли её последними. */
+  refused: number;
+  /** Сколько хопов вообще отчитались, то есть знаменатель для «2 из 4». */
+  answered: number;
+}
+
+export function lastAttemptFacts(
+  hops: { nodeId: string }[],
+  nodeById: Map<string, { lastInboundSyncAt?: string | null; lastInboundSyncError?: { at: string } | null }>,
+): LastAttemptFacts | null {
+  let at: string | null = null;
+  let refused = 0;
+  let answered = 0;
+
+  for (const hop of hops) {
+    const node = nodeById.get(hop.nodeId);
+    const ok = node?.lastInboundSyncAt ?? null;
+    const bad = node?.lastInboundSyncError?.at ?? null;
+    if (!ok && !bad) continue;
+    answered++;
+    // Сравнение строк ISO работает как сравнение моментов, пока обе в UTC с
+    // одинаковой точностью, а сервер отдаёт именно такие. Date здесь дал бы то
+    // же самое дороже.
+    const last = ok && bad ? (bad > ok ? bad : ok) : (bad ?? ok)!;
+    if (bad && (!ok || bad > ok)) refused++;
+    if (!at || last > at) at = last;
+  }
+
+  return at ? { at, refused, answered } : null;
+}
+
+/**
+ * Порт ноги назначает ПАНЕЛЬ, а не оператор: линк с позиции i слушает на
+ * ПРИНИМАЮЩЕЙ ноде порт `LINK_PORT_BASE + i`.
+ *
+ * Зеркало `LINK_PORT_BASE` из `cascade.config.ts:28` бэкенда. Число здесь
+ * только показывается: менять его отсюда нечем и не нужно, но и прятать нельзя,
+ * потому что именно его оператор открывает в фаерволе, когда линк не встаёт.
+ */
+export const LEG_PORT_BASE = 24000;
+
+/**
+ * Одна нога пути: чем позиция N говорит с тем, что за ней.
+ *
+ * Три состояния, и «неизвестно» тут не то же, что «не выбрано»: в колонке
+ * лежит свободная строка, и сохранённое значение может не совпадать ни с одной
+ * ячейкой, которую панель умеет собрать (список ячеек короткий сознательно, см.
+ * `LINK_CELLS`). Тогда показывается то, что записано, и это НЕ выдаётся за
+ * рабочую ногу.
+ *
+ * `pair` заполнен только у реализованной ячейки: пару протокол+движок нельзя
+ * вывести из имени, которого панель не знает, а угадать её значило бы сказать
+ * оператору, чем ходит трафик, не имея на это оснований.
+ */
+export type LegState = 'known' | 'unrealised' | 'unknown';
+
+export interface LegFacts {
+  state: LegState;
+  /** Что записано в колонке. `null` только у `unknown`. */
+  cell: string | null;
+  /** Протокол и движок ячейки. Есть только у двух встроенных ячеек. */
+  pair: EnginePair | null;
+  /** Порт на принимающей стороне: 24000 + номер шага. */
+  port: number;
+  /** Движки ячейки по таблице контракта. Есть у `known`, которую опознала
+   *  таблица, а не встроенный список. */
+  engines?: EngineName[];
+}
+
+export function legFacts(
+  linkProtocol: string | null | undefined,
+  step: number,
+  /** Движки ячейки по таблице контракта; `undefined` = ячейка чужая. Приходит
+   *  снаружи, чтобы функция осталась чистой и проверяемой. */
+  enginesOf?: (cell: string) => readonly EngineName[] | undefined,
+): LegFacts {
+  const port = LEG_PORT_BASE + step;
+  const cell = linkProtocol && linkProtocol.trim() !== '' ? linkProtocol : null;
+  if (!cell) return { state: 'unknown', cell: null, pair: null, port };
+
+  // Две ячейки панель собирала всегда, и их пару она знает точно.
+  const pair = linkCellPair(cell);
+  if (pair) return { state: 'known', cell, pair, port };
+
+  // Остальные (hy2, tuic) становятся рабочими РОВНО тогда, когда таблица
+  // контракта называет движки. До этого прежнее поведение: показываем, что
+  // записано, и не выдаём это за рабочую ногу.
+  const engines = enginesOf?.(cell);
+  if (engines && engines.length > 0) return { state: 'known', cell, pair: null, port, engines: [...engines] };
+  return { state: 'unrealised', cell, pair: null, port };
+}
+
+/**
+ * Ноды направления, которые ТОЧНО не несут выбранную ячейку.
+ *
+ * Возвращается только доказанное «нет»: нода отчиталась о своих движках, и
+ * среди них нет ни одного, кем ячейка поднимается. Молчащая нода и ячейка, про
+ * которую таблицы нет, сюда не попадают вовсе: это незнание, а красная строка
+ * про незнание врёт. То же правило, что стоило 23 отказов рабочим парам
+ * 2026-09-11.
+ *
+ * `engines` в ответе это то, что нода сообщила о себе: без этого списка
+ * оператору некуда идти, кроме как гадать.
+ */
+export interface CellGap {
+  nodeId: string;
+  name: string;
+  engines: EngineName[];
+}
+
+/**
+ * Что у ноги настраивается сверх выбора ячейки.
+ *
+ * Решает не разметка: список спрошен у ДВИЖКА, и цена ошибки тут не косметика,
+ * а лежачая нода при зелёном «сохранено» в панели.
+ *
+ * `minted` (hy2): настраивать нечем. Соль Salamander рождает панель, как и
+ * остальные креды линка, а `congestion_control` sing-box 1.13.14 на hysteria2
+ * отвергает ПРИ РАЗБОРЕ конфига, то есть поле там не игнорируется. Скорость у
+ * hy2 это Brutal, и задаётся она парой чисел про полосу; решено 2026-09-22 не
+ * спрашивать её здесь вовсе: полоса это свойство канала НОДЫ, а не ноги, и без
+ * пары чисел sing-box ведёт hy2 по BBR, что для линка между дата-центрами
+ * рабочий дефолт.
+ *
+ * `congestion` (tuic): ровно три значения, и это ответ движка, а не выписка со
+ * страницы документации. `brutal` sing-box на tuic не знает и отвечает
+ * «unknown congestion control algorithm», поэтому предложить его значило бы
+ * положить ногу. `new_reno` пишется с подчёркиванием, ровно так он принимается.
+ */
+export type LegParamKind = 'none' | 'minted' | 'congestion';
+
+export interface LegParamFacts {
+  kind: LegParamKind;
+  /** Только у `congestion`: что предлагать и что стоит, если не выбрали. */
+  options: LinkCongestion[];
+  fallback: LinkCongestion | null;
+}
+
+export function legParamFacts(cell: string | null | undefined): LegParamFacts {
+  if (cell === 'hy2') return { kind: 'minted', options: [], fallback: null };
+  if (cell === 'tuic') {
+    return { kind: 'congestion', options: [...LINK_CONGESTIONS], fallback: DEFAULT_LINK_CONGESTION };
+  }
+  return { kind: 'none', options: [], fallback: null };
+}
+
+export function cellGaps(
+  nodeIds: string[],
+  cell: string | null | undefined,
+  nodeById: Map<string, { name: string; engines?: EngineName[] }>,
+  carries: (node: { engines?: EngineName[] } | undefined, cell: string) => boolean | undefined,
+): CellGap[] {
+  if (!cell) return [];
+  const gaps: CellGap[] = [];
+  for (const id of nodeIds) {
+    if (!id) continue;
+    const node = nodeById.get(id);
+    if (!node) continue;
+    if (carries(node, cell) !== false) continue;
+    gaps.push({ nodeId: id, name: node.name, engines: node.engines ?? [] });
+  }
+  return gaps;
+}
+
+/**
+ * Отказ сервера записать ногу: 409 `CELL_NOT_CARRIED`.
+ *
+ * Второй источник тех же фактов, что и `cellGaps`. Первый предсказывает по
+ * тому, что нода рассказала о себе, второй приходит от сервера в момент
+ * сохранения, и перечисляет ВСЕ заблокированные ноги, а не первую. Слова у
+ * них одни: «<нода> не несёт <ячейку>: сообщила <движки>». Источники разные,
+ * повод для оператора один, и две разные формулировки читались бы как две
+ * разные беды.
+ *
+ * ⚠ Первым делом проверяется ВХОД. У react-query `error` это `null`, когда
+ * ошибки нет, и разбор, читающий `err.response` без проверки, роняет экран
+ * белым на первом же открытии: `unknown` после каста разрешает читать что
+ * угодно, и ни сборка, ни линт этого не видят (поймано 22.09 на шаблонах).
+ *
+ * `null` в ответе это «отказ не этот»: вызывающий идёт своей прежней дорогой.
+ * Пустой массив был бы «отказ этот, но конфликтов нет», а такого ответа
+ * сервер не шлёт.
+ */
+export interface CellRefusal {
+  nodeName: string;
+  cell: string;
+  engines: EngineName[];
+}
+
+export function refusedCells(err: unknown): CellRefusal[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'CELL_NOT_CARRIED') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: CellRefusal[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as { nodeName?: unknown; cell?: unknown; engines?: unknown };
+    if (typeof c.nodeName !== 'string' || typeof c.cell !== 'string') continue;
+    out.push({
+      nodeName: c.nodeName,
+      cell: c.cell,
+      // Молчащий список движков это не «движков нет»: строка скажет об этом
+      // своими словами, а выдумывать их здесь нечем.
+      engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [],
+    });
+  }
+  return out;
+}
+
+/**
+ * Второй отказ той же формы: 409 `LINK_PORT_IN_USE`.
+ *
+ * Порт ноги назначает сервер (24000 + шаг), и оператор его не выбирает, но
+ * занять его может чужой профиль на той же ноде. Отказ называет ноду, номер,
+ * ТРАНСПОРТ и профиль: без транспорта строка врала бы половину времени, потому
+ * что `24001/udp` и `24001/tcp` это разные сокеты, и занятость одного ничего не
+ * говорит о другом.
+ *
+ * Разбор и правила те же, что у `refusedCells`: вход проверяется первым, `null`
+ * значит «отказ не этот», запись без обязательных полей пропускается.
+ */
+export interface LinkPortConflict {
+  nodeName: string;
+  port: number;
+  transport: string;
+  profileName: string;
+}
+
+export function refusedLinkPorts(err: unknown): LinkPortConflict[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'LINK_PORT_IN_USE') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: LinkPortConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.port !== 'number') continue;
+    out.push({
+      nodeName: c.nodeName,
+      port: c.port,
+      // Транспорт и имя профиля идут в текст строки. Пустая строка лучше
+      // выдуманной: подпись сама скажет «профиль не назван».
+      transport: typeof c.transport === 'string' ? c.transport : '',
+      profileName: typeof c.profileName === 'string' ? c.profileName : '',
+    });
+  }
+  return out;
+}
+
+/**
+ * На чём едет нога (фаза 8, d94b2b2): `direct` или внутри туннеля AmneziaWG.
+ *
+ * Туннель поднимают ОБЕ стороны ноги, поэтому смотрятся ноды обоих концов
+ * через `nodeCoreFit(node, 'amneziawg')`, тем же чтением, что у гейта BACK:
+ *
+ *   missing  нода сообщила AWG как не установленный. `awg` не предлагается,
+ *            причина и ссылка на «Ядра» этой ноды; уже выбранный `awg`
+ *            снимается (напрямую доступно всегда);
+ *   silent   нода AWG не сообщала вовсе: не отказ, неполный факт фактом не
+ *            считается, но экран говорит словами, что проверить нечем.
+ *
+ * `own` это ключ этой ноги; нет ключа = direct у позиции, у направления
+ * значение последней позиции (`inherited`), как у ячейки.
+ */
+export interface UnderlayFacts {
+  value: LinkUnderlay;
+  /** Направление без своего ключа идёт как последняя позиция. */
+  inherited: boolean;
+  missing: { id: string; name: string }[];
+  silent: string[];
+}
+
+export function underlayFacts(
+  nodeIds: readonly string[],
+  nodeById: ReadonlyMap<string, Node>,
+  own: LinkUnderlay | undefined,
+  inherited?: LinkUnderlay,
+): UnderlayFacts {
+  const missing: { id: string; name: string }[] = [];
+  const silent: string[] = [];
+  for (const id of new Set(nodeIds.filter(Boolean))) {
+    const n = nodeById.get(id);
+    if (!n) continue;
+    const fit = nodeCoreFit(n, 'amneziawg');
+    if (fit.kind === 'missing') missing.push({ id: n.id, name: n.name });
+    else if (fit.kind === 'silent') silent.push(n.name);
+  }
+  const value = own ?? inherited ?? DEFAULT_LINK_UNDERLAY;
+  return { value, inherited: own === undefined && inherited !== undefined, missing, silent };
+}
+
+/**
+ * Положение переключателя подложки. `inherit` есть только у направления в
+ * каскаде с несколькими ногами: «как у последней позиции», то есть ключа
+ * `underlay` у направления НЕТ. До E25 (стенд 24.09) третьего положения не
+ * было: щелчок по строке направления писал ему явный `underlay`, и вернуть
+ * «как у позиции» было нечем, а явный `direct` у направления побеждает `awg`
+ * позиции.
+ */
+export type UnderlayChoice = LinkUnderlay | 'inherit';
+
+/**
+ * Где стоит переключатель:
+ *   position   нога позиции, два положения, нет ключа = direct;
+ *   direction  нога до выхода в каскаде из нескольких ног, три положения;
+ *   one-leg    каскад из одной ноги (одна позиция, одно направление): нога
+ *              одна, и спрашивается она один раз, у направления, два
+ *              положения по действующему значению.
+ */
+export type UnderlayPlace = 'position' | 'direction' | 'one-leg';
+
+/**
+ * Политика входа (Ф9.3, решение владельца 24.09): одна route-политика для всех
+ * пользователей входа, которые политику не выбирают сами.
+ *
+ *   select     протокол входа hysteria или amneziawg: у их пользователей
+ *              варианта UUID нет, политику за них ставит каскад;
+ *   xray-self  xray: пользователь выбирает политику сам вариантом UUID, и
+ *              селектор был бы обещанием, которое вход не исполнит;
+ *   hidden     сервер поля не знает (ключа `entryPolicy` в ответе нет), или
+ *              протокол входа другой: говорить не о чем.
+ */
+export type EntryPolicyPlace = 'select' | 'xray-self' | 'hidden';
+
+export function entryPolicyPlace(entryProtocol: string | undefined, serverKnows: boolean): EntryPolicyPlace {
+  if (!serverKnows) return 'hidden';
+  if (entryProtocol === 'hysteria' || entryProtocol === 'amneziawg') return 'select';
+  if (entryProtocol === 'xray') return 'xray-self';
+  return 'hidden';
+}
+
+/**
+ * Что из политики входа уходит в PUT: ничего, если сервер поля не знает или
+ * значение не менялось (у сервера отсутствие = не трогать); `null` снимает,
+ * id ставит.
+ */
+export function entryPolicyPatch(
+  draft: string | null | undefined,
+  stored: string | null | undefined,
+): { entryPolicyId?: string | null } {
+  if (draft === undefined || stored === undefined || draft === stored) return {};
+  return { entryPolicyId: draft };
+}
+
+/**
+ * Политика входа стоящего каскада в трёх значениях черновика: `undefined` =
+ * сервер поля не знает, `null` = не задана, строка = id. Знает ли сервер,
+ * решает `serverKnows` (listFieldKnown: сперва `fields` конверта, по стоящим
+ * каскадам только у сервера старше), а не ключ у одного каскада: сервер,
+ * назвавший поле, отсутствие ключа значит «не задана», а не «не знаю».
+ */
+export function storedEntryPolicy(
+  stored: { id: string } | null | undefined,
+  serverKnows: boolean,
+): string | null | undefined {
+  if (stored === undefined) return serverKnows ? null : undefined;
+  return stored?.id ?? null;
+}
+
+/** 400 ENTRY_POLICY_NOT_FOUND: выбранной политики уже нет (удалили, пока форма
+ *  была открыта). Вход проверяется первым; `null` значит «отказ не этот». */
+export function entryPolicyRefusal(err: unknown): { policyId: string | null } | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: unknown }).response;
+  if (!res || typeof res !== 'object') return null;
+  const { status, data } = res as { status?: unknown; data?: unknown };
+  if (status !== 400 || !data || typeof data !== 'object') return null;
+  const d = data as { error?: unknown; policyId?: unknown };
+  if (d.error !== 'ENTRY_POLICY_NOT_FOUND') return null;
+  return { policyId: typeof d.policyId === 'string' ? d.policyId : null };
+}
+
+/** Одна позиция и одно направление за ней: нога в каскаде одна. */
+export function isOneLegCascade(poolCount: number, directionCount: number): boolean {
+  return poolCount === 1 && directionCount === 1;
+}
+
+/** Что строке ноги нужно про подложку: факты и отказ сервера по её нодам. */
+export interface LegUnderlay {
+  facts: UnderlayFacts;
+  /** Имена нод ЭТОЙ ноги из 409 LINK_UNDERLAY_NOT_ON_NODE. */
+  refused: string[];
+  place: UnderlayPlace;
+  /** Что показывает переключатель: у направления без ключа `inherit`, у
+   *  остальных действующее значение. */
+  choice: UnderlayChoice;
+  onChange: (value: UnderlayChoice) => void;
+}
+
+/**
+ * Подложка одной ноги для строки: факты по нодам обоих концов и та часть
+ * отказа сервера, что называет эти ноды (у ног отказ общий на весь каскад).
+ */
+export function legUnderlay(
+  nodeIds: readonly string[],
+  nodeById: ReadonlyMap<string, Node>,
+  own: LinkUnderlay | undefined,
+  inherited: LinkUnderlay | undefined,
+  refusedNames: readonly string[],
+  onChange: (value: UnderlayChoice) => void,
+  place: UnderlayPlace = 'position',
+): LegUnderlay {
+  const names = new Set(nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)));
+  const facts = underlayFacts(nodeIds, nodeById, own, inherited);
+  return {
+    facts,
+    refused: refusedNames.filter((n) => names.has(n)),
+    place,
+    choice: place === 'direction' ? (own ?? 'inherit') : facts.value,
+    onChange,
+  };
+}
+
+/**
+ * `linkParams` ноги после выбора подложки. Колонка одна и заменяется целиком,
+ * поэтому остальные ключи (congestion) переносятся; `inherit` УБИРАЕТ ключ
+ * `underlay`, а не пишет `direct`. Пустой объект уходит как `null`: сервер
+ * читает их одинаково, а `null` честно говорит «ничего не выбрано».
+ */
+export function withUnderlay(params: LinkParams | null | undefined, choice: UnderlayChoice): LinkParams | null {
+  const next: LinkParams = { ...(params ?? {}) };
+  if (choice === 'inherit') delete next.underlay;
+  else next.underlay = choice;
+  return Object.keys(next).length > 0 ? next : null;
+}
+
+/**
+ * 409 `LINK_UNDERLAY_NOT_ON_NODE`: ноды, у которых AWG не установлен, а нога
+ * над ними просит туннель. Вход проверяется первым, `null` значит «отказ не
+ * этот»; нечитаемые имена пропускаются.
+ */
+export function refusedUnderlay(err: unknown): string[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; nodeNames?: unknown } | undefined;
+  if (!data || data.error !== 'LINK_UNDERLAY_NOT_ON_NODE') return null;
+  if (!Array.isArray(data.nodeNames)) return [];
+  return data.nodeNames.filter((n): n is string => typeof n === 'string' && n !== '');
+}
+
+/**
+ * Третий отказ той же формы: 409 `ENTRY_CHANGE_DROPS_USERS` (фаза 6).
+ *
+ * На каскаде один протокол входа. Смена входа с xray на hysteria снимает
+ * каскад с xray-профилей входных нод, и их пользователи дальше выходят
+ * НАПРЯМУЮ из страны входа. Сервер не молчит об этом, а отказывает и
+ * перечисляет, кого это касается; сменить можно, но только повторив запрос с
+ * явным согласием (`confirmEntryChange: true`).
+ *
+ * Разбор тот же, что у двух соседних: вход проверяется первым, `null` значит
+ * «отказ не этот», запись без обязательных полей пропускается.
+ */
+export interface EntryChangeConflict {
+  nodeName: string;
+  profileName: string;
+}
+
+/**
+ * Весь вопрос целиком. `from` и `to` называет СЕРВЕР: подпись «с xray на
+ * hysteria», собранная по форме, соврала бы, если форму успели поправить ещё
+ * раз, пока летел запрос. `null` у них значит «сервер не назвал», и тогда
+ * подпись без них, а не с угаданными.
+ */
+export interface EntryChangeRefusal {
+  from: string | null;
+  to: string | null;
+  conflicts: EntryChangeConflict[];
+}
+
+export function refusedEntryChange(err: unknown): EntryChangeRefusal | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown; from?: unknown; to?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_CHANGE_DROPS_USERS') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const conflicts: EntryChangeConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.profileName !== 'string') continue;
+    conflicts.push({ nodeName: c.nodeName, profileName: c.profileName });
+  }
+  return {
+    from: typeof data.from === 'string' ? data.from : null,
+    to: typeof data.to === 'string' ? data.to : null,
+    conflicts,
+  };
+}
+
+/**
+ * Пятый вопрос той же формы: 409 `ENTRY_NODES_DROPPED` (фаза 6).
+ *
+ * Не смена протокола, а уход НОД из входа: у них есть профили, и их
+ * пользователи после сохранения выйдут напрямую. Отдельный код и отдельная
+ * подпись («Убрать ноды из входа?»), без `from` и `to`: протокол не меняется.
+ * Согласие то же, `confirmEntryChange: true`.
+ *
+ * Профили группируются ПО НОДЕ: вопрос оператору про ноды, и список «нода:
+ * профили» читается как ответ на него, а плоский список пар нет.
+ */
+export interface EntryNodesDropped {
+  nodeName: string;
+  profiles: string[];
+}
+
+export function refusedEntryNodes(err: unknown): EntryNodesDropped[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_NODES_DROPPED') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const byNode = new Map<string, string[]>();
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string' || typeof c.profileName !== 'string') continue;
+    const list = byNode.get(c.nodeName) ?? [];
+    if (!list.includes(c.profileName)) list.push(c.profileName);
+    byNode.set(c.nodeName, list);
+  }
+  return [...byNode.entries()].map(([nodeName, profiles]) => ({ nodeName, profiles }));
+}
+
+/**
+ * Можно ли открыть вопрос о согласии, или сервер повторяет уже отвеченный.
+ *
+ * Сервер задаёт вопросы по очереди (смена протокола, потом уход нод), и после
+ * первого согласия за тем же кликом законно приходит второй: это не ошибка, а
+ * следующий вопрос. Но тот же вопрос в ответ на запрос, где согласие уже было,
+ * это уже ошибка сервера или гонка, и открыть окно снова значило бы крутить
+ * оператора по кругу. Поэтому помним коды, на которые в этой цепочке уже
+ * согласились.
+ */
+export function entryQuestionRepeats(code: string, consented: ReadonlySet<string>, sentWithConsent: boolean): boolean {
+  return sentWithConsent && consented.has(code);
+}
+
+/**
+ * Четвёртый отказ той же формы: 409 `ENTRY_CANNOT_CHAIN` (фаза 6).
+ *
+ * Входные ноды не могут поднять цепь: отчитались о движках, и sing-box среди
+ * них нет. Это ФАКТ сервера по отчёту ноды, поэтому кнопку заранее мы им не
+ * гасим: частичный или старый список движков годится, чтобы сказать «да», и
+ * не годится, чтобы сказать «нет» (правило ворот, 2026-09-11).
+ *
+ * На сервере этот отказ стоит РАНЬШЕ вопроса о согласии на смену входа:
+ * спрашивать «снять ли профили», когда вход всё равно не поднимется, незачем.
+ */
+export interface EntryChainConflict {
+  nodeName: string;
+  engines: EngineName[];
+}
+
+export function refusedEntryChain(err: unknown): EntryChainConflict[] | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as { response?: { status?: number; data?: unknown } }).response;
+  if (!res || res.status !== 409) return null;
+  const data = res.data as { error?: string; conflicts?: unknown } | undefined;
+  if (!data || data.error !== 'ENTRY_CANNOT_CHAIN') return null;
+  if (!Array.isArray(data.conflicts)) return null;
+  const out: EntryChainConflict[] = [];
+  for (const raw of data.conflicts) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.nodeName !== 'string') continue;
+    out.push({ nodeName: c.nodeName, engines: Array.isArray(c.engines) ? (c.engines as EngineName[]) : [] });
+  }
+  return out;
+}
+
+/**
+ * Входные ноды, которые ТОЧНО не поднимут цепь: то же чтение, что у сервера
+ * (canRunChainAtSave, cell-carriage.ts, 3962886), до кнопки.
+ *
+ *   цепь на ноде работает                     несёт, говорить не о чем;
+ *   блок цепи есть, но не работает, и агент
+ *   НЕ из тех, что несут ноги только цепью    незнание: причиной может быть
+ *                                             конфиг, который запись заменит;
+ *   агент несёт ноги только цепью
+ *   (`cores.chainEngine`, E46)                решают движки: «no singbox binary»
+ *                                             ровно такая причина;
+ *   движков в отчёте нет                      незнание;
+ *   движки есть, sing-box среди них нет       отказ, строка.
+ *
+ * Кнопку не гасит: это предсказание, отказ всё равно скажет сервер, и слова у
+ * них одни (entryCannotChain). Одинаково для входа xray, hysteria и
+ * amneziawg: цепь на входе одна и та же, sing-box.
+ */
+export function entryChainGaps(
+  nodes: ReadonlyArray<
+    | {
+        name: string;
+        engines?: EngineName[];
+        cores?: { chainEngine?: EngineName } | null;
+        chainStatus?: { running: boolean } | null;
+      }
+    | undefined
+  >,
+): EntryChainConflict[] {
+  const out: EntryChainConflict[] = [];
+  for (const n of nodes) {
+    if (!n) continue;
+    const chain = n.chainStatus ?? null;
+    if (chain?.running === true) continue;
+    const chainOnly = n.cores?.chainEngine !== undefined;
+    if (chain && !chainOnly) continue;
+    if (!n.engines) continue;
+    if (!n.engines.includes('singbox')) out.push({ nodeName: n.name, engines: [...n.engines] });
+  }
+  return out;
+}
+
+/** Предсказание и отказ сервера одной строкой на ноду: предсказание первым,
+ *  нода, о которой сказали оба, один раз (как legCellNotes). */
+export function entryChainNotes(
+  predicted: EntryChainConflict[],
+  refusals: EntryChainConflict[],
+): EntryChainConflict[] {
+  const seen = new Set(predicted.map((p) => p.nodeName));
+  return [...predicted, ...refusals.filter((r) => !seen.has(r.nodeName))];
+}
+
+/**
+ * Пейлоад сохранения с согласием на смену входа или без него.
+ *
+ * ⚠ Флаг уходит ТОЛЬКО после явного «всё равно сменить». Отдельной функцией,
+ * а не полем черновика: черновик живёт между сохранениями, и флаг, однажды
+ * попавший туда, уехал бы и со следующим сохранением, уже без вопроса. Здесь
+ * он существует ровно на один запрос.
+ */
+export function withEntryConfirm<T extends object>(
+  input: T,
+  confirmed: boolean,
+): T & { confirmEntryChange?: true } {
+  return confirmed ? { ...input, confirmEntryChange: true } : input;
+}
+
+/** Занятые порты, относящиеся к ЭТОЙ ноге: та же нода и тот же номер. */
+export function legPortNotes(
+  nodeIds: string[],
+  port: number | null | undefined,
+  nodeById: Map<string, { name: string }>,
+  conflicts: LinkPortConflict[],
+): LinkPortConflict[] {
+  if (port === null || port === undefined || conflicts.length === 0) return [];
+  const names = new Set(
+    nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)),
+  );
+  return conflicts.filter((c) => c.port === port && names.has(c.nodeName));
+}
+
+/**
+ * Что показать под одной ногой: предсказание и отказ сервера, сведённые.
+ *
+ * Одна нода попадает в строку один раз, даже когда про неё сказали оба
+ * источника: слова у них одинаковые, и вторая такая же строка выглядела бы как
+ * вторая проблема. Предсказание идёт первым, потому что оно уже на экране к
+ * моменту, когда приходит отказ.
+ */
+export function legCellNotes(
+  nodeIds: string[],
+  cell: string | null | undefined,
+  nodeById: Map<string, { name: string; engines?: EngineName[] }>,
+  carries: (node: { engines?: EngineName[] } | undefined, cell: string) => boolean | undefined,
+  refusals: CellRefusal[],
+): CellGap[] {
+  const notes = cellGaps(nodeIds, cell, nodeById, carries);
+  if (!cell || refusals.length === 0) return notes;
+  const seen = new Set(notes.map((n) => n.name));
+  const names = new Set(
+    nodeIds.map((id) => nodeById.get(id)?.name).filter((n): n is string => Boolean(n)),
+  );
+  for (const r of refusals) {
+    if (r.cell !== cell || !names.has(r.nodeName) || seen.has(r.nodeName)) continue;
+    seen.add(r.nodeName);
+    // Сервер называет ноду ИМЕНЕМ, id в отказе нет. Ключ строки это имя: в
+    // одном каскаде нода встречается один раз, по имени она и опознаётся.
+    notes.push({ nodeId: r.nodeName, name: r.nodeName, engines: r.engines });
+  }
+  return notes;
+}
+
