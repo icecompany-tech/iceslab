@@ -1,0 +1,27 @@
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1-5);
+  margin: 0;
+}
+
+.plot {
+  width: 100%;
+  height: var(--size-empty);
+}
+
+.bar {
+  fill: var(--color-accent);
+}
+
+.empty {
+  fill: var(--color-border);
+}
+
+.marks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+}
