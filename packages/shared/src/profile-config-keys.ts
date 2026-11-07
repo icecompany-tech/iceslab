@@ -66,7 +66,20 @@ export const PROFILE_CONFIG_KEYS: Record<ProtocolName, ProfileConfigKeys> = {
       'grpcMultiMode',
       'subprotocol',
     ],
-    keptByServer: [],
+    keptByServer: [
+      {
+        key: 'tcpUserTimeout',
+        why: 'Bk-170: the old form has no field for it and its save must not erase it; an edit without it keeps the stored value, null clears it',
+      },
+      {
+        key: 'tcpKeepAliveIdle',
+        why: 'Bk-170: as tcpUserTimeout',
+      },
+      {
+        key: 'tcpKeepAliveInterval',
+        why: 'Bk-170: as tcpUserTimeout',
+      },
+    ],
     setByPush: [],
   },
   amneziawg: {

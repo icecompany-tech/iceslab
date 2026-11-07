@@ -353,6 +353,22 @@ export function assertPortHoppingRange(protocol: string, config: unknown): void 
 
 // ───── Profile CRUD ─────
 
+const XRAY_SOCKOPT_KEYS = ['tcpUserTimeout', 'tcpKeepAliveIdle', 'tcpKeepAliveInterval'] as const;
+
+/**
+ * Bk-170: the old profile form has no field for the socket options and builds
+ * the config afresh on every save, so a key it does not send is kept from what
+ * is stored (A-285, profile-config-keys.ts). null is how a client clears one, and
+ * it is not stored: absent is what "as the core does" looks like at rest.
+ */
+function keepXraySockopt(incoming: Record<string, unknown>, stored: unknown): void {
+  const kept = (stored ?? {}) as Record<string, unknown>;
+  for (const key of XRAY_SOCKOPT_KEYS) {
+    if (incoming[key] === null) delete incoming[key];
+    else if (!(key in incoming) && kept[key] != null) incoming[key] = kept[key];
+  }
+}
+
 export async function createProfile(input: CreateProfileInput): Promise<PublicProfileDto> {
   const existing = await prisma.profile.findUnique({ where: { name: input.name } });
   if (existing) throw new ProfileNameTakenError(input.name);
@@ -387,6 +403,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
   // when the operator switches back. See stripInapplicableTransportFields.
   if (input.protocol === 'xray') {
     configToStore = stripInapplicableTransportFields(configToStore);
+    keepXraySockopt(configToStore, null);
   }
   assertPortHoppingRange(input.protocol, configToStore);
 
@@ -578,6 +595,7 @@ export async function updateProfile(
             : generateSsServerPsk(incoming.method);
       }
     }
+    if (isXray) keepXraySockopt(parsed as Record<string, unknown>, existing.config);
     // After parse, so schema defaults are filled in first and only then the
     // fields belonging to other transports are dropped.
     data.config = (

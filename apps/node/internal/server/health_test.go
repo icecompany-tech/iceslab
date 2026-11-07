@@ -154,6 +154,43 @@ type policyCore struct {
 func (p *policyCore) ApplyPolicy(json.RawMessage) error { return nil }
 func (p *policyCore) ApplyDns(json.RawMessage) error    { return nil }
 
+type sockoptCore struct {
+	provisionableCore
+}
+
+func (s *sockoptCore) RendersSockopt() bool { return true }
+
+// The socket options belong to xray, and the other cores have no answer to give:
+// on the wire they say nothing rather than false, and silence reads as "unknown".
+func TestOnlyACoreThatDrawsTheSocketOptionsSpeaksOfThem(t *testing.T) {
+	body := healthBody(t,
+		&sockoptCore{provisionableCore{fakeCore{name: "xray", engine: "xray", running: true}, true}},
+		&provisionableCore{fakeCore{name: "tuic", engine: "singbox", running: true}, true},
+	)
+	if n := strings.Count(body, `"rendersSockopt"`); n != 1 {
+		t.Fatalf("the key is on %d cores, want one: %s", n, body)
+	}
+	if !strings.Contains(body, `"rendersSockopt":true`) {
+		t.Fatalf("no true on the wire: %s", body)
+	}
+	var got dto.HealthcheckResponse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range got.Cores {
+		switch c.Name {
+		case "xray":
+			if c.RendersSockopt == nil || !*c.RendersSockopt {
+				t.Errorf("xray: %v", c.RendersSockopt)
+			}
+		default:
+			if c.RendersSockopt != nil {
+				t.Errorf("%s speaks of options it does not have: %v", c.Name, *c.RendersSockopt)
+			}
+		}
+	}
+}
+
 // The operator's policy is applied by the CORE, not by the node. Until the node
 // said which of its cores render it, the panel showed the policy attached to a
 // node whose cores ignore it, with nothing anywhere to say so.

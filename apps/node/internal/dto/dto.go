@@ -694,6 +694,10 @@ type CoreStatus struct {
 	// must say "unknown", never "does not render it".
 	RendersPolicy *bool `json:"rendersPolicy,omitempty"`
 	RendersDns    *bool `json:"rendersDns,omitempty"`
+	// RendersSockopt: this core draws an inbound's tcpUserTimeout and TCP keepalive
+	// options. Only xray reports it. Absent means the agent predates the field or
+	// the core has nothing to say, which is NOT false: "unknown" on the screen.
+	RendersSockopt *bool `json:"rendersSockopt,omitempty"`
 	// Restarts is present only for cores that supervise a real process. See
 	// CoreRestartsDto: absent means "this agent/core doesn't report", which is
 	// NOT the same as zero.

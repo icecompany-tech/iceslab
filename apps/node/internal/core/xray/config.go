@@ -279,6 +279,15 @@ type InboundConfig struct {
 	// connection. false (default) keeps the single-stream behaviour.
 	GrpcMultiMode bool
 
+	// Bk-170: the listening socket's options, on any transport (streamSettings.
+	// sockopt, read off Xray-core v26.3.27, transport/internet/system_listener.go
+	// and sockopt_linux.go). 0 = not set, not drawn: the core's own behaviour,
+	// which on an inbound is keepalive off and the kernel's TCP_USER_TIMEOUT.
+	// TCPUserTimeout is in milliseconds, the two keepalive values in seconds.
+	TCPUserTimeout       int
+	TCPKeepAliveIdle     int
+	TCPKeepAliveInterval int
+
 	// Warp is the optional Cloudflare WARP egress (per-node egress v1). When
 	// non-nil, renderConfig adds a `wireguard` outbound to WARP and routes this
 	// inbound's user traffic through it instead of `direct`. nil = direct egress
@@ -1319,6 +1328,10 @@ func buildStreamSettings(cfg InboundConfig) map[string]any {
 		}
 		stream["tlsSettings"] = tls
 	}
+	// Bk-170: drawn only when set, so a profile without them renders as before.
+	if sockopt := buildInboundSockopt(cfg); sockopt != nil {
+		stream["sockopt"] = sockopt
+	}
 
 	switch network {
 	case "raw", "":
@@ -1377,6 +1390,27 @@ func buildStreamSettings(cfg InboundConfig) map[string]any {
 		}
 	}
 	return stream
+}
+
+// buildInboundSockopt is the inbound's streamSettings.sockopt, or nil when none
+// of its values is set. Only a positive value is drawn: 0 means "as the core
+// does", and a negative keepalive means something else to xray (keepalive off),
+// which the panel does not offer and this does not pass on.
+func buildInboundSockopt(cfg InboundConfig) map[string]any {
+	sockopt := map[string]any{}
+	if cfg.TCPUserTimeout > 0 {
+		sockopt["tcpUserTimeout"] = cfg.TCPUserTimeout
+	}
+	if cfg.TCPKeepAliveIdle > 0 {
+		sockopt["tcpKeepAliveIdle"] = cfg.TCPKeepAliveIdle
+	}
+	if cfg.TCPKeepAliveInterval > 0 {
+		sockopt["tcpKeepAliveInterval"] = cfg.TCPKeepAliveInterval
+	}
+	if len(sockopt) == 0 {
+		return nil
+	}
+	return sockopt
 }
 
 // buildWarpOutbound renders the Cloudflare WARP wireguard outbound (tag "warp").

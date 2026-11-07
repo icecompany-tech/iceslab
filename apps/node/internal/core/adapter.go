@@ -214,6 +214,16 @@ type DnsReceiver interface {
 	ApplyDns(dns json.RawMessage) error
 }
 
+// SockoptRenderer is an OPTIONAL interface for an adapter that draws the socket
+// options of an inbound (tcpUserTimeout, tcpKeepAliveIdle, tcpKeepAliveInterval).
+// An agent older than them drops the fields without a word, so the panel can only
+// tell the operator the truth if the agent says it carries them out. Only the xray
+// adapter implements it, and a core that does not implement it says nothing, which
+// reads as "unknown".
+type SockoptRenderer interface {
+	RendersSockopt() bool
+}
+
 // CascadeReceiver is an OPTIONAL interface for adapters that can draw this
 // node's hop in a cascade (see dto.NodeCascade).
 //

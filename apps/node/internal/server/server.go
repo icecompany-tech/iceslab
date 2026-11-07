@@ -593,6 +593,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 			_, rendersDns := adapter.(core.DnsReceiver)
 			cs.RendersPolicy = &rendersPolicy
 			cs.RendersDns = &rendersDns
+			// Unlike the two above, silent unless the core says yes: the fields
+			// belong to xray alone, so no other core has an answer to give.
+			if r, ok := adapter.(core.SockoptRenderer); ok {
+				rendersSockopt := r.RendersSockopt()
+				cs.RendersSockopt = &rendersSockopt
+			}
 			// Whether this core is configured at all. Same optional-interface
 			// pattern; adapters that don't report count as configured.
 			if p, ok := adapter.(core.Provisionable); ok {

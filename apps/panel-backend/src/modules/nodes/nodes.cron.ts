@@ -430,6 +430,7 @@ export function observedCores(
       ...(c.installed !== undefined ? { installed: c.installed } : {}),
       ...(c.rendersPolicy !== undefined ? { rendersPolicy: c.rendersPolicy } : {}),
       ...(c.rendersDns !== undefined ? { rendersDns: c.rendersDns } : {}),
+      ...(c.rendersSockopt !== undefined ? { rendersSockopt: c.rendersSockopt } : {}),
       // Whether the core counts bytes per user; absent stays absent (unknown).
       ...(c.countsUsers !== undefined ? { countsUsers: c.countsUsers } : {}),
       // The fault as the agent words it, for the node screen.

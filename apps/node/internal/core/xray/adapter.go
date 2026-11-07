@@ -168,6 +168,9 @@ func (a *Adapter) PolicyDrawn() *dto.PolicyDrawn {
 	return a.policyDrawn
 }
 
+// RendersSockopt implements core.SockoptRenderer.
+func (a *Adapter) RendersSockopt() bool { return true }
+
 // ApplyPolicy implements core.PolicyReceiver: store the node-level policy and
 // re-render if it actually changed.
 //
@@ -1325,6 +1328,11 @@ type xrayInboundCfgWire struct {
 	XhttpMode                               string `json:"xhttpMode,omitempty"`
 	XhttpPaddingBytes                       string `json:"xhttpPaddingBytes,omitempty"`
 	GrpcMultiMode                           bool   `json:"grpcMultiMode,omitempty"`
+	// Bk-170: the inbound's socket options, see InboundConfig. Absent or null
+	// leaves them at 0, which is not drawn.
+	TCPUserTimeout       int `json:"tcpUserTimeout,omitempty"`
+	TCPKeepAliveIdle     int `json:"tcpKeepAliveIdle,omitempty"`
+	TCPKeepAliveInterval int `json:"tcpKeepAliveInterval,omitempty"`
 	// Slice 24c part 3, controls inbound `protocol` (vless vs trojan) and
 	// `settings.clients` shape. Empty/missing → vless (back-compat).
 	Subprotocol string `json:"subprotocol,omitempty"`
@@ -1411,6 +1419,9 @@ func (a *Adapter) ApplyInbound(port int, rawCfg json.RawMessage) error {
 		XhttpMode:                               wire.XhttpMode,
 		XhttpPaddingBytes:                       wire.XhttpPaddingBytes,
 		GrpcMultiMode:                           wire.GrpcMultiMode,
+		TCPUserTimeout:                          wire.TCPUserTimeout,
+		TCPKeepAliveIdle:                        wire.TCPKeepAliveIdle,
+		TCPKeepAliveInterval:                    wire.TCPKeepAliveInterval,
 		Warp:                                    wire.Warp,
 	}
 	// Before it is stored: an inbound the render would refuse must not sit in

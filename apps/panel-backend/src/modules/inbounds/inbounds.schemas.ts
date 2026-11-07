@@ -186,6 +186,24 @@ export const XrayConfigSchema = z.object({
    *  several gRPC streams per connection for better throughput. */
   grpcMultiMode: z.boolean().default(false),
 
+  // Bk-170: the inbound's socket options, on any transport. No default on
+  // purpose: absent means "as the core does" (Xray-core v26.3.27, on an inbound:
+  // keepalive off), and the panel sets nothing until a measurement says what to.
+  // null clears a stored value (profiles.service.ts, keepXraySockopt).
+  //
+  // Bounded because the core does not refuse: a value the kernel rejects is
+  // logged at info level and the listener comes up without it
+  // (transport/internet/system_listener.go), a save that silently does nothing.
+  // The keepalive ceiling is the kernel's (MAX_TCP_KEEPIDLE, MAX_TCP_KEEPINTVL),
+  // the other is xray's int32. 0 does nothing in xray and a negative keepalive
+  // turns keepalive off, neither of which is what these fields are for.
+  /** TCP_USER_TIMEOUT in milliseconds. */
+  tcpUserTimeout: z.number().int().min(1).max(2147483647).nullable().optional(),
+  /** Keepalive idle threshold in seconds. */
+  tcpKeepAliveIdle: z.number().int().min(1).max(32767).nullable().optional(),
+  /** Seconds between keepalive probes. */
+  tcpKeepAliveInterval: z.number().int().min(1).max(32767).nullable().optional(),
+
   // Э3 F note: the resolver used to live here. It is a NODE setting now
   // (nodes.dns, DnsSchema in nodes.schemas.ts): the core keeps one dns section
   // per process and the process is one per node, so a per-profile switch over a

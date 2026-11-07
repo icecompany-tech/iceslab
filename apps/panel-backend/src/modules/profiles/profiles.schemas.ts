@@ -97,9 +97,16 @@ export function engineServesSubprotocol(
 export const SINGBOX_XRAY_FAMILY_CODE = 'SINGBOX_XRAY_FAMILY';
 
 export const SINGBOX_XRAY_FAMILY_MESSAGE =
-  'sing-box serves the xray family only as REALITY over raw with one server name; use the xray engine for TLS, none, self-steal, several server names and other transports';
+  'sing-box serves the xray family only as REALITY over raw with one server name; use the xray engine for TLS, none, self-steal, several server names, other transports and socket options';
 
-export type SingboxXrayField = 'security' | 'realityMode' | 'network' | 'realityServerNames';
+export type SingboxXrayField =
+  | 'security'
+  | 'realityMode'
+  | 'network'
+  | 'realityServerNames'
+  | 'tcpUserTimeout'
+  | 'tcpKeepAliveIdle'
+  | 'tcpKeepAliveInterval';
 
 /**
  * The field that keeps an xray-family profile (vless, vmess, trojan) off the
@@ -121,6 +128,9 @@ export type SingboxXrayField = 'security' | 'realityMode' | 'network' | 'reality
  * options.ServerName), and the agent renders the first of the list. A host
  * with the second name as its SNI passed the panel, went out in the
  * subscription, and every handshake on it was refused by the node.
+ *
+ * And the socket options (Bk-170): the sing-box adapter does not read them, so a
+ * value kept on such a profile would be a save that does nothing on the node.
  */
 export function singboxRefusesXrayField(
   protocol: string,
@@ -134,6 +144,9 @@ export function singboxRefusesXrayField(
     realityMode?: unknown;
     network?: unknown;
     realityServerNames?: unknown;
+    tcpUserTimeout?: unknown;
+    tcpKeepAliveIdle?: unknown;
+    tcpKeepAliveInterval?: unknown;
   };
   if ((XRAY_PLAIN_SUBPROTOCOLS as readonly unknown[]).includes(c.subprotocol)) return null;
   const set = (v: unknown) => v !== undefined && v !== null && v !== '';
@@ -141,6 +154,9 @@ export function singboxRefusesXrayField(
   if (c.realityMode === 'self-steal') return 'realityMode';
   if (set(c.network) && c.network !== 'raw') return 'network';
   if (Array.isArray(c.realityServerNames) && c.realityServerNames.length > 1) return 'realityServerNames';
+  if (set(c.tcpUserTimeout)) return 'tcpUserTimeout';
+  if (set(c.tcpKeepAliveIdle)) return 'tcpKeepAliveIdle';
+  if (set(c.tcpKeepAliveInterval)) return 'tcpKeepAliveInterval';
   return null;
 }
 

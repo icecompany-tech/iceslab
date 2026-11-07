@@ -750,6 +750,13 @@ export interface XrayInboundCfg {
   xhttpPaddingBytes?: string;
   /** gRPC multiMode: multiplex several streams per connection. */
   grpcMultiMode?: boolean;
+  /** Bk-170: the inbound's socket options, on any transport. Absent = as the
+   *  core does (on an inbound: keepalive off). TCP_USER_TIMEOUT in milliseconds. */
+  tcpUserTimeout?: number;
+  /** Keepalive idle threshold in seconds. */
+  tcpKeepAliveIdle?: number;
+  /** Seconds between keepalive probes. */
+  tcpKeepAliveInterval?: number;
   /** Subprotocol carried by the xray inbound. `vless` (default) → per-user
    *  UUID with optional Vision flow; `trojan` → per-user password (we reuse
    *  user.xrayUuid); `vmess` → per-user UUID, AEAD (no flow). VMess pairs with
@@ -1865,6 +1872,13 @@ export interface CoreStatus {
    */
   rendersPolicy?: boolean;
   rendersDns?: boolean;
+  /**
+   * This core draws an inbound's tcpUserTimeout and TCP keepalive options. Only
+   * xray reports it. ⚠ Absent means the agent predates the field, which is NOT
+   * false: an old agent drops the options without a word, so the screen says
+   * "unknown" there, never "does not render them".
+   */
+  rendersSockopt?: boolean;
   /** See CoreRestarts. Absent = this core/agent doesn't report it. */
   restarts?: CoreRestarts;
   /** T7: underlying core binary version (e.g. "26.3.27" from `xray version`),
@@ -2180,6 +2194,8 @@ export interface NodeCoreInfo {
   installed?: boolean;
   rendersPolicy?: boolean;
   rendersDns?: boolean;
+  /** See CoreStatus.rendersSockopt. Inventory: it changes with the agent. */
+  rendersSockopt?: boolean;
   /** See CoreStatus.countsUsers. Inventory: it changes with the core build. */
   countsUsers?: boolean;
   /** See CoreStatus.error: the fault as of the last report, for the node

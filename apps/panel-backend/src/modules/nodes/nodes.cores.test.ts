@@ -70,6 +70,18 @@ describe('what the panel keeps from the healthcheck', () => {
     expect('rendersPolicy' in got.cores[0]!).toBe(false);
   });
 
+  it('keeps rendersSockopt where a core reported it and leaves the rest without it', () => {
+    const got = observedCores(
+      [
+        core({ name: 'xray', engine: 'xray', rendersSockopt: true }),
+        core({ name: 'tuic', engine: 'singbox' }),
+      ],
+      AT,
+    );
+    expect(got.cores[0]).toEqual({ name: 'xray', engine: 'xray', rendersSockopt: true });
+    expect('rendersSockopt' in got.cores[1]!).toBe(false);
+  });
+
   it('keeps the AmneziaWG tools version beside the module version', () => {
     // Two upstream tags, two fields: the manifest judges each against its own
     // pin (amneziawg-module, amneziawg-tools).
@@ -211,5 +223,36 @@ describe('the node DTO', () => {
     expect(body.cores.cores[0]!.rendersPolicy).toBe(true);
     expect(body.cores.cores[1]!.rendersPolicy).toBe(false);
     expect(body.cores.observedAt).toBe(AT);
+  });
+
+  it('reads an old agent report as no rendersSockopt at all, never as false', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/nodes',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: `cores-old-${seq}`, address: `cores-old-${seq}.test`, protocol: 'xray' },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = JSON.parse(created.body).id as string;
+
+    // A row as the column already holds it: the report of an agent that predates
+    // the field, written with no migration, since `cores` is Json.
+    await prisma.node.update({
+      where: { id },
+      data: { cores: { observedAt: AT, cores: [{ name: 'xray', engine: 'xray', rendersPolicy: true }] } },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/nodes/${id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const first = (JSON.parse(res.body) as { cores: NodeCores }).cores.cores[0]!;
+    expect('rendersSockopt' in first).toBe(false);
+    expect(first.rendersPolicy).toBe(true);
+
+    // And the next poll of the same old agent leaves it that way.
+    const polled = observedCores([core({ name: 'xray', engine: 'xray', rendersPolicy: true })], AT);
+    expect(polled.cores[0]!.rendersSockopt).toBeUndefined();
   });
 });
