@@ -23,4 +23,14 @@ export default defineConfig({
   },
   // Read by scripts/budget.mjs: which files a screen loads. The image leaves it out.
   build: { manifest: true },
+  server: {
+    // Same origin in development too: the session is a SameSite=Strict cookie.
+    proxy: {
+      '/api': process.env.PANEL_API ?? 'http://127.0.0.1:2515',
+      '/admin': process.env.PANEL_API ?? 'http://127.0.0.1:2515',
+      '/health': process.env.PANEL_API ?? 'http://127.0.0.1:2515',
+      // A regex: a bare /sub would swallow the /subscription screens.
+      '^/sub/': process.env.PANEL_API ?? 'http://127.0.0.1:2515',
+    },
+  },
 })

@@ -24,7 +24,7 @@
 }
 
 .field[data-focus-within] {
-  border-color: var(--color-text-muted);
+  border-color: var(--color-accent-edge);
 }
 
 .field[data-invalid] {
@@ -173,7 +173,13 @@
   outline-offset: calc(var(--border-check) * -1);
 }
 
+.day[data-today] {
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--color-accent-edge);
+  color: var(--color-accent);
+}
+
 .day[data-selected] {
+  box-shadow: none;
   background: var(--color-accent);
   color: var(--color-check-ink);
   font-weight: var(--font-weight-semibold);

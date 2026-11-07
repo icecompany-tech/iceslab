@@ -1,0 +1,118 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1-5);
+  min-width: 0;
+}
+
+.label {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.input {
+  width: 100%;
+  padding-inline: var(--spacing-3);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.md {
+  height: var(--size-field-md);
+}
+
+.sm {
+  height: var(--size-field);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input:focus {
+  border-color: var(--color-accent-edge);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger-edge);
+}
+
+.input:disabled,
+.input:read-only {
+  color: var(--color-text-secondary);
+}
+
+.withAction {
+  position: relative;
+}
+
+.withAction .input {
+  padding-right: calc(var(--spacing-2-5) * 2 + var(--size-icon-lg));
+}
+
+.secret {
+  letter-spacing: var(--tracking-secret);
+}
+
+.action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-inline: var(--spacing-2-5);
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.action:hover {
+  color: var(--color-text);
+}
+
+.action:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: calc(var(--border-check) * -1);
+  border-radius: var(--radius-md);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.warning {
+  color: var(--color-amber);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.labelHidden {
+  position: absolute;
+  width: var(--border-hairline);
+  height: var(--border-hairline);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

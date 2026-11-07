@@ -1,0 +1,52 @@
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--page-glow) no-repeat, var(--color-bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: var(--size-topbar);
+  padding-inline: var(--spacing-6);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2-5);
+}
+
+.mark {
+  width: var(--size-icon-brand);
+  height: var(--size-icon-brand);
+}
+
+.markEdge {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: var(--stroke-icon);
+}
+
+.markCore {
+  fill: var(--color-accent);
+}
+
+.brandName {
+  color: var(--color-text);
+  font-size: var(--text-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-xl);
+  letter-spacing: var(--tracking-tight);
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 0 var(--spacing-4) var(--size-topbar);
+}

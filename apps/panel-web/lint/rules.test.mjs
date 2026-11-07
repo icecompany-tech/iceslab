@@ -47,6 +47,9 @@ const refused = [
   ['F7 fontsource', 'src/app/main.tsx', "import '@fontsource-variable/inter'", /Not in the new panel/],
   ['Mantine stays out', COMPONENT, "import { Box } from '@mantine/core'\nexport const y = Box", /Not in the new panel/],
   ['headless outside ui', 'src/contours/users/components/Row.tsx', "import { Button } from 'react-aria-components'\nexport const y = Button", /through src\/ui only/],
+  ['F10 Math.random in a contour', 'src/contours/users/lib/a.ts', 'export const y = () => Math.random()', /crypto\.getRandomValues/],
+  ['F10 Math.random in the app', 'src/app/a.ts', 'export const y = () => Math.random()', /crypto\.getRandomValues/],
+  ['F10 Math.random in ui', COMPONENT, 'export const y = () => Math.random()', /crypto\.getRandomValues/],
   ['F9 test by class', 'src/ui/Foo/Foo.test.tsx', "export const y = (e: HTMLElement) => e.querySelector('.a')", /by role and text/],
   ['F9 test by test id', 'src/ui/Foo/Foo.test.tsx', "export const y = (s: { getByTestId: (a: string) => void }) => s.getByTestId('a')", /by role and text/],
 ]
@@ -65,6 +68,8 @@ const allowed = [
   ['eight fields on a non-props type', COMPONENT, 'export interface Texts { a: 1; b: 1; c: 1; d: 1; e: 1; f: 1; g: 1; h: 1 }'],
   ['a hash that is not a colour', COMPONENT, "export const y = '/nodes/1#cores'"],
   ['a word with digits', COMPONENT, "export const y = 'top10px-free'"],
+  ['randomness through crypto', 'src/contours/users/lib/a.ts', 'export const y = () => crypto.getRandomValues(new Uint8Array(1))'],
+  ['a test may draw with Math.random', 'src/ui/Foo/Foo.test.tsx', 'export const y = () => Math.random()'],
   ['a test by role', 'src/ui/Foo/Foo.test.tsx', "export const y = (s: { getByRole: (a: string) => void }) => s.getByRole('button')"],
 ]
 

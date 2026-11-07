@@ -1,0 +1,81 @@
+.button {
+  --kind: var(--color-text);
+  --edge: 24%;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: var(--spacing-1-5);
+  padding-block: 0;
+  padding-inline: var(--spacing-3);
+  border: var(--border-hairline) solid color-mix(in srgb, var(--kind) var(--edge), transparent);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--kind);
+  font-family: inherit;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary {
+  --kind: var(--color-accent);
+  --edge: 45%;
+}
+
+.danger {
+  --kind: var(--color-danger);
+  --edge: 45%;
+}
+
+.warn {
+  --kind: var(--color-amber);
+  --edge: 45%;
+}
+
+.normal {
+  --kind: var(--color-text);
+}
+
+.md {
+  height: var(--size-field-md);
+  font-size: var(--text-base);
+  line-height: var(--leading-lg);
+}
+
+.sm {
+  height: var(--size-row);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+
+.wide {
+  width: 100%;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--kind);
+}
+
+.button:active:not(:disabled) {
+  border-color: color-mix(in srgb, var(--kind) 28%, transparent);
+  color: color-mix(in srgb, var(--kind) 80%, transparent);
+}
+
+.button:focus-visible {
+  outline: var(--border-check) solid var(--kind);
+  outline-offset: var(--spacing-half);
+}
+
+.button:disabled {
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+  cursor: default;
+}
+
+.button[aria-busy="true"] {
+  cursor: progress;
+}

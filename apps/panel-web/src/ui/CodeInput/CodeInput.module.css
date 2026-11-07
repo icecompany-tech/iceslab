@@ -1,0 +1,48 @@
+.code {
+  position: relative;
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: transparent;
+  caret-color: transparent;
+  opacity: 0;
+  cursor: text;
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: var(--size-code-cell);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+}
+
+.active {
+  border-color: var(--color-accent-edge);
+}
+
+.invalid {
+  border-color: var(--color-danger-edge);
+}
+
+.caret {
+  width: var(--border-check);
+  height: var(--size-caret);
+  background: var(--color-accent);
+}

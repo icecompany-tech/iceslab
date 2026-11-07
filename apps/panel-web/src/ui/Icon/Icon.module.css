@@ -8,6 +8,11 @@
   stroke-linejoin: round;
 }
 
+.solid {
+  fill: currentcolor;
+  stroke: none;
+}
+
 .sm {
   width: var(--size-icon-sm);
   height: var(--size-icon-sm);
@@ -21,4 +26,9 @@
 .lg {
   width: var(--size-icon-lg);
   height: var(--size-icon-lg);
+}
+
+.xl {
+  width: var(--size-icon-xl);
+  height: var(--size-icon-xl);
 }

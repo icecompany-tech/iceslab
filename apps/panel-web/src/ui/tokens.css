@@ -4,7 +4,7 @@
  * First block: the tokens of the Paper file Iceslab-BlackHole, as get_tokens returns
  * them, except the two font stacks (below).
  * Second block: values the frames use and Paper has no token for, taken from
- * get_jsx of the named layers. Each needs a token in Paper or a decision.
+ * get_jsx of the frames. Each needs a token in Paper or a decision.
  */
 :root {
   --color-text: #F2F3EE;
@@ -20,6 +20,16 @@
   --color-surface-raised: #121820;
   --color-border: #1C2430;
   --color-text-muted: #8893A0;
+  --color-text-secondary: #B4BDC8;
+  --color-text-hint: #A3ADB8;
+  --color-border-strong: #2A3442;
+  --color-hover: #FFFFFF0D;
+  --color-selected: #FFFFFF0A;
+  --color-segment-on: #FFFFFF14;
+  --color-check-well: #00000033;
+  --color-check-edge: #8893A0A6;
+  --color-check-ink: var(--color-bg);
+  --color-scroll-thumb: #A8E6FF33;
 
   /* Paper holds "Segoe UI" and "Cascadia Mono", the faces the frames are drawn in.
      The panel ships system stacks and no web fonts: DECISIONS 2026-11-01. */
@@ -32,11 +42,17 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-display: 40px;
+  --text-md: 15px;
+  --text-title: 18px;
   --font-weight-regular: 400;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
   --tracking-tight: -0.02em;
   --tracking-caps: 0.08em;
+  --leading-tight: 16px;
+  --leading-base: 18px;
+  --leading-lg: 20px;
+  --leading-xl: 24px;
   --spacing-1: 4px;
   --spacing-2: 8px;
   --spacing-3: 12px;
@@ -44,40 +60,133 @@
   --spacing-6: 24px;
   --spacing-8: 32px;
   --spacing-12: 48px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-full: 999px;
-}
-
-:root {
-  /* ui/SquadSelect, ui/Popover/сквады, ui/Check, срок в ui/UserWindow/новый */
+  --border-hairline: 1px;
+  --border-check: 1.5px;
   --spacing-half: 2px;
+  --scrollbar-inset: 5px;
   --spacing-1-5: 6px;
   --spacing-2-5: 10px;
-  --leading-tight: 16px;
-  --leading-base: 18px;
   --size-icon-sm: 12px;
   --size-icon-md: 14px;
+  --spacing-3-5: 14px;
+  --scrollbar-gutter: 14px;
   --size-icon-lg: 16px;
   --size-check: 16px;
+  --size-check-lg: 18px;
+  --spacing-5: 20px;
   --size-tag: 24px;
   --size-row: 32px;
   --size-field: 36px;
   --size-bar: 38px;
-  --size-popover-list: 288px;
+  --size-field-md: 40px;
+  --size-field-lg: 44px;
   --size-calendar: 280px;
-  --border-hairline: 1px;
-  --border-check: 1.5px;
+  --size-popover-list: 288px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
   --radius-check: 5px;
-  --color-hover: #FFFFFF0D;
-  --color-check-well: #00000033;
-  --color-check-edge: color-mix(in srgb, var(--color-text-muted) 65%, transparent);
-  --color-check-ink: var(--color-bg);
+}
+
+:root {
+  /* Code only: Paper has no token type for it. */
   --stroke-icon: 2;
 
-  /* Scrollbar, design-handoff snapshot "Прокрутка": its own gutter, a 4 px thumb. */
-  --scrollbar-gutter: 14px;
-  --scrollbar-inset: 5px;
-  --color-scroll-thumb: #A8E6FF33;
+  /* Frames with no token yet. */
+  --font-weight-medium: 500;
+  --leading-card: 26px;
+  --leading-stat: 34px;
+  --leading-metric: 28px;
+  --leading-hero: 48px;
+  --leading-2xs: 14px;
+  --text-2xs: 11px;
+  --text-metric: 22px;
+  --text-stat: 28px;
+  --text-hero: 44px;
+  --tracking-hero: -0.03em;
+  --tracking-secret: 0.14em;
+  --size-icon-xl: 18px;
+  --size-icon-brand: 22px;
+  --size-topbar: 60px;
+  --size-topbar-control: 34px;
+  --size-sidebar: 232px;
+  --size-rail: 56px;
+  --size-panel: 340px;
+  --size-center: 1088px;
+  --size-auth-card: 400px;
+  --size-code-cell: 52px;
+  --size-chip: 30px;
+  --size-rail-button: 30px;
+  --size-table-row: 54px;
+  --size-footer-row: 40px;
+  --size-dot: 8px;
+  --size-dot-sm: 7px;
+  --size-dot-xs: 6px;
+  --size-meter: 4px;
+  --size-meter-table: 5px;
+  --size-divider: 18px;
+  --size-caret: 22px;
+  --spacing-7: 28px;
+  --spacing-10: 40px;
+  --spacing-11: 44px;
+  --spacing-px-7: 7px;
+  --spacing-px-11: 11px;
+  --spacing-px-17: 17px;
+  --radius-xs: 2px;
+  --color-telegram: #2AABEE;
+  --color-discord: #5865F2;
+  --color-topbar-divider: #FFFFFF24;
+  --color-flag-edge: #FFFFFF1F;
+  --color-notice-warn: color-mix(in srgb, var(--color-amber) 8%, transparent);
+  --color-notice-warn-edge: color-mix(in srgb, var(--color-amber) 30%, transparent);
+  --color-danger-edge: color-mix(in srgb, var(--color-danger) 60%, transparent);
+  --color-row-danger: linear-gradient(90deg, #FF5D4F14 0%, #FF5D4F00 40%);
+  --color-weekend: #A8E6FF08;
+  --color-area-top: #A8E6FF33;
+  --color-area-bottom: #A8E6FF00;
+  --color-pill-accent: #A8E6FF29;
+  --color-pill-accent-edge: #C8F0FF33;
+  --color-pill-amber-ink: #0B0F06;
+  --shadow-popover: 0 8px 24px #00000073;
+  --shadow-panel: -8px 0 24px #00000073;
+  --page-glow: radial-gradient(ellipse 46% 44% at 0% 0%, #8CD7FF33 0%, #8CD7FF15 35%, #8CD7FF06 65%, #8CD7FF00 100%);
+  --topbar-fill: linear-gradient(90deg, #0B0F1300 0%, #0B0F1300 30%, #0B0F13 100%);
+  --topbar-edge: linear-gradient(90deg, #1C243000 0%, #1C243000 12%, #1C2430 38%);
+  --sidebar-fill: linear-gradient(180deg, #0B0F1300 0%, #0B0F1300 18%, #0B0F13 46%);
+  --sidebar-edge: linear-gradient(180deg, #1C243000 0%, #1C243000 18%, #1C2430 46%);
+}
+:root {
+  --size-empty: 280px;
+  --size-col-engines: 210px;
+  --size-col-users: 64px;
+  --size-col-traffic: 156px;
+  --size-col-traffic-value: 46px;
+  --size-col-cert: 100px;
+  --size-chart: 268px;
+  --size-chart-tip: 214px;
+  --size-flag-height: 13px;
+  --text-flag: 8px;
+  --leading-flag: 11px;
+  --opacity-closed: 0.45;
+  --size-dialog: 480px;
+  --size-window: 920px;
+  --size-menu: 244px;
+  --size-switch: 28px;
+  --size-switch-height: 14px;
+  --size-switch-knob: 10px;
+  --size-toolbar-row: 40px;
+  --size-filter-row: 64px;
+  --size-filters: 248px;
+  --size-columns: 380px;
+  --size-col-select: 44px;
+  --size-col-actions: 56px;
+  --size-configs: 560px;
+  --size-devices: 216px;
+  --size-unit: 76px;
+  --color-scrim: #000000B3;
+  --color-row-amber: linear-gradient(90deg, #F2C14E0F 0%, #F2C14E00 40%);
+  --shadow-toast: 0 12px 32px #00000099;
+  --image-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 13l5 5L19 7' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
+  --image-check-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12H18' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
 }

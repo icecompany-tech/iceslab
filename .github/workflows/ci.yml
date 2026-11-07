@@ -87,6 +87,7 @@ jobs:
             web:
               - *common
               - 'apps/panel-web/**'
+              - 'packages/shared/**'
             node:
               - *common
               - 'apps/node/**'
@@ -701,8 +702,14 @@ jobs:
       - name: Build
         run: pnpm exec vite build
 
-      - name: Budgets (entry, all JS, no web fonts)
+      - name: Budgets (entry, login screen, all JS, no web fonts)
         run: node scripts/budget.mjs dist
+
+      # A library update can add a <style> without the nonce; only the console would say.
+      - name: CSP guard (Chromium, the policy of nginx.conf.template)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          node scripts/csp-guard.mjs dist
 
   node-agent:
     name: node-agent (Go)

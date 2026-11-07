@@ -24,10 +24,12 @@ WORKDIR /repo
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/panel-web/package.json apps/panel-web/
+COPY packages/shared/package.json packages/shared/
 
 RUN --mount=type=cache,id=pnpm,target=/root/.pnpm-store \
     pnpm install --frozen-lockfile --prefer-offline --filter "@iceslab/panel-web..."
 
+COPY packages/shared packages/shared
 COPY apps/panel-web apps/panel-web
 
 WORKDIR /repo/apps/panel-web

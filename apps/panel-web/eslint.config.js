@@ -20,7 +20,7 @@ const headless = {
   regex: '^(react-aria|react-stately|@react-aria/|@react-stately/|@internationalized/)',
   message: 'The headless library is reached through src/ui only',
 }
-const net = { regex: '^@/lib/net(/|$)', message: 'Only hooks/ and screens/ reach the network (rule S)' }
+const net = { regex: '^@/lib/net/client$', message: 'Only hooks/ and screens/ reach the network (rule S)' }
 const contour = { regex: '^@/contours/', message: 'lib and ui do not know contours (F1)' }
 const app = { regex: '^@/app(/|$)', message: 'Nothing imports the app (F1)' }
 const ui = { regex: '^@/ui(/|$)', message: 'lib does not draw (F1)' }
@@ -44,6 +44,7 @@ const syntax = [
   ...noLiterals,
   { selector: "JSXAttribute[name.name='style']", message: 'Style from a CSS module and tokens (F6)' },
   { selector: 'TSAsExpression > TSUnknownKeyword', message: 'Parse the value at the edge, no `as unknown` (F2)' },
+  { selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']", message: 'Randomness through crypto.getRandomValues, tests excepted (F10)' },
 ]
 // Rule D: the clock comes through a provider or an argument.
 const noClock = [
@@ -121,7 +122,8 @@ export function buildConfig({ typed = true, contours = listContours(here) } = {}
     },
     {
       files: ['src/lib/**/*.{ts,tsx}'],
-      rules: restrict(contour, app, ui, headless),
+      // A provider and its hook live together: the hook is the only door to the context.
+      rules: { ...restrict(contour, app, ui, headless), 'react-refresh/only-export-components': 'off' },
     },
     {
       files: ['src/lib/net/**/*.{ts,tsx}'],
@@ -130,6 +132,12 @@ export function buildConfig({ typed = true, contours = listContours(here) } = {}
         'no-restricted-globals': 'off',
       },
     },
+    // Copied as it stands from the frozen panel, tests with it; goes away with the Go API in S1.
+    { files: ['src/lib/old/**/*.ts'], rules: { '@typescript-eslint/switch-exhaustiveness-check': 'off' } },
+    // The one door to browser storage (rule D).
+    { files: ['src/lib/storage.ts'], rules: { 'no-restricted-globals': 'off' } },
+    // National colours are not the theme: the one named exception to F6.
+    { files: ['src/ui/Flag/flags.ts'], rules: { 'no-restricted-syntax': 'off' } },
     ...contours.flatMap((c) => {
       const other = { regex: `^@/contours/(?!${c}/)`, message: 'Contours do not import each other (F1)' }
       return [
