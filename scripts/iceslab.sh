@@ -17,12 +17,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/ops/_lib.sh"
 
 # Parallel arrays; index order = menu order. KEYS also accepted as direct args.
-KEYS=(deploy deploy-backend deploy-frontend logs cleanup backup restore)
-RUN=(deploy.sh deploy-backend.sh deploy-frontend.sh logs.sh cleanup.sh iceslab-backup.sh iceslab-restore.sh)
+KEYS=(deploy deploy-backend deploy-frontend first-admin logs cleanup backup restore)
+RUN=(deploy.sh deploy-backend.sh deploy-frontend.sh first-admin.sh logs.sh cleanup.sh iceslab-backup.sh iceslab-restore.sh)
 WHAT=(
     "Full re-deploy: rebuild backend+frontend, migrate the DB, restart."
     "Backend only: rebuild + migrate + restart (frontend untouched)."
     "Frontend only: rebuild + restart the SPA (no migration)."
+    "Create the first admin with a generated password; refuses if one exists."
     "Tail service logs (backend/frontend/postgres/redis/caddy); -f follows."
     "Prune dangling Docker images + build cache left by past deploys."
     "Back up Postgres + Redis + .env.production into one tarball."
@@ -32,6 +33,7 @@ WHEN=(
     "after any change, or to pull the latest release."
     "you changed only the backend, or added a Prisma migration."
     "you changed only the panel UI."
+    "a compose install by hand: after up -d backend, before the frontend."
     "debugging a running service."
     "the panel-host disk fills up after several deploys."
     "before a risky op or restore, or on a schedule."

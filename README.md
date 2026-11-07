@@ -59,7 +59,9 @@ PANEL_DOMAIN=panel.example.com \
   bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab.sh)
 ```
 
-Installs Docker, builds the panel images, brings up Postgres + Redis + backend + frontend, installs Caddy with auto-TLS, locks ufw to 22/80/443. First run takes 5-10 minutes.
+Installs Docker, builds the panel images, brings up Postgres + Redis + backend, creates the first admin, brings up the frontend, installs Caddy with auto-TLS, locks ufw to 22/80/443. First run takes 5-10 minutes.
+
+The first admin is `admin` with a generated password, shown in the terminal and kept in `/root/iceslab-first-admin.txt` (mode 600), not in any log. Sign in, change it, delete the file. The panel has no sign-up page: registration from outside is always refused, and on a compose install by hand the same step is `bash scripts/iceslab.sh first-admin`, run before the frontend is up.
 
 For quick local testing without TLS:
 

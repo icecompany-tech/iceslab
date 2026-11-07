@@ -154,7 +154,7 @@ test('9b. блок бинарей агента: четыре файла тега
 test('10. имена образов те же, что публикует job docker в ci.yml', () => {
   const ci = readFileSync(join(here, '..', 'workflows', 'ci.yml'), 'utf8');
   const matrix = ci.slice(ci.indexOf('  docker:'), ci.indexOf('    steps:', ci.indexOf('  docker:')));
-  const names = [...matrix.matchAll(/- name: (iceslab-[a-z]+)/g)].map((m) => m[1]);
+  const names = [...matrix.matchAll(/- name: (iceslab-[a-z-]+)/g)].map((m) => m[1]);
   assert.deepEqual(names, IMAGES);
 });
 

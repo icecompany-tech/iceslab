@@ -25,7 +25,13 @@
 #   ICESLAB_IMAGE_TAG=develop docker compose -f docker-compose.ghcr.yml \
 #     --env-file .env.production run --rm migrate
 #   ICESLAB_IMAGE_TAG=develop docker compose -f docker-compose.ghcr.yml \
+#     --env-file .env.production up -d backend
+#   bash scripts/iceslab.sh first-admin --compose docker-compose.ghcr.yml
+#   ICESLAB_IMAGE_TAG=develop docker compose -f docker-compose.ghcr.yml \
 #     --env-file .env.production up -d
+#
+# The first admin before the frontend: that port is the only published one, and
+# a panel with no admin must not be reachable. The script refuses a repeat.
 
 # A-267: every container's log capped, 10 MB x 3. The reasons are written out
 # on the same block in docker-compose.prod.yml; keep the two the same.
@@ -140,7 +146,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/icecompany-tech/iceslab-frontend:${ICESLAB_IMAGE_TAG:-main}
+    image: ghcr.io/icecompany-tech/iceslab-panel-web:${ICESLAB_IMAGE_TAG:-main}
     container_name: iceslab-prod-frontend
     logging: *default-logging
     mem_limit: 96m

@@ -25,7 +25,7 @@ export const CHANGELOGEN_VERSION = '0.6.2';
 
 // Имена образов, которые публикует job `docker` в ci.yml. Тест держит этот
 // список равным матрице оттуда, чтобы релиз не называл образ, которого нет.
-export const IMAGES = ['iceslab-backend', 'iceslab-frontend', 'iceslab-node'];
+export const IMAGES = ['iceslab-backend', 'iceslab-frontend', 'iceslab-panel-web', 'iceslab-node'];
 
 const TAG_RE = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?$/;
 

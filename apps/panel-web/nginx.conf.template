@@ -131,6 +131,17 @@ server {
     # short-circuits the resolver entirely, leading to the stale-IP bug.
     set $backend "backend:3000";
 
+    # ───── First admin ─────
+    # Never from outside: the installer creates the first admin from inside the
+    # backend container (scripts/ops/first-admin.sh) before this port is published.
+    # A panel whose database lost its admins stays closed here too. nginx matches
+    # the decoded, normalized path, so case, encoding, dot segments and doubled
+    # slashes all land here, and proxy_pass would have sent the raw one on.
+    location ~* ^/api/auth/register {
+        default_type application/json;
+        return 403 '{"error":"REGISTRATION_DISABLED","message":"The first admin is created by the installer"}';
+    }
+
     # ───── API proxy ─────
     location /api/ {
         proxy_pass http://$backend;

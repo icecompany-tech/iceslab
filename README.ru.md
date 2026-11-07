@@ -59,7 +59,9 @@ PANEL_DOMAIN=panel.example.com \
   bash <(curl -fsSL https://raw.githubusercontent.com/icecompany-tech/iceslab/main/scripts/install-iceslab.sh)
 ```
 
-Ставит Docker, билдит образы, поднимает Postgres + Redis + backend + frontend, ставит Caddy с auto-TLS, лочит ufw на 22/80/443. Первый запуск 5-10 минут.
+Ставит Docker, билдит образы, поднимает Postgres + Redis + backend, создаёт первого администратора, поднимает frontend, ставит Caddy с auto-TLS, лочит ufw на 22/80/443. Первый запуск 5-10 минут.
+
+Первый администратор: `admin` со сгенерированным паролем, он показан в терминале и лежит в `/root/iceslab-first-admin.txt` (права 600), в логах его нет. Войди, смени пароль, удали файл. Страницы регистрации нет: снаружи регистрация всегда отказывает, а при ручной установке через compose тот же шаг делает `bash scripts/iceslab.sh first-admin`, до запуска frontend.
 
 Для быстрых локальных тестов без TLS:
 

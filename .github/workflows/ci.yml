@@ -1488,6 +1488,33 @@ jobs:
           expect_backend http://127.0.0.1:8082/sub/tok-123 /sub/tok-123
           expect_spa http://127.0.0.1:8082/s2/tok-123
 
+      # The first admin is the installer's: no spelling of the route gets through.
+      # --path-as-is, or curl would normalize the dot segments itself.
+      - name: Registration is refused from outside, however it is spelled
+        if: matrix.image.name == 'iceslab-panel-web'
+        run: |
+          set -euo pipefail
+          for path in \
+            /api/auth/register /api/auth/register/ /api/auth/register// //api/auth/register \
+            /api//auth//register /api/auth/./register /api/auth/x/../register \
+            /API/AUTH/REGISTER /api/auth/Register /api/auth/regist%65r /api/auth%2Fregister \
+            /api/auth/register%2F /api/auth/register?x=1 '/api/auth/register;x=1' \
+            /api/auth/register%3Fx=1 /admin/../api/auth/register /sub/../api/auth/register \
+            /admin/%2e%2e/api/auth/register; do
+            code=$(curl -sS -o /tmp/register.out -w '%{http_code}' --path-as-is -X POST "http://127.0.0.1:8082$path")
+            body=$(cat /tmp/register.out)
+            if [[ "$code" != "403" || "$body" == BACKEND* ]]; then
+              echo "::error::POST $path should be refused by nginx, got $code: ${body:0:120}"
+              exit 1
+            fi
+            echo "ok: POST $path -> 403"
+          done
+          expect=$(curl -sS http://127.0.0.1:8082/api/auth/status)
+          if [[ "$expect" != "BACKEND /api/auth/status" ]]; then
+            echo "::error::/api/auth/status should still reach the backend, got: ${expect:0:120}"
+            exit 1
+          fi
+
       # A value the backend would refuse stops the container with a reason,
       # instead of reaching a location line.
       - name: A prefix the backend would refuse is refused here too

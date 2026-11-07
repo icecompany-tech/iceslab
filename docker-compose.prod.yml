@@ -194,12 +194,12 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: apps/panel-frontend/Dockerfile
+      dockerfile: apps/panel-web/Dockerfile
       args:
         # Empty → Vite issues same-origin requests, which the frontend's
         # own nginx layer reverse-proxies to the backend service.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
-    image: iceslab-frontend:latest
+    image: iceslab-panel-web:latest
     container_name: iceslab-prod-frontend
     logging: *default-logging
     mem_limit: 96m

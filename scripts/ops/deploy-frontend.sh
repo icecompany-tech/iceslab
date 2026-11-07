@@ -2,7 +2,7 @@
 # deploy-frontend.sh: fast path for SPA-only changes.
 #
 # Skips Prisma migrate + backend rebuild. Use when you only edited files
-# under apps/panel-frontend/. --no-cache is ON by default: the Vite bundle
+# under apps/panel-web/. --no-cache is ON by default: the Vite bundle
 # is content-hashed, but the COPY layer occasionally gets a Docker cache hit
 # that lands a stale dist/ in the image. Roughly 30s slower, but what you see
 # is what shipped.

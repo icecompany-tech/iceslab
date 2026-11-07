@@ -5,7 +5,7 @@
 #   1. Verifies Docker + Compose plugin (installs them on Ubuntu/Debian if missing)
 #   2. Clones this repo into $ICESLAB_DIR (default /opt/iceslab)
 #   3. Generates `.env.production` with random JWT_SECRET + Postgres password
-#   4. Builds the panel-backend / panel-frontend images locally
+#   4. Builds the panel-backend / panel-web images locally
 #   5. Runs Prisma migrate deploy (one-shot service)
 #   6. Brings up the full stack and waits for health
 #
@@ -686,7 +686,11 @@ step "Launch stack + health check"
 # is usually one line. Caught live 2026-08-10, where a single mistyped character
 # in the ACME email failed config validation and the install ended in eleven
 # minutes of build followed by a message naming nothing.
-if ! docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d; then
+#
+# Backend first, and the frontend, the only published port, after the first admin
+# exists: a panel with no admin must never be reachable, or whoever gets there
+# first owns it.
+if ! docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d backend; then
   printf '\n\033[1;31mThe stack did not come up. The backend says:\033[0m\n' >&2
   docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" logs --tail 30 backend >&2 || true
   printf '\n' >&2
@@ -707,8 +711,24 @@ for i in $(seq 1 60); do
     warn "Backend didn't reach /health within 60s. Its log:"
     docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" logs --tail 30 backend >&2 || true
     warn "Full log: docker compose -f $ICESLAB_DIR/docker-compose.prod.yml logs backend"
+    fail "the backend is not healthy, so the panel port was not published"
   fi
 done
+
+first_admin_rc=0
+bash "$ICESLAB_DIR/scripts/ops/first-admin.sh" || first_admin_rc=$?
+case "$first_admin_rc" in
+  0) FIRST_ADMIN_CREATED=1 ;;
+  3) FIRST_ADMIN_CREATED=0 ;;
+  *) fail "the first admin was not created, so the panel port was not published. Fix the cause above and run this installer again" ;;
+esac
+
+if ! docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d; then
+  printf '\n\033[1;31mThe frontend did not come up:\033[0m\n' >&2
+  docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" logs --tail 30 frontend >&2 || true
+  printf '\n' >&2
+  fail "docker compose up failed, see the frontend log above"
+fi
 
 # write_caddyfile <path>: the host Caddy in front of the panel, for
 # PANEL_DOMAIN, proxying to FRONTEND_PORT.
@@ -937,7 +957,12 @@ printf '  SPA          %s\n' "$SPA_URL"
 printf '  Install dir  %s\n' "$ICESLAB_DIR"
 printf '  Env file     %s  (chmod 600)\n' "$ENV_FILE"
 printf '\n'
-printf '  Next:  open the SPA → click "Create first admin"\n'
+if [[ "$FIRST_ADMIN_CREATED" -eq 1 ]]; then
+  printf '  Next:  open the SPA, sign in as admin. The password is in /root/iceslab-first-admin.txt\n'
+  printf '         (chmod 600). Change it, then delete that file.\n'
+else
+  printf '  Next:  open the SPA and sign in. This panel already had an admin.\n'
+fi
 printf '\n'
 if [[ -z "$PANEL_DOMAIN" ]]; then
   printf '\033[1;33m  ⚠  Plain HTTP on :%s, fine for testing, NOT for production.\033[0m\n' "$FRONTEND_PORT"
