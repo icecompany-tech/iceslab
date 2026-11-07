@@ -1,0 +1,27 @@
+.row {
+  display: flex;
+  gap: var(--spacing-1-5);
+}
+
+.chip {
+  padding: var(--spacing-half) var(--spacing-px-7);
+  border: var(--border-hairline) solid;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+}
+
+.accent {
+  border-color: var(--color-accent-edge);
+  color: var(--color-accent);
+}
+
+.danger {
+  border-color: var(--color-danger-edge);
+  color: var(--color-danger);
+}
+
+.muted {
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}

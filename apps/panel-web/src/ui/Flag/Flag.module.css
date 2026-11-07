@@ -1,0 +1,17 @@
+.flag {
+  display: inline-block;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--size-icon-xl);
+  height: var(--size-flag-height);
+  overflow: clip;
+  border: var(--border-hairline) solid var(--color-flag-edge);
+  border-radius: var(--radius-xs);
+}
+
+.code {
+  color: var(--color-text-muted);
+  font-size: var(--text-flag);
+  line-height: var(--leading-flag);
+  text-align: center;
+}

@@ -1,0 +1,52 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  height: var(--size-chip);
+  padding-inline: var(--spacing-3);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--color-hover);
+}
+
+.chip:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
+}
+
+.active {
+  border-color: var(--color-accent-edge);
+  background: var(--color-accent-soft);
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.dot {
+  width: var(--size-dot-sm);
+  height: var(--size-dot-sm);
+  border-radius: var(--radius-full);
+}
+
+.danger {
+  background: var(--color-danger);
+}
+
+.amber {
+  background: var(--color-amber);
+}
+
+.unknown {
+  border: var(--border-check) solid var(--color-unknown);
+}

@@ -1,0 +1,30 @@
+.meter {
+  display: block;
+  width: 100%;
+  height: var(--size-meter);
+}
+
+.table {
+  height: var(--size-meter-table);
+}
+
+.track {
+  fill: var(--color-surface-raised);
+  rx: var(--radius-xs);
+}
+
+.value {
+  rx: var(--radius-xs);
+}
+
+.accent {
+  fill: var(--color-accent);
+}
+
+.amber {
+  fill: var(--color-amber);
+}
+
+.danger {
+  fill: var(--color-danger);
+}
