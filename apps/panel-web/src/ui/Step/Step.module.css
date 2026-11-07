@@ -1,0 +1,61 @@
+.step {
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2-5);
+  width: 100%;
+  min-height: var(--size-toolbar-row);
+  padding: var(--spacing-2-5) var(--spacing-3-5);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: none;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.head:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+}
+
+.mark {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--size-dot);
+  height: var(--size-dot);
+  border: var(--border-check) solid var(--color-text-muted);
+  border-radius: var(--radius-full);
+}
+
+.dot {
+  border: 0;
+  background: var(--color-text-muted);
+}
+
+.title {
+  flex: 1 1 auto;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-base);
+}
+
+.value {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  padding: 0 var(--spacing-3-5) var(--spacing-3-5);
+}

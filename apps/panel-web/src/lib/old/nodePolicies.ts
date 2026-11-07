@@ -1,0 +1,268 @@
+import { api } from '@/lib/old/api';
+
+/**
+ * Э3 layer B: what a NODE does with traffic that has already reached it.
+ *
+ * Deliberately NOT the same thing as `routePolicies.ts`, which is the older
+ * squad-granted pair of domain lists. That one decides what a subscription
+ * hands the client; this one decides which door a connection leaves the node
+ * by. They are separate resources on the API and stay separate here.
+ *
+ * One policy can be attached to many nodes, and it stays ONE policy: a node
+ * carries `policyId`, never a copy of the rules. Editing it changes every node
+ * running it, which is why `nodeCount` travels with the policy.
+ */
+
+/**
+ * What a rule does with what it matched.
+ *
+ * `direct` is the wire value and must never reach the screen: in layer A the
+ * same word means "around the tunnel, from the user's own address", here it
+ * means "out of the node's address". Opposite outcomes under one word, so the
+ * interface names them apart. See nodePolicyActions.ts for the labels.
+ */
+export type PolicyActionKind = 'direct' | 'block' | 'warp' | 'cascade';
+
+export interface PolicyMatch {
+  domain: string[];
+  ip: string[];
+  port: string | null;
+  protocol: string[];
+  network: string | null;
+}
+
+export interface PolicyRule {
+  id: string;
+  position: number;
+  enabled: boolean;
+  match: PolicyMatch;
+  action: {
+    kind: PolicyActionKind;
+    /** Cascade only: which way out. The id, never the outbound name. */
+    directionId: string | null;
+    /** Display-only, filled in when the direction was loaded with the rule. */
+    directionLabel?: string | null;
+  };
+  /**
+   * This rule can never fire: an earlier one already matches everything it
+   * matches. Carries WHO eats it, because "shadowed" alone leaves the operator
+   * hunting up the list for the culprit.
+   *
+   * The backend computes it sound but not complete: it only accuses a rule it
+   * can prove is dead, so absence is not a guarantee of reachability.
+   */
+  shadowedBy?: { id: string; position: number } | null;
+}
+
+export interface NodePolicy {
+  id: string;
+  name: string;
+  description: string | null;
+  rules: PolicyRule[];
+  /** How many nodes run this policy. Absent on some reads, never assume 0. */
+  nodeCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What a rule looks like on the way in. `id` kept so a save does not re-create
+ *  rows and lose their identity; absent means a new rule. */
+export interface PolicyRuleInput {
+  id?: string;
+  enabled: boolean;
+  match: PolicyMatch;
+  action: { kind: PolicyActionKind; directionId?: string | null };
+}
+
+export interface NodePolicyInput {
+  name: string;
+  description?: string | null;
+  /**
+   * The WHOLE ordered list. A policy is its order, so rules are written as a
+   * set: a partial list would silently delete the rest. This is the one place
+   * a set-replacing payload is right, and only because the screen edits the
+   * entire list and nothing else writes it.
+   */
+  rules: PolicyRuleInput[];
+}
+
+/**
+ * GET /api/nodes/:id/policy-drawing (A-232, BACK 4c8cac67): which rules of the
+ * node's policy the push leaves out, by the drawing the panel SENDS, and
+ * beside it what the node's xray reports it drew (`agent`, null from an agent
+ * that does not report it). Read by `policyDrawingOf`, input checked first.
+ */
+export type PolicyDrawingKind = 'legacy' | 'handover' | 'none';
+export type PolicyNotDrawnReason = 'lost-condition' | 'direction-not-dialled' | 'no-cascade-drawing' | 'nobody-may-take';
+
+export interface PolicyDrawing {
+  policyId: string | null;
+  drawing: PolicyDrawingKind;
+  /** Rules the push leaves out; a reason this build does not know stays as its code. */
+  notDrawn: { ruleId: string; reason: string }[];
+  /**
+   * A-277 (BACK-2 5465a512): cascade rules drawn for every user of the entry,
+   * because the entry (hysteria, AmneziaWG) cannot tell users apart. `null`:
+   * a server older than the field, nothing said.
+   */
+  ungated: string[] | null;
+  agent: {
+    drawing: PolicyDrawingKind;
+    /** `ruleIds` empty: no rule of the current policy names that way out. */
+    notDrawn: { exit: string; direction: number; ruleIds: string[] }[];
+    renderedAt: string;
+    observedAt: string;
+  } | null;
+}
+
+export async function getPolicyDrawing(nodeId: string): Promise<unknown> {
+  const { data } = await api.get<unknown>(`/api/nodes/${nodeId}/policy-drawing`);
+  return data;
+}
+
+const DRAWINGS: readonly string[] = ['legacy', 'handover', 'none'];
+
+/** The answer, or null when it is not one (missing or malformed fields). */
+export function policyDrawingOf(data: unknown): PolicyDrawing | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  if (typeof d.drawing !== 'string' || !DRAWINGS.includes(d.drawing) || !Array.isArray(d.notDrawn)) return null;
+  if (!(d.policyId === null || typeof d.policyId === 'string') || !('agent' in d)) return null;
+  const notDrawn = d.notDrawn.flatMap((n) => {
+    const r = n && typeof n === 'object' ? (n as Record<string, unknown>) : null;
+    return r && typeof r.ruleId === 'string' && typeof r.reason === 'string' ? [{ ruleId: r.ruleId, reason: r.reason }] : [];
+  });
+  let agent: PolicyDrawing['agent'] = null;
+  if (d.agent !== null) {
+    const a = d.agent && typeof d.agent === 'object' ? (d.agent as Record<string, unknown>) : null;
+    if (!a || typeof a.drawing !== 'string' || !DRAWINGS.includes(a.drawing) || !Array.isArray(a.notDrawn)) return null;
+    if (typeof a.renderedAt !== 'string' || typeof a.observedAt !== 'string') return null;
+    agent = {
+      drawing: a.drawing as PolicyDrawingKind,
+      notDrawn: a.notDrawn.flatMap((n) => {
+        const r = n && typeof n === 'object' ? (n as Record<string, unknown>) : null;
+        if (!r || typeof r.exit !== 'string' || typeof r.direction !== 'number') return [];
+        const ruleIds = Array.isArray(r.ruleIds) ? r.ruleIds.filter((x): x is string => typeof x === 'string') : [];
+        return [{ exit: r.exit, direction: r.direction, ruleIds }];
+      }),
+      renderedAt: a.renderedAt,
+      observedAt: a.observedAt,
+    };
+  }
+  const ungated = Array.isArray(d.ungated) ? d.ungated.filter((x): x is string => typeof x === 'string') : null;
+  return { policyId: d.policyId as string | null, drawing: d.drawing as PolicyDrawingKind, notDrawn, ungated, agent };
+}
+
+export async function listNodePolicies(): Promise<{ policies: NodePolicy[] }> {
+  const { data } = await api.get<{ policies: NodePolicy[] }>('/api/node-policies');
+  return data;
+}
+
+export async function getNodePolicy(id: string): Promise<NodePolicy> {
+  const { data } = await api.get<NodePolicy>(`/api/node-policies/${id}`);
+  return data;
+}
+
+export async function createNodePolicy(input: NodePolicyInput): Promise<NodePolicy> {
+  const { data } = await api.post<NodePolicy>('/api/node-policies', input);
+  return data;
+}
+
+export async function updateNodePolicy(
+  id: string,
+  input: Partial<NodePolicyInput>,
+): Promise<NodePolicy> {
+  const { data } = await api.put<NodePolicy>(`/api/node-policies/${id}`, input);
+  return data;
+}
+
+export async function deleteNodePolicy(id: string): Promise<void> {
+  await api.delete(`/api/node-policies/${id}`);
+}
+
+/**
+ * The refusals this API sends, kept in the shape the server sends them.
+ *
+ * Every one of these is already a sentence naming the node, the policy or the
+ * reason. The screen shows that sentence, it does not summarise it into
+ * "something went wrong": the whole value of the answer is the name in it.
+ */
+export interface PolicyRefusal {
+  /** POLICY_DOES_NOT_FIT_NODE, DIRECTION_IN_USE_BY_POLICY, CONFLICT, ... */
+  code: string;
+  /** The server's own sentence. Shown verbatim. */
+  message: string;
+  /** DIRECTION_IN_USE_BY_POLICY only: the policies holding the direction. */
+  policies?: string[];
+}
+
+/**
+ * Any refusal of the node-policies API, for the policy editor: every answer
+ * that API sends is a sentence naming the node, the policy or the reason.
+ *
+ * ⚠ Not for other screens: it takes ANY error that carries a message, a 500
+ * and a core-version 400 included. The node page uses `policyFitRefusal`.
+ */
+export function policyRefusal(err: unknown): PolicyRefusal | null {
+  if (!err || typeof err !== 'object') return null;
+  const res = (err as {
+    response?: { status?: number; data?: { error?: string; message?: string; policies?: string[] } };
+  }).response;
+  if (!res?.data || typeof res.data.message !== 'string' || !res.data.message) return null;
+  return {
+    code: res.data.error ?? String(res.status ?? ''),
+    message: res.data.message,
+    ...(Array.isArray(res.data.policies) ? { policies: res.data.policies } : {}),
+  };
+}
+
+/**
+ * The one refusal the node page's policy strip is about: the policy this
+ * machine cannot carry out (POLICY_DOES_NOT_FIT_NODE, 409). Anything else,
+ * a core-version 400, a 500, a network failure, is not this strip's to show.
+ */
+export function policyFitRefusal(err: unknown): PolicyRefusal | null {
+  const r = policyRefusal(err);
+  return r && r.code === 'POLICY_DOES_NOT_FIT_NODE' ? r : null;
+}
+
+/** A policy that exists only in the browser, until the first save. */
+export function blankNodePolicy(): NodePolicy {
+  return {
+    id: 'draft',
+    name: '',
+    description: null,
+    rules: [],
+    nodeCount: 0,
+    createdAt: '',
+    updatedAt: '',
+  };
+}
+
+/** An empty rule for the "add rule" row. Matches nothing until the operator
+ *  types, which is why it is created disabled-safe: an empty match means "any"
+ *  on the server, and a blank catch-all at the bottom is not what a click on
+ *  "add" asked for. */
+export function blankRule(): PolicyRuleInput {
+  return {
+    enabled: true,
+    match: { domain: [], ip: [], port: null, protocol: [], network: null },
+    action: { kind: 'block' },
+  };
+}
+
+/** Rules as the API wants them back: ids kept, position implied by order. */
+export function toRuleInput(rules: PolicyRule[]): PolicyRuleInput[] {
+  return rules.map((r) => ({
+    id: r.id.startsWith('new-') ? undefined : r.id,
+    enabled: r.enabled,
+    match: r.match,
+    action: {
+      kind: r.action.kind,
+      // The server rejects a direction on anything but a cascade rule, and it
+      // is right to: a leftover id from switching the action in the form would
+      // otherwise ride along and mean something nobody asked for.
+      ...(r.action.kind === 'cascade' ? { directionId: r.action.directionId } : {}),
+    },
+  }));
+}
