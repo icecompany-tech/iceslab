@@ -1,0 +1,76 @@
+# The load stand, on top of the production compose and without changing it:
+#
+#   docker compose -p iceslab-b2 --env-file scripts/loadstand/.work/b2.env \
+#     -f docker-compose.prod.yml -f scripts/loadstand/docker-compose.b2.yml up -d --build
+#
+# Memory ceilings stay the production ones unless B2_*_MEM says otherwise: what
+# an operator gets out of the box is the first thing measured.
+
+services:
+  postgres:
+    mem_limit: ${B2_POSTGRES_MEM:-512m}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - track_io_timing=on
+      - -c
+      - log_lock_waits=on
+      - -c
+      - log_autovacuum_min_duration=0
+    ports:
+      - "127.0.0.1:${B2_POSTGRES_PORT:-2600}:5432"
+
+  redis:
+    mem_limit: ${B2_REDIS_MEM:-384m}
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "${B2_REDIS_MAXMEMORY:-256mb}", "--maxmemory-policy", "noeviction"]
+
+  backend:
+    mem_limit: ${B2_BACKEND_MEM:-768m}
+    environment:
+      # The image's own default, until a run raises it next to the ceiling above.
+      NODE_OPTIONS: ${B2_NODE_OPTIONS:---max-old-space-size=512}
+
+  # On one machine for a local run. On the stand it runs on the load VPS, where
+  # its clock is also the clock of k6.
+  synth:
+    profiles: ["synth"]
+    build:
+      context: apps/node
+      dockerfile: ../../scripts/loadstand/synth.Dockerfile
+    image: iceslab-b2-synth:latest
+    container_name: iceslab-b2-synth
+    command:
+      - -nodes=/work/nodes.json
+      - -events=/work/events.ndjson
+      - -online=${B2_ONLINE_SHARE:-0.18}
+      - -reach=${B2_REACH:-1}
+    volumes:
+      - ./scripts/loadstand/.work:/work
+
+  probe:
+    profiles: ["probe"]
+    image: docker:27.5-cli
+    entrypoint: ["sh", "/loadstand/probe.sh"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/loadstand:/loadstand:ro
+      - ./scripts/loadstand/.work:/work
+
+  k6:
+    profiles: ["k6"]
+    image: grafana/k6:1.3.0
+    user: root
+    environment:
+      BASE_URL: ${B2_BASE_URL:-http://frontend}
+    volumes:
+      - ./scripts/loadstand/k6:/scripts:ro
+      - ./scripts/loadstand/.work:/work
