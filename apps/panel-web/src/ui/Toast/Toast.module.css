@@ -1,0 +1,50 @@
+.stack {
+  position: fixed;
+  right: calc(var(--size-rail) + var(--spacing-6));
+  bottom: var(--spacing-6);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  width: var(--size-panel);
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2-5);
+  padding: var(--spacing-3);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-toast);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: var(--leading-lg);
+}
+
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.done {
+  color: var(--color-accent);
+}
+
+.partial {
+  color: var(--color-amber);
+}
+
+.failed {
+  color: var(--color-danger);
+}
+
+.close {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}

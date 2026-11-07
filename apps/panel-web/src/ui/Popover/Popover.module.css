@@ -1,0 +1,14 @@
+.anchor {
+  display: inline-flex;
+}
+
+.panel {
+  position: fixed;
+  z-index: 40;
+  max-height: calc(100vh - var(--spacing-4));
+  overflow-y: auto;
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+}

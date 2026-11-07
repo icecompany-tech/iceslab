@@ -1,0 +1,62 @@
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.hidden {
+  position: absolute;
+  overflow: hidden;
+  width: var(--border-hairline);
+  height: var(--border-hairline);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.track {
+  position: relative;
+  width: var(--size-switch);
+  height: var(--size-switch-height);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+}
+
+.track::after {
+  content: "";
+  position: absolute;
+  top: var(--spacing-half);
+  left: var(--spacing-half);
+  width: var(--size-switch-knob);
+  height: var(--size-switch-knob);
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+
+.input:checked + .track {
+  background: var(--color-accent);
+}
+
+.input:checked + .track::after {
+  left: auto;
+  right: var(--spacing-half);
+  background: var(--color-check-ink);
+}
+
+.input:focus-visible + .track {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
+}
+
+.input:disabled + .track {
+  opacity: var(--opacity-closed);
+}
