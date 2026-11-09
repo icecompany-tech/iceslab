@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,10 +22,12 @@ import (
 Bk-170, live, with the real core: a connection whose other end has gone dead is
 closed by the time the operator set, and without the setting it stays.
 
-The peer dies by taking the loopback down, so nothing answers and nothing resets,
-which is what a client that lost its network looks like from the server. That
-needs a network namespace of its own: the test runs itself again inside one, and
-the machine's own loopback is not touched. Skipped without XRAY_BIN, or where no
+The peer dies without a word: nothing answers and nothing resets, which is what a
+client that lost its network looks like from the server. An idle connection dies by
+taking the loopback down; one with data in flight by dropping only its packets
+(iptables), so the core keeps sending (see deadConnection). That needs a network
+namespace of its own: the test runs itself again inside one, and the machine's own
+loopback and firewall are not touched. Skipped without XRAY_BIN, or where no
 namespace can be made.
 */
 
@@ -176,24 +180,108 @@ func deadConnection(t *testing.T, bin, extra string, inFlight bool, wait time.Du
 	if _, err := io.ReadAtLeast(stream, buf, 1); err != nil {
 		t.Fatalf("nothing came through: %v", err)
 	}
-	// With data in flight the client stops reading, so the core's send queue is
-	// full when the peer dies. TCP_USER_TIMEOUT counts only what waits for an
-	// answer: a client that went on reading could leave the queue empty at that
-	// moment on a busy machine, and then nothing would be waiting.
-	time.Sleep(time.Second)
 	if !serverSideOpen(t, socksPort) {
 		t.Fatal("no connection on the core's port before the peer died")
 	}
-
-	setLoopback(t, "down")
+	// How the peer dies. TCP_USER_TIMEOUT is the time sent data may stay
+	// unacknowledged, so with data in flight the core must keep sending after the
+	// peer is gone, by construction:
+	//   - the client keeps reading, so the window stays open: a client that stopped
+	//     reading closed it, nothing was in flight, the kernel only probed the zero
+	//     window, and whether the timeout ends that differs by kernel (CI
+	//     42706313485 kept it 15 s, `ss` showed timer:(persist) and no unacked);
+	//   - only the client's packets are dropped, not the loopback: with the loopback
+	//     down the target's side died too, the core had nothing left to send, and
+	//     in a run where the last bytes were acknowledged just before, nothing
+	//     waited for an answer (2 of 20 in WSL, `ss` showed bytes_acked = bytes_sent).
+	//     With the target alive the core goes on sending into the silence.
+	var before string
+	if inFlight {
+		go func() { _, _ = io.Copy(io.Discard, stream) }()
+		defer undropPort(t, socksPort)
+		// Cut at a moment the kernel shows bytes waiting for an answer, with nothing
+		// in between: a sample taken later can find the window closed.
+		info, ok := waitInFlight(socksPort, 5*time.Second)
+		if !ok {
+			t.Fatalf("no unacknowledged data on the core's side to start from: %s", info)
+		}
+		dropPort(t, socksPort)
+		before = info
+	} else {
+		before = tcpInfo(socksPort)
+		setLoopback(t, "down")
+	}
+	t.Logf("before: %s", before)
 	died := time.Now()
+	logged := false
 	for time.Since(died) < wait {
 		if !serverSideOpen(t, socksPort) {
 			return time.Since(died)
 		}
+		if !logged && time.Since(died) > time.Second {
+			info := tcpInfo(socksPort)
+			t.Logf("1 s after: %s", info)
+			logged = true
+			if inFlight && info != "" && unacked(info) == 0 {
+				t.Fatalf("nothing is waiting for an answer after the peer died, the timeout has nothing to count: %s", info)
+			}
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	t.Logf("at the end: %s", tcpInfo(socksPort))
 	return -1
+}
+
+// dropPort silences the client's connection to the core: every packet to or from
+// the core's port is dropped, so nothing answers and nothing resets, as when a
+// client loses its network. Other connections on the loopback live on.
+func dropPort(t *testing.T, port int) {
+	t.Helper()
+	for _, dir := range []string{"--sport", "--dport"} {
+		if out, err := exec.Command("iptables", "-I", "INPUT", "-p", "tcp", dir, strconv.Itoa(port), "-j", "DROP").CombinedOutput(); err != nil {
+			t.Fatalf("iptables %s %d: %v\n%s", dir, port, err, out)
+		}
+	}
+}
+
+func undropPort(t *testing.T, port int) {
+	t.Helper()
+	for _, dir := range []string{"--sport", "--dport"} {
+		_ = exec.Command("iptables", "-D", "INPUT", "-p", "tcp", dir, strconv.Itoa(port), "-j", "DROP").Run()
+	}
+}
+
+var unackedField = regexp.MustCompile(`\bunacked:(\d+)`)
+
+// unacked is tcpi_unacked from ss's line, 0 when ss does not print it.
+func unacked(info string) int {
+	m := unackedField.FindStringSubmatch(info)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
+// waitInFlight waits until the core's side has sent data not yet acknowledged.
+func waitInFlight(port int, within time.Duration) (string, bool) {
+	var info string
+	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if info = tcpInfo(port); unacked(info) > 0 {
+			return info, true
+		}
+	}
+	return info, false
+}
+
+// tcpInfo is the kernel's TCP_INFO of the core's side of the connection, as ss
+// prints it: unacked, backoff, the send window, timers.
+func tcpInfo(port int) string {
+	out, err := exec.Command("ss", "-tinoeH", "state", "established", fmt.Sprintf("( sport = :%d )", port)).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("ss: %v %s", err, out)
+	}
+	return strings.Join(strings.Fields(string(out)), " ")
 }
 
 // serveTarget answers each connection with one chunk, and with stream set goes
