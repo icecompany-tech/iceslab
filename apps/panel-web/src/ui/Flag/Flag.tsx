@@ -12,7 +12,13 @@ export function Flag({ code }: { code: string | null }) {
   const n = flag.colors.length
   return (
     <svg className={styles.flag} viewBox="0 0 18 13" preserveAspectRatio="none" role="img" aria-label={upper}>
-      {flag.kind === 'cross' ? (
+      {flag.kind === 'kz' ? (
+        <>
+          <rect width="18" height="13" fill={flag.colors[0]} />
+          <circle cx="10" cy="6.5" r="2.8" fill={flag.colors[1]} />
+          <rect x="1.5" width="1.5" height="13" fill={flag.colors[1]} />
+        </>
+      ) : flag.kind === 'cross' ? (
         <>
           <rect width="18" height="13" fill={flag.colors[0]} />
           <rect x={CROSS_AT} width="3" height="13" fill={flag.colors[1]} />

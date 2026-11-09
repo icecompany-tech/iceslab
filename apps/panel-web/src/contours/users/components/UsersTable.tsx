@@ -17,12 +17,13 @@ import { Flag } from '@/ui/Flag/Flag'
 import { Icon } from '@/ui/Icon/Icon'
 import { Menu } from '@/ui/Menu/Menu'
 import { Meter } from '@/ui/Meter/Meter'
-import { meterTone } from '@/ui/Meter/tone'
 import { useToast } from '@/ui/Toast/useToast'
 
 export type Density = 'compact' | 'normal' | 'relaxed'
 
 const SOON_DAYS = 7
+/** The users table has no red bar: above 60% amber. The node card keeps 60/85 (DSGN, rows). */
+const AMBER_FROM = 60
 const MIN_WIDTH = 48
 /** The column that takes the window's spare width; the rest keep theirs. */
 const STRETCH: ColumnId = 'username'
@@ -62,8 +63,7 @@ function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableC
     case 'username':
       return (
         <span className={styles.userName}>
-          <b className={user.status === 'disabled' ? styles.dimName : ''}>{user.username}</b>
-          {user.telegramId && <span className={styles.handle}>{user.telegramId}</span>}
+          <b>{user.username}</b>
         </span>
       )
     case 'shortId':
@@ -100,14 +100,14 @@ function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableC
       return (
         <span className={styles.usedCell}>
           <span className={user.status === 'disabled' ? styles.muted : ''}>{fmtBytes(user.trafficUsedBytes, locale)}</span>
-          {percent === null ? <span className={styles.noMeter} /> : <Meter size="table" percent={percent} tone={meterTone(percent)} />}
+          {percent === null ? <span className={styles.noMeter} /> : <Meter percent={percent} tone={percent > AMBER_FROM ? 'amber' : 'accent'} />}
         </span>
       )
     }
     case 'usedPct': {
       if (!user.trafficLimitBytes) return dash
       const percent = (user.trafficUsedBytes / user.trafficLimitBytes) * 100
-      return <span className={percent > 60 ? styles.soon : styles.muted}>{fmtPercent(percent, locale)}</span>
+      return <span className={percent > AMBER_FROM ? styles.soon : styles.muted}>{fmtPercent(percent, locale)}</span>
     }
     case 'limit':
       return <span className={styles.muted}>{user.trafficLimitBytes === null ? '∞' : fmtBytes(user.trafficLimitBytes, locale)}</span>
@@ -156,7 +156,7 @@ function RowActions({ user, context, onDialog, onEnable }: { user: User; context
   return (
     <span className={styles.rowActions}>
       <button type="button" className={styles.copyRow} aria-label={words.copyLink} disabled={url === null} title={noLink} onClick={copy}>
-        <Icon name="copy" size="md" />
+        <Icon name="copy" size="lg" />
       </button>
       <Menu
         label={words.rowMenu(user.username)}
@@ -209,6 +209,24 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
       place(column.id, 'right', right)
       right += drawn(column.id)
     }
+  }, [columns, view, users])
+
+  // The expired and limit tint runs across the whole row (DSGN, rows), but every cell is opaque for
+  // the pins: each cell draws its own slice of one row-wide gradient, placed by its column's offset.
+  useLayoutEffect(() => {
+    const root = table.current
+    if (!root) return
+    const paint = () => {
+      root.style.setProperty('--row-width', `${root.offsetWidth}px`)
+      for (const th of root.querySelectorAll<HTMLElement>('thead th[data-col]')) {
+        for (const el of root.querySelectorAll<HTMLElement>(`tbody [data-col="${th.dataset.col}"]`)) el.style.setProperty('--cell-x', `${-th.offsetLeft}px`)
+      }
+    }
+    paint()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(paint)
+    observer.observe(root)
+    return () => observer.disconnect()
   }, [columns, view, users])
 
   const startResize = (column: UserColumn, event: PointerEvent<HTMLSpanElement>) => {
@@ -283,7 +301,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
                 </th>
               )
             })}
-            {!stretches && <th scope="col" className={styles.filler} aria-hidden="true" />}
+            {!stretches && <th scope="col" data-col="filler" className={styles.filler} aria-hidden="true" />}
             <th scope="col" data-col="actions" className={`${styles.actionsCell} ${styles.pinned}`} aria-label={words.rowMenu('')} />
           </tr>
         </thead>
@@ -291,7 +309,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
           {users.map((user) => {
             const word = statusWord(user.status)
             return (
-              <tr key={user.id} className={`${styles.row} ${word === 'expired' ? styles.rowExpired : word === 'limited' ? styles.rowLimited : ''} ${selected.has(user.id) ? styles.rowSelected : ''}`} onClick={() => onOpen(user)}>
+              <tr key={user.id} className={`${styles.row} ${word === 'expired' ? styles.rowExpired : word === 'limited' ? styles.rowLimited : word === 'disabled' ? styles.rowDisabled : ''} ${selected.has(user.id) ? styles.rowSelected : ''}`} onClick={() => onOpen(user)}>
                 <td data-col="select" className={`${styles.selectCell} ${styles.pinned}`} onClick={(e) => e.stopPropagation()}>
                   <Check label={words.selectUser(user.username)} checked={selected.has(user.id)} onChange={(on) => onSelect([user.id], on)} />
                 </td>
@@ -300,7 +318,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
                     <Cell id={column.id} user={user} context={context} />
                   </td>
                 ))}
-                {!stretches && <td className={styles.filler} />}
+                {!stretches && <td data-col="filler" className={styles.filler} />}
                 <td data-col="actions" className={`${styles.actionsCell} ${styles.pinned}`} onClick={(e) => e.stopPropagation()}>
                   <RowActions user={user} context={context} onDialog={onDialog} onEnable={onEnable} />
                 </td>

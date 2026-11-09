@@ -92,6 +92,10 @@
 }
 
 .table {
+  /* Set on the elements by UsersTable for the row tint; these hold until it measures. */
+  --row-width: 100%;
+  --cell-x: 0;
+
   width: 100%;
   table-layout: fixed;
   border-collapse: separate;
@@ -122,14 +126,16 @@
   vertical-align: top;
 }
 
+/* Paper AS2-0 Row: 46 with its bottom edge, no block padding, middle. */
 .table td {
-  height: var(--size-field-lg);
-  padding: var(--spacing-1) var(--spacing-1-5);
+  height: var(--size-user-row);
+  padding: 0 var(--spacing-1-5);
   overflow: hidden;
   border-bottom: var(--border-hairline) solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .compact td {
@@ -471,20 +477,38 @@
   cursor: pointer;
 }
 
-.row:hover td {
-  background: var(--color-surface-raised);
+/* Each cell paints its slice of one row-wide tint: --row-width and --cell-x come from UsersTable. */
+.rowExpired td {
+  background: var(--row-tint-danger) var(--cell-x) 0 / var(--row-width) 100% no-repeat, var(--color-surface);
 }
 
-.rowExpired td:first-child {
-  background: var(--color-row-danger), var(--color-surface);
-}
-
-.rowLimited td:first-child {
-  background: var(--color-row-amber), var(--color-surface);
+.rowLimited td {
+  background: var(--row-tint-amber) var(--cell-x) 0 / var(--row-width) 100% no-repeat, var(--color-surface);
 }
 
 .rowSelected td {
   background: var(--color-surface-raised);
+}
+
+.row:hover td {
+  background: linear-gradient(var(--color-row-hover), var(--color-row-hover)), var(--color-surface);
+}
+
+/* «Отключён»: the row's words go quiet, the flag half way. */
+.rowDisabled td,
+.rowDisabled td .danger,
+.rowDisabled td .soon {
+  color: var(--color-text-muted);
+}
+
+.rowDisabled .nodeCell > :first-child {
+  opacity: var(--opacity-dim);
+}
+
+/* The hovered row's box answers before the press: accent edge, soft fill. */
+.row:hover .selectCell input:not(:checked, :indeterminate) {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-soft);
 }
 
 .userName {
@@ -495,19 +519,9 @@
 }
 
 .userName b {
+  font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
-}
-
-.dimName {
-  color: var(--color-text-muted);
-}
-
-.handle {
-  overflow: hidden;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
+  line-height: var(--leading-base);
 }
 
 .mono {
@@ -522,7 +536,8 @@
 
 .fine {
   color: var(--color-text-muted);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
 }
 
 .danger {
@@ -552,8 +567,8 @@
 
 .statusDot {
   flex-shrink: 0;
-  width: var(--size-dot-xs);
-  height: var(--size-dot-xs);
+  width: var(--size-dot-sm);
+  height: var(--size-dot-sm);
   border-radius: var(--radius-full);
 }
 
@@ -572,7 +587,7 @@
 .dot_disabled,
 .dot_unknown {
   box-sizing: border-box;
-  border: var(--border-hairline) solid var(--color-text-muted);
+  border: var(--border-check) solid var(--color-unknown);
 }
 
 .nodeCell {
@@ -589,7 +604,8 @@
 
 .online {
   color: var(--color-accent);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
 }
 
 .usedCell {
@@ -599,14 +615,16 @@
 }
 
 .noMeter {
-  height: var(--size-meter-table);
+  height: var(--size-meter);
   border-top: var(--border-hairline) dashed var(--color-border);
 }
 
+/* The icons sit 8 apart and the ⋮ glyph, not its button, ends 16 from the card edge. */
 .rowActions {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
+  margin-right: calc(-1 * var(--spacing-1));
+  vertical-align: middle;
 }
 
 .copyRow {
@@ -614,7 +632,7 @@
   padding: var(--spacing-1);
   border: 0;
   background: none;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   opacity: 0;
   cursor: pointer;
 }
@@ -622,6 +640,10 @@
 .row:hover .copyRow,
 .copyRow:focus-visible {
   opacity: 1;
+}
+
+.row:hover .rowActions button {
+  color: var(--color-text);
 }
 
 .empty {

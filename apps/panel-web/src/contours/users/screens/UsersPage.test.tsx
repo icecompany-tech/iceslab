@@ -129,6 +129,13 @@ describe('UsersPage', () => {
     await waitFor(() => expect(s.sent.some((r) => r.path.includes('sort=traffic'))).toBe(true))
   })
 
+  it('nothing stands by the name while there is no Telegram nick: the numeric id is not shown (owner 10.11)', async () => {
+    server({ 'GET /api/users': { body: { users: [user({ telegramId: '734550012' })], total: 1 } } })
+    page()
+    await screen.findByText('kate_m')
+    expect(screen.queryByText('734550012')).toBeNull()
+  })
+
   it('the status and limit filters pick from a popover, not a native select', async () => {
     const s = server()
     page()

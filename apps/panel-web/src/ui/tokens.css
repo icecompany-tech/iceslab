@@ -30,6 +30,9 @@
   --color-check-edge: #8893A0A6;
   --color-check-ink: var(--color-bg);
   --color-scroll-thumb: #A8E6FF33;
+  --color-row-hover: #FFFFFF08;
+  --color-inset: #FFFFFF05;
+  --color-backdrop: #05070AD9;
 
   /* Paper holds "Segoe UI" and "Cascadia Mono", the faces the frames are drawn in.
      The panel ships system stacks and no web fonts: DECISIONS 2026-11-01. */
@@ -190,12 +193,17 @@
   --size-col-select: 38px;
   --size-col-actions: 78px;
   --size-col-filter: 26px;
+  --size-user-row: 46px;
+  --opacity-dim: 0.6;
   --spacing-px-5: 5px;
   --size-configs: 560px;
   --size-devices: 216px;
   --size-unit: 76px;
   --color-scrim: #000000B3;
   --color-row-amber: linear-gradient(90deg, #F2C14E0F 0%, #F2C14E00 40%);
+  /* The users rows, Paper Row/истёк and Row/лимит: blended in oklab, 0 to 40% of the row. */
+  --row-tint-danger: linear-gradient(in oklab 90deg, #FF5D4F14 0%, #FF5D4F00 40%);
+  --row-tint-amber: linear-gradient(in oklab 90deg, #F2C14E14 0%, #F2C14E00 40%);
   --shadow-toast: 0 12px 32px #00000099;
   --image-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 13l5 5L19 7' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
   --image-check-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12H18' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
