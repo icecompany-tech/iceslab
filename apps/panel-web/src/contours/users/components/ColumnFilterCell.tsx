@@ -30,6 +30,35 @@ function Opener({ label, active, ...props }: { label: string; active: boolean; '
   )
 }
 
+/** Status and Limit pick one value, through ui/Popover like «Нода», not a native select (DSGN, head of the users table). */
+function Choice({ label, value, options, onPick }: { label: string; value: string; options: readonly { value: string; label: string }[]; onPick: (value: string) => void }) {
+  const shown = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
+  return (
+    <Popover trigger={(props) => <Opener label={shown} active={value !== (options[0]?.value ?? '')} {...props} aria-label={label} />}>
+      {(close) => (
+        <div role="menu" aria-label={label} className={styles.choiceList}>
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={o.value === value}
+              className={styles.choiceItem}
+              onClick={() => {
+                close()
+                onPick(o.value)
+              }}
+            >
+              {o.label}
+              {o.value === value && <Icon name="check" size="md" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </Popover>
+  )
+}
+
 function Dates({ list, after, before, presence, label }: { list: ListState; after: FilterParam; before: FilterParam; presence?: FilterParam; label: string }) {
   const words = useDict(DICT)
   const active = [after, before, presence].some((k) => k && list.filters[k])
@@ -93,11 +122,10 @@ export function ColumnFilterCell({ filter, list, nodes, label }: { filter: Colum
       return <input className={styles.searchInput} aria-label={words.searchLabel} placeholder={words.searchPlaceholder} value={list.searchText} onChange={(e) => list.setSearchText(e.target.value)} />
     case 'status':
       return (
-        <Select
-          look="filter"
-          aria-label={words.statusFilter}
+        <Choice
+          label={words.statusFilter}
           value={list.status}
-          onChange={(e) => list.setStatus(e.target.value as StatusFilter)}
+          onPick={(value) => list.setStatus(value as StatusFilter)}
           options={[
             { value: 'all', label: words.anyValue },
             { value: 'active', label: words.statuses.active },
@@ -112,11 +140,10 @@ export function ColumnFilterCell({ filter, list, nodes, label }: { filter: Colum
     case 'choice': {
       const values = filter.param === 'deviceLimit' ? words.deviceChoice : words.choice
       return (
-        <Select
-          look="filter"
-          aria-label={label}
+        <Choice
+          label={label}
           value={list.filters[filter.param] ?? ''}
-          onChange={(e) => list.setFilter(filter.param, e.target.value)}
+          onPick={(value) => list.setFilter(filter.param, value)}
           options={[{ value: '', label: words.anyValue }, ...filter.values.map((value) => ({ value, label: values[value] ?? value }))]}
         />
       )

@@ -187,8 +187,10 @@
   --size-filter-row: 64px;
   --size-filters: 248px;
   --size-columns: 380px;
-  --size-col-select: 44px;
-  --size-col-actions: 56px;
+  --size-col-select: 38px;
+  --size-col-actions: 78px;
+  --size-col-filter: 26px;
+  --spacing-px-5: 5px;
   --size-configs: 560px;
   --size-devices: 216px;
   --size-unit: 76px;

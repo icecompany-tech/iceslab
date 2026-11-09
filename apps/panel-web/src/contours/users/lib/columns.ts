@@ -67,7 +67,8 @@ export interface UserColumn {
 
 // Widths are the frame's: the table is drawn for sideways scrolling (design 2026-11-04).
 export const COLUMNS: readonly UserColumn[] = [
-  { id: 'username', width: 244, sort: 'username', filter: { kind: 'search' }, def: true },
+  // «Юзер» is the least it takes: the 8 default columns sum to 1086 at 1440, a wider window adds to it.
+  { id: 'username', width: 220, sort: 'username', filter: { kind: 'search' }, def: true },
   { id: 'shortId', width: 68, def: true },
   { id: 'status', width: 104, filter: { kind: 'status' }, def: true },
   { id: 'lastNode', width: 144, filter: { kind: 'node' }, def: true },

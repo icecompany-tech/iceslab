@@ -129,6 +129,19 @@ describe('UsersPage', () => {
     await waitFor(() => expect(s.sent.some((r) => r.path.includes('sort=traffic'))).toBe(true))
   })
 
+  it('the status and limit filters pick from a popover, not a native select', async () => {
+    const s = server()
+    page()
+    await screen.findByText('kate_m')
+    expect(within(screen.getAllByRole('rowgroup')[0] as HTMLElement).queryAllByRole('combobox')).toEqual([])
+    await userEvent.click(screen.getByRole('button', { name: 'Фильтр по статусу' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Отключ/ }))
+    await waitFor(() => expect(s.sent.some((r) => r.path.includes('status=disabled'))).toBe(true))
+    expect(screen.queryByRole('menu', { name: 'Фильтр по статусу' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Фильтр: Лимит' }))
+    expect(screen.getByRole('menuitemradio', { name: /Все/ }).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('disabling asks first, amber, then sends only the status', async () => {
     const s = server({ 'PUT /api/users/u1': { body: user({ status: 'disabled' }) } })
     page()

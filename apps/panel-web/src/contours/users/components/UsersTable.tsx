@@ -1,5 +1,5 @@
 import { isOnlineAt } from '@iceslab/shared'
-import { useLayoutEffect, useRef, type PointerEvent, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ColumnFilterCell } from '@/contours/users/components/ColumnFilterCell'
 import type { DialogKind } from '@/contours/users/components/ActionDialogs'
 import styles from '@/contours/users/components/users.module.css'
@@ -184,6 +184,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
   const pageIds = users.map((u) => u.id)
   const allOn = pageIds.length > 0 && pageIds.every((id) => selected.has(id))
   const someOn = pageIds.some((id) => selected.has(id))
+  const [dragging, setDragging] = useState<{ id: ColumnId; width: number } | null>(null)
 
   // Sticky offsets are set on the elements: the page's CSP refuses style attributes.
   useLayoutEffect(() => {
@@ -215,8 +216,14 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
     const startX = event.clientX
     // From the drawn width: «Юзер» may be wider than its stored one.
     const startWidth = event.currentTarget.closest('th')?.offsetWidth ?? widthOf(column, view)
-    const onMove = (move: globalThis.PointerEvent) => onView({ ...view, widths: { ...view.widths, [column.id]: Math.max(MIN_WIDTH, startWidth + move.clientX - startX) } })
+    setDragging({ id: column.id, width: startWidth })
+    const onMove = (move: globalThis.PointerEvent) => {
+      const width = Math.max(MIN_WIDTH, startWidth + move.clientX - startX)
+      setDragging({ id: column.id, width })
+      onView({ ...view, widths: { ...view.widths, [column.id]: width } })
+    }
     const onUp = () => {
+      setDragging(null)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
@@ -225,6 +232,10 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
   }
 
   const pinClass = (id: ColumnId) => (view.pins[id] ? styles.pinned : '')
+  // «Юзер» takes the spare width unless the operator sized it or hid it; then an empty cell before
+  // the actions does, and no other column stretches (owner 10.11).
+  const stretches = columns.some((c) => c.id === STRETCH) && view.widths[STRETCH] === undefined
+  const lastId = columns.at(-1)?.id
 
   return (
     <div className={styles.tableScroll}>
@@ -232,8 +243,9 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
         <colgroup>
           <col className={styles.colSelect} />
           {columns.map((c) => (
-            <col key={c.id} width={c.id === STRETCH ? undefined : widthOf(c, view)} />
+            <col key={c.id} width={c.id === STRETCH && stretches ? undefined : widthOf(c, view)} />
           ))}
+          {!stretches && <col />}
           <col className={styles.colActions} />
         </colgroup>
         <thead>
@@ -245,23 +257,33 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
               const sorted = list.sort.by === column.sort
               return (
                 <th key={column.id} scope="col" data-col={column.id} className={pinClass(column.id)} aria-sort={sorted ? (list.sort.order === 'asc' ? 'ascending' : 'descending') : undefined}>
-                  <div className={styles.headTop}>
+                  <div className={`${styles.headTop} ${sorted ? styles.headSorted : ''}`}>
                     {column.sort ? (
                       <button type="button" className={styles.sortButton} onClick={() => column.sort && list.toggleSort(column.sort)}>
                         {words.column[column.id]}
-                        <Icon name={sorted ? (list.sort.order === 'asc' ? 'arrowDown' : 'arrowUp') : 'sort'} size="sm" />
+                        <Icon name={sorted ? (list.sort.order === 'asc' ? 'sortDown' : 'sortUp') : 'sort'} size="sm" />
                       </button>
                     ) : (
                       words.column[column.id]
                     )}
                   </div>
-                  <div className={styles.headFilter}>
-                    <ColumnFilterCell filter={column.filter} list={list} nodes={context.allNodes} label={words.filterOf(words.column[column.id])} />
-                  </div>
-                  <span className={styles.resize} role="separator" aria-label={words.resizeColumn(words.column[column.id])} onPointerDown={(e) => startResize(column, e)} />
+                  {column.filter && (
+                    <div className={styles.headFilter}>
+                      <ColumnFilterCell filter={column.filter} list={list} nodes={context.allNodes} label={words.filterOf(words.column[column.id])} />
+                    </div>
+                  )}
+                  <span
+                    className={`${styles.resize} ${column.id === lastId ? styles.resizeLast : ''} ${dragging?.id === column.id ? styles.resizing : ''}`}
+                    role="separator"
+                    aria-label={words.resizeColumn(words.column[column.id])}
+                    onPointerDown={(e) => startResize(column, e)}
+                  >
+                    {dragging?.id === column.id && <span className={styles.resizeLabel}>{words.widthPx(Math.round(dragging.width))}</span>}
+                  </span>
                 </th>
               )
             })}
+            {!stretches && <th scope="col" className={styles.filler} aria-hidden="true" />}
             <th scope="col" data-col="actions" className={`${styles.actionsCell} ${styles.pinned}`} aria-label={words.rowMenu('')} />
           </tr>
         </thead>
@@ -278,6 +300,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
                     <Cell id={column.id} user={user} context={context} />
                   </td>
                 ))}
+                {!stretches && <td className={styles.filler} />}
                 <td data-col="actions" className={`${styles.actionsCell} ${styles.pinned}`} onClick={(e) => e.stopPropagation()}>
                   <RowActions user={user} context={context} onDialog={onDialog} onEnable={onEnable} />
                 </td>

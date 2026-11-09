@@ -30,6 +30,9 @@ const ICONS = {
   pinLeft: { d: 'M4 4 V20 M9 12 H20 M13 8 L9 12 L13 16' },
   pinRight: { d: 'M20 4 V20 M15 12 H4 M11 8 L15 12 L11 16' },
   sort: { d: 'M8 19 V5 M4.5 8.5 L8 5 L11.5 8.5 M16 5 V19 M12.5 15.5 L16 19 L19.5 15.5' },
+  // The sorted column's arrow in a table head (Paper AS2-0 Head), shorter than arrowUp/arrowDown.
+  sortDown: { d: 'M12 5 V19 M6.5 13.5 L12 19 L17.5 13.5' },
+  sortUp: { d: 'M12 19 V5 M6.5 10.5 L12 5 L17.5 10.5' },
   arrowUp: { d: 'M12 20 V4 M6 10 L12 4 L18 10' },
   arrowDown: { d: 'M12 4 V20 M6 14 L12 20 L18 14' },
   phone: { d: 'M7 3 H17 V21 H7 Z M11 18 H13' },

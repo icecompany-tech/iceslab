@@ -28,6 +28,7 @@ const ru = {
   moveColumn: (name: string) => `Перетащить: ${name}`,
   columnShown: (name: string) => `Показывать колонку ${name}`,
   resizeColumn: (name: string) => `Ширина колонки ${name}`,
+  widthPx: (px: number) => `${px} px`,
   column: {
     username: 'Юзер',
     shortId: 'ID',
@@ -345,6 +346,7 @@ const en: typeof ru = {
   moveColumn: (name) => `Drag: ${name}`,
   columnShown: (name) => `Show column ${name}`,
   resizeColumn: (name) => `Width of column ${name}`,
+  widthPx: (px) => `${px} px`,
   column: {
     username: 'User',
     shortId: 'ID',

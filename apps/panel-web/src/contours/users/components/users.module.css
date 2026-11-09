@@ -108,10 +108,10 @@
   width: var(--size-col-actions);
 }
 
+/* Paper AS2-0 Head: cells 0 6 apart, the outer ones 16 from the card; head 8 + label 16 + 6 + field 26 + 8 + edge. */
 .table th {
   position: relative;
-  height: var(--size-filter-row);
-  padding: var(--spacing-1-5) var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-1-5);
   overflow: visible;
   border-bottom: var(--border-hairline) solid var(--color-border);
   background: var(--color-surface);
@@ -124,7 +124,7 @@
 
 .table td {
   height: var(--size-field-lg);
-  padding: var(--spacing-1) var(--spacing-2);
+  padding: var(--spacing-1) var(--spacing-1-5);
   overflow: hidden;
   border-bottom: var(--border-hairline) solid var(--color-border);
   background: var(--color-surface);
@@ -140,39 +140,55 @@
   height: var(--size-table-row);
 }
 
-.pinned {
+/* Stronger than `.table th { position: relative }`: a pinned cell lost to it moved by its own offset onto the next column. */
+.table .pinned {
   position: sticky;
   z-index: 2;
 }
 
-.selectCell {
+.table .selectCell {
   left: 0;
-  text-align: center;
+  padding-left: var(--spacing-4);
+  text-align: left;
 }
 
-.actionsCell {
+.table .actionsCell {
   right: 0;
+  padding-right: var(--spacing-4);
   text-align: right;
+}
+
+/* No width of its own: the spare width when «Юзер» is the operator's (owner 10.11). */
+.table .filler {
+  padding: 0;
 }
 
 .headTop {
   display: flex;
   align-items: center;
-  min-height: var(--leading-lg);
+  gap: var(--spacing-px-5);
+  height: var(--leading-tight);
+  line-height: var(--leading-tight);
+}
+
+.headSorted {
+  color: var(--color-text);
 }
 
 .headFilter {
-  margin-top: var(--spacing-1);
+  margin-top: var(--spacing-1-5);
 }
 
-.headFilter select {
-  height: var(--size-tag);
+/* The popover's anchor spans the column, so the field is the column's full width. */
+.headFilter > * {
+  display: flex;
+  width: 100%;
 }
 
 .sortButton {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
+  gap: var(--spacing-px-5);
   padding: 0;
   border: 0;
   background: none;
@@ -186,35 +202,108 @@
   color: var(--color-text);
 }
 
+/* A 6 px grab zone centred on the cell edge; the divider is its middle line, over the label and the field. */
 .resize {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: var(--spacing-2);
+  right: calc(var(--spacing-1-5) / -2);
+  bottom: var(--spacing-2);
+  z-index: 3;
   width: var(--spacing-1-5);
   cursor: col-resize;
 }
 
-.resize:hover {
-  background: var(--color-border-strong);
+.resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--border-hairline);
+  background: var(--color-border);
+}
+
+.resizeLast::after {
+  content: none;
+}
+
+/* Board «ui/ColumnResize»: while dragging, a 2 px accent line and the width beside it. */
+.resizing::after {
+  content: "";
+  width: var(--spacing-half);
+  background: var(--color-accent);
+}
+
+.resizeLabel {
+  position: absolute;
+  top: 0;
+  left: calc(50% + var(--spacing-2));
+  display: flex;
+  align-items: center;
+  height: var(--spacing-5);
+  padding-inline: var(--spacing-px-7);
+  border: var(--border-hairline) solid var(--color-accent-edge);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-accent-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .searchInput,
 .blockSearch {
   box-sizing: border-box;
   width: 100%;
-  height: var(--size-tag);
+  height: var(--size-col-filter);
   padding-inline: var(--spacing-2);
   border: var(--border-hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  background: none;
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
 }
 
 .blockSearch {
   height: var(--size-row);
+  background: var(--color-bg);
+}
+
+.choiceList {
+  display: flex;
+  flex-direction: column;
+  min-width: var(--size-chart-tip);
+}
+
+.choiceItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  height: var(--size-row);
+  padding-inline: var(--spacing-2-5);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.choiceItem:hover,
+.choiceItem:focus-visible {
+  background: var(--color-hover);
+  outline: 0;
 }
 
 .searchInput:focus,
@@ -230,11 +319,14 @@
   gap: var(--spacing-1);
   box-sizing: border-box;
   width: 100%;
-  height: var(--size-tag);
-  padding-inline: var(--spacing-2);
+  height: var(--size-col-filter);
+  padding-block: 0;
+  padding-right: var(--spacing-1-5);
+  padding-left: var(--spacing-2);
+  line-height: var(--leading-tight);
   border: var(--border-hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  background: none;
   color: var(--color-text-muted);
   font-family: inherit;
   font-size: var(--text-xs);
