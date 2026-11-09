@@ -72,7 +72,13 @@ function Group({ group }: { group: NavGroup }) {
     <div className={styles.group}>
       <button type="button" className={`${styles.groupHead} ${shown ? styles.groupOpen : ''}`} aria-expanded={shown} onClick={() => setOpen(!shown)}>
         {group.title[locale]}
-        <Icon name={shown ? 'chevronDown' : 'chevronRight'} size="md" />
+        {shown ? (
+          <Icon name="chevronDown" size="md" />
+        ) : (
+          <span className={styles.chevronQuiet}>
+            <Icon name="chevronRight" size="md" />
+          </span>
+        )}
       </button>
       {shown && group.items.map((item) => <Item key={item.id} item={item} />)}
     </div>

@@ -45,8 +45,15 @@
   text-decoration: none;
 }
 
-.item:hover {
-  background: var(--color-selected);
+/* Owner 10.11: hover lifts the row to the hover fill and the plain text colour, never the accent. */
+.item:not(.active):hover,
+.groupHead:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.item:not(.active):hover .label {
+  color: var(--color-text);
 }
 
 .item:focus-visible,
@@ -101,6 +108,12 @@
 
 .groupOpen {
   color: var(--color-text-secondary);
+}
+
+/* Paper AS2-0, ui/NavGroup/collapsed: the closed group's chevron is drawn quieter. */
+.chevronQuiet {
+  display: flex;
+  opacity: var(--opacity-chevron);
 }
 
 .account {

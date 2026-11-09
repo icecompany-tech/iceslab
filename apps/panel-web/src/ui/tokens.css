@@ -156,8 +156,9 @@
   /* The top bar blends in oklab, as Paper draws it (AS2-0). */
   --topbar-fill: linear-gradient(in oklab 90deg, #0B0F1300 0%, #0B0F1300 30%, #0B0F13 100%);
   --topbar-edge: linear-gradient(in oklab 90deg, #1C243000 0%, #1C243000 12%, #1C2430 38%);
-  --sidebar-fill: linear-gradient(180deg, #0B0F1300 0%, #0B0F1300 18%, #0B0F13 46%);
-  --sidebar-edge: linear-gradient(180deg, #1C243000 0%, #1C243000 18%, #1C2430 46%);
+  /* The menu blends in oklab too (AS2-0). */
+  --sidebar-fill: linear-gradient(in oklab 180deg, #0B0F1300 0%, #0B0F1300 18%, #0B0F13 46%);
+  --sidebar-edge: linear-gradient(in oklab 180deg, #1C243000 0%, #1C243000 18%, #1C2430 46%);
 }
 :root {
   --size-empty: 280px;
@@ -172,6 +173,7 @@
   --text-flag: 8px;
   --leading-flag: 11px;
   --opacity-closed: 0.45;
+  --opacity-chevron: 0.7;
   --size-dialog: 480px;
   --size-window: 920px;
   --size-menu: 244px;
