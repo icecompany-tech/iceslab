@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import NodeCreatePage from '@/contours/nodes/screens/NodeCreatePage'
+import { guardedLeave } from '@/lib/leaveGuard'
 import { coreVersionChoices } from '@/lib/old/coreVersions'
 import { renderApp, stubServer } from '@/test/app'
 
@@ -116,5 +117,33 @@ describe('NodeCreatePage', () => {
     expect(steps[2]?.textContent).toMatch(/--payload-file/)
     await userEvent.click(screen.getByRole('button', { name: 'Открыть ноду' }))
     expect((await screen.findByRole('dialog')).textContent).toMatch(/показан один раз/)
+  })
+
+  it('F-29: leaving by the menu or the sign-out asks the same, and goes where the menu was going', async () => {
+    server({ 'POST /api/nodes': { status: 201, body: created({ token: 't', expiresAt: '2026-11-06T12:15:00Z', command: 'bash install --payload-file /root/node.payload', payloadOnly: true }) } })
+    renderApp(<NodeCreatePage />, { route: '/nodes/new' })
+    fill('de-09', '9.9.9.9')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    await screen.findByText('Панель без https: установка файлом')
+    const menuLeave = vi.fn()
+    act(() => guardedLeave(menuLeave))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.textContent).toMatch(/показан один раз/)
+    expect(menuLeave).not.toHaveBeenCalled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Закрыть без файла' }))
+    expect(menuLeave).toHaveBeenCalledTimes(1)
+  })
+
+  it('F-29: once the file is saved the menu goes straight on', async () => {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }))
+    server({ 'POST /api/nodes': { status: 201, body: created({ token: 't', expiresAt: '2026-11-06T12:15:00Z', command: 'bash install --payload-file /root/node.payload', payloadOnly: true }) } })
+    renderApp(<NodeCreatePage />, { route: '/nodes/new' })
+    fill('de-09', '9.9.9.9')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Скачать файл' }))
+    const menuLeave = vi.fn()
+    act(() => guardedLeave(menuLeave))
+    expect(menuLeave).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

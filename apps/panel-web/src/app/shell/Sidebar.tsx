@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTES, SERVED_NAV } from '@/app/contours'
 import { GROUP_NAV, MAIN_NAV, type NavGroup, type NavItem } from '@/app/nav'
@@ -7,6 +7,7 @@ import styles from '@/app/shell/Sidebar.module.css'
 import { signOutOnServer, useSession } from '@/lib/auth/session'
 import { nodeHealth, useOverview } from '@/lib/domain/overview'
 import { useDict, useLocale } from '@/lib/i18n'
+import { guardedLeave, leaveGuarded } from '@/lib/leaveGuard'
 import { Icon } from '@/ui/Icon/Icon'
 
 const DICT = {
@@ -24,9 +25,17 @@ function hrefOf(item: NavItem): { to: string } | { href: string } | null {
   return null
 }
 
+/** F-29: a screen that holds the way out gets the leave instead of the link. */
+function holdIfGuarded(event: MouseEvent<HTMLAnchorElement>, go: () => void) {
+  if (!leaveGuarded()) return
+  event.preventDefault()
+  guardedLeave(go)
+}
+
 function Item({ item, badge }: { item: NavItem; badge?: number }) {
   const { locale } = useLocale()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   // An address outside the item's own path can light it up too: /cascades lights «Ноды».
   const lit = ROUTES.some((r) => r.nav === item.id && matchPath(r.path, pathname) !== null)
   const target = hrefOf(item)
@@ -40,13 +49,13 @@ function Item({ item, badge }: { item: NavItem; badge?: number }) {
   )
   if ('href' in target) {
     return (
-      <a className={styles.item} href={target.href}>
+      <a className={styles.item} href={target.href} onClick={(e) => holdIfGuarded(e, () => window.location.assign(target.href))}>
         {body}
       </a>
     )
   }
   return (
-    <NavLink end={target.to === '/'} to={target.to} className={({ isActive }) => `${styles.item} ${isActive || lit ? styles.active : ''}`}>
+    <NavLink end={target.to === '/'} to={target.to} onClick={(e) => holdIfGuarded(e, () => void navigate(target.to))} className={({ isActive }) => `${styles.item} ${isActive || lit ? styles.active : ''}`}>
       {body}
     </NavLink>
   )
@@ -98,10 +107,10 @@ export function Sidebar() {
         ))}
       </div>
       <div className={styles.account}>
-        <NavLink to="/account" className={({ isActive }) => `${styles.admin} ${isActive ? styles.adminHere : ''}`}>
+        <NavLink to="/account" onClick={(e) => holdIfGuarded(e, () => void navigate('/account'))} className={({ isActive }) => `${styles.admin} ${isActive ? styles.adminHere : ''}`}>
           {session.data?.username}
         </NavLink>
-        <button type="button" className={styles.logout} aria-label={words.logout} onClick={() => void logout()}>
+        <button type="button" className={styles.logout} aria-label={words.logout} onClick={() => guardedLeave(() => void logout())}>
           <Icon name="logout" />
         </button>
       </div>

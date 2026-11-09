@@ -5,6 +5,7 @@ import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { isPayloadOnly, payloadFileName, payloadFileOf, scpCommand } from '@/contours/nodes/lib/payloadInstall'
 import { useNow } from '@/lib/clock'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 import { engineLabel } from '@/lib/domain/engines'
 import { fmtDuration } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
@@ -34,6 +35,8 @@ export function InstallStep({ node }: { node: NodeWithPayload }) {
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
   const [askClose, setAskClose] = useState(false)
+  // The leave the window was asked about: the menu's, or null for «open the node».
+  const [pending, setPending] = useState<{ go: () => void } | null>(null)
   const [started] = useState(() => now())
   const [, tick] = useState(0)
   useEffect(() => {
@@ -46,6 +49,11 @@ export function InstallStep({ node }: { node: NodeWithPayload }) {
   const payloadOnly = isPayloadOnly(node.bootstrap)
   const fileName = payloadFileOf(node.bootstrap.command) ?? payloadFileName(node.name)
   const leave = () => void navigate(`/nodes/${node.id}`)
+  // F-29: the menu, the sign-out and closing the tab ask too, not only the button below.
+  useLeaveGuard(payloadOnly && !saved, (go) => {
+    setPending({ go })
+    setAskClose(true)
+  })
   const minutesLeft = Math.ceil((Date.parse(node.bootstrap.expiresAt) - now()) / MINUTE_MS)
 
   if (reported && fresh) {
@@ -116,7 +124,15 @@ export function InstallStep({ node }: { node: NodeWithPayload }) {
         <Button onClick={() => (payloadOnly && !saved ? setAskClose(true) : leave())}>{words.openNode}</Button>
       </div>
       {askClose && (
-        <Confirm title={words.closeNoFileTitle} labels={{ confirm: words.closeAnyway, cancel: words.cancel }} onClose={() => setAskClose(false)} onConfirm={leave}>
+        <Confirm
+          title={words.closeNoFileTitle}
+          labels={{ confirm: words.closeAnyway, cancel: words.cancel }}
+          onClose={() => {
+            setAskClose(false)
+            setPending(null)
+          }}
+          onConfirm={() => (pending ? pending.go() : leave())}
+        >
           {words.closeNoFileBody}
         </Confirm>
       )}
