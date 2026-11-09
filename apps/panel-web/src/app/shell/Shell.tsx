@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { routeAt } from '@/app/contours'
 import styles from '@/app/shell/Shell.module.css'
@@ -18,13 +18,18 @@ export function Shell() {
   const { locale } = useLocale()
   const words = useDict(DICT)
   const title = routeAt(pathname)?.title?.[locale] ?? ''
+  // Only the center scrolls, so a new screen starts at its top, not where the last one was left.
+  const main = useRef<HTMLElement>(null)
+  useEffect(() => {
+    main.current?.scrollTo?.({ top: 0 })
+  }, [pathname])
 
   return (
     <div className={styles.shell}>
       <Topbar title={title} />
       <div className={styles.body}>
         <Sidebar />
-        <main className={styles.main}>
+        <main ref={main} className={styles.main}>
           <div className={styles.center}>
             <Suspense>
               <Outlet />
