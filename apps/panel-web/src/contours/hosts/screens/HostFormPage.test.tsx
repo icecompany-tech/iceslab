@@ -82,6 +82,16 @@ describe('HostFormPage', () => {
     expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('F-15, AUDT: a path, query, fragment or user part in the own address refuses at the field', async () => {
+    const s = server()
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /^Адрес/ }))
+    fireEvent.change(screen.getByLabelText('Своё имя или адрес'), { target: { value: 'cdn.example.net/x?y#z' } })
+    await screen.findByText('Без «/», «?», «#» и «@»: только имя или адрес')
+    expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(s.writes()).toEqual([])
+  })
+
   it('a wrong SNI stands at the field with the names the node serves', async () => {
     server({ 'PUT /api/hosts/h1': { status: 400, body: { error: 'SNI_MISMATCH', expected: ['a.example'] } } })
     page()
