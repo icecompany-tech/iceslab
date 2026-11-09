@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
+import { EstimateBlock, SavePresetWindow } from '@/contours/users/components/NewUserParts'
 import { AdvancedFields, SquadField, TermField, TrafficField } from '@/contours/users/components/UserFields'
 import styles from '@/contours/users/components/users.module.css'
 import { DICT } from '@/contours/users/dict'
 import { useCreateUser, useUsersList } from '@/contours/users/hooks/useUsers'
+import { presetDays } from '@/contours/users/lib/estimate'
 import { randomUsername, usernameValid } from '@/contours/users/lib/newUser'
-import { DEFAULT_PRESETS, loadPresets, type UserPreset } from '@/contours/users/lib/presets'
+import { DEFAULT_PRESETS, loadPresets, savePresets, withPreset, type UserPreset } from '@/contours/users/lib/presets'
 import { readSaveRefusal, type SaveRefusal } from '@/contours/users/lib/refusal'
 import { expireFromParts } from '@/contours/users/lib/term'
-import { createBody, deviceLimitValid, limitError, type UserDraft } from '@/contours/users/lib/userBody'
+import { createBody, deviceLimitValid, limitError, limitToGb, type UserDraft } from '@/contours/users/lib/userBody'
 import { widenedBy } from '@/contours/users/lib/widen'
 import { useNow } from '@/lib/clock'
+import type { NodeRow } from '@/lib/domain/nodes'
 import { ALL_SQUAD_ID, type Squad } from '@/lib/domain/squads'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
@@ -66,13 +69,21 @@ function NameField({ value, onChange, error }: { value: string; onChange: (next:
   )
 }
 
-export function NewUserWindow({ squads, squadsFailed, onClose }: { squads: readonly Squad[]; squadsFailed: boolean; onClose: () => void }) {
+export interface NewUserWindowProps {
+  squads: readonly Squad[]
+  squadsFailed: boolean
+  nodes: ReadonlyMap<string, NodeRow>
+  onClose: () => void
+}
+
+export function NewUserWindow({ squads, squadsFailed, nodes, onClose }: NewUserWindowProps) {
   const words = useDict(DICT)
   const { locale } = useLocale()
   const now = useNow()
   const toast = useToast()
   const create = useCreateUser()
-  const [presets] = useState(loadPresets)
+  const [presets, setPresets] = useState(loadPresets)
+  const [savingPreset, setSavingPreset] = useState(false)
   const [presetId, setPresetId] = useState(DEFAULT_PRESETS[0]?.id ?? '')
   const [username, setUsername] = useState('')
   const [token, setToken] = useState('')
@@ -89,6 +100,18 @@ export function NewUserWindow({ squads, squadsFailed, onClose }: { squads: reado
     setPresetId(id)
     const keep = { groupIds: draft.groupIds, email: draft.email, telegramId: draft.telegramId, deviceLimit: draft.deviceLimit, tag: draft.tag, description: draft.description }
     setDraft({ ...blankDraft(presets.find((p) => p.id === id), now()), ...keep })
+  }
+
+  const trafficGb = draft.unlimited ? null : limitToGb(draft.limitText, draft.limitUnit)
+  const expireDays = presetDays(draft.noExpiry, draft.expireAt, now())
+  const presetSummary = words.presetSummary(trafficGb === null ? words.presetUnlimited : `${trafficGb} ГБ`, expireDays === null ? words.presetNoTerm : `${expireDays} ${words.daysUnit}`, words.strategy[draft.strategy] ?? draft.strategy)
+  const savePreset = (name: string) => {
+    const { list, saved } = withPreset(presets, { name, trafficGb, expireDays, strategy: draft.strategy })
+    savePresets(list)
+    setPresets(list)
+    setPresetId(saved.id)
+    setSavingPreset(false)
+    toast.show(words.presetSaved(saved.name))
   }
 
   const send = (next: boolean) => {
@@ -150,16 +173,16 @@ export function NewUserWindow({ squads, squadsFailed, onClose }: { squads: reado
               />
             )}
           </Field>
+          <button type="button" className={styles.presetSave} disabled={!draft.unlimited && trafficGb === null} onClick={() => setSavingPreset(true)}>
+            {words.presetSave}
+          </button>
           <NameField value={username} onChange={setUsername} error={errors.username} />
           <SquadField squads={squads} value={draft.groupIds} failed={squadsFailed} error={errors.groups} onChange={(groupIds) => patch({ groupIds })} />
           <TrafficField draft={draft} onChange={patch} errors={errors} limitTouched />
           <TermField draft={draft} onChange={patch} errors={errors} limitTouched />
         </div>
         <div className={styles.windowRight}>
-          <section className={styles.block}>
-            <h3 className={styles.blockTitle}>{words.clientGets}</h3>
-            <div className={styles.grayLine}>{words.newConfigsNote}</div>
-          </section>
+          <EstimateBlock picked={draft.groupIds} squads={squads} nodes={nodes} />
         </div>
       </div>
       <section className={styles.block}>
@@ -179,6 +202,7 @@ export function NewUserWindow({ squads, squadsFailed, onClose }: { squads: reado
           </>
         )}
       </section>
+      {savingPreset && <SavePresetWindow summary={presetSummary} taken={(name) => presets.some((p) => p.name === name)} onSave={savePreset} onClose={() => setSavingPreset(false)} />}
       {asking && widen && (
         <Confirm
           title={words.emptySquadWidenTitle}

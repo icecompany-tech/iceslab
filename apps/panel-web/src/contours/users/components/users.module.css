@@ -355,6 +355,26 @@
   color: var(--color-text);
 }
 
+.presetSave {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.presetSave:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.presetSave:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+}
+
 .row {
   cursor: pointer;
 }

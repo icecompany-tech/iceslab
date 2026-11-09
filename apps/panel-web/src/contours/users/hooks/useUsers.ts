@@ -4,8 +4,18 @@ import type { UserBodyFields } from '@/contours/users/lib/userBody'
 import { OVERVIEW_KEY } from '@/lib/domain/overview'
 import { request, requestVoid } from '@/lib/net/client'
 import { arr, nullable, obj, optional, str } from '@/lib/net/parse'
+import { listHosts } from '@/lib/old/hosts'
+import { listBindings, listProfiles } from '@/lib/old/profiles'
 
 export const USERS_KEY = ['users'] as const
+
+/** What the estimate for a new user is built from, under the keys the other screens use. */
+export function useEstimateSources() {
+  const profiles = useQuery({ queryKey: ['profiles'], queryFn: () => listProfiles() })
+  const bindings = useQuery({ queryKey: ['bindings', 'all'], queryFn: () => listBindings() })
+  const hosts = useQuery({ queryKey: ['hosts', 'all'], queryFn: () => listHosts() })
+  return { profiles, bindings, hosts }
+}
 
 export type ListParams = Record<string, string | number>
 

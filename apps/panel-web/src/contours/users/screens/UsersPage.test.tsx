@@ -252,6 +252,51 @@ describe('UsersPage', () => {
     expect(within(dialog).getByText('Подписка')).toBeTruthy()
   })
 
+  it('a new user: the right side guesses the configs from the squad, says it is a guess, and a narrowed squad narrows it', async () => {
+    server({
+      'GET /api/squads': { body: { squads: [squad(ALL_SQUAD_ID, 'All', [], ['p']), squad('n', 'premium', ['h-de'], ['p'])] } },
+      'GET /api/nodes': { body: { nodes: [{ id: 'de', name: 'de-01', address: '1.1.1.1', status: 'online', countryCode: 'de', lastStatusChange: null, lastStatusMessage: null }, { id: 'nl', name: 'nl-01', address: '2.2.2.2', status: 'online', countryCode: 'nl', lastStatusChange: null, lastStatusMessage: null }], total: 2 } },
+      'GET /api/profiles': { body: { profiles: [{ id: 'p', name: 'vless', protocol: 'xray' }] } },
+      'GET /api/bindings': { body: { bindings: [{ id: 'b-de', profileId: 'p', nodeId: 'de', port: 443, enabled: true }, { id: 'b-nl', profileId: 'p', nodeId: 'nl', port: 8443, enabled: true }] } },
+      'GET /api/hosts': { body: { hosts: [{ id: 'h-de', bindingId: 'b-de' }, { id: 'h-nl', bindingId: 'b-nl' }] } },
+    })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('nl-01')
+    expect(within(dialog).getByText('прикидка')).toBeTruthy()
+    expect(within(dialog).getByText('de-01')).toBeTruthy()
+    expect(within(dialog).getByText(/Точный список появится после сохранения/)).toBeTruthy()
+  })
+
+  it('a new user: a list the estimate needs did not come, said instead of «no configs»', async () => {
+    server({ 'GET /api/profiles': { status: 500, body: {} }, 'GET /api/bindings': { body: { bindings: [] } }, 'GET /api/hosts': { body: { hosts: [] } } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText(/Прикидка не посчиталась/, {}, { timeout: 8000 })
+    expect(within(dialog).queryByText(/конфигов не выходит/)).toBeNull()
+  })
+
+  it('a new user: the current values save as a preset in this browser and get picked', async () => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) })
+    const s = server({ 'GET /api/profiles': { body: { profiles: [] } }, 'GET /api/bindings': { body: { bindings: [] } }, 'GET /api/hosts': { body: { hosts: [] } } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить текущие значения как пресет' }))
+    const ask = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement
+    expect(ask.textContent).toMatch(/Сохранится: 50 ГБ, 30 дн, сброс каждый месяц/)
+    fireEvent.change(within(ask).getByLabelText('Название пресета'), { target: { value: 'family' } })
+    await userEvent.click(within(ask).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1))
+    const stored = JSON.parse(store.get('iceslab:user-presets') ?? '[]') as { name: string; trafficGb: number; expireDays: number; strategy: string }[]
+    expect(stored.at(-1)).toMatchObject({ name: 'family', trafficGb: 50, expireDays: 30, strategy: 'month' })
+    expect((within(dialog).getByLabelText('Пресет') as HTMLSelectElement).selectedOptions[0]?.textContent).toMatch(/^family/)
+    expect(s.writes()).toEqual([])
+  })
+
   it('a new user: bad name closes the button, a taken name stands at the field', async () => {
     const s = server({ 'POST /api/users': { status: 409, body: { error: 'USERNAME_TAKEN', message: 'taken', field: 'username' } } })
     page()

@@ -254,7 +254,7 @@ export default function UsersPage() {
       </div>
 
       {openUser && <UserWindow key={openUser.id} user={data?.users.find((u) => u.id === openUser.id) ?? openUser} squads={squads.data ?? []} squadsFailed={squads.isError} nodes={nodeMap} panel={panel.data} onClose={() => setOpenUser(null)} />}
-      {creating && <NewUserWindow squads={squads.data ?? []} squadsFailed={squads.isError} onClose={() => setCreating(false)} />}
+      {creating && <NewUserWindow squads={squads.data ?? []} squadsFailed={squads.isError} nodes={nodeMap} onClose={() => setCreating(false)} />}
       {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
       {enabling && <EnableRow key={enabling.id} user={enabling} onDone={() => setEnabling(null)} />}
       {bulkAsk && (
