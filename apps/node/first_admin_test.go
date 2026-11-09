@@ -24,9 +24,14 @@ type firstAdminRun struct {
 	file     string
 	fileMode os.FileMode
 	posted   string
+	// caAsked: the CA step reached the backend.
+	caAsked bool
 }
 
-func runFirstAdmin(t *testing.T, status, postCode string) firstAdminRun {
+// runFirstAdmin runs the script against a stub docker: ca is what the CA step
+// prints (created, present, or a failure), status the /api/auth/status answer,
+// postCode the register answer.
+func runFirstAdmin(t *testing.T, ca, status, postCode string) firstAdminRun {
 	t.Helper()
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("needs bash")
@@ -42,7 +47,9 @@ func runFirstAdmin(t *testing.T, status, postCode string) firstAdminRun {
 		}
 	}
 	posted := filepath.Join(bin, "posted")
+	caMark := filepath.Join(bin, "ca-asked")
 	stub := "#!/bin/sh\ncase \"$*\" in\n" +
+		"  *bootstrapCa*) : >\"$STUB_CA_MARK\"; printf 'some log line\\n%s\\n' \"$STUB_CA\" ;;\n" +
 		"  *wget*) printf '%s' \"$STUB_STATUS\" ;;\n" +
 		"  *node*) cat >\"$STUB_POSTED\"; printf '%s\\n' \"$STUB_CODE\" ;;\n" +
 		"esac\n"
@@ -55,6 +62,7 @@ func runFirstAdmin(t *testing.T, status, postCode string) firstAdminRun {
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"STUB_STATUS="+status, "STUB_CODE="+postCode, "STUB_POSTED="+posted,
+		"STUB_CA="+ca, "STUB_CA_MARK="+caMark,
 		"ICESLAB_FIRST_ADMIN_FILE="+adminFile,
 	)
 	out, err := cmd.CombinedOutput()
@@ -75,6 +83,8 @@ func runFirstAdmin(t *testing.T, status, postCode string) firstAdminRun {
 	if blob, err := os.ReadFile(posted); err == nil {
 		run.posted = string(blob)
 	}
+	_, err = os.Stat(caMark)
+	run.caAsked = err == nil
 	return run
 }
 
@@ -86,9 +96,12 @@ const (
 var firstAdminPassword = regexp.MustCompile(`password: ([0-9a-f]{48})\n`)
 
 func TestFirstAdminPasswordGoesToTheFileAndNeverToTheLog(t *testing.T) {
-	run := runFirstAdmin(t, registrationOpen, "201")
+	run := runFirstAdmin(t, "created", registrationOpen, "201")
 	if run.exit != 0 {
 		t.Fatalf("exit %d:\n%s", run.exit, run.out)
+	}
+	if !run.caAsked || !strings.Contains(run.out, "panel CA created") {
+		t.Errorf("the CA step did not run or did not say so:\n%s", run.out)
 	}
 	match := firstAdminPassword.FindStringSubmatch(run.file)
 	if match == nil {
@@ -108,17 +121,34 @@ func TestFirstAdminPasswordGoesToTheFileAndNeverToTheLog(t *testing.T) {
 // The status answer has an `enabled: true` of its own under authentication, so a
 // loose match would read every closed panel as open.
 func TestFirstAdminRefusesARepeatWithoutTouchingAnything(t *testing.T) {
-	run := runFirstAdmin(t, registrationClosed, "201")
+	run := runFirstAdmin(t, "present", registrationClosed, "201")
 	if run.exit != 3 {
 		t.Fatalf("exit %d, want 3:\n%s", run.exit, run.out)
 	}
 	if run.posted != "" || run.file != "" {
 		t.Errorf("a panel with an admin got a request %q and a file %q", run.posted, run.file)
 	}
+	if !strings.Contains(run.out, "panel CA already there, unchanged") {
+		t.Errorf("a repeat does not say the CA was left as it was:\n%s", run.out)
+	}
+}
+
+// No CA, no admin: the first node of that panel would race for it (Бк-183).
+func TestFirstAdminStopsWhenTheCAWasNotCreated(t *testing.T) {
+	run := runFirstAdmin(t, "failed: connection refused", registrationOpen, "201")
+	if run.exit != 1 {
+		t.Fatalf("exit %d, want 1:\n%s", run.exit, run.out)
+	}
+	if run.posted != "" || run.file != "" {
+		t.Errorf("no CA, yet a request %q and a file %q", run.posted, run.file)
+	}
+	if !strings.Contains(run.out, "connection refused") {
+		t.Errorf("the refusal does not carry the backend's words:\n%s", run.out)
+	}
 }
 
 func TestFirstAdminRefusedByTheBackendLeavesNoPasswordBehind(t *testing.T) {
-	run := runFirstAdmin(t, registrationOpen, "500")
+	run := runFirstAdmin(t, "created", registrationOpen, "500")
 	if run.exit != 1 {
 		t.Fatalf("exit %d, want 1:\n%s", run.exit, run.out)
 	}
@@ -131,7 +161,7 @@ func TestFirstAdminRefusedByTheBackendLeavesNoPasswordBehind(t *testing.T) {
 }
 
 func TestFirstAdminWithNoBackendSaysSo(t *testing.T) {
-	run := runFirstAdmin(t, "", "201")
+	run := runFirstAdmin(t, "created", "", "201")
 	if run.exit != 1 {
 		t.Fatalf("exit %d, want 1:\n%s", run.exit, run.out)
 	}
