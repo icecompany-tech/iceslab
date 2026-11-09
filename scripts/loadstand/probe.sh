@@ -54,6 +54,10 @@ case "$action" in
   stop)
     docker rm -f b2-probe >/dev/null 2>&1 || true
     date +%s >"$out/stopped.txt"
+    # The backend's own log of the window: the next run's `down -v` takes the
+    # container and its log with it, and with them the words of every failure.
+    docker logs --since "$(cat "$out/started.txt")" --until "$(cat "$out/stopped.txt")" \
+      iceslab-prod-backend >"$out/backend.log" 2>&1 || true
     before=$(cat "$out/wal-before.txt")
     psql_in -At -c "select pg_size_pretty(pg_current_wal_lsn() - '$before'::pg_lsn)" >"$out/wal-written.txt"
     psql_in -f - <"$(dirname "$0")/collect.sql" >"$out/postgres.txt"
