@@ -39,9 +39,10 @@ const link = (value: string | undefined, fallback = '') => {
   return v.startsWith('http') ? v : ''
 }
 
-// A blank link renders nothing: an install shows only the channels it has.
+// A blank link renders nothing: an install shows only the channels it has, a build overrides each
+// with its VITE_* variable (as the old panel, lib/domain/community.ts).
 const GITHUB_URL = link(import.meta.env.VITE_GITHUB_URL, 'https://github.com/icecompany-tech/iceslab')
-const TELEGRAM_URL = link(import.meta.env.VITE_TELEGRAM_URL)
+const TELEGRAM_URL = link(import.meta.env.VITE_TELEGRAM_URL, 'https://t.me/+XgrJWvUUggxlNGUy')
 const DISCORD_URL = link(import.meta.env.VITE_DISCORD_URL)
 const DOCS_URL = link(import.meta.env.VITE_DOCS_URL)
 const SUPPORT_URL = link(import.meta.env.VITE_SUPPORT_URL)
