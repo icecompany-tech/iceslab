@@ -1,12 +1,13 @@
-import { ENGINE_NAMES, type EngineName } from '@iceslab/shared'
+import { ENGINE_NAMES, type EngineName, type NodeCoreVersions } from '@iceslab/shared'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CoreVersions } from '@/contours/nodes/components/CoreVersions'
 import { InstallStep } from '@/contours/nodes/components/InstallStep'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { useCreateNode, useFleet, useRegions } from '@/contours/nodes/hooks/useNodes'
 import { addressOf } from '@/contours/nodes/lib/nodeBody'
-import { engineListForLabel, toggleEngine } from '@/contours/nodes/lib/nodeCreateForm'
+import { createCoreVersions, engineListForLabel, toggleEngine } from '@/contours/nodes/lib/nodeCreateForm'
 import { domainOk } from '@/contours/nodes/lib/nodeEditForm'
 import { parseMaxUsers, parseMultiplier } from '@/contours/nodes/lib/nodeLimits'
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols'
@@ -14,6 +15,8 @@ import { engineLabel } from '@/lib/domain/engines'
 import { useDict, useLocale } from '@/lib/i18n'
 import { isApiError } from '@/lib/net/errors'
 import { failureText } from '@/lib/net/messages'
+import { coreVersionRefusal } from '@/lib/old/coreVersions'
+import { nodeFieldKnown } from '@/lib/old/nodeFields'
 import type { CreateNodeInput, NodeHardening, NodeWithPayload } from '@/lib/old/nodes'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
@@ -61,10 +64,15 @@ export default function NodeCreatePage() {
   const [open, setOpen] = useState<StepId | null>('cores')
   const [created, setCreated] = useState<NodeWithPayload | null>(null)
   const [refused, setRefused] = useState<{ name?: string; address?: string; form?: string }>({})
+  const [versions, setVersions] = useState<NodeCoreVersions>({})
+  const [versionsRefused, setVersionsRefused] = useState<string[] | null>(null)
 
   if (created) return <InstallStep node={created} />
 
   const nodes = fleet.data?.nodes ?? []
+  // An older server would refuse the key, so the picker shows only when the server names the field.
+  const versionsKnown = nodeFieldKnown(fleet.data, 'coreVersions')
+  const pickedVersions = createCoreVersions(versionsKnown, versions)
   const address = addressOf({ host, port })
   // The server answers one field at a time and names nobody: the list says both first.
   const nameUsed = nodes.some((n) => n.name === name.trim())
@@ -97,12 +105,18 @@ export default function NodeCreatePage() {
       hardening: hardeningBody(harden),
       ...(multiplierValue.ok ? { consumptionMultiplier: multiplierValue.value } : {}),
       ...(maxUsersValue.ok ? { maxUsers: maxUsersValue.value } : {}),
+      ...(pickedVersions ? { coreVersions: pickedVersions } : {}),
     }
     setRefused({})
+    setVersionsRefused(null)
     create.mutate(input, {
       onSuccess: setCreated,
       onError: (err) => {
-        if (isApiError(err) && err.status === 409 && /address/i.test(err.serverMessage ?? '')) setRefused({ address: words.addressTakenServer })
+        const lines = coreVersionRefusal(err)
+        if (lines) {
+          setVersionsRefused(lines)
+          setOpen('cores')
+        } else if (isApiError(err) && err.status === 409 && /address/i.test(err.serverMessage ?? '')) setRefused({ address: words.addressTakenServer })
         else if (isApiError(err) && err.status === 409) setRefused({ name: words.nameTaken })
         else setRefused({ form: failureText(err, locale) })
       },
@@ -131,6 +145,8 @@ export default function NodeCreatePage() {
             </label>
           ))}
         </div>
+        {versionsKnown && <CoreVersions engines={engines} value={versions} onChange={setVersions} refusal={versionsRefused} />}
+        {versionsKnown && <p className={styles.note}>{words.coreVersionsCreateNote}</p>}
       </Step>
       <Step optional title={words.domainStep} open={open === 'limits'} onToggle={() => toggle('limits')} value={domain || '-'}>
         <div className={styles.formRow}>

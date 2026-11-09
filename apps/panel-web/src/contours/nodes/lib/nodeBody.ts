@@ -3,6 +3,8 @@
 import { maxUsersPatch, multiplierPatch, multiplierInput, parseMaxUsers, parseMultiplier } from '@/contours/nodes/lib/nodeLimits'
 import { domainOk, domainPatch } from '@/contours/nodes/lib/nodeEditForm'
 import { DEFAULT_NODE_PORT } from '@/contours/nodes/lib/nodeProtocols'
+import type { NodeCoreVersions } from '@iceslab/shared'
+import { coreVersionsPatch } from '@/lib/old/coreVersions'
 import type { Node, UpdateNodeInput } from '@/lib/old/nodes'
 
 export interface NodeDraft {
@@ -15,6 +17,8 @@ export interface NodeDraft {
   multiplier: string
   maxUsers: string
   policyId: string
+  /** No component = the manifest pin. Only the difference from the stored one is sent. */
+  coreVersions: NodeCoreVersions
 }
 
 function splitAddress(address: string): { host: string; port: string } {
@@ -34,12 +38,13 @@ export function draftOfNode(node: Node): NodeDraft {
     multiplier: multiplierInput(node.consumptionMultiplier, true),
     maxUsers: node.maxUsers === null ? '' : String(node.maxUsers),
     policyId: node.policyId ?? '',
+    coreVersions: { ...(node.coreVersions ?? {}) },
   }
 }
 
 export const addressOf = (draft: Pick<NodeDraft, 'host' | 'port'>) => `${draft.host.trim()}:${draft.port.trim() || DEFAULT_NODE_PORT}`
 
-export function nodeUpdateBody(initial: NodeDraft, draft: NodeDraft, stored: Pick<Node, 'domain'>): UpdateNodeInput {
+export function nodeUpdateBody(initial: NodeDraft, draft: NodeDraft, stored: Pick<Node, 'domain' | 'coreVersions'>): UpdateNodeInput {
   const body: UpdateNodeInput = {}
   if (draft.name.trim() !== initial.name) body.name = draft.name.trim()
   if (addressOf(draft) !== addressOf(initial)) body.address = addressOf(draft)
@@ -50,6 +55,9 @@ export function nodeUpdateBody(initial: NodeDraft, draft: NodeDraft, stored: Pic
   if (draft.maxUsers !== initial.maxUsers) Object.assign(body, maxUsersPatch(draft.maxUsers))
   // A real action, not a no-op: null rewrites the node's config without the rules.
   if (draft.policyId !== initial.policyId) body.policyId = draft.policyId || null
+  // A server with no `coreVersions` on the node would refuse the key: nothing goes then.
+  const versions = stored.coreVersions === undefined ? undefined : coreVersionsPatch(initial.coreVersions, draft.coreVersions)
+  if (versions) body.coreVersions = versions
   return body
 }
 

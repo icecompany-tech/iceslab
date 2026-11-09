@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { NodeRoutes } from '@/contours/nodes/components/NodeRoutes'
+import { CoreVersions } from '@/contours/nodes/components/CoreVersions'
 import { CoresStep, EgressStep, HostsBlock, PolicyStep, ServiceStep } from '@/contours/nodes/components/NodeSteps'
+import { coreVersionRefusal } from '@/lib/old/coreVersions'
 import { SystemStrip } from '@/contours/nodes/components/SystemStrip'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
@@ -46,6 +48,7 @@ function NodeForm({ node }: { node: Node }) {
   const [tab, setTab] = useState<Tab>('settings')
   const [open, setOpen] = useState<StepId | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [versionsRefused, setVersionsRefused] = useState<string[] | null>(null)
   const [asking, setAsking] = useState(false)
   const patch = (next: Partial<NodeDraft>) => setDraft((d) => ({ ...d, ...next }))
   const toggle = (step: StepId) => setOpen(open === step ? null : step)
@@ -62,12 +65,19 @@ function NodeForm({ node }: { node: Node }) {
 
   const save = () => {
     setRefusal(null)
+    setVersionsRefused(null)
     update.mutate(body, {
       onSuccess: () => {
         setInitial(draft)
         toast.show(words.saved)
       },
-      onError: (err) => setRefusal(failureText(err, locale)),
+      onError: (err) => {
+        const lines = coreVersionRefusal(err)
+        if (lines) {
+          setVersionsRefused(lines)
+          setOpen('cores')
+        } else setRefusal(failureText(err, locale))
+      },
     })
   }
 
@@ -104,6 +114,7 @@ function NodeForm({ node }: { node: Node }) {
           </section>
           <Step title={words.coresTitle} open={open === 'cores'} onToggle={() => toggle('cores')} value={(node.engines ?? node.intendedEngines ?? []).join(', ') || '-'}>
             <CoresStep node={node} />
+            {node.coreVersions !== undefined && <CoreVersions engines={node.engines ?? node.intendedEngines ?? []} value={draft.coreVersions} onChange={(coreVersions) => patch({ coreVersions })} refusal={versionsRefused} />}
           </Step>
           <EgressStep node={node} open={open === 'egress'} onToggle={() => toggle('egress')} memberName={member?.cascade.name ?? null} cascadesKnown={cascades.data !== undefined} />
           <PolicyStep node={node} value={draft.policyId} onChange={(policyId) => patch({ policyId })} open={open === 'policy'} onToggle={() => toggle('policy')} />

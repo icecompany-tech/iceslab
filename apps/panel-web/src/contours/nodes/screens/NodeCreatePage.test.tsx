@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import NodeCreatePage from '@/contours/nodes/screens/NodeCreatePage'
+import { coreVersionChoices } from '@/lib/old/coreVersions'
 import { renderApp, stubServer } from '@/test/app'
 
 const created = (bootstrap: object) => ({ id: 'n9', name: 'de-09', address: '9.9.9.9:1337', status: 'unknown', cores: null, payload: 'SECRET', bootstrap })
@@ -48,6 +49,32 @@ describe('NodeCreatePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
     await screen.findByText('Такое имя уже есть')
     expect(s.writes()).toHaveLength(1)
+  })
+
+  it('core versions: the picker comes with the server field, nothing chosen sends no key, a pin sends only itself', async () => {
+    const pin = coreVersionChoices('xray').find((c) => c.kind !== 'recommended' && c.blocked === null)
+    const s = server({ 'GET /api/nodes': { body: { nodes: [], total: 0, fields: ['coreVersions', 'intendedEngines'] } }, 'POST /api/nodes': { status: 400, body: { error: 'CORE_VERSION_NOT_LISTED', problems: ['xray: no such release'] } } })
+    renderApp(<NodeCreatePage />, { route: '/nodes/new' })
+    await screen.findByText('Версии ядер')
+    expect(screen.getByText('Ядра не отмечены: выбирать нечего.')).toBeTruthy()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'xray' }))
+    fireEvent.change(await screen.findByRole('combobox', { name: 'xray' }), { target: { value: pin?.value } })
+    fill('de-09', '9.9.9.9')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    await waitFor(() => expect(s.writes()).toHaveLength(1))
+    expect((s.writes()[0]?.body as { coreVersions: object }).coreVersions).toEqual({ xray: pin?.value })
+    await screen.findByText('xray: no such release')
+  })
+
+  it('core versions: an older server gets no picker and no key', async () => {
+    const s = server({ 'POST /api/nodes': { status: 400, body: { error: 'X', message: 'stop' } } })
+    renderApp(<NodeCreatePage />, { route: '/nodes/new' })
+    await waitFor(() => expect(s.sent.length).toBeGreaterThan(0))
+    expect(screen.queryByText('Версии ядер')).toBeNull()
+    fill('de-09', '9.9.9.9')
+    await userEvent.click(screen.getByRole('button', { name: 'Создать' }))
+    await waitFor(() => expect(s.writes()).toHaveLength(1))
+    expect('coreVersions' in (s.writes()[0]?.body as object)).toBe(false)
   })
 
   it('сбой: a refused create stays on the form in the server words', async () => {

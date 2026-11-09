@@ -361,6 +361,37 @@
   list-style: none;
 }
 
+.versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
+}
+
+.subTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.versionRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  max-width: var(--size-chart);
+}
+
+.textButton {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
 .engineGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

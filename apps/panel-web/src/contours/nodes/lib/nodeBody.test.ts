@@ -25,6 +25,19 @@ describe('the body of a node save', () => {
     expect(nodeUpdateBody(draft, { ...draft, policyId: '' }, withPolicy)).toEqual({ policyId: null })
   })
 
+  it('core versions: only the changed component, null puts it back on the pin', () => {
+    const pinned = { ...node, coreVersions: { xray: '26.3.27' } } as Node
+    const draft = draftOfNode(pinned)
+    expect(nodeUpdateBody(draft, { ...draft }, pinned)).toEqual({})
+    expect(nodeUpdateBody(draft, { ...draft, coreVersions: { xray: '26.3.27', singbox: '1.13.14' } }, pinned)).toEqual({ coreVersions: { singbox: '1.13.14' } })
+    expect(nodeUpdateBody(draft, { ...draft, coreVersions: {} }, pinned)).toEqual({ coreVersions: { xray: null } })
+  })
+
+  it('core versions: a server without the field gets no key', () => {
+    const draft = draftOfNode(node)
+    expect(nodeUpdateBody(draft, { ...draft, coreVersions: { xray: '26.3.27' } }, node)).toEqual({})
+  })
+
   it('refuses at the field', () => {
     const draft = draftOfNode(node)
     expect(draftErrors(draft)).toEqual({})

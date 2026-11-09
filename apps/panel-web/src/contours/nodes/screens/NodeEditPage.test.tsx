@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import NodeEditPage from '@/contours/nodes/screens/NodeEditPage'
+import { coreVersionChoices } from '@/lib/old/coreVersions'
 import { renderApp, stubServer } from '@/test/app'
 
 const node = (over: object = {}) => ({
@@ -92,6 +93,27 @@ describe('NodeEditPage', () => {
     await waitFor(() => expect(save.disabled).toBe(false))
     await userEvent.click(save)
     await waitFor(() => expect(s.writes()).toEqual([{ method: 'PUT', path: '/api/nodes/n1', body: { name: 'de-02' } }]))
+  })
+
+  it('core versions: a pin sends only that component, a refusal stands in the cores step in the server words', async () => {
+    const pin = coreVersionChoices('xray').find((c) => c.kind === 'pin' && c.blocked === null) ?? coreVersionChoices('xray').find((c) => c.kind === 'pinCurrent')
+    const s = server(node({ coreVersions: {} }), { 'PUT /api/nodes/n1': { status: 400, body: { error: 'CORE_VERSION_NOT_LISTED', problems: ['xray 0.0.1 is not in the manifest'] } } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Ядра/ }))
+    const picker = await screen.findByRole('combobox', { name: 'xray' })
+    fireEvent.change(picker, { target: { value: pin?.value } })
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(s.writes()[0]?.body).toEqual({ coreVersions: { xray: pin?.value } }))
+    await screen.findByText('xray 0.0.1 is not in the manifest')
+    expect(screen.getByText(/Сервер не принял версии ядер/)).toBeTruthy()
+  })
+
+  it('core versions: a server without the field shows no picker', async () => {
+    server(node())
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Ядра/ }))
+    await screen.findByText(/ядра ставятся и снимаются командами/)
+    expect(screen.queryByText('Версии ядер')).toBeNull()
   })
 
   it('F-20: a change of host warns before the save and promises no reissue of the node certificate', async () => {
