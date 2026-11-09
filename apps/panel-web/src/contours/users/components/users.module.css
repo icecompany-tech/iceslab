@@ -23,11 +23,70 @@
 .chips,
 .topActions,
 .viewTools,
-.pager,
 .bulkActions {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+}
+
+/* Paper Footer: page size and arrows 12 apart, the arrows 4 apart. */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.pageArrows,
+.perPage {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.perPage {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.perPage:hover,
+.perPage[aria-expanded="true"] {
+  color: var(--color-text);
+}
+
+.pageArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-col-filter);
+  height: var(--size-col-filter);
+  padding: 0;
+  border: var(--border-hairline) solid color-mix(in srgb, var(--color-text) 24%, transparent);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.pageArrow:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+.pageArrow:disabled {
+  color: var(--color-text-muted);
+  opacity: var(--opacity-half);
+  cursor: default;
+}
+
+.perPage:focus-visible,
+.pageArrow:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
 }
 
 .bulkBar {

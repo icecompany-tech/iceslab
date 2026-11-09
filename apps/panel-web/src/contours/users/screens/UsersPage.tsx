@@ -25,7 +25,6 @@ import { Confirm } from '@/ui/Dialog/Confirm'
 import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
 import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
-import { Select } from '@/ui/Select/Select'
 import { useToast } from '@/ui/Toast/useToast'
 
 const DENSITY_ORDER: readonly Density[] = ['normal', 'compact', 'relaxed']
@@ -243,13 +242,45 @@ export default function UsersPage() {
         <div className={styles.cardFoot}>
           <span>{words.range(fmtNumber(first, locale), fmtNumber(last, locale), fmtNumber(total, locale))}</span>
           <span className={styles.pager}>
-            <Select look="chip" aria-label={words.perPage} value={String(list.limit)} onChange={(e) => list.setLimit(Number(e.target.value))} options={PAGE_SIZES.map((n) => ({ value: String(n), label: words.perPageOption(n) }))} />
-            <button type="button" className={styles.iconButton} aria-label={words.prevPage} disabled={list.page <= 1} onClick={() => list.setPage(list.page - 1)}>
-              <Icon name="chevronLeft" size="md" />
-            </button>
-            <button type="button" className={styles.iconButton} aria-label={words.nextPage} disabled={last >= total} onClick={() => list.setPage(list.page + 1)}>
-              <Icon name="chevronRight" size="md" />
-            </button>
+            {/* Paper Footer: the page size is words with a chevron, chosen in ui/Popover; the arrows carry the frames. */}
+            <Popover
+              align="end"
+              trigger={(props) => (
+                <button type="button" className={styles.perPage} aria-label={words.perPage} {...props}>
+                  {words.perPageOption(list.limit)}
+                  <Icon name="chevronDown" size="md" />
+                </button>
+              )}
+            >
+              {(close) => (
+                <div role="menu" aria-label={words.perPage} className={styles.choiceList}>
+                  {PAGE_SIZES.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={n === list.limit}
+                      className={styles.choiceItem}
+                      onClick={() => {
+                        close()
+                        list.setLimit(n)
+                      }}
+                    >
+                      {words.perPageOption(n)}
+                      {n === list.limit && <Icon name="check" size="md" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Popover>
+            <span className={styles.pageArrows}>
+              <button type="button" className={styles.pageArrow} aria-label={words.prevPage} disabled={list.page <= 1} onClick={() => list.setPage(list.page - 1)}>
+                <Icon name="chevronLeft" size="md" />
+              </button>
+              <button type="button" className={styles.pageArrow} aria-label={words.nextPage} disabled={last >= total} onClick={() => list.setPage(list.page + 1)}>
+                <Icon name="chevronRight" size="md" />
+              </button>
+            </span>
           </span>
         </div>
       </div>

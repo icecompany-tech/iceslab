@@ -136,6 +136,18 @@ describe('UsersPage', () => {
     expect(screen.queryByText('734550012')).toBeNull()
   })
 
+  it('the page size is words opening a popover, 25 by default, and the first page has no way back', async () => {
+    const s = server()
+    page()
+    await screen.findByText('kate_m')
+    await waitFor(() => expect(s.sent.some((r) => r.path.startsWith('/api/users?') && r.path.includes('limit=25'))).toBe(true))
+    expect((screen.getByRole('button', { name: 'Предыдущая страница' }) as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(screen.getByRole('button', { name: 'На странице' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /^50 на странице/ }))
+    await waitFor(() => expect(s.sent.some((r) => r.path.includes('limit=50'))).toBe(true))
+    expect(screen.getByRole('button', { name: 'На странице' }).textContent).toMatch(/50 на странице/)
+  })
+
   it('the status and limit filters pick from a popover, not a native select', async () => {
     const s = server()
     page()
