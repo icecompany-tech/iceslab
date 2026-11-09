@@ -35,6 +35,9 @@ services:
     environment:
       # The image's own default, until a run raises it next to the ceiling above.
       NODE_OPTIONS: ${B2_NODE_OPTIONS:---max-old-space-size=512}
+    # The image's command with --trace-gc: the panel has no heap metric, and the
+    # peak of the heap is a number the stand owes. heap-peak.mjs reads the log.
+    command: ["node", "--enable-experimental-regexp-engine", "--trace-gc", "dist/index.js"]
 
   # On one machine for a local run. On the stand it runs on the load VPS, where
   # its clock is also the clock of k6.
