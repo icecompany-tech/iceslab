@@ -14,7 +14,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /** One style for every button, owner 2026-11-05: no fill, a border and text in the kind's colour. */
 export function Button({ variant = 'normal', size = 'sm', icon, loading = false, wide = false, type = 'button', disabled, children, ...rest }: ButtonProps) {
-  const classes = [styles.button, styles[variant], styles[size], wide ? styles.wide : ''].join(' ')
+  const classes = [styles.button, styles[variant], styles[size], wide ? styles.wide : '', icon ? styles.withIcon : ''].join(' ')
   return (
     <button type={type} className={classes} disabled={disabled || loading} aria-busy={loading} {...rest}>
       {icon}

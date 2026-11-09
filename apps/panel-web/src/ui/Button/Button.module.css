@@ -51,6 +51,22 @@
   line-height: var(--leading-tight);
 }
 
+/* Board «ui/Button: единый стиль», row «Размер 32»: with an icon the icon is 16, the text side 14,
+   the icon side 12 for a coloured kind and 10 for the plain one. */
+.sm.withIcon {
+  padding-right: var(--spacing-3-5);
+  padding-left: var(--spacing-3);
+}
+
+.sm.withIcon.normal {
+  padding-left: var(--spacing-2-5);
+}
+
+.sm.withIcon svg {
+  width: var(--size-icon-lg);
+  height: var(--size-icon-lg);
+}
+
 .wide {
   width: 100%;
 }

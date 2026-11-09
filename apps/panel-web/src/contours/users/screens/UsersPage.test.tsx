@@ -109,6 +109,14 @@ describe('UsersPage', () => {
     expect(within(screen.getByRole('button', { name: 'Действуют' })).queryByText('0')).toBeNull()
   })
 
+  it('a status the answer leaves out is a 0, as the owner decided 10.11', async () => {
+    server({ 'GET /api/dashboard/overview': { body: { ...OVERVIEW, users: { ...OVERVIEW.users, byStatus: { active: 1204 } } } } })
+    page()
+    await screen.findByText('kate_m')
+    await within(screen.getByRole('button', { name: /Отключены/ })).findByText('0')
+    expect(within(screen.getByRole('button', { name: /Действуют/ })).getByText(/^1\s204$/)).toBeTruthy()
+  })
+
   it('shows the row as the frame does and sends what the server can narrow by', async () => {
     const s = server()
     page()

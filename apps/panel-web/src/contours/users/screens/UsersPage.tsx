@@ -125,7 +125,8 @@ export default function UsersPage() {
   }
 
   const byStatus = overview.data?.users.byStatus
-  const countOf = (value: StatusFilter) => (value === 'all' ? overview.data?.users.total : byStatus?.[value])
+  // Owner 10.11: a status the answer leaves out is a grey 0; with no answer yet no number at all (F-K1).
+  const countOf = (value: StatusFilter) => (value === 'all' ? overview.data?.users.total : byStatus && (byStatus[value] ?? 0))
   const data = users.data
   const total = data?.total ?? 0
   const first = total === 0 ? 0 : (list.page - 1) * list.limit + 1

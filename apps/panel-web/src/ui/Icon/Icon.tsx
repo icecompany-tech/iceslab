@@ -13,7 +13,7 @@ const ICONS = {
   close: { d: 'M6 6 L18 18 M18 6 L6 18' },
   more: { dots: [[12, 5, 1.6], [12, 12, 1.6], [12, 19, 1.6]], d: '' },
   plus: { d: 'M12 5 V19 M5 12 H19' },
-  filter: { d: 'M4 5 H20 L14 12.5 V19 L10 17 V12.5 Z' },
+  filter: { d: 'M4 6 H20 L14 13 V19 L10 17 V13 Z' },
   copy: { d: 'M9 9 H20 V20 H9 Z M5 15 H4 V4 H15 V5' },
   external: { d: 'M13 4 H20 V11 M20 4 L11 13 M18 14 V20 H4 V6 H10' },
   power: { d: 'M12 3 V11 M6.8 6.5 A8 8 0 1 0 17.2 6.5' },
