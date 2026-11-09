@@ -69,6 +69,15 @@ export function squadsLosingLastHost(hostIds: readonly string[], squads: readonl
   return squads.filter((s) => s.hostIds.length > 0 && s.hostIds.every((h) => hostIds.includes(h))).map((s) => s.name)
 }
 
+/**
+ * F-32: the same question when a list may not be in. null = cannot tell: a list still loading or
+ * failed is not "nobody loses", and an open delete there would let the server widen a squad.
+ */
+export function lastHostCheck(hostIds: readonly string[] | undefined, squads: readonly Pick<Squad, 'id' | 'name' | 'hostIds' | 'profileIds'>[] | undefined): string[] | null {
+  if (hostIds === undefined || squads === undefined) return null
+  return squadsLosingLastHost(hostIds, squads)
+}
+
 export interface NarrowingFact {
   /** The squads of the user that have host rows. */
   narrowed: Squad[]

@@ -8,7 +8,7 @@ import { hostPortPlan } from '@/contours/hosts/lib/hostPortPlan'
 import { nodePortClaims } from '@/contours/hosts/lib/portClaims'
 import { engineLabel } from '@/lib/domain/engines'
 import { nodeHealth } from '@/lib/domain/overview'
-import { ALL_SQUAD_ID, grantHostBody, squadReach, squadsLosingLastHost } from '@/lib/domain/squads'
+import { ALL_SQUAD_ID, grantHostBody, lastHostCheck, squadReach } from '@/lib/domain/squads'
 import { fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
@@ -217,7 +217,9 @@ function HostForm({ host }: { host: Host | null }) {
   const carried = formats.data?.formats.filter((f) => f.carried) ?? []
   const carriedOn = carried.filter((f) => !draft.disabledFormats.includes(f.format))
 
-  const lastOf = host ? squadsLosingLastHost([host.id], allSquads) : []
+  // F-32: squads not in yet or failed is "cannot tell", and the delete stays closed.
+  const lastOf = host ? lastHostCheck([host.id], squads.data?.squads) : []
+  const deleteLock = lastOf === null ? words.deleteSquadsUnknown : lastOf.length > 0 ? words.deleteLocked(lastOf.join(', ')) : null
   const lastOnNode = host && binding ? allHosts.filter((h) => h.id !== host.id && allBindings.find((b) => b.id === h.bindingId)?.nodeId === binding.nodeId).length === 0 : false
   const addressShown = draft.address.trim() || node?.address.split(':')[0] || null
 
@@ -373,10 +375,11 @@ function HostForm({ host }: { host: Host | null }) {
           {refusal && <Banner tone="danger">{refusal}</Banner>}
           <div className={styles.actions}>
             {host && (
-              <Button variant="danger" onClick={() => setAsking(true)}>
+              <Button variant="danger" disabled={deleteLock !== null} title={deleteLock ?? undefined} onClick={() => setAsking(true)}>
                 {words.delete}
               </Button>
             )}
+            {host && deleteLock && <span className={styles.note}>{deleteLock}</span>}
             <span className={styles.spacer} />
             <Button onClick={() => void navigate('/hosts')}>{words.cancel}</Button>
             <Button variant="primary" disabled={!ready && !(host && grantIds.length > 0 && !changed)} loading={create.isPending || update.isPending || grant.isPending} onClick={() => (host && !changed ? runGrant(host.id) : submit())}>
@@ -411,10 +414,10 @@ function HostForm({ host }: { host: Host | null }) {
         <Confirm
           title={words.deleteTitle(host.remark)}
           labels={{ confirm: words.delete, cancel: words.cancel }}
-          state={{ busy: remove.isPending, error: remove.error ? failureText(remove.error, locale) : lastOf.length > 0 ? words.deleteLocked(lastOf.join(', ')) : null }}
+          state={{ busy: remove.isPending, error: remove.error ? failureText(remove.error, locale) : deleteLock }}
           onClose={() => setAsking(false)}
           onConfirm={() => {
-            if (lastOf.length > 0) return
+            if (deleteLock !== null) return
             remove.mutate(host.id, {
               onSuccess: () => {
                 toast.show(words.deleted(host.remark))

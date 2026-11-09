@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -90,14 +90,34 @@ describe('HostFormPage', () => {
     await screen.findByText(/Нода обслуживает только: a\.example/)
   })
 
-  it('the last host of a squad cannot be deleted, the window names it', async () => {
+  it('the last host of a squad cannot be deleted, the reason names the squad', async () => {
     const s = server({ 'GET /api/squads': { body: { squads: [squad('s1', 'premium', ['h1'], ['p1'])] } } })
     page()
-    await userEvent.click(await screen.findByRole('button', { name: 'Удалить хост' }))
-    const dialog = await screen.findByRole('dialog')
-    await within(dialog).findByText(/последний хост сквада \(premium\)/)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Удалить хост' }))
+    await screen.findByText(/последний хост сквада \(premium\)/)
+    expect((screen.getByRole('button', { name: 'Удалить хост' }) as HTMLButtonElement).disabled).toBe(true)
     expect(s.writes()).toEqual([])
+  })
+
+  it('F-32: squads still loading close the delete with the reason', async () => {
+    server({ 'GET /api/squads': { hold: true } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/)
+    expect((screen.getByRole('button', { name: 'Удалить хост' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('F-32: squads that failed close the delete, not "nobody loses"', async () => {
+    const s = server({ 'GET /api/squads': { status: 500, body: {} } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/, {}, { timeout: 8000 })
+    expect((screen.getByRole('button', { name: 'Удалить хост' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(s.writes()).toEqual([])
+  })
+
+  it('F-32: with squads in and none losing, the delete opens', async () => {
+    server()
+    page()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Удалить хост' }) as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.queryByText(/Не могу проверить сквады/)).toBeNull()
   })
 
   it('a new host goes in a second request to the squads, read fresh; All is closed', async () => {

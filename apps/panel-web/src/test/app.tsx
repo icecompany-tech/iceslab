@@ -24,6 +24,8 @@ export interface Answer {
   status?: number
   body?: unknown
   headers?: Record<string, string>
+  /** Never answers: the screen stays in its loading state for the whole test. */
+  hold?: boolean
 }
 
 export interface SentRequest {
@@ -53,7 +55,8 @@ export function stubServer(routes: Record<string, Handler>) {
         unknown.push(`${method} ${url.pathname}`)
         return new Response('{}', { status: 500 })
       }
-      const { status = 200, body, headers } = typeof handler === 'function' ? handler(request) : handler
+      const { status = 200, body, headers, hold } = typeof handler === 'function' ? handler(request) : handler
+      if (hold) return new Promise<Response>(() => undefined)
       return new Response(status === 204 ? null : JSON.stringify(body ?? {}), { status, headers })
     }),
   )

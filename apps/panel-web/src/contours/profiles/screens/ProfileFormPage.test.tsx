@@ -21,6 +21,7 @@ const server = (over: Record<string, object> = {}) =>
     'GET /api/profiles/p1/key-impact': { body: { hosts: 2, nodes: 1, bindings: 2, configs: 21 } },
     'GET /api/profiles/p2/key-impact': { body: { hosts: 0, nodes: 0, bindings: 0, configs: 0 } },
     'POST /api/profiles/generate-keypair': { body: { privateKey: 'new-priv', publicKey: 'new-pub' } },
+    'GET /api/squads': { body: { squads: [] } },
     ...over,
   })
 
@@ -137,6 +138,21 @@ describe('ProfileFormPage', () => {
     page()
     await userEvent.click(await screen.findByRole('button', { name: 'Удалить профиль' }))
     expect((await screen.findByRole('dialog')).textContent).toMatch(/Профиль стоит на нодах: 2/)
+    expect(s.writes()).toEqual([])
+  })
+
+  it('F-32: squads still loading close the delete with the reason', async () => {
+    server({ 'GET /api/squads': { hold: true } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/)
+    expect((screen.getByRole('button', { name: 'Удалить профиль' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('F-32: bindings that failed close the delete, not "nobody loses"', async () => {
+    const s = server({ 'GET /api/bindings': { status: 500, body: {} } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/, {}, { timeout: 8000 })
+    expect((screen.getByRole('button', { name: 'Удалить профиль' }) as HTMLButtonElement).disabled).toBe(true)
     expect(s.writes()).toEqual([])
   })
 

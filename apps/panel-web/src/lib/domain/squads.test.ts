@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_SQUAD_ID, grantHostBody, narrowingFact, squadReach, squadsLosingLastHost, type Squad } from '@/lib/domain/squads'
+import { ALL_SQUAD_ID, grantHostBody, lastHostCheck, narrowingFact, squadReach, squadsLosingLastHost, type Squad } from '@/lib/domain/squads'
 
 const squad = (id: string, hostIds: string[], profileIds: string[]): Squad => ({ id, name: id, description: null, hostIds, profileIds, memberCount: 0, hwidDeviceLimit: null, routingPreset: null, customRoutingPresetId: null })
 
@@ -21,6 +21,14 @@ describe('handing a host to a squad', () => {
     expect(squadsLosingLastHost(['a'], squads)).toEqual(['one'])
     expect(squadsLosingLastHost(['a', 'b'], squads)).toEqual(['one', 'two'])
     expect(squadsLosingLastHost(['c'], squads)).toEqual([])
+  })
+
+  it('F-32: a list that is not in is "cannot tell", never "nobody loses"', () => {
+    const squads = [squad('one', ['a'], ['p'])]
+    expect(lastHostCheck(undefined, squads)).toBeNull()
+    expect(lastHostCheck(['a'], undefined)).toBeNull()
+    expect(lastHostCheck([], squads)).toEqual([])
+    expect(lastHostCheck(['a'], squads)).toEqual(['one'])
   })
 })
 

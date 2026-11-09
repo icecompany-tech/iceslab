@@ -18,7 +18,7 @@ import { singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports'
 import { DICT as RECIPE_DICT } from '@/contours/profiles/recipesDict'
 import { RadioRow } from '@/ui/RadioRow/RadioRow'
 import { settleXrayFields, xrayFieldReactions } from '@/contours/profiles/lib/xrayFieldReactions'
-import { squadsLosingLastHost, useSquads } from '@/lib/domain/squads'
+import { lastHostCheck, useSquads } from '@/lib/domain/squads'
 import { fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
@@ -273,8 +273,11 @@ function ProfileForm({ profile, onDone }: { profile: Profile | null; onDone: (sa
   }
 
   const impact = keyAsk?.kind === 'confirm' ? keyAsk.impact : null
-  const myBindings = new Set((bindings.data?.bindings ?? []).filter((b) => b.profileId === profile?.id).map((b) => b.id))
-  const lastOf = squadsLosingLastHost((hosts.data?.hosts ?? []).filter((h) => myBindings.has(h.bindingId)).map((h) => h.id), squads.data ?? [])
+  // F-32: hosts reach the profile through its bindings, so all three lists must be in before anyone can say "nobody loses".
+  const myBindings = bindings.data ? new Set(bindings.data.bindings.filter((b) => b.profileId === profile?.id).map((b) => b.id)) : undefined
+  const myHostIds = myBindings && hosts.data ? hosts.data.hosts.filter((h) => myBindings.has(h.bindingId)).map((h) => h.id) : undefined
+  const lastOf = lastHostCheck(myHostIds, squads.data)
+  const deleteLock = lastOf === null ? words.deleteSquadsUnknown : lastOf.length > 0 ? words.deleteLastHost(lastOf.join(', ')) : null
   return (
     <div className={styles.page}>
       <h1 className={styles.pageTitle}>{profile ? profile.name : words.newProfile}</h1>
@@ -331,11 +334,11 @@ function ProfileForm({ profile, onDone }: { profile: Profile | null; onDone: (sa
           {refusal && <Banner tone="danger">{refusal}</Banner>}
           <div className={styles.actions}>
             {profile && (
-              <Button variant="danger" disabled={lastOf.length > 0} title={lastOf.length > 0 ? words.deleteLastHost(lastOf.join(', ')) : undefined} onClick={() => setDeleting(true)}>
+              <Button variant="danger" disabled={deleteLock !== null} title={deleteLock ?? undefined} onClick={() => setDeleting(true)}>
                 {words.delete}
               </Button>
             )}
-            {lastOf.length > 0 && <span className={styles.lastHost}>{words.deleteLastHost(lastOf.join(', '))}</span>}
+            {profile && deleteLock && <span className={styles.lastHost}>{deleteLock}</span>}
             <span className={styles.spacer} />
             <Button onClick={() => void navigate('/profiles')}>{words.cancel}</Button>
             <Button variant="primary" disabled={!changed || blocked} loading={create.isPending || update.isPending || check.isPending} onClick={submit}>

@@ -42,6 +42,7 @@ const server = (n: object, over: Record<string, object> = {}) =>
     'GET /api/cascades': { body: { cascades: [] } },
     'GET /api/hosts': { body: { hosts: [] } },
     'GET /api/node-policies': { body: { policies: [] } },
+    'GET /api/squads': { body: { squads: [] } },
     ...over,
   })
 
@@ -160,6 +161,21 @@ describe('NodeEditPage', () => {
     page()
     await screen.findByText(/последние хосты сквада \(premium\)/)
     expect(screen.queryByRole('button', { name: 'Удалить ноду' })).toBeNull()
+  })
+
+  it('F-32: squads still loading close the delete with the reason', async () => {
+    server(node(), { 'GET /api/squads': { hold: true } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/)
+    expect(screen.queryByRole('button', { name: 'Удалить ноду' })).toBeNull()
+  })
+
+  it('F-32: hosts or squads that failed close the delete, not "nobody loses"', async () => {
+    const s = server(node(), { 'GET /api/hosts': { status: 500, body: {} } })
+    page()
+    await screen.findByText(/Не могу проверить сквады/, {}, { timeout: 8000 })
+    expect(screen.queryByRole('button', { name: 'Удалить ноду' })).toBeNull()
+    expect(s.writes()).toEqual([])
   })
 
   it('F-16, Bk-159: a reissue promises no revoked token and offers no new payload', async () => {

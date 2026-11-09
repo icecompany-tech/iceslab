@@ -8,7 +8,7 @@ import { SystemStrip } from '@/contours/nodes/components/SystemStrip'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { useCascades, useDeleteNode, useNode, useNodeHosts, useRegions, useSyncStatus, useUpdateNode } from '@/contours/nodes/hooks/useNodes'
-import { squadsLosingLastHost, useSquads } from '@/lib/domain/squads'
+import { lastHostCheck, useSquads } from '@/lib/domain/squads'
 import { draftErrors, draftOfNode, hostChanged, nodeUpdateBody, type NodeDraft } from '@/contours/nodes/lib/nodeBody'
 import { nodeDeleteFacts } from '@/contours/nodes/lib/nodeDelete'
 import { nodeHealth } from '@/lib/domain/overview'
@@ -59,7 +59,7 @@ function NodeForm({ node }: { node: Node }) {
   const blocked = nodeDeleteFacts(node)?.blocked ?? (member ? [member.cascade.name] : [])
   const nodeHosts = useNodeHosts(node.id)
   const squads = useSquads()
-  const lastOf = squadsLosingLastHost((nodeHosts.data?.hosts ?? []).map((h) => h.id), squads.data ?? [])
+  const lastOf = lastHostCheck(nodeHosts.data?.hosts.map((h) => h.id), squads.data)
   const notApplied = sync.data && !sync.data.applied && sync.data.online
   const coreError = node.lastInboundSyncError
 
@@ -136,6 +136,8 @@ function NodeForm({ node }: { node: Node }) {
               <Banner title={words.deleteRun} action={member ? <Link className={styles.linkPlain} to={`/cascades/${member.cascade.id}`}>{words.openCascade}</Link> : undefined}>
                 {words.deleteLocked(blocked.join(', '))}
               </Banner>
+            ) : lastOf === null ? (
+              <Banner title={words.deleteRun}>{words.deleteSquadsUnknown}</Banner>
             ) : lastOf.length > 0 ? (
               <Banner title={words.deleteRun}>{words.deleteLastHost(lastOf.join(', '))}</Banner>
             ) : (
