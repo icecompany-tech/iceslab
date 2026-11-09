@@ -102,7 +102,7 @@ export function Topbar({ title }: { title: string }) {
             {words.update(version.data.latest)}
           </a>
         )}
-        <span className={styles.divider} />
+        <span className={`${styles.divider} ${styles.dividerQuiet}`} />
         <div className={styles.links}>
           {TELEGRAM_URL && (
             <a className={`${styles.chip} ${styles.square} ${styles.telegram}`} href={TELEGRAM_URL} target="_blank" rel="noreferrer" aria-label="Telegram">

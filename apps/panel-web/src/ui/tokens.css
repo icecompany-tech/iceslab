@@ -100,6 +100,8 @@
   --leading-metric: 28px;
   --leading-hero: 48px;
   --leading-2xs: 14px;
+  --leading-brand: 22px;
+  --size-icon-star: 13px;
   --text-2xs: 11px;
   --text-metric: 22px;
   --text-stat: 28px;
@@ -151,8 +153,9 @@
   --shadow-popover: 0 8px 24px #00000073;
   --shadow-panel: -8px 0 24px #00000073;
   --page-glow: radial-gradient(ellipse 46% 44% at 0% 0%, #8CD7FF33 0%, #8CD7FF15 35%, #8CD7FF06 65%, #8CD7FF00 100%);
-  --topbar-fill: linear-gradient(90deg, #0B0F1300 0%, #0B0F1300 30%, #0B0F13 100%);
-  --topbar-edge: linear-gradient(90deg, #1C243000 0%, #1C243000 12%, #1C2430 38%);
+  /* The top bar blends in oklab, as Paper draws it (AS2-0). */
+  --topbar-fill: linear-gradient(in oklab 90deg, #0B0F1300 0%, #0B0F1300 30%, #0B0F13 100%);
+  --topbar-edge: linear-gradient(in oklab 90deg, #1C243000 0%, #1C243000 12%, #1C2430 38%);
   --sidebar-fill: linear-gradient(180deg, #0B0F1300 0%, #0B0F1300 18%, #0B0F13 46%);
   --sidebar-edge: linear-gradient(180deg, #1C243000 0%, #1C243000 18%, #1C2430 46%);
 }

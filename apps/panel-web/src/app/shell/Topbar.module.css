@@ -7,14 +7,16 @@
   gap: var(--spacing-6);
   height: var(--size-topbar);
   padding-inline: var(--spacing-6);
-  background: var(--topbar-fill);
+  /* Paper AS2-0: a clear hairline under the bar, the edge gradient is drawn into it. */
+  border-bottom: var(--border-hairline) solid transparent;
+  background: var(--topbar-fill) border-box;
 }
 
 .topbar::after {
   content: "";
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: calc(-1 * var(--border-hairline));
   left: 0;
   height: var(--border-hairline);
   background: var(--topbar-edge);
@@ -56,7 +58,7 @@
   color: var(--color-text);
   font-size: var(--text-title);
   font-weight: var(--font-weight-semibold);
-  line-height: var(--leading-xl);
+  line-height: var(--leading-brand);
   letter-spacing: var(--tracking-tight);
 }
 
@@ -65,6 +67,11 @@
   width: var(--border-hairline);
   height: var(--size-divider);
   background: var(--color-topbar-divider);
+}
+
+/* Paper AS2-0: the divider among the right controls is the plain border colour, quieter than the left one. */
+.dividerQuiet {
+  background: var(--color-border);
 }
 
 .title {
@@ -156,6 +163,12 @@
   align-items: center;
   gap: var(--spacing-1);
   color: var(--color-text);
+}
+
+/* Paper AS2-0 draws the star at 13, between the icon sizes. */
+.stars svg {
+  width: var(--size-icon-star);
+  height: var(--size-icon-star);
 }
 
 .heart {
