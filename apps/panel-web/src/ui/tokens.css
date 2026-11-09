@@ -116,6 +116,9 @@
   --size-rail: 56px;
   --size-panel: 340px;
   --size-center: 1088px;
+  --size-register: 1856px;
+  /* The center's own height inside the window: below the bar, inside the center's padding. */
+  --size-main-height: calc(100dvh - var(--size-topbar) - 2 * var(--spacing-7));
   --size-auth-card: 400px;
   --size-code-cell: 52px;
   --size-chip: 30px;

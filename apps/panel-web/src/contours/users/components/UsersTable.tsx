@@ -24,6 +24,8 @@ export type Density = 'compact' | 'normal' | 'relaxed'
 
 const SOON_DAYS = 7
 const MIN_WIDTH = 48
+/** The column that takes the window's spare width; the rest keep theirs. */
+const STRETCH: ColumnId = 'username'
 
 export interface TableContext {
   nodes: ReadonlyMap<string, NodeRow>
@@ -192,22 +194,27 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
     const place = (id: string, side: 'left' | 'right', offset: number) => {
       for (const el of root.querySelectorAll<HTMLElement>(`[data-col="${id}"]`)) el.style[side] = `${offset}px`
     }
-    let left = root.querySelector<HTMLElement>('[data-col="select"]')?.offsetWidth ?? 0
+    const drawn = (id: string) => root.querySelector<HTMLElement>(`th[data-col="${id}"]`)?.offsetWidth ?? 0
+    // The table is at least the sum of its columns and scrolls sideways past it; a wider window
+    // goes to «Юзер», whose col has no width of its own (DECISIONS 10.11, window 1920).
+    root.style.minWidth = `${drawn('select') + drawn('actions') + columns.reduce((sum, c) => sum + widthOf(c, view), 0)}px`
+    let left = drawn('select')
     for (const column of leftPins) {
       place(column.id, 'left', left)
-      left += widthOf(column, view)
+      left += drawn(column.id)
     }
-    let right = root.querySelector<HTMLElement>('[data-col="actions"]')?.offsetWidth ?? 0
+    let right = drawn('actions')
     for (const column of [...rightPins].reverse()) {
       place(column.id, 'right', right)
-      right += widthOf(column, view)
+      right += drawn(column.id)
     }
   }, [columns, view, users])
 
   const startResize = (column: UserColumn, event: PointerEvent<HTMLSpanElement>) => {
     event.preventDefault()
     const startX = event.clientX
-    const startWidth = widthOf(column, view)
+    // From the drawn width: «Юзер» may be wider than its stored one.
+    const startWidth = event.currentTarget.closest('th')?.offsetWidth ?? widthOf(column, view)
     const onMove = (move: globalThis.PointerEvent) => onView({ ...view, widths: { ...view.widths, [column.id]: Math.max(MIN_WIDTH, startWidth + move.clientX - startX) } })
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -225,7 +232,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
         <colgroup>
           <col className={styles.colSelect} />
           {columns.map((c) => (
-            <col key={c.id} width={widthOf(c, view)} />
+            <col key={c.id} width={c.id === STRETCH ? undefined : widthOf(c, view)} />
           ))}
           <col className={styles.colActions} />
         </colgroup>

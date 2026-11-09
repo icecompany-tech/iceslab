@@ -10,6 +10,8 @@ export interface ContourRoute {
   /** The id of the menu item this address lights up, app/nav.ts. */
   nav?: string
   title?: Record<Locale, string>
+  /** A register (list, cards): stretches between the menu and the rail. Without it the screen is a form, 1088 wide, at the left (DECISIONS 10.11). */
+  wide?: boolean
   load: () => Promise<{ default: ComponentType }>
 }
 

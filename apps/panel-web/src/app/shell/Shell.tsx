@@ -30,7 +30,7 @@ export function Shell() {
       <div className={styles.body}>
         <Sidebar />
         <main ref={main} className={styles.main}>
-          <div className={styles.center}>
+          <div className={`${styles.center} ${routeAt(pathname)?.wide ? styles.wide : ''}`}>
             <Suspense>
               <Outlet />
             </Suspense>
