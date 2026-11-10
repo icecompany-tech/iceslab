@@ -157,7 +157,10 @@
   --color-pill-accent-edge: #C8F0FF33;
   --color-pill-amber-ink: #0B0F06;
   --shadow-popover: 0 8px 24px #00000073;
-  --shadow-panel: -8px 0 24px #00000073;
+  --shadow-panel: -10px 0 28px #00000099;
+  /* The open right panel, Paper ZGN-0 shell/Rail/open: a cold glow from its top right corner. */
+  --panel-glow: radial-gradient(ellipse 100% 40% at 100% 0% in oklab, #8CAAFF24 0%, #8CAAFF00 70%);
+  --spacing-px-13: 13px;
   --page-glow: radial-gradient(ellipse 46% 44% at 0% 0%, #8CD7FF33 0%, #8CD7FF15 35%, #8CD7FF06 65%, #8CD7FF00 100%);
   /* The top bar blends in oklab, as Paper draws it (AS2-0). */
   --topbar-fill: linear-gradient(in oklab 90deg, #0B0F1300 0%, #0B0F1300 30%, #0B0F13 100%);

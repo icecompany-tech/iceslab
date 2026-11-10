@@ -8,8 +8,8 @@ import { useDict, useLocale } from '@/lib/i18n'
 import { Icon } from '@/ui/Icon/Icon'
 
 const DICT = {
-  ru: { openPanel: 'Открыть правую панель', closePanel: 'Закрыть правую панель' },
-  en: { openPanel: 'Open the right panel', closePanel: 'Close the right panel' },
+  ru: { openPanel: 'Открыть правую панель', closePanel: 'Закрыть правую панель', panel: 'Правая панель' },
+  en: { openPanel: 'Open the right panel', closePanel: 'Close the right panel', panel: 'Right panel' },
 }
 
 export function Shell() {
@@ -23,6 +23,23 @@ export function Shell() {
   useEffect(() => {
     main.current?.scrollTo?.({ top: 0 })
   }, [pathname])
+  // The open panel closes by Esc, by a press outside it and by its button (owner 10.11).
+  const panel = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!panelOpen) return
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panel.current?.contains(event.target)) setPanelOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) setPanelOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [panelOpen])
 
   return (
     <div className={styles.shell}>
@@ -44,7 +61,7 @@ export function Shell() {
         {/* Over the screen, the center does not narrow: owner 2026-11-05. Empty until the
             owner names its tasks. */}
         {panelOpen && (
-          <aside className={styles.panel}>
+          <aside ref={panel} className={styles.panel} aria-label={words.panel}>
             <button type="button" className={styles.railButton} aria-label={words.closePanel} autoFocus onClick={() => setPanelOpen(false)}>
               <Icon name="panelClose" size="xl" />
             </button>
