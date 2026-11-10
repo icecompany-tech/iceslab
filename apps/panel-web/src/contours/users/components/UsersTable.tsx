@@ -253,7 +253,6 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
   // «Юзер» takes the spare width unless the operator sized it or hid it; then an empty cell before
   // the actions does, and no other column stretches (owner 10.11).
   const stretches = columns.some((c) => c.id === STRETCH) && view.widths[STRETCH] === undefined
-  const lastId = columns.at(-1)?.id
 
   return (
     <div className={styles.tableScroll}>
@@ -291,7 +290,7 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
                     </div>
                   )}
                   <span
-                    className={`${styles.resize} ${column.id === lastId ? styles.resizeLast : ''} ${dragging?.id === column.id ? styles.resizing : ''}`}
+                    className={`${styles.resize} ${dragging?.id === column.id ? styles.resizing : ''}`}
                     role="separator"
                     aria-label={words.resizeColumn(words.column[column.id])}
                     onPointerDown={(e) => startResize(column, e)}

@@ -163,6 +163,20 @@ describe('UsersPage', () => {
     expect(screen.queryByRole('group', { name: 'С даты' })).toBeNull()
   })
 
+  it('the columns window: «Юзер» is pinned left by default, its switch is locked with the reason, «Открепить» unpins', async () => {
+    server()
+    page()
+    await screen.findByText('kate_m')
+    await userEvent.click(screen.getByRole('button', { name: 'Колонки' }))
+    const user = screen.getByRole('switch', { name: 'Юзер' }) as HTMLInputElement
+    expect(user.disabled).toBe(true)
+    expect(user.getAttribute('aria-description')).toBe('Колонку «Юзер» скрыть нельзя')
+    const pin = screen.getAllByRole('button', { pressed: true }).find((b) => /Юзер/.test(b.getAttribute('aria-label') ?? ''))
+    expect(pin).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Открепить' }))
+    expect(screen.getAllByRole('button', { pressed: true }).filter((b) => /Юзер/.test(b.getAttribute('aria-label') ?? ''))).toEqual([])
+  })
+
   it('the status and limit filters pick from a popover, not a native select', async () => {
     const s = server()
     page()

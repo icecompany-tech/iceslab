@@ -304,10 +304,6 @@
   background: var(--color-border);
 }
 
-.resizeLast::after {
-  content: none;
-}
-
 /* Board «ui/ColumnResize»: while dragging, a 2 px accent line and the width beside it. */
 .resizing::after {
   content: "";
@@ -606,7 +602,7 @@
   outline: var(--border-check) solid var(--color-accent);
 }
 
-.pinOn {
+.pinButton.pinOn {
   color: var(--color-accent);
 }
 

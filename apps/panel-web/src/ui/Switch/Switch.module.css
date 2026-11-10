@@ -65,3 +65,12 @@
 .input:disabled + .track {
   opacity: var(--opacity-closed);
 }
+
+/* ui/Switch/on/locked: the switch at half, the label keeps its colour, nothing answers the pointer. */
+.locked {
+  cursor: not-allowed;
+}
+
+.locked .input:disabled + .track {
+  opacity: var(--opacity-half);
+}

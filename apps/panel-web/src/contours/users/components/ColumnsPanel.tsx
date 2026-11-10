@@ -64,7 +64,7 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
                 <Switch
                   label={name}
                   checked={!view.hidden.includes(id)}
-                  disabled={id === 'username'}
+                  lockedReason={id === 'username' ? words.userColumnLocked : undefined}
                   onChange={(on) => onChange({ ...view, hidden: on ? view.hidden.filter((h) => h !== id) : [...view.hidden, id] })}
                 />
               </span>

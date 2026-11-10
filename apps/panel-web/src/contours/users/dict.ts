@@ -29,6 +29,7 @@ const ru = {
   columnShown: (name: string) => `Показывать колонку ${name}`,
   resizeColumn: (name: string) => `Ширина колонки ${name}`,
   widthPx: (px: number) => `${px} px`,
+  userColumnLocked: 'Колонку «Юзер» скрыть нельзя',
   column: {
     username: 'Юзер',
     shortId: 'ID',
@@ -347,6 +348,7 @@ const en: typeof ru = {
   columnShown: (name) => `Show column ${name}`,
   resizeColumn: (name) => `Width of column ${name}`,
   widthPx: (px) => `${px} px`,
+  userColumnLocked: 'The «User» column cannot be hidden',
   column: {
     username: 'User',
     shortId: 'ID',
