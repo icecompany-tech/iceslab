@@ -1768,18 +1768,7 @@ func (a *Adapter) regenerateAndRestart(ctx context.Context) (retErr error) {
 		}
 	}
 
-	proc := subprocess.New(subprocess.Config{
-		Name:           Name,
-		Binary:         binPath,
-		Args:           []string{"run", "-c", cfgPath},
-		Logger:         a.logger,
-		MaxRestarts:    subprocess.DefaultMaxRestarts,
-		RestartBackoff: subprocess.DefaultRestartBackoff,
-		// Memory ceiling + reporting. memLimit is read under a.mu above with
-		// the rest of the config snapshot; 0 leaves the watchdog disarmed.
-		MemoryLimitBytes: memLimit,
-		OnRestart:        a.recordRestart,
-	})
+	proc := subprocess.New(a.processConfig(binPath, cfgPath, memLimit))
 	if err := proc.Start(ctx); err != nil {
 		a.mu.Lock()
 		a.proc = nil
