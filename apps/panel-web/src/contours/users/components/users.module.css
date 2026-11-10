@@ -2,12 +2,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-4);
-  min-height: var(--size-main-height);
+  /* Paper AS2-0: the card fills the center to its bottom and the rows scroll inside it, the footer stays in view. */
+  height: var(--size-main-height);
 }
 
 .fullscreen {
   position: fixed;
   inset: 0;
+  height: auto;
   z-index: 30;
   padding: var(--spacing-4);
   background: var(--color-bg);
@@ -103,7 +105,7 @@
 
 .card {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
   overflow: clip;
@@ -114,6 +116,7 @@
 
 .cardHead {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   height: var(--size-toolbar-row);
@@ -135,6 +138,7 @@
 
 .cardFoot {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   height: var(--size-field-lg);
@@ -204,6 +208,17 @@
 
 .relaxed td {
   height: var(--size-table-row);
+}
+
+/* The head stays while the rows scroll under it; a pinned head cell sits over both. */
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.table thead .pinned {
+  z-index: 4;
 }
 
 /* Stronger than `.table th { position: relative }`: a pinned cell lost to it moved by its own offset onto the next column. */
