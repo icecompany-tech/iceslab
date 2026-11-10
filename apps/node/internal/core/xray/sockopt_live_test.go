@@ -212,6 +212,7 @@ func deadConnection(t *testing.T, bin, extra string, inFlight bool, wait time.Du
 		setLoopback(t, "down")
 	}
 	t.Logf("before: %s", before)
+	t.Logf("the core's sockets: %s", coreSocketOptions(socksPort))
 	died := time.Now()
 	logged := false
 	for time.Since(died) < wait {
