@@ -6,7 +6,7 @@ const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy} a${r} ${
 // the filled parts of an otherwise stroked icon, `solid` the brand marks.
 const ICONS = {
   chevronDown: { d: 'M6.5 9.5 L12 15 L17.5 9.5' },
-  chevronUp: { d: 'M6.5 14.5 L12 9 L17.5 14.5' },
+  chevronUp: { d: 'M6.5 15 L12 9.5 L17.5 15' },
   chevronLeft: { d: 'M14.5 6.5 L9 12 L14.5 17.5' },
   chevronRight: { d: 'M9.5 6.5 L15 12 L9.5 17.5' },
   arrowRight: { d: 'M4 12 H20 M14 6 L20 12 L14 18' },

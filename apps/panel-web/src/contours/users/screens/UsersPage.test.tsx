@@ -148,6 +148,21 @@ describe('UsersPage', () => {
     expect(screen.getByRole('button', { name: 'На странице' }).textContent).toMatch(/50 на странице/)
   })
 
+  it('the term filter: «Есть срок» from its own popover, the dates in day fields, and the box stays while you pick', async () => {
+    const s = server()
+    page()
+    await screen.findByText('kate_m')
+    await userEvent.click(screen.getByRole('button', { name: 'Фильтр: Срок' }))
+    expect(screen.queryAllByRole('combobox')).toEqual([])
+    await userEvent.click(screen.getByRole('button', { name: 'Есть срок' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Да/ }))
+    await waitFor(() => expect(s.sent.some((r) => r.path.includes('hasExpiry=yes'))).toBe(true))
+    expect(await screen.findByRole('group', { name: 'С даты' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'По дату' })).toBeTruthy()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('group', { name: 'С даты' })).toBeNull()
+  })
+
   it('the status and limit filters pick from a popover, not a native select', async () => {
     const s = server()
     page()

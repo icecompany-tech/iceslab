@@ -435,6 +435,58 @@
   padding: var(--spacing-3);
 }
 
+/* Paper ui/Popover/срок: 248 together with the box's own border. */
+.filterPanel {
+  box-sizing: border-box;
+  width: calc(var(--size-filters) - 2 * var(--border-hairline));
+}
+
+.boxField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-px-5);
+}
+
+.boxField > span:last-child {
+  display: flex;
+}
+
+.boxLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.boxPick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: var(--size-row);
+  padding: 0 var(--spacing-2) 0 var(--spacing-2-5);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.boxPick svg {
+  color: var(--color-text-muted);
+}
+
+.boxPick[aria-expanded="true"] {
+  border-color: var(--color-accent-edge);
+}
+
+.boxPick:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
+}
+
 .filtersPair {
   display: grid;
   grid-template-columns: 1fr 1fr;

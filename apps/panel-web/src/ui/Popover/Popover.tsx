@@ -5,13 +5,20 @@ export interface PopoverProps {
   /** Pressed state and the opener's own props; the anchor is the wrapper. */
   trigger: (props: { 'aria-expanded': boolean; onClick: () => void }) => ReactNode
   align?: 'start' | 'end'
-  /** A larger box (ui/ColumnsPanel): radius lg and the deeper shadow. */
-  look?: 'menu' | 'sheet'
+  /**
+   * menu: 6 under the trigger. sheet (ui/ColumnsPanel): radius lg, the deeper shadow, no gap.
+   * field (ui/Popover/срок): 5 under a column filter, the deeper shadow.
+   */
+  look?: 'menu' | 'sheet' | 'field'
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
-const GAP = 6
+// As drawn: a sheet hangs from its button's bottom edge, a filter's box sits 5 under the field.
+const GAPS = { menu: 6, sheet: 0, field: 5 } as const
 const MARGIN = 8
+
+/** A calendar or a list that a field inside the box opens lives in its own layer: a press there is not «outside». */
+const inNestedLayer = (target: Element) => target.closest('[data-trigger]') !== null
 
 /**
  * Open under its trigger and out of any scrolling parent: `fixed`, the place set on the
@@ -28,8 +35,7 @@ export function Popover({ trigger, align = 'start', look = 'menu', children }: P
     if (!open || !box || !el) return
     const place = el.getBoundingClientRect()
     const left = align === 'end' ? box.right - place.width : box.left
-    // A sheet hangs from its button's bottom edge, as ui/ColumnsPanel is drawn; a menu keeps a gap.
-    const gap = look === 'sheet' ? 0 : GAP
+    const gap = GAPS[look]
     const below = box.bottom + gap
     const fits = below + place.height <= window.innerHeight - MARGIN
     el.style.left = `${Math.max(MARGIN, left)}px`
@@ -40,10 +46,12 @@ export function Popover({ trigger, align = 'start', look = 'menu', children }: P
     if (!open) return
     const onPointer = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && !anchor.current?.contains(target) && !panel.current?.contains(target)) setOpen(false)
+      if (!(target instanceof Element) || anchor.current?.contains(target) || panel.current?.contains(target) || inNestedLayer(target)) return
+      setOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      // An Esc a nested calendar already took closes only it.
+      if (event.key === 'Escape' && !event.defaultPrevented) setOpen(false)
     }
     document.addEventListener('pointerdown', onPointer)
     document.addEventListener('keydown', onKey)
@@ -57,7 +65,7 @@ export function Popover({ trigger, align = 'start', look = 'menu', children }: P
     <span ref={anchor} className={styles.anchor}>
       {trigger({ 'aria-expanded': open, onClick: () => setOpen(!open) })}
       {open && (
-        <div ref={panel} className={`${styles.panel} ${look === 'sheet' ? styles.sheet : ''}`}>
+        <div ref={panel} className={`${styles.panel} ${look === 'menu' ? '' : styles[look]}`}>
           {typeof children === 'function' ? children(() => setOpen(false)) : children}
         </div>
       )}

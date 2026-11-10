@@ -3,7 +3,8 @@ import { DICT } from '@/contours/users/dict'
 import type { StatusFilter, ListState } from '@/contours/users/hooks/useListState'
 import type { ColumnFilter, FilterParam } from '@/contours/users/lib/columns'
 import type { NodeRow } from '@/lib/domain/nodes'
-import { useDict } from '@/lib/i18n'
+import { useDict, useLocale } from '@/lib/i18n'
+import { LazyDateTimeField } from '@/ui/DateTimeField/LazyDateTimeField'
 import { Field, Input } from '@/ui/Field/Field'
 import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
@@ -11,15 +12,12 @@ import { Select } from '@/ui/Select/Select'
 
 const GiB = 1024 ** 3
 
-/** An ISO date field of the request from the native date input, the whole day in local time. */
-const dayStart = (date: string) => (date ? new Date(`${date}T00:00:00`).toISOString() : '')
-const dayEnd = (date: string) => (date ? new Date(`${date}T23:59:59`).toISOString() : '')
-const dateOf = (iso: string | undefined) => {
-  if (!iso) return ''
-  const at = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
-}
+/** The browser's own clock, as the user window uses it. */
+const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+const DAY_LAST_MS = 86_399_000
+
+/** «По дату» takes the whole day: the field hands its start, the request gets 23:59:59 of it. */
+const dayEnd = (dayStartIso: string) => new Date(Date.parse(dayStartIso) + DAY_LAST_MS).toISOString()
 
 function Opener({ label, active, ...props }: { label: string; active: boolean; 'aria-expanded': boolean; onClick: () => void }) {
   return (
@@ -34,7 +32,7 @@ function Opener({ label, active, ...props }: { label: string; active: boolean; '
 function Choice({ label, value, options, onPick }: { label: string; value: string; options: readonly { value: string; label: string }[]; onPick: (value: string) => void }) {
   const shown = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
   return (
-    <Popover trigger={(props) => <Opener label={shown} active={value !== (options[0]?.value ?? '')} {...props} aria-label={label} />}>
+    <Popover look="field" trigger={(props) => <Opener label={shown} active={value !== (options[0]?.value ?? '')} {...props} aria-label={label} />}>
       {(close) => (
         <div role="menu" aria-label={label} className={styles.choiceList}>
           {options.map((o) => (
@@ -59,19 +57,67 @@ function Choice({ label, value, options, onPick }: { label: string; value: strin
   )
 }
 
+/** A 32 field inside a filter box that picks one value from its own popover (Paper «Есть срок»). */
+function FieldChoice({ label, value, options, onPick }: { label: string; value: string; options: readonly { value: string; label: string }[]; onPick: (value: string) => void }) {
+  const shown = options.find((o) => o.value === value)?.label ?? options[0]?.label ?? ''
+  return (
+    <div className={styles.boxField}>
+      <span className={styles.boxLabel}>{label}</span>
+      <Popover
+        trigger={(props) => (
+          <button type="button" className={styles.boxPick} aria-label={label} {...props}>
+            {shown}
+            <Icon name={props['aria-expanded'] ? 'chevronUp' : 'chevronDown'} size="md" />
+          </button>
+        )}
+      >
+        {(close) => (
+          <div role="menu" aria-label={label} className={styles.choiceList}>
+            {options.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={o.value === value}
+                className={styles.choiceItem}
+                onClick={() => {
+                  close()
+                  onPick(o.value)
+                }}
+              >
+                {o.label}
+                {o.value === value && <Icon name="check" size="md" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </Popover>
+    </div>
+  )
+}
+
 function Dates({ list, after, before, presence, label }: { list: ListState; after: FilterParam; before: FilterParam; presence?: FilterParam; label: string }) {
   const words = useDict(DICT)
+  const { locale } = useLocale()
   const active = [after, before, presence].some((k) => k && list.filters[k])
+  const texts = { open: words.calendarOpen, previousMonth: words.calendarPrev, nextMonth: words.calendarNext }
   return (
-    <Popover trigger={(props) => <Opener label={words.filterDates} active={active} {...props} aria-label={label} />}>
+    <Popover look="field" trigger={(props) => <Opener label={words.filterDates} active={active} {...props} aria-label={label} />}>
       <div className={styles.filterPanel}>
         {presence && (
-          <Field label={words.hasExpiry}>
-            {(a11y) => <Select {...a11y} value={list.filters[presence] ?? ''} onChange={(e) => list.setFilter(presence, e.target.value)} options={[{ value: '', label: words.any }, { value: 'yes', label: words.choice.yes ?? '' }, { value: 'no', label: words.choice.no ?? '' }]} />}
-          </Field>
+          <FieldChoice
+            label={words.hasExpiry}
+            value={list.filters[presence] ?? ''}
+            onPick={(value) => list.setFilter(presence, value)}
+            options={[
+              { value: '', label: words.any },
+              { value: 'yes', label: words.choice.yes ?? '' },
+              { value: 'no', label: words.choice.no ?? '' },
+            ]}
+          />
         )}
-        <Field label={words.fromDate}>{(a11y) => <Input {...a11y} type="date" value={dateOf(list.filters[after])} onChange={(e) => list.setFilter(after, dayStart(e.target.value))} />}</Field>
-        <Field label={words.toDate}>{(a11y) => <Input {...a11y} type="date" value={dateOf(list.filters[before])} onChange={(e) => list.setFilter(before, dayEnd(e.target.value))} />}</Field>
+        <LazyDateTimeField kind="day" label={words.fromDate} locale={locale} timeZone={TIME_ZONE} texts={texts} value={list.filters[after] ?? null} onChange={(iso) => list.setFilter(after, iso ?? '')} />
+        <LazyDateTimeField kind="day" label={words.toDate} locale={locale} timeZone={TIME_ZONE} texts={texts} value={list.filters[before] ?? null} onChange={(iso) => list.setFilter(before, iso ? dayEnd(iso) : '')} />
       </div>
     </Popover>
   )
@@ -88,7 +134,7 @@ function Bytes({ list, over, under, label }: { list: ListState; over: FilterPara
     list.setFilter(key, text.trim() !== '' && Number.isFinite(n) && n >= 0 ? String(Math.round(n * GiB)) : '')
   }
   return (
-    <Popover trigger={(props) => <Opener label={words.filterBytes} active={Boolean(list.filters[over] ?? list.filters[under])} {...props} aria-label={label} />}>
+    <Popover look="field" trigger={(props) => <Opener label={words.filterBytes} active={Boolean(list.filters[over] ?? list.filters[under])} {...props} aria-label={label} />}>
       <div className={styles.filterPanel}>
         <Field label={words.fromGb}>{(a11y) => <Input {...a11y} inputMode="decimal" value={gb(over)} onChange={(e) => set(over, e.target.value)} />}</Field>
         <Field label={words.toGb}>{(a11y) => <Input {...a11y} inputMode="decimal" value={gb(under)} onChange={(e) => set(under, e.target.value)} />}</Field>
@@ -100,7 +146,7 @@ function Bytes({ list, over, under, label }: { list: ListState; over: FilterPara
 function NodeFilter({ list, nodes, label }: { list: ListState; nodes: readonly NodeRow[]; label: string }) {
   const words = useDict(DICT)
   return (
-    <Popover trigger={(props) => <Opener label={words.filterNode} active={Boolean(list.filters.nodeId ?? list.filters.online)} {...props} aria-label={label} />}>
+    <Popover look="field" trigger={(props) => <Opener label={words.filterNode} active={Boolean(list.filters.nodeId ?? list.filters.online)} {...props} aria-label={label} />}>
       <div className={styles.filterPanel}>
         <Field label={words.node}>
           {(a11y) => <Select {...a11y} value={list.filters.nodeId ?? ''} onChange={(e) => list.setFilter('nodeId', e.target.value)} options={[{ value: '', label: words.any }, { value: 'none', label: words.neverConnected }, ...nodes.map((n) => ({ value: n.id, label: n.name }))]} />}

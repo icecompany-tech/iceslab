@@ -1,4 +1,6 @@
-import { parseAbsolute, type ZonedDateTime } from '@internationalized/date'
+import { parseAbsolute, toZoned, type CalendarDate, type CalendarDateTime, type ZonedDateTime } from '@internationalized/date'
+
+type DateValue = CalendarDate | CalendarDateTime | ZonedDateTime
 import {
   Button,
   Calendar,
@@ -35,19 +37,25 @@ export interface DateTimeFieldProps {
   timeZone: string
   error?: string
   texts: DateTimeFieldTexts
+  /** «day»: a date alone in a small 32 field, as the column filter «Срок» is drawn; the instant is that day's start. */
+  kind?: 'datetime' | 'day'
 }
 
-export function DateTimeField({ label, value, onChange, timeZone, error, texts }: DateTimeFieldProps) {
+/** Typed into an empty field the picker hands a plain date or date-time: placed in `timeZone` here. */
+const toInstant = (next: DateValue, timeZone: string) => ('toAbsoluteString' in next ? next.toAbsoluteString() : toZoned(next, timeZone).toAbsoluteString())
+
+export function DateTimeField({ label, value, onChange, timeZone, error, texts, kind = 'datetime' }: DateTimeFieldProps) {
+  const day = kind === 'day'
   return (
-    <DatePicker<ZonedDateTime>
-      className={styles.picker}
-      granularity="minute"
+    <DatePicker<DateValue>
+      className={`${styles.picker} ${day ? styles.day32 : ''}`}
+      granularity={day ? 'day' : 'minute'}
       hourCycle={24}
       hideTimeZone
       shouldForceLeadingZeros
       isInvalid={error !== undefined}
       value={value === null ? null : parseAbsolute(value, timeZone)}
-      onChange={(next) => onChange(next === null ? null : next.toAbsoluteString())}
+      onChange={(next) => onChange(next === null ? null : toInstant(next, timeZone))}
     >
       <Label className={styles.label}>{label}</Label>
       <Group className={styles.field}>
@@ -55,7 +63,7 @@ export function DateTimeField({ label, value, onChange, timeZone, error, texts }
           {(segment) => <DateSegment segment={segment} className={styles.segment} />}
         </DateInput>
         <Button aria-label={texts.open} className={styles.open}>
-          <Icon name="calendar" />
+          <Icon name="calendar" size={day ? 'md' : 'lg'} />
         </Button>
       </Group>
       {error !== undefined && (
