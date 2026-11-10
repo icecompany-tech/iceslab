@@ -3,6 +3,7 @@ import type { Profile } from '@/lib/old/profiles';
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues';
 import { randomAwgHeaders, TSPU_PRESET } from '@/contours/profiles/lib/awgPresets';
 import { profileAwgGeneration } from '@/lib/old/awg';
+import { sockoptFromConfig } from '@/contours/profiles/lib/xraySockopt';
 
 export function defaults(profile: Profile | null): FormValues {
   // A new profile gets its own H1..H4 (A-286): left empty they were sent as
@@ -50,6 +51,9 @@ export function defaults(profile: Profile | null): FormValues {
     xrayXhttpMode: 'auto',
     xrayXhttpPaddingBytes: '',
     xrayGrpcMultiMode: false,
+    xrayTcpUserTimeout: '',
+    xrayTcpKeepAliveIdle: '',
+    xrayTcpKeepAliveInterval: '',
 
     awgGeneration: profileAwgGeneration(profile?.awgProtocol),
     awgSubnet: '10.66.66.0/24',
@@ -138,6 +142,7 @@ export function defaults(profile: Profile | null): FormValues {
         xrayXhttpMode: ((cfg.xhttpMode as FormValues['xrayXhttpMode']) ?? base.xrayXhttpMode),
         xrayXhttpPaddingBytes: (cfg.xhttpPaddingBytes as string) ?? base.xrayXhttpPaddingBytes,
         xrayGrpcMultiMode: (cfg.grpcMultiMode as boolean) ?? base.xrayGrpcMultiMode,
+        ...sockoptFromConfig(cfg),
       };
     case 'amneziawg': {
       const obf = (cfg.obfuscation as Record<string, number | string> | undefined) ?? {};

@@ -440,3 +440,28 @@
   color: var(--color-amber);
   font-size: var(--text-xs);
 }
+
+/* Bk-170: the nodes of the profile and what each agent does with the TCP options. */
+.sockoptNodes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-base);
+  list-style: none;
+}
+
+.sockoptRefuses {
+  color: var(--color-amber);
+}
+
+.sockoptUnknown {
+  color: var(--color-text-muted);
+}
+/* A label that wraps to two lines does not push its field below the others. */
+.fieldsAtBase {
+  align-items: end;
+}

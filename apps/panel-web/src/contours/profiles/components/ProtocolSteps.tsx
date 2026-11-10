@@ -20,6 +20,7 @@ import type { Profile } from '@/lib/old/profiles'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
 import { Field, Input } from '@/ui/Field/Field'
+import { SockoptFields } from '@/contours/profiles/components/SockoptFields'
 import { Keys, Secret } from '@/contours/profiles/components/StepFields'
 import { RadioRow } from '@/ui/RadioRow/RadioRow'
 import { Select } from '@/ui/Select/Select'
@@ -153,6 +154,7 @@ function xraySteps(props: StepProps, { words, cfg }: Words): StepDef[] {
     title: words.stepAdvanced,
     optional: true,
     value: words.byDefault,
+    invalid: problems.tcp !== undefined,
     body: (
       <>
         <div className={styles.twoFields}>
@@ -183,17 +185,8 @@ function xraySteps(props: StepProps, { words, cfg }: Words): StepDef[] {
             {cfg.tlsRejectUnknownSniLabel}
           </label>
         )}
-        {!onSingbox && (
-          <fieldset className={styles.fieldset} disabled>
-            <legend>{words.tcpTimeouts}</legend>
-            <div className={styles.threeFields}>
-              <Field label={words.tcpUserTimeout}>{(a11y) => <Input {...a11y} placeholder="-" />}</Field>
-              <Field label={words.tcpKeepAliveIdle}>{(a11y) => <Input {...a11y} placeholder="-" />}</Field>
-              <Field label={words.tcpKeepAliveInterval}>{(a11y) => <Input {...a11y} placeholder="-" />}</Field>
-            </div>
-            <p className={styles.note}>{words.tcpEmpty} {words.tcpOldAgent} {words.tcpWaiting}</p>
-          </fieldset>
-        )}
+        {/* Bk-170: sing-box refuses the TCP options, so it is not offered them. */}
+        {!onSingbox && <SockoptFields values={v} patch={patch} profileId={props.profile?.id ?? null} problem={problems.tcp} />}
       </>
     ),
   }

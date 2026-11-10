@@ -51,6 +51,10 @@ export interface FormValues {
   xrayXhttpMode: 'auto' | 'packet-up' | 'stream-up' | 'stream-one';
   xrayXhttpPaddingBytes: string;
   xrayGrpcMultiMode: boolean;
+  /** Bk-170: TCP options of the inbound; empty is «as the core does» (lib/xraySockopt). */
+  xrayTcpUserTimeout: number | '';
+  xrayTcpKeepAliveIdle: number | '';
+  xrayTcpKeepAliveInterval: number | '';
 
   // AmneziaWG
   /** Поколение, которое профиль раздаёт (227054e): 1 = 1.x, 3 = 3.1. В форме

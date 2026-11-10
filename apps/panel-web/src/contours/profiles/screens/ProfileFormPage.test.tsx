@@ -74,6 +74,38 @@ describe('ProfileFormPage', () => {
     await waitFor(() => expect(s.writes()[0]).toEqual({ method: 'PUT', path: '/api/profiles/p1', body: { name: 'vless-2' } }))
   })
 
+  it('Bk-170: the TCP fields name each node by its agent answer (true, false, none) and a save sends only the set field', async () => {
+    const core = (rendersSockopt?: boolean) => ({ name: 'xray', engine: 'xray', ...(rendersSockopt === undefined ? {} : { rendersSockopt }) })
+    const node = (id: string, name: string, rendersSockopt?: boolean) => ({ id, name, cores: { cores: [core(rendersSockopt)] } })
+    const s = server({
+      'GET /api/bindings': { body: { bindings: ['n1', 'n2', 'n3'].map((nodeId, i) => ({ id: `b${i}`, profileId: 'p1', nodeId, port: 443 })) } },
+      'GET /api/nodes': { body: { nodes: [node('n1', 'de-01', true), node('n2', 'nl-02', false), node('n3', 'kz-01')], total: 3 } },
+      'PUT /api/profiles/p1': { body: xray },
+      'POST /api/profiles/p1/test-connect': { body: { results: [] } },
+    })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Дополнительно/ }))
+    const nodes = await screen.findByRole('list', { name: 'Ноды профиля' })
+    await waitFor(() => expect(nodes.textContent).toMatch(/de-01: агент применит/))
+    expect(nodes.textContent).toMatch(/nl-02: агент этой ноды опцию не применит/)
+    expect(nodes.textContent).toMatch(/kz-01: не знаю, агент не сообщил/)
+    fireEvent.change(screen.getByLabelText('Проверка соединения: интервал, с'), { target: { value: '10' } })
+    const save = screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement
+    await waitFor(() => expect(save.disabled).toBe(false))
+    await userEvent.click(save)
+    await waitFor(() => expect(s.writes()[0]?.method).toBe('PUT'))
+    const config: Record<string, unknown> = { ...(s.writes()[0]?.body as { config: object }).config }
+    expect(config.tcpKeepAliveInterval).toBe(10)
+    expect('tcpUserTimeout' in config || 'tcpKeepAliveIdle' in config).toBe(false)
+  })
+
+  it('Bk-170: a profile on no node says which agent applies the fields', async () => {
+    server()
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Дополнительно/ }))
+    await screen.findByText(/Поля применит агент v0.4.0 и новее/)
+  })
+
   it('a new pair asks with the server numbers read again, in the right case', async () => {
     const s = server()
     page()

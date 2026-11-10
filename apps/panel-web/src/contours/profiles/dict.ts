@@ -138,9 +138,16 @@ const ru = {
   tcpUserTimeout: 'Таймаут без подтверждения, мс',
   tcpKeepAliveIdle: 'Проверка соединения: первая через, с',
   tcpKeepAliveInterval: 'Проверка соединения: интервал, с',
-  tcpEmpty: 'Пустое поле значит «как у ядра». Работает на любом транспорте.',
-  tcpOldAgent: 'Агент старше этой версии молча игнорирует эти поля: проверьте версию агента на ноде.',
-  tcpWaiting: 'Запись этих полей появится вместе с серверной частью; пока форма их не отправляет.',
+  tcpEmpty: 'Пустое поле значит «как у ядра», оно не отправляется. Работает на любом транспорте.',
+  tcpRange: (max: number) => `Целое число от 1 до ${max}.`,
+  tcpNoNodes: 'Профиль пока ни на одной ноде. Поля применит агент v0.4.0 и новее; агент старше молча их пропустит.',
+  tcpNodesFailed: 'Список нод не загрузился: не знаю, какие ноды применят поля.',
+  tcpNodesLabel: 'Ноды профиля',
+  tcpReach: {
+    applies: 'агент применит',
+    refuses: 'агент этой ноды опцию не применит',
+    unknown: 'не знаю, агент не сообщил',
+  },
 }
 
 const en: typeof ru = {
@@ -275,9 +282,16 @@ const en: typeof ru = {
   tcpUserTimeout: 'Timeout without an acknowledgement, ms',
   tcpKeepAliveIdle: 'Connection check: first after, s',
   tcpKeepAliveInterval: 'Connection check: interval, s',
-  tcpEmpty: 'An empty field means as the core has it. Works on any transport.',
-  tcpOldAgent: 'An agent older than this version silently ignores these fields: check the agent version on the node.',
-  tcpWaiting: 'These fields are written once the server part is in; for now the form does not send them.',
+  tcpEmpty: 'An empty field means as the core has it and is not sent. Works on any transport.',
+  tcpRange: (max) => `A whole number from 1 to ${max}.`,
+  tcpNoNodes: 'The profile is on no node yet. Agent v0.4.0 and newer applies the fields; an older one skips them without a word.',
+  tcpNodesFailed: 'The node list did not load: I do not know which nodes apply the fields.',
+  tcpNodesLabel: 'Nodes of the profile',
+  tcpReach: {
+    applies: 'the agent applies them',
+    refuses: 'this node\'s agent will not apply the option',
+    unknown: 'unknown, the agent did not say',
+  },
 }
 
 export const DICT = { ru, en }

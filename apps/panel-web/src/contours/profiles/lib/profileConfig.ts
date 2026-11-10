@@ -2,6 +2,7 @@ import { csvList, numOr, type FormValues } from '@/contours/profiles/lib/profile
 import { isPlainSubprotocol, plainXrayConfig } from '@/contours/profiles/lib/plainSubprotocol';
 import { portHopConfig } from '@/contours/profiles/lib/portHopRange';
 import { awgHeaderConfig } from '@/contours/profiles/lib/awgHeaders';
+import { sockoptConfig } from '@/contours/profiles/lib/xraySockopt';
 
 /**
  * The profile's config as the form builds it on save, from the form's own
@@ -70,6 +71,8 @@ export function profileConfigOf(values: FormValues): Record<string, unknown> {
             }
           : {}),
         ...(values.xrayNetwork === 'grpc' ? { grpcMultiMode: values.xrayGrpcMultiMode } : {}),
+        // Bk-170: only the set TCP options; an empty one is left to the server's keeping.
+        ...sockoptConfig(values),
       };
     case 'amneziawg':
       return {

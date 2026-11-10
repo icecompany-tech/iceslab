@@ -6,6 +6,8 @@ import { profileConfigOf } from '@/contours/profiles/lib/profileConfig'
 import { ENGINE_CHOICE_PROTOCOLS } from '@/contours/profiles/lib/profileKinds'
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues'
 import { ssConfigPatch } from '@/contours/profiles/lib/ssServerKey'
+import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol'
+import { sockoptClears, sockoptProblem, type SockoptField } from '@/contours/profiles/lib/xraySockopt'
 import { profileAwgCreate, profileAwgPatch } from '@/lib/old/awg'
 import type { CreateProfileInput, Profile, UpdateProfileInput } from '@/lib/old/profiles'
 
@@ -33,7 +35,8 @@ export function updateBody(initial: FormValues, values: FormValues, stored: Prof
   if (engineOf(values) !== engineOf(initial)) body.engine = engineOf(values)
   if (JSON.stringify(profileConfigOf(values)) !== JSON.stringify(profileConfigOf(initial))) {
     const config = values.protocol === 'shadowsocks' ? ssConfigPatch(stored.config, true, values.ssMethod).config : profileConfigOf(values)
-    if (config) body.config = config as never
+    // A TCP option emptied since the form opened goes as null: left out, the server keeps it.
+    if (config) body.config = (values.protocol === 'xray' ? { ...config, ...sockoptClears(initial, values) } : config) as never
   }
   if (values.protocol === 'amneziawg') Object.assign(body, profileAwgPatch(stored.awgProtocol, values.awgGeneration))
   return body
@@ -44,16 +47,20 @@ export interface FormProblems {
   portHop?: 'hyPortHopStart' | 'hyPortHopEnd'
   awgHeaders?: true
   security?: 'network'
+  /** Bk-170: the first TCP option out of the server's bounds. */
+  tcp?: SockoptField
 }
 
 export function formProblems(values: FormValues): FormProblems {
   const hop = values.protocol === 'hysteria' ? portHopProblem(values.hyPortHopStart, values.hyPortHopEnd) : null
   const wrongNetwork = values.protocol === 'xray' && values.xraySecurity === 'reality' && !['raw', 'xhttp', 'grpc'].includes(values.xrayNetwork)
+  const tcp = values.protocol === 'xray' && !isPlainSubprotocol(values.xraySubprotocol) ? sockoptProblem(values) : undefined
   return {
     ...(values.name === '' ? { name: 'required' as const } : NAME.test(values.name) ? {} : { name: 'latin' as const }),
     ...(hop ? { portHop: hop } : {}),
     ...(values.protocol === 'amneziawg' && awgHeaderProblems(values).size > 0 ? { awgHeaders: true as const } : {}),
     // A transport that REALITY cannot run on: the choice stays, the step asks (ARCH 06.11).
     ...(wrongNetwork ? { security: 'network' as const } : {}),
+    ...(tcp ? { tcp } : {}),
   }
 }
