@@ -200,16 +200,17 @@ export default function UsersPage() {
             {sortColumn && ` · ${words.sortedBy(words.column[sortColumn.id])}`}
           </span>
           <span className={styles.viewTools}>
-            <button type="button" className={styles.iconButton} aria-label={words.density} onClick={() => setDensity(DENSITY_ORDER[(DENSITY_ORDER.indexOf(density) + 1) % DENSITY_ORDER.length] ?? 'normal')}>
+            <button type="button" className={styles.viewButton} aria-label={words.density} onClick={() => setDensity(DENSITY_ORDER[(DENSITY_ORDER.indexOf(density) + 1) % DENSITY_ORDER.length] ?? 'normal')}>
               <Icon name="density" size="lg" />
             </button>
-            <button type="button" className={styles.iconButton} aria-label={words.fullscreen} aria-pressed={fullscreen} onClick={() => setFullscreen(!fullscreen)}>
+            <button type="button" className={styles.viewButton} aria-label={words.fullscreen} aria-pressed={fullscreen} onClick={() => setFullscreen(!fullscreen)}>
               <Icon name="fullscreen" size="lg" />
             </button>
             <Popover
               align="end"
+              look="sheet"
               trigger={(props) => (
-                <button type="button" className={styles.iconButton} aria-label={words.columnsPanel} {...props}>
+                <button type="button" className={styles.viewButton} aria-label={words.columnsPanel} {...props}>
                   <Icon name="columns" size="lg" />
                 </button>
               )}

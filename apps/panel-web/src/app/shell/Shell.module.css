@@ -21,8 +21,6 @@
   overflow-y: auto;
   padding-block: var(--spacing-7);
   padding-inline: var(--spacing-8);
-  scrollbar-color: var(--color-scroll-thumb) transparent;
-  scrollbar-width: thin;
 }
 
 /* Two widths, both at the left (DECISIONS 10.11): a form keeps 1088, a register stretches up to the 1920 window. */

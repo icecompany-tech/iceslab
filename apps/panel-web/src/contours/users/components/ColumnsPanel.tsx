@@ -26,6 +26,7 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
   return (
     <div className={styles.columnsPanel}>
       <div className={styles.columnsHead}>
+        <span className={styles.columnsLinks}>
         <button type="button" className={styles.textButton} onClick={() => onChange({ ...view, hidden: view.order.filter((id) => id !== 'username') })}>
           {words.hideAll}
         </button>
@@ -38,6 +39,7 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
         <button type="button" className={styles.textButton} onClick={() => onChange({ ...view, hidden: [] })}>
           {words.showAll}
         </button>
+        </span>
         <span className={styles.columnsCount}>
           {shown}/{total}
         </span>
@@ -57,12 +59,15 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
               <button type="button" className={`${styles.pinButton} ${view.pins[id] === 'right' ? styles.pinOn : ''}`} aria-label={words.pinRight(name)} aria-pressed={view.pins[id] === 'right'} onClick={() => pin(id, 'right')}>
                 <Icon name="pinRight" size="md" />
               </button>
-              <Switch
-                label={name}
-                checked={!view.hidden.includes(id)}
-                disabled={id === 'username'}
-                onChange={(on) => onChange({ ...view, hidden: on ? view.hidden.filter((h) => h !== id) : [...view.hidden, id] })}
-              />
+              {/* Paper ui/ColumnsPanel: the switch, then the name, bright while the column shows. */}
+              <span className={`${styles.columnsSwitch} ${view.hidden.includes(id) ? '' : styles.columnsShown}`}>
+                <Switch
+                  label={name}
+                  checked={!view.hidden.includes(id)}
+                  disabled={id === 'username'}
+                  onChange={(on) => onChange({ ...view, hidden: on ? view.hidden.filter((h) => h !== id) : [...view.hidden, id] })}
+                />
+              </span>
             </li>
           )
         })}

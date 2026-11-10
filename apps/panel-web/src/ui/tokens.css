@@ -183,7 +183,7 @@
   --size-dialog: 480px;
   --size-window: 920px;
   --size-menu: 244px;
-  --size-switch: 28px;
+  --size-switch: 26px;
   --size-switch-height: 14px;
   --size-switch-knob: 10px;
   --size-toolbar-row: 40px;
@@ -194,6 +194,8 @@
   --size-col-actions: 78px;
   --size-col-filter: 26px;
   --size-user-row: 46px;
+  --size-columns-height: 600px;
+  --size-view-button: 28px;
   --opacity-dim: 0.6;
   --opacity-half: 0.5;
   --spacing-px-5: 5px;

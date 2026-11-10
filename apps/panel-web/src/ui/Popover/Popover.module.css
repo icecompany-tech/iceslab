@@ -12,3 +12,8 @@
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-popover);
 }
+
+.sheet {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-toast);
+}

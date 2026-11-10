@@ -5,6 +5,8 @@ export interface PopoverProps {
   /** Pressed state and the opener's own props; the anchor is the wrapper. */
   trigger: (props: { 'aria-expanded': boolean; onClick: () => void }) => ReactNode
   align?: 'start' | 'end'
+  /** A larger box (ui/ColumnsPanel): radius lg and the deeper shadow. */
+  look?: 'menu' | 'sheet'
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
@@ -15,7 +17,7 @@ const MARGIN = 8
  * Open under its trigger and out of any scrolling parent: `fixed`, the place set on the
  * element, since the page's CSP refuses style attributes. Esc and a click outside close it.
  */
-export function Popover({ trigger, align = 'start', children }: PopoverProps) {
+export function Popover({ trigger, align = 'start', look = 'menu', children }: PopoverProps) {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLSpanElement>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -26,11 +28,13 @@ export function Popover({ trigger, align = 'start', children }: PopoverProps) {
     if (!open || !box || !el) return
     const place = el.getBoundingClientRect()
     const left = align === 'end' ? box.right - place.width : box.left
-    const below = box.bottom + GAP
+    // A sheet hangs from its button's bottom edge, as ui/ColumnsPanel is drawn; a menu keeps a gap.
+    const gap = look === 'sheet' ? 0 : GAP
+    const below = box.bottom + gap
     const fits = below + place.height <= window.innerHeight - MARGIN
     el.style.left = `${Math.max(MARGIN, left)}px`
-    el.style.top = `${fits ? below : Math.max(MARGIN, box.top - GAP - place.height)}px`
-  }, [open, align])
+    el.style.top = `${fits ? below : Math.max(MARGIN, box.top - gap - place.height)}px`
+  }, [open, align, look])
 
   useEffect(() => {
     if (!open) return
@@ -53,7 +57,7 @@ export function Popover({ trigger, align = 'start', children }: PopoverProps) {
     <span ref={anchor} className={styles.anchor}>
       {trigger({ 'aria-expanded': open, onClick: () => setOpen(!open) })}
       {open && (
-        <div ref={panel} className={styles.panel}>
+        <div ref={panel} className={`${styles.panel} ${look === 'sheet' ? styles.sheet : ''}`}>
           {typeof children === 'function' ? children(() => setOpen(false)) : children}
         </div>
       )}

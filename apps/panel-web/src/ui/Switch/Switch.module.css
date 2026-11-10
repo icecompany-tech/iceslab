@@ -23,10 +23,14 @@
   pointer-events: none;
 }
 
+/* Paper ui/Switch: 26x14, knob 10. Off has a border-colour edge, on is filled accent. */
 .track {
   position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
   width: var(--size-switch);
   height: var(--size-switch-height);
+  border: var(--border-hairline) solid var(--color-border);
   border-radius: var(--radius-full);
   background: var(--color-surface-raised);
 }
@@ -34,7 +38,7 @@
 .track::after {
   content: "";
   position: absolute;
-  top: var(--spacing-half);
+  top: calc(50% - var(--size-switch-knob) / 2);
   left: var(--spacing-half);
   width: var(--size-switch-knob);
   height: var(--size-switch-knob);
@@ -43,12 +47,13 @@
 }
 
 .input:checked + .track {
+  border-color: var(--color-accent);
   background: var(--color-accent);
 }
 
 .input:checked + .track::after {
   left: auto;
-  right: var(--spacing-half);
+  right: calc(var(--spacing-half) - var(--border-hairline));
   background: var(--color-check-ink);
 }
 
