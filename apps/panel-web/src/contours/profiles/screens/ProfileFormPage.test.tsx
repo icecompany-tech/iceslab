@@ -89,7 +89,8 @@ describe('ProfileFormPage', () => {
     await waitFor(() => expect(nodes.textContent).toMatch(/de-01: агент применит/))
     expect(nodes.textContent).toMatch(/nl-02: агент этой ноды опцию не применит/)
     expect(nodes.textContent).toMatch(/kz-01: не знаю, агент не сообщил/)
-    fireEvent.change(screen.getByLabelText('Проверка соединения: интервал, с'), { target: { value: '10' } })
+    expect(screen.getByText('Где «не знаю», обновите агент ноды до v0.4.0: старый агент об этих полях не сообщает.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Проверка соединения: интервал'), { target: { value: '10' } })
     const save = screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement
     await waitFor(() => expect(save.disabled).toBe(false))
     await userEvent.click(save)
@@ -99,11 +100,35 @@ describe('ProfileFormPage', () => {
     expect('tcpUserTimeout' in config || 'tcpKeepAliveIdle' in config).toBe(false)
   })
 
+  it('F-34: a typo over a stored timeout is an error at the field and the save stays closed', async () => {
+    const stored = { ...xray, config: { ...xray.config, tcpUserTimeout: 15000 } }
+    const s = server({ 'GET /api/profiles': { body: { profiles: [stored, awg] } } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Дополнительно/ }))
+    const field = screen.getByLabelText('Таймаут без подтверждения') as HTMLInputElement
+    expect(field.value).toBe('15000')
+    fireEvent.change(field, { target: { value: 'abc' } })
+    await screen.findByText('Целое число от 1 до 2147483647.')
+    expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(s.writes()).toEqual([])
+  })
+
+  it('F-34: a SOCKS5 profile with stored timeouts says they are kept and in force', async () => {
+    const socks = { ...xray, config: { subprotocol: 'socks', security: 'none', network: 'raw', tcpKeepAliveIdle: 30 } }
+    server({ 'GET /api/profiles': { body: { profiles: [socks, awg] } } })
+    page()
+    // The step titled SOCKS5, not «Протокол» whose value reads SOCKS5.
+    const step = (await screen.findAllByRole('button', { name: /^SOCKS5/ })).find((b) => b.hasAttribute('aria-expanded'))
+    if (step?.getAttribute('aria-expanded') === 'false') await userEvent.click(step)
+    await screen.findByText(/Таймауты TCP сохранены и действуют: первая проверка через 30 с/)
+  })
+
   it('Bk-170: a profile on no node says which agent applies the fields', async () => {
     server()
     page()
     await userEvent.click(await screen.findByRole('button', { name: /Дополнительно/ }))
     await screen.findByText(/Поля применит агент v0.4.0 и новее/)
+    expect(screen.queryByText(/Где «не знаю»/)).toBeNull()
   })
 
   it('a new pair asks with the server numbers read again, in the right case', async () => {

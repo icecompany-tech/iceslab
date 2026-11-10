@@ -465,3 +465,94 @@
 .fieldsAtBase {
   align-items: end;
 }
+
+/* Paper «Дополнительно xray, таймауты TCP»: label 170 on the left, a 44 field with its unit inside. */
+.unitRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.unitRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-4);
+}
+
+.unitLabel {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: var(--size-unit-label);
+  min-height: var(--size-field-lg);
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  line-height: var(--leading-lg);
+}
+
+.unitCell {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  min-width: 0;
+}
+
+.unitField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  height: var(--size-field-lg);
+  padding-inline: var(--spacing-3-5);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.unitField:focus-within {
+  border-color: var(--color-accent-edge);
+}
+
+.unitInvalid,
+.unitInvalid:focus-within {
+  border-color: var(--color-danger);
+}
+
+.unitInput {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-md);
+  line-height: var(--leading-lg);
+}
+
+.unitInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.unit {
+  flex-shrink: 0;
+  color: var(--color-text-hint);
+  font-size: var(--text-base);
+  line-height: var(--leading-lg);
+}
+
+.unitError {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  line-height: var(--leading-base);
+}
+
+.unitHint {
+  margin: 0;
+  padding-left: calc(var(--size-unit-label) + var(--spacing-4));
+  color: var(--color-text-hint);
+  font-size: var(--text-sm);
+  line-height: var(--leading-base);
+}

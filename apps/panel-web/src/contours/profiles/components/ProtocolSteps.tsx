@@ -21,6 +21,7 @@ import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
 import { Field, Input } from '@/ui/Field/Field'
 import { SockoptFields } from '@/contours/profiles/components/SockoptFields'
+import { keptSockopt } from '@/contours/profiles/lib/xraySockopt'
 import { Keys, Secret } from '@/contours/profiles/components/StepFields'
 import { RadioRow } from '@/ui/RadioRow/RadioRow'
 import { Select } from '@/ui/Select/Select'
@@ -193,19 +194,25 @@ function xraySteps(props: StepProps, { words, cfg }: Words): StepDef[] {
   return [transport, security, masquerade, advanced]
 }
 
-function plainSteps(props: StepProps, { cfg }: Words): StepDef[] {
+function plainSteps(props: StepProps, { words, cfg }: Words): StepDef[] {
   const socks = props.values.xraySubprotocol === 'socks'
+  // F-34: the server keeps the TCP options of a profile moved to SOCKS5 or HTTP and the agent draws
+  // them there too, so the screen says they are in force rather than hiding them.
+  const kept = keptSockopt(props.values)
   return [
     {
       id: 'plain',
       title: socks ? 'SOCKS5' : 'HTTP',
       body: (
-        <ul className={styles.plainList}>
-          <li>{cfg.plain.onXray}</li>
-          <li>{cfg.plain.fixed}</li>
-          <li>{cfg.plain.auth}</li>
-          <li>{socks ? cfg.plain.portSocks : cfg.plain.portHttp}</li>
-        </ul>
+        <>
+          <ul className={styles.plainList}>
+            <li>{cfg.plain.onXray}</li>
+            <li>{cfg.plain.fixed}</li>
+            <li>{cfg.plain.auth}</li>
+            <li>{socks ? cfg.plain.portSocks : cfg.plain.portHttp}</li>
+          </ul>
+          {kept.length > 0 && <p className={styles.note}>{words.tcpKept(kept.map((k) => `${words.tcpKeptName[k.field]} ${k.value} ${words.unit[k.unit]}`).join(', '))}</p>}
+        </>
       ),
     },
   ]
