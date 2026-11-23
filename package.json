@@ -25,7 +25,8 @@
       "follow-redirects": ">=1.16.2",
       "hono": ">=4.12.25",
       "@fastify/static": ">=10.1.1",
-      "react-router": ">=7.18.0 <8"
+      "react-router": ">=7.18.0 <8",
+      "@prisma/config@7.10.1>effect": "3.22.1"
     },
     "auditConfig": {
       "ignoreGhsas": [

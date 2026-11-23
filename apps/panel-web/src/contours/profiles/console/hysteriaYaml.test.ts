@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaults } from '../lib/profileDefaults'
+import { defaults } from '@/contours/profiles/lib/profileDefaults'
 import { printHysteria, readHysteria } from './hysteriaYaml'
 
 const initial = { ...defaults(null), protocol: 'hysteria' as const, hyMasqueradeUrl: 'https://one.example', hyObfsPassword: 'synthetic-test', hyPortHopStart: 3000, hyPortHopEnd: 3010 }
