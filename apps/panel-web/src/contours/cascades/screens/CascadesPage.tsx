@@ -7,16 +7,18 @@ import { useBindingsAll, useCascadeStatuses, useCascadesList, useFleet, useOldSq
 import { MAX_POSITIONS } from '@/contours/cascades/lib/cascadeForm'
 import { cascadeRow, type CascadeRow } from '@/contours/cascades/lib/rows'
 import { useOverview } from '@/lib/domain/overview'
-import { fmtBytes, fmtNumber } from '@/lib/format'
+import { fmtBytes } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
 import type { CascadeStatus } from '@/lib/old/cascades'
 import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
 import { Field } from '@/ui/Field/Field'
+import { HopMeter } from '@/ui/HopMeter/HopMeter'
 import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
 import { QueryFailed, QueryFailedLine, QueryLoading } from '@/ui/QueryState/QueryState'
+import { RegistryIcon } from '@/ui/Icon/RegistryIcon'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import { Select } from '@/ui/Select/Select'
 
@@ -90,7 +92,7 @@ export default function CascadesPage() {
       case 'off':
         return filtered.filter((r) => !r.cascade.enabled).length
       case 'broken':
-        return filtered.filter((r) => r.push.kind === 'broken').length
+        return filtered.filter((r) => r.problem).length
     }
   }
   const shown = filtered.filter((r) => {
@@ -102,7 +104,7 @@ export default function CascadesPage() {
       case 'off':
         return !r.cascade.enabled
       case 'broken':
-        return r.push.kind === 'broken'
+        return r.problem
     }
   })
   const active = Object.values(filters).filter(Boolean).length
@@ -111,29 +113,21 @@ export default function CascadesPage() {
   )
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.registry}`}>
       <div className={styles.toolbar}>
         <div className={styles.chips}>
           <Segmented<'nodes' | 'cascades'> label={words.segmentLabel} value="cascades" onChange={(v) => v === 'nodes' && void navigate('/nodes')} options={[{ value: 'nodes', label: words.segmentNodes }, { value: 'cascades', label: words.segmentCascades }]} />
           <Chip label={words.chipAll} count={cascades.data ? count('all') : undefined} active={chip === 'all'} onClick={() => setChip('all')} />
           <Chip label={words.chipOn} count={cascades.data ? count('on') : undefined} active={chip === 'on'} onClick={() => setChip('on')} />
-          <Chip label={words.chipOff} count={cascades.data ? count('off') : undefined} dot="unknown" active={chip === 'off'} onClick={() => setChip('off')} />
           <Chip label={words.chipBroken} count={cascades.data ? count('broken') : undefined} dot="danger" active={chip === 'broken'} onClick={() => setChip('broken')} />
+          <Chip label={words.chipOff} count={cascades.data ? count('off') : undefined} dot="unknown" active={chip === 'off'} onClick={() => setChip('off')} />
         </div>
         <div className={styles.chips}>
-          <Segmented<View> label={words.viewLabel} value={view} onChange={setView} options={[{ value: 'cards', label: words.viewCards }, { value: 'list', label: words.viewList }]} />
-          <Link className={styles.linkPrimary} to="/cascades/new">
-            <Icon name="plus" size="md" />
-            {words.create}
-          </Link>
-        </div>
-      </div>
-      <div className={styles.chips}>
-        <input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <label className={styles.registrySearch}><RegistryIcon name="search" /><input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} /></label>
         <Popover
           align="end"
           trigger={(props) => (
-            <Button {...props} size="sm" icon={<Icon name="filter" size="md" />}>
+            <Button {...props} size="sm" icon={<RegistryIcon name="filter" />}>
               {active > 0 ? `${words.filters}: ${active}` : words.filters}
             </Button>
           )}
@@ -148,6 +142,12 @@ export default function CascadesPage() {
             </Button>
           </div>
         </Popover>
+          <div className={styles.viewButtons} role="radiogroup" aria-label={words.viewLabel}>
+            <button type="button" title={words.viewCards} aria-label={words.viewCards} role="radio" aria-checked={view === 'cards'} onClick={() => setView('cards')}><RegistryIcon name="cards" /></button>
+            <button type="button" title={words.viewList} aria-label={words.viewList} role="radio" aria-checked={view === 'list'} onClick={() => setView('list')}><Icon name="density" /></button>
+          </div>
+          <Link className={styles.linkPrimary} to="/cascades/new"><Icon name="plus" size="md" />{words.create}</Link>
+        </div>
       </div>
       {sideFailed && (
         <QueryFailedLine
@@ -165,11 +165,12 @@ export default function CascadesPage() {
       {cascades.isError && <QueryFailed title={words.failedTitle} body={failureText(cascades.error, locale)} retryLabel={words.retry} onRetry={() => void cascades.refetch()} />}
       {fleet.isError && <QueryFailed title={words.nodesFailedTitle} body={failureText(fleet.error, locale)} retryLabel={words.retry} onRetry={() => void fleet.refetch()} />}
       {cascades.data && fleet.data && list.length === 0 && (
-        <div className={styles.empty}>
+        <div className={`${styles.empty} ${styles.firstCascade}`}>
+          <span className={styles.cascadeIcon}><Icon name="routes" size="lg" /></span>
           <h2 className={styles.emptyTitle}>{words.emptyTitle}</h2>
           <p>{words.emptyBody}</p>
-          <Button variant="primary" onClick={() => void navigate('/cascades/new')}>
-            {words.create}
+          <Button size="md" variant="primary" icon={<Icon name="plus" />} onClick={() => void navigate('/cascades/new')}>
+            {words.saveNew}
           </Button>
         </div>
       )}
@@ -187,7 +188,6 @@ export default function CascadesPage() {
             <thead>
               <tr>
                 <th scope="col">{words.colCascade}</th>
-                <th scope="col">{words.colState}</th>
                 <th scope="col">{words.colHops}</th>
                 <th scope="col">{words.colPath}</th>
                 <th scope="col">{words.colReach}</th>
@@ -197,18 +197,17 @@ export default function CascadesPage() {
             </thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.cascade.id}>
+                <tr key={r.cascade.id} data-enabled={r.cascade.enabled}>
                   <td>
-                    <Link className={styles.link} to={`/cascades/${r.cascade.id}`}>
+                    <Link className={styles.tableName} title={r.cascade.enabled ? words.stateOn : words.stateOff} to={`/cascades/${r.cascade.id}`}>
                       {r.cascade.name}
                     </Link>
                   </td>
-                  <td>{r.cascade.enabled ? words.stateOn : words.stateOff}</td>
-                  <td>{`${r.hops}/${MAX_POSITIONS}`}</td>
-                  <td>{r.path}</td>
-                  <td>{r.reach === null ? '?' : r.reach.squads.length === 0 ? words.reachNobody : words.reachSquads(r.reach.squads.map((s) => s.name).join(', '), fmtNumber(r.reach.users, locale))}</td>
+                  <td><span className={styles.tableMeter} aria-label={words.hopMeter(r.hops,MAX_POSITIONS)}><HopMeter count={r.hops} max={MAX_POSITIONS} label="" /></span></td>
+                  <td className={styles.pathShort}>{r.path}</td>
+                  <td>{r.reach === null ? '?' : r.reach.squads.length === 0 ? words.reachNobody : r.reach.squads.map(s => s.name).join(', ')}</td>
                   <td>{r.today === null ? '-' : fmtBytes(r.today, locale)}</td>
-                  <td className={r.push.kind === 'broken' ? styles.danger : undefined}>{r.push.kind === 'broken' ? r.push.broken : r.push.kind === 'done' ? words.pushDone : r.push.kind === 'pending' ? words.pushPending(r.push.waiting.join(', ')) : '-'}</td>
+                  <td className={r.push.kind === 'broken' ? styles.danger : undefined}>{!r.cascade.enabled ? words.offPush : r.push.kind === 'broken' ? r.push.broken : r.push.kind === 'done' ? words.pushDone : r.push.kind === 'pending' ? words.pushPending(r.push.waiting.join(', ')) : '-'}</td>
                 </tr>
               ))}
             </tbody>

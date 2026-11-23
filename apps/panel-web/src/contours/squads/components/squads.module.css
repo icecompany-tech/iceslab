@@ -13,6 +13,7 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-4);
@@ -24,9 +25,20 @@
   gap: var(--spacing-2);
 }
 
-.search {
-  box-sizing: border-box;
-  width: 100%;
+.tools,
+.cardHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  width: var(--size-squad-search);
+  max-width: 100%;
   height: var(--size-row);
   padding-inline: var(--spacing-2-5);
   border: var(--border-hairline) solid var(--color-border);
@@ -37,7 +49,19 @@
   font-size: var(--text-xs);
 }
 
-.search:focus {
+.search {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.searchBox:focus-within {
   border-color: var(--color-accent-edge);
   outline: 0;
 }
@@ -94,15 +118,15 @@
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--size-squad-card)), 1fr));
+  gap: var(--spacing-4);
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1-5);
-  padding: var(--spacing-3-5);
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
   border: var(--border-hairline) solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -118,6 +142,16 @@
 }
 
 .card:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+}
+
+.cardLink {
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.cardLink:focus-visible {
   outline: var(--border-check) solid var(--color-accent);
 }
 

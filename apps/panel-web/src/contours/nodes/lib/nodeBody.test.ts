@@ -10,6 +10,14 @@ describe('the body of a node save', () => {
     expect(nodeUpdateBody(draft, { ...draft }, node)).toEqual({})
   })
 
+  it('keeps the ceiling empty when an older response omits maxUsers', () => {
+    const legacy = { ...node }
+    Reflect.deleteProperty(legacy, 'maxUsers')
+    const draft = draftOfNode(legacy)
+    expect(draftErrors(draft)).toEqual({})
+    expect(nodeUpdateBody(draft, { ...draft, host: '192.0.2.8' }, legacy)).toEqual({ address: '192.0.2.8:1337' })
+  })
+
   it('sends only what changed', () => {
     const draft = draftOfNode(node)
     expect(nodeUpdateBody(draft, { ...draft, name: 'de-02' }, node)).toEqual({ name: 'de-02' })

@@ -94,7 +94,11 @@ export default function SquadsPage() {
           <Chip label={words.noHosts} count={noHosts} dot="unknown" active={chip === 'noHosts'} onClick={() => setChip('noHosts')} />
           <Chip label={words.emptySquads} count={squads.data ? emptyCount : undefined} dot="amber" active={chip === 'empty'} onClick={() => setChip('empty')} />
         </div>
-        <div className={styles.chips}>
+        <div className={styles.tools}>
+          <label className={styles.searchBox}>
+            <Icon name="search" />
+            <input className={styles.search} aria-label={words.search} placeholder={words.searchPlaceholder} value={search} onChange={(e) => setSearch(e.target.value)} />
+          </label>
           <Segmented<View> label={words.viewLabel} value={view} onChange={setView} options={[{ value: 'cards', label: words.views.cards }, { value: 'list', label: words.views.list }]} />
           <Link className={styles.linkPrimary} to="/squads/new">
             <Icon name="plus" size="md" />
@@ -102,7 +106,6 @@ export default function SquadsPage() {
           </Link>
         </div>
       </div>
-      <input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} />
       {squads.isPending && <QueryLoading label={words.loading} />}
       {squads.isError && <QueryFailed title={words.failedTitle} body={failureText(squads.error, locale)} retryLabel={words.retry} onRetry={() => void squads.refetch()} />}
       {squads.data && all.length === 0 && (
@@ -119,8 +122,11 @@ export default function SquadsPage() {
         <div className={styles.cards}>
           {shown.map((squad) => (
             <button key={squad.id} type="button" className={styles.card} onClick={() => void navigate(`/squads/${squad.id}`)}>
-              <b className={styles.cardName}>{squad.name}</b>
-              {markOf(squad) && <span className={squadReach(squad) === 'empty' ? styles.amber : styles.muted}>{markOf(squad)}</span>}
+              <span className={styles.cardHeading}>
+                <b className={styles.cardName}>{squad.name}</b>
+                {markOf(squad) && <span className={squadReach(squad) === 'empty' ? styles.amber : styles.muted}>{markOf(squad)}</span>}
+              </span>
+              {squad.description && <span className={styles.muted}>{squad.description}</span>}
               <span>{words.usersCount(fmtNumber(squad.memberCount, locale))}</span>
               <span className={styles.flags}>
                 {countriesOf(squad)?.map((code) => <Flag key={code} code={code} />) ?? words.hostsUnknown}
@@ -152,7 +158,7 @@ export default function SquadsPage() {
               {shown.map((squad) => (
                 <tr key={squad.id} className={styles.row} onClick={() => void navigate(`/squads/${squad.id}`)}>
                   <td>
-                    <b>{squad.name}</b>
+                    <Link className={styles.cardLink} to={`/squads/${squad.id}`} onClick={(event) => event.stopPropagation()}>{squad.name}</Link>
                     {markOf(squad) && <div className={squadReach(squad) === 'empty' ? styles.amber : styles.muted}>{markOf(squad)}</div>}
                   </td>
                   <td>{fmtNumber(squad.memberCount, locale)}</td>

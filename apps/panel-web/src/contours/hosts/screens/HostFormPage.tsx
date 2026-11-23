@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import styles from '@/contours/hosts/components/hosts.module.css'
 import { DICT } from '@/contours/hosts/dict'
 import { useBindingsList, useCreateHost, useDeleteHost, useFleet, useGrantHost, useHostFields, useHostFormats, useHostsList, useOldSquads, usePortCheck, useProfilesList, useUpdateHost, type GrantFailure } from '@/contours/hosts/hooks/useHosts'
+import { hostProtocol, statusAge } from '@/contours/hosts/lib/hostDisplay'
+import { Icon } from '@/ui/Icon/Icon'
 import { draftOfHost, draftProblems, emptyDraft, hostCreateFields, hostUpdateBody, type HostDraft } from '@/contours/hosts/lib/hostForm'
 import { hostPortPlan } from '@/contours/hosts/lib/hostPortPlan'
 import { nodePortClaims } from '@/contours/hosts/lib/portClaims'
@@ -10,6 +12,7 @@ import { engineLabel } from '@/lib/domain/engines'
 import { nodeHealth } from '@/lib/domain/overview'
 import { ALL_SQUAD_ID, grantHostBody, lastHostCheck, squadReach } from '@/lib/domain/squads'
 import { fmtNumber } from '@/lib/format'
+import { useNow } from '@/lib/clock'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
 import { hostPortPayload, profileNotOnNode, type Host, type HostPortMove } from '@/lib/old/hosts'
@@ -39,8 +42,12 @@ const numberOr = (text: string): number | '' => (text.trim() === '' || Number.is
 function HostForm({ host }: { host: Host | null }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
+  const now = useNow()
   const toast = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
+  const transfer = location.state?.hostGrant as { hostId: string; failures: GrantFailure[] } | undefined
+  const initialFailures = transfer && transfer.hostId === host?.id ? transfer.failures : []
   const [url] = useSearchParams()
   const isNew = host === null
   const hosts = useHostsList()
@@ -65,8 +72,8 @@ function HostForm({ host }: { host: Host | null }) {
   const [nodeFind, setNodeFind] = useState('')
   const [onlyFree, setOnlyFree] = useState(false)
   const [squadFind, setSquadFind] = useState('')
-  const [grantIds, setGrantIds] = useState<string[]>([])
-  const [grantFailed, setGrantFailed] = useState<GrantFailure[]>([])
+  const [grantIds, setGrantIds] = useState<string[]>(() => initialFailures.map(f => f.id))
+  const [grantFailed, setGrantFailed] = useState<GrantFailure[]>(initialFailures)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [portOwners, setPortOwners] = useState<PortOwner[] | null>(null)
   const [sniExpected, setSniExpected] = useState<string[] | null>(null)
@@ -142,29 +149,26 @@ function HostForm({ host }: { host: Host | null }) {
   }
 
   const say = (err: unknown) => failureText(err, locale)
-  const runGrant = (hostId: string, then?: () => void) => {
+  const runGrant = (hostId: string, afterCreate?: (failures: GrantFailure[]) => void) => {
     const pid = effectiveProfileId
     if (!pid || grantIds.length === 0) {
-      then?.()
+      afterCreate?.([])
       return
     }
-    grant.mutate(
-      { hostId, profileId: pid, squadIds: grantIds, bodyOf: grantHostBody, say },
-      {
-        onSuccess: (failures) => {
-          setGrantFailed(failures)
-          if (failures.length === 0) {
-            setGrantIds([])
-            if (!then) toast.show(words.grantDone)
-          }
-          then?.()
-        },
-        onError: (err) => {
-          setGrantFailed([{ name: words.stepSquads, message: say(err) }])
-          then?.()
-        },
-      },
-    )
+    const targets = grantIds.map(id => ({ id, name: squads.data?.squads.find(s => s.id === id)?.name ?? grantFailed.find(f => f.id === id)?.name ?? id }))
+    const finish = (failures: GrantFailure[]) => {
+      setGrantFailed(failures)
+      setGrantIds(failures.map(f => f.id))
+      if (afterCreate) { afterCreate(failures); return }
+      if (transfer?.hostId === hostId) {
+        void navigate(location.pathname + location.search, { replace: true, state: failures.length ? { hostGrant: { hostId, failures } } : null })
+      }
+      if (failures.length === 0) toast.show(words.grantDone)
+    }
+    grant.mutate({ hostId, profileId: pid, targets, bodyOf: grantHostBody, say, missing: words.squadGone }, {
+      onSuccess: finish,
+      onError: (err) => finish(targets.map(target => ({ ...target, message: say(err) }))),
+    })
   }
 
   const submit = () => {
@@ -176,9 +180,9 @@ function HostForm({ host }: { host: Host | null }) {
         { profileId: effectiveProfileId, nodeId: effectiveNodeId, ...hostCreateFields(draft, map), ...hostPortPayload(null, { port, clientPort }) },
         {
           onSuccess: (saved) =>
-            runGrant(saved.id, () => {
-              toast.show(words.created)
-              void navigate(`/hosts/${saved.id}`, { replace: true })
+            runGrant(saved.id, (failures) => {
+              if (failures.length === 0) toast.show(words.created)
+              void navigate(`/hosts/${saved.id}`, { replace: true, state: failures.length ? { hostGrant: { hostId: saved.id, failures } } : null })
             }),
           onError: fail,
         },
@@ -225,26 +229,39 @@ function HostForm({ host }: { host: Host | null }) {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>{host ? host.remark : words.newHost}</h1>
+      <header className={styles.formHeader}>
+        <Link className={styles.back} to="/hosts" aria-label={words.cancel}><Icon name="chevronLeft" /></Link>
+        <h1 className={styles.pageTitle}>{host ? host.remark : words.newHost}</h1>
+        {host && <span className={styles.note}>{node && nodeHealth(node.status) === 'problem' ? words.downNode + statusAge(node, locale, now()) : host.reach && fmtNumber(host.reach.users, locale) + ' ' + words.usersNoun(host.reach.users)}</span>}
+        <span className={styles.spacer} />
+            <Button size="md" onClick={() => void navigate('/hosts')}>{words.cancel}</Button>
+            <Button size="md" icon={<Icon name="check" />} variant="primary" disabled={!ready && !(host && grantIds.length > 0 && !changed)} loading={create.isPending || update.isPending || grant.isPending} onClick={() => (host && !changed ? runGrant(host.id) : submit())}>
+              {isNew ? words.createShort : words.save}
+            </Button>
+      </header>
       {grantFailed.length > 0 && (
-        <Banner title={words.grantBannerEdit(grantFailed.map((f) => `${f.name}: ${f.message}`).join('; '))} action={host ? <Button loading={grant.isPending} onClick={() => runGrant(host.id)}>{words.grantRetry}</Button> : undefined}>
+        <Banner title={(transfer?.hostId === host?.id ? words.grantBanner : words.grantBannerEdit)(grantFailed.map((f) => `${f.name}: ${f.message}`).join('; '))} action={host ? <Button loading={grant.isPending} disabled={!effectiveProfileId} onClick={() => runGrant(host.id)}>{words.grantRetry}</Button> : undefined}>
           {null}
         </Banner>
       )}
       {host?.hiddenByCascade && node && <Banner title={words.stateHidden}>{words.hiddenBanner(node.name, host.hiddenByCascade.cascadeName)}</Banner>}
-      {host && node && nodeHealth(node.status) === 'problem' && <Banner tone="danger" title={words.stateDown}>{words.downBanner}</Banner>}
       <div className={styles.columns}>
         <div className={styles.left}>
+          {host && node && nodeHealth(node.status) === 'problem' && <Banner tone="danger" title={node.name + ' · ' + words.downNode + statusAge(node, locale, now())}>{words.downBanner}</Banner>}
           <section className={styles.panel}>
             <h2 className={styles.panelTitle}>{words.stepBasics}</h2>
-            <Field label={words.name} error={problems.remark ? words.nameRequired : undefined}>{(a11y) => <Input {...a11y} autoFocus={isNew} value={draft.remark} onChange={(e) => patch({ remark: e.target.value })} />}</Field>
-            <div className={styles.switches}>
-              <Switch label={words.enabled} checked={draft.enabled} onChange={(enabled) => patch({ enabled })} />
-              <Switch label={words.hidden} checked={draft.hidden} onChange={(hidden) => patch({ hidden })} />
+            <div className={styles.basicFields}>
+              <Field label={words.name} error={problems.remark ? words.nameRequired : undefined}>{(a11y) => <Input {...a11y} autoFocus={isNew} value={draft.remark} onChange={(e) => patch({ remark: e.target.value })} />}</Field>
+              <Field label={words.description} error={problems.description ? words.descriptionBad : undefined}>{(a11y) => <Input {...a11y} value={draft.description} onChange={(e) => patch({ description: e.target.value })} />}</Field>
             </div>
-            <Field label={words.description} error={problems.description ? words.descriptionBad : undefined}>{(a11y) => <Input {...a11y} value={draft.description} onChange={(e) => patch({ description: e.target.value })} />}</Field>
+            <div className={styles.switches}>
+              <div><Switch label={words.enabled} checked={draft.enabled} onChange={enabled => patch({ enabled })} /><small>{words.enabledHint}</small></div>
+              <div><Switch label={words.hidden} checked={draft.hidden} onChange={hidden => patch({ hidden })} /><small>{words.hiddenHint}</small></div>
+            </div>
           </section>
-          <Step optional={!isNew} title={words.stepProfile} open={open === 'profile'} onToggle={() => setOpen(open === 'profile' ? null : 'profile')} value={profile?.name ?? '-'}>
+          <div className={styles.steps}>
+            <header><h2 className={styles.panelTitle}>{words.settingsTitle}</h2><p className={styles.note}>{words.stepHint}</p></header>
+          <Step optional={!isNew} title={words.stepProfile} open={open === 'profile'} onToggle={() => setOpen(open === 'profile' ? null : 'profile')} value={profile ? profile.name + ', ' + hostProtocol(profile) : '-'}>
             {isNew ? (
               profiles.data?.profiles.length === 0 ? (
                 <>
@@ -372,6 +389,7 @@ function HostForm({ host }: { host: Host | null }) {
               })}
             </div>
           </Step>
+          </div>
           {refusal && <Banner tone="danger">{refusal}</Banner>}
           <div className={styles.actions}>
             {host && (
@@ -381,10 +399,7 @@ function HostForm({ host }: { host: Host | null }) {
             )}
             {host && deleteLock && <span className={styles.note}>{deleteLock}</span>}
             <span className={styles.spacer} />
-            <Button onClick={() => void navigate('/hosts')}>{words.cancel}</Button>
-            <Button variant="primary" disabled={!ready && !(host && grantIds.length > 0 && !changed)} loading={create.isPending || update.isPending || grant.isPending} onClick={() => (host && !changed ? runGrant(host.id) : submit())}>
-              {isNew ? words.createShort : words.save}
-            </Button>
+
           </div>
         </div>
         <aside className={styles.right}>
@@ -393,14 +408,15 @@ function HostForm({ host }: { host: Host | null }) {
             {!profile && !node ? (
               <p className={styles.note}>{words.rightNothing}</p>
             ) : (
+              <><div className={styles.clientPreview}><Flag code={node?.countryCode ?? null} /><span><b>{draft.remark || '-'}</b><small>{draft.description}</small></span><b>{clientPort || port || '-'}</b></div>
               <dl className={styles.facts}>
-                <dt>{words.rightName}</dt>
-                <dd>{draft.remark || '-'}</dd>
+                <dt>{words.col.protocol}</dt>
+                <dd>{hostProtocol(profile)}</dd>
                 <dt>{words.rightAddress}</dt>
                 <dd>{addressShown ?? '-'}</dd>
                 <dt>{words.rightPort}</dt>
                 <dd>{clientPort || port || '-'}</dd>
-              </dl>
+              </dl></>
             )}
             {node && (
               <p className={styles.flagLine}>

@@ -35,6 +35,7 @@ export function cascadeRow(cascade: Cascade, src: RowSources, words: typeof DICT
     flow,
     path: pathLine(flow.columns),
     hops: draft.pools.length + 1,
+    problem: push.kind === 'broken' || (push.kind === 'pending' && push.waiting.length > 0),
     reach: cascadeReach(shape.entryNodeIds, src.bindings, src.squads, src.policies),
     today: known.length > 0 ? known.reduce((a, b) => a + b, 0) : null,
     push,

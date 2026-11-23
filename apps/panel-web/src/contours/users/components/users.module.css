@@ -233,6 +233,10 @@
   text-align: left;
 }
 
+.table td.selectCell input {
+  display: block;
+}
+
 .table .actionsCell {
   right: 0;
   padding-right: var(--spacing-4);
@@ -620,26 +624,6 @@
   color: var(--color-text);
 }
 
-.presetSave {
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-accent);
-  font-family: inherit;
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.presetSave:disabled {
-  color: var(--color-text-muted);
-  cursor: not-allowed;
-}
-
-.presetSave:focus-visible {
-  outline: var(--border-check) solid var(--color-accent);
-}
-
 .row {
   cursor: pointer;
 }
@@ -838,6 +822,228 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-columns));
   gap: var(--spacing-4);
   margin-bottom: var(--spacing-4);
+}
+
+.newLayout {
+  display: flex;
+  flex-wrap: wrap;
+  --size-field-md: var(--size-field);
+}
+
+dialog:has(> div > .newLayout) {
+  --new-top: clamp(var(--spacing-4), calc(100dvh - var(--size-new-user-height) - var(--spacing-4)), var(--size-new-user-top));
+  inset-block: var(--new-top) auto;
+  max-height: calc(100dvh - var(--new-top) - var(--spacing-4));
+  margin-block: 0;
+}
+
+dialog:has(> div > .newLayout)::backdrop {
+  background: var(--color-backdrop);
+}
+
+dialog:has(> div > .newLayout) > header {
+  flex-shrink: 0;
+  padding-block: var(--spacing-4);
+}
+
+dialog:has(> div > .newLayout) > header h2 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-card);
+}
+
+dialog:has(> div > .newLayout) > header button {
+  width: var(--size-row);
+  height: var(--size-row);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--color-text) 24%, transparent);
+  color: var(--color-text-muted);
+}
+
+.page dialog:has(> div > .newLayout) > footer {
+  flex-shrink: 0;
+  min-height: var(--size-topbar);
+  padding-block: var(--spacing-2);
+}
+
+.page dialog:has(> div > .newLayout) > footer button {
+  padding-inline: var(--spacing-3-5);
+}
+
+.page:has(> dialog[open] > div > .newLayout) > .card {
+  visibility: hidden;
+}
+
+.newLayout .windowRight {
+  flex: 0 1 var(--size-user-estimate);
+}
+
+.newLayout .windowLeft {
+  flex: 1 1 var(--size-panel);
+  gap: var(--spacing-3-5);
+}
+
+.presetField {
+  position: relative;
+}
+
+.presetField select {
+  color: transparent;
+}
+
+.presetValue {
+  position: absolute;
+  inset: 0 var(--spacing-8) 0 var(--spacing-3);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.presetValue small,
+.estimateNote {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.newLayout .limitBox,
+.newLayout .nameBox {
+  height: var(--size-field);
+  min-width: 0;
+  gap: 0;
+  padding-right: var(--spacing-2);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.newLayout .limitBox:focus-within,
+.newLayout .nameBox:focus-within {
+  border-color: var(--color-accent-edge);
+}
+
+.newLayout .limitBox input,
+.newLayout .limitBox select,
+.newLayout .nameBox input {
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+}
+
+.newLayout .unit {
+  width: var(--spacing-12);
+}
+
+.newLayout .unit select {
+  height: var(--size-row);
+  padding-left: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.newLayout .nameFree {
+  padding-inline: var(--spacing-2);
+  border-right: var(--border-hairline) solid var(--color-border);
+  line-height: var(--leading-base);
+}
+
+.newLayout .nameBox button {
+  flex: none;
+  width: var(--size-tag);
+  height: var(--size-tag);
+  margin-left: var(--spacing-2);
+}
+
+.newLayout .termRow {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.newLayout .termRow > * {
+  flex: 0 1 var(--size-term-part);
+  min-width: 0;
+}
+
+.newLayout .termRow > .termEnd {
+  flex: 1 1 min(100%, var(--size-unit-label));
+}
+
+.newLayout .termEnd [data-type] {
+  padding-inline: 0;
+}
+
+.newLayout .block,
+.newLayout + .block {
+  gap: var(--spacing-3);
+  border-radius: var(--radius-md);
+  background: var(--color-inset);
+}
+
+.newLayout .configCount {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.newLayout .configScroll {
+  max-height: var(--size-estimate-list);
+}
+
+.newLayout .devices {
+  table-layout: fixed;
+}
+
+.newLayout .devices th:nth-child(2) {
+  width: var(--size-estimate-protocol);
+}
+
+.newLayout .devices th:last-child {
+  width: var(--size-estimate-port);
+}
+
+.newLayout .devices th {
+  height: var(--size-chip);
+}
+
+.newLayout .devices td {
+  height: var(--size-field);
+}
+
+.newLayout .routingRow {
+  padding-top: var(--spacing-3);
+  line-height: var(--leading-tight);
+}
+
+.newLayout .routingRow > :first-child {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.onlineCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-px-5);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.onlineCount::before {
+  width: var(--size-dot-sm);
+  height: var(--size-dot-sm);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  content: "";
+}
+
+.newLayout + .block {
+  justify-content: center;
+  min-height: var(--size-field-lg);
+  margin-bottom: 0;
+  padding-block: var(--spacing-2);
 }
 
 .windowLeft,
@@ -1173,6 +1379,7 @@
 
 /* Paper «Вид»: the view buttons 28x28, 4 apart; the columns button while its window is open. */
 .viewTools {
+  padding-top: var(--border-hairline);
   gap: var(--spacing-1);
 }
 

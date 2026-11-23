@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import styles from '@/ui/CascadeFlow/CascadeFlow.module.css'
+import { useLocale } from '@/lib/i18n'
 import { Flag } from '@/ui/Flag/Flag'
 
 /** A point is a node, its colour the state; a ring is not a node: a named outbound has no leg of its own. */
@@ -8,6 +9,9 @@ export type FlowDot = 'ok' | 'down' | 'failed' | 'unknown' | 'off' | 'empty' | '
 export interface FlowNode {
   key: string
   name: string
+  address?: string
+  country?: string | null
+  version?: string | undefined
   dot: FlowDot
   note?: string
 }
@@ -50,7 +54,9 @@ function Diamond() {
   return <span className={styles.diamond} aria-hidden />
 }
 
-function Hop({ column }: { column: FlowColumn }) {
+function Hop({ column, captionOnLink }: { column: FlowColumn; captionOnLink: boolean }) {
+  const { locale } = useLocale()
+  const regions = new Intl.DisplayNames([locale], { type: 'region' })
   return (
     <div className={styles.hop}>
       <span className={styles.hopTitle}>{column.title}</span>
@@ -58,7 +64,7 @@ function Hop({ column }: { column: FlowColumn }) {
         <div key={group.key} className={styles.group}>
           {(group.title || group.code) && (
             <span className={styles.groupTitle}>
-              {group.code && <Flag code={group.code} />}
+              {group.code && <strong>{/^[A-Z]{2}$/.test(group.code) ? regions.of(group.code) : group.code}</strong>}
               {group.title}
             </span>
           )}
@@ -74,15 +80,17 @@ function Hop({ column }: { column: FlowColumn }) {
                 <span className={styles.nodeLine}>
                   {group.nodes.length > 1 && <span className={node.dot === 'down' || node.dot === 'failed' ? styles.branchDead : styles.branch} aria-hidden />}
                   <span className={`${styles.dot} ${DOT[node.dot]}`} aria-hidden />
+                  {node.country && <Flag code={node.country} />}
                   <span className={node.dot === 'empty' ? styles.nameEmpty : styles.name}>{node.name}</span>
                 </span>
-                {node.note && <span className={node.dot === 'failed' || node.dot === 'down' ? styles.noteDanger : styles.note}>{node.note}</span>}
+                {node.address && <span className={styles.address}>{node.address}</span>}
+                {node.note && <span className={node.dot === 'failed' || node.dot === 'down' ? styles.noteDanger : styles.note}>{node.note}{node.dot === 'ok' && column.key !== 'exit' && node.version ? ', ' + node.version : ''}</span>}
               </li>
             ))}
           </ul>
         </div>
       ))}
-      {column.caption && (
+      {column.caption && !captionOnLink && (
         <span className={styles.caption}>
           {column.diamond && <Diamond />}
           {column.caption}
@@ -96,18 +104,19 @@ function Hop({ column }: { column: FlowColumn }) {
 export function CascadeFlow({ label, columns, links, legend }: CascadeFlowProps) {
   return (
     <figure className={styles.flow} aria-label={label}>
-      {legend && <figcaption className={styles.legend}>{legend}</figcaption>}
+      {legend && <figcaption className={styles.accessibleLegend}>{legend}</figcaption>}
       <div className={styles.line}>
         {columns.map((column, i) => {
           const link = links[i]
+          const forkCaption = columns[i + 1]?.key === 'exit' ? columns[i + 1]?.caption : undefined
           return (
             <Fragment key={column.key}>
-              <Hop column={column} />
+              <Hop column={column} captionOnLink={column.key === 'exit' && i > 0 && Boolean(links[i - 1])} />
               {link && (
                 <div className={link.tone === 'danger' ? styles.linkDanger : link.tone === 'pending' ? styles.linkPending : styles.link}>
                   <span className={styles.over}>{link.over}</span>
-                  <span className={styles.wire} aria-hidden />
-                  <span className={styles.under}>{link.under}</span>
+                  <span className={styles.wire} aria-hidden>{columns[i + 1]?.diamond && <Diamond />}</span>
+                  <span className={styles.under} title={forkCaption ? link.under : undefined}>{forkCaption ?? link.under}</span>
                 </div>
               )}
             </Fragment>

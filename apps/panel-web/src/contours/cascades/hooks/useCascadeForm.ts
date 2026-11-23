@@ -50,7 +50,7 @@ export function useCascadeForm({ cascade, cascades, fields, nodes }: CascadeForm
   const [refusal, setRefusal] = useState<SaveRefusal | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [ask, setAsk] = useState<EntryAsk | null>(null)
-  const [open, setOpen] = useState<StepId | null>(cascade ? null : 'entry')
+  const [open, setOpen] = useState<StepId | null>(null)
   const consented = useRef<Set<string>>(new Set())
 
   const clear = () => {

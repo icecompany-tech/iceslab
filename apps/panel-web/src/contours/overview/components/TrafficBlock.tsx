@@ -1,3 +1,6 @@
+import { Button } from '@/ui/Button/Button'
+import { OverviewState } from './OverviewState'
+import { DailyChart } from './DailyChart'
 import { useState } from 'react'
 import styles from '@/contours/overview/components/blocks.module.css'
 import { DICT } from '@/contours/overview/dict'
@@ -13,10 +16,23 @@ type Window = '1h' | '24h' | '7d' | '30d' | '90d'
 
 const hourLabel = (iso: string, locale: string) => new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso))
 
-export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
+export function TrafficBlock({ traffic, onRetry, retrying }: { traffic: Overview['traffic']; onRetry: () => void; retrying: boolean }) {
+  const words = useDict(DICT)
+  const empty = traffic && traffic.last24hHourly.every(h => h.bytes === 0) && [traffic.todayBytes, traffic.last7dBytes, traffic.last30dBytes, traffic.prev30dBytes, traffic.currentYearBytes].every(n => n === 0)
+  if (traffic && !empty) return <TrafficData traffic={traffic} />
+  return <section className={styles.block}>
+    <h2 className={styles.heading}><Icon name="traffic" size="lg" />{words.trafficFor['30d']}</h2>
+    {empty ? <OverviewState kind="traffic" title={words.trafficEmpty} body={words.trafficEmptyBody} />
+      : <OverviewState kind="error" title={words.trafficFailed} body={words.trafficFailureBody}>
+          <Button loading={retrying} onClick={onRetry}>{words.retry}</Button>
+        </OverviewState>}
+  </section>
+}
+
+function TrafficData({ traffic }: { traffic: NonNullable<Overview['traffic']> }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
-  const [selected, setSelected] = useState<Window>('24h')
+  const [selected, setSelected] = useState<Window>(traffic.dailyComparison?.length ? '30d' : '24h')
   const window = selected === '7d' || selected === '30d' ? selected : '24h'
 
   const total = window === '24h' ? sumHourly(traffic.last24hHourly) : window === '7d' ? traffic.last7dBytes : traffic.last30dBytes
@@ -25,6 +41,13 @@ export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
   const sign = change !== null && change > 0 ? '+' : ''
   const closed = (value: Window, label: string) => ({ value, label, disabledReason: words.noWindow })
 
+  const directions = window === '30d' ? traffic.monthlyDirections : undefined
+  const days = traffic.dailyComparison ?? []
+  const weekends = days.filter(d => [0,6].includes(new Date(d.date).getUTCDay()))
+  const workdays = days.filter(d => ![0,6].includes(new Date(d.date).getUTCDay()))
+  const average = (values: typeof days) => values.reduce((n,d)=>n+d.bytes,0) / values.length
+  const weekendChange = weekends.length && workdays.length ? changePercent(average(weekends), average(workdays)) : null
+  const directionTotal = directions ? directions.toUsers+directions.fromUsers : 0
   return (
     <section className={styles.block}>
       <div className={styles.trafficHead}>
@@ -49,6 +72,8 @@ export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
             </div>
           )}
         </div>
+        <div className={styles.plotControls}>
+          {window === '30d' && Boolean(traffic.dailyComparison?.length) && <div className={styles.legend}><span>{words.currentLine}</span><span>{words.previousLine}</span></div>}
         <Segmented
           label={words.windowLabel}
           value={window}
@@ -61,8 +86,11 @@ export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
             closed('90d', words.window['90d']),
           ]}
         />
+        </div>
       </div>
-      {window !== '24h' ? (
+      {window === '30d' && traffic.dailyComparison?.length ? (
+        <DailyChart days={traffic.dailyComparison} />
+      ) : window !== '24h' ? (
         <div className={styles.chartNote}>{words.noSeries}</div>
       ) : traffic.last24hHourly.length === 0 ? (
         <div className={styles.chartNote}>{words.noTraffic}</div>
@@ -80,6 +108,12 @@ export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
             {fmtBytes(traffic.last30dBytes / 30, locale)} <span className={styles.cellNote}>{words.was(fmtBytes(traffic.prev30dBytes / 30, locale))}</span>
           </div>
         </div>
+        {directions && directionTotal > 0 && weekendChange !== null ? <>
+          <div className={styles.cell}><div className={styles.cellLabel}>{words.weekend}</div><div className={styles.cellValue}>{weekendChange > 0 ? '+' : ''}{fmtPercent(weekendChange,locale)}</div></div>
+          {([['down',directions.toUsers],['up',directions.fromUsers]] as const).map(([key,bytes]) =>
+            <div className={styles.cell} key={key}><div className={styles.cellLabel}>{words[key]}</div>
+              <div className={styles.cellValue}>{fmtBytesLarge(bytes,locale)} <span className={styles.cellNote}>{fmtPercent(100*bytes/directionTotal,locale)}</span></div></div>)}
+        </> : <>
         <div className={styles.cell}>
           <div className={styles.cellLabel}>{words.today}</div>
           <div className={styles.cellValue}>{fmtBytes(traffic.todayBytes, locale)}</div>
@@ -92,6 +126,7 @@ export function TrafficBlock({ traffic }: { traffic: Overview['traffic'] }) {
           <div className={styles.cellLabel}>{words.thisYear}</div>
           <div className={styles.cellValue}>{fmtBytes(traffic.currentYearBytes, locale)}</div>
         </div>
+        </>}
       </div>
     </section>
   )

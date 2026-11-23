@@ -1,21 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { NodeCard } from '@/contours/nodes/components/NodeCard'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { useCascades, useFleet, useRegions } from '@/contours/nodes/hooks/useNodes'
-import { certTerm } from '@/contours/nodes/lib/nodeCert'
-import { useNow } from '@/lib/clock'
+import { NodesTable } from '@/contours/nodes/components/NodesTable'
+import { Popover } from '@/ui/Popover/Popover'
+import { RegistryIcon } from '@/ui/Icon/RegistryIcon'
+import { useBindingsList, useHostsList } from '@/lib/domain/hostInventory'
 import { nodeHealth, useOverview, type NodeHealth } from '@/lib/domain/overview'
-import { fmtBytes } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
 import { cascadeMemberships } from '@/lib/old/cascadeMembership'
 import type { Node } from '@/lib/old/nodes'
 import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
-import { CoreChips } from '@/ui/CoreChip/CoreChip'
-import { Flag } from '@/ui/Flag/Flag'
 import { Icon } from '@/ui/Icon/Icon'
 import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
 import { Segmented } from '@/ui/Segmented/Segmented'
@@ -28,7 +27,6 @@ type CascadeFilter = 'all' | 'one' | 'in'
 export default function NodesPage() {
   const words = useDict(DICT)
   const { locale } = useLocale()
-  const now = useNow()
   const navigate = useNavigate()
   const fleet = useFleet()
   const overview = useOverview()
@@ -39,6 +37,25 @@ export default function NodesPage() {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('')
   const [cascadeFilter, setCascadeFilter] = useState<CascadeFilter>('all')
+
+  const [pageIndex,setPageIndex] = useState(0)
+  const [perPage,setPerPage] = useState<number | null>(null)
+  const [columns,setColumns] = useState(3)
+  const grid = useRef<HTMLDivElement>(null)
+  const hosts = useHostsList()
+  const bindings = useBindingsList()
+  const hostCounts = useMemo(() => {
+    if (!hosts.data || !bindings.data) return null
+    const nodeOf = new Map(bindings.data.bindings.map(b=>[b.id,b.nodeId]))
+    const counts = new Map<string,number>()
+    for (const host of hosts.data.hosts) {
+      const id = nodeOf.get(host.bindingId)
+      if (!id) return null
+      counts.set(id,(counts.get(id) ?? 0)+1)
+    }
+    return counts
+  }, [hosts.data,bindings.data])
+  const regionNames = new Map((regions.data?.regions ?? []).map(r=>[r.id,r.name]))
 
   const memberships = useMemo(() => cascadeMemberships(cascades.data?.cascades ?? []), [cascades.data])
   const live = useMemo(() => new Map((overview.data?.nodes ?? []).map((n) => [n.id, n])), [overview.data])
@@ -68,109 +85,78 @@ export default function NodesPage() {
     return { byCascade: [...byCascade.entries()], outside }
   }, [shown, memberships])
 
-  const certOf = (node: Node) => {
-    const term = certTerm(node.certNotAfter, now())
-    if (!term || term.kind === 'unknown') return <span className={styles.muted}>{words.certUnknown}</span>
-    if (term.kind === 'expired') return <span className={styles.danger}>{words.certExpired}</span>
-    return <span className={term.kind === 'soon' ? styles.amber : styles.muted}>{words.certDays(term.days)}</span>
-  }
-
+  const hasGrid = view==='cards' && shown.length>0
+  useLayoutEffect(() => {
+    if (!hasGrid || !grid.current || typeof ResizeObserver==='undefined') return
+    const el = grid.current
+    const measure = () => setColumns(getComputedStyle(el).gridTemplateColumns.split(' ').length || 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasGrid])
+  const pageSize = perPage ?? (view==='cards' ? columns*3 : 10)
+  const lastPage = Math.max(0,Math.ceil(shown.length/pageSize)-1)
+  const currentPage = Math.min(pageIndex,lastPage)
+  const offset = currentPage*pageSize
+  const healthOrder: Record<NodeHealth, number> = {problem:0,unverified:1,ok:2,off:3}
+  const ordered = view === 'list' ? [...shown].sort((a,b)=>healthOrder[nodeHealth(a.status)]-healthOrder[nodeHealth(b.status)]) : shown
+  const visible = ordered.slice(offset,offset+pageSize)
+  const footer = <footer className={styles.pager}>
+    <span>{words.pageRange(offset+1,offset+visible.length,shown.length)}</span>
+    <select aria-label={words.perPage} value={pageSize} onChange={e=>{setPerPage(Number(e.target.value));setPageIndex(0)}}>
+      {[...new Set([view==='cards'?columns*3:10,20,50])].map(size=><option key={size} value={size}>{size} · {words.perPage}</option>)}
+    </select>
+    <button type="button" aria-label={words.prevPage} disabled={currentPage===0} onClick={()=>setPageIndex(currentPage-1)}><Icon name="chevronLeft"/></button>
+    <button type="button" aria-label={words.nextPage} disabled={currentPage===lastPage} onClick={()=>setPageIndex(currentPage+1)}><Icon name="chevronRight"/></button>
+  </footer>
   return (
-    <div className={styles.page}>
-      <div className={styles.toolbar}>
+    <div className={styles.registry}>
+      {(!fleet.data || nodes.length > 0) && <div className={styles.toolbar}>
         <div className={styles.chips}>
           <Segmented<'nodes' | 'cascades'> label={words.sectionLabel} value="nodes" onChange={(v) => v === 'cascades' && void navigate('/cascades')} options={[{ value: 'nodes', label: words.sectionNodes }, { value: 'cascades', label: words.sectionCascades }]} />
-          <Chip label={words.chips.all} count={fleet.data ? nodes.length : undefined} active={chip === 'all'} onClick={() => setChip('all')} />
-          <Chip label={words.chips.ok} count={fleet.data ? count('ok') : undefined} active={chip === 'ok'} onClick={() => setChip('ok')} />
-          <Chip label={words.chips.problem} count={fleet.data ? count('problem') : undefined} dot="danger" active={chip === 'problem'} onClick={() => setChip('problem')} />
-          <Chip label={words.chips.unverified} count={fleet.data ? count('unverified') : undefined} dot="unknown" active={chip === 'unverified'} onClick={() => setChip('unverified')} />
+          <Chip label={words.chips.all} count={fleet.data ? nodes.length : undefined} active={chip === 'all'} onClick={() => {setChip('all');setPageIndex(0)}} />
+          <Chip label={words.chips.ok} count={fleet.data ? count('ok') : undefined} active={chip === 'ok'} onClick={() => {setChip('ok');setPageIndex(0)}} />
+          <Chip label={words.chips.problem} count={fleet.data ? count('problem') : undefined} dot="danger" active={chip === 'problem'} onClick={() => {setChip('problem');setPageIndex(0)}} />
+          <Chip label={words.chips.unverified} count={fleet.data ? count('unverified') : undefined} dot="unknown" active={chip === 'unverified'} onClick={() => {setChip('unverified');setPageIndex(0)}} />
         </div>
         <div className={styles.toolbarRight}>
-          <Segmented<View> label={words.viewLabel} value={view} onChange={setView} options={[{ value: 'cards', label: words.views.cards }, { value: 'list', label: words.views.list }, { value: 'cascades', label: words.views.cascades }]} />
-          <Link className={styles.linkPrimary} to="/nodes/new">
-            <Icon name="plus" size="md" />
-            {words.add}
-          </Link>
+          <label className={styles.searchBox}><RegistryIcon name="search"/><input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={e=>{setSearch(e.target.value);setPageIndex(0)}}/></label>
+          <Popover align="end" trigger={props=><Button {...props} icon={<RegistryIcon name="filter"/>}>{words.filters}</Button>}>
+            <div className={styles.filterMenu}>
+              <label>{words.cascadeFilter}<Select look="filter" aria-label={words.cascadeFilter} value={cascadeFilter} onChange={e=>{setCascadeFilter(e.target.value as CascadeFilter);setPageIndex(0)}} options={[{value:'all',label:words.cascadeAny},{value:'one',label:words.cascadeOne},{value:'in',label:words.cascadeIn}]}/></label>
+              <label>{words.region}<Select look="filter" aria-label={words.region} value={region} onChange={e=>{setRegion(e.target.value);setPageIndex(0)}} options={[{value:'',label:words.anyRegion},...(regions.data?.regions ?? []).map(r=>({value:r.id,label:r.name}))]}/></label>
+            </div>
+          </Popover>
+          <div role="radiogroup" aria-label={words.viewLabel} className={styles.views}>
+            {(['cards','list','cascades'] as const).map(v=><button key={v} type="button" role="radio" aria-label={words.views[v]} title={words.views[v]} aria-checked={view===v} onClick={()=>{setView(v);setPageIndex(0);setPerPage(null)}}>
+              {v==='cards' ? <RegistryIcon name="cards"/> : <Icon name={v==='list'?'density':'routes'}/>}
+            </button>)}
+          </div>
+          <Link className={styles.linkPrimary} to="/nodes/new"><Icon name="plus"/>{words.create}</Link>
         </div>
-      </div>
-      <div className={styles.filters}>
-        <input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} />
-        <Select look="filter" aria-label={words.region} value={region} onChange={(e) => setRegion(e.target.value)} options={[{ value: '', label: words.anyRegion }, ...(regions.data?.regions ?? []).map((r) => ({ value: r.id, label: r.name }))]} />
-        <Select
-          look="filter"
-          aria-label={words.cascadeFilter}
-          value={cascadeFilter}
-          onChange={(e) => setCascadeFilter(e.target.value as CascadeFilter)}
-          options={[{ value: 'all', label: words.cascadeAny }, { value: 'one', label: words.cascadeOne }, { value: 'in', label: words.cascadeIn }]}
-        />
-      </div>
-
+      </div>}
       {fleet.isPending && <QueryLoading label={words.loading} />}
       {fleet.isError && <QueryFailed title={words.failedTitle} body={failureText(fleet.error, locale)} retryLabel={words.retry} onRetry={() => void fleet.refetch()} />}
       {fleet.data && nodes.length === 0 && (
-        <div className={styles.empty}>
-          <h2 className={styles.emptyTitle}>{words.emptyTitle}</h2>
-          <p>{words.emptyBody}</p>
-          <Button variant="primary" onClick={() => void navigate('/nodes/new')}>
-            {words.add}
-          </Button>
+        <div className={styles.blank}>
+          <span className={styles.blankIcon}><Icon name="nodes"/></span>
+          <h2>{words.emptyTitle}</h2><p>{words.emptyBody}</p>
+          <Link className={styles.linkPrimary} to="/nodes/new"><Icon name="plus"/>{words.firstNode}</Link>
         </div>
       )}
       {fleet.data && nodes.length > 0 && shown.length === 0 && <div className={styles.empty}>{words.emptyFiltered}</div>}
 
       {shown.length > 0 && view === 'cards' && (
-        <div className={styles.cards}>
-          {shown.map((node) => (
-            <NodeCard key={node.id} node={node} live={live.get(node.id)} membership={memberships.get(node.id)} onOpen={() => open(node)} />
+        <div className={styles.cards} ref={grid}>
+          {visible.map((node) => (
+            <NodeCard key={node.id} node={node} hostCount={hostCounts ? hostCounts.get(node.id) ?? 0 : undefined} live={live.get(node.id)} membership={memberships.get(node.id)} onOpen={() => open(node)} />
           ))}
         </div>
       )}
 
-      {shown.length > 0 && view === 'list' && (
-        <div className={styles.tableBox}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th scope="col">{words.name}</th>
-                <th scope="col">{words.address}</th>
-                <th scope="col">{words.engines}</th>
-                <th scope="col" title={words.usersUnknownHint}>
-                  {words.usersColumn}
-                </th>
-                <th scope="col">{words.today}</th>
-                <th scope="col">{words.cert}</th>
-                <th scope="col">{words.cascade}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((node) => {
-                const member = memberships.get(node.id)
-                const today = live.get(node.id)?.todayBytes
-                return (
-                  <tr key={node.id} className={styles.row} onClick={() => open(node)}>
-                    <td>
-                      <span className={styles.nameCell}>
-                        <span className={`${styles.dot} ${styles[`dot_${nodeHealth(node.status)}`]}`} />
-                        <Flag code={node.countryCode} />
-                        <b>{node.name}</b>
-                      </span>
-                    </td>
-                    <td className={styles.muted}>{node.address}</td>
-                    <td>{node.engines || node.intendedEngines ? <CoreChips engines={node.engines ?? node.intendedEngines ?? []} tone={nodeHealth(node.status) === 'problem' ? 'danger' : 'accent'} /> : <span className={styles.muted}>{words.metricsUnknown}</span>}</td>
-                    <td className={styles.muted} title={words.usersUnknownHint}>
-                      ?
-                    </td>
-                    <td>{today === undefined ? <span className={styles.muted}>{words.metricsUnknown}</span> : fmtBytes(today, locale)}</td>
-                    <td>{certOf(node)}</td>
-                    <td className={styles.muted}>{member ? `${member.cascade.name}, ${words.role[member.role] ?? member.role}` : '-'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
+      {hasGrid && footer}
+      {shown.length > 0 && view === 'list' && <NodesTable rows={visible} readings={live} memberships={memberships} hostCounts={hostCounts} regionNames={regionNames} open={open} footer={footer}/>}
       {shown.length > 0 && view === 'cascades' && (
         <div className={styles.groups}>
           {groups.byCascade.map(([name, members]) => (
@@ -178,7 +164,7 @@ export default function NodesPage() {
               <h2 className={styles.groupTitle}>{name}</h2>
               <div className={styles.cards}>
                 {members.map((node) => (
-                  <NodeCard key={node.id} node={node} live={live.get(node.id)} membership={memberships.get(node.id)} onOpen={() => open(node)} />
+                  <NodeCard key={node.id} node={node} hostCount={hostCounts ? hostCounts.get(node.id) ?? 0 : undefined} live={live.get(node.id)} membership={memberships.get(node.id)} onOpen={() => open(node)} />
                 ))}
               </div>
             </section>
@@ -188,7 +174,7 @@ export default function NodesPage() {
               <h2 className={styles.groupTitle}>{words.outsideCascades}</h2>
               <div className={styles.cards}>
                 {groups.outside.map((node) => (
-                  <NodeCard key={node.id} node={node} live={live.get(node.id)} onOpen={() => open(node)} />
+                  <NodeCard key={node.id} node={node} hostCount={hostCounts ? hostCounts.get(node.id) ?? 0 : undefined} live={live.get(node.id)} onOpen={() => open(node)} />
                 ))}
               </div>
             </section>

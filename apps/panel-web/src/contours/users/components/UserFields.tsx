@@ -53,6 +53,8 @@ export function SquadField({ squads, value, onChange, error, failed }: { squads:
 export function TrafficField({ draft, onChange, errors, limitTouched, storedLimit }: FieldsProps) {
   const words = useDict(DICT)
   const refused = errors.limit ?? limitError(draft, limitTouched, words.limitBad)
+  const fractional = Number(draft.limitText.replace(',', '.')) % 1 !== 0
+  const hint = !limitTouched && storedLimit ? words.limitStored(storedLimit) : refused && fractional ? words.limitWhole : undefined
   return (
     <div className={styles.group}>
       <div className={styles.groupHead}>
@@ -63,7 +65,7 @@ export function TrafficField({ draft, onChange, errors, limitTouched, storedLimi
         <div className={styles.grayLine}>{words.noLimitNote}</div>
       ) : (
         <div className={styles.trafficRow}>
-          <Field labelHidden label={words.limitLabel} error={refused} hint={limitTouched || !storedLimit ? words.limitWhole : words.limitStored(storedLimit)}>
+          <Field labelHidden label={words.limitLabel} error={refused} hint={hint}>
             {(a11y) => (
               <span className={styles.limitBox}>
                 <Input {...a11y} inputMode="decimal" value={draft.limitText} onChange={(e) => onChange({ limitText: e.target.value })} />
@@ -105,15 +107,18 @@ export function TermField({ draft, onChange, errors, leftLabel }: FieldsProps & 
         <div className={styles.termRow}>
           <Field labelHidden label={words.termDays}>{(a11y) => <span className={styles.suffixBox}><Input {...a11y} inputMode="numeric" value={String(left.days)} onChange={(e) => part('days', e.target.value)} /><span className={styles.suffix}>{words.daysUnit}</span></span>}</Field>
           <Field labelHidden label={words.termHours}>{(a11y) => <span className={styles.suffixBox}><Input {...a11y} inputMode="numeric" value={String(left.hours)} onChange={(e) => part('hours', e.target.value)} /><span className={styles.suffix}>{words.hoursUnit}</span></span>}</Field>
-          <LazyDateTimeField
-            locale={locale}
-            label={words.termDate}
-            value={draft.expireAt}
-            timeZone={TIME_ZONE}
-            error={errors.term}
-            onChange={(next) => next && onChange({ expireAt: next })}
-            texts={{ open: words.calendarOpen, previousMonth: words.calendarPrev, nextMonth: words.calendarNext }}
-          />
+          <div className={styles.termEnd}>
+            <LazyDateTimeField
+              locale={locale}
+              label={words.termDate}
+              kind={leftLabel ? 'datetime' : 'inlineDatetime'}
+              value={draft.expireAt}
+              timeZone={TIME_ZONE}
+              error={errors.term}
+              onChange={(next) => next && onChange({ expireAt: next })}
+              texts={{ open: words.calendarOpen, previousMonth: words.calendarPrev, nextMonth: words.calendarNext }}
+            />
+          </div>
         </div>
       )}
     </div>

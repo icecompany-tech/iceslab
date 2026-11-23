@@ -172,7 +172,7 @@ function esc(s: string): string {
  * to come out in the genitive ("декабря", not "декабрь"). Asking for day and
  * month together is what gets that case; asking for the month alone does not.
  */
-function fmtDate(iso: string, lang: 'ru' | 'en'): string {
+function fmtDate(iso: string, lang: 'ru' | 'en', compact = false): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const locale = lang === 'ru' ? 'ru-RU' : 'en-US';
@@ -186,7 +186,7 @@ function fmtDate(iso: string, lang: 'ru' | 'en'): string {
   const day = get('day');
   const month = get('month');
   const year = get('year');
-  return lang === 'ru' ? `${day} ${month}, ${year}` : `${month} ${day}, ${year}`;
+  return lang === 'ru' ? `${day} ${month}${compact ? '' : ','} ${year}` : `${month} ${day}, ${year}`;
 }
 
 /**
@@ -559,8 +559,7 @@ function renderSteps(
       : `<div class="step__buttons" hidden><a class="step-btn" data-app-put href="#">${icons.draw('Plus', { cls: 'ic' })}<span>${esc(t.stepAdd)} <b data-app-label></b></span></a></div>`;
   return (
     step('DownloadIcon', s[0], { body: dlBtn }) +
-    step('Plus', s[1], { body: addBtn }) +
-    step('help', s[2], { tone: ' step__num--info' }) +
+    step('Plus', s[1], { body: addBtn + (s[2] ? `<small class="step__help">${esc(s[2].text)}</small>` : '') }) +
     step('Check', s[3], { tone: ' step__num--ok' })
   );
 }
@@ -578,11 +577,11 @@ function renderPanel(
   if (apps.length === 0) return '';
   const { row, rest } = splitApps(apps);
   return (
-    `<div class="apps">${cardRows(row, data.subUrl, icons, 'apps__row', ROW_SIZE, row[0]?.name)}` +
-    renderTelegramRow(platform, data.protocols, t, icons) +
+    `<p class="apps-guide">${esc(t.chooseApp.replace('{app}', row[0]?.name ?? ''))}</p><div class="apps">${cardRows(row, data.subUrl, icons, 'apps__row', ROW_SIZE, row[0]?.name)}` +
+    (data.mtprotoNodes?.length || data.telegramProxies?.length ? '' : renderTelegramRow(platform, data.protocols, t, icons)) +
     `</div>` +
     renderAllApps(platform, apps, rest, data.subUrl, t, icons) +
-    renderSteps(platform, data, hasAwg, t, icons, row[0])
+    '<div class="connect-steps">' + renderSteps(platform, data, hasAwg, t, icons, row[0]) + '</div>'
   );
 }
 
@@ -853,17 +852,15 @@ function renderDownloads(
       // they are: one node, one link, not the subscription. INSIDE that group,
       // under its one title: they used to open a group of their own with the
       // same title, and the page printed "for another device" twice in a row.
-      (telegram || telegramProxies || outline || other.length > 0
+      (outline || other.length > 0
         ? `<div class="dl-group" data-dl-group="other"><div class="all-apps__group-title">${esc(t.dlGroupOther)}</div>` +
-          `${outline}${telegram}${telegramProxies}${other.map(row).join('')}</div>`
+          `${outline}${other.map(row).join('')}</div>`
         : '');
   const count =
     clients.length +
     router.length +
     other.length +
-    (data.outlineNodes?.length ?? 0) +
-    (data.mtprotoNodes?.length ?? 0) +
-    (data.telegramProxies?.length ?? 0);
+    (data.outlineNodes?.length ?? 0);
   // Нечего предложить и подписка в силе: карточки нет. Нечего предложить
   // ПОТОМУ ЧТО она не в силе: карточка остаётся. Блок, который исчезает, учит
   // читателя, что его там и не было, и продливший идёт искать вчерашнюю кнопку.
@@ -871,7 +868,10 @@ function renderDownloads(
   // Folded by the same expander as "all apps", and behind the same amber line
   // as the transfer window: one mechanism each, not a second of each.
   // This is the only block on the page that changes with the state.
-  return `<div class="dl-card" id="downloads">
+  const telegramTools = !dead && (telegram || telegramProxies)
+    ? `<details class="telegram-tools"><summary>${icons.draw('Telegram', { cls: 'ic' })}<span>Telegram<small>${esc(t.telegramShort)}</small></span></summary>${telegram}${telegramProxies}</details>`
+    : '';
+  return `${telegramTools}<div class="dl-card" id="downloads">
     <div class="all-apps all-apps--flat${dead ? ' is-open is-dead' : ''}" data-all-apps>
       <div class="all-apps__top">
         <div class="all-apps__line">
@@ -892,6 +892,69 @@ function renderDownloads(
       </div>
     </div>
   </div>`;
+}
+
+type StoppedStatus = 'expired' | 'limited' | 'disabled' | 'revoked';
+
+function subscriptionHeader(data: Pick<SubscriptionPageData, 'lang' | 'brandTitle' | 'protocolSwitch'>): string {
+  const t = L[data.lang];
+  const keep = data.protocolSwitch?.selected ?? [];
+  const language = (value: 'ru' | 'en', label: string) =>
+    `<a class="lng${value === data.lang ? ' on' : ''}" href="${esc(withProtocols('?lang=' + value, keep))}" hreflang="${value}"${value === data.lang ? ' aria-current="true"' : ''}>${label}</a>`;
+  return `<header class="stopped-head">
+    <strong>${esc(data.brandTitle)}</strong>
+    <details><summary aria-label="${esc(t.stoppedCard.language)}">${data.lang.toUpperCase()} <span aria-hidden="true">⌄</span></summary>
+      <nav aria-label="${esc(t.stoppedCard.language)}">${language('ru', 'Русский')}${language('en', 'English')}</nav>
+    </details>
+  </header>`;
+}
+
+export function missingSubscriptionPage(data: Pick<SubscriptionPageData, 'lang' | 'brandTitle' | 'supportUrl'>): string {
+  const words = L[data.lang].stoppedCard;
+  const body = data.supportUrl ? words.missingHelp : words.missingBody;
+  return `<!DOCTYPE html><html lang="${data.lang}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="dark">
+<title>${esc(data.brandTitle)}</title><style>${PAGE_CSS}</style></head>
+<body class="stopped"><div class="stopped-page">${subscriptionHeader(data)}
+<main class="stopped-main"><section class="stopped-card stopped-link">
+<div><h1>${esc(words.missingTitle)}</h1><p class="stopped-reason">${esc(body)}</p></div>
+${data.supportUrl ? `<a class="support" href="${esc(data.supportUrl)}" rel="noopener noreferrer">${esc(words.contact)}</a>` : ''}
+</section></main></div></body></html>`;
+}
+
+function stoppedSubscription(data: SubscriptionPageData, status: StoppedStatus, expires: string, traffic: string): string {
+  const { user: u, lang } = data;
+  const t = L[lang];
+  const limited = status === 'limited';
+  const revoked = status === 'revoked';
+  const words = t.stoppedCard;
+  const glyph = (path: string) => `<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+  const message = words.states[status];
+  const custom = !revoked && data.deadTexts?.[status]?.[lang]?.trim();
+  const total = u.trafficLimitBytes;
+  const gib = 1024 ** 3;
+  const number = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
+  const volume = total !== null && total >= gib && u.trafficUsedBytes >= gib
+    ? words.volume(number.format(u.trafficUsedBytes / gib), number.format(total / gib))
+    : traffic;
+  return `<div class="stopped-page">
+  ${subscriptionHeader(data)}
+  <main class="stopped-main">
+    <section class="stopped-card stopped-sub-card" data-status="${status}">
+      <div class="stopped-row"><strong class="stopped-name">${esc(u.username)}</strong><span class="stopped-badge">${esc(message.badge)}</span></div>
+      <div><h1>${esc(message.title)}</h1>
+      <p class="stopped-reason">${esc(custom || message.body)}</p></div>
+      ${revoked ? '' : `<div class="stopped-row"><span>${esc(limited ? t.traffic : status === 'expired' ? words.expiredDate : t.expires)}</span><b>${esc(limited ? volume : expires)}</b></div>`}
+      ${data.supportUrl ? `<a class="support" href="${esc(data.supportUrl)}" rel="noopener noreferrer">${glyph('M4 5 H20 V17 H9 L4 21 Z')}${esc(words.contact)}</a>` : ''}
+    </section>
+    ${revoked ? '' : `<section class="stopped-card stopped-link" id="sublink">
+      <label for="url">${esc(words.link)}</label>
+      <input id="url" readonly value="${esc(data.subUrl)}">
+      <button id="copy-inline" type="button">${glyph('M9 9 H21 V21 H9 Z M15 9 V3 H3 V15 H9')}<span>${esc(words.copy)}</span></button>
+      <p>${esc(t.deadLinkNote)}</p>
+    </section>`}
+  </main></div>`;
 }
 
 /** How the subscription card presents itself: which badge, which tint, and the
@@ -1023,7 +1086,10 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
     total === null || total <= 0
       ? `${fmtBytes(used)} / ${t.unlimited}`
       : `${fmtBytes(used)} / ${fmtBytes(total)}`;
-  const expiresStr = u.expireAt ? fmtDate(u.expireAt, data.lang) : t.noExpiry;
+  const compact = u.status === 'expired' || u.status === 'limited' || u.status === 'disabled' || u.status === 'revoked' ? u.status : null;
+  const expiresStr = u.expireAt ? fmtDate(u.expireAt, data.lang, compact !== null) : t.noExpiry;
+  const remaining = u.expireAt ? daysUntil(u.expireAt) : null;
+  const activeDateNote = remaining === null ? '' : t.daysLeft.replace('{n}', String(remaining) + ' ' + plural(remaining, t.days));
   const statusLabel = t.statusValues[u.status] ?? u.status;
   const st = statusView(u, t, data.lang, data.deadTexts);
 
@@ -1171,7 +1237,7 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
       figures.push(
         `<figure class="qrf" data-target="awg:${esc(n.nodeName)}" data-app="conf">` +
           qrBox({ text: n.conf, fallback: n.conf, note: t.qrNeedsJs, esc }) +
-          `<figcaption>AmneziaWG</figcaption></figure>`,
+          `<figcaption>AmneziaWG</figcaption><a class="step-btn" href="${esc(withQuery(data.subUrl, 'format=wgconf&node=' + encodeURIComponent(n.id ?? n.nodeName) + '&dl=1'))}">${esc(t.dlGet)}</a></figure>`,
       );
     }
   });
@@ -1270,14 +1336,20 @@ export function buildSubscriptionPage(data: SubscriptionPageData): string {
 <title>${esc(data.brandTitle)}</title>
 <style>${PAGE_CSS}</style>
 </head>
-<body class="nojs">
-${SPRITE_SLOT}
-<div class="page">
-  <header class="head">
-    <div class="head__brand">
-      ${icons.draw('cube', { cls: 'ic' })}
-      <span class="head__title">${esc(data.brandTitle)}</span>
+<body class="nojs${compact ? ' stopped' : ' active-sub'}">
+${compact ? '' : SPRITE_SLOT}
+${compact ? stoppedSubscription(data, compact, expiresStr, trafficStr) : `<div class="page">
+  ${subscriptionHeader(data)}
+  <main class="wrap active-layout">
+  <section class="card sub-card">
+    <div class="stopped-row"><strong class="stopped-name">${esc(u.username)}</strong>
+      <span class="active-badge${st.note}">${esc(st.trafficTile ? t.lowTraffic : st.expiresTile ? t.expiring : statusLabel)}</span>
     </div>
+    <div class="active-usage"><div class="stopped-row"><span>${esc(t.traffic)}</span><b>${esc(trafficStr)}</b></div>
+      ${total !== null && total > 0 ? `<progress aria-label="${esc(t.traffic)}" max="${total}" value="${Math.min(used,total)}"${st.trafficTile ? ' class="low"' : ''}></progress>` : ''}
+    </div>
+    <div class="stopped-row"><span>${esc(t.expires)}</span><b>${esc(expiresStr)}${activeDateNote ? ` <small class="active-date">${esc(activeDateNote)}</small>` : ''}</b></div>
+    ${st.note ? `<p class="active-warning">${esc(st.line)}</p>` : ''}
     <div class="head__actions">
       ${
         transferHtml
@@ -1290,56 +1362,9 @@ ${SPRITE_SLOT}
         ${icons.draw('copy', { cls: 'ic' })}<span class="hbtn__full">${esc(t.copyLink)}</span><span class="hbtn__short">${esc(t.copyLinkShort)}</span>
       </button>
     </div>
-  </header>
 
-  <main class="wrap">
-  <section class="card sub-card">
-    <div class="sub-card__head">
-      <div class="sub-card__badge${st.badge}">${icons.draw(st.icon, { cls: 'ic' })}</div>
-      <div class="sub-card__who">
-        <div class="sub-card__name">${esc(u.username)}</div>
-        <div class="sub-card__note${st.note}">${esc(st.line)}</div>
-      </div>
-    </div>
-    <div class="sub-card__grid">
-      <div class="sub-card__row">
-        <div class="tile">
-          <div class="tile__label">${icons.draw('User', { cls: 'ic' })}<span>${esc(t.username)}</span></div>
-          <div class="tile__value">${esc(u.username)}</div>
-        </div>
-        <div class="tile${st.statusTile}">
-          <div class="tile__label">${icons.draw('check-circle', { cls: 'ic' })}<span>${esc(t.status)}</span></div>
-          <div class="tile__value">${esc(statusLabel)}</div>
-        </div>
-      </div>
-      <div class="sub-card__row">
-        <div class="tile${st.expiresTile}">
-          <div class="tile__label">${icons.draw('Calendar', { cls: 'ic' })}<span>${esc(t.expires)}</span></div>
-          <div class="tile__value">${esc(expiresStr)}</div>
-        </div>
-        <div class="tile${st.trafficTile}">
-          <div class="tile__label">${icons.draw('ChartBar', { cls: 'ic' })}<span>${esc(t.traffic)}</span></div>
-          <div class="tile__value">${esc(trafficStr)}</div>
-        </div>
-      </div>
-    </div>
-    ${
-      protocolChips
-        ? `<div${switchable ? ' data-proto-switch' : ''}><div class="lbl" style="margin-bottom:8px">${esc(t.protocols)}</div><div class="protos">${protocolChips}</div>${
-            switchable ? `<div class="protos__hint">${esc(t.protocolsHint)}</div>` : ''
-          }</div>`
-        : ''
-    }
   </section>
 
-  <section class="card" id="sublink">
-    <div class="lbl">${esc(t.subLink)}</div>
-    <div class="linkrow">
-      <input class="link" id="url" value="${esc(data.subUrl)}" readonly onclick="this.select()">
-      <button class="copy" id="copy-inline">${esc(t.copy)}</button>
-    </div>
-    ${deadLinkNote}
-  </section>
 
   ${
     /* «Забрать конфигом» это последний блок ВНУТРИ «Установки», а не карточка
@@ -1376,28 +1401,40 @@ ${SPRITE_SLOT}
           : ''
     }
     ${panelsHtml}
-    ${downloadsHtml}
   </section>`
       : ''
   }
 
   ${scanSection}
 
-  ${supportRow}
+  <aside class="active-tools">
+    ${downloadsHtml}
+  <details class="active-link" id="sublink">
+    <summary>${esc(t.subLink)}</summary>
+    <div class="linkrow">
+      <input class="link" id="url" value="${esc(data.subUrl)}" readonly onclick="this.select()">
+      <button class="copy" id="copy-inline">${esc(t.copy)}</button>
+    </div>
+    ${
+      protocolChips
+        ? `<div${switchable ? ' data-proto-switch' : ''}><div class="lbl" style="margin-bottom:8px">${esc(t.protocols)}</div><div class="protos">${protocolChips}</div>${
+            switchable ? `<div class="protos__hint">${esc(t.protocolsHint)}</div>` : ''
+          }</div>`
+        : ''
+    }
+    ${deadLinkNote}
+  </details>
+
+    ${supportRow}
+  </aside>
   </main>
-  <footer class="foot">
-    <nav class="lang" aria-label="Language">
-      <a class="lng${data.lang === 'ru' ? ' on' : ''}" href="${esc(withProtocols('?lang=ru', ps?.selected ?? []))}" hreflang="ru"${data.lang === 'ru' ? ' aria-current="true"' : ''}>Русский</a>
-      <span class="lang__sep">·</span>
-      <a class="lng${data.lang === 'en' ? ' on' : ''}" href="${esc(withProtocols('?lang=en', ps?.selected ?? []))}" hreflang="en"${data.lang === 'en' ? ' aria-current="true"' : ''}>English</a>
-    </nav>
-  </footer>
-</div>
+
+</div>`}
 ${transferHtml}
 <!-- Two tags, not one: a throw in either script stops only that one, and the
      page has to survive losing its codes as readily as losing its tabs. -->
-<script>${QR_SCRIPT}</script>
-<script>${pageScript({ subUrl: data.subUrl, noTransfer: NO_TRANSFER, copied: t.copied, hideAll: t.hideAll, showAll: t.showAll, protocolOrder: PROTOCOL_NAMES })}</script>
+${compact ? '' : `<script>${QR_SCRIPT}</script>`}
+${compact === 'revoked' ? '' : `<script>${pageScript({ subUrl: data.subUrl, noTransfer: NO_TRANSFER, copied: t.copied, hideAll: t.hideAll, showAll: t.showAll, protocolOrder: PROTOCOL_NAMES })}</script>`}
 </body>
 </html>`;
 

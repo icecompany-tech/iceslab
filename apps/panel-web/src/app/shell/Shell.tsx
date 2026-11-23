@@ -18,7 +18,7 @@ export function Shell() {
   const { locale } = useLocale()
   const words = useDict(DICT)
   const title = routeAt(pathname)?.title?.[locale] ?? ''
-  // Only the center scrolls, so a new screen starts at its top, not where the last one was left.
+  // Reset the center on navigation while keeping the menu at its current scroll position.
   const main = useRef<HTMLElement>(null)
   useEffect(() => {
     main.current?.scrollTo?.({ top: 0 })

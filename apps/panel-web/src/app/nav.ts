@@ -30,6 +30,9 @@ export const MAIN_NAV: readonly NavItem[] = [
 
 // Only what v0.4.0 has: pages that are new and have no server yet stay out of the menu
 // (ARCH 2026-11-06, F-V1), and the frame's items come back with them.
+const requestsItem: NavItem = { id: 'requests', icon: 'requests', title: t('Запросы подписки', 'Subscription requests'), path: '/requests' }
+const devicesItem: NavItem = { id: 'devices', icon: 'phone', title: t('Устройства', 'Devices'), path: '/devices' }
+
 export const GROUP_NAV: readonly NavGroup[] = [
   {
     id: 'subscription',
@@ -38,6 +41,9 @@ export const GROUP_NAV: readonly NavGroup[] = [
       { id: 'subscription-params', icon: 'settings', title: t('Параметры', 'Parameters'), path: '/subscription/params' },
       { id: 'delivery', icon: 'routes', title: t('Выдача', 'Delivery'), path: '/subscription/delivery' },
       { id: 'templates', icon: 'journal', title: t('Шаблоны', 'Templates'), path: '/subscription/templates' },
+      ...(import.meta.env.MODE === 'paper-review' ? [
+        { id: 'page-design', icon: 'journal' as const, title: t('Страница', 'Page designer'), path: '/subscription/page' },
+      ] : []),
     ],
   },
   {
@@ -47,15 +53,20 @@ export const GROUP_NAV: readonly NavGroup[] = [
       { id: 'routes', icon: 'routes', title: t('Маршруты', 'Routes'), path: '/routes' },
       { id: 'outbounds', icon: 'outbounds', title: t('Выходы', 'Outbounds'), path: '/outbounds' },
       { id: 'geo', icon: 'geo', title: t('Гео-наборы', 'Geo sets'), path: '/geo' },
+      ...(import.meta.env.MODE === 'paper-review' ? [
+        { id: 'rule-sets', icon: 'routes' as const, title: t('Наборы правил', 'Rule sets'), path: '/rule-sets' },
+        { id: 'dns', icon: 'server' as const, title: t('DNS', 'DNS'), path: '/dns' },
+        { id: 'torrents', icon: 'traffic' as const, title: t('Торренты', 'Torrents'), path: '/torrents' },
+      ] : []),
     ],
   },
   {
     id: 'observe',
     title: t('Наблюдение', 'Observation'),
-    items: [
-      { id: 'requests', icon: 'requests', title: t('Запросы подписки', 'Subscription requests'), path: '/requests' },
-      { id: 'devices', icon: 'phone', title: t('Устройства', 'Devices'), path: '/devices' },
-    ],
+    items: import.meta.env.MODE === 'paper-review' ? [
+      { id: 'sessions', icon: 'wifi' as const, title: t('Сессии', 'Sessions'), path: '/sessions' }, devicesItem, requestsItem,
+      { id: 'http-stats', icon: 'pulse' as const, title: t('Статистика HTTP', 'HTTP statistics'), path: '/http-stats' },
+    ] : [requestsItem, devicesItem],
   },
   {
     id: 'system',

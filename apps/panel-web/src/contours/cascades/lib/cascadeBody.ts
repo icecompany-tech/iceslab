@@ -32,6 +32,7 @@ export function cascadeCreateBody(draft: CascadeDraft): CreateCascadeV4Input {
     name: draft.name.trim(),
     enabled: draft.enabled,
     hideHopsFromSub: draft.hideHops,
+    ...(draft.autoProfile ? { autoProfile: true } : {}),
     positions: toPositionInputs(draft.pools),
     directions: toDirectionInputs(draft.directions),
     ...policy,

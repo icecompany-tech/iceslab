@@ -1,3 +1,4 @@
+.creation,
 .page {
   display: flex;
   flex-direction: column;
@@ -11,7 +12,9 @@
   line-height: var(--leading-xl);
 }
 
-.toolbar {
+.toolbar,
+.formHeader {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -19,14 +22,9 @@
 }
 
 .chips {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-}
-
-.filters {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--size-filters);
   gap: var(--spacing-2);
 }
 
@@ -86,8 +84,8 @@
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--size-squad-card)), 1fr));
+  gap: var(--spacing-4);
 }
 
 .card {
@@ -163,8 +161,8 @@
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-columns));
-  gap: var(--spacing-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-host-details));
+  gap: var(--spacing-5);
   align-items: start;
 }
 
@@ -181,6 +179,7 @@
   top: var(--spacing-4);
 }
 
+.basics,
 .panel {
   display: flex;
   flex-direction: column;
@@ -555,4 +554,91 @@
   color: var(--color-text-hint);
   font-size: var(--text-sm);
   line-height: var(--leading-base);
+}
+.basics {
+  padding: var(--spacing-6);
+  gap: var(--spacing-5);
+}
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: clip;
+}
+
+.wizard > section {
+  border: 0;
+  border-top: var(--border-hairline) solid var(--color-border);
+  border-radius: 0;
+}
+
+.wizardHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding: var(--spacing-5) var(--spacing-6);
+}
+
+.stepFooter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.creation,
+.creation .left {
+  gap: var(--spacing-5);
+}
+
+.creation .formHeader {
+  justify-content: flex-start;
+  gap: var(--spacing-3-5);
+}
+
+.creation .formHeader .actions {
+  margin-left: auto;
+}
+
+.backButton {
+  display: grid;
+  width: var(--size-toolbar-row);
+  height: var(--size-toolbar-row);
+  place-items: center;
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.creation h1 {
+  font-size: var(--text-profile-heading);
+  line-height: var(--leading-profile-heading);
+}
+
+.creation .panelTitle {
+  font-size: var(--text-title);
+  line-height: var(--spacing-6);
+}
+
+.basics .twoFields {
+  gap: var(--spacing-5);
+}
+
+.basics .twoFields > div {
+  gap: var(--spacing-2);
+}
+
+.basics .twoFields label {
+  font-size: var(--text-base);
+  line-height: var(--spacing-5);
+}
+
+.basics .twoFields input {
+  height: var(--size-field-lg);
+}
+
+.creation .wizardHeading {
+  min-height: var(--size-profile-section-head);
 }

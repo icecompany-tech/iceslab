@@ -10,7 +10,7 @@ import { fmtBytes, fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
 import { cascadeToggleRefusal, nodeInOtherCascadeRefusal } from '@/lib/old/cascades'
-import { Button } from '@/ui/Button/Button'
+import { Icon } from '@/ui/Icon/Icon'
 import { CascadeFlow } from '@/ui/CascadeFlow/CascadeFlow'
 import { Confirm } from '@/ui/Dialog/Confirm'
 import { HopMeter } from '@/ui/HopMeter/HopMeter'
@@ -44,30 +44,27 @@ export function CascadeCard({ row }: { row: CascadeRow }) {
     )
   }
   return (
-    <article className={styles.card}>
+    <article className={styles.card} data-enabled={cascade.enabled}>
       <div className={styles.cardHead}>
-        <Link className={styles.cardName} to={`/cascades/${cascade.id}`}>
-          {cascade.name}
-        </Link>
+        <Link className={styles.cardName} to={`/cascades/${cascade.id}`}>{cascade.name}</Link>
+        <Switch label={cascade.enabled ? words.stateOn : words.stateOff} checked={cascade.enabled} disabled={toggle.isPending} onChange={on => on ? send(true) : setAskOff(true)} />
         <HopMeter count={hops} max={MAX_POSITIONS} label={words.hopMeter(hops, MAX_POSITIONS)} />
+        {!cascade.enabled && <><span className={styles.pathShort}>{row.path}</span><span className={styles.note}>{words.offSummary}</span></>}
         <span className={styles.spacer} />
-        <Switch label={cascade.enabled ? words.stateOn : words.stateOff} checked={cascade.enabled} disabled={toggle.isPending} onChange={(on) => (on ? send(true) : setAskOff(true))} />
-        <Button size="sm" variant="danger" onClick={() => setDeleting(true)}>
-          {words.deleteAction}
-        </Button>
+        {cascade.enabled && today !== null && <span className={styles.note}>{words.today(fmtBytes(today, locale))}</span>}
+        <button type="button" className={styles.iconAction} aria-label={words.deleteAction} title={words.deleteAction} onClick={() => setDeleting(true)}><Icon name="trash" /></button>
       </div>
       {push.kind === 'broken' && <p className={styles.danger}>{`${words.brokenBanner}: ${push.broken}`}</p>}
-      <div className={cascade.enabled ? undefined : styles.cardOff}>
+      {cascade.enabled && <div className={styles.cardFlow}>
         <CascadeFlow label={words.flowLabel(cascade.name)} columns={flow.columns} links={flow.links} {...(flow.legend ? { legend: flow.legend } : {})} />
-      </div>
-      <div className={styles.cardFacts}>
-        <span>
-          {words.colReach}: {reach === null ? '?' : reach.squads.length === 0 ? words.reachNobody : words.reachSquads(reach.squads.map((s) => s.name).join(', '), fmtNumber(reach.users, locale))}
-        </span>
-        {today !== null && <span>{words.today(fmtBytes(today, locale))}</span>}
+      </div>}
+      {cascade.enabled && <div className={styles.cardFacts}>
+        <span>{words.colReach}</span><span className={styles.factValue}>{reach === null ? '?' : reach.squads.length === 0 ? words.reachNobody : words.reachSquads(reach.squads.map(s => s.name).join(', '), fmtNumber(reach.users, locale))}</span>
+        <span>{words.cardPolicies}</span><span className={styles.factValue}>{reach === null ? '?' : reach.policies.map(p => p.name).join(' · ') || words.ordinary}</span>
+        <span className={styles.spacer} />
         {push.kind === 'done' && <span>{words.pushDone}</span>}
         {push.kind === 'pending' && push.waiting.length > 0 && <span className={styles.amber}>{words.pushPending(push.waiting.join(', '))}</span>}
-      </div>
+      </div>}
       {refused && (
         <p className={styles.danger}>
           {words.enableRefused} {refused.text}{' '}

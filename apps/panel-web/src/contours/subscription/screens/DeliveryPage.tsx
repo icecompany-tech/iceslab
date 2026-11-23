@@ -128,7 +128,7 @@ export default function DeliveryPage() {
               </table>
             </div>
           )}
-      <div className={styles.columns}>
+      <div className={`${styles.columns} ${styles.deliveryColumns}`}>
         <div className={styles.left}>
           <section className={styles.panel}>
             <h2 className={styles.panelTitle}>{words.testTitle}</h2>

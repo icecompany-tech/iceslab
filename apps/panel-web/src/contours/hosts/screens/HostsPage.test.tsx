@@ -44,6 +44,7 @@ describe('HostsPage', () => {
     server({ 'GET /api/hosts/h1/freshness': { status: 500, body: {} }, 'GET /api/hosts/h2/freshness': { body: { configChangedAt: '2026-11-01T00:00:00Z', current: 1, stale: 37, total: 38, neverFetched: 2, retentionDays: 30 } }, 'GET /api/hosts/h3/freshness': { body: { configChangedAt: '2026-11-01T00:00:00Z', current: 1, stale: 0, total: 1, neverFetched: 0, retentionDays: 30 } } })
     renderApp(<HostsPage />, { route: '/hosts' })
     await screen.findByText('Direct')
+    await userEvent.click(screen.getByRole('button', { name: 'Фильтры' }))
     await userEvent.click(screen.getByRole('switch', { name: /На старой ссылке/ }))
     await screen.findByText('неизвестно')
     await userEvent.click(await screen.findByRole('button', { name: '37 из 38' }))

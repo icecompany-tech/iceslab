@@ -7,6 +7,7 @@ import { useDict } from '@/lib/i18n'
 import type { CascadeProtocol } from '@/lib/old/cascades'
 import { chainFacts } from '@/lib/old/chainStatus'
 import { isOlderThan, MIN_CASCADE_CORE } from '@/lib/old/protocols'
+import { Flag } from '@/ui/Flag/Flag'
 import { Field } from '@/ui/Field/Field'
 import { QueryFailedLine } from '@/ui/QueryState/QueryState'
 import { Select } from '@/ui/Select/Select'
@@ -39,6 +40,57 @@ export function ChainNotes({ form, ids }: { form: CascadeForm; ids: readonly str
   )
 }
 
+function EntryNodes({ form }: { form: CascadeForm }) {
+  const words = useDict(DICT)
+  const chosen = form.entryIds
+  const used = new Set(form.othersThan(chosen))
+  const sorted = [...form.nodes].sort((a,b) => {
+    const rank = (id: string) => chosen.includes(id) ? 0 : form.claimedBy.has(id) || used.has(id) ? 2 : 1
+    return rank(a.id) - rank(b.id)
+  })
+  const render = (node: (typeof form.nodes)[number]) => {
+    const owner = form.claimedBy.get(node.id)
+    const engines = node.cores?.cores.filter(core => core.installed !== false).map(core => [core.engine ?? core.name, core.version].filter(Boolean).join(' '))
+    const inventory = engines?.join(', ') || (node.engines?.length ? node.engines.join(', ') : node.cores ? words.agentOnly : words.coreUnknown)
+    return <label className={styles.entryChoice} key={node.id}>
+      <input type="checkbox" aria-label={node.name} checked={chosen.includes(node.id)} disabled={used.has(node.id)}
+        onChange={e => form.setPoolNodes(0, e.target.checked ? [...chosen,node.id] : chosen.filter(id => id !== node.id))} />
+      <Flag code={node.countryCode} /><strong>{node.name}</strong>
+      <span>{owner ? words.nodeInCascade(owner) : inventory}</span>
+    </label>
+  }
+  const limit = Math.max(6, chosen.length)
+  return <div className={styles.entryChoices}>
+    <p className={styles.note}>{words.entryHint}</p>
+    <div className={styles.entryList}>{sorted.slice(0,limit).map(render)}</div>
+    {sorted.length > limit && <details><summary>{words.moreNodes} ({sorted.length-limit})</summary>{sorted.slice(limit).map(render)}</details>}
+  </div>
+}
+
+function EntryProtocols({ form, value }: { form: CascadeForm; value: CascadeProtocol }) {
+  const words = useDict(DICT)
+  const options = protocolOptions(value)
+  const descriptions: Record<string, string> = { xray: words.entryXray, hysteria: words.entryHy2, amneziawg: words.entryAwg }
+  const primary = options.filter(option => descriptions[option.value])
+  const others = options.filter(option => !descriptions[option.value])
+  const render = (option: (typeof options)[number]) => (
+    <label key={option.value} className={styles.protocolChoice}>
+      <input type="radio" name="entry-protocol" value={option.value} checked={value === option.value}
+        onChange={() => form.setPool(0, { entryProtocol: option.value as CascadeProtocol })} />
+      <span><strong>{option.value === 'hysteria' ? 'Hysteria 2' : option.value === 'amneziawg' ? 'AmneziaWG' : option.label}</strong>
+        {descriptions[option.value] && <small>{descriptions[option.value]}</small>}
+      </span>
+    </label>
+  )
+  return (
+    <fieldset className={styles.protocols}>
+      <legend>{words.howClientConnects}</legend>
+      {primary.map(render)}
+      {others.length > 0 && <details open={others.some(option => option.value === value) || undefined}><summary>{words.otherProtocols}</summary>{others.map(render)}</details>}
+    </fieldset>
+  )
+}
+
 export function EntryStep({ form }: { form: CascadeForm }) {
   const words = useDict(DICT)
   const pool = form.draft.pools[0]
@@ -56,8 +108,8 @@ export function EntryStep({ form }: { form: CascadeForm }) {
   }) : []
   return (
     <>
-      <PoolField form={form} label={words.poolEntry} ids={pool.nodeIds} onChange={(ids) => form.setPoolNodes(0, ids)} />
-      <Field label={words.entryProtocol}>{(a11y) => <Select {...a11y} value={pool.entryProtocol} onChange={(e) => form.setPool(0, { entryProtocol: e.target.value as CascadeProtocol })} options={protocolOptions(pool.entryProtocol)} />}</Field>
+      {form.cascade === null && form.entryIds.every(id => form.nodeById.has(id)) ? <EntryNodes form={form} /> : <PoolField form={form} label={words.poolEntry} ids={pool.nodeIds} onChange={(ids) => form.setPoolNodes(0, ids)} />}
+      {form.cascade === null ? <EntryProtocols form={form} value={pool.entryProtocol} /> : <Field label={words.entryProtocol}>{(a11y) => <Select {...a11y} value={pool.entryProtocol} onChange={(e) => form.setPool(0, { entryProtocol: e.target.value as CascadeProtocol })} options={protocolOptions(pool.entryProtocol)} />}</Field>}
       {kind === 'notCarried' && facts && <p className={styles.danger}>{words.entryNotCarried(facts.protocol, chainEntryList())}</p>}
       {kind === 'autoOnly' && facts && <p className={styles.note}>{words.entryAutoOnly(facts.protocol)}</p>}
       {noCore && <p className={styles.danger}>{words.entryNoCore(chainEntryList())}</p>}
@@ -74,7 +126,7 @@ export function EntryStep({ form }: { form: CascadeForm }) {
           )}
         </>
       )}
-      {place === 'xray-self' && <p className={styles.note}>{words.entryPolicyXray}</p>}
+      {place === 'xray-self' && form.cascade !== null && <p className={styles.note}>{words.entryPolicyXray}</p>}
       {form.entry.failed && <p className={styles.note}>{words.entryListsFailed}</p>}
       {form.entry.bystanders?.map((b) => (
         <p key={b.nodeId} className={styles.note}>

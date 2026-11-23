@@ -8,6 +8,36 @@
   background: var(--color-bg);
 }
 
+.compact {
+  align-items: center;
+  gap: var(--spacing-2-5);
+  min-height: var(--size-field-md);
+  padding-block: var(--spacing-2);
+  padding-inline-end: var(--spacing-2-5);
+}
+
+.compact .code {
+  font-size: var(--text-sm);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:focus-visible {
+  outline: var(--border-check) solid var(--color-accent);
+  outline-offset: var(--spacing-half);
+}
+
 .code {
   flex: 1 1 auto;
   min-width: 0;

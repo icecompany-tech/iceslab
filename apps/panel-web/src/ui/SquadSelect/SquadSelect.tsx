@@ -17,6 +17,7 @@ import {
   TagList,
   useFilter,
 } from 'react-aria-components'
+import { useDialogPortal } from '@/ui/Dialog/useDialogPortal'
 import { Icon } from '@/ui/Icon/Icon'
 import styles from '@/ui/SquadSelect/SquadSelect.module.css'
 
@@ -78,6 +79,7 @@ function Row({ option, query }: { option: SquadOption; query: string }) {
 }
 
 export function SquadSelect({ label, options, value, onChange, texts }: SquadSelectProps) {
+  const { attach, container } = useDialogPortal()
   const [query, setQuery] = useState('')
   // Rows change group when the list opens, not under the cursor: a row that jumps
   // to "selected" while being clicked would leave the keyboard focus somewhere else.
@@ -95,7 +97,7 @@ export function SquadSelect({ label, options, value, onChange, texts }: SquadSel
   const remove = (keys: Set<Key>) => onChange(value.filter((id) => !keys.has(id)))
 
   return (
-    <div className={styles.root}>
+    <div ref={attach} className={styles.root}>
       <Select
         className={styles.select}
         selectionMode="multiple"
@@ -116,7 +118,7 @@ export function SquadSelect({ label, options, value, onChange, texts }: SquadSel
           </span>
         </Button>
 
-        <Popover className={styles.popover} placement="bottom start" offset={6}>
+        <Popover UNSTABLE_portalContainer={container} className={styles.popover} placement="bottom start" offset={6}>
           <Autocomplete inputValue={query} onInputChange={setQuery} filter={contains}>
             <SearchField aria-label={texts.search} className={styles.search} autoFocus>
               <span className={styles.searchIcon}>

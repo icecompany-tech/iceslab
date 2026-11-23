@@ -5,23 +5,27 @@ import { DICT } from '@/contours/cascades/dict'
 import type { CascadeForm } from '@/contours/cascades/hooks/useCascadeForm'
 import { directionLines, directionVia, entryChainNotes, outboundChainGaps, type DirectionDraft, type DirectionVia } from '@/contours/cascades/lib/cascadeForm'
 import { nextFreeKey, nextFreeTag } from '@/contours/cascades/lib/draft'
-import { useDict } from '@/lib/i18n'
+import { useDict, useLocale } from '@/lib/i18n'
 import { COUNTRIES } from '@/lib/old/countries'
 import { outboundAddress } from '@/lib/old/namedOutbounds'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
+import { Icon } from '@/ui/Icon/Icon'
 import { Field } from '@/ui/Field/Field'
 import { QueryFailedLine } from '@/ui/QueryState/QueryState'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import { Select } from '@/ui/Select/Select'
 
-function countryOptions(current: string, words: typeof DICT.ru) {
-  const list = COUNTRIES.map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }))
+function countryOptions(current: string, words: typeof DICT.ru, locale: string) {
+  const regions = new Intl.DisplayNames([locale], { type: 'region' })
+  const list = COUNTRIES.map((c) => ({ value: c.code, label: regions.of(c.code) ?? c.name }))
   return [{ value: '', label: words.countryPlaceholder }, ...(current && !COUNTRIES.some((c) => c.code === current) ? [{ value: current, label: current }] : []), ...list]
 }
 
 function DirectionRow({ form, direction, index }: { form: CascadeForm; direction: DirectionDraft; index: number }) {
   const words = useDict(DICT)
+  const { locale } = useLocale()
+  const creating = form.cascade === null
   const { directions, nextTag } = form.draft
   const via = directionVia(direction)
   const refusal = form.refusal?.kind === 'direction' ? form.refusal.refusal : null
@@ -50,20 +54,17 @@ function DirectionRow({ form, direction, index }: { form: CascadeForm; direction
     form.setDirection(index, { outboundId: id || null, outboundTouched: true, ...(o?.countryCode && !direction.countryCode ? { countryCode: o.countryCode } : {}) })
   }
   return (
-    <div className={styles.hopRow}>
-      <div className={styles.hopHead}>
-        <span className={direction.tag === null ? styles.tagNew : styles.tag}>
-          {words.directionTag} {direction.tag ?? nextFreeTag(directions, index, nextTag)}
-        </span>
-        <span className={styles.spacer} />
-        <Button size="sm" disabled={directions.length < 2} onClick={() => form.patch({ directions: directions.filter((_, j) => j !== index) })}>
-          {words.remove}
-        </Button>
+    <div className={styles.hopRow} data-creating={creating}>
+      <div className={styles.directionHead}>
+        <Field label={words.direction} labelHidden={creating}>{(a11y) => <Select {...a11y} value={direction.countryCode} onChange={(e) => form.setDirection(index, { countryCode: e.target.value })} options={countryOptions(direction.countryCode, words, locale)} />}</Field>
+        {form.outboundKnown && (
+          <Segmented<DirectionVia> label={words.via} value={via} onChange={pickVia} options={[{ value: 'pool', label: words.viaPool }, { value: 'outbound', label: words.viaOutbound }]} />
+        )}
+        <button type="button" className={styles.iconAction} aria-label={words.remove} title={words.remove} disabled={directions.length < 2} onClick={() => form.patch({ directions: directions.filter((_, j) => j !== index) })}>
+          <Icon name="close" size="sm" />
+        </button>
       </div>
-      <Field label={words.direction}>{(a11y) => <Select {...a11y} value={direction.countryCode} onChange={(e) => form.setDirection(index, { countryCode: e.target.value })} options={countryOptions(direction.countryCode, words)} />}</Field>
-      {form.outboundKnown && (
-        <Segmented<DirectionVia> label={words.via} value={via} onChange={pickVia} options={[{ value: 'pool', label: words.viaPool }, { value: 'outbound', label: words.viaOutbound }]} />
-      )}
+      <div className={styles.directionBody}>
       {via === 'pool' ? (
         <PoolField form={form} label={words.poolDirection} ids={direction.nodeIds} onChange={(ids) => form.setDirection(index, { nodeIds: ids })} />
       ) : form.outbounds.isError ? (
@@ -75,8 +76,12 @@ function DirectionRow({ form, direction, index }: { form: CascadeForm; direction
           {words.outboundNone} <Link className={styles.link} to="/outbounds">{words.open}</Link>
         </p>
       ) : (
-        <Field label={words.outboundField}>{(a11y) => <Select {...a11y} value={direction.outboundId ?? ''} onChange={(e) => pickOutbound(e.target.value)} options={[{ value: '', label: words.outboundPick }, ...form.outboundOptions.map((o) => ({ value: o.id, label: `${o.name} ${outboundAddress(o)}` }))]} />}</Field>
+        <Field label={words.outboundField} labelHidden={creating}>{(a11y) => <Select {...a11y} value={direction.outboundId ?? ''} onChange={(e) => pickOutbound(e.target.value)} options={[{ value: '', label: words.outboundPick }, ...form.outboundOptions.map((o) => ({ value: o.id, label: `${o.name} ${outboundAddress(o)}` }))]} />}</Field>
       )}
+      <small className={styles.note} title={words.directionTag + ' ' + (direction.tag ?? nextFreeTag(directions, index, nextTag))}>
+        {direction.tag === null ? words.flowDirectionNew : words.tagOf(direction.tag)}
+      </small>
+      </div>
       {directionLines(directions, index, refusal, say).map((line) => (
         <p key={line} className={styles.danger}>
           {line}

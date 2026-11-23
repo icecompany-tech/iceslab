@@ -1,0 +1,77 @@
+{
+  "hysteria": {
+    "file": "config.yaml",
+    "engine": "hysteria",
+    "text": "listen: :…\n\nacme:\n  domains:\n    - hy2.example.com\n\nauth:\n  type: http\n  http:\n    url: http://127.0.0.1:9000/auth\n\nobfs:\n  type: salamander\n  salamander:\n    password: ••••••••••••\n\nmasquerade:\n  type: proxy\n  proxy:\n    url: https://www.wikipedia.org\n    rewriteHost: true\n\nignoreClientBandwidth: true\n\ntrafficStats:\n  listen: 127.0.0.1:…\n  secret: ••••••••••••"
+  },
+  "hysteria/singbox": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"hysteria2\",\n  \"tag\": \"hy2-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"users\": […],\n  \"ignore_client_bandwidth\": true,\n  \"obfs\": {\n    \"type\": \"salamander\",\n    \"password\": \"••••••••••••\"\n  },\n  \"masquerade\": \"https://www.wikipedia.org\",\n  \"tls\": {\n    \"enabled\": true,\n    \"server_name\": \"hy2.example.com\",\n    \"certificate_path\": …,\n    \"key_path\": …\n  }\n}"
+  },
+  "amneziawg": {
+    "file": "awg0.conf",
+    "engine": "amneziawg",
+    "text": "[Interface]\nPrivateKey = ••••••••••••\nListenPort = …\nAddress = 10.66.66.1/24\nJc = 4\nJmin = 40\nJmax = 70\nS1 = 32\nS2 = 40\nS3 = 0\nS4 = 0\nH1 = 1234567891\nH2 = 1234567892\nH3 = 1234567893\nH4 = 1234567894\nPostUp = …\nPostDown = …\n&nbsp;\n[Peer]\nPublicKey = …\nAllowedIPs = …"
+  },
+  "shadowsocks": {
+    "file": "config.json",
+    "engine": "xray",
+    "text": "{\n  \"tag\": …,\n  \"listen\": \"0.0.0.0\",\n  \"port\": …,\n  \"protocol\": \"shadowsocks\",\n  \"settings\": {\n    \"method\": \"2022-blake3-aes-256-gcm\",\n    \"password\": \"••••••••••••\",\n    \"clients\": […],\n    \"network\": \"tcp,udp\"\n  }\n}"
+  },
+  "shadowsocks/singbox": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"shadowsocks\",\n  \"tag\": \"ss-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"method\": \"2022-blake3-aes-256-gcm\",\n  \"password\": \"••••••••••••\",\n  \"users\": […]\n}"
+  },
+  "naive": {
+    "file": "Caddyfile",
+    "engine": "caddy-naive",
+    "text": "{\n  admin unix/…\n  storage file_system /etc/caddy\n  log default {\n    exclude http.log.error\n  }\n}\n:…, naive.example.com {\n  tls admin@example.com\n  route {\n    forward_proxy {\n      basic_auth …\n      hide_ip\n      hide_via\n      probe_resistance\n    }\n    file_server {\n      root /var/www/html\n    }\n  }\n}"
+  },
+  "mieru": {
+    "file": "config.json",
+    "engine": "mita",
+    "text": "{\n  \"portBindings\": […],\n  \"users\": […],\n  \"mtu\": 1400,\n  \"loggingLevel\": \"INFO\"\n}"
+  },
+  "tuic": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"tuic\",\n  \"tag\": \"tuic-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"users\": […],\n  \"congestion_control\": \"bbr\",\n  \"tls\": {\n    \"enabled\": true,\n    \"server_name\": \"tuic.example.net\",\n    \"alpn\": [\"h3\"],\n    \"certificate_path\": \"…\",\n    \"key_path\": \"…\"\n  }\n}"
+  },
+  "anytls": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"anytls\",\n  \"tag\": \"anytls-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"users\": […],\n  \"tls\": {\n    \"enabled\": true,\n    \"server_name\": \"anytls.example.net\",\n    \"certificate_path\": \"…\",\n    \"key_path\": \"…\"\n  }\n}"
+  },
+  "shadowtls": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "[\n  {\n    \"type\": \"shadowtls\",\n    \"tag\": \"shadowtls-in\",\n    \"listen\": \"0.0.0.0\",\n    \"listen_port\": …,\n    \"version\": 3,\n    \"users\": […],\n    \"handshake\": {\n      \"server\": \"www.bing.com\",\n      \"server_port\": 443\n    },\n    \"strict_mode\": true,\n    \"detour\": \"shadowtls-ss-in\"\n  },\n  {\n    \"type\": \"shadowsocks\",\n    \"tag\": \"shadowtls-ss-in\",\n    \"listen\": \"127.0.0.1\",\n    \"method\": \"2022-blake3-aes-128-gcm\",\n    \"password\": \"••••••••••••\"\n  }\n]"
+  },
+  "mtproto": {
+    "file": "config.toml",
+    "engine": "mtg",
+    "text": "secret = \"ee••••••••••••\"\nbind-to = \"0.0.0.0:…\"\nconcurrency = 8192\nprefer-ip = \"prefer-ipv4\"\n\n[stats.prometheus]\nenabled = true\nbind-to = \"127.0.0.1:3129\"\nmetric-prefix = \"mtg\""
+  },
+  "socks5": {
+    "file": "config.json",
+    "engine": "xray",
+    "text": "{\n  \"tag\": \"socks-in\",\n  \"listen\": \"0.0.0.0\",\n  \"port\": …,\n  \"protocol\": \"socks\",\n  \"settings\": {\n    \"auth\": \"password\",\n    \"accounts\": […],\n    \"udp\": false\n  },\n  \"streamSettings\": {\n    \"network\": \"raw\",\n    \"security\": \"none\"\n  },\n  \"sniffing\": {\n    \"enabled\": true,\n    \"destOverride\": [\"http\", \"tls\", \"quic\"]\n  }\n}"
+  },
+  "http": {
+    "file": "config.json",
+    "engine": "xray",
+    "text": "{\n  \"tag\": \"http-in\",\n  \"listen\": \"0.0.0.0\",\n  \"port\": …,\n  \"protocol\": \"http\",\n  \"settings\": {\n    \"accounts\": […],\n    \"allowTransparent\": false\n  },\n  \"streamSettings\": {\n    \"network\": \"raw\",\n    \"security\": \"none\"\n  },\n  \"sniffing\": {\n    \"enabled\": true,\n    \"destOverride\": [\"http\", \"tls\", \"quic\"]\n  }\n}"
+  },
+  "vless/singbox": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"vless\",\n  \"tag\": \"vless-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"users\": […],\n  \"tls\": {\n    \"enabled\": true,\n    \"server_name\": \"www.cloudflare.com\",\n    \"reality\": {\n      \"enabled\": true,\n      \"handshake\": {\n        \"server\": \"www.cloudflare.com\",\n        \"server_port\": 443\n      },\n      \"private_key\": \"••••••••••••\",\n      \"short_id\": [\"6ba85179e30d4fc2\"]\n    }\n  }\n}"
+  },
+  "trojan/singbox": {
+    "file": "config.json",
+    "engine": "sing-box",
+    "text": "{\n  \"type\": \"trojan\",\n  \"tag\": \"trojan-in\",\n  \"listen\": \"0.0.0.0\",\n  \"listen_port\": …,\n  \"users\": […],\n  \"tls\": {\n    \"enabled\": true,\n    \"server_name\": \"www.cloudflare.com\",\n    \"reality\": {\n      \"enabled\": true,\n      \"handshake\": {\n        \"server\": \"www.cloudflare.com\",\n        \"server_port\": 443\n      },\n      \"private_key\": \"••••••••••••\",\n      \"short_id\": [\"6ba85179e30d4fc2\"]\n    }\n  }\n}"
+  }
+}

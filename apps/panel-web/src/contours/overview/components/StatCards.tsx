@@ -21,12 +21,14 @@ export function StatCards({ overview }: { overview: Overview }) {
       <StatCard label={words.onlineNow} icon="wifi" value={n(users.onlineNow)}>
         <div className={styles.note}>{words.onlineToday(n(users.onlineToday))}</div>
       </StatCard>
-      <StatCard label={words.activeUsers} icon="userCheck" value={users.byStatus.active === undefined ? words.unknown : n(users.byStatus.active)}>
+      <StatCard label={words.activeUsers} icon="userCheck" value={users.total === 0 ? n(0) : users.byStatus.active === undefined ? words.unknown : n(users.byStatus.active)}>
         <div className={styles.note}>{words.totalUsers(n(users.total))}</div>
       </StatCard>
       <StatCard label={words.expiring} icon="calendarSoon" value={expiring.data === undefined ? words.unknown : n(expiring.data)}>
         {expiring.isError ? (
           <div className={styles.note}>{words.expiringFailed}</div>
+        ) : expiring.data === 0 ? (
+          <div className={styles.note}>{words.nobody}</div>
         ) : (
           <Link className={styles.noteLink} to="/users?filter=expiring">
             {words.openList}
@@ -34,7 +36,7 @@ export function StatCards({ overview }: { overview: Overview }) {
           </Link>
         )}
       </StatCard>
-      <StatCard label={words.nodesOnline} icon="nodes" value={n(system.onlineNodeCount)} valueNote={words.ofTotal(n(system.totalNodeCount))}>
+      <StatCard label={words.nodesOnline} icon="nodes" value={n(system.onlineNodeCount)} valueNote={system.totalNodeCount ? words.ofTotal(n(system.totalNodeCount)) : undefined}>
         <div className={styles.note}>
           {system.totalNodeCount === 0 ? (
             words.noNodes

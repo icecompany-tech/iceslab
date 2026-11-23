@@ -102,15 +102,17 @@ export function Sidebar() {
 
   return (
     <nav className={styles.sidebar}>
-      <div className={styles.main}>
-        {MAIN_NAV.map((item) => (
-          <Item key={item.id} item={item} badge={item.id === 'nodes' ? problems : undefined} />
-        ))}
-      </div>
-      <div className={styles.groups}>
-        {GROUP_NAV.map((group) => (
-          <Group key={group.id} group={group} />
-        ))}
+      <div className={styles.menu}>
+        <div className={styles.main}>
+          {MAIN_NAV.map((item) => (
+            <Item key={item.id} item={item} badge={item.id === 'nodes' ? problems : undefined} />
+          ))}
+        </div>
+        <div className={styles.groups}>
+          {GROUP_NAV.map((group) => (
+            <Group key={group.id} group={group} />
+          ))}
+        </div>
       </div>
       <div className={styles.account}>
         <NavLink to="/account" onClick={(e) => holdIfGuarded(e, () => void navigate('/account'))} className={({ isActive }) => `${styles.admin} ${isActive ? styles.adminHere : ''}`}>

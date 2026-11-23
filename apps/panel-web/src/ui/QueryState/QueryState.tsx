@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/ui/Button/Button'
-import { Icon } from '@/ui/Icon/Icon'
+import { Icon, type IconName } from '@/ui/Icon/Icon'
 import styles from '@/ui/QueryState/QueryState.module.css'
 
 export interface QueryFailedProps {
@@ -43,4 +43,15 @@ export function QueryFailedLine({ children, retryLabel, onRetry }: { children: R
       </button>
     </div>
   )
+}
+
+export function EmptyRegistry({ icon, title, body, action, onCreate }: {
+  icon: IconName; title: string; body: string; action: string; onCreate: () => void
+}) {
+  return <section className={styles.emptyPage}>
+    <span className={styles.emptyIcon}><Icon name={icon} /></span>
+    <h2>{title}</h2>
+    <p>{body}</p>
+    <Button variant="primary" size="sm" icon={<Icon name="plus" />} onClick={onCreate}>{action}</Button>
+  </section>
 }

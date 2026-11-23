@@ -25,15 +25,17 @@ export function SubscribersPanel({ form }: { form: CascadeForm }) {
     switch (row.kind) {
       case 'awg':
         return { text: `${words.subAwg}${row.awg31 ? ' · 3.1' : ''}`, note: row.unknown ? words.subAwgFailed : '' }
+      case 'hysteria':
+        return { text: row.country ? words.subVia(draft.name, row.country) : words.subAuto(draft.name), note: row.country ? words.subStandard : words.subTagAuto }
       case 'auto':
         return { text: words.subAuto(draft.name), note: words.subTagAuto }
       case 'direction':
-        return { text: words.subVia(draft.name, row.where), note: words.subTag(row.tag) }
+        return { text: words.subVia(draft.name, row.where), note: form.cascade ? words.subTag(row.tag) : words.subStandard }
       case 'direct':
         return { text: row.name, note: words.subDirect }
     }
   }
-  const hint = draft.pools[0]?.entryProtocol === 'amneziawg' ? words.subHintAwg : draft.directions.length > 1 ? words.subHintMany : words.subHintOne
+  const hint = draft.pools[0]?.entryProtocol === 'amneziawg' ? words.subHintAwg : draft.pools[0]?.entryProtocol === 'hysteria' ? words.subHysteria : draft.directions.length > 1 ? words.subHintMany : words.subHintOne
   return (
     <section className={styles.panel}>
       <h3 className={styles.panelTitle}>{words.subTitle}</h3>
@@ -52,7 +54,7 @@ export function SubscribersPanel({ form }: { form: CascadeForm }) {
           })}
         </ul>
       )}
-      <p className={styles.note}>{hint}</p>
+      {draft.enabled && rows.length > 0 && <p className={styles.note}>{hint}</p>}
     </section>
   )
 }

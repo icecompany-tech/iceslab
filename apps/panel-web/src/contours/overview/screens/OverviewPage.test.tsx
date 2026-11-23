@@ -86,6 +86,17 @@ describe('OverviewPage', () => {
     expect(s.sent.length).toBeGreaterThan(before)
   })
 
+  it('keeps the server and nodes when only traffic fails, then retries', async () => {
+    server({ 'GET /api/dashboard/overview': { body: overview({ traffic: null }) } })
+    renderApp(<OverviewPage />)
+    await screen.findByText('Не удалось загрузить трафик')
+    expect(screen.getByRole('table', { name: 'Ноды' })).toBeTruthy()
+    expect(screen.getByText('Сервер панели')).toBeTruthy()
+    server()
+    await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+    await screen.findByRole('heading', { name: 'Трафик за 24 часа' })
+  })
+
   it('counts from the server: online, active, expiring, nodes', async () => {
     const s = server()
     renderApp(<OverviewPage />)
@@ -129,7 +140,8 @@ describe('OverviewPage', () => {
     server({ 'GET /api/dashboard/overview': { body: { ...empty, traffic: { ...empty.traffic, last24hHourly: [] } } }, 'GET /api/nodes': { body: { nodes: [], total: 0 } } })
     renderApp(<OverviewPage />)
     await screen.findByText(/трафика нет: пусто/)
-    expect(screen.getByText('Нод ещё нет: добавьте первую.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Добавить ноду' }).getAttribute('href')).toBe('/nodes/new')
+    expect(screen.queryByRole('table')).toBeNull()
   })
 
   it('a missing disk or host is unknown, not zero', async () => {

@@ -19,6 +19,7 @@ const DICT = {
     serverVersion: (v: string) => `сервер v${v}`,
     update: (v: string) => `вышла ${v}`,
     updateTitle: 'Открыть заметки выпуска',
+    discordPending: 'Ссылка-приглашение в Discord пока не задана',
     docs: 'Документация',
     support: 'Поддержать',
   },
@@ -29,6 +30,7 @@ const DICT = {
     serverVersion: (v: string) => `server v${v}`,
     update: (v: string) => `${v} is out`,
     updateTitle: 'Open the release notes',
+    discordPending: 'The Discord invite link has not been configured yet',
     docs: 'Documentation',
     support: 'Support the project',
   },
@@ -41,11 +43,13 @@ const link = (value: string | undefined, fallback = '') => {
 
 // A blank link renders nothing: an install shows only the channels it has, a build overrides each
 // with its VITE_* variable (as the old panel, lib/domain/community.ts).
-const GITHUB_URL = link(import.meta.env.VITE_GITHUB_URL, 'https://github.com/icecompany-tech/iceslab')
+const paperReview = import.meta.env.MODE === 'paper-review'
+const projectUrl = 'https://github.com/icecompany-tech/iceslab'
+const GITHUB_URL = link(import.meta.env.VITE_GITHUB_URL, projectUrl)
 const TELEGRAM_URL = link(import.meta.env.VITE_TELEGRAM_URL, 'https://t.me/+XgrJWvUUggxlNGUy')
 const DISCORD_URL = link(import.meta.env.VITE_DISCORD_URL)
-const DOCS_URL = link(import.meta.env.VITE_DOCS_URL)
-const SUPPORT_URL = link(import.meta.env.VITE_SUPPORT_URL)
+const DOCS_URL = link(import.meta.env.VITE_DOCS_URL) || (paperReview ? `${projectUrl}/blob/HEAD/README.ru.md` : '')
+const SUPPORT_URL = link(import.meta.env.VITE_SUPPORT_URL) || (paperReview ? `${projectUrl}#support-the-project` : '')
 
 /** The newest answer among the queries this screen is showing. */
 function useLastChecked(): number | null {
@@ -72,6 +76,7 @@ export function Topbar({ title }: { title: string }) {
   const ago = useLastChecked()
   const version = useQuery({ queryKey: ['system', 'version'], queryFn: () => request('/api/system/version', parseVersion), staleTime: 3_600_000 })
   const stars = version.data?.stars
+  const visibleVersion = paperReview ? __APP_VERSION__.split('+', 1)[0] : __APP_VERSION__
 
   return (
     <header className={styles.topbar}>
@@ -93,8 +98,8 @@ export function Topbar({ title }: { title: string }) {
         </span>
       </div>
       <div className={styles.right}>
-        <span className={styles.chip}>
-          <span className={styles.version}>v{__APP_VERSION__}</span>
+        <span className={`${styles.chip} ${styles.buildVersion}`}>
+          <span className={styles.version} title={__APP_VERSION__}>v{visibleVersion}</span>
         </span>
         {/* F-7: the served build and the server can differ after a half-done update. */}
         {version.data && version.data.current !== __APP_VERSION__ && <span className={`${styles.chip} ${styles.update}`}>{words.serverVersion(version.data.current)}</span>}
@@ -110,8 +115,19 @@ export function Topbar({ title }: { title: string }) {
               <Icon name="telegram" size="xl" />
             </a>
           )}
-          {DISCORD_URL && (
-            <a className={`${styles.chip} ${styles.square} ${styles.discord}`} href={DISCORD_URL} target="_blank" rel="noreferrer" aria-label="Discord">
+          {(DISCORD_URL || paperReview) && (
+            <a
+              className={`${styles.chip} ${styles.square} ${styles.discord}`}
+              href={DISCORD_URL || undefined}
+              role={DISCORD_URL ? undefined : 'link'}
+              aria-disabled={DISCORD_URL ? undefined : true}
+              tabIndex={DISCORD_URL ? undefined : 0}
+              title={DISCORD_URL ? 'Discord' : words.discordPending}
+              aria-description={DISCORD_URL ? undefined : words.discordPending}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Discord"
+            >
               <Icon name="discord" size="xl" />
             </a>
           )}
@@ -127,7 +143,7 @@ export function Topbar({ title }: { title: string }) {
             </a>
           )}
           {DOCS_URL && (
-            <a className={`${styles.chip} ${styles.square} ${styles.docs}`} href={DOCS_URL} target="_blank" rel="noreferrer" aria-label={words.docs}>
+            <a className={`${styles.chip} ${styles.square}`} href={DOCS_URL} target="_blank" rel="noreferrer" aria-label={words.docs}>
               <Icon name="book" size="xl" />
             </a>
           )}

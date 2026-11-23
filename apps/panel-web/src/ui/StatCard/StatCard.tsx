@@ -19,7 +19,7 @@ export function StatCard({ label, icon, aside, value, valueNote, size = 'stat', 
     <section className={styles.card}>
       <div className={styles.head}>
         <h3 className={styles.label}>{label}</h3>
-        {aside !== undefined ? <span className={styles.aside}>{aside}</span> : <Icon name={icon} size="lg" />}
+        {aside !== undefined ? <span className={styles.aside}>{aside}</span> : <Icon name={icon} size={size === 'stat' ? 'xl' : 'lg'} />}
       </div>
       <div className={size === 'stat' ? styles.stat : styles.metric}>
         {value}

@@ -10,7 +10,7 @@ import { statusWord, subscriptionUrl, type User } from '@/contours/users/lib/use
 import { useNow } from '@/lib/clock'
 import type { NodeRow } from '@/lib/domain/nodes'
 import type { Squad } from '@/lib/domain/squads'
-import { fmtAge, fmtBytes, fmtDate, fmtDateTime, fmtPercent } from '@/lib/format'
+import { fmtAge, fmtBytes, fmtDate, fmtDateTime, fmtNumber, fmtPercent } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { Check } from '@/ui/Check/Check'
 import { Flag } from '@/ui/Flag/Flag'
@@ -24,6 +24,7 @@ export type Density = 'compact' | 'normal' | 'relaxed'
 const SOON_DAYS = 7
 /** The users table has no red bar: above 60% amber. The node card keeps 60/85 (DSGN, rows). */
 const AMBER_FROM = 60
+const GiB = 1024 ** 3
 const MIN_WIDTH = 48
 /** The column that takes the window's spare width; the rest keep theirs. */
 const STRETCH: ColumnId = 'username'
@@ -97,9 +98,13 @@ function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableC
     }
     case 'used': {
       const percent = user.trafficLimitBytes ? (user.trafficUsedBytes / user.trafficLimitBytes) * 100 : null
+      const bytes = user.trafficUsedBytes
+      const used = bytes === 0 || (bytes >= GiB && bytes < 1024 * GiB)
+        ? `${fmtNumber(bytes / GiB, locale, 1)} ${words.gb}`
+        : fmtBytes(bytes, locale)
       return (
         <span className={styles.usedCell}>
-          <span className={user.status === 'disabled' ? styles.muted : ''}>{fmtBytes(user.trafficUsedBytes, locale)}</span>
+          <span className={user.status === 'disabled' ? styles.muted : ''}>{used}</span>
           {percent === null ? <span className={styles.noMeter} /> : <Meter percent={percent} tone={percent > AMBER_FROM ? 'amber' : 'accent'} />}
         </span>
       )
@@ -218,8 +223,10 @@ export function UsersTable({ layout, list, users, context, selection, actions, e
     if (!root) return
     const paint = () => {
       root.style.setProperty('--row-width', `${root.offsetWidth}px`)
+      let columnStart = 0
       for (const th of root.querySelectorAll<HTMLElement>('thead th[data-col]')) {
-        for (const el of root.querySelectorAll<HTMLElement>(`tbody [data-col="${th.dataset.col}"]`)) el.style.setProperty('--cell-x', `${-th.offsetLeft}px`)
+        for (const el of root.querySelectorAll<HTMLElement>(`tbody [data-col="${th.dataset.col}"]`)) el.style.setProperty('--cell-x', `${-columnStart}px`)
+        columnStart += th.getBoundingClientRect().width
       }
     }
     paint()

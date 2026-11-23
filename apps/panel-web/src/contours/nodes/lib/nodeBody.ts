@@ -36,7 +36,7 @@ export function draftOfNode(node: Node): NodeDraft {
     regionId: node.regionId ?? '',
     domain: node.domain ?? '',
     multiplier: multiplierInput(node.consumptionMultiplier, true),
-    maxUsers: node.maxUsers === null ? '' : String(node.maxUsers),
+    maxUsers: String(node.maxUsers ?? ''),
     policyId: node.policyId ?? '',
     coreVersions: { ...(node.coreVersions ?? {}) },
   }

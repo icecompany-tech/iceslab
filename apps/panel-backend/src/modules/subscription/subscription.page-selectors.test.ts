@@ -35,6 +35,13 @@ function page(overrides: Partial<SubscriptionPageData> = {}): Document {
   return dom.window.document;
 }
 
+it('shows the reason and support without offering a revoked address for reuse', () => {
+  const doc = page({ lang: 'ru', supportUrl: 'https://support.example.invalid', user: { username: 'adm', status: 'revoked', expireAt: null, trafficLimitBytes: null, trafficUsedBytes: 0 } });
+  expect(doc.querySelector('h1')?.textContent).toBe('Эта ссылка больше не работает');
+  expect(doc.querySelector('.support')?.getAttribute('href')).toBe('https://support.example.invalid');
+  expect(doc.querySelector('#copy-inline, #url, script')).toBeNull();
+});
+
 const click = (el: Element | null) => {
   expect(el, 'element to click').not.toBeNull();
   el!.dispatchEvent(new el!.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true }));

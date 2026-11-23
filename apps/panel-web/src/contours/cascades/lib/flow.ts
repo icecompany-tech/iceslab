@@ -16,7 +16,7 @@ export interface FlowInput {
   directions: readonly DirectionDraft[]
   enabled: boolean
   autoProfile: boolean
-  nodeById: ReadonlyMap<string, Pick<Node, 'name' | 'status'>>
+  nodeById: ReadonlyMap<string, Pick<Node, 'name' | 'status' | 'address' | 'countryCode' | 'cores' | 'lastStatusMessage'>>
   /** Null: the list did not arrive, so a missing name is unknown, not gone. */
   outboundById: ReadonlyMap<string, NamedOutbound> | null
   hops?: readonly CascadeHopStatus[]
@@ -28,15 +28,18 @@ const AUTO_ENTRIES: readonly string[] = ['hysteria', 'amneziawg']
 function pointOf(id: string, input: FlowInput, inBalancer: boolean, words: Words): FlowNode {
   const node = input.nodeById.get(id)
   if (!node) return { key: id, name: words.nodeGone(id.slice(0, 8)), dot: 'failed' }
-  if (!input.enabled) return { key: id, name: node.name, dot: 'off' }
+  const version = node.cores?.cores.find(c => c.version && c.installed !== false)
+  const info = { key: id, name: node.name, address: node.address, country: node.countryCode, version: version ? [version.engine ?? version.name, version.version].join(' ') : undefined }
+  if (!input.enabled) return { ...info, dot: 'off' }
   const hop = input.hops?.find((h) => h.nodeId === id)
   const health = nodeHealth(node.status)
   // A node that does not answer has refused nothing: "fetch failed" is a lost link, not the core's word.
-  if (health === 'problem' || hop?.online === false) return { key: id, name: node.name, dot: 'down', note: inBalancer ? words.balancerSkips : words.noAnswer }
+  if (node.status === 'unreachable' || node.status === 'offline' || hop?.online === false) return { ...info, dot: 'down', note: inBalancer ? words.balancerSkips : words.noAnswer }
   const broken = hop ? hopBroken(hop) : null
-  if (broken) return { key: id, name: node.name, dot: 'failed', note: words.coreRefused(broken) }
-  if (health === 'ok') return { key: id, name: node.name, dot: 'ok' }
-  return { key: id, name: node.name, dot: 'unknown', note: words.unverified }
+  if (broken) return { ...info, dot: 'failed', note: words.coreRefused(broken) }
+  if (health === 'problem') return { ...info, dot: 'failed', note: node.lastStatusMessage || words.issue }
+  if (health === 'ok') return { ...info, dot: 'ok', note: words.online }
+  return { ...info, dot: 'unknown', note: words.unverified }
 }
 
 const empty = (key: string, name: string): FlowNode => ({ key, name, dot: 'empty' })
@@ -84,7 +87,7 @@ function exitColumn(input: FlowInput, words: Words): FlowColumn {
       return {
         key: `d${d.key}`,
         code: d.countryCode || null,
-        title: d.tag === null ? words.flowDirectionNew : words.tagOf(d.tag),
+        ...(d.tag !== null ? { title: d.tag.toString(16).padStart(4, '0') } : d.countryCode || ids.length || d.outboundId ? { title: words.flowDirectionNew } : {}),
         ...(balanced ? { balancer: words.balancer } : {}),
         nodes: onOutbound ? [outboundPoint(d, input, words)] : ids.length > 0 ? ids.map((id) => pointOf(id, input, balanced, words)) : [empty(`e${i}`, words.directionNoNodes)],
       }
@@ -130,5 +133,5 @@ export function buildFlow(input: FlowInput, words: Words): { columns: FlowColumn
 
 /** The path as one line, for the list. */
 export function pathLine(columns: readonly FlowColumn[]): string {
-  return columns.map((c) => c.groups.map((g) => (g.title && g.code ? g.code : g.nodes.map((n) => n.name).join(', '))).join(', ')).join(' → ')
+  return columns.map((c) => c.groups.map((g) => ([g.code, g.nodes.map((n) => n.name).join(', ')].filter(Boolean).join(' '))).join(', ')).join(' → ')
 }

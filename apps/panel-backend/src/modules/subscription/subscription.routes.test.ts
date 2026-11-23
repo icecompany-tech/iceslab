@@ -647,6 +647,18 @@ describe('a subscription that is not in force', () => {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
   };
 
+  it('serves an unknown link as a 404 page for the browser and JSON for a subscription client', async () => {
+    const path = '/sub/nonexistent-review-subscription';
+    const page = await app.inject({ method: 'GET', url: path + '?lang=ru', headers: browser });
+    expect(page.statusCode).toBe(404);
+    expect(page.headers['referrer-policy']).toBe('no-referrer');
+    expect(page.body).toContain('Такой ссылки нет');
+    expect(page.body).not.toContain('nonexistent-review-subscription');
+    const client = await app.inject({ method: 'GET', url: path + '?format=plain', headers: browser });
+    expect(client.statusCode).toBe(404);
+    expect(client.json().error).toBe('NOT_FOUND');
+  });
+
   it('shows the page, and still answers 403', async () => {
     const user = await createUser('lapsed');
     await createNode('lapsed-n', '10.0.0.31:8443');

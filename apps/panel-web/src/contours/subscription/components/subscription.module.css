@@ -37,6 +37,13 @@
   align-items: start;
 }
 
+.deliveryColumns {
+  width: 100%;
+  max-width: var(--size-center);
+  grid-template-columns: minmax(0, 696fr) minmax(0, 372fr);
+  gap: var(--spacing-5);
+}
+
 .left,
 .right {
   display: flex;

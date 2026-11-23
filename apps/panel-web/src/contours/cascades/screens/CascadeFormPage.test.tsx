@@ -83,7 +83,7 @@ describe('CascadeFormPage', () => {
     page()
     const save = await saveLive()
     expect(save.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText(/Название/), { target: { value: 'a5' } })
+    fireEvent.change(screen.getByLabelText(/Имя/), { target: { value: 'a5' } })
     await waitFor(() => expect(save.disabled).toBe(false))
     await userEvent.click(save)
     await waitFor(() => expect(s.writes()).toEqual([{ method: 'PUT', path: '/api/cascades/c1', body: { name: 'a5' } }]))
@@ -156,7 +156,7 @@ describe('CascadeFormPage', () => {
   it('a node in another enabled cascade names it with the way there', async () => {
     server({ 'PUT /api/cascades/c1': { status: 409, body: { error: 'NODE_IN_OTHER_CASCADE', nodeName: 'de-01', cascadeId: 'c2', cascadeName: 'other' } } })
     page()
-    fireEvent.change(await screen.findByLabelText(/Название/), { target: { value: 'a5' } })
+    fireEvent.change(await screen.findByLabelText(/Имя/), { target: { value: 'a5' } })
     await userEvent.click(await saveLive())
     await screen.findByText(/Нода de-01 уже во включённом каскаде «other»/)
     expect(screen.getByRole('link', { name: 'Открыть тот каскад' }).getAttribute('href')).toBe('/cascades/c2')
@@ -165,11 +165,12 @@ describe('CascadeFormPage', () => {
   it('a create sends the whole shape and goes to the new cascade', async () => {
     const s = server({ 'POST /api/cascades': { body: cascade({ id: 'c1' }) } })
     page('/cascades/new')
-    const save = (await screen.findByRole('button', { name: 'Создать каскад' })) as HTMLButtonElement
+    const save = (await screen.findByRole('button', { name: 'Создать' })) as HTMLButtonElement
     expect(save.disabled).toBe(true)
-    await screen.findByText('Дайте каскаду название.')
-    fireEvent.change(screen.getByLabelText(/Название/), { target: { value: 'eu-mix' } })
-    fireEvent.change(screen.getByLabelText('Нода'), { target: { value: 'n1' } })
+    expect(screen.getByRole('button', { name: /^Вход/ }).getAttribute('aria-expanded')).toBe('false')
+    fireEvent.change(screen.getByLabelText(/Имя/), { target: { value: 'eu-mix' } })
+    await userEvent.click(screen.getByRole('button', { name: /^Вход/ }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'de-01' }))
     await userEvent.click(screen.getByRole('button', { name: /Выход/ }))
     fireEvent.change(screen.getByLabelText(/Страна/), { target: { value: 'SE' } })
     fireEvent.change(screen.getByLabelText('Нода'), { target: { value: 'n2' } })

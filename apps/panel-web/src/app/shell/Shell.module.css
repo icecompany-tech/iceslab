@@ -1,4 +1,4 @@
-/* Paper AS2-0: the frame is the viewport, clipped; the menu and the rail stand still and only the center scrolls. */
+/* Paper AS2-0: the frame is the viewport, clipped; the menu and center scroll independently inside the frame. */
 .shell {
   display: flex;
   flex-direction: column;

@@ -121,10 +121,10 @@ export function pageScript(o: PageScriptOpts): string {
         };
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(SUB_URL).then(done).catch(function () {
-            if (i) { i.select(); document.execCommand('copy'); }
+            if (i) { var box = i.closest('details'); if (box) box.open = true; i.select(); document.execCommand('copy'); }
             done();
           });
-        } else if (i) { i.select(); document.execCommand('copy'); done(); }
+        } else if (i) { var box = i.closest('details'); if (box) box.open = true; i.select(); if (document.execCommand('copy')) done(); }
         else { done(); }
       });
     }
@@ -134,8 +134,9 @@ export function pageScript(o: PageScriptOpts): string {
     if (b2 && i) {
       b2.addEventListener('click', function () {
         i.select();
-        var o = b2.textContent;
-        var done = function () { b2.textContent = ${JSON.stringify(o.copied)}; setTimeout(function () { b2.textContent = o; }, 1500); };
+        var label = b2.querySelector('span') || b2;
+        var o = label.textContent;
+        var done = function () { label.textContent = ${JSON.stringify(o.copied)}; setTimeout(function () { label.textContent = o; }, 1500); };
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(SUB_URL).then(done).catch(function () { document.execCommand('copy'); done(); });
         } else { document.execCommand('copy'); done(); }

@@ -10,7 +10,8 @@ import { failureText } from '@/lib/net/messages'
 import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
 import { Icon } from '@/ui/Icon/Icon'
-import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
+import { EmptyRegistry, QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
+import { Popover } from '@/ui/Popover/Popover'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import { Select } from '@/ui/Select/Select'
 
@@ -47,6 +48,7 @@ export default function ProfilesPage() {
   const shown = all.filter((p) => (protocol === '' || p.protocol === protocol) && (!noHostsOnly || countOf(p.id) === 0) && (needle === '' || `${p.name} ${p.description ?? ''}`.toLowerCase().includes(needle)))
   const protocols = [...new Set(all.map((p) => p.protocol))]
 
+  if (profiles.data && all.length === 0) return <EmptyRegistry icon="profiles" title={words.emptyTitle} body={words.emptyBody} action={words.emptyCreate} onCreate={() => void navigate('/profiles/new')} />
   return (
     <div className={styles.page}>
       <div className={styles.toolbar}>
@@ -55,6 +57,10 @@ export default function ProfilesPage() {
           <Chip label={words.noHosts} count={without} dot="unknown" active={noHostsOnly} onClick={() => setNoHostsOnly(true)} />
         </div>
         <div className={styles.chips}>
+          <input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Popover align="end" trigger={(props) => <Button {...props}>{words.filters}{protocol && ` · ${protocol}`}</Button>}>
+            <Select look="filter" aria-label={words.protocolFilter} value={protocol} onChange={(e) => setProtocol(e.target.value)} options={[{ value: '', label: words.anyProtocol }, ...protocols.map((p) => ({ value: p, label: p }))]} />
+          </Popover>
           <Segmented<View> label={words.viewLabel} value={view} onChange={setView} options={[{ value: 'cards', label: words.views.cards }, { value: 'list', label: words.views.list }]} />
           <Link className={styles.linkPrimary} to="/profiles/new">
             <Icon name="plus" size="md" />
@@ -62,22 +68,8 @@ export default function ProfilesPage() {
           </Link>
         </div>
       </div>
-      <div className={styles.filters}>
-        <input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={(e) => setSearch(e.target.value)} />
-        <Select look="filter" aria-label={words.protocolFilter} value={protocol} onChange={(e) => setProtocol(e.target.value)} options={[{ value: '', label: words.anyProtocol }, ...protocols.map((p) => ({ value: p, label: p }))]} />
-      </div>
       {profiles.isPending && <QueryLoading label={words.loading} />}
       {profiles.isError && <QueryFailed title={words.failedTitle} body={failureText(profiles.error, locale)} retryLabel={words.retry} onRetry={() => void profiles.refetch()} />}
-      {profiles.data && all.length === 0 && (
-        <div className={styles.empty}>
-          <h2 className={styles.emptyTitle}>{words.emptyTitle}</h2>
-          <p>{words.emptyBody}</p>
-          <Button variant="primary" onClick={() => void navigate('/profiles/new?from=recipe')}>
-            {words.emptyFromRecipe}
-          </Button>
-          <Button onClick={() => void navigate('/profiles/new')}>{words.create}</Button>
-        </div>
-      )}
       {profiles.data && all.length > 0 && shown.length === 0 && <div className={styles.empty}>{words.emptyFiltered}</div>}
       {shown.length > 0 && view === 'cards' && (
         <div className={styles.cards}>
@@ -114,7 +106,7 @@ export default function ProfilesPage() {
               {shown.map((p) => (
                 <tr key={p.id} className={styles.row} onClick={() => void navigate(`/profiles/${p.id}`)}>
                   <td>
-                    <b>{p.name}</b>
+                    <Link className={styles.link} to={`/profiles/${p.id}`} onClick={(event) => event.stopPropagation()}>{p.name}</Link>
                   </td>
                   <td>{p.protocol}</td>
                   <td>{engineLabel(p.effectiveEngine ?? p.engine ?? p.protocol)}</td>

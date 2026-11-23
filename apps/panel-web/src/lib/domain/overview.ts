@@ -10,19 +10,26 @@ const parseNodeMetrics = obj({
   uptimeSeconds: num,
 })
 
+const parseTraffic = obj({
+  todayBytes: num,
+  yesterdayBytes: num,
+  last7dBytes: num,
+  prev7dBytes: num,
+  last30dBytes: num,
+  prev30dBytes: num,
+  calendarMonthBytes: num,
+  currentYearBytes: num,
+  last24hHourly: arr(obj({ hour: str, bytes: num })),
+  monthlyDirections: optional(obj({ toUsers: num, fromUsers: num })),
+  dailyComparison: optional(arr(obj({ date: str, bytes: num, previousBytes: num }))),
+})
+
 export const parseOverview = obj({
   users: obj({ total: num, byStatus: record(num), onlineNow: num, onlineToday: num }),
-  traffic: obj({
-    todayBytes: num,
-    yesterdayBytes: num,
-    last7dBytes: num,
-    prev7dBytes: num,
-    last30dBytes: num,
-    prev30dBytes: num,
-    calendarMonthBytes: num,
-    currentYearBytes: num,
-    last24hHourly: arr(obj({ hour: str, bytes: num })),
-  }),
+  traffic: (value: unknown) => {
+    // Traffic can fail independently of the usable fleet and user sections.
+    try { return parseTraffic(value) } catch { return null }
+  },
   system: obj({ onlineNodeCount: num, totalNodeCount: num }),
   inventory: obj({ profileCount: num, squadCount: num, hostCount: num }),
   host: maybe(

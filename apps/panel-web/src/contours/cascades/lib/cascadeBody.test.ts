@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cascadeCreateBody, cascadeUpdateBody, isUntouched } from '@/contours/cascades/lib/cascadeBody'
 import { appendPosition, movePosition, withUnderlay } from '@/contours/cascades/lib/cascadeForm'
-import { draftOfCascade, newDraft, type CascadeDraft } from '@/contours/cascades/lib/draft'
+import { draftOfCascade, newDraft, subscriberRows, type CascadeDraft } from '@/contours/cascades/lib/draft'
 import type { Cascade } from '@/lib/old/cascades'
 
 const cascade = (over: Partial<Cascade> = {}): Cascade => ({
@@ -98,6 +98,10 @@ describe('cascadeUpdateBody', () => {
 })
 
 describe('cascadeCreateBody', () => {
+  it('preserves an explicitly selected Auto subscription on creation', () => {
+    expect(cascadeCreateBody({ ...newDraft(true), autoProfile: true }).autoProfile).toBe(true)
+  })
+
   it('a policy goes only where it acts, xray entries pick their own', () => {
     const draft: CascadeDraft = { ...newDraft(true), name: 'n', entryPolicyId: 'p' }
     expect(cascadeCreateBody(draft)).not.toHaveProperty('entryPolicyId')
@@ -109,5 +113,19 @@ describe('cascadeCreateBody', () => {
     const body = cascadeCreateBody({ ...draft, name: 'n', pools: draft.pools.map((p) => ({ ...p, nodeIds: ['', 'a'] })), directions: draft.directions.map((d) => ({ ...d, countryCode: 'DE', nodeIds: ['b', ''] })) })
     expect(body.positions[0]?.nodeIds).toEqual(['a'])
     expect(body.directions[0]?.nodeIds).toEqual(['b'])
+  })
+})
+
+describe('Hysteria subscription preview', () => {
+  it('uses the country for one exit and a single Auto line for several exits, including when the xray Auto option is off', () => {
+    const draft = stored()
+    const entry = draft.pools[0]!
+    entry.entryProtocol = 'hysteria'
+    const rows = () => subscriberRows(draft, () => undefined, { awg31: undefined, failed: false })
+    expect(rows()).toEqual([{ kind: 'hysteria', country: 'DE' }])
+    draft.directions.push({ ...draft.directions[0]!, key: 4, countryCode: 'NL', nodeIds: ['n3'] })
+    expect(rows()).toEqual([{ kind: 'hysteria', country: null }])
+    entry.nodeIds = []
+    expect(rows()).toEqual([])
   })
 })

@@ -1,0 +1,211 @@
+.page,
+.stack,
+.card {
+  display: grid;
+  gap: var(--spacing-4);
+  min-width: 0;
+}
+.page {
+  gap: var(--spacing-5);
+}
+.toolbar,
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+.toolbar {
+  min-height: var(--size-row);
+}
+.search {
+  width: var(--size-menu);
+  margin-inline-start: auto;
+}
+.registry,
+.card,
+.empty,
+.metric {
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.registry {
+  overflow: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.table td,
+.table th {
+  padding: var(--spacing-2) var(--spacing-3);
+  text-align: left;
+  border-bottom: var(--border-hairline) solid var(--color-border);
+}
+.table td {
+  height: var(--size-user-row);
+}
+.table th {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+}
+.table tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover {
+  background: var(--color-row-hover);
+}
+.table small,
+.muted {
+  color: var(--color-text-muted);
+}
+.table small {
+  display: block;
+}
+.note,
+.card,
+.metric {
+  padding: var(--spacing-4) var(--spacing-5);
+}
+.note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.empty {
+  padding: var(--spacing-12);
+  text-align: center;
+}
+.empty h2,
+.card h2,
+.card h3,
+.page h1,
+.card p {
+  margin: 0;
+}
+.page h1 {
+  font-size: var(--text-xl);
+}
+.card h2 {
+  font-size: var(--text-lg);
+}
+.card h3 {
+  font-size: var(--text-base);
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.87fr) minmax(0, 1fr);
+  gap: var(--spacing-5);
+  max-width: var(--size-center);
+  align-items: start;
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(var(--size-col-engines), 1fr) minmax(0, 2.9fr);
+  gap: var(--spacing-5);
+  align-items: start;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-col-engines)), 1fr));
+  gap: var(--spacing-4);
+}
+.metric {
+  padding: var(--spacing-3-5) var(--spacing-4);
+}
+.metric strong {
+  display: block;
+  font-size: var(--text-stat);
+  line-height: var(--leading-stat);
+  font-weight: var(--font-weight-semibold);
+}
+.metric span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.push {
+  margin-inline-start: auto;
+}
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.control {
+  display: block;
+  width: 100%;
+  padding: var(--spacing-2);
+  border: var(--border-hairline) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: inherit;
+  font-size: inherit;
+}
+.plotBox {
+  gap: var(--spacing-2-5);
+  padding-block: var(--spacing-4) var(--size-check-lg);
+}
+.plotBox h2 {
+  font-size: var(--text-base);
+}
+.plot {
+  display: block;
+  width: 100%;
+  height: var(--size-review-http-plot);
+}
+.plotTotal {
+  fill: var(--color-accent);
+}
+.plotErrors {
+  fill: var(--color-danger);
+}
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.legend::before {
+  content: '';
+  width: var(--size-dot-sm);
+  height: var(--size-dot-sm);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+}
+.errorLegend::before {
+  background: var(--color-danger);
+}
+.ticks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-hint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.metric:last-child strong {
+  color: var(--color-danger);
+}
+.queues td {
+  height: var(--size-topbar);
+}
+
+.detail {
+  padding: var(--spacing-4);
+  background: var(--color-surface-raised);
+  white-space: pre-wrap;
+}
+
+.failureIcon {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
+}

@@ -6,15 +6,15 @@ export interface PopoverProps {
   trigger: (props: { 'aria-expanded': boolean; onClick: () => void }) => ReactNode
   align?: 'start' | 'end'
   /**
-   * menu: 6 under the trigger. sheet (ui/ColumnsPanel): radius lg, the deeper shadow, no gap.
+   * menu: 6 under the trigger. sheet (ui/ColumnsPanel): radius lg, the deeper shadow, 1 px gap.
    * field (ui/Popover/срок): 5 under a column filter, the deeper shadow.
    */
   look?: 'menu' | 'sheet' | 'field'
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
-// As drawn: a sheet hangs from its button's bottom edge, a filter's box sits 5 under the field.
-const GAPS = { menu: 6, sheet: 0, field: 5 } as const
+// As drawn: a sheet hangs just below its button, a filter's box sits 5 under the field.
+const GAPS = { menu: 6, sheet: 1, field: 5 } as const
 const MARGIN = 8
 
 /** A calendar or a list that a field inside the box opens lives in its own layer: a press there is not «outside». */

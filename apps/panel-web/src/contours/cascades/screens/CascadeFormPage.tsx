@@ -22,6 +22,7 @@ import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
 import { CascadeFlow } from '@/ui/CascadeFlow/CascadeFlow'
 import { Field, Input } from '@/ui/Field/Field'
+import { Icon } from '@/ui/Icon/Icon'
 import { HopMeter } from '@/ui/HopMeter/HopMeter'
 import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
 import { Step } from '@/ui/Step/Step'
@@ -91,17 +92,17 @@ function Steps({ form }: { form: CascadeForm }) {
   const { draft, refusal } = form
   const step = (id: StepId) => ({ open: form.open === id, onToggle: () => form.toggleStep(id) })
   const refusedAt = (kinds: readonly string[]) => (refusal && kinds.includes(refusal.kind) ? <span className={styles.danger}>{words.refusalTop(refusalCount(refusal))}</span> : null)
-  const entryNames = form.entryIds.map(form.nodeName).join(', ') || words.pendingEntry
-  const countries = draft.directions.map((d) => d.countryCode).filter(Boolean).join(', ') || words.directionNoNodes
+  const entryNames = form.entryIds.map(form.nodeName).join(', ')
+  const countries = draft.directions.map((d) => d.countryCode).filter(Boolean).join(', ') || words.notPicked
   const legs = draft.pools.length + draft.directions.filter((d) => !directionEmpty(d)).length - 1
   const served = draft.directions.filter((d) => !directionEmpty(d)).length
   const exitNames = draft.directions.flatMap((d) => d.nodeIds).filter(Boolean).map(form.nodeName).join(', ')
   return (
     <>
-      <Step title={words.stepEntry} value={refusedAt(['entryChain', 'policyGone']) ?? `${entryNames} · ${draft.pools[0]?.entryProtocol ?? ''}`} {...step('entry')}>
+      <Step title={words.stepEntry} value={refusedAt(['entryChain', 'policyGone']) ?? (entryNames ? `${entryNames}, ${draft.pools[0]?.entryProtocol ?? ''}` : words.notPicked)} {...step('entry')}>
         <EntryStep form={form} />
       </Step>
-      <Step optional title={words.stepTransit} value={draft.pools.length > 1 ? words.summaryHops(draft.pools.length - 1) : words.summaryNone} {...step('transit')}>
+      <Step optional title={words.stepTransit} value={draft.pools.length > 1 ? words.summaryHops(draft.pools.length - 1) : words.noTransitSummary} {...step('transit')}>
         <TransitStep form={form} />
       </Step>
       <Step title={words.stepExit} value={refusedAt(['direction', 'tags']) ?? countries} {...step('exit')}>
@@ -112,6 +113,7 @@ function Steps({ form }: { form: CascadeForm }) {
       </Step>
       <Step optional title={words.stepSubscription} value={draft.autoProfile ? words.summaryOn : words.summaryOff} {...step('subscription')}>
         <div className={styles.switches}>
+          {form.cascade === null && <Switch label={words.stateLabel} checked={draft.enabled} onChange={enabled => form.patch({enabled})} />}
           <Switch label={words.hideHops} checked={draft.hideHops} onChange={(hideHops) => form.patch({ hideHops })} />
           <p className={styles.note}>{exitNames ? words.hideHopsNamed(exitNames) : words.hideHopsHint}</p>
           <Switch label={words.autoProfile} checked={draft.autoProfile} disabled={served < 2} onChange={(autoProfile) => form.patch({ autoProfile })} />
@@ -131,17 +133,15 @@ function Form({ cascade, cascades, fields, nodes }: Parameters<typeof useCascade
   const status = useCascadeStatus(cascade?.id ?? '', cascade !== null && cascade.enabled)
   const push = cascadeStatusView(status.data)
   const flow = buildFlow({ pools: draft.pools, directions: draft.directions, enabled: draft.enabled, autoProfile: draft.autoProfile, nodeById: form.nodeById, outboundById: form.outbounds.data ? new Map(form.outbounds.data.outbounds.map((o) => [o.id, o])) : null, ...(status.data ? { hops: status.data.hops } : {}) }, words)
-  const hops = draft.pools.length + 1
-  const saveWord = cascade === null ? words.saveNew : draft.enabled ? words.saveLive : words.saveOff
+  const hops = draft.pools.filter(pool => pool.nodeIds.some(Boolean)).length + Number(draft.directions.some(d => !directionEmpty(d)))
+  const saveWord = cascade === null ? words.create : draft.enabled ? words.saveLive : words.saveOff
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.formPage}`}>
       <div className={styles.toolbar}>
         <div className={styles.chips}>
-          <Link className={styles.link} to="/cascades">
-            {words.crumbs}
-          </Link>
+          <Link className={styles.back} to="/cascades" aria-label={words.crumbs} title={words.crumbs}><Icon name="chevronLeft" /></Link>
           <h1 className={styles.pageTitle}>{cascade?.name ?? words.newTitle}</h1>
-          <HopMeter count={hops} max={MAX_POSITIONS} label={words.hopMeter(hops, MAX_POSITIONS)} />
+          <span className={styles.note}>{words.formHint}</span>
         </div>
         <div className={styles.actions}>
           {!form.untouched && cascade !== null && <span className={styles.amber}>{words.unsaved}</span>}
@@ -150,27 +150,30 @@ function Form({ cascade, cascades, fields, nodes }: Parameters<typeof useCascade
               {words.deleteAction}
             </Button>
           )}
-          <Button onClick={() => void navigate('/cascades')}>{words.cancel}</Button>
-          <Button variant="primary" loading={form.saving} disabled={form.blocker !== null || form.untouched} onClick={form.save}>
+          <Button size="md" onClick={() => void navigate('/cascades')}>{words.cancel}</Button>
+          <Button size="md" icon={cascade === null ? <Icon name="plus" /> : undefined} variant="primary" loading={form.saving} disabled={form.blocker !== null || form.untouched} onClick={form.save}>
             {saveWord}
           </Button>
         </div>
       </div>
-      {form.blocker && !form.untouched && <p className={styles.amber}>{blockerWords(form.blocker, words)}</p>}
+
       <RefusalTop form={form} />
       {push.kind === 'broken' && <Banner tone="danger" title={words.brokenBanner}>{push.broken}</Banner>}
       {cascade !== null && !draft.enabled && <Banner tone="info">{words.offNote}</Banner>}
-      <section className={styles.panel}>
+      <section className={styles.scheme}>
+        <header><h2>{words.scheme}</h2><HopMeter count={hops} max={MAX_POSITIONS} label={words.hopMeter(hops, MAX_POSITIONS)} /><small>{words.chainHint}</small></header>
         <CascadeFlow label={words.flowLabel(draft.name)} columns={flow.columns} links={flow.links} {...(flow.legend ? { legend: flow.legend } : {})} />
       </section>
       <div className={styles.columns}>
         <div className={styles.left}>
           <section className={styles.panel}>
+            <h2 className={styles.panelTitle}>{words.basics}</h2>
             <Field label={words.name} hint={words.nameHint}>{(a11y) => <Input {...a11y} autoFocus={cascade === null} value={draft.name} onChange={(e) => form.patch({ name: e.target.value })} />}</Field>
-            <Switch label={words.stateLabel} checked={draft.enabled} onChange={(enabled) => form.patch({ enabled })} />
-            <p className={styles.note}>{words.stateHint}</p>
+            {cascade !== null && <><Switch label={words.stateLabel} checked={draft.enabled} onChange={(enabled) => form.patch({ enabled })} />
+            <p className={styles.note}>{words.stateHint}</p></>}
           </section>
-          <Steps form={form} />
+          <section className={styles.chainSteps}><header><h2>{words.chainTitle}</h2><p className={styles.note}>{words.chainHelp}</p></header><Steps form={form} /></section>
+          {form.blocker && draft.name.trim() && !form.untouched && <p className={styles.formBlocker}>{blockerWords(form.blocker, words)}</p>}
         </div>
         <div className={styles.right}>
           <SubscribersPanel form={form} />

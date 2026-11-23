@@ -21,7 +21,7 @@ import { buildOutlineJson, outlineAccessKey } from './formats/outline.js';
 import { buildSurgeConf } from './formats/surge.js';
 import { buildQuantumultXConf } from './formats/quantumultx.js';
 import { buildLoonConf } from './formats/loon.js';
-import { buildSubscriptionPage } from './subscription.page.js';
+import { buildSubscriptionPage, missingSubscriptionPage } from './subscription.page.js';
 import { subscriptionUrl } from './subscription.link.js';
 import { linkWithDescription } from './subscription.description.js';
 import { endpointsForFormat, isPlainXray, withoutDescription, type SubscriptionEndpoint } from './subscription.formats.js';
@@ -1106,6 +1106,15 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
       }
     } catch (err) {
       if (err instanceof service.SubscriptionNotFoundError) {
+        if (wantsHtmlPage(query, (request.headers.accept ?? '').toString())) {
+          const settings = await getSubscriptionSettings();
+          const html = missingSubscriptionPage({
+            brandTitle: settings.profileTitle ?? settings.brandName ?? 'Iceslab',
+            lang: query.lang ?? settings.defaultLocale ?? pickLang(request.headers['accept-language'] as string | undefined),
+            supportUrl: settings.supportUrl,
+          });
+          return reply.code(404).type('text/html; charset=utf-8').header('referrer-policy','no-referrer').send(html);
+        }
         return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
       }
       if (err instanceof service.SubscriptionForbiddenError) {

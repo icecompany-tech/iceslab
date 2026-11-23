@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { FilterParam, UserSort } from '@/contours/users/lib/columns'
+import { expiringWeek } from '@/lib/domain/expiringUsers'
 import { useNow } from '@/lib/clock'
 
 export type StatusFilter = 'all' | 'active' | 'expired' | 'limited' | 'disabled'
 
 const SEARCH_WAIT_MS = 300
-const WEEK_MS = 7 * 86_400_000
 export const PAGE_SIZES = [10, 25, 50, 100, 500] as const
 
 export function useListState() {
   const [url] = useSearchParams()
   const now = useNow()
-  const [status, setStatus] = useState<StatusFilter>('all')
+  const [status, setStatus] = useState<StatusFilter>(() => url.get('filter') === 'expiring' ? 'active' : 'all')
   const [searchText, setSearchText] = useState('')
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Partial<Record<FilterParam, string>>>(() => {
     // The number on the Overview opens this list.
     if (url.get('filter') !== 'expiring') return {}
-    const at = now()
-    return { expiresAfter: new Date(at).toISOString(), expiresBefore: new Date(at + WEEK_MS).toISOString() }
+    return expiringWeek(now())
   })
   const [sort, setSort] = useState<{ by: UserSort; order: 'asc' | 'desc' }>({ by: 'username', order: 'asc' })
   const [page, setPage] = useState(1)

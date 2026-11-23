@@ -20,6 +20,7 @@ import {
   Text,
 } from 'react-aria-components'
 import styles from '@/ui/DateTimeField/DateTimeField.module.css'
+import { useDialogPortal } from '@/ui/Dialog/useDialogPortal'
 import { Icon } from '@/ui/Icon/Icon'
 
 export interface DateTimeFieldTexts {
@@ -38,17 +39,21 @@ export interface DateTimeFieldProps {
   error?: string
   texts: DateTimeFieldTexts
   /** «day»: a date alone in a small 32 field, as the column filter «Срок» is drawn; the instant is that day's start. */
-  kind?: 'datetime' | 'day'
+  kind?: 'datetime' | 'day' | 'inlineDatetime'
 }
 
 /** Typed into an empty field the picker hands a plain date or date-time: placed in `timeZone` here. */
 const toInstant = (next: DateValue, timeZone: string) => ('toAbsoluteString' in next ? next.toAbsoluteString() : toZoned(next, timeZone).toAbsoluteString())
 
 export function DateTimeField({ label, value, onChange, timeZone, error, texts, kind = 'datetime' }: DateTimeFieldProps) {
+  const { attach, container } = useDialogPortal()
   const day = kind === 'day'
+  const hideLabel = kind === 'inlineDatetime'
   return (
     <DatePicker<DateValue>
+      ref={attach}
       className={`${styles.picker} ${day ? styles.day32 : ''}`}
+      aria-label={hideLabel ? label : undefined}
       granularity={day ? 'day' : 'minute'}
       hourCycle={24}
       hideTimeZone
@@ -57,7 +62,7 @@ export function DateTimeField({ label, value, onChange, timeZone, error, texts, 
       value={value === null ? null : parseAbsolute(value, timeZone)}
       onChange={(next) => onChange(next === null ? null : toInstant(next, timeZone))}
     >
-      <Label className={styles.label}>{label}</Label>
+      {!hideLabel && <Label className={styles.label}>{label}</Label>}
       <Group className={styles.field}>
         <DateInput className={styles.input}>
           {(segment) => <DateSegment segment={segment} className={styles.segment} />}
@@ -71,7 +76,7 @@ export function DateTimeField({ label, value, onChange, timeZone, error, texts, 
           {error}
         </Text>
       )}
-      <Popover className={styles.popover} placement="bottom end" offset={6}>
+      <Popover UNSTABLE_portalContainer={container} className={styles.popover} placement="bottom end" offset={6}>
         <Dialog className={styles.dialog}>
           <Calendar>
             <header className={styles.month}>

@@ -333,7 +333,7 @@ describe('UsersPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByText('nl-01')
-    expect(within(dialog).getByText('прикидка')).toBeTruthy()
+    expect(within(dialog).getByText(/из 2 онлайн/)).toBeTruthy()
     expect(within(dialog).getByText('de-01')).toBeTruthy()
     expect(within(dialog).getByText(/Точный список появится после сохранения/)).toBeTruthy()
   })
@@ -354,7 +354,7 @@ describe('UsersPage', () => {
     page()
     await userEvent.click(await screen.findByRole('button', { name: 'Создать' }))
     const dialog = await screen.findByRole('dialog')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить текущие значения как пресет' }))
+    await userEvent.selectOptions(within(dialog).getByLabelText('Пресет'), 'save-current')
     const ask = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement
     expect(ask.textContent).toMatch(/Сохранится: 50 ГБ, 30 дн, сброс каждый месяц/)
     fireEvent.change(within(ask).getByLabelText('Название пресета'), { target: { value: 'family' } })

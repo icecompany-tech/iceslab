@@ -136,7 +136,7 @@ export function firstBlocker(d: CascadeDraft, nodeName: (id: string) => string):
   return null
 }
 
-export type SubscriberRow = { kind: 'awg'; awg31: boolean; unknown: boolean } | { kind: 'auto' } | { kind: 'direction'; where: string; tag: string } | { kind: 'direct'; name: string }
+export type SubscriberRow = { kind: 'awg'; awg31: boolean; unknown: boolean } | { kind: 'auto' } | { kind: 'hysteria'; country: string | null } | { kind: 'direction'; where: string; tag: string } | { kind: 'direct'; name: string }
 
 /** What lands in a client: a line per served direction, the Auto line when asked for and there are two to pick from. */
 export function subscriberRows(d: CascadeDraft, nodeName: (id: string) => string | undefined, awg: { awg31: boolean | undefined; failed: boolean }): SubscriberRow[] {
@@ -150,6 +150,13 @@ export function subscriberRows(d: CascadeDraft, nodeName: (id: string) => string
         })
   if (d.pools[0]?.entryProtocol === 'amneziawg') return [{ kind: 'awg', awg31: awg.awg31 === true, unknown: awg.failed }, ...direct]
   const served = d.directions.filter((x) => !directionEmpty(x))
+  if (d.pools[0]?.entryProtocol === 'hysteria') {
+    if (!d.pools[0].nodeIds.some(Boolean) || !served.length) return direct
+    // The backend names the password-based entry by its only exit, or Auto for multiple exits.
+    const country = served.length === 1 ? served[0]?.countryCode : null
+    if (served.length === 1 && !country) return direct
+    return [{ kind: 'hysteria', country: country ?? null }, ...direct]
+  }
   const lines: SubscriberRow[] = d.directions.flatMap((x, i) => (x.countryCode && !directionEmpty(x) ? [{ kind: 'direction' as const, where: x.countryCode, tag: (x.tag ?? nextFreeTag(d.directions, i, d.nextTag)).toString(16).padStart(4, '0') }] : []))
   return [...(d.autoProfile && served.length > 1 ? [{ kind: 'auto' as const }] : []), ...lines, ...direct]
 }

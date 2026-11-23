@@ -97,11 +97,17 @@ export function NewUserWindow({ squads, squadsFailed, nodes, onClose }: NewUserW
   const ready = usernameValid(username.trim()) && !limitBad && deviceLimitValid(draft.deviceLimit)
 
   const pickPreset = (id: string) => {
+    if (id === 'save-current') {
+      setSavingPreset(true)
+      return
+    }
     setPresetId(id)
     const keep = { groupIds: draft.groupIds, email: draft.email, telegramId: draft.telegramId, deviceLimit: draft.deviceLimit, tag: draft.tag, description: draft.description }
     setDraft({ ...blankDraft(presets.find((p) => p.id === id), now()), ...keep })
   }
 
+  const selectedPreset = presets.find((p) => p.id === presetId)
+  const hintOf = (p: UserPreset) => words.presetHint(p.trafficGb === null ? words.presetUnlimited : `${p.trafficGb} ${words.gb}`, p.expireDays === null ? words.presetNoTerm : `${p.expireDays} ${words.daysUnit}`)
   const trafficGb = draft.unlimited ? null : limitToGb(draft.limitText, draft.limitUnit)
   const expireDays = presetDays(draft.noExpiry, draft.expireAt, now())
   const presetSummary = words.presetSummary(trafficGb === null ? words.presetUnlimited : `${trafficGb} ГБ`, expireDays === null ? words.presetNoTerm : `${expireDays} ${words.daysUnit}`, words.strategy[draft.strategy] ?? draft.strategy)
@@ -158,24 +164,28 @@ export function NewUserWindow({ squads, squadsFailed, nodes, onClose }: NewUserW
         </>
       }
     >
-      <div className={styles.windowColumns}>
+      <div className={`${styles.windowColumns} ${styles.newLayout}`}>
         <div className={styles.windowLeft}>
           <Field label={words.preset}>
             {(a11y) => (
-              <Select
-                {...a11y}
-                value={presetId}
-                onChange={(e) => pickPreset(e.target.value)}
-                options={[
-                  { value: '', label: words.presetNone },
-                  ...presets.map((p) => ({ value: p.id, label: `${p.name}: ${words.presetHint(p.trafficGb === null ? words.presetUnlimited : `${p.trafficGb} ГБ`, p.expireDays === null ? words.presetNoTerm : `${p.expireDays} ${words.daysUnit}`)}` })),
-                ]}
-              />
+              <span className={styles.presetField}>
+                <Select
+                  {...a11y}
+                  value={presetId}
+                  onChange={(e) => pickPreset(e.target.value)}
+                  options={[
+                    { value: '', label: words.presetNone },
+                    ...presets.map((p) => ({ value: p.id, label: `${p.name}: ${hintOf(p)}` })),
+                    ...(draft.unlimited || trafficGb !== null ? [{ value: 'save-current', label: words.presetSave }] : []),
+                  ]}
+                />
+                <span aria-hidden="true" className={styles.presetValue}>
+                  {selectedPreset?.name ?? words.presetNone}
+                  {selectedPreset && <small>{hintOf(selectedPreset)}</small>}
+                </span>
+              </span>
             )}
           </Field>
-          <button type="button" className={styles.presetSave} disabled={!draft.unlimited && trafficGb === null} onClick={() => setSavingPreset(true)}>
-            {words.presetSave}
-          </button>
           <NameField value={username} onChange={setUsername} error={errors.username} />
           <SquadField squads={squads} value={draft.groupIds} failed={squadsFailed} error={errors.groups} onChange={(groupIds) => patch({ groupIds })} />
           <TrafficField draft={draft} onChange={patch} errors={errors} limitTouched />

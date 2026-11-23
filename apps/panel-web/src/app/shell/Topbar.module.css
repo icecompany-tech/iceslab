@@ -136,6 +136,16 @@
   padding: 0;
 }
 
+.buildVersion {
+  justify-content: center;
+  min-width: var(--size-topbar-version);
+}
+
+.support {
+  justify-content: center;
+  min-width: var(--size-topbar-support);
+}
+
 .version {
   font-family: var(--font-mono);
 }

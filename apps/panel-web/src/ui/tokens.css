@@ -115,10 +115,40 @@
   --size-icon-brand: 22px;
   --size-topbar: 60px;
   --size-topbar-control: 34px;
+  --size-topbar-version: 69px;
+  --size-topbar-support: 118px;
   --size-sidebar: 232px;
   --size-rail: 56px;
   --size-panel: 340px;
   --size-center: 1088px;
+  --size-host-details: 372px;
+  --size-host-card: 352px;
+  --size-node-search: 148px;
+  --size-cascade-table-row: 56px;
+  --size-cascade-name: 140px;
+  --size-cascade-hops: 76px;
+  --size-cascade-reach: 104px;
+  --size-cascade-today: 70px;
+  --size-cascade-push: 190px;
+  --size-node-table: 1050px;
+  --size-node-col: 72px;
+  --size-node-cascade: 128px;
+  --size-node-address: 112px;
+  --size-node-wide-col: 154px;
+  --size-node-small-col: 48px;
+  --size-node-row: 46px;
+  --size-host-search: 220px;
+  --size-host-cta: 99px;
+  --size-host-name-min: 156px;
+  --size-host-address: 198px;
+  --size-host-profile: 92px;
+  --size-host-node: 80px;
+  --size-host-count: 58px;
+  --size-host-state: 118px;
+  --size-host-table-min: 954px;
+  --size-host-card-heading: 22px;
+  --size-squad-card: 352px;
+  --size-squad-search: 220px;
   --size-register: 1856px;
   /* The center's own height inside the window: below the bar, inside the center's padding. */
   --size-main-height: calc(100dvh - var(--size-topbar) - 2 * var(--spacing-7));
@@ -171,6 +201,7 @@
 }
 :root {
   --size-empty: 280px;
+  --size-state-description: 460px;
   --size-col-engines: 210px;
   --size-col-users: 64px;
   --size-col-traffic: 156px;
@@ -178,6 +209,13 @@
   --size-col-cert: 100px;
   --size-chart: 268px;
   --size-chart-tip: 214px;
+  --size-review-http-plot: 96px;
+  --text-profile-heading: 24px;
+  --leading-profile-heading: 30px;
+  --size-profile-revision: 58px;
+  --size-profile-log: 65px;
+  --size-profile-section-head: 82px;
+  --color-profile-string: #A5D8BD;
   --size-flag-height: 13px;
   --text-flag: 8px;
   --leading-flag: 11px;
@@ -185,6 +223,13 @@
   --opacity-chevron: 0.7;
   --size-dialog: 480px;
   --size-window: 920px;
+  --size-new-user-top: 130px;
+  --size-new-user-height: 598px;
+  --size-user-estimate: 356px;
+  --size-estimate-list: 212px;
+  --size-estimate-protocol: 72px;
+  --size-estimate-port: 74px;
+  --size-term-part: 96px;
   --size-menu: 244px;
   --size-switch: 26px;
   --size-switch-height: 14px;

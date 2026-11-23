@@ -19,6 +19,7 @@ import { coreVersionRefusal } from '@/lib/old/coreVersions'
 import { nodeFieldKnown } from '@/lib/old/nodeFields'
 import type { CreateNodeInput, NodeHardening, NodeWithPayload } from '@/lib/old/nodes'
 import { Banner } from '@/ui/Banner/Banner'
+import { Icon } from '@/ui/Icon/Icon'
 import { Button } from '@/ui/Button/Button'
 import { Check } from '@/ui/Check/Check'
 import { Field, Input } from '@/ui/Field/Field'
@@ -61,7 +62,7 @@ export default function NodeCreatePage() {
   const [multiplier, setMultiplier] = useState('1')
   const [maxUsers, setMaxUsers] = useState('')
   const [harden, setHarden] = useState<Hardening>({ ufw: false, f2b: false, fallback: false, ssh: '' })
-  const [open, setOpen] = useState<StepId | null>('cores')
+  const [open, setOpen] = useState<StepId | null>(null)
   const [created, setCreated] = useState<NodeWithPayload | null>(null)
   const [refused, setRefused] = useState<{ name?: string; address?: string; form?: string }>({})
   const [versions, setVersions] = useState<NodeCoreVersions>({})
@@ -125,16 +126,26 @@ export default function NodeCreatePage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.pageTitle}>{words.createTitle}</h1>
+      <header className={styles.createHead}>
+        <Button aria-label={words.prevPage} onClick={()=>void navigate('/nodes')}><Icon name="chevronLeft"/></Button>
+        <h1 className={styles.pageTitle}>{words.createTitle}</h1><span className={styles.subhead}>{words.createSubtitle}</span>
+        <div className={styles.actions}>
+          <Button size="md" onClick={()=>void navigate('/nodes')}>{words.cancel}</Button>
+          <Button size="md" variant="primary" icon={<Icon name="plus"/>} disabled={!ready} loading={create.isPending} onClick={submit}>{words.create}</Button>
+        </div>
+      </header>
+      <div className={styles.createColumns}><div className={styles.createMain}>
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>{words.basics}</h2>
         <div className={styles.formRow}>
-          <Field label={words.name} error={bad.name}>{(a11y) => <Input {...a11y} autoFocus value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-          <Field label={words.host} error={bad.host} hint={words.hostHint}>{(a11y) => <Input {...a11y} value={host} onChange={(e) => setHost(e.target.value)} />}</Field>
+          <Field label={words.name} error={bad.name}>{(a11y) => <Input {...a11y} autoFocus placeholder={words.nameExample} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+          <Field label={words.country} hint={words.countryAuto}>{(a11y) => <Input {...a11y} placeholder={words.countryUnset} maxLength={2} value={country} onChange={(e) => setCountry(e.target.value)} />}</Field>
+          <Field label={words.host} error={bad.host} hint={words.hostHint}>{(a11y) => <Input {...a11y} placeholder={words.addressExample} value={host} onChange={(e) => setHost(e.target.value)} />}</Field>
           <Field label={words.port} error={bad.port}>{(a11y) => <Input {...a11y} inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} />}</Field>
-          <Field label={words.country} hint={words.countryAuto}>{(a11y) => <Input {...a11y} maxLength={2} value={country} onChange={(e) => setCountry(e.target.value)} />}</Field>
         </div>
       </section>
+      <section className={styles.createSettings}>
+      <h2 className={styles.panelTitle}>{words.nodeSettings}</h2><p className={styles.note}>{words.stepOrder}</p>
       <Step optional title={words.coresStep} open={open === 'cores'} onToggle={() => toggle('cores')} value={engines.length > 0 ? engines.map(engineLabel).join(', ') : words.coresNone}>
         <p className={styles.note}>{words.coresHint}</p>
         <div className={styles.engineGrid}>
@@ -166,15 +177,19 @@ export default function NodeCreatePage() {
         ))}
         <Field label={words.hardenSsh} hint={words.hardenSshHint}>{(a11y) => <Input {...a11y} value={harden.ssh} onChange={(e) => setHarden({ ...harden, ssh: e.target.value })} />}</Field>
       </Step>
-      <Banner tone="info" title={words.willCreate}>
-        {words.willCreateBody}
-      </Banner>
+      </section>
       {refused.form && <Banner tone="danger">{refused.form}</Banner>}
-      <div className={styles.actions}>
-        <Button onClick={() => void navigate('/nodes')}>{words.cancel}</Button>
-        <Button variant="primary" disabled={!ready} loading={create.isPending} onClick={submit}>
-          {words.create}
-        </Button>
+      </div>
+      <aside className={styles.createSummary}>
+        <h2 className={styles.panelTitle}>{words.willCreate}</h2>
+        <dl>
+          {[[words.recordLabel, name.trim() || words.noName], [words.connectionLabel, host.trim() ? address : words.noAddress],
+            [words.coresStep, engines.length ? engines.map(engineLabel).join(', ') : words.coresNone],
+            [words.securityLabel, hardeningBody(harden) ? String(Object.keys(hardeningBody(harden) ?? {}).length) : words.hardenNone]].map(([label,value])=>
+            <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl>
+        <p>{words.installNote}</p>
+      </aside>
       </div>
     </div>
   )

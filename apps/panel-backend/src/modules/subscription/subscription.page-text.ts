@@ -14,6 +14,18 @@ export interface StepText {
 }
 
 export interface Labels {
+  stoppedCard: {
+    language: string;
+    missingTitle: string;
+    missingBody: string;
+    missingHelp: string;
+    states: Record<'expired' | 'limited' | 'disabled' | 'revoked', { badge: string; title: string; body: string }>;
+    expiredDate: string;
+    contact: string;
+    link: string;
+    copy: string;
+    volume: (used: string, limit: string) => string;
+  };
   status: string;
   traffic: string;
   expires: string;
@@ -85,6 +97,11 @@ export interface Labels {
   close: string;
   noExpiry: string;
   unlimited: string;
+  lowTraffic: string;
+  daysLeft: string;
+  chooseApp: string;
+  telegramShort: string;
+  expiring: string;
   protocols: string;
   /** The switcher's chip that takes the narrowing away. */
   protocolsAll: string;
@@ -132,6 +149,20 @@ export const L: Record<'ru' | 'en', Labels> = {
     username: 'Username',
     transfer: 'Another device',
     transferShort: 'Another device',
+    stoppedCard: {
+      language: 'Language',
+      missingTitle: 'Subscription link not found',
+      missingBody: 'Check that you copied the entire link.',
+      missingHelp: 'Check that you copied the entire link. If it is correct, contact support.',
+      states: {
+        expired: { badge: 'Expired', title: 'The subscription has run out', body: 'Renew it to reconnect. Your setup stays the same.' },
+        limited: { badge: 'Limit reached', title: 'Traffic allowance used up', body: 'Access resumes when your allowance is renewed. Your setup stays the same.' },
+        disabled: { badge: 'Disabled', title: 'The subscription is switched off', body: 'Support can switch it back on. Your setup stays the same.' },
+        revoked: { badge: 'Revoked', title: 'This link has been withdrawn', body: 'Ask support for a new link.' },
+      },
+      expiredDate: 'Valid until', contact: 'Contact support', link: 'Your link', copy: 'Copy link',
+      volume: (used, limit) => `${used} of ${limit} GiB`,
+    },
     copyLink: 'Copy link',
     copyLinkShort: 'Link',
     noteActive: 'Active, {n} left',
@@ -215,7 +246,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       },
     ],
     enterOnTv: 'TYPE THIS ON THE TELEVISION',
-    dlTitle: 'Take it as a config file',
+    dlTitle: 'Manual setup',
     dlNote:
       'For when the app cannot be given a subscription link: a router, an offline machine, a client that only imports files.',
     dlWarn:
@@ -280,6 +311,11 @@ export const L: Record<'ru' | 'en', Labels> = {
     close: 'Close',
     noExpiry: 'no expiry',
     unlimited: 'unlimited',
+    lowTraffic: 'Low traffic',
+    daysLeft: '{n} left',
+    chooseApp: 'Choose an app. If you are unsure, use {app}.',
+    telegramShort: 'For Telegram only, no separate app required',
+    expiring: 'Expiring soon',
     protocols: 'Protocols',
     protocolsAll: 'all',
     protocolsHint: 'Pick the ones to keep: the link, its code and the Add buttons then hand out only those.',
@@ -294,7 +330,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copyKey: 'Copy key',
     qrNeedsJs: 'The QR is drawn in the browser: turn JavaScript on, or copy the text above.',
     awg3Client: 'AmneziaWG 3.1: needs AmneziaVPN 5.0.1.5 or newer.',
-    setup: 'Set up',
+    setup: 'How to connect',
     scanTitle: 'AmneziaWG keys',
     oneTunnel: 'One key is one tunnel to one server, not the whole subscription.',
     oneTunnelMany: 'One key is one tunnel to ONE server, not the whole subscription. Pick the server first, then scan: importing all of them gives you one connection each, not a set that switches.',
@@ -315,6 +351,20 @@ export const L: Record<'ru' | 'en', Labels> = {
     username: 'Имя пользователя',
     transfer: 'Другое устройство',
     transferShort: 'Другое устройство',
+    stoppedCard: {
+      language: 'Язык',
+      missingTitle: 'Такой ссылки нет',
+      missingBody: 'Проверьте, что скопировали её целиком.',
+      missingHelp: 'Проверьте, что скопировали её целиком. Если ссылка верная, напишите в поддержку.',
+      states: {
+        expired: { badge: 'Закончилась', title: 'Срок подписки закончился', body: 'Продлите, и всё снова заработает. Ничего заново настраивать не придётся.' },
+        limited: { badge: 'Лимит исчерпан', title: 'Трафик закончился', body: 'Доступ вернётся, когда лимит обновят. Ничего заново настраивать не придётся.' },
+        disabled: { badge: 'Выключена', title: 'Подписка выключена', body: 'Включить её может поддержка. Ничего заново настраивать не придётся.' },
+        revoked: { badge: 'Отозвана', title: 'Эта ссылка больше не работает', body: 'Попросите новую ссылку в поддержке.' },
+      },
+      expiredDate: 'Действовала до', contact: 'Написать в поддержку', link: 'Ваша ссылка', copy: 'Копировать ссылку',
+      volume: (used, limit) => `${used} из ${limit} ГБ`,
+    },
     copyLink: 'Скопировать ссылку',
     copyLinkShort: 'Ссылка',
     noteActive: 'Активна, осталось {n}',
@@ -398,7 +448,7 @@ export const L: Record<'ru' | 'en', Labels> = {
       },
     ],
     enterOnTv: 'ВВЕСТИ НА ТЕЛЕВИЗОРЕ',
-    dlTitle: 'Забрать конфигом',
+    dlTitle: 'Настройка вручную',
     dlNote:
       'На случай, когда приложению нельзя отдать ссылку подписки: роутер, машина без интернета, клиент, который умеет только файл.',
     dlWarn:
@@ -465,6 +515,11 @@ export const L: Record<'ru' | 'en', Labels> = {
     close: 'Закрыть',
     noExpiry: 'без срока',
     unlimited: 'безлимит',
+    lowTraffic: 'Мало трафика',
+    daysLeft: 'осталось {n}',
+    chooseApp: 'Выберите приложение. Не знаете какое, оставьте {app}.',
+    telegramShort: 'Только для Telegram, без отдельного приложения',
+    expiring: 'Скоро закончится',
     protocols: 'Протоколы',
     protocolsAll: 'все',
     protocolsHint: 'Отметьте нужные: ссылка, её код и кнопки «Добавить в» будут выдавать только их.',
@@ -479,7 +534,7 @@ export const L: Record<'ru' | 'en', Labels> = {
     copyKey: 'Скопировать ключ',
     qrNeedsJs: 'QR рисуется в браузере: включите JavaScript или скопируйте текст выше.',
     awg3Client: 'AmneziaWG 3.1: нужен AmneziaVPN 5.0.1.5 или новее.',
-    setup: 'Установка',
+    setup: 'Как подключиться',
     scanTitle: 'Ключи AmneziaWG',
     oneTunnel: 'Один ключ это один туннель до одного сервера, а не вся подписка.',
     oneTunnelMany: 'Один ключ это один туннель до ОДНОГО сервера, а не вся подписка. Сначала выберите сервер, потом сканируйте: если импортировать все, получится по отдельному подключению на каждый, а не набор с переключением.',

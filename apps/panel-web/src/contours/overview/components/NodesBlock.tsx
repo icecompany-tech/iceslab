@@ -1,3 +1,4 @@
+import { OverviewState } from './OverviewState'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import styles from '@/contours/overview/components/blocks.module.css'
@@ -105,6 +106,12 @@ export function NodesBlock({ nodes }: { nodes: Overview['nodes'] }) {
     setFilter(next)
     setExpanded(false)
   }
+  if (rows.length === 0) return <section className={styles.block}>
+    <h2 className={styles.heading}><Icon name="nodes" size="lg" />{words.nodes}</h2>
+    <OverviewState kind="nodes" title={words.nodesEmpty} body={words.nodesEmptyBody}>
+      <Link className={styles.allNodes} to="/nodes/new"><Icon name="plus" size="md" />{words.addNode}</Link>
+    </OverviewState>
+  </section>
   return (
     <section className={styles.block}>
       <div className={styles.nodesHead}>
@@ -147,7 +154,7 @@ export function NodesBlock({ nodes }: { nodes: Overview['nodes'] }) {
           </span>
         </div>
         {shown.length === 0 ? (
-          <div className={styles.empty}>{rows.length === 0 ? words.emptyNodes : words.emptyFilter}</div>
+          <div className={styles.empty}>{words.emptyFilter}</div>
         ) : (
           shown.map((row) => <NodeLine key={row.id} row={row} maxBytes={maxBytes} />)
         )}

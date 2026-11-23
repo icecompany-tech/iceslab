@@ -207,3 +207,70 @@
 .linkPending .wire::after {
   display: none;
 }
+
+.accessibleLegend { position: absolute; width: var(--border-hairline); height: var(--border-hairline); overflow: hidden; clip-path: inset(50%); }
+.line { align-items: center; gap: var(--spacing-2); padding-block: var(--spacing-1); }
+.hop { flex: 1 0 var(--size-col-cert); min-width: 0; }
+.hop:last-child { flex: 1.6 0 var(--size-node-wide-col); }
+.hopTitle { color: var(--color-text-muted); }
+.groupTitle { font-family: var(--font-mono); color: var(--color-accent-text); }
+.groupTitle strong { font-family: var(--font-sans); color: var(--color-text); }
+.nodeLine { flex-wrap: wrap; }
+.address { display: block; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.name { font-family: var(--font-mono); font-weight: var(--font-weight-semibold); }
+.link, .linkDanger, .linkPending { flex: 1 0 var(--size-col-cert); min-width: 0; }
+.hop:last-child .group:has(.groupTitle) { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr); align-items: center; column-gap: var(--spacing-3); }
+.hop:last-child .groupTitle { grid-area: 1 / 1; align-self: end; flex-wrap: wrap; }
+.hop:last-child .balancer { grid-area: 2 / 1; align-self: start; }
+.hop:last-child .group:has(.groupTitle) .nodes { grid-area: 1 / 2 / span 2 / 3; padding-left: var(--spacing-3); border-left: var(--border-hairline) solid var(--color-border-strong); }
+.hop:last-child .nodes { gap: var(--spacing-2); }
+.hop:only-child .group { display: flex; }
+
+.line:has(> :nth-child(3):last-child) > .hop:first-child {
+  flex: 0 0 12%;
+  min-width: var(--size-col-cert);
+}
+
+.line:has(> :nth-child(3):last-child) > :nth-child(2) {
+  flex: 0 0 23%;
+  min-width: var(--size-col-cert);
+}
+
+.hop:last-child .node {
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 0 var(--spacing-2);
+}
+
+.hop:last-child .nodeLine {
+  width: 100%;
+}
+
+.under {
+  white-space: normal;
+}
+
+.wire > .diamond {
+  position: absolute;
+  right: 0;
+  top: 0;
+  box-sizing: content-box;
+  background: var(--color-surface);
+  transform: translateY(-55%) rotate(45deg);
+}
+
+.wire:has(.diamond)::after { display: none; }
+
+.hop:last-child .nodes:has(> li:nth-child(2)) {
+  gap: var(--spacing-4);
+  padding-block: var(--spacing-1);
+}
+
+.hop:last-child .group:has(.groupTitle) .nodeLine { position: relative; }
+.hop:last-child .group:has(.groupTitle) .nodeLine::before {
+  position: absolute;
+  right: 100%;
+  width: var(--spacing-3);
+  border-top: var(--border-hairline) solid var(--color-border-strong);
+  content: '';
+}

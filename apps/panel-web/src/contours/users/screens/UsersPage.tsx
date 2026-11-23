@@ -24,7 +24,7 @@ import { Chip } from '@/ui/Chip/Chip'
 import { Confirm } from '@/ui/Dialog/Confirm'
 import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
-import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
+import { EmptyRegistry, QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
 import { useToast } from '@/ui/Toast/useToast'
 
 const DENSITY_ORDER: readonly Density[] = ['normal', 'compact', 'relaxed']
@@ -133,6 +133,10 @@ export default function UsersPage() {
   const sortColumn = COLUMNS.find((c) => c.sort === list.sort.by)
   const nameOf = (id: string) => data?.users.find((u) => u.id === id)?.username ?? id.slice(0, 8)
 
+  if (data && !users.isError && total === 0 && !list.narrowed && !overview.data?.users.total) return <>
+    <EmptyRegistry icon="users" title={words.emptyTitle} body={words.emptyBody} action={words.emptyCreate} onCreate={() => setCreating(true)} />
+    {creating && <NewUserWindow squads={squads.data ?? []} squadsFailed={squads.isError} nodes={nodeMap} onClose={() => setCreating(false)} />}
+  </>
   return (
     <div className={`${styles.page} ${fullscreen ? styles.fullscreen : ''}`}>
       <div className={styles.topRow}>
@@ -197,7 +201,7 @@ export default function UsersPage() {
             ) : (
               words.noFilters
             )}
-            {sortColumn && ` · ${words.sortedBy(words.column[sortColumn.id])}`}
+            {sortColumn && ` · ${sortColumn.id === 'username' ? words.sortedByName : words.sortedBy(words.column[sortColumn.id])}`}
           </span>
           <span className={styles.viewTools}>
             <button type="button" className={styles.viewButton} aria-label={words.density} onClick={() => setDensity(DENSITY_ORDER[(DENSITY_ORDER.indexOf(density) + 1) % DENSITY_ORDER.length] ?? 'normal')}>

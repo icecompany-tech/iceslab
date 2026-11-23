@@ -28,13 +28,21 @@ export function EstimateBlock({ picked, squads, nodes }: EstimateBlockProps) {
   const failed = [profiles, bindings, hosts].find((q) => q.isError)
   const ready = profiles.data && bindings.data && hosts.data
   const rows = ready ? estimateConfigs({ picked, squads, profiles: profiles.data.profiles, bindings: bindings.data.bindings, hosts: hosts.data.hosts, nodes }) : []
-  const nodeCount = new Set(rows.map((r) => r.nodeId)).size
+  const nodeIds = new Set(rows.map((r) => r.nodeId))
+  const nodeCount = nodeIds.size
+  const online = [...nodeIds].filter((id) => nodes.get(id)?.status === 'online').length
+  const selected = squads.filter((squad) => picked.includes(squad.id))
+  const inherited = selected.filter((squad) => squad.routingPreset || squad.customRoutingPresetId)
+  const source = inherited.length === 1 ? inherited[0] : undefined
+  const routing = source?.routingPreset && !source.customRoutingPresetId
+    ? `${source.routingPreset}, ${words.routingFromSquad} ${source.name}`
+    : words.routingUnknown
   const protocolCount = new Set(rows.map((r) => r.protocol)).size
   return (
     <section className={styles.block}>
       <div className={styles.blockHead}>
         <h3 className={styles.blockTitle}>{words.clientGets}</h3>
-        <span className={styles.blockAside}>{words.estimateLabel}</span>
+        {ready && !failed && nodeCount > 0 && <span className={styles.onlineCount}>{words.nodesOnline(online, nodeCount)}</span>}
       </div>
       {failed && (
         <QueryFailedLine retryLabel={words.retry} onRetry={() => void failed.refetch()}>
@@ -73,7 +81,8 @@ export function EstimateBlock({ picked, squads, nodes }: EstimateBlockProps) {
           </div>
         </>
       )}
-      <div className={styles.grayLine}>{words.newConfigsNote}</div>
+      {ready && !failed && <div className={styles.routingRow}><span>{words.routing}</span><span>{routing}</span></div>}
+      <div className={styles.estimateNote}>{words.newConfigsNote}</div>
     </section>
   )
 }

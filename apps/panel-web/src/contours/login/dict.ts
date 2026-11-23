@@ -19,10 +19,10 @@ const ru = {
   retry: 'Повторить',
   checking: 'Спрашиваем сервер панели',
   noAdminTitle: 'Админа ещё нет',
-  noAdminBody: 'Панель установлена, но войти пока некому. Создайте первого админа: выполните команду от root на VPS панели.',
+  noAdminBody: 'Панель установлена, но войти пока некому. Создайте первого админа на сервере.',
   // The one place of the command: INFRA confirms it by a run.
   noAdminCommand: 'bash /opt/iceslab/scripts/iceslab.sh first-admin',
-  noAdminNote: 'Затем проверьте снова.',
+  noAdminNote: 'Выполните от root на VPS панели, затем проверьте снова.',
   checkAgain: 'Проверить снова',
   copy: 'Скопировать',
   copied: 'Скопировано',
@@ -30,7 +30,7 @@ const ru = {
   notice: {
     logoutUnconfirmed: 'Сервер не подтвердил выход: копия токена может быть жива.',
     passwordChanged: 'Пароль изменён, войдите заново.',
-    sessionExpired: 'Сессия истекла, войдите заново.',
+    sessionExpired: 'Сессия истекла. Войдите снова, вернёмся на тот же экран.',
   },
 }
 
@@ -55,9 +55,9 @@ const en: typeof ru = {
   retry: 'Retry',
   checking: 'Asking the panel server',
   noAdminTitle: 'There is no admin yet',
-  noAdminBody: 'The panel is installed and nobody can sign in yet. Create the first admin: run the command as root on the panel VPS.',
+  noAdminBody: 'The panel is installed. Create the first admin on the server to sign in.',
   noAdminCommand: 'bash /opt/iceslab/scripts/iceslab.sh first-admin',
-  noAdminNote: 'Then check again.',
+  noAdminNote: 'Run the command as root on the panel VPS, then check again.',
   checkAgain: 'Check again',
   copy: 'Copy',
   copied: 'Copied',
@@ -65,7 +65,7 @@ const en: typeof ru = {
   notice: {
     logoutUnconfirmed: 'The server did not confirm the sign-out: a copy of the token may be alive.',
     passwordChanged: 'Password changed, sign in again.',
-    sessionExpired: 'The session has expired, sign in again.',
+    sessionExpired: 'Your session has expired. Sign in again to return to the same screen.',
   },
 }
 
