@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../../prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { NodeTransport, NodeRequestError } from '../nodes/nodes.transport.js';
@@ -10,6 +11,9 @@ import {
   type StatsUserEntry,
 } from './stats.compute.js';
 import { storeLingering } from './lingering.js';
+import { observedMinute, observeNodePoll, type NodePollObservation } from './minute-traffic.js';
+
+const lastObservation = new Map<string, NodePollObservation>();
 
 /**
  * Per-node in-memory snapshot of the last seen cumulative `totalBytesIn/Out`
@@ -46,10 +50,9 @@ const NODE_STATS_MAX_USER_DELTA_BYTES = 1024 ** 4; // 1 TiB
  * `user_traffic.used_traffic_bytes` (per-user) and `node_usage_history`
  * (per-node, hourly bucket).
  *
- * Agent-side: xray's `api statsquery -reset` returns deltas since last
- * poll; the agent's `GET /stats` endpoint already wraps that. Other cores
- * (Hysteria/AWG/Naive/SS) don't expose per-user counters today - they're
- * absent from the response and silently skipped here.
+ * GET /stats can report cumulative or already-delta counters. The poll
+ * keeps the existing billing rules for both. Minute history uses tagged
+ * cumulative Xray and sing-box user counters without changing quota calculations.
  *
  * Apply `node.consumptionMultiplier` to the user-side delta so premium
  * regions count more (or less) against per-user limits.
@@ -57,16 +60,12 @@ const NODE_STATS_MAX_USER_DELTA_BYTES = 1024 ** 4; // 1 TiB
  * B3 - per-node writes go out as one bulk `unnest`-based upsert per table
  * (user_traffic, node_user_usage_history) instead of N individual upserts.
  * That collapses 2N statements into 2, cutting round-trips and the row-lock
- * window on `user_traffic` under contention. All writes for a node still run
- * in one `$transaction`: the agent's getStats() destructively drained the
- * upstream counters, so a partial commit would burn deltas - all-or-nothing
- * means an upsert failure rolls back and the agent returns cumulative+new on
- * the next tick.
- *
- * Idempotent: on transient failure, skip and try next tick. Never block
- * the cron loop on one slow/down node.
+ * window on `user_traffic` under contention. A short claim precedes the RPC;
+ * the transaction commits usage, snapshots and the scheduled receipt together.
+ * A failed write leaves the previous cumulative baseline in place. A delta
+ * adapter that drains on read cannot replay traffic lost in a failed write.
  */
-export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
+export async function pollNodeStats(scheduledAt?: Date): Promise<{ ok: number; failed: number }> {
   const nodes = await prisma.node.findMany({
     where: {
       deletedAt: null,
@@ -97,18 +96,54 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
   // date = today, so this must match startOfToday()'s UTC-midnight shape.
   const dateStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
 
+  const scheduled = scheduledAt?.toISOString() ?? null;
   let ok = 0;
   let failed = 0;
 
-  await Promise.all(
-    nodes.map(async (node) => {
-      try {
-        const transport = new NodeTransport(node);
-        const res = await transport.getStats();
-        // A-218: before the traffic writes, so a failed write does not lose it.
-        await storeLingering(node.id, res.lingering).catch((err: unknown) =>
-          getLogger().warn({ node: node.id, err: String(err) }, '[cron] node-stats-poll: lingering not kept'),
-        );
+  await Promise.all(nodes.map(async (node) => {
+    const observationId = randomUUID();
+    let claimed = false;
+    try {
+      // Claim before calling even a destructive stats reader. The DB clock
+      // bounds recovery after a crash; the token fences a late worker.
+      const [claim] = await prisma.$queryRaw<{ observationId: string | null }[]>`
+        INSERT INTO node_stats_poll_cursors (node_id, lease_token, lease_until)
+        VALUES (${node.id}::uuid, ${observationId}::uuid, clock_timestamp() + interval '60 seconds')
+        ON CONFLICT (node_id) DO UPDATE SET
+          lease_token = EXCLUDED.lease_token, lease_until = EXCLUDED.lease_until
+        WHERE (node_stats_poll_cursors.lease_until IS NULL
+                OR node_stats_poll_cursors.lease_until <= clock_timestamp())
+          AND (${scheduled}::timestamptz IS NULL
+                OR node_stats_poll_cursors.scheduled_at IS NULL
+                OR node_stats_poll_cursors.scheduled_at < ${scheduled}::timestamptz)
+        RETURNING observation_id AS "observationId"
+      `;
+      if (!claim) return;
+      claimed = true;
+
+      const transport = new NodeTransport(node);
+      const startedAt = Date.now();
+      const res = await transport.getStats();
+      const observation = observeNodePoll(observationId, res, startedAt, Date.now());
+      await storeLingering(node.id, res.lingering).catch((err: unknown) =>
+        getLogger().warn({ node: node.id, err: String(err) }, '[cron] node-stats-poll: lingering not kept'),
+      );
+
+      const committed = await prisma.$transaction(async (tx) => {
+        const [ownership] = await tx.$queryRaw<{ owned: boolean }[]>`
+          SELECT true AS owned FROM node_stats_poll_cursors
+          WHERE node_id = ${node.id}::uuid AND lease_token = ${observationId}::uuid
+          FOR UPDATE
+        `;
+        if (!ownership) return;
+
+        const last = lastObservation.get(node.id);
+        const previous = last?.id === claim.observationId ? last : undefined;
+        // Another worker or a restart invalidates the process-local baselines.
+        if (!previous) {
+          totalSnapshot.delete(node.id);
+          adapterTotalSnapshot.delete(node.id);
+        }
         let userList: StatsUserEntry[] = res.users ?? [];
         const rawTotal = userList.reduce(
           (acc, u) => acc + (u.bytesIn || 0) + (u.bytesOut || 0),
@@ -144,7 +179,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           const cumulativeUsers = tagged ? userList.filter((u) => u.cumulative) : userList;
           const deltaUsers = tagged ? userList.filter((u) => !u.cumulative) : [];
           if (cumulativeUsers.length > 0) {
-            const prevRows = await prisma.nodeUserTrafficSnapshot.findMany({
+            const prevRows = await tx.nodeUserTrafficSnapshot.findMany({
               where: { nodeId: node.id, userId: { in: cumulativeUsers.map((u) => u.userId) } },
               select: { userId: true, protocol: true, engine: true, cumIn: true, cumOut: true },
             });
@@ -212,7 +247,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           const ids = w.userTrafficRows.map((r) => r.userId);
           const amts = w.userTrafficRows.map((r) => r.scaled.toString());
           stmts.push(
-            prisma.$executeRaw(Prisma.sql`
+            tx.$executeRaw(Prisma.sql`
               INSERT INTO user_traffic
                 (user_id, used_traffic_bytes, lifetime_traffic_bytes, online_at, first_connected_at, last_connected_node_id)
               SELECT u.uid, u.amt, u.amt, ${now}, ${now}, ${node.id}::uuid
@@ -237,7 +272,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           const ins = w.historyRows.map((r) => r.bytesIn.toString());
           const outs = w.historyRows.map((r) => r.bytesOut.toString());
           stmts.push(
-            prisma.$executeRaw(Prisma.sql`
+            tx.$executeRaw(Prisma.sql`
               INSERT INTO node_user_usage_history (node_id, "date", user_id, bytes_in, bytes_out)
               SELECT ${node.id}::uuid, ${dateStr}::date, u.uid, u.bin, u.bout
               FROM unnest(
@@ -256,7 +291,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
         // typed upsert stays. Raw (unscaled) bytes that crossed the wire.
         if (w.nodeDownload > 0n || w.nodeUpload > 0n) {
           stmts.push(
-            prisma.nodeUsageHistory.upsert({
+            tx.nodeUsageHistory.upsert({
               where: { nodeId_hour: { nodeId: node.id, hour: hourBucket } },
               create: {
                 nodeId: node.id,
@@ -287,7 +322,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           const sins = sorted.map((s) => s.cumIn.toString());
           const souts = sorted.map((s) => s.cumOut.toString());
           stmts.push(
-            prisma.$executeRaw(Prisma.sql`
+            tx.$executeRaw(Prisma.sql`
               INSERT INTO node_user_traffic_snapshot (node_id, user_id, protocol, engine, cum_in, cum_out, updated_at)
               SELECT ${node.id}::uuid, u.uid, u.proto, u.eng, u.cin, u.cout, ${now}
               FROM unnest(
@@ -308,7 +343,7 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
         // no use for the summed row an older agent left.
         if (adapterKeyedUsers.length > 0) {
           stmts.push(
-            prisma.$executeRaw(Prisma.sql`
+            tx.$executeRaw(Prisma.sql`
               DELETE FROM node_user_traffic_snapshot
               WHERE node_id = ${node.id}::uuid AND protocol = '' AND engine = ''
                 AND user_id = ANY(ARRAY[${Prisma.join(adapterKeyedUsers)}]::uuid[])
@@ -316,27 +351,52 @@ export async function pollNodeStats(): Promise<{ ok: number; failed: number }> {
           );
         }
 
-        if (stmts.length > 0) {
-          await prisma.$transaction(stmts);
+        const sample = observedMinute(previous, observation);
+        if (sample) {
+          stmts.push(tx.$executeRaw`
+            INSERT INTO node_minute_traffic (node_id, minute, bytes)
+            VALUES (${node.id}::uuid, ${sample.minute.toISOString()}::timestamptz, ${sample.bytes})
+            ON CONFLICT (node_id, minute) DO UPDATE SET bytes = node_minute_traffic.bytes + EXCLUDED.bytes
+          `);
         }
-        // Advance the single-counter snapshot only after a clean commit, so a
-        // failed write doesn't drop those node-level bytes (next poll
-        // re-derives the delta from the un-advanced baseline).
-        if (w.newSnapshot) totalSnapshot.set(node.id, w.newSnapshot);
-        if (newAdapterTotals) adapterTotalSnapshot.set(node.id, newAdapterTotals);
+        for (const stmt of stmts) await stmt;
+
+        // Commit the receipt with all counters so a retried scheduled job
+        // cannot apply its writes twice, including after a process restart.
+        await tx.$executeRaw`
+          UPDATE node_stats_poll_cursors
+          SET observation_id = ${observationId}::uuid, scheduled_at = COALESCE(${scheduled}::timestamptz, scheduled_at),
+              lease_token = NULL, lease_until = NULL
+          WHERE node_id = ${node.id}::uuid
+        `;
+        return { observation, newSnapshot: w.newSnapshot, newAdapterTotals };
+      }, { maxWait: 15_000, timeout: 25_000 });
+      if (committed) {
+        claimed = false;
+        lastObservation.set(node.id, committed.observation);
+        if (committed.newSnapshot) totalSnapshot.set(node.id, committed.newSnapshot);
+        if (committed.newAdapterTotals) adapterTotalSnapshot.set(node.id, committed.newAdapterTotals);
         ok++;
-      } catch (err) {
-        failed++;
-        const detail =
-          err instanceof NodeRequestError
-            ? `${err.status} ${err.message}`
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        getLogger().error(`[cron] node-stats-poll ${node.id} FAILED: ${detail}`);
       }
-    }),
-  );
+    } catch (err) {
+      if (claimed) lastObservation.get(node.id)?.counters.clear();
+      failed++;
+      const detail =
+        err instanceof NodeRequestError
+          ? `${err.status} ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      getLogger().error(`[cron] node-stats-poll ${node.id} FAILED: ${detail}`);
+    } finally {
+      if (claimed) {
+        await prisma.nodeStatsPollCursor.updateMany({
+          where: { nodeId: node.id, leaseToken: observationId },
+          data: { leaseToken: null, leaseUntil: null },
+        }).catch((err: unknown) => getLogger().warn({ node: node.id, err: String(err) }, '[cron] node stats lease release failed'));
+      }
+    }
+  }));
 
   return { ok, failed };
 }

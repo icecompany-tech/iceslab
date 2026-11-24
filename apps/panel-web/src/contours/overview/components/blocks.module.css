@@ -428,12 +428,13 @@
   border-radius: var(--radius-xs);
   background: var(--color-accent);
 }
-.legend span:last-child::before, .dailyTip .previousTip::before {
+.legend [data-previous]::before {
   background: var(--chart-previous-key);
 }
 .daily { position: relative; height: var(--size-chart); flex-shrink: 0; }
 .daily svg { display: block; width: 100%; height: 100%; }
 .daily text { fill: var(--color-text-muted); font-size: var(--text-2xs); }
+.daily .weekDate { fill: var(--color-text-secondary); font-size: var(--text-xs); }
 .daily .peak { fill: var(--color-text); }
 .daily .night { fill: var(--color-chart-night); }
 .daily .endLabel text, .daily .previousEndLabel text { font-size: var(--text-xs); font-weight: var(--font-weight-semibold); }
@@ -468,7 +469,8 @@
 .dailyTip span { display: flex; align-items: center; gap: var(--spacing-2); }
 .dailyTip b { margin-inline-start: auto; color: var(--color-text); font-weight: var(--font-weight-semibold); }
 .dailyTip .currentTip::before, .dailyTip .previousTip::before { width: var(--spacing-2-5); height: var(--spacing-half); }
-.currentTip b, .previousTip b { font-size: var(--text-sm); }
+.dailyTip .previousTip::before { background: var(--chart-previous-tip); }
+.currentTip b, .previousTip b { font-size: var(--text-sm); white-space: nowrap; }
 .previousTip b { font-weight: var(--font-weight-regular); }
 .tipDifference { border-top: var(--border-hairline) solid var(--color-border); padding-top: var(--spacing-2); }
 .tipDifference b { color: var(--color-text-muted); }

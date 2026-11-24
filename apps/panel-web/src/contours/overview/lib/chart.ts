@@ -1,13 +1,18 @@
 export interface ChartPoint {
   date: string
   bytes: number | null
-  previousBytes?: number
+  previousBytes?: number | null
 }
 
 export const isNight = (date: string) => new Date(date).getHours() < 7
 export const isWeekend = (date: string) => [0, 6].includes(new Date(date).getUTCDay())
 
-export function chartGeometry(points: readonly ChartPoint[], width: number) {
+// Slots are equally spaced. Opposite or zero slopes give a horizontal tangent.
+function sharedSlope(left: number, right: number) {
+  return left * right > 0 ? 2 * left * right / (left + right) : 0
+}
+
+export function chartGeometry(points: readonly ChartPoint[], width: number, monotone = false) {
   const left = 52, right = width - 84, top = 18, bottom = 226
   const dx = (right - left) / Math.max(1, points.length - 1)
   const max = Math.max(1, ...points.map(p => Math.max(p.bytes ?? 0, p.previousBytes ?? 0)))
@@ -19,8 +24,7 @@ export function chartGeometry(points: readonly ChartPoint[], width: number) {
   const y = (v: number) => bottom - (bottom - top) * v / ceiling
   const coord = (i: number, value: number) => x(i).toFixed(1) + ' ' + y(value).toFixed(1)
 
-  // Paper uses Catmull-Rom tangents converted to cubic Béziers. Each run of
-  // measurements owns its area, so missing hours remain empty down to the baseline.
+  // Each continuous run has its own end tangents and closes its own area.
   function paths(key: 'bytes' | 'previousBytes') {
     let run = '', line = '', area = '', start = 0
     for (const [i, point] of points.entries()) {
@@ -33,10 +37,19 @@ export function chartGeometry(points: readonly ChartPoint[], width: number) {
         run = 'M' + coord(i, value)
       } else {
         const prior = points[i - 2]?.[key]
-        const a = Math.max(0, prev + (value - (prior ?? prev)) / 6)
-        const b = Math.max(0, value - ((next ?? value) - prev) / 6)
-        run += ' C' + coord(i - 1 + (prior == null ? 1 : 2) / 6, a)
-          + ' ' + coord(i - (next == null ? 1 : 2) / 6, b) + ' ' + coord(i, value)
+        if (monotone) {
+          const slope = value - prev
+          const startSlope = prior == null ? slope : sharedSlope(prev - prior, slope)
+          const endSlope = next == null ? slope : sharedSlope(slope, next - value)
+          run += ' C' + coord(i - 2 / 3, prev + startSlope / 3)
+            + ' ' + coord(i - 1 / 3, value - endSlope / 3)
+        } else {
+          const a = Math.max(0, prev + (value - (prior ?? prev)) / 6)
+          const b = Math.max(0, value - ((next ?? value) - prev) / 6)
+          run += ' C' + coord(i - 1 + (prior == null ? 1 : 2) / 6, a)
+            + ' ' + coord(i - (next == null ? 1 : 2) / 6, b)
+        }
+        run += ' ' + coord(i, value)
       }
       if (next == null) {
         line += run

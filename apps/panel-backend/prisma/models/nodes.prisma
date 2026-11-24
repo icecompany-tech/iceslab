@@ -241,6 +241,8 @@ model Node {
   connectedUsers    UserTraffic[]
   userUsageHistory  NodeUserUsageHistory[]
   usageHistory      NodeUsageHistory[]
+  minuteTraffic     NodeMinuteTraffic[]
+  statsPollCursor   NodeStatsPollCursor?
   bootstrapTokens   NodeBootstrapToken[]
   cascadeHops       CascadeHop[]
   // Cascades v4. Deleting a node a live cascade routes through has to be a
@@ -341,6 +343,30 @@ model NodeUsageHistory {
   // composite indexes above are leftmost on nodeId and useless for that.
   @@index([hour(sort: Desc)])
   @@map("node_usage_history")
+}
+
+model NodeMinuteTraffic {
+  nodeId String   @map("node_id") @db.Uuid
+  minute DateTime @db.Timestamptz(6)
+  bytes  BigInt
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([nodeId, minute])
+  @@index([minute])
+  @@map("node_minute_traffic")
+}
+
+model NodeStatsPollCursor {
+  nodeId        String    @id @map("node_id") @db.Uuid
+  observationId String?   @map("observation_id") @db.Uuid
+  scheduledAt   DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  leaseToken    String?   @map("lease_token") @db.Uuid
+  leaseUntil    DateTime? @map("lease_until") @db.Timestamptz(6)
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@map("node_stats_poll_cursors")
 }
 
 /// #5 - per-(node, user) cumulative byte snapshot for non-destructive xray

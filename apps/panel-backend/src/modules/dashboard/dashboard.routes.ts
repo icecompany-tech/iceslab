@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.hook.js';
 import * as dashboardService from './dashboard.service.js';
 import { getInsights } from './insights.service.js';
+import { getTrafficSeries, type TrafficSeriesPeriod } from './traffic-series.service.js';
 
 // B12 - response schema for the hottest read in the panel (every admin tab
 // polls /overview every 30s). Attaching a schema swaps Fastify's generic
@@ -60,6 +61,18 @@ const overviewResponseSchema = {
               additionalProperties: true,
               properties: { toUsers: { type: 'number' }, fromUsers: { type: 'number' } },
             },
+          },
+        },
+        recordedUtc24h: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              hour: { type: 'string' },
+              bytes: { type: ['number', 'null'] },
+              previousBytes: { type: ['number', 'null'] },
+            },
+            required: ['hour', 'bytes', 'previousBytes'],
           },
         },
         last24hHourly: {
@@ -160,6 +173,21 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       const overview = await dashboardService.getOverview();
       return reply.send(overview);
     },
+  );
+
+  app.get<{ Querystring: { period: TrafficSeriesPeriod } }>(
+    '/api/dashboard/traffic-series',
+    {
+      onRequest: [requireAuth],
+      schema: {
+        querystring: {
+          type: 'object',
+          required: ['period'],
+          properties: { period: { type: 'string', enum: ['1h', '7d', '90d'] } },
+        },
+      },
+    },
+    async (request) => getTrafficSeries(request.query.period),
   );
 
   // K1-b/c Insights: on-demand (not polled). `days` selects the SRH window;

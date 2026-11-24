@@ -21,6 +21,7 @@ const parseTraffic = obj({
   calendarMonthBytes: num,
   currentYearBytes: num,
   last24hHourly: arr(obj({ hour: str, bytes: num, previousBytes: optional(num) })),
+  recordedUtc24h: optional(arr(obj({ hour: str, bytes: nullable(num), previousBytes: nullable(num) }))),
   hourlyDirections: optional(directions),
   completedUtc30d: optional(obj({
     dailyComparison: optional(arr(obj({ date: str, bytes: num, previousBytes: num }))),

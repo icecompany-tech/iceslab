@@ -184,6 +184,7 @@
   --size-chart-key: 3px;
   --color-chart-tick: #3A4656;
   --color-chart-night: #5C6876;
+  --chart-previous-tip: repeating-linear-gradient(90deg, var(--color-amber) 0 3px, transparent 3px 5px);
   --chart-previous-key: repeating-linear-gradient(90deg, var(--color-amber) 0 4px, transparent 4px 6px);
   --color-weekend: #A8E6FF08;
   --color-area-top: #A8E6FF33;

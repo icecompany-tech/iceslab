@@ -11,6 +11,7 @@ import {
 import { pollNodeStatuses, pollNodeMetrics } from '../nodes/nodes.cron.js';
 import { renewExpiringNodeCerts } from '../nodes/node-cert-rotation.js';
 import { pollNodeStats } from '../stats/stats.cron.js';
+import { pruneNodeMinuteTraffic } from '../stats/minute-traffic.js';
 import { ADMIN_AUDIT_RETENTION_DAYS } from '@iceslab/shared';
 import { DELETED_USER_RETENTION_DAYS, HWID_DEVICE_RETENTION_DAYS, pruneHistory } from '../maintenance/retention.cron.js';
 import { queueDueUrlFetches } from '../geo-sets/geo-sets.queue.js';
@@ -48,6 +49,7 @@ const CRON_JOBS: CronJobSpec[] = [
   { name: 'node-metrics-poll',              pattern: '*/15 * * * * *' }, // каждые 15 секунд
   { name: 'node-stats-poll',                pattern: '*/30 * * * * *' }, // каждые 30 секунд - per-user/per-node traffic
   { name: 'reconcile-orphan-users',         pattern: '*/10 * * * *' },   // каждые 10 минут - catch-up for status-flip crashes / dropped jobs
+  { name: 'prune-node-minute-traffic',      pattern: '5 * * * *' },    // remove minute buckets older than 24 hours
   { name: 'prune-history',                  pattern: '30 3 * * *' },     // 03:30 каждый день - B2 retention для append-only history-таблиц
   { name: 'alert-near-expiry',              pattern: '0 9 * * *'  },     // 09:00 каждый день - K3 near-expiry/near-cap дайджест в Telegram
   { name: 'geo-url-refresh',                pattern: '*/10 * * * *' },   // каждые 10 минут - Ф9.4: гео-наборы по URL, у которых вышел refreshHours
@@ -139,7 +141,8 @@ export function startCronTasksWorker(): Worker {
           break;
         }
         case 'node-stats-poll': {
-          const { failed } = await pollNodeStats();
+          const scheduledAt = new Date(job.opts.prevMillis ?? job.timestamp + job.delay);
+          const { failed } = await pollNodeStats(scheduledAt);
           if (failed > 0) {
             getLogger().info(`[cron] node-stats-poll - ${failed} nodes failed`);
           }
@@ -170,6 +173,11 @@ export function startCronTasksWorker(): Worker {
         case 'node-drawing-check': {
           const n = await checkNodeDrawings();
           if (n > 0) getLogger().info(`[cron] node-drawing-check - queued ${n} node push(es) whose drawing changed`);
+          break;
+        }
+        case 'prune-node-minute-traffic': {
+          const deleted = await pruneNodeMinuteTraffic();
+          if (deleted > 0) getLogger().info({ deleted }, '[cron] pruned node minute traffic');
           break;
         }
         case 'prune-history': {

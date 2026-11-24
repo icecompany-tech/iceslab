@@ -161,26 +161,70 @@ describe('OverviewPage', () => {
     for (const label of ['К юзерам', 'От юзеров']) expect(block.getByText(label)).toBeTruthy()
   })
 
-  it('compares a week with a week, and a day with nothing', async () => {
-    server()
+  it.each([false, true])('uses server UTC slots and compares totals only with full coverage (%s)', async (partial) => {
+    const base = overview()
+    const recordedUtc24h = Array.from({ length: 24 }, (_, i) => ({
+      hour: new Date(Date.UTC(2026, 10, 1, i)).toISOString(),
+      bytes: partial && i === 2 ? null : GiB,
+      previousBytes: partial && i === 4 ? null : GiB / 2,
+    }))
+    server({ 'GET /api/dashboard/overview': { body: { ...base, traffic: { ...base.traffic, recordedUtc24h } } } })
+    renderApp(<OverviewPage />)
+    const title = await screen.findByRole('heading', { name: 'Трафик за 24 часа' })
+    const block = within(title.closest('section')!)
+    expect(within(title.parentElement!).getByText(partial ? '23,0 ГБ' : '24,0 ГБ')).toBeTruthy()
+    expect(block.getByText('Эти 24 часа')).toBeTruthy()
+    expect(block.getByText('Вчера')).toBeTruthy()
+    if (partial) {
+      expect(block.getByText(/Сумма записанных данных/)).toBeTruthy()
+      expect(block.queryByText('+100%')).toBeNull()
+    } else {
+      expect(block.getByText('+100%')).toBeTruthy()
+    }
+  })
+
+  it('keeps hourly and monthly totals usable on a server without traffic-series', async () => {
+    const base = overview()
+    server({ 'GET /api/dashboard/overview': { body: { ...base, traffic: { ...base.traffic, last24hHourly: [{ hour: new Date().toISOString(), bytes: GiB }] } } },
+      'GET /api/dashboard/traffic-series?period=7d': { status: 404 },
+    })
     renderApp(<OverviewPage />)
     await screen.findByText(/Трафик за 24 часа/)
     expect(screen.getByText(/Нет почасовых данных за вчера/)).toBeTruthy()
+    expect(screen.getByText('Эти 24 часа')).toBeTruthy()
+    expect(screen.queryByText('Вчера')).toBeNull()
     await userEvent.click(screen.getByRole('radio', { name: '7 д' }))
-    expect(screen.getByText(/\+40%/)).toBeTruthy()
-    expect(screen.getByText(/Для графика нужны суточные значения/)).toBeTruthy()
-    expect((screen.getByRole('radio', { name: '90 д' }) as HTMLButtonElement).disabled).toBe(true)
+    await screen.findByText('Эта версия сервера ещё не отдаёт ряд за выбранный период.')
+    expect(screen.queryByText('50,0 ГБ')).toBeNull()
+    expect((screen.getByRole('radio', { name: '90 д' }) as HTMLButtonElement).disabled).toBe(false)
     await userEvent.click(screen.getByRole('radio', { name: '30 д' }))
     expect(screen.getByText('3,22 ТБ')).toBeTruthy()
-    expect(screen.getByText(/к прошлым 30 дням \(2,93 ТБ\)/)).toBeTruthy()
-    expect(screen.getByText('было 100 ГБ')).toBeTruthy()
+    expect(screen.getByText('2,93 ТБ')).toBeTruthy()
+    expect(screen.queryByText('было 100 ГБ')).toBeNull()
+  })
+
+  it.each([
+    { label: 'partial', values: [0, 300, null, null, null, null, null], prior: 50, comparable: false, total: '300 Б', mean: '150 Б', percent: false },
+    { label: 'comparable', values: Array<number>(7).fill(100), prior: 50, comparable: true, total: '700 Б', mean: '100 Б', percent: true },
+    { label: 'zero baseline', values: Array<number>(7).fill(100), prior: 0, comparable: true, total: '700 Б', mean: '100 Б', percent: false },
+  ])('uses the selected week for the hero and measured average ($label)', async ({ values, prior, comparable, total, mean, percent }) => {
+    const points = values.map((bytes, i) => ({ at: new Date(Date.UTC(2026, 10, i + 1)).toISOString(), bytes, previousBytes: prior }))
+    const requests = server({ 'GET /api/dashboard/traffic-series?period=7d': { body: { period: '7d', points, canCompareTotals: comparable } } })
+    renderApp(<OverviewPage />, { route: '/?period=7d' })
+    const plot = await screen.findByRole('group', { name: 'Трафик за 7 дней' })
+    const block = within(plot.closest('section')!)
+    const heading = block.getByRole('heading')
+    expect(within(heading.parentElement!).getByText(total)).toBeTruthy()
+    expect(within(block.getByText('В среднем за день').parentElement!).getByText(mean)).toBeTruthy()
+    expect(heading.parentElement!.textContent?.includes('+100%')).toBe(percent)
+    expect(requests.sent.filter(r => r.path.includes('/traffic-series')).map(r => r.path)).toEqual(['/api/dashboard/traffic-series?period=7d'])
   })
 
   it('пусто: no traffic in a day and no nodes are said in words', async () => {
     const empty = overview({ nodes: [], system: { onlineNodeCount: 0, totalNodeCount: 0 } })
     server({ 'GET /api/dashboard/overview': { body: { ...empty, traffic: { ...empty.traffic, last24hHourly: [] } } }, 'GET /api/nodes': { body: { nodes: [], total: 0 } } })
     renderApp(<OverviewPage />)
-    await screen.findByText(/трафика нет: пусто/)
+    await screen.findByText(/Нет почасовых записей за эти сутки/)
     expect(screen.getByRole('link', { name: 'Добавить ноду' }).getAttribute('href')).toBe('/nodes/new')
     expect(screen.queryByRole('table')).toBeNull()
   })

@@ -20,7 +20,8 @@ import { readCompletedUtc30dTraffic, type CompletedUtc30dTraffic } from './compl
 // 30s cron and traffic counters are cumulative.
 const OVERVIEW_CACHE_KEY = 'dashboard:overview:v1';
 const OVERVIEW_CACHE_TTL_SECONDS = 30;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 const TOP_USERS_LIMIT = 5;
 const RECENT_EVENTS_LIMIT = 10;
@@ -50,6 +51,7 @@ export interface DashboardOverview {
     lastCalendarMonthBytes: number;
     lastYearBytes: number;
     last24hHourly: { hour: string; bytes: number }[];
+    recordedUtc24h?: { hour: string; bytes: number | null; previousBytes: number | null }[];
     completedUtc30d?: CompletedUtc30dTraffic;
   };
   system: {
@@ -100,8 +102,8 @@ export interface DashboardOverview {
   }[];
 }
 
-function startOfToday(): Date {
-  const d = new Date();
+function startOfToday(now = Date.now()): Date {
+  const d = new Date(now);
   d.setUTCHours(0, 0, 0, 0);
   return d;
 }
@@ -163,20 +165,37 @@ async function sumNodeUsageSince(since: Date, until?: Date): Promise<number> {
   return dl + ul;
 }
 
-async function last24hHourly(): Promise<{ hour: string; bytes: number }[]> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+async function hourlyTraffic(now: number, hourStart: number): Promise<
+  Pick<DashboardOverview['traffic'], 'last24hHourly' | 'recordedUtc24h'>
+> {
+  const recordedStart = hourStart - 2 * DAY_MS;
+  const legacyStart = now - DAY_MS;
   const rows = await prisma.nodeUsageHistory.groupBy({
     by: ['hour'],
-    where: { hour: { gte: since } },
+    where: { hour: { gte: new Date(recordedStart) } },
     _sum: { downloadBytes: true, uploadBytes: true },
     orderBy: { hour: 'asc' },
   });
-  return rows.map((r) => ({
-    hour: r.hour.toISOString(),
-    bytes:
-      (r._sum.downloadBytes ? Number(r._sum.downloadBytes) : 0) +
-      (r._sum.uploadBytes ? Number(r._sum.uploadBytes) : 0),
-  }));
+  const last24hHourly: DashboardOverview['traffic']['last24hHourly'] = [];
+  const recorded = new Map<number, number>();
+  for (const row of rows) {
+    const hour = row.hour.getTime();
+    const bytes = Number(row._sum.downloadBytes ?? 0n) + Number(row._sum.uploadBytes ?? 0n);
+    // The legacy cutoff is a rolling timestamp and includes the current hour.
+    if (hour >= legacyStart) last24hHourly.push({ hour: row.hour.toISOString(), bytes });
+    if (hour < hourStart) recorded.set(hour, bytes);
+  }
+  if (recorded.size === 0) return { last24hHourly };
+
+  const recordedUtc24h = Array.from({ length: 24 }, (_, index) => {
+    const hour = hourStart - DAY_MS + index * HOUR_MS;
+    return {
+      hour: new Date(hour).toISOString(),
+      bytes: recorded.get(hour) ?? null,
+      previousBytes: recorded.get(hour - DAY_MS) ?? null,
+    };
+  });
+  return { last24hHourly, recordedUtc24h };
 }
 
 async function userMetrics(): Promise<DashboardOverview['users']> {
@@ -225,7 +244,7 @@ async function userMetrics(): Promise<DashboardOverview['users']> {
   };
 }
 
-async function trafficMetrics(today: Date): Promise<DashboardOverview['traffic']> {
+async function trafficMetrics(today: Date, now: number, hourStart: number): Promise<DashboardOverview['traffic']> {
   const yesterday = startOfYesterday();
   const week = startOfWeek();
   const month = startOfMonth();
@@ -257,7 +276,7 @@ async function trafficMetrics(today: Date): Promise<DashboardOverview['traffic']
     sumNodeUsageSince(daysAgo(60), month),
     sumNodeUsageSince(startOfLastCalendarMonth(), calMonth),
     sumNodeUsageSince(startOfLastYear(), year),
-    last24hHourly(),
+    hourlyTraffic(now, hourStart),
     readCompletedUtc30dTraffic(today),
   ]);
 
@@ -272,7 +291,7 @@ async function trafficMetrics(today: Date): Promise<DashboardOverview['traffic']
     prev30dBytes,
     lastCalendarMonthBytes,
     lastYearBytes,
-    last24hHourly: hourly,
+    ...hourly,
     ...(completedUtc30d ? { completedUtc30d } : {}),
   };
 }
@@ -433,7 +452,8 @@ async function recentEvents(): Promise<DashboardOverview['recentEvents']> {
   }));
 }
 
-async function computeOverview(today: Date): Promise<DashboardOverview> {
+async function computeOverview(nowAtRequest: number, hourStart: number): Promise<DashboardOverview> {
+  const today = startOfToday(nowAtRequest);
   const [
     users,
     traffic,
@@ -447,7 +467,7 @@ async function computeOverview(today: Date): Promise<DashboardOverview> {
     hostCount,
   ] = await Promise.all([
     userMetrics(),
-    trafficMetrics(today),
+    trafficMetrics(today, nowAtRequest, hourStart),
     nodeMetrics(),
     protocolMetrics(),
     topUsersToday(),
@@ -470,10 +490,10 @@ async function computeOverview(today: Date): Promise<DashboardOverview> {
     recentEvents: events,
   };
 
-  // A cached comparison belongs to one UTC day. A late result from the
-  // previous day can still answer its caller, but must not replace the cache.
+  // Both completed windows advance at the UTC hour boundary. A late result
+  // can still answer its caller, but must not be cached into the next hour.
   const now = Date.now();
-  const expiresAt = Math.min(now + OVERVIEW_CACHE_TTL_SECONDS * 1000, today.getTime() + DAY_MS);
+  const expiresAt = Math.min(now + OVERVIEW_CACHE_TTL_SECONDS * 1000, hourStart + HOUR_MS);
   if (expiresAt > now) {
     await redis
       .set(OVERVIEW_CACHE_KEY, JSON.stringify(overview), 'PXAT', expiresAt)
@@ -491,7 +511,8 @@ async function computeOverview(today: Date): Promise<DashboardOverview> {
 const inflightOverviews = new Map<number, Promise<DashboardOverview>>();
 
 export async function getOverview(): Promise<DashboardOverview> {
-  const today = startOfToday();
+  const now = Date.now();
+  const hourStart = Math.floor(now / HOUR_MS) * HOUR_MS;
   const cached = await redis.get(OVERVIEW_CACHE_KEY).catch(() => null);
   if (cached) {
     try {
@@ -501,12 +522,11 @@ export async function getOverview(): Promise<DashboardOverview> {
     }
   }
 
-  const day = today.getTime();
-  const inflight = inflightOverviews.get(day);
+  const inflight = inflightOverviews.get(hourStart);
   if (inflight) return inflight;
-  const overview = computeOverview(today).finally(() => {
-    inflightOverviews.delete(day);
+  const overview = computeOverview(now, hourStart).finally(() => {
+    inflightOverviews.delete(hourStart);
   });
-  inflightOverviews.set(day, overview);
+  inflightOverviews.set(hourStart, overview);
   return overview;
 }
