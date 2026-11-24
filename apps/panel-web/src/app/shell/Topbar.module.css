@@ -185,3 +185,5 @@
   display: flex;
   color: var(--color-danger);
 }
+
+.discord[aria-disabled="true"] { opacity: var(--opacity-closed); cursor: help; }

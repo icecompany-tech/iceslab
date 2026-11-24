@@ -10,6 +10,7 @@ const parseNodeMetrics = obj({
   uptimeSeconds: num,
 })
 
+const directions = obj({ toUsers: num, fromUsers: num })
 const parseTraffic = obj({
   todayBytes: num,
   yesterdayBytes: num,
@@ -19,9 +20,12 @@ const parseTraffic = obj({
   prev30dBytes: num,
   calendarMonthBytes: num,
   currentYearBytes: num,
-  last24hHourly: arr(obj({ hour: str, bytes: num })),
-  monthlyDirections: optional(obj({ toUsers: num, fromUsers: num })),
-  dailyComparison: optional(arr(obj({ date: str, bytes: num, previousBytes: num }))),
+  last24hHourly: arr(obj({ hour: str, bytes: num, previousBytes: optional(num) })),
+  hourlyDirections: optional(directions),
+  completedUtc30d: optional(obj({
+    dailyComparison: optional(arr(obj({ date: str, bytes: num, previousBytes: num }))),
+    monthlyDirections: optional(directions),
+  })),
 })
 
 export const parseOverview = obj({

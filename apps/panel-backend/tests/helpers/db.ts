@@ -45,6 +45,7 @@ export const TABLES = [
   'subscription_templates',
   'node_user_usage_history',
   'node_usage_history',
+  'dashboard_client_traffic_days',
   'group_members',
   'group_profiles',
   'group_hosts',

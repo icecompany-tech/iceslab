@@ -33,6 +33,11 @@ COPY packages/shared packages/shared
 COPY apps/panel-web apps/panel-web
 
 WORKDIR /repo/apps/panel-web
+ARG VITE_TELEGRAM_URL
+ARG VITE_DISCORD_URL
+ARG VITE_GITHUB_URL
+ARG VITE_DOCS_URL
+ARG VITE_SUPPORT_URL
 RUN pnpm build && rm -rf dist/.vite
 
 FROM nginx:${NGINX_VERSION} AS runtime

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import styles from '@/contours/overview/components/blocks.module.css'
 import { DICT } from '@/contours/overview/dict'
 import { byAttention, certTone } from '@/contours/overview/lib/traffic'
+import { useLastNodeCount } from '@/contours/overview/hooks/useOverviewFacts'
 import { useNow } from '@/lib/clock'
 import { certDaysLeft, nodeEngines, useAllNodes, type NodeRow } from '@/lib/domain/nodes'
 import { nodeHealth, type NodeHealth, type Overview, type OverviewNode } from '@/lib/domain/overview'
@@ -29,6 +30,7 @@ function NodeLine({ row, maxBytes }: { row: Row; maxBytes: number }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
   const now = useNow()
+  const count = useLastNodeCount(row.id)
   const engines = row.detail ? nodeEngines(row.detail) : null
   const days = certDaysLeft(row.detail?.certNotAfter, now())
   const reason = words.statusWord[row.status]
@@ -56,10 +58,10 @@ function NodeLine({ row, maxBytes }: { row: Row; maxBytes: number }) {
       <span role="cell" className={styles.enginesCell}>
         {engines && <CoreChips engines={engines} tone={row.health === 'problem' ? 'danger' : 'accent'} />}
       </span>
-      <span role="cell" className={styles.usersCell} title={words.usersUnknown}>
-        ?
+      <span role="cell" className={styles.usersCell} title={words.lastNodeUsers}>
+        {count.isError ? words.noData : count.data ?? words.loadingCount}
       </span>
-      {off ? (
+      {off && row.todayBytes === 0 ? (
         <span role="cell" className={`${styles.trafficCell} ${styles.noData}`}>
           {words.noData}
         </span>
@@ -143,11 +145,11 @@ export function NodesBlock({ nodes }: { nodes: Overview['nodes'] }) {
           <span role="columnheader" className={styles.enginesCell}>
             {words.engines}
           </span>
-          <span role="columnheader" className={styles.usersCell}>
+          <span role="columnheader" className={styles.usersCell} title={words.lastNodeUsers}>
             {words.usersColumn}
           </span>
           <span role="columnheader" className={styles.trafficHead2}>
-            {words.traffic24}
+            {words.trafficToday}
           </span>
           <span role="columnheader" className={styles.certCell}>
             {words.cert}

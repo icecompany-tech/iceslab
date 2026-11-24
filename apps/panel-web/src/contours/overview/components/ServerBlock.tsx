@@ -58,7 +58,7 @@ export function ServerBlock({ host, checkedAt }: { host: Overview['host']; check
           <Meter percent={cpuPercent} tone={meterTone(cpuPercent)} />
           <div className={styles.fine}>{words.loadAverage(cpu.loadavg.map((v) => fmtNumber(v, 'en', 2)).join(' / '))}</div>
         </StatCard>
-        <StatCard label={words.memory} icon="memory" size="metric" aside={fmtPercent(memory.usedPercent, locale)} value={`${used.value} ${used.unit}`} valueNote={words.ofUnit(totalMemory.value, totalMemory.unit)}>
+        <StatCard label={words.memory} icon="memory" size="metric" aside={fmtPercent(memory.usedPercent, locale)} value={used.unit === totalMemory.unit ? used.value : `${used.value} ${used.unit}`} valueNote={words.ofUnit(totalMemory.value, totalMemory.unit)}>
           <Meter percent={memory.usedPercent} tone={meterTone(memory.usedPercent)} />
         </StatCard>
         {disk ? (
@@ -87,7 +87,7 @@ function DiskCard({ disk }: { disk: NonNullable<NonNullable<Overview['host']>['d
   const used = fmtBinaryParts(disk.usedBytes, locale)
   const total = fmtBinaryParts(disk.totalBytes, locale)
   return (
-    <StatCard label={words.disk} icon="disk" size="metric" aside={fmtPercent(disk.usedPercent, locale)} value={`${used.value} ${used.unit}`} valueNote={words.ofUnit(total.value, total.unit)}>
+    <StatCard label={words.disk} icon="disk" size="metric" aside={fmtPercent(disk.usedPercent, locale)} value={used.unit === total.unit ? used.value : `${used.value} ${used.unit}`} valueNote={words.ofUnit(total.value, total.unit)}>
       <Meter percent={disk.usedPercent} tone={meterTone(disk.usedPercent)} />
     </StatCard>
   )

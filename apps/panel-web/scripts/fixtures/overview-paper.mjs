@@ -34,9 +34,9 @@ export function newOverviewReview(mode = 'normal') {
   const hourly=empty?[]:Array.from({length:24},(_,i)=>({hour:new Date(now-(23-i)*3600000).toISOString(),bytes:(i%8+1)*G}))
   const totalBytes = empty ? 0 : sum(current)
   const toUsers = Math.round(totalBytes*.87)
-  const traffic={monthlyDirections:{toUsers,fromUsers:totalBytes-toUsers},todayBytes:empty?0:sum([32]),yesterdayBytes:empty?0:sum([89]),last7dBytes:empty?0:sum(current.slice(-7)),
+  const traffic={completedUtc30d:empty?undefined:{dailyComparison,monthlyDirections:{toUsers,fromUsers:totalBytes-toUsers}},todayBytes:empty?0:sum([32]),yesterdayBytes:empty?0:sum([89]),last7dBytes:empty?0:sum(current.slice(-7)),
     prev7dBytes:empty?0:sum(current.slice(-14,-7)),last30dBytes:empty?0:sum(current),prev30dBytes:empty?0:sum(previous),calendarMonthBytes:empty?0:sum(current.slice(-3)),
-    currentYearBytes:empty?0:sum([...previous,...current]),last24hHourly:hourly,dailyComparison:empty?[]:dailyComparison}
+    currentYearBytes:empty?0:sum([...previous,...current]),last24hHourly:hourly}
   return {rows,nodes,traffic,failOnce:mode==='traffic-error'}
 }
 

@@ -43,6 +43,25 @@ const overviewResponseSchema = {
         prev30dBytes: { type: 'number' },
         lastCalendarMonthBytes: { type: 'number' },
         lastYearBytes: { type: 'number' },
+        completedUtc30d: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            dailyComparison: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: true,
+                properties: { date: { type: 'string' }, bytes: { type: 'number' }, previousBytes: { type: 'number' } },
+              },
+            },
+            monthlyDirections: {
+              type: 'object',
+              additionalProperties: true,
+              properties: { toUsers: { type: 'number' }, fromUsers: { type: 'number' } },
+            },
+          },
+        },
         last24hHourly: {
           type: 'array',
           items: {

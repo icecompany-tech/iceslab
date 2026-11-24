@@ -6,7 +6,7 @@ const templates = { ru: 'Шаблоны', en: 'Templates' }
 
 export const manifest: ContourManifest = {
   routes: [
-    { path: '/subscription/params', nav: 'subscription-params', title: params, load: () => import('@/contours/subscription/screens/ParamsPage') },
+    { path: '/subscription/params', nav: 'subscription-params', wide: true, title: params, load: () => import('@/contours/subscription/screens/ParamsPage') },
     { path: '/subscription/delivery', wide: true, nav: 'delivery', title: delivery, load: () => import('@/contours/subscription/screens/DeliveryPage') },
     { path: '/subscription/templates', nav: 'templates', title: templates, load: () => import('@/contours/subscription/screens/TemplatesPage') },
     { path: '/subscription/templates/new', nav: 'templates', title: templates, load: () => import('@/contours/subscription/screens/TemplateEditPage') },

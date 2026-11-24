@@ -16,3 +16,16 @@ export function certTone(days: number): 'expired' | 'soon' | 'fine' {
   if (days < 0) return 'expired'
   return days <= 14 ? 'soon' : 'fine'
 }
+
+const hourMs = 3_600_000
+
+/** The server omits hours without a sample. Keep their time slots empty. */
+export function hourlyPoints(hours: { hour: string; bytes: number; previousBytes?: number }[], checkedAt: number) {
+  const last = Math.floor(checkedAt / hourMs)
+  const samples = new Map(hours.map(h => [Math.floor(Date.parse(h.hour) / hourMs), h]))
+  return Array.from({ length: 24 }, (_, i) => {
+    const hour = last - 23 + i
+    const sample = samples.get(hour)
+    return { date: new Date(hour * hourMs).toISOString(), bytes: sample?.bytes ?? null, previousBytes: sample?.previousBytes }
+  })
+}

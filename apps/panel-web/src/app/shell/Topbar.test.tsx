@@ -30,15 +30,17 @@ describe('the top bar, Paper AS2-0', () => {
     await screen.findByText('Iceslab')
   })
 
-  it('Telegram by default, the channels with no address hidden, no server chip when versions agree', async () => {
+  it('keeps the community controls and explains a missing Discord invite', async () => {
     stubServer({ ...VERSION, 'GET /api/settings/public': { body: {} } })
     renderApp(<Topbar title="Юзеры" />)
     await screen.findByText('19')
     expect(screen.getByRole('link', { name: 'Telegram' }).getAttribute('href')).toBe('https://t.me/+XgrJWvUUggxlNGUy')
     expect(screen.getByRole('link', { name: 'GitHub' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Discord' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Документация' })).toBeNull()
-    expect(screen.queryByText('Поддержать')).toBeNull()
+    const discord = screen.getByRole('link', { name: 'Discord' })
+    expect(discord.getAttribute('aria-disabled')).toBe('true')
+    expect(discord.hasAttribute('href')).toBe(false)
+    expect(screen.getByRole('link', { name: 'Документация' }).getAttribute('href')).toContain('/README.ru.md')
+    expect(screen.getByRole('link', { name: 'Поддержать' }).getAttribute('href')).toContain('#support-the-project')
     expect(screen.queryByText(/^сервер v/)).toBeNull()
   })
 

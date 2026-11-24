@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => ({
             { name: 'legacy-api', test: /\/lib\/old\// },
             { name: 'query', test: /\/node_modules\/@tanstack\// },
             screenGroup('network-words', [...network, ...traffic], true),
-            screenGroup('operator-words', ['squads', 'insights', 'audit', ...admin], true),
+            screenGroup('operator-words', ['squads', 'insights', 'overview', 'audit', ...admin], true),
             screenGroup('network', network),
             screenGroup('traffic-subscription', [...traffic, 'insights']),
             screenGroup('admin', admin),

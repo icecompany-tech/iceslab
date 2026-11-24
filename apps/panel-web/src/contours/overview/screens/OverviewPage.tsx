@@ -21,7 +21,7 @@ export default function OverviewPage() {
   return (
     <div className={styles.page}>
       <StatCards overview={data} />
-      <TrafficBlock traffic={data.traffic} onRetry={() => void overview.refetch()} retrying={overview.isFetching} />
+      <TrafficBlock checkedAt={overview.dataUpdatedAt} traffic={data.traffic} onRetry={() => void overview.refetch()} retrying={overview.isFetching} />
       <ServerBlock host={data.host} checkedAt={overview.dataUpdatedAt} />
       <NodesBlock nodes={data.nodes} />
     </div>

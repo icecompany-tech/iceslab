@@ -102,8 +102,8 @@ describe('OverviewPage', () => {
     renderApp(<OverviewPage />)
     await screen.findByText('318')
     expect(screen.getByText(/^1\s204$/)).toBeTruthy()
-    await screen.findByText('37')
-    const asked = s.sent.find((r) => r.path.startsWith('/api/users'))?.path ?? ''
+    await screen.findAllByText('37')
+    const asked = s.sent.find((r) => r.path.includes('expiresBefore='))?.path ?? ''
     expect(asked).toMatch(/status=active/)
     expect(asked).toMatch(/expiresBefore=2026-11-13T12/)
     expect(screen.getByText(/1 с проблемами/)).toBeTruthy()
@@ -124,15 +124,56 @@ describe('OverviewPage', () => {
     for (const word of [/пик за сутки/, /Выходные к будням/, /К юзерам/, /От юзеров/]) expect(screen.queryByText(word)).toBeNull()
   })
 
+  it('uses completed UTC rows for the monthly total, previous total and average independently of directions', async () => {
+    const base = overview()
+    const dailyComparison = Array.from({ length: 30 }, (_, i) => ({
+      date: new Date(Date.UTC(2026, 9, i + 1)).toISOString().slice(0, 10), bytes: 3 * GiB, previousBytes: 2 * GiB,
+    }))
+    server({ 'GET /api/dashboard/overview': { body: { ...base, traffic: { ...base.traffic, completedUtc30d: { dailyComparison } } } } })
+    renderApp(<OverviewPage />)
+    await screen.findByRole('group', { name: 'Трафик за 30 дней' })
+    expect(screen.getByText('90,0 ГБ')).toBeTruthy()
+    expect(screen.getByText(/к прошлым 30 дням \(60,0 ГБ\)/)).toBeTruthy()
+    expect(screen.getByText('было 2 ГБ')).toBeTruthy()
+    expect(screen.queryByText('К юзерам')).toBeNull()
+  })
+
+  it.each([
+    { toUsers: 3 * GiB, fromUsers: GiB, total: '4,00 ГБ', mean: '137 МБ', shares: ['75%', '25%'] },
+    { toUsers: 0, fromUsers: 0, total: '0 Б', mean: '0 Б', shares: [] },
+  ])('shows confirmed directions alone when the operator selects the month ($total)', async ({ toUsers, fromUsers, total, mean, shares }) => {
+    const base = overview()
+    server({ 'GET /api/dashboard/overview': { body: { ...base, traffic: {
+      ...base.traffic, completedUtc30d: { monthlyDirections: { toUsers, fromUsers } },
+    } } } })
+    renderApp(<OverviewPage />)
+    await screen.findByRole('heading', { name: 'Трафик за 24 часа' })
+    await userEvent.click(screen.getByRole('radio', { name: '30 д' }))
+    const title = screen.getByRole('heading', { name: 'Трафик за 30 дней' })
+    const block = within(title.closest('section')!)
+    expect(within(title.parentElement!).getByText(total)).toBeTruthy()
+    expect(within(block.getByText('В среднем за день').parentElement!).getByText(mean)).toBeTruthy()
+    expect(block.getByText('Нет данных за предыдущие 30 суток')).toBeTruthy()
+    expect(block.queryByText(/было |к прошлым 30 дням/)).toBeNull()
+    expect(block.queryByText('Прошлые 30')).toBeNull()
+    expect(block.queryByRole('group', { name: 'Трафик за 30 дней' })).toBeNull()
+    expect(block.queryAllByText(/%$/).map(el => el.textContent)).toEqual(shares)
+    for (const label of ['К юзерам', 'От юзеров']) expect(block.getByText(label)).toBeTruthy()
+  })
+
   it('compares a week with a week, and a day with nothing', async () => {
     server()
     renderApp(<OverviewPage />)
     await screen.findByText(/Трафик за 24 часа/)
-    expect(screen.getByText(/не отдаёт прошлые сутки/)).toBeTruthy()
+    expect(screen.getByText(/Нет почасовых данных за вчера/)).toBeTruthy()
     await userEvent.click(screen.getByRole('radio', { name: '7 д' }))
     expect(screen.getByText(/\+40%/)).toBeTruthy()
-    expect(screen.getByText(/почасовой ряд только за 24 часа/)).toBeTruthy()
+    expect(screen.getByText(/Для графика нужны суточные значения/)).toBeTruthy()
     expect((screen.getByRole('radio', { name: '90 д' }) as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(screen.getByRole('radio', { name: '30 д' }))
+    expect(screen.getByText('3,22 ТБ')).toBeTruthy()
+    expect(screen.getByText(/к прошлым 30 дням \(2,93 ТБ\)/)).toBeTruthy()
+    expect(screen.getByText('было 100 ГБ')).toBeTruthy()
   })
 
   it('пусто: no traffic in a day and no nodes are said in words', async () => {
@@ -156,14 +197,16 @@ describe('OverviewPage', () => {
   })
 
   it('lists problems first, with the engines, the term and an honest users column', async () => {
-    server()
+    server({ 'GET /api/users?nodeId=n1&limit=1': { body: { total: 0 } }, 'GET /api/users?nodeId=n3&limit=1': { status: 503 } })
     renderApp(<OverviewPage />)
     const table = await screen.findByRole('table')
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows[0]?.textContent).toMatch(/de-02.*Не отвечает, 4 мин/)
     expect(rows[1]?.textContent).toMatch(/kz-01.*Не проверено.*нет данных/)
     await within(table).findByText('xray')
-    expect(rows[2]?.textContent).toMatch(/de-01.*xray.*sing-box.*\+2.*\?.*6 дн/)
+    expect(within(rows[2]!).getByRole('cell', { name: '0' })).toBeTruthy()
+    expect(rows[1]?.children[3]?.textContent).toBe('нет данных')
+    expect(rows[2]?.textContent).toMatch(/de-01.*xray.*sing-box.*\+2.*6 дн/)
   })
 
   it('a failed node list says so and keeps the table', async () => {

@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { byAttention, certTone, changePercent, sumHourly } from '@/contours/overview/lib/traffic'
+import { byAttention, certTone, changePercent, hourlyPoints, sumHourly } from '@/contours/overview/lib/traffic'
 
 describe('overview numbers', () => {
   it('compares only with a previous period that had traffic', () => {
     expect(changePercent(110, 100)).toBeCloseTo(10)
     expect(changePercent(90, 100)).toBeCloseTo(-10)
     expect(changePercent(5, 0)).toBeNull()
+  })
+
+  it('keeps missing hourly samples distinct from zero across midnight UTC', () => {
+    const points = hourlyPoints([
+      { hour: '2026-11-23T23:00:00Z', bytes: 0 },
+      { hour: '2026-11-24T01:00:00Z', bytes: 12 },
+    ], Date.parse('2026-11-24T01:20:00Z'))
+    expect(points).toHaveLength(24)
+    expect(points.at(0)?.date).toBe('2026-11-23T02:00:00.000Z')
+    expect(points.slice(-3).map(p => p.bytes)).toEqual([0, null, 12])
   })
 
   it('sums the hours', () => {

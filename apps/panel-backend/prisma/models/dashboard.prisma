@@ -1,0 +1,11 @@
+/// One finalized UTC day of fleet-wide traffic at the client boundary.
+/// A missing day means incomplete coverage. A stored zero means measured zero.
+/// Directions are filled only when both counters cover the same bytes as total.
+model DashboardClientTrafficDay {
+  date           DateTime @id @db.Date
+  totalBytes     BigInt   @map("total_bytes")
+  toUsersBytes   BigInt?  @map("to_users_bytes")
+  fromUsersBytes BigInt?  @map("from_users_bytes")
+
+  @@map("dashboard_client_traffic_days")
+}

@@ -151,7 +151,7 @@ function Form({ settings }: { settings: AdminSettings }) {
   }
   const setDead = (key: DeadTextState, value: string) => patch({ dead: { ...draft.dead, [key]: { ...draft.dead[key], [lang]: value } } })
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.params}`}>
       <div className={styles.toolbar}>
         <h1 className={styles.pageTitle}>{words.paramsTitle}</h1>
         <div className={styles.actions}>
@@ -165,7 +165,7 @@ function Form({ settings }: { settings: AdminSettings }) {
         </div>
       </div>
       {failure && <Banner tone="danger">{failure}</Banner>}
-      <div className={styles.columns}>
+      <div className={`${styles.columns} ${styles.paramsColumns}`}>
         <div className={styles.left}>
           <section className={styles.panel}>
             <h2 className={styles.panelTitle}>{words.clientTitle}</h2>

@@ -199,6 +199,11 @@ services:
         # Empty → Vite issues same-origin requests, which the frontend's
         # own nginx layer reverse-proxies to the backend service.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_TELEGRAM_URL: ${VITE_TELEGRAM_URL:-}
+        VITE_DISCORD_URL: ${VITE_DISCORD_URL:-}
+        VITE_GITHUB_URL: ${VITE_GITHUB_URL:-}
+        VITE_DOCS_URL: ${VITE_DOCS_URL:-}
+        VITE_SUPPORT_URL: ${VITE_SUPPORT_URL:-}
     image: iceslab-panel-web:latest
     container_name: iceslab-prod-frontend
     logging: *default-logging

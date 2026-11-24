@@ -3,6 +3,7 @@ import { prisma } from '../../prisma.js';
 import { redis } from '../../lib/infra/redis.js';
 import { collectSystemMetrics, type SystemMetrics } from './system-metrics.js';
 import { readCachedNodeMetrics } from '../nodes/nodes.cron.js';
+import { readCompletedUtc30dTraffic, type CompletedUtc30dTraffic } from './completed-traffic.service.js';
 
 // Dashboard overview is hit by every admin's browser every 10s. The aggregates
 // (groupBy on NodeUsageHistory + UserTraffic counts) cost a few hundred ms
@@ -19,6 +20,7 @@ import { readCachedNodeMetrics } from '../nodes/nodes.cron.js';
 // 30s cron and traffic counters are cumulative.
 const OVERVIEW_CACHE_KEY = 'dashboard:overview:v1';
 const OVERVIEW_CACHE_TTL_SECONDS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const TOP_USERS_LIMIT = 5;
 const RECENT_EVENTS_LIMIT = 10;
@@ -48,6 +50,7 @@ export interface DashboardOverview {
     lastCalendarMonthBytes: number;
     lastYearBytes: number;
     last24hHourly: { hour: string; bytes: number }[];
+    completedUtc30d?: CompletedUtc30dTraffic;
   };
   system: {
     onlineNodeCount: number;
@@ -222,8 +225,7 @@ async function userMetrics(): Promise<DashboardOverview['users']> {
   };
 }
 
-async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
-  const today = startOfToday();
+async function trafficMetrics(today: Date): Promise<DashboardOverview['traffic']> {
   const yesterday = startOfYesterday();
   const week = startOfWeek();
   const month = startOfMonth();
@@ -242,6 +244,7 @@ async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
     lastCalendarMonthBytes,
     lastYearBytes,
     hourly,
+    completedUtc30d,
   ] = await Promise.all([
     sumNodeUsageSince(today),
     sumNodeUsageSince(yesterday, today),
@@ -255,6 +258,7 @@ async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
     sumNodeUsageSince(startOfLastCalendarMonth(), calMonth),
     sumNodeUsageSince(startOfLastYear(), year),
     last24hHourly(),
+    readCompletedUtc30dTraffic(today),
   ]);
 
   return {
@@ -269,6 +273,7 @@ async function trafficMetrics(): Promise<DashboardOverview['traffic']> {
     lastCalendarMonthBytes,
     lastYearBytes,
     last24hHourly: hourly,
+    ...(completedUtc30d ? { completedUtc30d } : {}),
   };
 }
 
@@ -428,7 +433,7 @@ async function recentEvents(): Promise<DashboardOverview['recentEvents']> {
   }));
 }
 
-async function computeOverview(): Promise<DashboardOverview> {
+async function computeOverview(today: Date): Promise<DashboardOverview> {
   const [
     users,
     traffic,
@@ -442,7 +447,7 @@ async function computeOverview(): Promise<DashboardOverview> {
     hostCount,
   ] = await Promise.all([
     userMetrics(),
-    trafficMetrics(),
+    trafficMetrics(today),
     nodeMetrics(),
     protocolMetrics(),
     topUsersToday(),
@@ -465,10 +470,15 @@ async function computeOverview(): Promise<DashboardOverview> {
     recentEvents: events,
   };
 
-  // Best-effort: never let a Redis hiccup break the dashboard response.
-  await redis
-    .set(OVERVIEW_CACHE_KEY, JSON.stringify(overview), 'EX', OVERVIEW_CACHE_TTL_SECONDS)
-    .catch(() => undefined);
+  // A cached comparison belongs to one UTC day. A late result from the
+  // previous day can still answer its caller, but must not replace the cache.
+  const now = Date.now();
+  const expiresAt = Math.min(now + OVERVIEW_CACHE_TTL_SECONDS * 1000, today.getTime() + DAY_MS);
+  if (expiresAt > now) {
+    await redis
+      .set(OVERVIEW_CACHE_KEY, JSON.stringify(overview), 'PXAT', expiresAt)
+      .catch(() => undefined);
+  }
 
   return overview;
 }
@@ -478,9 +488,10 @@ async function computeOverview(): Promise<DashboardOverview> {
 // await the same in-flight promise instead of each firing their own stampede
 // of aggregates at a 1-vCPU host. In-process (the prod deploy is single
 // instance); cleared in finally so the next post-cache miss recomputes fresh.
-let inflightOverview: Promise<DashboardOverview> | null = null;
+const inflightOverviews = new Map<number, Promise<DashboardOverview>>();
 
 export async function getOverview(): Promise<DashboardOverview> {
+  const today = startOfToday();
   const cached = await redis.get(OVERVIEW_CACHE_KEY).catch(() => null);
   if (cached) {
     try {
@@ -490,9 +501,12 @@ export async function getOverview(): Promise<DashboardOverview> {
     }
   }
 
-  if (inflightOverview) return inflightOverview;
-  inflightOverview = computeOverview().finally(() => {
-    inflightOverview = null;
+  const day = today.getTime();
+  const inflight = inflightOverviews.get(day);
+  if (inflight) return inflight;
+  const overview = computeOverview(today).finally(() => {
+    inflightOverviews.delete(day);
   });
-  return inflightOverview;
+  inflightOverviews.set(day, overview);
+  return overview;
 }

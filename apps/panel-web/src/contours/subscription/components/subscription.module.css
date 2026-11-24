@@ -37,6 +37,19 @@
   align-items: start;
 }
 
+.paramsColumns {
+  grid-template-columns: minmax(0, var(--params-form-track, 696fr)) minmax(0, var(--params-preview-track, 372fr));
+  gap: var(--spacing-5);
+}
+
+main:has(+ aside button[aria-expanded="true"]) .params {
+  margin-inline-end: var(--params-rail-offset, 0);
+}
+
+.paramsColumns .left :is(input, textarea, select) {
+  max-width: var(--params-field-max, 100%);
+}
+
 .deliveryColumns {
   width: 100%;
   max-width: var(--size-center);

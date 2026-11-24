@@ -180,6 +180,11 @@
   --color-notice-warn-edge: color-mix(in srgb, var(--color-amber) 30%, transparent);
   --color-danger-edge: color-mix(in srgb, var(--color-danger) 60%, transparent);
   --color-row-danger: linear-gradient(90deg, #FF5D4F14 0%, #FF5D4F00 40%);
+  --size-chart-periods: 221px;
+  --size-chart-key: 3px;
+  --color-chart-tick: #3A4656;
+  --color-chart-night: #5C6876;
+  --chart-previous-key: repeating-linear-gradient(90deg, var(--color-amber) 0 4px, transparent 4px 6px);
   --color-weekend: #A8E6FF08;
   --color-area-top: #A8E6FF33;
   --color-area-bottom: #A8E6FF00;
@@ -259,4 +264,14 @@
   --shadow-toast: 0 12px 32px #00000099;
   --image-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 13l5 5L19 7' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
   --image-check-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12H18' fill='none' stroke='%2305070A' stroke-width='3'/%3E%3C/svg%3E");
+}
+
+/* Subscription parameters: distribute the extra room after the 1440 Paper layout. */
+@media (min-width: 96em) {
+  :root {
+    --params-form-track: 3fr;
+    --params-preview-track: 2fr;
+    --params-rail-offset: calc(var(--size-panel) - var(--size-rail));
+    --params-field-max: 80ch;
+  }
 }
