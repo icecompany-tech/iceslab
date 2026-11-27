@@ -17,7 +17,7 @@ import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
 import { Flag } from '@/ui/Flag/Flag'
 import { Icon } from '@/ui/Icon/Icon'
-import { EmptyRegistry, QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
+import { EmptyRegistry, QueryFailed, QueryFailedLine, QueryLoading } from '@/ui/QueryState/QueryState'
 import { Popover } from '@/ui/Popover/Popover'
 import { hostEndpoint, hostProtocol, statusAge } from '@/contours/hosts/lib/hostDisplay'
 import { profileTransport } from '@/lib/old/profileTransport'
@@ -62,13 +62,15 @@ export default function HostsPage() {
     const b = bindingById.get(h.bindingId)
     return b ? nodeById.get(b.nodeId) : undefined
   }
-  const stateOf = (h: Host): Exclude<Chips, 'all'> => {
+  const statusKnown = Boolean(nodes.data && bindings.data && !nodes.isError && !bindings.isError)
+  const stateOf = (h: Host): Exclude<Chips, 'all'> | 'unknown' => {
     if (!h.enabled) return 'off'
     if (h.hiddenByCascade || hiddenByOperator(h)) return 'hidden'
-    const node = nodeOf(h)
-    return node && nodeHealth(node.status) === 'problem' ? 'down' : 'alive'
+    const node = statusKnown && nodeOf(h)
+    const health = node && nodeHealth(node.status)
+    return health === 'ok' ? 'alive' : health === 'problem' ? 'down' : 'unknown'
   }
-  const stateWord = (h: Host) => (h.hiddenByCascade ? words.stateHidden : hiddenByOperator(h) ? words.stateOperatorHidden : { alive: words.stateAlive, down: words.stateDown, hidden: words.stateHidden, off: words.stateOff }[stateOf(h)])
+  const stateWord = (h: Host) => (h.hiddenByCascade ? words.stateHidden : hiddenByOperator(h) ? words.stateOperatorHidden : { alive: words.stateAlive, down: words.stateDown, hidden: words.stateHidden, off: words.stateOff, unknown: words.unknown }[stateOf(h)])
   const squadsOf = (h: Host) => h.reach?.squads
   const count = (state: Exclude<Chips, 'all'>) => all.filter((h) => stateOf(h) === state).length
   const countries = [...new Set((nodes.data?.nodes ?? []).flatMap((n) => (n.countryCode ? [n.countryCode.toUpperCase()] : [])))].sort()
@@ -77,7 +79,7 @@ export default function HostsPage() {
     const binding = bindingById.get(h.bindingId)
     const node = nodeOf(h)
     const profile = binding && profileById.get(binding.profileId)
-    const searchable = [h.remark, hostEndpoint(h, node, binding), binding?.port, node?.name, profile?.name].join(' ').toLowerCase()
+    const searchable = [h.remark, hostEndpoint(h, node, binding, profile), binding?.port, node?.name, profile?.name].join(' ').toLowerCase()
     return (chip === 'all' || stateOf(h) === chip) && (!country || node?.countryCode?.toUpperCase() === country) && searchable.includes(needle)
   })
   const hasCards = view === 'cards' && shown.length > 0
@@ -138,8 +140,8 @@ export default function HostsPage() {
       <div className={styles.toolbar}>
         <div className={styles.chips}>
           <Chip label={words.chips.all} count={hosts.data ? all.length : undefined} active={chip === 'all'} onClick={() => { setChip('all'); setPageIndex(0) }} />
-          <Chip label={words.chips.alive} count={hosts.data ? count('alive') : undefined} active={chip === 'alive'} onClick={() => { setChip('alive'); setPageIndex(0) }} />
-          <Chip label={words.chips.down} count={hosts.data ? count('down') : undefined} dot="danger" active={chip === 'down'} onClick={() => { setChip('down'); setPageIndex(0) }} />
+          <Chip label={words.chips.alive} count={statusKnown ? count('alive') : undefined} active={chip === 'alive'} onClick={() => { setChip('alive'); setPageIndex(0) }} />
+          <Chip label={words.chips.down} count={statusKnown ? count('down') : undefined} dot="danger" active={chip === 'down'} onClick={() => { setChip('down'); setPageIndex(0) }} />
           <Chip label={words.chips.hidden} count={hosts.data ? count('hidden') : undefined} dot="amber" active={chip === 'hidden'} onClick={() => { setChip('hidden'); setPageIndex(0) }} />
           <Chip label={words.chips.off} count={hosts.data ? count('off') : undefined} active={chip === 'off'} onClick={() => { setChip('off'); setPageIndex(0) }} />
         </div>
@@ -164,9 +166,14 @@ export default function HostsPage() {
       </div>
       {all.length > REORDER_LIMIT && <p className={styles.note}>{words.reorderLimit(REORDER_LIMIT)}</p>}
       {reorder.isError && <Banner tone="danger" title={words.reorderFailed}>{failureText(reorder.error, locale)}</Banner>}
+      {(nodes.isError || bindings.isError) && (
+        <QueryFailedLine retryLabel={words.retry} onRetry={() => { void nodes.refetch(); void bindings.refetch() }}>
+          {words.statesFailed}
+        </QueryFailedLine>
+      )}
       {hosts.isPending && <QueryLoading label={words.loading} />}
       {hosts.isError && <QueryFailed title={words.failedTitle} body={failureText(hosts.error, locale)} retryLabel={words.retry} onRetry={() => void hosts.refetch()} />}
-      {hosts.data && all.length > 0 && shown.length === 0 && <div className={styles.empty}>{words.emptyFiltered}</div>}
+      {hosts.data && all.length > 0 && shown.length === 0 && (statusKnown || chip !== 'alive' && chip !== 'down') && <div className={styles.empty}>{words.emptyFiltered}</div>}
       {shown.length > 0 && view === 'cards' && (
         <div className={styles.cards} ref={grid}>
           {visible.map((host) => {
@@ -176,14 +183,14 @@ export default function HostsPage() {
             const state = stateOf(host)
             const count = host.reach?.users
             return (
-              <button data-state={state} data-dragging={dragged === host.id || undefined} key={host.id} type="button" className={`${styles.card} ${stateOf(host) === 'down' ? styles.cardDown : ''}`} onClick={() => void navigate(`/hosts/${host.id}`)} {...dragProps(host)}>
+              <button data-state={state} data-dragging={dragged === host.id || undefined} key={host.id} type="button" className={`${styles.card} ${state === 'down' ? styles.cardDown : ''}`} onClick={() => void navigate(`/hosts/${host.id}`)} {...dragProps(host)}>
                 <span className={styles.cardHead}>
                   <Flag code={node?.countryCode ?? null} />
                   <b>{host.remark}</b>
-                  {(state === 'off' || hiddenByOperator(host)) && <small>{stateWord(host)}</small>}
+                  {(state === 'off' || state === 'unknown' || hiddenByOperator(host)) && <small>{stateWord(host)}</small>}
                   <span className={styles.protocol}>{hostProtocol(profile, true)}</span>
                 </span>
-                <span className={styles.endpoint}>{hostEndpoint(host, node, binding) || words.unknown}</span>
+                <span className={styles.endpoint}>{hostEndpoint(host, node, binding, profile) || words.unknown}</span>
                 <span className={styles.reach}>
                   <span><b>{count === undefined ? '?' : fmtNumber(count, locale)}</b> {words.usersNoun(count ?? 0)}</span>
                   <span>{state === 'down' ? stateWord(host) + statusAge(node, locale, now()) : host.hiddenByCascade ? stateWord(host) + ' ' + host.hiddenByCascade.cascadeName : words.squadTotal(squadsOf(host))}</span>
@@ -229,7 +236,7 @@ export default function HostsPage() {
                         <Link to={`/hosts/${host.id}`} className={styles.rowName} onClick={e => e.stopPropagation()}>{host.remark}</Link>
                       </span>
                     </td>
-                    <td className={styles.muted}>{hostEndpoint(host, node, binding) || '-'}</td>
+                    <td className={styles.muted}>{hostEndpoint(host, node, binding, profile) || '-'}</td>
                     <td>{profile?.name ?? '-'}</td>
                     <td className={styles.muted}>{hostProtocol(profile)}</td>
                     <td>{node?.name ?? '-'}</td>

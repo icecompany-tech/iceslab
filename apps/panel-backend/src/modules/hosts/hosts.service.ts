@@ -179,7 +179,7 @@ export async function listHosts(q: ListHostsQuery): Promise<PublicHostDto[]> {
     // The two rows under the host are part of its config: an operator who moved
     // the port edited the BINDING, and every client's link changed with it.
     include: { binding: { select: LINK_STAMPS } },
-    orderBy: [{ bindingId: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ priority: 'asc' }, { bindingId: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
   });
   const [reach, hidden] = await Promise.all([reachByHost(rows.map((r) => r.id)), getHiddenCascadeNodes()]);
   return rows.map((r) =>
@@ -666,8 +666,8 @@ export async function deleteHost(id: string): Promise<void> {
 
 /**
  * Bulk-rewrite priority based on the order of the supplied host IDs. Hosts
- * outside the list are untouched. Used by the drag-and-drop UI which sends
- * the full ordered list of a binding's hosts in one request.
+ * outside the list are untouched. The drag-and-drop UI sends
+ * the full panel inventory in the desired order.
  */
 export async function reorderHosts(input: ReorderHostsInput): Promise<PublicHostDto[]> {
   const found = await prisma.host.findMany({

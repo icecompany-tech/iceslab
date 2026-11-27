@@ -5,10 +5,18 @@ import type { Node } from '@/lib/old/nodes'
 import type { Binding, Profile } from '@/lib/old/profiles'
 import { protocolLabelCompact } from '@/lib/old/protocols'
 
-export function hostEndpoint(host: Host, node?: Node, binding?: Binding) {
-  const address = host.addressOverride || node?.address.replace(/^(\[[^\]]+\]|[^:]+):\d+$/, '$1')
+export const nodeHost = (address: string) => address.replace(/^\[([^\]]+)\](?::\d+)?$|^([^:]+):\d+$/, '$1$2')
+
+export function clientAddress(override: string | null, node?: Node, binding?: Binding, profile?: Profile) {
+  const config = profile?.config
+  const hostname = profile?.protocol === 'naive' && config && 'hostname' in config ? config.hostname : ''
+  return override || hostname || binding?.publicHost || (node ? nodeHost(node.address) : '')
+}
+
+export function hostEndpoint(host: Host, node?: Node, binding?: Binding, profile?: Profile) {
+  const address = clientAddress(host.addressOverride, node, binding, profile)
   if (!address) return ''
-  const port = host.portOverride ?? binding?.port
+  const port = host.portOverride ?? binding?.publicPort ?? binding?.port
   if (!port) return address
   const hostname = address.includes(':') && !address.startsWith('[') ? `[${address}]` : address
   return `${hostname}:${port}`

@@ -204,9 +204,13 @@
   cursor: pointer;
 }
 
+main:has(+ aside button[aria-expanded=true]) .page:not(.registry) {
+  margin-inline-end: calc(var(--size-panel) - var(--size-rail));
+}
+
 .columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-host-details));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-5);
   align-items: start;
 }
@@ -346,7 +350,7 @@
 .dropTargets { display: flex; gap: var(--spacing-2); margin-inline: auto; }
 .dropTargets button { width: auto; padding-inline: var(--spacing-3); color: var(--color-accent); border-style: dashed; }
 .formHeader { display: flex; align-items: center; gap: var(--spacing-3-5); flex-wrap: wrap; }
-.formHeader h1 { font-size: var(--text-profile-heading); line-height: var(--leading-profile-heading); }
+.formHeader h1 { font-size: var(--text-profile-heading); line-height: var(--leading-profile-heading); overflow-wrap: anywhere; min-width: 0; }
 .formHeader + .columns { margin-top: var(--spacing-1); }
 .back { justify-content: center; width: var(--size-toolbar-row); height: var(--size-toolbar-row); color: var(--color-text-secondary); }
 .basicFields { display: grid; gap: var(--spacing-5); grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -356,11 +360,10 @@
 .steps > section { border: 0; border-top: var(--border-hairline) solid var(--color-border); border-radius: 0; }
 .steps > section > button { min-height: var(--size-code-cell); padding-inline: var(--spacing-6); }
 .clientPreview { display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3); border: var(--border-hairline) solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
-.clientPreview span { display: grid; gap: var(--spacing-half); }
+.clientPreview span { display: grid; gap: var(--spacing-half); min-width: 0; overflow-wrap: anywhere; }
 .clientPreview small { color: var(--color-text-muted); }
 .clientPreview > b { margin-left: auto; color: var(--color-accent); }
-.columns { display: flex; flex-wrap: wrap; }
-.left { flex: 1 1 var(--size-host-details); }
+.left { flex: 1 1 var(--size-configs); }
 .right { flex: 0 1 var(--size-host-details); max-width: 100%; }
 .basicFields { grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--size-host-search)), 1fr)); }
 

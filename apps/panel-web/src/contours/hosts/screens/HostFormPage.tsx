@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import styles from '@/contours/hosts/components/hosts.module.css'
 import { DICT } from '@/contours/hosts/dict'
 import { useBindingsList, useCreateHost, useDeleteHost, useFleet, useGrantHost, useHostFields, useHostFormats, useHostsList, useOldSquads, usePortCheck, useProfilesList, useUpdateHost, type GrantFailure } from '@/contours/hosts/hooks/useHosts'
-import { hostProtocol, statusAge } from '@/contours/hosts/lib/hostDisplay'
+import { clientAddress, hostProtocol, statusAge } from '@/contours/hosts/lib/hostDisplay'
 import { Icon } from '@/ui/Icon/Icon'
 import { draftOfHost, draftProblems, emptyDraft, hostCreateFields, hostUpdateBody, type HostDraft } from '@/contours/hosts/lib/hostForm'
 import { hostPortPlan } from '@/contours/hosts/lib/hostPortPlan'
@@ -37,7 +37,10 @@ import { useToast } from '@/ui/Toast/useToast'
 const ALPN = ['h2', 'http/1.1', 'h3'] as const
 const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'edge', 'ios', 'android', 'random', 'randomized']
 
-const numberOr = (text: string): number | '' => (text.trim() === '' || Number.isNaN(Number(text)) ? '' : Number(text))
+const asPort = (text: string): number | '' => {
+  const port = Number(text)
+  return /^\d+$/.test(text) && port >= 1 && port <= 65535 ? port : ''
+}
 
 function HostForm({ host }: { host: Host | null }) {
   const words = useDict(DICT)
@@ -65,7 +68,7 @@ function HostForm({ host }: { host: Host | null }) {
   const [draft, setDraft] = useState<HostDraft>(initial)
   const [profileId, setProfileId] = useState<string | null>(url.get('profileId'))
   const [nodeId, setNodeId] = useState<string | null>(url.get('nodeId'))
-  const [portText, setPortText] = useState('')
+  const [portText, setPortText] = useState<string | null>(null)
   const [clientPortText, setClientPortText] = useState<string | null>(null)
   const [portMove, setPortMove] = useState<HostPortMove>('host')
   const [open, setOpen] = useState<string | null>(isNew ? 'profile' : null)
@@ -86,9 +89,11 @@ function HostForm({ host }: { host: Host | null }) {
 
   const effectiveProfileId = binding?.profileId ?? profileId
   const effectiveNodeId = binding?.nodeId ?? nodeId
-  const port: number | '' = portText !== '' ? numberOr(portText) : (binding?.port ?? '')
+  const port = portText === null ? binding?.port ?? '' : asPort(portText)
   const storedClient = host?.portOverride ?? null
-  const clientPort: number | '' = clientPortText === null ? (storedClient ?? '') : numberOr(clientPortText)
+  const clientPort = clientPortText === null ? storedClient ?? '' : asPort(clientPortText)
+  const portInvalid = portText !== null && port === ''
+  const clientPortInvalid = Boolean(clientPortText) && clientPort === ''
   const profile = profiles.data?.profiles.find((p) => p.id === effectiveProfileId)
   const node = fleet.data?.nodes.find((n) => n.id === effectiveNodeId)
   const transport = profileTransport(profile)
@@ -128,8 +133,9 @@ function HostForm({ host }: { host: Host | null }) {
   const body = hostUpdateBody(initial, draft)
   const portChanged = host && binding ? hostPortPayload({ listenPort: binding.port, clientPort: storedClient }, { port, clientPort }, portMove) : {}
   const changed = Object.keys(body).length > 0 || Object.keys(portChanged).length > 0
-  const invalid = problems.remark || problems.address !== null || problems.description || portBusy || (sniExpected !== null && !sniExpected.includes(draft.sni.trim()))
-  const ready = isNew ? effectiveProfileId !== null && effectiveNodeId !== null && port !== '' && !invalid : changed && !invalid
+  const invalid = problems.remark || problems.address !== null || problems.description || portInvalid || clientPortInvalid || portBusy || (sniExpected !== null && !sniExpected.includes(draft.sni.trim()))
+  const compatibleNode = node && profile && !nodeCoreBlocks(nodeCoreFit(node, profile.effectiveEngine))
+  const ready = isNew ? compatibleNode && port !== '' && !invalid : changed && !invalid
 
   const fail = (err: unknown) => {
     const taken = portRefusalOf(err)
@@ -172,6 +178,7 @@ function HostForm({ host }: { host: Host | null }) {
   }
 
   const submit = () => {
+    if (!ready) return
     setRefusal(null)
     setPortOwners(null)
     if (isNew) {
@@ -194,7 +201,7 @@ function HostForm({ host }: { host: Host | null }) {
       {
         onSuccess: () => {
           setInitial(draft)
-          setPortText('')
+          setPortText(null)
           setClientPortText(null)
           toast.show(words.saved)
           if (grantIds.length > 0 && host) runGrant(host.id)
@@ -225,7 +232,15 @@ function HostForm({ host }: { host: Host | null }) {
   const lastOf = host ? lastHostCheck([host.id], squads.data?.squads) : []
   const deleteLock = lastOf === null ? words.deleteSquadsUnknown : lastOf.length > 0 ? words.deleteLocked(lastOf.join(', ')) : null
   const lastOnNode = host && binding ? allHosts.filter((h) => h.id !== host.id && allBindings.find((b) => b.id === h.bindingId)?.nodeId === binding.nodeId).length === 0 : false
-  const addressShown = draft.address.trim() || node?.address.split(':')[0] || null
+  const target = isNew || portMoved && portMove === 'host'
+    ? allBindings.find(b => b.profileId === effectiveProfileId && b.nodeId === effectiveNodeId && b.port === port)
+    : undefined
+  const inheritedAddress = clientAddress(null, node, target ?? binding, profile)
+  const address = !problems.address && draft.address.trim() || null
+  const addressShown = address || inheritedAddress
+  const publicPort = target ? target.publicPort : plan?.kind === 'split' || portMoved && binding?.publicPort === binding?.port ? null : binding?.publicPort
+  const previewPort = clientPort || publicPort || port || '-'
+  const recordType = (value: string) => value.includes(':') ? 'AAAA' : /^(?:\d+\.){3}\d+$/.test(value) ? 'A' : 'CNAME'
 
   return (
     <div className={styles.page}>
@@ -235,7 +250,7 @@ function HostForm({ host }: { host: Host | null }) {
         {host && <span className={styles.note}>{node && nodeHealth(node.status) === 'problem' ? words.downNode + statusAge(node, locale, now()) : host.reach && fmtNumber(host.reach.users, locale) + ' ' + words.usersNoun(host.reach.users)}</span>}
         <span className={styles.spacer} />
             <Button size="md" onClick={() => void navigate('/hosts')}>{words.cancel}</Button>
-            <Button size="md" icon={<Icon name="check" />} variant="primary" disabled={!ready && !(host && grantIds.length > 0 && !changed)} loading={create.isPending || update.isPending || grant.isPending} onClick={() => (host && !changed ? runGrant(host.id) : submit())}>
+            <Button size="md" icon={<Icon name="check" />} variant="primary" disabled={!ready && !(host && effectiveProfileId && grantIds.length > 0 && !changed && !invalid)} loading={create.isPending || update.isPending || grant.isPending} onClick={() => (host && !changed ? runGrant(host.id) : submit())}>
               {isNew ? words.createShort : words.save}
             </Button>
       </header>
@@ -281,12 +296,12 @@ function HostForm({ host }: { host: Host | null }) {
           </Step>
           <Step optional={!isNew} title={words.stepNode} open={open === 'node'} onToggle={() => setOpen(open === 'node' ? null : 'node')} value={`${node?.name ?? '-'}${port === '' ? '' : `:${port}`}`}>
             <div className={styles.twoFields}>
-              <Field label={words.port} error={portBusy ? words.portBusy(owners.map(ownerWord).join(', ')) : undefined} hint={!portBusy && check.data?.ok ? words.portCheckFree : undefined}>
+              <Field label={words.port} error={portInvalid ? words.portInvalid : portBusy ? words.portBusy(owners.map(ownerWord).join(', ')) : undefined} hint={!portBusy && check.data?.ok ? words.portCheckFree : undefined}>
                 {(a11y) => (
                   <Input
                     {...a11y}
                     inputMode="numeric"
-                    value={port}
+                    value={portText ?? port}
                     onChange={(e) => {
                       setPortText(e.target.value)
                       setPortOwners(null)
@@ -294,7 +309,6 @@ function HostForm({ host }: { host: Host | null }) {
                   />
                 )}
               </Field>
-              <Field label={words.clientPort} hint={words.clientPortHint}>{(a11y) => <Input {...a11y} inputMode="numeric" value={clientPort} onChange={(e) => setClientPortText(e.target.value)} />}</Field>
             </div>
             {planText && <p className={styles.note}>{planText}</p>}
             {portMoved && (
@@ -323,7 +337,8 @@ function HostForm({ host }: { host: Host | null }) {
           </Step>
           <Step optional title={words.stepAddress} open={open === 'address'} onToggle={() => setOpen(open === 'address' ? null : 'address')} value={draft.address || words.addressFromNode}>
             <Field label={words.addressLabel} hint={words.addressHint} error={problems.address ? words.addressProblem[problems.address] : undefined}>{(a11y) => <Input {...a11y} value={draft.address} onChange={(e) => patch({ address: e.target.value })} />}</Field>
-            {draft.address.trim() && node && !problems.address && <p className={styles.note}>{words.aRecord(draft.address.trim(), node.address.split(':')[0] ?? '')}</p>}
+            <Field label={words.clientPort} hint={words.clientPortHint} error={clientPortInvalid ? words.portInvalid : undefined}>{(a11y) => <Input {...a11y} inputMode="numeric" value={clientPortText ?? clientPort} onChange={(e) => setClientPortText(e.target.value)} />}</Field>
+            {address && inheritedAddress && address !== inheritedAddress && recordType(address) === 'CNAME' && <p className={styles.note}>{words.dnsRecord(address, recordType(inheritedAddress), inheritedAddress.replace(/^\[|\]$/g, ''))}</p>}
           </Step>
           <Step optional title={words.stepClient} open={open === 'client'} onToggle={() => setOpen(open === 'client' ? null : 'client')} value={nothing ? words.nothingValue : undefined}>
             {effectiveProfileId === null && <p className={styles.note}>{words.pickProfileFirst}</p>}
@@ -408,14 +423,14 @@ function HostForm({ host }: { host: Host | null }) {
             {!profile && !node ? (
               <p className={styles.note}>{words.rightNothing}</p>
             ) : (
-              <><div className={styles.clientPreview}><Flag code={node?.countryCode ?? null} /><span><b>{draft.remark || '-'}</b><small>{draft.description}</small></span><b>{clientPort || port || '-'}</b></div>
+              <><div className={styles.clientPreview}><Flag code={node?.countryCode ?? null} /><span><b>{draft.remark || '-'}</b><small>{draft.description}</small></span><b>{previewPort}</b></div>
               <dl className={styles.facts}>
                 <dt>{words.col.protocol}</dt>
                 <dd>{hostProtocol(profile)}</dd>
                 <dt>{words.rightAddress}</dt>
-                <dd>{addressShown ?? '-'}</dd>
+                <dd>{addressShown || '-'}</dd>
                 <dt>{words.rightPort}</dt>
-                <dd>{clientPort || port || '-'}</dd>
+                <dd>{previewPort}</dd>
               </dl></>
             )}
             {node && (

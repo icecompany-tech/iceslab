@@ -92,6 +92,19 @@ describe('HostFormPage', () => {
     expect(s.writes()).toEqual([])
   })
 
+  it('keeps an invalid client port visible and blocks a write', async () => {
+    const s = server({ 'GET /api/hosts': { body: { hosts: [{ ...host, portOverride: 8443 }] } } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /^Адрес/ }))
+    const field = screen.getByLabelText('Порт у клиента') as HTMLInputElement
+    expect(field.value).toBe('8443')
+    fireEvent.change(field, { target: { value: 'xx' } })
+    expect(field.value).toBe('xx')
+    await screen.findByText('Введите порт от 1 до 65535.')
+    expect((screen.getByRole('button', { name: 'Сохранить' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(s.writes()).toEqual([])
+  })
+
   it('a wrong SNI stands at the field with the names the node serves', async () => {
     server({ 'PUT /api/hosts/h1': { status: 400, body: { error: 'SNI_MISMATCH', expected: ['a.example'] } } })
     page()
