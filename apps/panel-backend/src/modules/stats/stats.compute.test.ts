@@ -15,7 +15,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       multiplier: 2,
     });
     // used+lifetime increment = scale(150) = 300
-    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 300n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 300n, hasActivity: true }]);
     // direction split scaled
     expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 200n, bytesOut: 100n }]);
     // node-level totals stay raw (unscaled)
@@ -29,7 +29,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       users: [{ userId: 'u1', bytesIn: 7, bytesOut: 3 }],
       multiplier: 1,
     });
-    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 10n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 10n, hasActivity: true }]);
     expect(w.historyRows[0]).toEqual({ userId: 'u1', bytesIn: 7n, bytesOut: 3n });
   });
 
@@ -107,8 +107,8 @@ describe('computeNodeStatsWrites (B3)', () => {
       multiplier: 1,
     });
     expect(w.userTrafficRows).toEqual([
-      { userId: 'u1', scaled: 175n }, // (150) + (25)
-      { userId: 'u2', scaled: 10n },
+      { userId: 'u1', scaled: 175n, hasActivity: true }, // (150) + (25)
+      { userId: 'u2', scaled: 10n, hasActivity: true },
     ]);
     expect(w.historyRows).toEqual([
       { userId: 'u1', bytesIn: 120n, bytesOut: 55n },
@@ -127,7 +127,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       multiplier: 2,
     });
     // scale(3)+scale(4) = 6+8 = 14 (matches the old two-increment behaviour)
-    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 14n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 14n, hasActivity: true }]);
   });
 
   // Regression guard for the runaway AWG accounting bug as seen from the panel
@@ -146,7 +146,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       maxUserDeltaBytes: TiB,
     });
     // sane user billed normally; runaway dropped from every accumulator
-    expect(w.userTrafficRows).toEqual([{ userId: 'sane', scaled: 1500n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'sane', scaled: 1500n, hasActivity: true }]);
     expect(w.historyRows).toEqual([{ userId: 'sane', bytesIn: 1000n, bytesOut: 500n }]);
     expect(w.nodeUpload).toBe(1000n);
     expect(w.nodeDownload).toBe(500n);
@@ -172,7 +172,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       ],
       multiplier: 1,
     });
-    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 5n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 5n, hasActivity: true }]);
     expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 5n, bytesOut: 0n }]);
   });
 
@@ -189,7 +189,7 @@ describe('computeNodeStatsWrites (B3)', () => {
       nodeTotalIsCumulative: true,
     });
     // per-user billing unchanged (scaled by multiplier)
-    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 300n }]);
+    expect(w.userTrafficRows).toEqual([{ userId: 'u1', scaled: 300n, hasActivity: true }]);
     expect(w.historyRows).toEqual([{ userId: 'u1', bytesIn: 200n, bytesOut: 100n }]);
     // node history is the inbound delta (5000-4200, 2000-1500), NOT the per-user
     // bytes (100/50) and NOT both summed.

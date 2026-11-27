@@ -231,11 +231,11 @@ export async function list(params: ListParams): Promise<{
 
   // ───── the traffic row: presence, last node, bytes, first seen ─────
   if (params.online === 'online') {
-    and.push({ traffic: { onlineAt: { gte: new Date(Date.now() - ONLINE_WINDOW_MS) } } });
+    and.push({ traffic: { onlineAt: { gt: new Date(Date.now() - ONLINE_WINDOW_MS) } } });
   } else if (params.online === 'offline') {
     // Seen at some point, not recently. Never-connected users are their own
     // cohort below, not a quiet third of this one.
-    and.push({ traffic: { onlineAt: { lt: new Date(Date.now() - ONLINE_WINDOW_MS) } } });
+    and.push({ traffic: { onlineAt: { lte: new Date(Date.now() - ONLINE_WINDOW_MS) } } });
   } else if (params.online === 'never') {
     and.push({ OR: [{ traffic: { is: null } }, { traffic: { onlineAt: null } }] });
   }

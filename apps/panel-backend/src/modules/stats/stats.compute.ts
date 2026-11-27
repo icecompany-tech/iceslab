@@ -98,10 +98,11 @@ export interface NodeStatsInput {
   nodeTotals?: { upload: bigint; download: bigint };
 }
 
-/** One per-user `user_traffic` increment (used+lifetime). Never 0 (A-121). */
+/** One per-user billing increment and its unscaled activity evidence. */
 export interface UserTrafficRow {
   userId: string;
   scaled: bigint;
+  hasActivity: boolean;
 }
 
 /** One per-user `node_user_usage_history` daily-bucket increment. */
@@ -289,7 +290,7 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
   // the same target row twice in one statement (Postgres error 21000). Summing
   // each entry's scaled bytes here matches the old per-user loop exactly (it ran
   // one increment per entry) and keeps userIds unique in the unnest array.
-  const usedByUser = new Map<string, bigint>();
+  const usedByUser = new Map<string, UserTrafficRow>();
   const histByUser = new Map<string, { in: bigint; out: bigint }>();
   const clamped: { userId: string; bytesIn: number; bytesOut: number }[] = [];
   const ceiling =
@@ -322,17 +323,17 @@ export function computeNodeStatsWrites(input: NodeStatsInput): NodeStatsWrites {
     // A user who moved nothing is not written: no row, no online touch, on
     // every protocol (A-121, see above).
     if (delta === 0n) continue;
-    usedByUser.set(u.userId, (usedByUser.get(u.userId) ?? 0n) + scale(delta));
+    const traffic = usedByUser.get(u.userId) ?? { userId: u.userId, scaled: 0n, hasActivity: false };
+    traffic.scaled += scale(delta);
+    traffic.hasActivity ||= inB >= 0n && outB >= 0n && delta > 0n;
+    usedByUser.set(u.userId, traffic);
     const h = histByUser.get(u.userId) ?? { in: 0n, out: 0n };
     h.in += scale(inB);
     h.out += scale(outB);
     histByUser.set(u.userId, h);
   }
 
-  const userTrafficRows: UserTrafficRow[] = [];
-  for (const [userId, scaled] of usedByUser) {
-    userTrafficRows.push({ userId, scaled });
-  }
+  const userTrafficRows = [...usedByUser.values()];
   const historyRows: UserHistoryRow[] = [];
   for (const [userId, h] of histByUser) {
     historyRows.push({ userId, bytesIn: h.in, bytesOut: h.out });

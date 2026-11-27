@@ -215,7 +215,7 @@ async function userMetrics(): Promise<DashboardOverview['users']> {
         _count: { _all: true },
       }),
       prisma.userTraffic.count({
-        where: { user: { deletedAt: null }, onlineAt: { gte: onlineCutoff } },
+        where: { user: { deletedAt: null }, onlineAt: { gt: onlineCutoff } },
       }),
       prisma.userTraffic.count({
         where: { user: { deletedAt: null }, onlineAt: { gte: todayCutoff } },

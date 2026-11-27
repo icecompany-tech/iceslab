@@ -237,29 +237,54 @@ export async function pollNodeStats(scheduledAt?: Date): Promise<{ ok: number; f
 
         const stmts: Prisma.PrismaPromise<unknown>[] = [];
 
-        // user_traffic: bulk upsert. used+lifetime increment by the scaled
-        // delta; online_at/last_connected_node_id always refreshed;
-        // first_connected_at only set on insert (absent from the SET list, so
-        // preserved on conflict). Only users who moved bytes get a row (A-121).
+        // Billing increments independently of the last-activity observation.
+        // An equal timestamp has no cross-node chronology: use UUID order
+        // only to keep the displayed pair stable across commit orders.
         // Values bound as text[] and
         // cast in-SQL so bigints serialize unambiguously through the pg driver.
         if (w.userTrafficRows.length > 0) {
           const ids = w.userTrafficRows.map((r) => r.userId);
           const amts = w.userTrafficRows.map((r) => r.scaled.toString());
+          const activity = w.userTrafficRows.map((r) => r.hasActivity);
+          const observedAt = now.toISOString();
           stmts.push(
             tx.$executeRaw(Prisma.sql`
               INSERT INTO user_traffic
                 (user_id, used_traffic_bytes, lifetime_traffic_bytes, online_at, first_connected_at, last_connected_node_id)
-              SELECT u.uid, u.amt, u.amt, ${now}, ${now}, ${node.id}::uuid
+              SELECT u.uid, u.amt, u.amt,
+                CASE WHEN u.active THEN ${observedAt}::timestamptz END,
+                CASE WHEN u.active THEN ${observedAt}::timestamptz END,
+                CASE WHEN u.active THEN ${node.id}::uuid END
               FROM unnest(
                 ARRAY[${Prisma.join(ids)}]::uuid[],
-                ARRAY[${Prisma.join(amts)}]::bigint[]
-              ) AS u(uid, amt)
+                ARRAY[${Prisma.join(amts)}]::bigint[],
+                ARRAY[${Prisma.join(activity)}]::boolean[]
+              ) AS u(uid, amt, active)
               ON CONFLICT (user_id) DO UPDATE SET
                 used_traffic_bytes     = user_traffic.used_traffic_bytes + EXCLUDED.used_traffic_bytes,
                 lifetime_traffic_bytes = user_traffic.lifetime_traffic_bytes + EXCLUDED.lifetime_traffic_bytes,
-                online_at              = EXCLUDED.online_at,
-                last_connected_node_id = EXCLUDED.last_connected_node_id
+                first_connected_at     = COALESCE(user_traffic.first_connected_at, CASE
+                  WHEN user_traffic.online_at IS NULL
+                    AND user_traffic.last_connected_node_id IS NULL
+                    AND user_traffic.used_traffic_bytes = 0
+                    AND user_traffic.lifetime_traffic_bytes = 0
+                  THEN CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM node_user_usage_history AS history
+                    WHERE history.user_id = user_traffic.user_id
+                  ) THEN EXCLUDED.first_connected_at END
+                END),
+                online_at              = GREATEST(user_traffic.online_at, EXCLUDED.online_at),
+                last_connected_node_id = CASE
+                  WHEN EXCLUDED.online_at IS NOT NULL AND (
+                    user_traffic.online_at IS NULL OR EXCLUDED.online_at > user_traffic.online_at OR (
+                      EXCLUDED.online_at = user_traffic.online_at AND (
+                        user_traffic.last_connected_node_id IS NULL OR
+                        EXCLUDED.last_connected_node_id < user_traffic.last_connected_node_id
+                      )
+                    )
+                  ) THEN EXCLUDED.last_connected_node_id
+                  ELSE user_traffic.last_connected_node_id
+                END
             `),
           );
         }
