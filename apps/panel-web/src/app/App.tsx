@@ -1,10 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Suspense, useCallback, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { unstable_HistoryRouter as HistoryRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ROUTES } from '@/app/contours'
 import { createQueryClient } from '@/app/queryClient'
 import { RequireSession } from '@/app/RequireSession'
 import { Shell } from '@/app/shell/Shell'
+import { panelHistory } from '@/app/panelHistory'
 import { ClockProvider } from '@/lib/clock'
 import { isLocale, LocaleProvider, type Locale } from '@/lib/i18n'
 import { ToastProvider } from '@/ui/Toast/Toast'
@@ -39,23 +40,20 @@ export function App() {
     }
   }, [])
 
-  const publicRoutes = ROUTES.filter((r) => r.public)
-  const privateRoutes = ROUTES.filter((r) => !r.public)
-
   return (
     <ClockProvider value={now}>
       <LocaleProvider locale={locale} setLocale={setLocale}>
         <QueryClientProvider client={queryClient}>
           <ToastProvider closeLabel={locale === 'ru' ? 'Закрыть' : 'Close'}>
-            <BrowserRouter>
+            <HistoryRouter history={panelHistory}>
               <Suspense>
                 <Routes>
-                  {publicRoutes.map(({ path, Screen }) => (
+                  {ROUTES.filter((route) => route.public).map(({ path, Screen }) => (
                     <Route key={path} path={path} element={<Screen />} />
                   ))}
                   <Route element={<RequireSession />}>
                     <Route element={<Shell />}>
-                      {privateRoutes.map(({ path, Screen }) => (
+                      {ROUTES.filter((route) => !route.public).map(({ path, Screen }) => (
                         <Route key={path} path={path} element={<Screen />} />
                       ))}
                     </Route>
@@ -63,7 +61,7 @@ export function App() {
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Suspense>
-            </BrowserRouter>
+            </HistoryRouter>
           </ToastProvider>
         </QueryClientProvider>
       </LocaleProvider>
