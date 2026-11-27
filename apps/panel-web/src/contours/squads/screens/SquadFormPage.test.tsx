@@ -78,7 +78,9 @@ describe('SquadFormPage, gates B2', () => {
   it('All is read only: no save, no delete, no live checks', async () => {
     server()
     page(`/squads/${ALL_SQUAD_ID}`)
-    await screen.findByText('Сквад All')
+    await screen.findByRole('heading', { name: 'All', level: 1 })
+    expect(screen.getByText('системный')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: /Германия/ }))
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Удалить сквад' })).toBeNull()
     expect((screen.getByRole('checkbox', { name: 'h1' }) as HTMLInputElement).disabled).toBe(true)

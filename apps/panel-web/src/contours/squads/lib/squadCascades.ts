@@ -185,6 +185,16 @@ export function nodePolicyLeadsInto(
   return complete ? false : null;
 }
 
+/** Entry hosts are selected on their cascade; other protocols on that node remain direct. */
+export function isCascadeEntry(c: Cascade, nodeId: string, protocol: string): boolean {
+  if (!c.enabled) return false;
+  const position = c.positions.find(p => p.position === 0);
+  const hop = c.hops.find(h => h.position === 0);
+  const matchesNode = position ? position.nodeIds.includes(nodeId) : hop?.nodeId === nodeId;
+  const entryProtocol = position?.entryProtocol ?? hop?.entryProtocol ?? 'xray';
+  return Boolean(matchesNode && protocol === entryProtocol);
+}
+
 /** Entry node ids and directions of a cascade, v4 first, hops for the old ones. */
 export function cascadeShape(c: Pick<Cascade, 'hops' | 'positions' | 'directions'>): {
   entryNodeIds: string[];

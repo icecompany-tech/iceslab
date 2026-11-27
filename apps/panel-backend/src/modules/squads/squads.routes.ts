@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/auth.hook.js';
 import {
   CreateSquadSchema,
+  ReorderSquadsSchema,
   UpdateSquadSchema,
   SquadIdParamSchema,
 } from './squads.schemas.js';
@@ -39,6 +40,18 @@ export async function squadsRoutes(app: FastifyInstance): Promise<void> {
       }
       if (err instanceof RoutingPresetNotFoundError) {
         return reply.code(400).send({ error: err.code, message: err.message, field: 'customRoutingPresetId' });
+      }
+      throw err;
+    }
+  });
+
+  app.put('/api/squads/reorder', { onRequest: [requireAuth] }, async (request, reply) => {
+    const input = ReorderSquadsSchema.parse(request.body);
+    try {
+      return reply.send({ ids: await squadsService.reorderSquads(input) });
+    } catch (err) {
+      if (err instanceof squadsService.SquadOrderConflictError) {
+        return reply.code(409).send({ error: 'SQUAD_ORDER_CONFLICT', message: err.message, ids: err.ids });
       }
       throw err;
     }

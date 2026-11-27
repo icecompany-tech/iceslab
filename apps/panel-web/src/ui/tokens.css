@@ -148,6 +148,9 @@
   --size-host-table-min: 954px;
   --size-host-card-heading: 22px;
   --size-squad-card: 352px;
+  --size-squad-users: 100px;
+  --size-squad-flags: 150px;
+  --size-squad-stat: 120px;
   --size-squad-search: 220px;
   --size-register: 1856px;
   /* The center's own height inside the window: below the bar, inside the center's padding. */

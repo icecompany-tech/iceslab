@@ -58,6 +58,7 @@ model Group {
   // has no explicit hwidDeviceLimit; the effective default is the MAX across
   // the user's squads (most-permissive cohort wins). Null = no squad default.
   hwidDeviceLimit Int?     @map("hwid_device_limit")
+  displayOrder    Int      @default(autoincrement()) @map("display_order")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 

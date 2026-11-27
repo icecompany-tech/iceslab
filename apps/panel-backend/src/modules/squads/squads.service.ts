@@ -1,8 +1,9 @@
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { isUniqueViolationOn } from '../../lib/util/unique-violation.js';
 import { ALL_SQUAD_ID } from './squads.constants.js';
-import type { CreateSquadInput, UpdateSquadInput } from './squads.schemas.js';
+import type { CreateSquadInput, ReorderSquadsInput, UpdateSquadInput } from './squads.schemas.js';
 import { mapSquadToPublic, type PublicSquadDto } from './squads.mapper.js';
 import {
   assertCustomPresetExists,
@@ -30,6 +31,13 @@ export class SquadProtectedError extends Error {
   constructor() {
     super('The "All" squad is system-managed and cannot be modified or deleted');
     this.name = 'SquadProtectedError';
+  }
+}
+
+export class SquadOrderConflictError extends Error {
+  constructor(public ids: string[]) {
+    super('Squad order changed. Reload it before trying again.');
+    this.name = 'SquadOrderConflictError';
   }
 }
 
@@ -153,10 +161,45 @@ function offRows(groupId: string, exitAcl: ExitAclInput): { groupId: string; cas
   return exitAcl.filter((e) => givenList(e).length === 0).map((e) => ({ groupId, cascadeId: e.cascadeId }));
 }
 
+const squadOrder = [
+  { displayOrder: 'asc' },
+  { id: 'asc' },
+] satisfies Prisma.GroupOrderByWithRelationInput[];
+
+async function lockSquadOrder(tx: Prisma.TransactionClient): Promise<void> {
+  // Serialize order writers and inserts/deletes, including writers that do
+  // not use this service. Ordinary list and subscription reads can continue.
+  await tx.$executeRaw`LOCK TABLE "groups" IN SHARE ROW EXCLUSIVE MODE`;
+}
+
+function sameSquadOrder(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+export async function reorderSquads({ expectedIds, ids }: ReorderSquadsInput): Promise<string[]> {
+  return prisma.$transaction(async (tx) => {
+    await lockSquadOrder(tx);
+    const current = (await tx.group.findMany({ select: { id: true }, orderBy: squadOrder }))
+      .map(({ id }) => id);
+    // A retry after a committed write already has the requested result.
+    if (sameSquadOrder(current, ids)) return current;
+    if (!sameSquadOrder(current, expectedIds)) throw new SquadOrderConflictError(current);
+
+    // One update, and only display order. Keep timestamps and grants intact.
+    await tx.$executeRaw`
+      UPDATE "groups" AS squad
+      SET "display_order" = desired.position::integer
+      FROM unnest(ARRAY[${Prisma.join(ids)}]::uuid[]) WITH ORDINALITY AS desired(id, position)
+      WHERE squad.id = desired.id AND squad.display_order <> desired.position
+    `;
+    return ids;
+  });
+}
+
 export async function listSquads(): Promise<PublicSquadDto[]> {
   const rows = await prisma.group.findMany({
     include: includeRelations,
-    orderBy: [{ createdAt: 'asc' }],
+    orderBy: squadOrder,
   });
   return rows.map(mapSquadToPublic);
 }
@@ -177,39 +220,42 @@ export async function createSquad(input: CreateSquadInput): Promise<PublicSquadD
   const exitRows = await exitAclRows('', input.exitAcl);
   await assertCustomPresetExists(input.customRoutingPresetId);
 
-  const row = await prisma.group.create({
-    data: {
-      name: input.name,
-      description: input.description ?? null,
-      routingPreset: input.routingPreset ?? null,
-      // A-229 - or an own preset (the schema refused both at once).
-      ...(input.customRoutingPresetId
-        ? { customRoutingPreset: { connect: { id: input.customRoutingPresetId } } }
-        : {}),
-      hwidDeviceLimit: input.hwidDeviceLimit ?? null,
-      groupProfiles: {
-        create: input.profileIds.map((profileId) => ({ profileId })),
+  const row = await prisma.$transaction(async (tx) => {
+    await lockSquadOrder(tx);
+    return tx.group.create({
+      data: {
+        name: input.name,
+        description: input.description ?? null,
+        routingPreset: input.routingPreset ?? null,
+        // A-229 - or an own preset (the schema refused both at once).
+        ...(input.customRoutingPresetId
+          ? { customRoutingPreset: { connect: { id: input.customRoutingPresetId } } }
+          : {}),
+        hwidDeviceLimit: input.hwidDeviceLimit ?? null,
+        groupProfiles: {
+          create: input.profileIds.map((profileId) => ({ profileId })),
+        },
+        // Opt-in narrowing: an empty list means every host of the granted
+        // profiles, which is what a squad has always done.
+        groupHosts: {
+          create: input.hostIds.map((hostId) => ({ hostId })),
+        },
+        cascadeExits: {
+          create: exitRows.map((r) => ({
+            cascade: { connect: { id: r.cascadeId } },
+            ...(r.directionId ? { direction: { connect: { id: r.directionId } } } : {}),
+            ...(r.exitNodeId ? { node: { connect: { id: r.exitNodeId } } } : {}),
+          })),
+        },
+        cascadesOff: {
+          create: offRows('', input.exitAcl).map((o) => ({ cascade: { connect: { id: o.cascadeId } } })),
+        },
+        routePolicies: {
+          create: input.policyIds.map((policyId) => ({ policy: { connect: { id: policyId } } })),
+        },
       },
-      // Opt-in narrowing: an empty list means every host of the granted
-      // profiles, which is what a squad has always done.
-      groupHosts: {
-        create: input.hostIds.map((hostId) => ({ hostId })),
-      },
-      cascadeExits: {
-        create: exitRows.map((r) => ({
-          cascade: { connect: { id: r.cascadeId } },
-          ...(r.directionId ? { direction: { connect: { id: r.directionId } } } : {}),
-          ...(r.exitNodeId ? { node: { connect: { id: r.exitNodeId } } } : {}),
-        })),
-      },
-      cascadesOff: {
-        create: offRows('', input.exitAcl).map((o) => ({ cascade: { connect: { id: o.cascadeId } } })),
-      },
-      routePolicies: {
-        create: input.policyIds.map((policyId) => ({ policy: { connect: { id: policyId } } })),
-      },
-    },
-    include: includeRelations,
+      include: includeRelations,
+    });
   }).catch((err: unknown) => {
     // The check above is read-then-insert: a create racing it loses here.
     if (isUniqueViolationOn(err, 'groups_name_key', ['name'])) throw new SquadAlreadyExistsError(input.name);

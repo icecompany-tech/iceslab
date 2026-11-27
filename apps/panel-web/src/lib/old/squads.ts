@@ -82,6 +82,11 @@ export async function listSquads(): Promise<{ squads: Squad[] }> {
   return data;
 }
 
+export async function reorderSquads(expectedIds: string[], ids: string[]): Promise<{ ids: string[] }> {
+  const { data } = await api.put<{ ids: string[] }>('/api/squads/reorder', { expectedIds, ids });
+  return data;
+}
+
 export async function createSquad(input: CreateSquadInput): Promise<Squad> {
   const { data } = await api.post<Squad>('/api/squads', input);
   return data;

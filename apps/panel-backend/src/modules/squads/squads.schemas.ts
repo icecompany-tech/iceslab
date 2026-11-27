@@ -86,6 +86,20 @@ export const UpdateSquadSchema = z.object({
 }).refine((v) => !bothPresetsGiven(v), { message: BOTH_PRESETS_MESSAGE, path: ['customRoutingPresetId'] });
 export type UpdateSquadInput = z.infer<typeof UpdateSquadSchema>;
 
+const OrderIds = z.array(PermissiveUuid.transform((id) => id.toLowerCase())).refine(
+  (ids) => new Set(ids).size === ids.length,
+  { message: 'Squad IDs must be unique' },
+);
+
+export const ReorderSquadsSchema = z.object({ expectedIds: OrderIds, ids: OrderIds }).refine(
+  ({ expectedIds, ids }) => {
+    const expected = new Set(expectedIds);
+    return expected.size === ids.length && ids.every((id) => expected.has(id));
+  },
+  { message: 'Both orders must contain the same squad IDs', path: ['ids'] },
+);
+export type ReorderSquadsInput = z.infer<typeof ReorderSquadsSchema>;
+
 // PermissiveUuid: SquadIdParamSchema accepts the seeded "All" squad
 // (00000000-0000-0000-0000-000000000001, non-v4 version digit) when admin
 // hits PUT/DELETE /api/squads/:id. The service layer rejects All with a

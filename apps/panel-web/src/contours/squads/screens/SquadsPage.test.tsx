@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import SquadsPage from '@/contours/squads/screens/SquadsPage'
@@ -45,18 +45,22 @@ describe('SquadsPage', () => {
     server({ 'GET /api/hosts': { status: 500, body: {} } })
     renderApp(<SquadsPage />, { route: '/squads' })
     await screen.findByText('premium')
-    expect(screen.getAllByText(/Хосты: неизвестно/).length).toBeGreaterThan(0)
+    const card = screen.getByRole('button', { name: /premium/ })
+    const hosts = within(card).getByText('Хосты')
+    expect(hosts.nextElementSibling?.textContent).toBe('неизвестно')
   })
 
   it('shows old states in words and marks an old empty squad', async () => {
     server()
     renderApp(<SquadsPage />, { route: '/squads' })
     await screen.findByText('premium')
-    await screen.findByText(/Хосты: 1 из 2/)
-    expect(screen.getAllByText(/Хосты: все 2/).length).toBeGreaterThan(0)
-    expect(screen.getByText('без сужения')).toBeTruthy()
-    expect(screen.getByText(/пустой: снимает сужение/)).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: /Пустые/ }))
+    const premium = within(screen.getByRole('button', { name: /premium/ }))
+    await premium.findByText('1 из 2')
+    const wide = within(screen.getByRole('button', { name: /wide/ }))
+    expect(wide.getByText('Хосты').nextElementSibling?.textContent).toBe('все 2')
+    await userEvent.click(screen.getByRole('button', { name: /Без хостов/ }))
+    const hollow = within(screen.getByRole('button', { name: /hollow/ }))
+    expect(hollow.getByText('Хосты').nextElementSibling?.textContent).toBe('0')
     expect(screen.queryByText('premium')).toBeNull()
     expect(screen.getByText('hollow')).toBeTruthy()
   })
