@@ -21,20 +21,20 @@ export function StatCards({ overview }: { overview: Overview }) {
       <StatCard label={words.onlineNow} icon="wifi" value={n(users.onlineNow)}>
         <div className={styles.note}>{words.onlineToday(n(users.onlineToday))}</div>
       </StatCard>
-      <StatCard label={words.activeUsers} icon="userCheck" value={users.total === 0 ? n(0) : users.byStatus.active === undefined ? words.unknown : n(users.byStatus.active)}>
+      <StatCard label={words.activeUsers} icon="userCheck" value={n(users.byStatus.active ?? 0)}>
         <div className={styles.note}>{words.totalUsers(n(users.total))}</div>
       </StatCard>
-      <StatCard label={words.expiring} icon="calendarSoon" value={expiring.data === undefined ? words.unknown : n(expiring.data)}>
+      <StatCard label={words.expiring} icon="calendarSoon" value={expiring.data === undefined ? words.unknown : n(expiring.data.total)}>
         {expiring.isError ? (
           <div className={styles.note}>{words.expiringFailed}</div>
-        ) : expiring.data === 0 ? (
+        ) : expiring.data?.total === 0 ? (
           <div className={styles.note}>{words.nobody}</div>
-        ) : (
-          <Link className={styles.noteLink} to="/users?filter=expiring">
+        ) : expiring.data ? (
+          <Link className={styles.noteLink} to={'/users?filter=expiring&start=' + encodeURIComponent(expiring.data.start)}>
             {words.openList}
             <Icon name="arrowRight" size="sm" />
           </Link>
-        )}
+        ) : null}
       </StatCard>
       <StatCard label={words.nodesOnline} icon="nodes" value={n(system.onlineNodeCount)} valueNote={system.totalNodeCount ? words.ofTotal(n(system.totalNodeCount)) : undefined}>
         <div className={styles.note}>

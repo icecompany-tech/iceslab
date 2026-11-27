@@ -42,7 +42,7 @@ export const parseOverview = obj({
       cpu: obj({ loadPercent: nullable(num), samplePercent: num, cores: num, loadavg: arr(num) }),
       memory: obj({ totalBytes: num, usedBytes: num, usedPercent: num }),
       disk: nullable(obj({ totalBytes: num, usedBytes: num, usedPercent: num })),
-      process: obj({ rssBytes: num, heapUsedBytes: num, heapLimitBytes: num, uptimeSeconds: num }),
+      process: obj({ rssBytes: num, heapUsedBytes: maybe(num), heapLimitBytes: maybe(num), uptimeSeconds: num }),
     }),
   ),
   nodes: arr(

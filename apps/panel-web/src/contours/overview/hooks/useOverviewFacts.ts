@@ -10,12 +10,15 @@ const parseHealth = obj({ status: str, db: str, redis: str })
 /** The server has no such count: the list answers with its total, one row is enough. */
 export function useExpiringSoon() {
   const now = useNow()
-  // To the hour: a key that moves every second would refetch every second.
-  const params = { limit: 1, status: 'active', ...expiringWeek(now()) }
   return useQuery({
-    queryKey: ['users', 'expiring', params.expiresAfter],
-    queryFn: () => request('/api/users', parseTotal, { params }).then((r) => r.total),
+    queryKey: ['users', 'expiring'],
+    queryFn: async () => {
+      const window = expiringWeek(now())
+      const {total} = await request('/api/users', parseTotal, {params: {limit: 1, status: 'active', ...window}})
+      return {total, start: window.expiresAfter}
+    },
     staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 }
 

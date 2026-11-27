@@ -18,7 +18,8 @@ export function useListState() {
   const [filters, setFilters] = useState<Partial<Record<FilterParam, string>>>(() => {
     // The number on the Overview opens this list.
     if (url.get('filter') !== 'expiring') return {}
-    return expiringWeek(now())
+    const start = Date.parse(url.get('start') ?? '')
+    return expiringWeek(Number.isFinite(start) && Number.isFinite(new Date(start + 7 * 86_400_000).valueOf()) ? start : now())
   })
   const [sort, setSort] = useState<{ by: UserSort; order: 'asc' | 'desc' }>({ by: 'username', order: 'asc' })
   const [page, setPage] = useState(1)

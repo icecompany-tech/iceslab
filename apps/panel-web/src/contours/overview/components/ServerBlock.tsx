@@ -39,9 +39,10 @@ export function ServerBlock({ host, checkedAt }: { host: Overview['host']; check
   const cpuPercent = cpu.loadPercent ?? cpu.samplePercent
   const used = fmtBinaryParts(memory.usedBytes, locale)
   const totalMemory = fmtBinaryParts(memory.totalBytes, locale)
-  const rss = fmtBinaryParts(process.rssBytes, locale)
-  const heap = fmtBinaryParts(process.heapLimitBytes, locale)
-  const rssPercent = process.heapLimitBytes > 0 ? (process.rssBytes / process.heapLimitBytes) * 100 : 0
+  const mib = (bytes: number) => fmtNumber(bytes / 2 ** 20, locale, 1)
+  const { heapUsedBytes, heapLimitBytes } = process
+  const heapPercent = heapLimitBytes != null && heapLimitBytes > 0 && heapUsedBytes != null && heapUsedBytes >= 0
+    ? heapUsedBytes / heapLimitBytes * 100 : null
   return (
     <section className={styles.block}>
       <div className={styles.serverHead}>
@@ -68,12 +69,12 @@ export function ServerBlock({ host, checkedAt }: { host: Overview['host']; check
             <div className={styles.fine}>{words.diskUnknown}</div>
           </StatCard>
         )}
-        <StatCard label={words.process} icon="pulse" size="metric" aside={fmtPercent(rssPercent, locale)} value={rss.value} valueNote={rss.unit}>
-          <Meter percent={rssPercent} tone={meterTone(rssPercent)} />
+        <StatCard label={words.process} icon="pulse" size="metric" aside={heapPercent === null ? words.heapUnknown : words.heapShare(fmtPercent(heapPercent, locale))} value={mib(process.rssBytes)} valueNote={words.rssUnit}>
+          {heapPercent !== null && <Meter percent={heapPercent} tone={meterTone(heapPercent)} />}
           <div className={styles.parts}>
             <Part label="Postgres" state={health.data?.db} />
             <Part label="Redis" state={health.data?.redis} />
-            <span className={styles.fine}>{words.heapOf(`${heap.value} ${heap.unit}`)}</span>
+            {heapPercent !== null && <span className={styles.fine}>{mib(heapUsedBytes!)} / {mib(heapLimitBytes!)} {words.mib}</span>}
           </div>
         </StatCard>
       </div>
