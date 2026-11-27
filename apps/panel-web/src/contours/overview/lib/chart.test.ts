@@ -12,7 +12,7 @@ function coordinates(line: string) {
 
 describe('traffic chart interpolation', () => {
   it('uses the end secants, harmonic means and horizontal extrema in screen coordinates', () => {
-    const g = chartGeometry(makePoints([0, 1, 4, 2, 2]), 1088, true)
+    const g = chartGeometry(makePoints([0, 1, 4, 2, 2]), 1088)
     const [, first, second, third, fourth] = coordinates(g.paths('bytes').line)
     const rounded = (v: number) => Math.round(v * 10) / 10
     expect(first!.coords).toEqual([rounded(g.x(1/3)), rounded(g.y(1/3)), rounded(g.x(2/3)), rounded(g.y(0.5)), g.x(1), g.y(1)])
@@ -25,7 +25,7 @@ describe('traffic chart interpolation', () => {
 
   it('keeps each series within its sampled interval across jumps, zero, gaps and plateaus', () => {
     const values = [1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 2, 0, 0, null, 3, null, 8, 1]
-    const g = chartGeometry(makePoints(values, [...values].reverse()), 1568, true)
+    const g = chartGeometry(makePoints(values, [...values].reverse()), 1568)
     for (const key of ['bytes', 'previousBytes'] as const) {
       const { line, area } = g.paths(key)
       expect(line.match(/M/g)).toHaveLength(3)
@@ -43,8 +43,17 @@ describe('traffic chart interpolation', () => {
     }
   })
 
-  it('preserves the original control points for the remaining periods', () => {
-    const g = chartGeometry(makePoints([1, 2, 1]), 1568)
-    expect(g.paths('bytes').line).toBe('M52.0 174.0 C171.3 165.3 529.3 122.0 768.0 122.0 C1006.7 122.0 1364.7 165.3 1484.0 174.0')
+  it('keeps the 8 GiB plateau horizontal in both lines and in the filled area', () => {
+    const peak = 8 * 1024 ** 3
+    const g = chartGeometry(makePoints([0, peak, peak, 0], [0, peak, peak, 0]), 1088)
+    for (const key of ['bytes', 'previousBytes'] as const) {
+      const { line, area } = g.paths(key)
+      const [start, rise, plateau, fall] = coordinates(line)
+      expect(start!.coords[1]).toBe(g.bottom)
+      expect(rise!.coords[5]).toBe(g.y(peak))
+      expect(plateau!.coords.filter((_, i) => i % 2 === 1)).toEqual(Array(3).fill(g.y(peak)))
+      expect(fall!.coords[5]).toBe(g.bottom)
+      expect(area).toBe(line + ' L' + g.x(3) + ' ' + g.bottom + ' L' + g.x(0) + ' ' + g.bottom + ' Z')
+    }
   })
 })

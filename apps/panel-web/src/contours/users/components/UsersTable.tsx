@@ -1,5 +1,5 @@
 import { isOnlineAt } from '@iceslab/shared'
-import { useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ColumnFilterCell } from '@/contours/users/components/ColumnFilterCell'
 import type { DialogKind } from '@/contours/users/components/ActionDialogs'
 import styles from '@/contours/users/components/users.module.css'
@@ -25,6 +25,7 @@ const SOON_DAYS = 7
 /** The users table has no red bar: above 60% amber. The node card keeps 60/85 (DSGN, rows). */
 const AMBER_FROM = 60
 const GiB = 1024 ** 3
+const activityDate = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
 const MIN_WIDTH = 48
 /** The column that takes the window's spare width; the rest keep theirs. */
 const STRETCH: ColumnId = 'username'
@@ -52,12 +53,38 @@ interface TableProps {
   empty: ReactNode
 }
 
+function OfflineHint({ text }: { text: string }) {
+  const id = useId()
+  const trigger = useRef<HTMLSpanElement>(null)
+  const tooltip = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  useLayoutEffect(() => {
+    const label = trigger.current, tip = tooltip.current
+    if (!label || !tip || !open) return
+    const place = () => {
+      const box = label.getBoundingClientRect()
+      const left = Math.max(4, Math.min(box.left, window.innerWidth - tip.offsetWidth - 4))
+      tip.style.left = left + 'px'
+      tip.style.top = (box.bottom + tip.offsetHeight <= window.innerHeight ? box.bottom : box.top - tip.offsetHeight) + 'px'
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place) }
+  }, [open])
+  return <span ref={trigger} tabIndex={0} className={styles.offline} aria-describedby={id}
+    onMouseEnter={() => setOpen(true)} onFocus={() => setOpen(true)}
+    onMouseLeave={e => { if (e.currentTarget !== document.activeElement) setOpen(false) }}
+    onBlur={() => setOpen(false)} onKeyDown={e => { if (e.key === 'Escape') setOpen(false) }}>
+    Offline<span id={id} role="tooltip" ref={tooltip} hidden={!open} className={styles.activityTip}>{text}</span>
+  </span>
+}
+
 function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableContext }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
   const now = useNow()
   const at = now()
-  const ago = (iso: string) => fmtAge((at - Date.parse(iso)) / 1000, locale)
   const dash = <span className={styles.muted}>{words.dash}</span>
   const when = (iso: string | null) => (iso ? fmtDateTime(iso, locale) : dash)
   switch (id) {
@@ -79,16 +106,19 @@ function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableC
       )
     }
     case 'lastNode': {
+      if (!user.lastConnectedNodeId && user.lastOnlineAt) return dash
       if (!user.lastConnectedNodeId) return <span className={styles.muted}>{words.never}</span>
       if (!user.lastConnectedNodeName) return <span className={styles.muted}>{words.nodeGone}</span>
       return (
         <span className={styles.nodeCell}>
           <Flag code={context.nodes.get(user.lastConnectedNodeId)?.countryCode ?? null} />
           <span className={styles.nodeName}>{user.lastConnectedNodeName}</span>
-          {isOnlineAt(user.lastOnlineAt, at) ? <span className={styles.online}>{words.onlineWord}</span> : user.lastOnlineAt && <span className={styles.fine}>{ago(user.lastOnlineAt)}</span>}
         </span>
       )
     }
+    case 'connection':
+      return isOnlineAt(user.lastOnlineAt, at) ? <span className={styles.online}>Online</span>
+        : <OfflineHint text={user.lastOnlineAt ? words.column.lastOnline + ': ' + activityDate.format(new Date(user.lastOnlineAt)) : words.noConnectionData} />
     case 'expires': {
       if (!user.expireAt) return <span className={styles.muted}>{words.noTerm}</span>
       const left = (Date.parse(user.expireAt) - at) / 1000
@@ -136,7 +166,7 @@ function Cell({ id, user, context }: { id: ColumnId; user: User; context: TableC
     case 'firstConnected':
       return when(user.firstConnectedAt)
     case 'lastOnline':
-      return when(user.lastOnlineAt)
+      return user.lastOnlineAt ? activityDate.format(new Date(user.lastOnlineAt)) : dash
     case 'trafficReset':
       return when(user.lastTrafficResetAt)
     case 'lifetimeUsed':

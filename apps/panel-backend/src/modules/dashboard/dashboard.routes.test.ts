@@ -269,7 +269,7 @@ describe('GET /api/dashboard/traffic-series', () => {
   it('requires dashboard authentication and validates the period', async () => {
     expect((await app.inject(`${endpoint}?period=1h`)).statusCode).toBe(401);
     expect((await app.inject({
-      url: `${endpoint}?period=30d`, headers: { authorization: `Bearer ${token}` },
+      url: `${endpoint}?period=365d`, headers: { authorization: `Bearer ${token}` },
     })).statusCode).toBe(400);
   });
 
@@ -282,11 +282,11 @@ describe('GET /api/dashboard/traffic-series', () => {
     expect(body.points.at(-1)).toEqual({ at: '2026-11-24T13:36:00.000Z', bytes: null, previousBytes: null });
   });
 
-  it.each([['1h', 60], ['7d', 7], ['90d', 90]] as const)('pairs independent rows for %s at UTC boundaries', async (period, size) => {
+  it.each([['1h', 60], ['7d', 7], ['30d', 30], ['90d', 90]] as const)('pairs independent rows for %s at UTC boundaries', async (period, size) => {
     const step = period === '1h' ? minutes : DAY_MS;
     const end = Math.floor(Date.parse(NOW) / step) * step;
     const position = (offset: number) => new Date(end + offset * step);
-    const samples = [[-2 * size - 1, 500], [-2 * size, 7], [-2 * size + 1, 0],
+    const samples = [[-2 * size - 1, 500], [-2 * size, 7], [-2 * size + 1, 0], [-2 * size + 3, 9],
       [-size - 1, 3], [-size, 11], [-size + 2, 17], [-1, 23], [0, 600]] as const;
     if (period === '1h') {
       await prisma.nodeMinuteTraffic.createMany({
@@ -307,24 +307,42 @@ describe('GET /api/dashboard/traffic-series', () => {
       points: Array.from({ length: size }, (_, index) => ({
         at: position(index - size).toISOString(),
         bytes: new Map([[0, 11], [2, 17], [size - 1, 23]]).get(index) ?? null,
-        previousBytes: new Map([[0, 7], [1, 0], [size - 1, 3]]).get(index) ?? null,
+        previousBytes: new Map([[0, 7], [1, 0], [3, 9], [size - 1, 3]]).get(index) ?? null,
       })),
       canCompareTotals: false,
     });
   });
 
-  it('allows day total comparison only with matching complete hourly coverage', async () => {
-    const count = 14 * 24;
+  it('keeps the previous 30-day series when the current window has no rows', async () => {
+    await prisma.nodeUsageHistory.createMany({
+      data: [
+        { nodeId, hour: dateAt(-60), uploadBytes: 12n },
+        { nodeId, hour: dateAt(-31) },
+        { nodeId, hour: dateAt(0), downloadBytes: 90n },
+      ],
+    });
+
+    const body = (await series('30d')).json<Awaited<ReturnType<typeof getTrafficSeries>>>();
+    expect(body.points).toHaveLength(30);
+    expect(body.points.every((point) => point.bytes === null)).toBe(true);
+    expect(body.points[0]).toEqual({ at: dateAt(-30).toISOString(), bytes: null, previousBytes: 12 });
+    expect(body.points[1]?.previousBytes).toBeNull();
+    expect(body.points.at(-1)).toEqual({ at: dateAt(-1).toISOString(), bytes: null, previousBytes: 0 });
+    expect(body.canCompareTotals).toBe(false);
+  });
+
+  it.each([['7d', 7], ['30d', 30]] as const)('compares %s totals only with matching complete hourly coverage', async (period, days) => {
+    const count = 2 * days * 24;
     const hours = Array.from({ length: count }, (_, index) => ({
       nodeId, hour: new Date(TODAY - (count - index) * 60 * minutes), downloadBytes: 1n,
     }));
     await prisma.nodeUsageHistory.createMany({ data: hours });
-    const complete = (await series('7d')).json<Awaited<ReturnType<typeof getTrafficSeries>>>();
+    const complete = (await series(period)).json<Awaited<ReturnType<typeof getTrafficSeries>>>();
     expect(complete.canCompareTotals).toBe(true);
     expect(complete.points.every((point) => point.bytes === 24 && point.previousBytes === 24)).toBe(true);
 
     await prisma.nodeUsageHistory.delete({ where: { nodeId_hour: { nodeId, hour: hours[0]!.hour } } });
-    const incomplete = (await series('7d')).json<Awaited<ReturnType<typeof getTrafficSeries>>>();
+    const incomplete = (await series(period)).json<Awaited<ReturnType<typeof getTrafficSeries>>>();
     expect(incomplete.canCompareTotals).toBe(false);
     expect(incomplete.points[0]?.previousBytes).toBe(23);
   });

@@ -2,7 +2,7 @@ import { prisma } from '../../prisma.js';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
-const PERIODS = { '1h': 60, '7d': 7, '90d': 90 } as const;
+const PERIODS = { '1h': 60, '7d': 7, '30d': 30, '90d': 90 } as const;
 
 export type TrafficSeriesPeriod = keyof typeof PERIODS;
 

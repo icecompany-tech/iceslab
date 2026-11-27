@@ -753,6 +753,23 @@
   text-overflow: ellipsis;
 }
 
+.offline {
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
+.activityTip {
+  position: fixed;
+  z-index: 40;
+  padding: var(--spacing-1-5) var(--spacing-3);
+  border: var(--border-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+}
+
 .online {
   color: var(--color-accent);
   font-size: var(--text-xs);

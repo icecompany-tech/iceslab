@@ -22,7 +22,7 @@ export function TrafficBlock({ traffic, checkedAt, onRetry, retrying }: { checke
   const words = useDict(DICT)
   const [search, setSearch] = useSearchParams()
   const requested = search.get('period')
-  const period = isSeriesPeriod(requested) || requested === '24h' || requested === '30d' ? requested
+  const period = isSeriesPeriod(requested) || requested === '24h' ? requested
     : traffic?.completedUtc30d?.dailyComparison?.length === 30 ? '30d' : '24h'
   const controls = <Segmented label={words.windowLabel} value={period}
     options={periods.map(value => ({ value, label: words.window[value] }))}
@@ -31,7 +31,18 @@ export function TrafficBlock({ traffic, checkedAt, onRetry, retrying }: { checke
       next.set('period', value)
       setSearch(next, { replace: true, preventScrollReset: true })
     }} />
-  if (isSeriesPeriod(period)) return <MeasuredTraffic period={period} controls={controls} />
+  if (period === '30d' && traffic?.completedUtc30d?.dailyComparison?.length !== 30) {
+    const directions = traffic?.completedUtc30d?.monthlyDirections
+    return <MeasuredTraffic period={period} controls={controls} fallback={traffic
+      ? notice => <TrafficData window="30d" traffic={traffic} checkedAt={checkedAt} controls={controls} notice={notice} />
+      : undefined}>
+      {directions && <>
+        <div className={styles.note}>{words.clientMonth}</div>
+        <div className={styles.strip}><DirectionCells values={directions} /></div>
+      </>}
+    </MeasuredTraffic>
+  }
+  if (period !== '30d' && isSeriesPeriod(period)) return <MeasuredTraffic period={period} controls={controls} />
   const empty = traffic && !traffic.completedUtc30d && !traffic.recordedUtc24h?.length && traffic.last24hHourly.length === 0 && [traffic.todayBytes, traffic.last7dBytes, traffic.last30dBytes, traffic.prev30dBytes, traffic.currentYearBytes].every(n => n === 0)
   if (traffic && !empty) return <TrafficData traffic={traffic} checkedAt={checkedAt} window={period} controls={controls} />
   return <section className={styles.block}>
@@ -43,8 +54,17 @@ export function TrafficBlock({ traffic, checkedAt, onRetry, retrying }: { checke
   </section>
 }
 
-function TrafficData({ traffic, checkedAt, window, controls }: {
-  checkedAt: number; traffic: NonNullable<Overview['traffic']>; window: '24h' | '30d'; controls: ReactNode
+function DirectionCells({ values }: { values: { toUsers: number; fromUsers: number } }) {
+  const words = useDict(DICT)
+  const { locale } = useLocale()
+  const total = values.toUsers + values.fromUsers
+  return ([['down', values.toUsers], ['up', values.fromUsers]] as const).map(([key, bytes]) =>
+    <div className={styles.cell} key={key}><div className={styles.cellLabel}>{words[key]}</div>
+      <div className={styles.cellValue}>{fmtBytesLarge(bytes, locale)} <span className={styles.cellNote}>{total > 0 && fmtPercent(100 * bytes / total, locale)}</span></div></div>)
+}
+
+function TrafficData({ traffic, checkedAt, window, controls, notice }: {
+  checkedAt: number; traffic: NonNullable<Overview['traffic']>; window: '24h' | '30d'; controls: ReactNode; notice?: ReactNode
 }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
@@ -52,10 +72,10 @@ function TrafficData({ traffic, checkedAt, window, controls }: {
   const days = confirmed?.dailyComparison?.length === 30 ? confirmed.dailyComparison : []
   const hourly = window === '24h'
   const recorded = traffic.recordedUtc24h?.length === 24 ? traffic.recordedUtc24h : undefined
-  const directions = hourly ? (recorded ? undefined : traffic.hourlyDirections) : window === '30d' ? confirmed?.monthlyDirections : undefined
+  const directions = hourly ? (recorded ? undefined : traffic.hourlyDirections) : confirmed?.monthlyDirections
   const directionTotal = directions ? directions.toUsers + directions.fromUsers : 0
-  const month = days.length ? days.reduce((n, d) => n + d.bytes, 0) : window === '30d' && directions ? directionTotal : traffic.last30dBytes
-  const priorMonth = days.length ? days.reduce((n, d) => n + d.previousBytes, 0) : window === '30d' && directions ? null : traffic.prev30dBytes
+  const month = days.length ? days.reduce((n, d) => n + d.bytes, 0) : directions ? directionTotal : traffic.last30dBytes
+  const priorMonth = days.length ? days.reduce((n, d) => n + d.previousBytes, 0) : directions ? null : traffic.prev30dBytes
 
   const hours = recorded ? recorded.map(h => ({ ...h, date: h.hour })) : hourlyPoints(traffic.last24hHourly, checkedAt)
   const measured = hours.filter(h => h.bytes !== null)
@@ -65,7 +85,7 @@ function TrafficData({ traffic, checkedAt, window, controls }: {
   const summaryOnly = window === '30d' && !days.length && !directions
   const change = previous === null ? null : changePercent(total, previous)
   const sign = change !== null && change > 0 ? '+' : ''
-  const series = hourly ? measured : window === '30d' ? days : []
+  const series = hourly ? measured : days
   const shaded = hourly ? isNight : isWeekend
   const average = (rows: typeof series) => rows.reduce((n, p) => n + (p.bytes ?? 0), 0) / rows.length
   const shade = series.filter(p => shaded(p.date))
@@ -74,7 +94,7 @@ function TrafficData({ traffic, checkedAt, window, controls }: {
   const duration = hourly ? 24 : 30
   const mean = hourly ? (measured.length ? average(measured) : null) : total / duration
   const oldMean = previous === null ? null : previous / duration
-  const hasPrevious = hourly ? hours.some(h => h.previousBytes != null) : window === '30d' && days.length > 0
+  const hasPrevious = hourly ? hours.some(h => h.previousBytes != null) : days.length > 0
   return (
     <section className={styles.block}>
       <TrafficHeader title={words.trafficFor[window]} controls={controls}
@@ -88,10 +108,11 @@ function TrafficData({ traffic, checkedAt, window, controls }: {
             <span className={styles.compareValue}>{sign}{fmtPercent(change, locale, 1)}</span>
             {words.againstPrev[window](fmtBytesLarge(previous, locale))}
           </>} />
+      {!hourly && (days.length > 0 || directions) && <div className={styles.note}>{words.clientMonth}</div>}
       {window === '30d' && days.length > 0 ? (
         <OverviewChart key="days" points={days} period="30d" />
       ) : window !== '24h' ? (
-        <div className={styles.chartNote}>{words.noSeries}</div>
+        <div className={styles.chartNote}>{notice ?? words.noSeries}</div>
       ) : !recorded && traffic.last24hHourly.length === 0 ? (
         <div className={styles.chartNote}>{words.noTraffic}</div>
       ) : (
@@ -106,11 +127,7 @@ function TrafficData({ traffic, checkedAt, window, controls }: {
         </div>
         {relative !== null ?
           <div className={styles.cell}><div className={styles.cellLabel}>{hourly ? words.nightVsDay : words.weekend}<Icon name="info" size="md" /></div><div className={styles.cellValue}>{relative > 0 ? '+' : ''}{fmtPercent(relative,locale)}</div></div> : <div className={styles.cell}><div className={styles.cellLabel}>{words.today}</div><div className={styles.cellValue}>{fmtBytes(traffic.todayBytes,locale)}</div></div>}
-        {directions ? <>
-          {([['down',directions.toUsers],['up',directions.fromUsers]] as const).map(([key,bytes]) =>
-            <div className={styles.cell} key={key}><div className={styles.cellLabel}>{words[key]}</div>
-              <div className={styles.cellValue}>{fmtBytesLarge(bytes,locale)} <span className={styles.cellNote}>{directionTotal > 0 && fmtPercent(100*bytes/directionTotal,locale)}</span></div></div>)}
-        </> : <>
+        {directions ? <DirectionCells values={directions} /> : <>
         <div className={styles.cell}>
           <div className={styles.cellLabel}>{words.thisMonth}</div>
           <div className={styles.cellValue}>{fmtBytes(traffic.calendarMonthBytes, locale)}</div>

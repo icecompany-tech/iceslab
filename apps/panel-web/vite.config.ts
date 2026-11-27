@@ -55,6 +55,8 @@ export default defineConfig(({ mode }) => ({
             screenGroup('network', network),
             screenGroup('traffic-subscription', [...traffic, 'insights']),
             screenGroup('admin', admin),
+            { name: 'overlays', test: /\/(?:ui\/(?:Dialog|Confirm|Popover|Menu)\/|useDialogPortal\.ts$)/ },
+            { name: 'registry-ui', test: /\/ui\/(?:Check|Flag|Meter|StatCard|Chip)\// },
             screenGroup('users', ['users']),
             screenGroup('squads', ['squads']),
           ],

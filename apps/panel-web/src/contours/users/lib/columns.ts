@@ -1,5 +1,6 @@
 // Every column of the list. A filter exists only where GET /api/users narrows by it: a filter
 // the server cannot honour would return the whole list and look like it worked.
+import { readStored } from '@/lib/storage'
 import { arr, obj, record, str, nullable } from '@/lib/net/parse'
 
 export type ColumnId =
@@ -7,6 +8,7 @@ export type ColumnId =
   | 'shortId'
   | 'status'
   | 'lastNode'
+  | 'connection'
   | 'expires'
   | 'used'
   | 'usedPct'
@@ -65,16 +67,17 @@ export interface UserColumn {
   def?: true
 }
 
-// Widths are the frame's: the table is drawn for sideways scrolling (design 2026-11-04).
+// The standard layout fits the registry at 1440px. Manual widths may overflow.
 export const COLUMNS: readonly UserColumn[] = [
-  // «Юзер» is the least it takes: the 8 default columns sum to 1086 at 1440, a wider window adds to it.
-  { id: 'username', width: 220, sort: 'username', filter: { kind: 'search' }, def: true },
-  { id: 'shortId', width: 68, def: true },
-  { id: 'status', width: 104, filter: { kind: 'status' }, def: true },
-  { id: 'lastNode', width: 144, filter: { kind: 'node' }, def: true },
+  // Spare width belongs to the username column.
+  { id: 'username', width: 182, sort: 'username', filter: { kind: 'search' }, def: true },
+  { id: 'shortId', width: 64, def: true },
+  { id: 'status', width: 100, filter: { kind: 'status' }, def: true },
+  { id: 'lastNode', width: 122, filter: { kind: 'node' }, def: true },
+  { id: 'connection', width: 100, def: true },
   { id: 'expires', width: 140, sort: 'expireAt', filter: { kind: 'dates', after: 'expiresAfter', before: 'expiresBefore', presence: 'hasExpiry' }, def: true },
-  { id: 'used', width: 162, sort: 'traffic', filter: { kind: 'bytes', over: 'usedOver', under: 'usedUnder' }, def: true },
-  { id: 'usedPct', width: 56, def: true },
+  { id: 'used', width: 138, sort: 'traffic', filter: { kind: 'bytes', over: 'usedOver', under: 'usedUnder' }, def: true },
+  { id: 'usedPct', width: 48, def: true },
   { id: 'limit', width: 76, filter: { kind: 'choice', param: 'trafficLimit', values: ['limited', 'unlimited'] }, def: true },
   { id: 'squads', width: 200 },
   { id: 'tag', width: 120, filter: { kind: 'choice', param: 'hasTag', values: ['yes', 'no'] } },
@@ -84,7 +87,7 @@ export const COLUMNS: readonly UserColumn[] = [
   { id: 'subLink', width: 260 },
   { id: 'deviceLimit', width: 130, filter: { kind: 'choice', param: 'deviceLimit', values: ['set', 'unlimited', 'unset'] } },
   { id: 'firstConnected', width: 160, sort: 'firstConnected', filter: { kind: 'dates', after: 'firstConnectedAfter', before: 'firstConnectedBefore' } },
-  { id: 'lastOnline', width: 150, sort: 'lastOnline' },
+  { id: 'lastOnline', width: 154, sort: 'lastOnline' },
   { id: 'trafficReset', width: 160 },
   { id: 'lifetimeUsed', width: 150, sort: 'lifetimeTraffic' },
   { id: 'linkRevoked', width: 150, filter: { kind: 'choice', param: 'revoked', values: ['yes', 'no'] } },
@@ -104,28 +107,42 @@ export interface ColumnView {
 }
 
 export const DEFAULT_VIEW: ColumnView = {
-  order: COLUMNS.map((c) => c.id),
+  order: COLUMNS.map(c => c.id),
   hidden: COLUMNS.filter((c) => !c.def).map((c) => c.id),
   pins: { username: 'left' },
   widths: {},
 }
 
-export const COLUMN_VIEW_KEY = 'iceslab:user-columns'
+export const COLUMN_VIEW_KEY = 'iceslab:user-columns:v2'
 
 export const parseStoredView = obj({ order: arr(str), hidden: arr(str), pins: record(nullable(str)), widths: record((v) => (typeof v === 'number' ? v : 0)) })
 
+export function loadColumnView(): ColumnView {
+  const current = readStored(COLUMN_VIEW_KEY, parseStoredView)
+  if (current) return viewFromStored(current)
+  const old = readStored('iceslab:user-columns', parseStoredView)
+  if (old && old.order.join() === DEFAULT_VIEW.order.filter(id => id !== 'connection').join()
+      && old.hidden.length === DEFAULT_VIEW.hidden.length
+      && DEFAULT_VIEW.hidden.every(id => old.hidden.includes(id))
+      && old.pins.username === 'left' && Object.keys(old.pins).length === 1
+      && Object.keys(old.widths).length === 0) return DEFAULT_VIEW
+  return viewFromStored(old)
+}
+
 const isColumn = (id: string): id is ColumnId => COLUMN_BY_ID.has(id as ColumnId)
 
-/** A column added since the view was saved appears, a removed one drops out. */
+/** Keep manual layouts when the registry gains the connection column. */
 export function viewFromStored(stored: ReturnType<typeof parseStoredView> | null): ColumnView {
   if (!stored) return DEFAULT_VIEW
   const order = stored.order.filter(isColumn)
+  const hidden = stored.hidden.filter(isColumn)
+  if (!order.includes('connection')) hidden.push('connection')
   for (const column of COLUMNS) if (!order.includes(column.id)) order.push(column.id)
   const pins: ColumnView['pins'] = {}
   for (const [id, pin] of Object.entries(stored.pins)) if (isColumn(id) && (pin === 'left' || pin === 'right')) pins[id] = pin
   const widths: ColumnView['widths'] = {}
   for (const [id, width] of Object.entries(stored.widths)) if (isColumn(id) && width > 0) widths[id] = width
-  return { order, hidden: stored.hidden.filter(isColumn), pins, widths }
+  return { order, hidden, pins, widths }
 }
 
 /** Left pins first and right pins last, the rest in the operator's order. */

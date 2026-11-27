@@ -27,7 +27,7 @@ export function OverviewChart({ points, period }: { points: ChartPoint[]; period
     return () => observer.disconnect()
   }, [])
 
-  const { left, right, top, bottom, dx, unit, ceiling, x, y, paths } = chartGeometry(points, width, week || period === '24h')
+  const { left, right, top, bottom, dx, unit, ceiling, x, y, paths } = chartGeometry(points, width)
   const current = paths('bytes')
   const previous = paths('previousBytes').line
   const last = points.at(-1)

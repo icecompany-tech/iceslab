@@ -183,7 +183,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         querystring: {
           type: 'object',
           required: ['period'],
-          properties: { period: { type: 'string', enum: ['1h', '7d', '90d'] } },
+          properties: { period: { type: 'string', enum: ['1h', '7d', '30d', '90d'] } },
         },
       },
     },

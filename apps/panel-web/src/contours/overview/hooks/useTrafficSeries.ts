@@ -2,12 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { request } from '@/lib/net/client'
 import { arr, bool, nullable, num, obj, str } from '@/lib/net/parse'
 
-export const intervals = { '1h': 60, '7d': 7, '90d': 90 } as const
+export const intervals = { '1h': 60, '7d': 7, '30d': 30, '90d': 90 } as const
 export type SeriesPeriod = keyof typeof intervals
-export type TrafficPeriod = SeriesPeriod | '24h' | '30d'
+export type TrafficPeriod = SeriesPeriod | '24h'
 
 export function isSeriesPeriod(value: string | null): value is SeriesPeriod {
-  return value === '1h' || value === '7d' || value === '90d'
+  return value !== null && Object.hasOwn(intervals, value)
 }
 
 const bucket = obj({ at: str, bytes: nullable(num), previousBytes: nullable(num) })

@@ -12,7 +12,7 @@ function sharedSlope(left: number, right: number) {
   return left * right > 0 ? 2 * left * right / (left + right) : 0
 }
 
-export function chartGeometry(points: readonly ChartPoint[], width: number, monotone = false) {
+export function chartGeometry(points: readonly ChartPoint[], width: number) {
   const left = 52, right = width - 84, top = 18, bottom = 226
   const dx = (right - left) / Math.max(1, points.length - 1)
   const max = Math.max(1, ...points.map(p => Math.max(p.bytes ?? 0, p.previousBytes ?? 0)))
@@ -37,19 +37,12 @@ export function chartGeometry(points: readonly ChartPoint[], width: number, mono
         run = 'M' + coord(i, value)
       } else {
         const prior = points[i - 2]?.[key]
-        if (monotone) {
-          const slope = value - prev
-          const startSlope = prior == null ? slope : sharedSlope(prev - prior, slope)
-          const endSlope = next == null ? slope : sharedSlope(slope, next - value)
-          run += ' C' + coord(i - 2 / 3, prev + startSlope / 3)
-            + ' ' + coord(i - 1 / 3, value - endSlope / 3)
-        } else {
-          const a = Math.max(0, prev + (value - (prior ?? prev)) / 6)
-          const b = Math.max(0, value - ((next ?? value) - prev) / 6)
-          run += ' C' + coord(i - 1 + (prior == null ? 1 : 2) / 6, a)
-            + ' ' + coord(i - (next == null ? 1 : 2) / 6, b)
-        }
-        run += ' ' + coord(i, value)
+        const slope = value - prev
+        const startSlope = prior == null ? slope : sharedSlope(prev - prior, slope)
+        const endSlope = next == null ? slope : sharedSlope(slope, next - value)
+        run += ' C' + coord(i - 2 / 3, prev + startSlope / 3)
+          + ' ' + coord(i - 1 / 3, value - endSlope / 3)
+          + ' ' + coord(i, value)
       }
       if (next == null) {
         line += run

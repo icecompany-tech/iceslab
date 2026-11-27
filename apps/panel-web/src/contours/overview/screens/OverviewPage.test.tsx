@@ -220,6 +220,24 @@ describe('OverviewPage', () => {
     expect(requests.sent.filter(r => r.path.includes('/traffic-series')).map(r => r.path)).toEqual(['/api/dashboard/traffic-series?period=7d'])
   })
 
+  it('sums a sparse recorded month separately from confirmed client directions', async () => {
+    const base = overview()
+    const points = Array.from({ length: 30 }, (_, i) => ({
+      at: new Date(Date.UTC(2026, 9, i + 1)).toISOString(), bytes: i === 0 ? 11 : i === 29 ? 23 : null,
+      previousBytes: i === 0 ? 0 : null,
+    }))
+    server({ 'GET /api/dashboard/overview': { body: { ...base, traffic: { ...base.traffic, completedUtc30d: { monthlyDirections: { toUsers: 3 * GiB, fromUsers: GiB } } } } },
+      'GET /api/dashboard/traffic-series?period=30d': { body: { period: '30d', points, canCompareTotals: false } } })
+    renderApp(<OverviewPage />, { route: '/?period=30d' })
+    const g = await screen.findByRole('group', { name: 'Трафик за 30 дней' })
+    const block = within(g.closest('section')!)
+    expect(within(block.getByRole('heading').parentElement!).getByText('34 Б')).toBeTruthy()
+    expect(block.getByText('17 Б')).toBeTruthy()
+    expect(block.getByText('75%')).toBeTruthy()
+    expect(block.getByText('25%')).toBeTruthy()
+    expect(block.getByText(/Записанный трафик нод/)).toBeTruthy()
+  })
+
   it('пусто: no traffic in a day and no nodes are said in words', async () => {
     const empty = overview({ nodes: [], system: { onlineNodeCount: 0, totalNodeCount: 0 } })
     server({ 'GET /api/dashboard/overview': { body: { ...empty, traffic: { ...empty.traffic, last24hHourly: [] } } }, 'GET /api/nodes': { body: { nodes: [], total: 0 } } })

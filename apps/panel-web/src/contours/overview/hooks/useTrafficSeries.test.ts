@@ -12,7 +12,7 @@ function sample(period: SeriesPeriod) {
 }
 
 describe('recorded traffic series', () => {
-  it.each(['1h', '7d', '90d'] as const)('keeps UTC slots, zeros and independent gaps for %s', period => {
+  it.each(['1h', '7d', '30d', '90d'] as const)('keeps UTC slots, zeros and independent gaps for %s', period => {
     const parsed = readTrafficSeries(sample(period), period)
     expect(parsed.points).toHaveLength(intervals[period])
     expect(parsed.points[0]).toEqual({ date: '2026-11-01T00:00:00.000Z', bytes: 0, previousBytes: null })

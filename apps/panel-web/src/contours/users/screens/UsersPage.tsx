@@ -9,7 +9,7 @@ import styles from '@/contours/users/components/users.module.css'
 import { DICT } from '@/contours/users/dict'
 import { PAGE_SIZES, useListState, type StatusFilter } from '@/contours/users/hooks/useListState'
 import { useBulkAccess, usePanelAddress, useUpdateUser, useUsersList } from '@/contours/users/hooks/useUsers'
-import { COLUMN_VIEW_KEY, COLUMNS, parseStoredView, viewFromStored, visibleColumns, type ColumnView } from '@/contours/users/lib/columns'
+import { COLUMN_VIEW_KEY, COLUMNS, loadColumnView, visibleColumns, type ColumnView } from '@/contours/users/lib/columns'
 import type { BulkReport, User } from '@/contours/users/lib/users'
 import { useAllNodes } from '@/lib/domain/nodes'
 import { useOverview } from '@/lib/domain/overview'
@@ -17,7 +17,7 @@ import { useSquads } from '@/lib/domain/squads'
 import { fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
-import { readStored, writeStored } from '@/lib/storage'
+import { writeStored } from '@/lib/storage'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
@@ -71,7 +71,7 @@ export default function UsersPage() {
   const panel = usePanelAddress()
   const bulk = useBulkAccess()
 
-  const [view, setViewState] = useState<ColumnView>(() => viewFromStored(readStored(COLUMN_VIEW_KEY, parseStoredView)))
+  const [view, setViewState] = useState<ColumnView>(loadColumnView)
   const [density, setDensity] = useState<Density>('normal')
   const [fullscreen, setFullscreen] = useState(false)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
