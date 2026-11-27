@@ -26,12 +26,16 @@ function screenGroup(name: string, contours: string[], wordsOnly = false) {
   }
 }
 
+const panelScreens = screenGroup('panel-screens', [...network, ...traffic, ...admin, 'insights', 'users', 'squads', 'profiles'])
+
 export default defineConfig(({ mode }) => ({
   plugins: [
     // React Aria ships its strings for every language it knows; the panel speaks two.
     { ...optimizeLocales.vite({ locales: ['ru-RU', 'en-US'] }), enforce: 'pre' },
     react(),
   ],
+  // Scope CSS modules with the same Lightning CSS engine Vite uses for minification.
+  css: { transformer: 'lightningcss' },
   resolve: {
     alias: { '@': resolve(here, 'src') },
   },
@@ -48,17 +52,21 @@ export default defineConfig(({ mode }) => ({
           // independently loadable by the shell, login and profile editor.
           includeDependenciesRecursively: false,
           groups: [
-            { name: 'legacy-api', test: /\/lib\/old\// },
             { name: 'query', test: /\/node_modules\/@tanstack\// },
-            screenGroup('network-words', [...network, ...traffic], true),
-            screenGroup('operator-words', ['users', 'profiles', 'squads', 'insights', 'overview', 'audit', ...admin], true),
-            screenGroup('network', network),
-            screenGroup('traffic-subscription', [...traffic, 'insights']),
-            screenGroup('admin', admin),
+            screenGroup('panel-words', [...network, ...traffic, ...admin, 'users', 'profiles', 'squads', 'insights', 'overview', 'audit'], true),
             { name: 'overlays', test: /\/(?:ui\/(?:Dialog|Confirm|Popover|Menu)\/|useDialogPortal\.ts$)/ },
             { name: 'registry-ui', test: /\/ui\/(?:Check|Flag|Meter|StatCard|Chip)\// },
-            screenGroup('users', ['users']),
-            screenGroup('squads', ['squads']),
+            // The recipe module reads this JSON at initialization on direct profile links.
+            { name: 'recipe-snapshot', priority: 2, test: /\/recipes\.snapshot\.json$/ },
+            // Calendar and squad picker share the lazy accessibility controls.
+            { name: 'aria-controls', test: /\/node_modules\/(?:@internationalized|@react-aria|@react-stately|react-aria-components|react-aria|react-stately)\// },
+            {
+              ...panelScreens,
+              test(id: string) {
+                return panelScreens.test(id) ||
+                  /\/(?:lib\/old|ui\/CodeArea|contours\/(?:audit|overview)\/screens)\//.test(id)
+              },
+            },
           ],
         } : true,
       },
