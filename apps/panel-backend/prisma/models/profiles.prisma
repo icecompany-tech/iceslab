@@ -46,11 +46,30 @@ model Profile {
   linkChangedAt DateTime @default(now()) @map("link_changed_at") @db.Timestamptz(6)
 
   bindings       ProfileNodeBinding[]
+  revisions      ProfileRevision[]
   groupProfiles  GroupProfile[]
   amneziawgPeers AmneziawgPeer[]
 
   @@index([protocol])
   @@map("profiles")
+}
+
+model ProfileRevision {
+  profileId        String   @map("profile_id") @db.Uuid
+  revision         Int
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  kind             String   @db.VarChar(16)
+  actorType        String?  @map("actor_type") @db.VarChar(16)
+  actorName        String?  @map("actor_name") @db.VarChar(128)
+  source           String?  @db.VarChar(16)
+  restoredFrom     Int?     @map("restored_from")
+  document         Json
+  protectedVersion Int      @default(1) @map("protected_version")
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([profileId, revision])
+  @@map("profile_revisions")
 }
 
 model ProfileNodeBinding {

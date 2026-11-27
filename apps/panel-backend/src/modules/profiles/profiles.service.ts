@@ -1,9 +1,20 @@
+import { keepStoredSecrets } from '../auth/token-secrets.js';
+import {
+  baselineRevision,
+  findProfileRevision,
+  latestProfileRevision,
+  profileDocument,
+  ProfileRevisionError,
+  splitProfileConfig,
+  writeProfileRevision,
+  type RevisionMetadata,
+} from './profiles.revisions.js';
 import type { EngineName, Transport } from '@iceslab/shared';
-import { Prisma } from '../../generated/prisma/client.js';
+import { Prisma, type Profile, type ProfileRevision } from '../../generated/prisma/client.js';
 import { eventBus } from '../../lib/infra/event-bus.js';
 import { prisma } from '../../prisma.js';
 import { isUniqueViolationOn } from '../../lib/util/unique-violation.js';
-import { anyChanged } from '../../lib/util/same-value.js';
+import { anyChanged, sameValue } from '../../lib/util/same-value.js';
 import { BINDING_LINK_FIELDS, PROFILE_LINK_FIELDS } from '../hosts/hosts.freshness.js';
 import { ALL_SQUAD_ID } from '../squads/squads.constants.js';
 import { ensureAllSquad } from '../squads/squads.system.js';
@@ -27,6 +38,7 @@ import {
   VMESS_REALITY_MESSAGE,
   vmessOnReality,
   withXraySecurityDefault,
+  UpdateProfileSchema,
 } from './profiles.schemas.js';
 import { ZodError } from 'zod';
 import {
@@ -369,7 +381,7 @@ function keepXraySockopt(incoming: Record<string, unknown>, stored: unknown): vo
   }
 }
 
-export async function createProfile(input: CreateProfileInput): Promise<PublicProfileDto> {
+export async function createProfile(input: CreateProfileInput, metadata: RevisionMetadata = {}): Promise<PublicProfileDto> {
   const existing = await prisma.profile.findUnique({ where: { name: input.name } });
   if (existing) throw new ProfileNameTakenError(input.name);
 
@@ -428,6 +440,7 @@ export async function createProfile(input: CreateProfileInput): Promise<PublicPr
       create: { groupId: ALL_SQUAD_ID, profileId: p.id },
       update: {},
     });
+    await writeProfileRevision(tx, p, 1, 'created', metadata, 1);
     return p;
   }).catch((err: unknown) => {
     // The check above is read-then-insert: a create racing it loses here
@@ -459,15 +472,115 @@ export async function getProfileById(id: string): Promise<PublicProfileDto> {
   return mapProfile(profile, await userReachForProfile(id));
 }
 
+type ProfileEditOptions = RevisionMetadata & { keepSecrets?: boolean };
+type ProfileRestore = { revision: number; expectedCurrentRevision: number };
+
+async function writeProfileEdit(
+  id: string,
+  edit: { input: UpdateProfileInput } | { restore: ProfileRestore },
+  options: ProfileEditOptions,
+) {
+  return prisma.$transaction(async (tx) => {
+    // Both save paths serialize before reading the revision head and live keys.
+    await tx.$queryRaw`SELECT id FROM profiles WHERE id = ${id}::uuid FOR UPDATE`;
+    const existing = await tx.profile.findUnique({ where: { id } });
+    if (!existing) throw new ProfileNotFoundError(id);
+    const head = await latestProfileRevision(tx, id);
+    const baseline = head ? undefined : baselineRevision(existing);
+    const current = head ?? baseline!;
+    const previous = splitProfileConfig(existing.protocol, existing.config);
+
+    let input: UpdateProfileInput;
+    let target: ProfileRevision | undefined;
+    if ('restore' in edit) {
+      const { revision, expectedCurrentRevision } = edit.restore;
+      if (current.revision !== expectedCurrentRevision) {
+        throw new ProfileRevisionError('PROFILE_REVISION_CONFLICT', current.revision);
+      }
+      target = await findProfileRevision(tx, current, revision);
+      if (!previous.restorable) {
+        throw new ProfileRevisionError('PROFILE_REVISION_INCOMPATIBLE', current.revision);
+      }
+      const document = target.document as ReturnType<typeof profileDocument>;
+      if (existing.protocol === 'mtproto' && current.protectedVersion !== target.protectedVersion) {
+        // The protected domain also determines the FakeTLS client credential.
+        throw new ProfileRevisionError('PROFILE_REVISION_PROTECTED', current.revision);
+      }
+      const config = { ...document.config, ...(previous.protectedConfig as Prisma.JsonObject) };
+      input = UpdateProfileSchema.parse({
+        name: document.name,
+        description: document.description,
+        enabled: document.enabled,
+        ...(document.engine !== existing.engine ? { engine: document.engine } : {}),
+        ...(document.awgProtocol !== existing.awgProtocol ? { awgProtocol: document.awgProtocol } : {}),
+        ...(!sameValue(config, existing.config) ? { config } : {}),
+      });
+    } else {
+      input = edit.input;
+      if (options.keepSecrets && input.config !== undefined) {
+        input = { ...input, config: keepStoredSecrets(input.config, existing.config) };
+      }
+    }
+
+    const updated = await applyProfileEdit(tx, existing, input, target !== undefined);
+    const next = splitProfileConfig(updated.protocol, updated.config);
+    const protectedChanged = !sameValue(previous.protectedConfig, next.protectedConfig);
+    const document = profileDocument(updated);
+    if (target && (protectedChanged || !sameValue(document, target.document))) {
+      throw new ProfileRevisionError(
+        protectedChanged ? 'PROFILE_REVISION_PROTECTED' : 'PROFILE_REVISION_INCOMPATIBLE',
+        current.revision,
+      );
+    }
+
+    if (baseline) await tx.profileRevision.create({ data: baseline });
+    if (target || protectedChanged || !sameValue(document, current.document)) {
+      await writeProfileRevision(
+        tx, updated, current.revision + 1, target ? 'restored' : 'updated', options,
+        current.protectedVersion + Number(protectedChanged), target?.revision,
+      );
+      return { updated, currentRevision: current.revision + 1 };
+    }
+    return { updated, currentRevision: current.revision };
+  });
+}
+
 export async function updateProfile(
   id: string,
   input: UpdateProfileInput,
+  options: ProfileEditOptions = {},
 ): Promise<PublicProfileDto> {
-  const existing = await prisma.profile.findUnique({ where: { id } });
-  if (!existing) throw new ProfileNotFoundError(id);
+  const { updated } = await writeProfileEdit(id, { input }, options).catch((err: unknown) => {
+    if (input.name !== undefined && isUniqueViolationOn(err, 'profiles_name_key', ['name'])) {
+      throw new ProfileNameTakenError(input.name);
+    }
+    throw err;
+  });
+  eventBus.emit('profile.updated', { profileId: id });
+  return mapProfile(updated, await userReachForProfile(id));
+}
 
+export async function restoreProfileRevision(id: string, restore: ProfileRestore, metadata: RevisionMetadata) {
+  const { currentRevision } = await writeProfileEdit(id, { restore }, metadata).catch((err: unknown) => {
+    if (isUniqueViolationOn(err, 'profiles_name_key', ['name']) || err instanceof ZodError) {
+      // The reconstructed validation input includes live secrets.
+      throw new ProfileRevisionError('PROFILE_REVISION_INCOMPATIBLE');
+    }
+    throw err;
+  });
+  eventBus.emit('profile.updated', { profileId: id });
+  return { currentRevision, restoredFrom: restore.revision };
+}
+
+async function applyProfileEdit(
+  tx: Prisma.TransactionClient,
+  existing: Profile,
+  input: UpdateProfileInput,
+  restoring: boolean,
+) {
+  const { id } = existing;
   if (input.name && input.name !== existing.name) {
-    const collision = await prisma.profile.findUnique({ where: { name: input.name } });
+    const collision = await tx.profile.findUnique({ where: { name: input.name } });
     if (collision) throw new ProfileNameTakenError(input.name);
   }
 
@@ -488,7 +601,7 @@ export async function updateProfile(
     // how a profile ends up deployed where nothing serves it.
     if (effectiveEngineOf({ protocol: existing.protocol, engine: input.engine ?? null }) !==
         effectiveEngineOf(existing)) {
-      const deployed = await prisma.profileNodeBinding.findMany({
+      const deployed = await tx.profileNodeBinding.findMany({
         where: { profileId: id, node: { deletedAt: null } },
         select: { node: true },
       });
@@ -511,7 +624,7 @@ export async function updateProfile(
     // module generations and asks nothing.
     const next = { protocol: existing.protocol, awgProtocol: input.awgProtocol };
     if (profileAwgProtocol(next) === 3 && profileAwgProtocol(existing) !== 3) {
-      const deployed = await prisma.profileNodeBinding.findMany({
+      const deployed = await tx.profileNodeBinding.findMany({
         where: { profileId: id, node: { deletedAt: null } },
         select: { node: { select: { name: true, cores: true } } },
       });
@@ -537,13 +650,13 @@ export async function updateProfile(
   // node with another mieru inbound is the same question.
   const mieruRetuned = existing.protocol === 'mieru' && input.config !== undefined;
   if (adapterSlot(nextSlotOf) !== adapterSlot(existing) || mieruRetuned) {
-    const deployed = await prisma.profileNodeBinding.findMany({
+    const deployed = await tx.profileNodeBinding.findMany({
       where: { profileId: id, node: { deletedAt: null } },
       select: { id: true, overrides: true, node: { select: { id: true, name: true } } },
     });
     // A-259: each binding against the rest of its node, the profile's own other
     // bindings there included, all of them counted in the slot they move to.
-    for (const b of deployed) await assertAdapterSlotFree(b.node, nextSlotOf, b.overrides, b.id);
+    for (const b of deployed) await assertAdapterSlotFree(b.node, nextSlotOf, b.overrides, b.id, tx);
   }
 
   if (input.config !== undefined) {
@@ -570,8 +683,12 @@ export async function updateProfile(
      */
     if (existing.protocol === 'shadowtls') {
       const incoming = parsed as { ssMethod: string; ssPassword?: string };
+      const stored = (existing.config ?? {}) as { ssMethod?: string; ssPassword?: string };
+      if (restoring && incoming.ssMethod !== stored.ssMethod && incoming.ssPassword &&
+          !pskFitsMethod(incoming.ssPassword, incoming.ssMethod)) {
+        throw new ProfileRevisionError('PROFILE_REVISION_PROTECTED');
+      }
       if (!incoming.ssPassword) {
-        const stored = (existing.config ?? {}) as { ssPassword?: string };
         incoming.ssPassword = stored.ssPassword ?? generateSsServerPsk(incoming.ssMethod);
       }
     }
@@ -587,15 +704,19 @@ export async function updateProfile(
      */
     if (existing.protocol === 'shadowsocks') {
       const incoming = parsed as { method: string; serverPsk?: string };
+      const stored = (existing.config ?? {}) as { method?: string; serverPsk?: string };
+      if (restoring && incoming.method !== stored.method && incoming.serverPsk &&
+          !pskFitsMethod(incoming.serverPsk, incoming.method)) {
+        throw new ProfileRevisionError('PROFILE_REVISION_PROTECTED');
+      }
       if (!incoming.serverPsk) {
-        const stored = (existing.config ?? {}) as { serverPsk?: string };
         incoming.serverPsk =
           stored.serverPsk && pskFitsMethod(stored.serverPsk, incoming.method)
             ? stored.serverPsk
             : generateSsServerPsk(incoming.method);
       }
     }
-    if (isXray) keepXraySockopt(parsed as Record<string, unknown>, existing.config);
+    if (isXray) keepXraySockopt(parsed as Record<string, unknown>, restoring ? null : existing.config);
     // After parse, so schema defaults are filled in first and only then the
     // fields belonging to other transports are dropped.
     data.config = (
@@ -622,7 +743,7 @@ export async function updateProfile(
   // What the node is pushed is the profile merged with each binding's
   // overrides, and an override may pin a network of its own.
   if (existing.protocol === 'xray' && nextEngine === 'singbox') {
-    const deployed = await prisma.profileNodeBinding.findMany({
+    const deployed = await tx.profileNodeBinding.findMany({
       where: { profileId: id },
       select: { overrides: true },
     });
@@ -646,7 +767,7 @@ export async function updateProfile(
    */
   const moves: { id: string; port: number; nodeId: string; transport: Transport }[] = [];
   if (data.config !== undefined) {
-    const bindings = await prisma.profileNodeBinding.findMany({
+    const bindings = await tx.profileNodeBinding.findMany({
       where: { profileId: id },
       select: { id: true, port: true, nodeId: true, transport: true, overrides: true },
     });
@@ -660,7 +781,7 @@ export async function updateProfile(
   if (moves.length > 0) {
     // Asked before the write, not caught after it, because the key says only
     // that something collided, and the operator needs to know which node.
-    const taken = await prisma.profileNodeBinding.findMany({
+    const taken = await tx.profileNodeBinding.findMany({
       where: {
         profileId: { not: id },
         OR: moves.map((m) => ({ nodeId: m.nodeId, port: m.port, transport: m.transport })),
@@ -695,12 +816,12 @@ export async function updateProfile(
       subnetOf(nextConfig) !== subnetOf(existing.config) ||
       profileAwgProtocol({ protocol: 'amneziawg', awgProtocol: nextAwg }) !== profileAwgProtocol(existing);
     if (moved) {
-      const deployed = await prisma.profileNodeBinding.findMany({
+      const deployed = await tx.profileNodeBinding.findMany({
         where: { profileId: id, node: { deletedAt: null } },
         select: { node: { select: { id: true, name: true } } },
       });
       for (const b of deployed) {
-        await assertAwgSubnetFree(b.node, { id, protocol: 'amneziawg', awgProtocol: nextAwg, config: nextConfig });
+        await assertAwgSubnetFree(b.node, { id, protocol: 'amneziawg', awgProtocol: nextAwg, config: nextConfig }, tx);
       }
     }
   }
@@ -709,27 +830,17 @@ export async function updateProfile(
   // client really changed (PROFILE_LINK_FIELDS); a rename or a description
   // does not. A moved binding's transport is in its link too.
   if (anyChanged(existing, data as Partial<typeof existing>, PROFILE_LINK_FIELDS)) data.linkChangedAt = new Date();
-  const updated = await prisma.$transaction(async (tx) => {
-    for (const m of moves) {
-      await tx.profileNodeBinding.update({
-        where: { id: m.id },
-        data: { transport: m.transport, linkChangedAt: new Date() },
-      });
-    }
-    return tx.profile.update({
-      where: { id },
-      data,
-      include: { _count: { select: { bindings: true } } },
+  for (const m of moves) {
+    await tx.profileNodeBinding.update({
+      where: { id: m.id },
+      data: { transport: m.transport, linkChangedAt: new Date() },
     });
-  }).catch((err: unknown) => {
-    // A rename racing the check above (A-257).
-    if (input.name !== undefined && isUniqueViolationOn(err, 'profiles_name_key', ['name'])) {
-      throw new ProfileNameTakenError(input.name);
-    }
-    throw err;
+  }
+  return tx.profile.update({
+    where: { id },
+    data,
+    include: { _count: { select: { bindings: true } } },
   });
-  eventBus.emit('profile.updated', { profileId: id });
-  return mapProfile(updated, await userReachForProfile(id));
 }
 
 export async function deleteProfile(id: string): Promise<void> {

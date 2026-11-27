@@ -63,6 +63,7 @@ export const TABLES = [
   'routing_presets',
   'hosts',
   'profile_node_bindings',
+  'profile_revisions',
   'profiles',
   'node_bootstrap_tokens',
   // Two of the additions here were REAL leaks, not bookkeeping. Nothing

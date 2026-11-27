@@ -132,9 +132,10 @@ export async function assertAdapterSlotFree(
   profile: { id: string; protocol: string; engine: string | null; awgProtocol?: number | null; config?: unknown },
   overrides?: unknown,
   exceptBindingId?: string,
+  db: Pick<typeof prisma, 'profileNodeBinding'> = prisma,
 ): Promise<void> {
   const slot = adapterSlot(profile);
-  const others = await prisma.profileNodeBinding.findMany({
+  const others = await db.profileNodeBinding.findMany({
     where: { nodeId: node.id, ...(exceptBindingId ? { id: { not: exceptBindingId } } : {}) },
     select: {
       profileId: true,

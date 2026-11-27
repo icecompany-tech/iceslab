@@ -218,11 +218,12 @@ const AWG_DEFAULT_SUBNET = '10.66.66.0/24';
 export async function assertAwgSubnetFree(
   node: { id: string; name: string },
   profile: { id: string; protocol: string; awgProtocol?: number | null; config: unknown },
+  db: Pick<typeof prisma, 'profileNodeBinding'> = prisma,
 ): Promise<void> {
   const mine = profileAwgProtocol(profile);
   if (mine === null) return;
   const subnet = ((profile.config ?? {}) as { subnet?: string }).subnet ?? AWG_DEFAULT_SUBNET;
-  const others = await prisma.profileNodeBinding.findMany({
+  const others = await db.profileNodeBinding.findMany({
     where: { nodeId: node.id, profile: { protocol: 'amneziawg', id: { not: profile.id } } },
     select: { profile: { select: { name: true, protocol: true, awgProtocol: true, config: true } } },
   });

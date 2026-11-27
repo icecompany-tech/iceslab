@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import { diffProfileRevision, listProfileRevisions, ProfileRevisionError, type RevisionMetadata } from './profiles.revisions.js';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.hook.js';
 import {
@@ -22,7 +23,7 @@ import { coreGateReply } from '../nodes/node-core-gate.js';
 import { AdapterSlotTakenError, MieruMtuMismatchError } from '../nodes/node-adapter-slot.js';
 import * as svc from './profiles.service.js';
 import { prisma } from '../../prisma.js';
-import { withStoredSecrets } from '../auth/token-secrets.js';
+import { isRestrictedToken, withStoredSecrets } from '../auth/token-secrets.js';
 
 const KeypairQuery = z.object({
   protocol: z.enum(['xray', 'amneziawg']).default('amneziawg'),
@@ -31,6 +32,94 @@ const KeypairQuery = z.object({
 const FormatsQuery = z.object({
   securityLayer: z.enum(['default', 'tls', 'none']).optional(),
 });
+
+const RevisionNumber = z.number().int().positive().max(2_147_483_647);
+const RevisionListQuery = z.object({ before: z.coerce.number().pipe(RevisionNumber).optional() });
+const RevisionParams = ProfileIdParamSchema.extend({ revision: z.coerce.number().pipe(RevisionNumber) });
+const RestoreRevisionBody = z.object({ expectedCurrentRevision: RevisionNumber });
+const RevisionSource = z.enum(['form', 'console', 'recipe', 'import']);
+
+async function revisionMetadata(req: FastifyRequest): Promise<RevisionMetadata> {
+  const source = RevisionSource.safeParse((req.body as { revisionSource?: unknown } | null)?.revisionSource).data;
+  if (req.apiToken) return { source, actor: { type: 'apiToken', name: req.apiToken.name } };
+  if (!req.admin) return { source };
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: req.admin.id }, select: { username: true },
+  });
+  return { source, actor: admin ? { type: 'admin', name: admin.username } : undefined };
+}
+
+function replyProfileEditError(err: unknown, reply: FastifyReply) {
+  if (err instanceof ProfileRevisionError) {
+    const status = err.code === 'PROFILE_REVISION_NOT_FOUND' ? 404 : 409;
+    return reply.code(status).send({ error: err.code, currentRevision: err.currentRevision });
+  }
+  if (err instanceof svc.ProfileNotFoundError) {
+    return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+  }
+  if (err instanceof svc.ProfileNameTakenError) {
+    return reply.code(409).send({ error: 'CONFLICT', message: err.message });
+  }
+  if (err instanceof svc.ProfileEngineNotForSubprotocolError) {
+    return reply.code(400).send({ error: err.code, message: err.message });
+  }
+  if (err instanceof svc.ProfileAwgProtocolNotAwgError) {
+    return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+  }
+  // A-055 on an edit: the adapter the profile moves onto is taken on one of
+  // its nodes. The same body as a binding gets.
+  if (err instanceof MieruMtuMismatchError) {
+    return reply.code(409).send({ error: err.code, message: err.message, nodeName: err.nodeName, mtu: err.mtu, wanted: err.wanted, heldBy: err.heldBy });
+  }
+  if (err instanceof AdapterSlotTakenError) {
+    return reply.code(409).send({
+      error: err.code,
+      message: err.message,
+      nodeName: err.nodeName,
+      protocol: err.protocol,
+      engine: err.engine,
+      heldBy: err.heldBy,
+    });
+  }
+  // Moving the profile to 3.1 while a node it is on runs a 1.x module:
+  // AWG_PROTOCOL_MISMATCH, the answer a binding gets.
+  const core = coreGateReply(err);
+  if (core) return reply.code(core.status).send(core.body);
+  // The field sing-box cannot serve on an xray-family profile, with its
+  // path, as the create path's schema issue carries it.
+  if (err instanceof svc.ProfileEngineNotForTransportError) {
+    return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
+  }
+  // Switching the engine would leave this profile deployed on a node whose
+  // cores cannot serve it. Named separately from CONFLICT so the screen can
+  // point at the node instead of at the field.
+  if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
+    return reply.code(409).send({
+      error: 'PROFILE_DOES_NOT_RUN_ON_NODE',
+      message: err.message,
+      // The same answer in machine form, so the sentence can one day be
+      // rebuilt in the operator's language without changing this contract.
+      // See ProfileDoesNotRunOnNodeError for what each one means.
+      nodeName: err.nodeName,
+      neededEngine: err.neededEngine,
+      reportedEngines: err.reportedEngines,
+      canWait: err.canWait,
+    });
+  }
+  // The edit moves the profile onto the other transport, and somebody else
+  // already holds that socket on one of its nodes. Named separately from
+  // CONFLICT for the same reason as above: the screen points at the nodes,
+  // and the list of them travels in machine form.
+  if (err instanceof svc.TransportMoveBlockedError) {
+    return reply.code(409).send({
+      error: 'TRANSPORT_MOVE_BLOCKED',
+      message: err.message,
+      transport: err.transport,
+      conflicts: err.conflicts,
+    });
+  }
+  throw err;
+}
 
 export async function profilesRoutes(app: FastifyInstance): Promise<void> {
   // Wave-14 #15: per-route auth (see users.routes.ts header comment).
@@ -50,7 +139,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/profiles', auth, async (req, reply) => {
     const input = CreateProfileSchema.parse(req.body);
     try {
-      const p = await svc.createProfile(input);
+      const p = await svc.createProfile(input, await revisionMetadata(req));
       return reply.code(201).send(p);
     } catch (err) {
       if (err instanceof svc.ProfileNameTakenError) {
@@ -125,78 +214,44 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  app.get('/api/profiles/:id/revisions', auth, async (req, reply) => {
+    const { id } = ProfileIdParamSchema.parse(req.params);
+    const { before } = RevisionListQuery.parse(req.query);
+    try {
+      return reply.send(await listProfileRevisions(id, before));
+    } catch (err) {
+      return replyProfileEditError(err, reply);
+    }
+  });
+
+  app.get('/api/profiles/:id/revisions/:revision/diff', auth, async (req, reply) => {
+    const { id, revision } = RevisionParams.parse(req.params);
+    try {
+      return reply.send(await diffProfileRevision(id, revision));
+    } catch (err) {
+      return replyProfileEditError(err, reply);
+    }
+  });
+
+  app.post('/api/profiles/:id/revisions/:revision/restore', auth, async (req, reply) => {
+    const { id, revision } = RevisionParams.parse(req.params);
+    const { expectedCurrentRevision } = RestoreRevisionBody.parse(req.body);
+    try {
+      const { actor } = await revisionMetadata(req);
+      return reply.send(await svc.restoreProfileRevision(id, { revision, expectedCurrentRevision }, { actor }));
+    } catch (err) {
+      return replyProfileEditError(err, reply);
+    }
+  });
+
   app.put('/api/profiles/:id', auth, async (req, reply) => {
     const { id } = ProfileIdParamSchema.parse(req.params);
-    const input = UpdateProfileSchema.parse(await withStoredSecrets(req, 'config', async () =>
-      (await prisma.profile.findUnique({ where: { id }, select: { config: true } }))?.config));
+    const input = UpdateProfileSchema.parse(req.body);
     try {
-      return reply.send(await svc.updateProfile(id, input));
+      const metadata = await revisionMetadata(req);
+      return reply.send(await svc.updateProfile(id, input, { ...metadata, keepSecrets: isRestrictedToken(req) }));
     } catch (err) {
-      if (err instanceof svc.ProfileNotFoundError) {
-        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
-      }
-      if (err instanceof svc.ProfileNameTakenError) {
-        return reply.code(409).send({ error: 'CONFLICT', message: err.message });
-      }
-      if (err instanceof svc.ProfileEngineNotForSubprotocolError) {
-        return reply.code(400).send({ error: err.code, message: err.message });
-      }
-      if (err instanceof svc.ProfileAwgProtocolNotAwgError) {
-        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
-      }
-      // A-055 on an edit: the adapter the profile moves onto is taken on one of
-      // its nodes. The same body as a binding gets.
-      if (err instanceof MieruMtuMismatchError) {
-        return reply.code(409).send({ error: err.code, message: err.message, nodeName: err.nodeName, mtu: err.mtu, wanted: err.wanted, heldBy: err.heldBy });
-      }
-      if (err instanceof AdapterSlotTakenError) {
-        return reply.code(409).send({
-          error: err.code,
-          message: err.message,
-          nodeName: err.nodeName,
-            protocol: err.protocol,
-          engine: err.engine,
-          heldBy: err.heldBy,
-        });
-      }
-      // Moving the profile to 3.1 while a node it is on runs a 1.x module:
-      // AWG_PROTOCOL_MISMATCH, the answer a binding gets.
-      const core = coreGateReply(err);
-      if (core) return reply.code(core.status).send(core.body);
-      // The field sing-box cannot serve on an xray-family profile, with its
-      // path, as the create path's schema issue carries it.
-      if (err instanceof svc.ProfileEngineNotForTransportError) {
-        return reply.code(400).send({ error: err.code, message: err.message, path: err.path });
-      }
-      // Switching the engine would leave this profile deployed on a node whose
-      // cores cannot serve it. Named separately from CONFLICT so the screen can
-      // point at the node instead of at the field.
-      if (err instanceof svc.ProfileDoesNotRunOnNodeError) {
-        return reply.code(409).send({
-          error: 'PROFILE_DOES_NOT_RUN_ON_NODE',
-          message: err.message,
-          // The same answer in machine form, so the sentence can one day be
-          // rebuilt in the operator's language without changing this contract.
-          // See ProfileDoesNotRunOnNodeError for what each one means.
-          nodeName: err.nodeName,
-          neededEngine: err.neededEngine,
-          reportedEngines: err.reportedEngines,
-          canWait: err.canWait,
-        });
-      }
-      // The edit moves the profile onto the other transport, and somebody else
-      // already holds that socket on one of its nodes. Named separately from
-      // CONFLICT for the same reason as above: the screen points at the nodes,
-      // and the list of them travels in machine form.
-      if (err instanceof svc.TransportMoveBlockedError) {
-        return reply.code(409).send({
-          error: 'TRANSPORT_MOVE_BLOCKED',
-          message: err.message,
-          transport: err.transport,
-          conflicts: err.conflicts,
-        });
-      }
-      throw err;
+      return replyProfileEditError(err, reply);
     }
   });
 
@@ -246,7 +301,7 @@ export async function profilesRoutes(app: FastifyInstance): Promise<void> {
           error: err.code,
           message: err.message,
           nodeName: err.nodeName,
-          protocol: err.protocol,
+        protocol: err.protocol,
           engine: err.engine,
           heldBy: err.heldBy,
         });
