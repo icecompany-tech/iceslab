@@ -1,7 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
 import { Editor } from '@/ui/CodeArea/Editor'
+import { Diff } from '@/ui/CodeArea/Diff'
+import { useLocale } from '@/lib/i18n'
+import { Button } from '@/ui/Button/Button'
 import type { ProfileError } from '@/ui/CodeArea/text'
 import styles from '@/ui/CodeArea/ProfileReview.module.css'
 
@@ -9,7 +12,7 @@ interface Props {
   text: string
   original: string
   error: ProfileError | null
-  isEdit: boolean
+  session: { isEdit: boolean; historyButton?: ReactNode; revision?: { body: ReactNode; footer: ReactNode } }
   protocol: { label: string; preview?: boolean; file?: { file: string; engine: string } }
   choices: readonly { label: string; engine: string; available: boolean }[]
   actions: {
@@ -20,10 +23,14 @@ interface Props {
   }
 }
 
-export function CreateConsole({ text, original, error, isEdit, protocol: { label: protocol, file, preview }, actions, choices }: Props) {
+export function CreateConsole({ text, original, error, session: { isEdit, historyButton, revision }, protocol: { label: protocol, file, preview }, actions, choices }: Props) {
   const { onProtocol, onEdit, onSecurity, onGenerate } = actions
   const area = useRef<HTMLDivElement>(null)
   const [message, setMessage] = useState('')
+  const [compare, setCompare] = useState(false)
+  const { locale } = useLocale()
+  const canCompare = isEdit && !preview && !error && text !== original
+  const comparing = canCompare && compare
   const [help, setHelp] = useState<{ key: 'security' | 'privateKey'; line: number } | null>(null)
   const [working, setWorking] = useState(false)
   const suggestion = useRef<HTMLDivElement>(null)
@@ -78,21 +85,24 @@ export function CreateConsole({ text, original, error, isEdit, protocol: { label
           </div>)}</div>}
       </Popover>
       <span>на ядре</span><b>{file?.engine ?? 'xray'}</b><span className={styles.space} /><code>{file?.file ?? 'config.json'}</code>
-      <button type="button" aria-label="Копировать конфиг" onClick={() => void copy()}><Icon name="copy" /></button>
+      {historyButton}
+      <button type="button" disabled={!!revision} aria-label="Копировать конфиг" onClick={() => void copy()}><Icon name="copy" /></button>
       <button type="button" aria-label="Во весь экран" onClick={() => void fullscreen()}><Icon name="fullscreen" /></button>
     </div>
-    <Editor fileName={file?.file} text={text} saved={original} error={error} clientsLabel={isEdit ? 'задаёт панель' : 'появятся с юзерами'} edit={(value) => { setMessage(''); onEdit(value) }} />
-    {help && <div className={styles.suggestion} ref={suggestion} aria-label="Подстановка">
+    {revision ? revision.body : comparing ? <Diff compact from={original} to={text} label={locale === 'ru' ? 'Разница конфигураций' : 'Configuration differences'} unchanged={count => locale === 'ru' ? 'Строк без изменений: ' + count : 'Unchanged lines: ' + count} /> : <Editor fileName={file?.file} text={text} saved={original} error={error} clientsLabel={isEdit ? 'задаёт панель' : 'появятся с юзерами'} edit={(value) => { setMessage(''); onEdit(value) }} />}
+    {!revision && help && <div className={styles.suggestion} ref={suggestion} aria-label="Подстановка">
       <div>{help.key === 'security' ? (['reality','tls','none'] as const).map((value) =>
         <button key={value} type="button" onClick={() => { onSecurity(value); setHelp(null) }}>{value}</button>)
         : <button type="button" disabled={working} onClick={() => void generate()}>Сгенерировать пару</button>}</div>
       <div>{help.key === 'security' ? 'Защита соединения. Выбранное значение подставится в streamSettings.security.' : 'Ключ x25519. Пара и Short ID подставятся в настройки REALITY.'}</div>
     </div>}
-    {error && <div className={styles.log} role="alert"><code>{file?.file ?? 'config.json'}:{error.line}:{error.column} {error.reason}</code></div>}
-    <div className={styles.status} role="status">
+    {!revision && error && <div className={styles.log} role="alert"><code>{file?.file ?? 'config.json'}:{error.line}:{error.column} {error.reason}</code></div>}
+    {revision ? <div className={styles.status}>{revision.footer}</div> : <div className={styles.status} role="status">
       <span className={styles.dot} data-tone={error ? 'error' : text !== original ? 'warn' : 'success'} />
       <span>{error ? 'Текст не сохранён' : message || (text === original ? (preview ? 'Образец Paper' : 'Собрано из формы') : 'Есть ручные правки')}</span>
-      <span className={styles.space} /><kbd>Ctrl+S</kbd><small>{preview ? 'сохранит на тестовом стенде' : isEdit ? 'проверит и сохранит' : 'проверит и создаст'}</small>
-    </div>
+      <span className={styles.space} />
+      {canCompare && <Button onClick={() => { setHelp(null); setCompare(!comparing) }}>{comparing ? (locale === 'ru' ? 'К тексту' : 'Back to text') : (locale === 'ru' ? 'Разница' : 'Diff')}</Button>}
+      <kbd>Ctrl+S</kbd><small>{preview ? 'сохранит на тестовом стенде' : isEdit ? 'проверит и сохранит' : 'проверит и создаст'}</small>
+    </div>}
   </div>
 }

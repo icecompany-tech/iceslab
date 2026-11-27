@@ -221,6 +221,9 @@
   --size-review-http-plot: 96px;
   --text-profile-heading: 24px;
   --leading-profile-heading: 30px;
+  --size-profile-protocol-column: 190px;
+  --size-profile-engine-column: 100px;
+  --size-profile-count-column: 90px;
   --size-profile-revision: 58px;
   --size-profile-log: 65px;
   --size-profile-section-head: 82px;

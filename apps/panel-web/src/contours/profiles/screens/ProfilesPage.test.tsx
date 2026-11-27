@@ -49,7 +49,7 @@ describe('ProfilesPage', () => {
     server()
     renderApp(<ProfilesPage />, { route: '/profiles' })
     await screen.findByText('vless-1')
-    await screen.findByText(/хостов: 1/)
+    await screen.findByText(/1 хост/)
     await userEvent.click(screen.getByRole('button', { name: /Без хостов/ }))
     expect(screen.queryByText('vless-1')).toBeNull()
     expect(screen.getByText('hy-1')).toBeTruthy()

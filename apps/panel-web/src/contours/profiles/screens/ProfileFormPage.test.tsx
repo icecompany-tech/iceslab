@@ -63,6 +63,19 @@ describe('ProfileFormPage', () => {
     await screen.findByText('неизвестно: ответ сервера не пришёл.', {}, { timeout: 8000 })
   })
 
+  it('shows xray disabled for Hysteria 2 and omits engine on an unrelated edit', async () => {
+    const hy2 = { ...xray, protocol: 'hysteria', effectiveEngine: 'hysteria', config: {}, name: 'hy2-1' }
+    const s = server({ 'GET /api/profiles': { body: { profiles: [hy2] } }, 'PUT /api/profiles/p1': { body: hy2 } })
+    page()
+    await userEvent.click(await screen.findByRole('button', { name: /Ядро.*Hysteria 2/ }))
+    expect((screen.getByRole('radio', { name: 'Hysteria 2' }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('radio', { name: /^xray/ }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByText('Агент не поддерживает Hysteria 2 на xray.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Описание'), { target: { value: 'Для проверки' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(s.writes()[0]?.body).toEqual({ description: 'Для проверки', revisionSource: 'form' }))
+  })
+
   it('an untouched form cannot save, a change sends only itself', async () => {
     const s = server({ 'PUT /api/profiles/p1': { body: { ...xray, name: 'vless-2' } }, 'POST /api/profiles/p1/test-connect': { body: { results: [] } } })
     page()
@@ -71,7 +84,7 @@ describe('ProfileFormPage', () => {
     fireEvent.change(screen.getByLabelText('Имя'), { target: { value: 'vless-2' } })
     await waitFor(() => expect(save.disabled).toBe(false))
     await userEvent.click(save)
-    await waitFor(() => expect(s.writes()[0]).toEqual({ method: 'PUT', path: '/api/profiles/p1', body: { name: 'vless-2' } }))
+    await waitFor(() => expect(s.writes()[0]).toEqual({ method: 'PUT', path: '/api/profiles/p1', body: { name: 'vless-2', revisionSource: 'form' } }))
   })
 
   it('Bk-170: the TCP fields name each node by its agent answer (true, false, none) and a save sends only the set field', async () => {

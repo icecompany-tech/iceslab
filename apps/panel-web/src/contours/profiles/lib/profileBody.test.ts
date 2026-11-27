@@ -31,6 +31,15 @@ describe('the body of a profile save', () => {
     expect(updateBody(values, { ...values, ssMethod: 'aes-128-gcm' }, stored).config).toEqual({ method: 'aes-128-gcm' })
   })
 
+  it.each(['xray', 'hysteria', 'shadowsocks'] as const)('an edit of %s keeps the stored engine', (protocol) => {
+    const native = protocol === 'hysteria' ? 'hysteria' : 'xray'
+    for (const engine of [null, native, 'singbox']) {
+      const stored = profile({ protocol, engine })
+      const values = defaults(stored)
+      expect(updateBody(values, { ...values, description: 'edited' }, stored)).toEqual({ description: 'edited' })
+    }
+  })
+
   it('a create carries the protocol and the engine', () => {
     const values = { ...defaults(null), name: 'a', protocol: 'hysteria' as const, engine: 'singbox' as const }
     expect(createBody(values).engine).toBe('singbox')

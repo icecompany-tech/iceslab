@@ -8,7 +8,7 @@ import { Button } from '@/ui/Button/Button'
 import { Icon } from '@/ui/Icon/Icon'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import { Editor } from '@/ui/CodeArea/Editor'
-import { ColoredLine } from '@/ui/CodeArea/ColoredLine'
+import { Diff } from '@/ui/CodeArea/Diff'
 import { changes, type ProfileError } from '@/ui/CodeArea/text'
 import { initialHistory, older, original, profileName, validate, type Revision } from './config'
 import styles from '@/ui/CodeArea/ProfileReview.module.css'
@@ -42,24 +42,6 @@ function SideInfo() {
       <div className={styles.recipeFoot}><span>Все рецепты</span><span>Импорт  Экспорт</span></div>
     </section>
   </>
-}
-
-function Diff({ from, to }: { from: string; to: string }) {
-  const diff = changes(from, to)
-  const head = Math.max(0, diff.start - 1)
-  const context = to.split('\n')
-  function row(line: string, oldLine: number | null, newLine: number | null, kind?: 'added' | 'removed') {
-    return <pre key={[oldLine, newLine].join('-')} data-kind={kind}>
-      <span>{oldLine}</span><span>{newLine}</span><b>{kind === 'added' ? '+' : kind === 'removed' ? '-' : ''}</b><code><ColoredLine line={line} /></code>
-    </pre>
-  }
-  return <div className={styles.diff} aria-label="Разница конфигураций">
-    <p>{head} строки без изменений</p>
-    {diff.start > 0 && row(context[head] ?? '', diff.start, diff.start)}
-    {diff.before.map((line,i) => row(line, diff.start+i+1, null, 'removed'))}
-    {diff.after.map((line,i) => row(line, null, diff.start+i+1, 'added'))}
-    {diff.tail.map((line,i) => row(line, diff.start+diff.before.length+i+1, diff.start+diff.after.length+i+1))}
-  </div>
 }
 
 export default function ProfileReview() {
@@ -135,7 +117,7 @@ export default function ProfileReview() {
             else if (panel) void panel.requestFullscreen().catch(()=>setMessage('Полный экран недоступен'))
           }}><Icon name="fullscreen"/></button>
         </div>
-        {diffFrom !== null ? <Diff from={diffFrom} to={revision ? saved : text}/> : <Editor text={text} saved={saved} error={error} edit={edit}/>}
+        {diffFrom !== null ? <Diff from={diffFrom} to={revision ? saved : text} label="Разница конфигураций" unchanged={count => count + ' строки без изменений'}/> : <Editor text={text} saved={saved} error={error} edit={edit}/>}
         {(error || message==='Ядро приняло, сохранено') && diffFrom===null && <div className={styles.log} role={error ? 'alert' : 'status'}>
           <code>{error ? 'config.json:'+error.line+':'+error.column+' '+error.reason : 'nl-ams-01 $ xray -test -c config.json'}</code>
           <code>{error ? 'Ядро не запускалось: сначала текст должен разобраться.' : 'Configuration OK.'}</code>

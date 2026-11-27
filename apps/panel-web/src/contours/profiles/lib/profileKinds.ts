@@ -1,3 +1,5 @@
+import { nativeEngineFor } from '@iceslab/shared';
+import { engineLabel } from '@/lib/domain/engines';
 import type { ProtocolName } from '@/lib/old/protocols';
 import { isPlainSubprotocol, type PlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 
@@ -10,6 +12,11 @@ import { isPlainSubprotocol, type PlainSubprotocol } from '@/contours/profiles/l
 // Protocols that can run on the sing-box engine besides their native core.
 // Mirrors the backend's ENGINE_OPTIONS; also gates the engine field in buildConfig.
 export const ENGINE_CHOICE_PROTOCOLS = ['xray', 'hysteria', 'shadowsocks'];
+
+export function profileEngineLabel(protocol: ProtocolName, choice: 'native' | 'singbox'): string {
+  const engine = choice === 'singbox' ? choice : nativeEngineFor(protocol);
+  return engine === 'hysteria' ? 'Hysteria 2' : engineLabel(engine);
+}
 
 export interface ProfileKind {
   key: string;

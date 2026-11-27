@@ -12,7 +12,7 @@ import { defaults } from '@/contours/profiles/lib/profileDefaults'
 import type { FormValues } from '@/contours/profiles/lib/profileFormValues'
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol'
 import { profileConfigOf } from '@/contours/profiles/lib/profileConfig'
-import { ENGINE_CHOICE_PROTOCOLS, profileKindKey } from '@/contours/profiles/lib/profileKinds'
+import { ENGINE_CHOICE_PROTOCOLS, profileEngineLabel, profileKindKey } from '@/contours/profiles/lib/profileKinds'
 import { randomShortIds, recipeApplyPlan, type Recipe } from '@/contours/profiles/lib/recipes'
 import { singboxXrayPatch } from '@/contours/profiles/lib/xrayTransports'
 import { DICT as RECIPE_DICT } from '@/contours/profiles/recipesDict'
@@ -21,17 +21,20 @@ import { settleXrayFields, xrayFieldReactions } from '@/contours/profiles/lib/xr
 import { lastHostCheck, useSquads } from '@/lib/domain/squads'
 import { fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
+import { guardedLeave, useLeaveGuard } from '@/lib/leaveGuard'
 import { failureText } from '@/lib/net/messages'
-import type { Profile, ProfileKeyImpact, TestConnectResult } from '@/lib/old/profiles'
+import type { Profile, ProfileKeyImpact, RevisionSource, TestConnectResult } from '@/lib/old/profiles'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
 import { Confirm } from '@/ui/Dialog/Confirm'
 import { Field, Input } from '@/ui/Field/Field'
+import { Flag } from '@/ui/Flag/Flag'
 import { Icon } from '@/ui/Icon/Icon'
 import { QueryFailed, QueryFailedLine, QueryLoading } from '@/ui/QueryState/QueryState'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import paperExamples from '@/contours/profiles/console/paper-examples.json'
 import { hysteriaFile, isNativeHysteria, printHysteria, readHysteria } from '@/contours/profiles/console/hysteriaYaml'
+import { useRevisionConsole } from '@/contours/profiles/console/useRevisionConsole'
 import { CreateConsole } from '@/contours/profiles/console/CreateConsole'
 import { consoleError, unrepresentedField, fromForm, isObject, printInbound, readInbound, rebase, supportsConsole } from '@/contours/profiles/console/createInbound'
 import type { ProfileError } from '@/ui/CodeArea/text'
@@ -74,14 +77,14 @@ function destWords(row: TestConnectResult, words: { destRefused: (why: string) =
   return words.destRefused(facts?.over ? words.destRecord(facts.bytes, facts.limit) : (row.error ?? '-'))
 }
 
-function RightColumn({ profile, values, rail }: { profile: Profile | null; values: FormValues; rail: ReactNode }) {
+function RightColumn({ profile, values, rail, revisions }: { profile: Profile | null; values: FormValues; rail: ReactNode; revisions: ReactNode }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
   const bindings = useAllBindings()
   const hosts = useAllHosts()
   const fleet = useFleetNames()
   const formats = useFormats(profile?.id ?? null)
-  const nodeName = (id: string) => fleet.data?.nodes.find((n) => n.id === id)?.name ?? id.slice(0, 8)
+  const nodes = new Map(fleet.data?.nodes.map(node => [node.id,node]))
   const mine = (bindings.data?.bindings ?? []).filter((b) => b.profileId === profile?.id)
   const myIds = new Set(mine.map((b) => b.id))
   const myHosts = (hosts.data?.hosts ?? []).filter((h) => myIds.has(h.bindingId))
@@ -89,10 +92,11 @@ function RightColumn({ profile, values, rail }: { profile: Profile | null; value
   const formatsUnknown = formats.isError || formats.data === null
   return (
     <aside className={styles.right}>
+      {revisions}
       {profile ? (
         <>
-          <section className={styles.panel}>
-            <h2 className={styles.panelTitle}>{words.rightHosts}</h2>
+          <section className={styles.panel + ' ' + styles.hostSummary}>
+            <header><h2 className={styles.panelTitle}>{words.rightHosts}</h2>{hosts.data && bindings.data && !hosts.isError && !bindings.isError && <small>{myHosts.length}</small>}</header>
             {(hosts.isError || bindings.isError) && (
               <QueryFailedLine
                 retryLabel={words.retry}
@@ -108,24 +112,25 @@ function RightColumn({ profile, values, rail }: { profile: Profile | null; value
             <ul className={styles.hostList}>
               {myHosts.map((host) => {
                 const binding = mine.find((b) => b.id === host.bindingId)
+                const node = binding && nodes.get(binding.nodeId)
                 return (
                   <li key={host.id}>
+                    {node?.countryCode && <Flag code={node.countryCode}/>}
                     <Link className={styles.link} to={`/hosts/${host.id}`}>
                       {host.remark}
                     </Link>
                     <span className={styles.muted}>
                       {' '}
-                      {binding ? `${nodeName(binding.nodeId)}:${binding.port}` : ''}
+                      {binding ? `${node?.name ?? binding.nodeId.slice(0,8)} · ${host.portOverride ?? binding.publicPort ?? binding.port}` : ''}
                     </span>
                   </li>
                 )
               })}
             </ul>
-            <p className={styles.note}>{words.rightUsers(fmtNumber(profile.userCount ?? 0, locale))}</p>
-          </section>
-          <section className={styles.panel}>
-            <h2 className={styles.panelTitle}>{words.willNotGet}</h2>
-            <p className={styles.note}>{formatsUnknown ? words.willNotGetUnknown : leftOut.length > 0 ? leftOut.join(', ') : words.willNotGetNone}</p>
+            <dl>
+              <dt>{words.columns.users}</dt><dd>{fmtNumber(profile.userCount ?? 0, locale)}</dd>
+              <dt>{words.willNotGet}</dt><dd>{formatsUnknown ? words.willNotGetUnknown : leftOut.length > 0 ? leftOut.join(', ') : words.willNotGetNone}</dd>
+            </dl>
           </section>
           {rail}
         </>
@@ -135,7 +140,7 @@ function RightColumn({ profile, values, rail }: { profile: Profile | null; value
           <section className={styles.panel}>
             <h2 className={styles.panelTitle}>{words.rightGets}</h2>
             <p className={styles.note}>
-              {values.protocol}, {values.engine === 'singbox' ? words.engineSingbox : words.engineNative}
+              {values.protocol}, {profileEngineLabel(values.protocol, values.engine)}
             </p>
             <p className={styles.note}>{words.rightNoHosts}</p>
           </section>
@@ -145,13 +150,15 @@ function RightColumn({ profile, values, rail }: { profile: Profile | null; value
   )
 }
 
-function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolean; profile: Profile | null; onDone: (saved: Profile) => void }) {
+function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole: boolean; profile: Profile | null; onDone: (saved: Profile) => void; reload?: () => Promise<Profile> }) {
   const words = useDict(DICT)
   const recipeWords = useDict(RECIPE_DICT)
   const { locale } = useLocale()
   const toast = useToast()
   const navigate = useNavigate()
   const [search] = useSearchParams()
+  const completedWrite = useRef(false)
+  const [leave, setLeave] = useState<{ go: () => void } | null>(null)
   const isEdit = profile !== null
   const [initial, setInitial] = useState<FormValues>(() => settleXrayFields(defaults(profile)))
   const [values, setValues] = useState<FormValues>(initial)
@@ -214,6 +221,7 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
   const stepArea = useRef<HTMLDivElement>(null)
   const [nameVisited, setNameVisited] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  const [restoreSync, setRestoreSync] = useState<'pending' | 'failed' | null>(null)
   const [destError, setDestError] = useState<string | null>(null)
   const [keyAsk, setKeyAsk] = useState<KeyAsk>(null)
   const [deleting, setDeleting] = useState(false)
@@ -293,7 +301,38 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
   )
   const showingExample = Boolean(example && exampleOpen)
   const inConsole = showingExample || draft !== null
-  const changed = Boolean(example && exampleText !== exampleInitial) || !profile || Object.keys(body ?? {}).length > 0 || manualChange
+  const dirty = Boolean(example && exampleText !== exampleInitial) || manualChange ||
+    (profile ? Object.keys(body ?? {}).length > 0 : JSON.stringify(values) !== JSON.stringify(initial))
+  const changed = !profile || dirty
+  const saving = create.isPending || update.isPending || check.isPending
+  async function syncRestoredProfile() {
+    if (!reload) return
+    setRestoreSync('pending')
+    try {
+      const fresh = await reload()
+      const next = settleXrayFields(defaults(fresh))
+      const raw = fromForm(next)
+      setInitial(next)
+      setValues(next)
+      setConsoleState({ base: raw, raw })
+      setDraft(previous => previous === null || !(isNativeHysteria(next) || supportsConsole(next)) ? null
+        : isNativeHysteria(next) ? printHysteria(next) : printInbound(raw))
+      setEditorError(null)
+      setRefusal(null)
+      setDestError(null)
+      setRestoreSync(null)
+      toast.show(words.revisionSaved)
+    } catch {
+      setRestoreSync('failed')
+    }
+  }
+  const revisions = useRevisionConsole(profile?.id, dirty, saving || restoreSync !== null, syncRestoredProfile)
+  const writing = saving || revisions.restoring || restoreSync === 'pending'
+  const locked = writing || restoreSync === 'failed'
+  useLeaveGuard(dirty, (go) => {
+    if (completedWrite.current) go()
+    else setLeave({ go })
+  })
   // An old row the operator did not touch must not close a rename: its config is not sent.
   const configTouched = !profile || JSON.stringify(profileConfigOf(values)) !== JSON.stringify(profileConfigOf(initial))
   const blocked = problems.name !== undefined || (configTouched && Object.keys(problems).length > 0)
@@ -322,9 +361,15 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
   }
 
   const afterSave = async (saved: Profile, submitted = values) => {
+    if (!isEdit) completedWrite.current = true
     // E23 by the old request after the save (6.6): a refusal stands at the field.
     if (saved.protocol === 'xray' && submitted.xraySecurity === 'reality' && submitted.xrayRealityMode === 'steal-others') {
-      const refused = await check.mutateAsync(saved.id).catch(() => [])
+      const refused = await check.mutateAsync(saved.id).catch(() => null)
+      if (refused === null) {
+        toast.show(words.savedDestUnavailable, 'partial')
+        onDone(saved)
+        return
+      }
       const first = refused[0]
       if (first) {
         setDestError(destWords(first, words))
@@ -339,7 +384,7 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
   }
 
   const submit = () => {
-    if (create.isPending || update.isPending || check.isPending) return
+    if (locked || revisions.preview) return
     const parsed = canConsole ? readDraft() : { raw: null, values }
     if (!parsed) return
     const next = parsed.values
@@ -349,13 +394,16 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
       return
     }
     if (!inConsole && blocked) return
+    setRefusal(null)
     const extra = example && (showingExample || exampleText !== exampleInitial) ? { reviewDocument: { key: exampleKey, text: exampleText } } : reviewConsole && supportsConsole(values) ? { reviewInbound: parsed.raw } : reviewConsole && isObject(storedInbound) ? { reviewInbound: null } : {}
+    const revisionSource: RevisionSource = inConsole ? 'console' : 'form'
     const onError = (err: unknown) => setRefusal(failureText(err, locale))
     if (profile) {
-      update.mutate({ ...updateBody(initial, next, profile), ...extra }, {
+      update.mutate({ ...updateBody(initial, next, profile), ...extra, revisionSource }, {
         onSuccess: (saved) => {
-          setInitial(next)
-          setValues(next)
+          const savedValues = { ...next, description: saved.description ?? '' }
+          setInitial(savedValues)
+          setValues(savedValues)
           if (hysteria && draft !== null) setDraft(printHysteria(next))
           if (parsed.raw) {
             setConsoleState({ base: fromForm(next), raw: parsed.raw })
@@ -366,7 +414,7 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
         onError,
       })
     } else {
-      create.mutate({ ...createBody(next), ...extra }, { onSuccess: (saved) => void afterSave(saved, next), onError })
+      create.mutate({ ...createBody(next), ...extra, revisionSource }, { onSuccess: (saved) => void afterSave(saved, next), onError })
     }
   }
 
@@ -437,8 +485,8 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
 
   const formActions = (
     <>
-      <Button size={isEdit ? 'sm' : 'md'} onClick={() => void navigate('/profiles')}>{words.cancel}</Button>
-      <Button size={isEdit ? 'sm' : 'md'} icon={isEdit ? undefined : <Icon name="plus" />} variant="primary" disabled={!changed || (inConsole ? Boolean(problems.name) : blocked)} loading={create.isPending || update.isPending || check.isPending} onClick={submit}>
+      <Button size={isEdit ? 'sm' : 'md'} onClick={() => guardedLeave(() => void navigate('/profiles'))}>{words.cancel}</Button>
+      <Button size={isEdit ? 'sm' : 'md'} icon={isEdit ? undefined : <Icon name="plus" />} variant="primary" disabled={locked || !!revisions.preview || !changed || (inConsole ? Boolean(problems.name) : blocked)} loading={create.isPending || update.isPending || check.isPending} onClick={submit}>
         {isEdit ? words.save : words.create}
       </Button>
     </>
@@ -451,19 +499,24 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
   const lastOf = lastHostCheck(myHostIds, squads.data)
   const deleteLock = lastOf === null ? words.deleteSquadsUnknown : lastOf.length > 0 ? words.deleteLastHost(lastOf.join(', ')) : null
   return (
-    <div className={isEdit ? styles.page : styles.creation} onKeyDown={(event) => {
+    <div className={isEdit ? styles.page + ' ' + styles.profileForm + (inConsole ? ' '+styles.editConsole : '') : styles.creation} onKeyDown={(event) => {
       if (inConsole && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         if (changed) submit()
       }
     }}>
       <header className={styles.formHeader}>
-        {!isEdit && <Link className={styles.backButton} to="/profiles" aria-label={words.backToList}><Icon name="chevronLeft" /></Link>}
+        {(!isEdit || inConsole) && <Link className={styles.backButton} to="/profiles" aria-label={words.backToList} onClick={(event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+          event.preventDefault()
+          guardedLeave(() => void navigate('/profiles'))
+        }}><Icon name="chevronLeft" /></Link>}
         <h1 className={styles.pageTitle}>{profile ? profile.name : words.newProfile}</h1>
-        {!isEdit && <div className={styles.actions}>{formActions}</div>}
+        {(!isEdit || inConsole) && <div className={styles.actions}>{formActions}</div>}
       </header>
       {refusal && <Banner tone="danger">{refusal}</Banner>}
-      <div className={styles.columns}>
+      {restoreSync === 'failed' && <QueryFailedLine retryLabel={words.retry} onRetry={() => void syncRestoredProfile()}>{words.revisionReloadFailed}</QueryFailedLine>}
+      <div className={styles.columns} inert={locked}>
         <div className={styles.left}>
           <section className={isEdit ? styles.panel : styles.basics}>
             <h2 className={styles.panelTitle}>{words.stepName}</h2>
@@ -475,22 +528,28 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
             </div>
             {isEdit && enabledField}
           </section>
-          <div ref={stepArea} className={isEdit ? styles.left : styles.wizard}>
-          {(!isEdit || canConsole || example) && <header className={styles.wizardHeading}>
+          <div ref={stepArea} className={isEdit && !inConsole ? styles.left : styles.wizard}>
+          {(!isEdit || canConsole || example || revisions.button) && <header className={styles.wizardHeading}>
             <div>
               <h2 className={styles.panelTitle}>{words.protocolSettings}</h2>
               <p className={styles.note}>{!inConsole ? words.stepGuide : words.consoleGuide}</p>
             </div>
-            {(canConsole || example) && <Segmented<'form' | 'console'> label={words.protocolSettings} value={inConsole ? 'console' : 'form'} onChange={changeMode} options={[{ value: 'form', label: words.formMode }, { value: 'console', label: words.consoleMode }]} />}
+            <div className={styles.wizardControls}>
+              {(canConsole || example) && <Segmented<'form' | 'console'> label={words.protocolSettings} value={inConsole ? 'console' : 'form'} onChange={(mode) => { revisions.clear(); changeMode(mode) }} options={[{ value: 'form', label: words.formMode }, { value: 'console', label: words.consoleMode }]} />}
+              {!inConsole && revisions.button}
+            </div>
           </header>}
           {(canConsole && draft !== null) || showingExample ? (
-            <CreateConsole key={hysteria ? hysteriaFile.file : example?.file ?? 'inbound'} text={showingExample ? exampleText : draft ?? ''} original={showingExample ? exampleInitial ?? '' : currentText()} error={showingExample ? null : editorError} isEdit={isEdit} protocol={{ label: tile?.label ?? values.protocol, file: hysteria ? hysteriaFile : showingExample ? example : undefined, preview: showingExample }}
+            <CreateConsole key={hysteria ? hysteriaFile.file : example?.file ?? 'inbound'} text={showingExample ? exampleText : draft ?? ''} original={showingExample ? exampleInitial ?? '' : currentText()} error={showingExample ? null : editorError} session={{ isEdit, historyButton: revisions.button, revision: revisions.preview }} protocol={{ label: tile?.label ?? values.protocol, file: hysteria ? hysteriaFile : showingExample ? example : undefined, preview: showingExample }}
               choices={[...TILES.filter((one) => !['mtproto','socks5','http'].includes(one.key)), ...TILES.filter((one) => ['mtproto','socks5','http'].includes(one.key))].map((one) => ({
                 label: one.label, engine: ['vless','trojan'].includes(one.key) ? 'xray, sing-box' : one.key === 'vmess' ? 'xray' : one.key === 'hysteria' ? 'hysteria' : words.formMode,
                 available: !isEdit || (supportsConsole(values) && ['vless','vmess','trojan'].includes(one.key)) || one.key === tile?.key,
               })).concat([{ label: 'WEB', engine: 'tproxy-server', available: false }])}
               actions={{ onProtocol: chooseInConsole, onEdit: showingExample ? (text) => setExampleDrafts(previous => ({ ...previous, [exampleKey]: text })) : editText, onSecurity: suggestSecurity, onGenerate: generateInConsole }} />
-          ) : <>
+          ) : revisions.preview ? <section className={styles.panel}>
+            {revisions.preview.body}
+            <div className={styles.actions}>{revisions.preview.footer}</div>
+          </section> : <>
           <Step title={words.stepProtocol} open={openSteps.includes('protocol')} onToggle={() => toggleStep('protocol')} value={tile?.label ?? values.protocol}>
             {!isEdit ? (
               <div className={styles.tiles} role="radiogroup" aria-label={words.stepProtocol}>
@@ -510,9 +569,10 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
             {advance('protocol')}
           </Step>
           {hasEngineChoice && (
-            <Step title={words.stepEngine} open={openSteps.includes('engine')} onToggle={() => toggleStep('engine')} value={values.engine === 'singbox' ? words.engineSingbox : words.engineNative}>
-              <RadioRow name="engine" title={words.engineNative} checked={values.engine === 'native'} onSelect={() => setEngine('native')} />
-              <RadioRow name="engine" title={words.engineSingbox} description={values.protocol === 'xray' ? words.singboxOnlyReality : undefined} checked={values.engine === 'singbox'} closedReason={values.xraySubprotocol === 'vmess' && values.protocol === 'xray' ? words.onlyVlessTrojan : undefined} onSelect={() => setEngine('singbox')} />
+            <Step title={words.stepEngine} open={openSteps.includes('engine')} onToggle={() => toggleStep('engine')} value={profileEngineLabel(values.protocol, values.engine)}>
+              <RadioRow name="engine" title={profileEngineLabel(values.protocol, 'native')} checked={values.engine === 'native'} onSelect={() => setEngine('native')} />
+              <RadioRow name="engine" title={profileEngineLabel(values.protocol, 'singbox')} description={values.protocol === 'xray' ? words.singboxOnlyReality : undefined} checked={values.engine === 'singbox'} closedReason={values.xraySubprotocol === 'vmess' && values.protocol === 'xray' ? words.onlyVlessTrojan : undefined} onSelect={() => setEngine('singbox')} />
+              {values.protocol === 'hysteria' && <RadioRow name="engine" title="xray" checked={false} closedReason={words.hy2XrayUnavailable} onSelect={() => undefined} />}
               {advance('engine')}
             </Step>
           )}
@@ -540,12 +600,13 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
             )}
             {profile && deleteLock && <span className={styles.lastHost}>{deleteLock}</span>}
             <span className={styles.spacer} />
-            {formActions}
+            {!inConsole && formActions}
           </div>}
         </div>
         <RightColumn
           profile={profile}
           values={values}
+          revisions={revisions.rail}
           rail={
             <RecipeRail
               key={`${kindKey}:${values.xraySubprotocol}`}
@@ -568,6 +629,13 @@ function ProfileForm({ profile, onDone, reviewConsole }: { reviewConsole: boolea
           }
         />
       </div>
+      {revisions.dialog}
+      {leave && (
+        <Confirm title={words.leaveTitle} tone="warn" labels={{ confirm: words.leaveAction, cancel: words.leaveStay }}
+          state={{ busy: writing }} onClose={() => setLeave(null)} onConfirm={() => { setLeave(null); leave.go() }}>
+          {words.leaveBody}
+        </Confirm>
+      )}
       {switchTo && <Confirm title={words.rebuildTitle} labels={{ confirm: words.rebuild, cancel: words.cancel }} onClose={() => setSwitchTo(null)} onConfirm={() => switchProtocol(switchTo)}>
         {words.rebuildBody}
       </Confirm>}
@@ -615,8 +683,12 @@ export default function ProfileFormPage() {
   const reviewConsole = import.meta.env.MODE === 'paper-review' && list.data !== undefined && 'reviewConsole' in list.data && list.data.reviewConsole === true
   if (!id) return <ProfileForm reviewConsole={reviewConsole} profile={null} onDone={(saved) => void navigate(`/profiles/${saved.id}`, { replace: true })} />
   if (list.isPending) return <QueryLoading label={words.loading} />
-  if (list.isError) return <QueryFailed title={words.failedTitle} body={failureText(list.error, locale)} retryLabel={words.retry} onRetry={() => void list.refetch()} />
-  const profile = list.data.profiles.find((p) => p.id === id)
+  if (list.isError && !list.data) return <QueryFailed title={words.failedTitle} body={failureText(list.error, locale)} retryLabel={words.retry} onRetry={() => void list.refetch()} />
+  const profile = list.data?.profiles.find((p) => p.id === id)
   if (!profile) return <QueryFailed title={words.goneTitle} body={words.goneBody} retryLabel={words.backToList} onRetry={() => void navigate('/profiles')} />
-  return <ProfileForm reviewConsole={reviewConsole} key={profile.id} profile={profile} onDone={() => undefined} />
+  return <ProfileForm reviewConsole={reviewConsole} key={profile.id} profile={profile} onDone={() => undefined} reload={async () => {
+    const fresh = (await list.refetch({ throwOnError: true })).data?.profiles.find(item => item.id === profile.id)
+    if (!fresh) throw new Error(words.goneTitle)
+    return fresh
+  }} />
 }

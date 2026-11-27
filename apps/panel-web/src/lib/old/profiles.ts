@@ -69,7 +69,46 @@ export interface Binding {
   updatedAt: string;
 }
 
+export type RevisionSource = 'form' | 'console' | 'recipe' | 'import';
+
+export interface ProfileRevision {
+  revision: number;
+  createdAt: string;
+  kind: 'baseline' | 'created' | 'updated' | 'restored';
+  source?: RevisionSource | null;
+  restoredFrom: number | null;
+  actor: { type: 'admin' | 'apiToken'; name: string } | null;
+}
+
+export interface ProfileRevisionPage {
+  currentRevision: number;
+  revisions: ProfileRevision[];
+  nextBefore: number | null;
+}
+
+export interface ProfileRevisionDiff {
+  currentRevision: number;
+  targetRevision: number;
+  changes: { path: string[]; before: unknown; after: unknown; kind: 'added' | 'removed' | 'changed' }[];
+  protectedConfigChanged: boolean;
+}
+
+export async function listProfileRevisions(id: string, before?: number) {
+  return (await api.get<ProfileRevisionPage>(`/api/profiles/${id}/revisions`, { params: { before } })).data;
+}
+
+export async function readProfileRevisionDiff(id: string, revision: number) {
+  return (await api.get<ProfileRevisionDiff>(`/api/profiles/${id}/revisions/${revision}/diff`)).data;
+}
+
+export async function restoreProfileRevision(id: string, revision: number, expectedCurrentRevision: number) {
+  return (await api.post<{ currentRevision: number; restoredFrom: number }>(
+    `/api/profiles/${id}/revisions/${revision}/restore`, { expectedCurrentRevision },
+  )).data;
+}
+
 export interface CreateProfileInput {
+  revisionSource?: RevisionSource;
   name: string;
   protocol: ProtocolName;
   description?: string | null;
@@ -82,6 +121,7 @@ export interface CreateProfileInput {
 }
 
 export interface UpdateProfileInput {
+  revisionSource?: RevisionSource;
   name?: string;
   description?: string | null;
   enabled?: boolean;

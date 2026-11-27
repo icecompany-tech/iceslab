@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
 import styles from '@/ui/Segmented/Segmented.module.css'
 
 export interface SegmentedOption<T extends string> {
   value: T
   label: string
+  icon?: ReactNode
   /** Closed with its reason: the server has no such data (F-K4). */
   disabledReason?: string
 }
@@ -23,12 +25,13 @@ export function Segmented<T extends string>({ label, options, value, onChange }:
           type="button"
           role="radio"
           aria-checked={option.value === value}
+          aria-label={option.icon ? option.label : undefined}
           disabled={option.disabledReason !== undefined}
           title={option.disabledReason}
           className={`${styles.segment} ${option.value === value ? styles.on : ''}`}
           onClick={() => onChange(option.value)}
         >
-          {option.label}
+          {option.icon ?? option.label}
         </button>
       ))}
     </div>

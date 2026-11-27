@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getProfileFormats } from '@/lib/old/formats'
 import { listHosts } from '@/lib/old/hosts'
 import { generateInboundKeypair } from '@/lib/old/inbounds'
-import { createProfile, deleteProfile, listBindings, listProfiles, testConnectProfile, updateProfile, type CreateProfileInput, type UpdateProfileInput } from '@/lib/old/profiles'
+import { createProfile, deleteProfile, listBindings, listProfiles, testConnectProfile, updateProfile, type CreateProfileInput, type Profile, type UpdateProfileInput } from '@/lib/old/profiles'
 import { listAllNodes } from '@/lib/old/nodes'
 
 const KEY = ['profiles'] as const
@@ -15,7 +15,11 @@ export const useFormats = (id: string | null) => useQuery({ queryKey: ['profile-
 
 function useRefresh() {
   const client = useQueryClient()
-  return () => void client.invalidateQueries({ queryKey: KEY })
+  return (profile: Profile) => {
+    void client.invalidateQueries({ queryKey: KEY })
+    void client.invalidateQueries({ queryKey: ['profile-revisions', profile.id] })
+    void client.invalidateQueries({ queryKey: ['profile-revision-diff', profile.id] })
+  }
 }
 
 export function useCreateProfile() {
@@ -29,8 +33,8 @@ export function useUpdateProfile(id: string) {
 }
 
 export function useDeleteProfile() {
-  const refresh = useRefresh()
-  return useMutation({ mutationFn: (id: string) => deleteProfile(id), onSuccess: refresh })
+  const client = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => deleteProfile(id), onSuccess: () => void client.invalidateQueries({ queryKey: KEY }) })
 }
 
 export const useKeypair = () => useMutation({ mutationFn: (protocol: 'xray' | 'amneziawg') => generateInboundKeypair(protocol) })

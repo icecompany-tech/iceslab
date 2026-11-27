@@ -417,6 +417,12 @@ h2.sideTitle {
   background: var(--color-surface);
 }
 
+.consoleArea .tools, .consoleArea .status { background: var(--color-surface); }
+.consoleArea .editor, .consoleArea .diff, .consoleArea .status { border-top: var(--border-hairline) solid var(--color-border); }
+.consoleArea .status { min-height: var(--size-rail); height: auto; flex-wrap: wrap; padding-block: var(--spacing-half); }
+.consoleArea .diff { overflow: auto; }
+.consoleArea .diff pre { margin: 0; }
+.consoleArea .diff p { display: flex; align-items: center; margin: 0; font-size: var(--text-sm); }
 .consoleArea:fullscreen {
   overflow: auto;
 }
