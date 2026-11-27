@@ -5,14 +5,11 @@ describe('the column view', () => {
   it('places connection immediately after the node and keeps the date optional', () => {
     expect(COLUMNS).toHaveLength(23)
     const shown = visibleColumns(DEFAULT_VIEW)
-    expect(shown).toHaveLength(9)
-    expect(shown.slice(3, 5).map(c => c.id)).toEqual(['lastNode', 'connection'])
-    expect(shown.map(c => c.id)).not.toContain('lastOnline')
-    expect(shown[0]?.id).toBe('username')
+    expect(shown.map(c => c.id)).toEqual(['username', 'status', 'lastNode', 'connection', 'expires', 'used', 'limit'])
   })
 
   it('upgrades the original default and preserves customized or newly saved layouts', () => {
-    const old = { order: COLUMNS.filter(c => c.id !== 'connection').map(c => c.id), hidden: COLUMNS.filter(c => !c.def).map(c => c.id), pins: { username: 'left' }, widths: {} }
+    const old = { order: COLUMNS.filter(c => c.id !== 'connection').map(c => c.id), hidden: DEFAULT_VIEW.hidden.filter(id => id !== 'shortId' && id !== 'usedPct'), pins: { username: 'left' }, widths: {} }
     const entries = new Map([['iceslab:user-columns', JSON.stringify(old)]])
     vi.stubGlobal('localStorage', { getItem: (key: string) => entries.get(key) ?? null })
     try {
@@ -20,12 +17,35 @@ describe('the column view', () => {
       for (const change of [{ widths: { username: 251 } }, { pins: {} }, { order: [...old.order].reverse() }, { hidden: [...old.hidden, 'limit'] }, { hidden: old.hidden.filter(id => id !== 'lastOnline') }]) {
         const saved = { ...old, ...change }
         entries.set('iceslab:user-columns', JSON.stringify(saved))
-        expect(loadColumnView()).toEqual({ ...saved, order: [...saved.order, 'connection'], hidden: [...saved.hidden, 'connection'] })
+        const order = [...saved.order]
+        order.splice(order.indexOf('lastNode') + 1, 0, 'connection')
+        expect(loadColumnView()).toEqual({ ...saved, order })
       }
+      entries.set('iceslab:user-columns:v2', JSON.stringify({ ...old, order: DEFAULT_VIEW.order }))
+      expect(loadColumnView()).toEqual(DEFAULT_VIEW)
+      const personal = { ...old, order: DEFAULT_VIEW.order, widths: { lastNode: 193 } }
+      entries.set('iceslab:user-columns:v2', JSON.stringify(personal))
+      expect(loadColumnView()).toEqual(personal)
       const manual = { ...DEFAULT_VIEW, hidden: [...DEFAULT_VIEW.hidden, 'connection'], widths: { lastOnline: 180 } }
       entries.set(COLUMN_VIEW_KEY, JSON.stringify(manual))
       expect(loadColumnView()).toEqual(manual)
     } finally { vi.unstubAllGlobals() }
+  })
+
+  it('moves presence next to a resized and pinned node in a legacy eight-column view', () => {
+    const old = { ...DEFAULT_VIEW, hidden: DEFAULT_VIEW.hidden.filter(id => id !== 'shortId' && id !== 'usedPct'), order: DEFAULT_VIEW.order.filter(id => id !== 'connection'), widths: { lastNode: 193 }, pins: { lastNode: 'right', username: 'left' } }
+    const migrated = viewFromStored(old)
+    const ids = visibleColumns(migrated).map(c => c.id)
+    expect(ids).toHaveLength(9)
+    expect(ids.slice(-2)).toEqual(['lastNode', 'connection'])
+    expect(migrated.widths.lastNode).toBe(193)
+    expect(viewFromStored({ ...old, hidden: [...old.hidden, 'lastNode'] }).hidden).toContain('connection')
+  })
+
+  it('retains an explicitly hidden connection in its chosen position on reload', () => {
+    const order = [...DEFAULT_VIEW.order.filter(id => id !== 'connection'), 'connection']
+    const saved = { ...DEFAULT_VIEW, order, hidden: [...DEFAULT_VIEW.hidden, 'connection'] }
+    expect(viewFromStored(saved)).toEqual(saved)
   })
 
   it('puts pins at the edges', () => {

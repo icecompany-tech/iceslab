@@ -71,13 +71,13 @@ export interface UserColumn {
 export const COLUMNS: readonly UserColumn[] = [
   // Spare width belongs to the username column.
   { id: 'username', width: 182, sort: 'username', filter: { kind: 'search' }, def: true },
-  { id: 'shortId', width: 64, def: true },
+  { id: 'shortId', width: 64 },
   { id: 'status', width: 100, filter: { kind: 'status' }, def: true },
   { id: 'lastNode', width: 122, filter: { kind: 'node' }, def: true },
   { id: 'connection', width: 100, def: true },
   { id: 'expires', width: 140, sort: 'expireAt', filter: { kind: 'dates', after: 'expiresAfter', before: 'expiresBefore', presence: 'hasExpiry' }, def: true },
   { id: 'used', width: 138, sort: 'traffic', filter: { kind: 'bytes', over: 'usedOver', under: 'usedUnder' }, def: true },
-  { id: 'usedPct', width: 48, def: true },
+  { id: 'usedPct', width: 48 },
   { id: 'limit', width: 76, filter: { kind: 'choice', param: 'trafficLimit', values: ['limited', 'unlimited'] }, def: true },
   { id: 'squads', width: 200 },
   { id: 'tag', width: 120, filter: { kind: 'choice', param: 'hasTag', values: ['yes', 'no'] } },
@@ -113,20 +113,25 @@ export const DEFAULT_VIEW: ColumnView = {
   widths: {},
 }
 
-export const COLUMN_VIEW_KEY = 'iceslab:user-columns:v2'
+export const COLUMN_VIEW_KEY = 'iceslab:user-columns:v3'
 
 export const parseStoredView = obj({ order: arr(str), hidden: arr(str), pins: record(nullable(str)), widths: record((v) => (typeof v === 'number' ? v : 0)) })
 
 export function loadColumnView(): ColumnView {
   const current = readStored(COLUMN_VIEW_KEY, parseStoredView)
   if (current) return viewFromStored(current)
-  const old = readStored('iceslab:user-columns', parseStoredView)
-  if (old && old.order.join() === DEFAULT_VIEW.order.filter(id => id !== 'connection').join()
-      && old.hidden.length === DEFAULT_VIEW.hidden.length
-      && DEFAULT_VIEW.hidden.every(id => old.hidden.includes(id))
-      && old.pins.username === 'left' && Object.keys(old.pins).length === 1
-      && Object.keys(old.widths).length === 0) return DEFAULT_VIEW
-  return viewFromStored(old)
+  const previous = readStored('iceslab:user-columns:v2', parseStoredView) ?? readStored('iceslab:user-columns', parseStoredView)
+  if (!previous) return DEFAULT_VIEW
+  // Only the exact defaults from the two published layouts advance automatically.
+  const oldOrder = DEFAULT_VIEW.order.filter(id => id !== 'connection' || previous.order.includes('connection'))
+  const oldHidden = DEFAULT_VIEW.hidden.filter(id => id !== 'shortId' && id !== 'usedPct')
+  if (
+    previous.order.length === oldOrder.length && oldOrder.every((id, i) => previous.order[i] === id) &&
+    previous.hidden.length === oldHidden.length && oldHidden.every(id => previous.hidden.includes(id)) &&
+    Object.keys(previous.widths).length === 0 &&
+    Object.keys(previous.pins).length === 1 && previous.pins.username === 'left'
+  ) return DEFAULT_VIEW
+  return viewFromStored(previous)
 }
 
 const isColumn = (id: string): id is ColumnId => COLUMN_BY_ID.has(id as ColumnId)
@@ -136,10 +141,15 @@ export function viewFromStored(stored: ReturnType<typeof parseStoredView> | null
   if (!stored) return DEFAULT_VIEW
   const order = stored.order.filter(isColumn)
   const hidden = stored.hidden.filter(isColumn)
-  if (!order.includes('connection')) hidden.push('connection')
+  if (!order.includes('connection')) {
+    const node = order.indexOf('lastNode')
+    if (node !== -1) order.splice(node + 1, 0, 'connection')
+    if (node === -1 || hidden.includes('lastNode')) hidden.push('connection')
+  }
   for (const column of COLUMNS) if (!order.includes(column.id)) order.push(column.id)
   const pins: ColumnView['pins'] = {}
   for (const [id, pin] of Object.entries(stored.pins)) if (isColumn(id) && (pin === 'left' || pin === 'right')) pins[id] = pin
+  if (!stored.order.includes('connection') && pins.lastNode) pins.connection = pins.lastNode
   const widths: ColumnView['widths'] = {}
   for (const [id, width] of Object.entries(stored.widths)) if (isColumn(id) && width > 0) widths[id] = width
   return { order, hidden, pins, widths }

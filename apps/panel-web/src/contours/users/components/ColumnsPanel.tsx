@@ -26,7 +26,12 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
   return (
     <div className={styles.columnsPanel}>
       <div className={styles.columnsHead}>
-        <span className={styles.columnsLinks}>
+        <button type="button" className={styles.textButton} onClick={() => onChange(DEFAULT_VIEW)}>
+          {words.defaultView}
+        </button>
+        <span className={styles.columnsCount}>{shown}/{total}</span>
+      </div>
+      <div className={styles.columnsLinks}>
         <button type="button" className={styles.textButton} onClick={() => onChange({ ...view, hidden: view.order.filter((id) => id !== 'username') })}>
           {words.hideAll}
         </button>
@@ -39,10 +44,6 @@ export function ColumnsPanel({ view, onChange }: { view: ColumnView; onChange: (
         <button type="button" className={styles.textButton} onClick={() => onChange({ ...view, hidden: [] })}>
           {words.showAll}
         </button>
-        </span>
-        <span className={styles.columnsCount}>
-          {shown}/{total}
-        </span>
       </div>
       <ul className={styles.columnsList}>
         {view.order.map((id) => {

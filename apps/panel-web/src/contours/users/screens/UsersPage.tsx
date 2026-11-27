@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ActionDialog, type DialogKind, type UserDialog } from '@/contours/users/components/ActionDialogs'
 import { ColumnsPanel } from '@/contours/users/components/ColumnsPanel'
 import { FiltersPopover } from '@/contours/users/components/FiltersPopover'
@@ -14,7 +14,7 @@ import type { BulkReport, User } from '@/contours/users/lib/users'
 import { useAllNodes } from '@/lib/domain/nodes'
 import { useOverview } from '@/lib/domain/overview'
 import { useSquads } from '@/lib/domain/squads'
-import { fmtNumber } from '@/lib/format'
+import { fmtDateTime, fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import { failureText } from '@/lib/net/messages'
 import { writeStored } from '@/lib/storage'
@@ -38,6 +38,7 @@ const STATUS_CHIPS: readonly { value: StatusFilter; dot?: 'danger' | 'amber' | '
 ]
 
 type BulkAction = 'enable' | 'disable'
+interface BulkSelection { action: BulkAction; names: ReadonlyMap<string,string>; outside: number }
 
 function EnableRow({ user, onDone }: { user: User; onDone: () => void }) {
   const words = useDict(DICT)
@@ -74,13 +75,13 @@ export default function UsersPage() {
   const [view, setViewState] = useState<ColumnView>(loadColumnView)
   const [density, setDensity] = useState<Density>('normal')
   const [fullscreen, setFullscreen] = useState(false)
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [selected, setSelected] = useState<ReadonlyMap<string,string>>(new Map())
   const [openUser, setOpenUser] = useState<User | null>(null)
   const [creating, setCreating] = useState(false)
   const [dialog, setDialog] = useState<UserDialog | null>(null)
   const [enabling, setEnabling] = useState<User | null>(null)
-  const [bulkAsk, setBulkAsk] = useState<BulkAction | null>(null)
-  const [bulkResult, setBulkResult] = useState<{ action: BulkAction; report: BulkReport } | null>(null)
+  const [bulkAsk, setBulkAsk] = useState<BulkSelection | null>(null)
+  const [bulkResult, setBulkResult] = useState<{ action: BulkAction; report: BulkReport; names: ReadonlyMap<string,string> } | null>(null)
 
   const setView = (next: ColumnView) => {
     setViewState(next)
@@ -93,26 +94,30 @@ export default function UsersPage() {
   const context = useMemo(() => ({ nodes: nodeMap, squads: squadMap, panel: panel.data, allNodes: nodes.data ?? [] }), [nodeMap, squadMap, panel.data, nodes.data])
 
   const select = (ids: readonly string[], on: boolean) => {
-    setSelected((all) => {
-      const next = new Set(all)
+    const pageNames = new Map(users.data?.users.map(u => [u.id,u.username]))
+    setSelected(current => {
+      const next = new Map(current)
       for (const id of ids) {
-        if (on) next.add(id)
+        const name = pageNames.get(id)
+        if (on && name !== undefined) next.set(id,name)
         else next.delete(id)
       }
       return next
     })
   }
 
-  const runBulk = (action: BulkAction) => {
-    const userIds = [...selected]
+  const outside = selected.size - (users.data?.users.filter(u => selected.has(u.id)).length ?? 0)
+  const askBulk = (action: BulkAction) => setBulkAsk({action, names: new Map(selected), outside})
+  const runBulk = ({ action, names }: BulkSelection) => {
+    const userIds = [...names.keys()]
     bulk.mutate(
       { userIds, action },
       {
         onSuccess: (report) => {
           setBulkAsk(null)
-          setBulkResult({ action, report })
+          setBulkResult({ action, report, names })
           // The selection stays on those it did not reach: they can be retried.
-          setSelected(new Set(report.failed.map((f) => f.userId)))
+          setSelected(new Map(report.failed.map(f => [f.userId, names.get(f.userId) ?? f.userId])))
           if (report.failed.length === 0) toast.show(words.bulkDone(words.bulkVerb[action], report.succeeded, report.requested))
         },
         onError: (err) => {
@@ -131,9 +136,14 @@ export default function UsersPage() {
   const first = total === 0 ? 0 : (list.page - 1) * list.limit + 1
   const last = Math.min(list.page * list.limit, total)
   const sortColumn = COLUMNS.find((c) => c.sort === list.sort.by)
-  const nameOf = (id: string) => data?.users.find((u) => u.id === id)?.username ?? id.slice(0, 8)
+  const lastPage = Math.max(1, Math.ceil(total / list.limit))
+  const correcting = data !== undefined && !users.isPlaceholderData && !users.isError && list.page > lastPage
+  const { setPage } = list
+  useEffect(() => {
+    if (correcting) setPage(lastPage)
+  }, [correcting, lastPage, setPage])
 
-  if (data && !users.isError && total === 0 && !list.narrowed && !overview.data?.users.total) return <>
+  if (data && !selected.size && !bulkResult && !users.isPlaceholderData && !users.isError && total === 0 && !list.narrowed && !overview.data?.users.total) return <>
     <EmptyRegistry icon="users" title={words.emptyTitle} body={words.emptyBody} action={words.emptyCreate} onCreate={() => setCreating(true)} />
     {creating && <NewUserWindow squads={squads.data ?? []} squadsFailed={squads.isError} nodes={nodeMap} onClose={() => setCreating(false)} />}
   </>
@@ -155,15 +165,15 @@ export default function UsersPage() {
 
       {selected.size > 0 && (
         <div className={styles.bulkBar}>
-          <b>{words.selected(selected.size)}</b>
+          <b>{words.selected(selected.size)}</b>{outside > 0 && <span>{words.outsidePage(outside)}</span>}
           <span className={styles.bulkActions}>
-            <Button variant="warn" icon={<Icon name="power" size="md" />} onClick={() => setBulkAsk('disable')}>
+            <Button variant="warn" icon={<Icon name="power" size="md" />} onClick={() => askBulk('disable')}>
               {words.bulkDisable}
             </Button>
-            <Button icon={<Icon name="power" size="md" />} onClick={() => setBulkAsk('enable')}>
+            <Button icon={<Icon name="power" size="md" />} onClick={() => askBulk('enable')}>
               {words.bulkEnable}
             </Button>
-            <Button onClick={() => setSelected(new Set())}>{words.unselect}</Button>
+            <Button onClick={() => { setSelected(new Map()); setBulkResult(null) }}>{words.unselect}</Button>
           </span>
         </div>
       )}
@@ -174,7 +184,7 @@ export default function UsersPage() {
             <Button
               onClick={() => {
                 setBulkResult(null)
-                setSelected(new Set())
+                setSelected(new Map())
               }}
             >
               {words.unselect}
@@ -182,7 +192,7 @@ export default function UsersPage() {
           }
         >
           <b>{words.bulkDone(words.bulkVerb[bulkResult.action], bulkResult.report.succeeded, bulkResult.report.requested)}</b>{' '}
-          {words.bulkFailed(bulkResult.report.failed.length, bulkResult.report.failed.map((f) => `${nameOf(f.userId)}${f.error ? `: ${f.error}` : ''}`).join('; '))}
+          {words.bulkFailed(bulkResult.report.failed.length, bulkResult.report.failed.map((f) => `${bulkResult.names.get(f.userId) ?? f.userId}${f.error ? `: ${f.error}` : ''}`).join('; '))}
         </Banner>
       )}
 
@@ -223,9 +233,11 @@ export default function UsersPage() {
             </Popover>
           </span>
         </div>
+        {users.isRefetchError && data && <Banner title={words.staleList(fmtDateTime(users.dataUpdatedAt, locale))}
+          action={<Button onClick={()=>void users.refetch()}>{words.retry}</Button>}>{failureText(users.error, locale)}</Banner>}
         {users.isError && !data ? (
           <QueryFailed title={words.failedTitle} body={failureText(users.error, locale)} retryLabel={words.retry} onRetry={() => void users.refetch()} />
-        ) : users.isPending ? (
+        ) : users.isPending || correcting || users.isPlaceholderData && data?.users.length === 0 ? (
           <QueryLoading label={words.loading} />
         ) : (
           <UsersTable
@@ -233,7 +245,7 @@ export default function UsersPage() {
             list={list}
             users={data?.users ?? []}
             context={context}
-            selection={{ selected, onSelect: select }}
+            selection={{ selected: new Set(selected.keys()), onSelect: select }}
             actions={{ onOpen: setOpenUser, onDialog: (kind: DialogKind, user) => setDialog({ kind, user }), onEnable: setEnabling }}
             empty={
               <div className={styles.empty}>
@@ -245,7 +257,7 @@ export default function UsersPage() {
           />
         )}
         <div className={styles.cardFoot}>
-          <span>{words.range(fmtNumber(first, locale), fmtNumber(last, locale), fmtNumber(total, locale))}</span>
+          <span>{!correcting && words.range(fmtNumber(first, locale), fmtNumber(last, locale), fmtNumber(total, locale))}</span>
           <span className={styles.pager}>
             {/* Paper Footer: the page size is words with a chevron, chosen in ui/Popover; the arrows carry the frames. */}
             <Popover
@@ -296,14 +308,18 @@ export default function UsersPage() {
       {enabling && <EnableRow key={enabling.id} user={enabling} onDone={() => setEnabling(null)} />}
       {bulkAsk && (
         <Confirm
-          title={bulkAsk === 'disable' ? words.bulkDisableTitle(selected.size) : words.bulkEnableTitle(selected.size)}
-          labels={{ confirm: bulkAsk === 'disable' ? words.bulkDisable : words.bulkEnable, cancel: words.cancel }}
+          title={bulkAsk.action === 'disable' ? words.bulkDisableTitle(bulkAsk.names.size) : words.bulkEnableTitle(bulkAsk.names.size)}
+          labels={{ confirm: bulkAsk.action === 'disable' ? words.bulkDisable : words.bulkEnable, cancel: words.cancel }}
           tone="warn"
           state={{ busy: bulk.isPending }}
           onConfirm={() => runBulk(bulkAsk)}
           onClose={() => setBulkAsk(null)}
         >
-          {bulkAsk === 'disable' ? words.bulkDisableBody : words.bulkEnableBody}
+          {bulkAsk.action === 'disable' ? words.bulkDisableBody : words.bulkEnableBody}
+          <div className={styles.recipients}>
+            <b>{words.outsidePage(bulkAsk.outside)}</b>
+            <ul tabIndex={bulkAsk.names.size > 5 ? 0 : undefined}>{[...bulkAsk.names].map(([id,name])=><li key={id}>{name}</li>)}</ul>
+          </div>
         </Confirm>
       )}
     </div>

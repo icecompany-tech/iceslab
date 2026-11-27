@@ -91,6 +91,8 @@
   outline-offset: var(--spacing-half);
 }
 
+.recipients { margin-block: var(--spacing-2); }
+.recipients ul { max-height: min(30vh,var(--size-popover-list)); overflow: auto; padding-inline-start: var(--spacing-6); }
 .bulkBar {
   display: flex;
   align-items: center;
@@ -515,7 +517,10 @@
 
 .columnsLinks {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-3-5);
+  border-bottom: var(--border-hairline) solid var(--color-border);
 }
 
 .columnsLinks .textButton {
