@@ -134,6 +134,14 @@
   --size-cascade-reach: 104px;
   --size-cascade-today: 70px;
   --size-cascade-push: 190px;
+  --size-cascade-flow-base: 240px;
+  --size-cascade-flow-exit-max: 688px;
+  --size-cascade-flow-exit-transit-max: 640px;
+  --size-cascade-flow-transit-link: 160px;
+  --size-cascade-flow-dense-hop-min: 144px;
+  --size-cascade-flow-dense-hop-max: 176px;
+  --size-cascade-flow-dense-link: 116px;
+  --size-cascade-flow-dense-exit: 430px;
   --size-node-table: 1050px;
   --size-node-col: 72px;
   --size-node-cascade: 128px;

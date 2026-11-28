@@ -1,5 +1,6 @@
-import { Fragment } from 'react'
+import { Fragment, useLayoutEffect, useRef } from 'react'
 import styles from '@/ui/CascadeFlow/CascadeFlow.module.css'
+import { drawWires } from '@/ui/CascadeFlow/wires'
 import { useLocale } from '@/lib/i18n'
 import { Flag } from '@/ui/Flag/Flag'
 
@@ -50,49 +51,50 @@ export interface CascadeFlowProps {
 
 const DOT = { ok: styles.ok, down: styles.down, failed: styles.failed, unknown: styles.unknown, off: styles.off, empty: styles.empty, ring: styles.ring } as const
 
-function Diamond() {
-  return <span className={styles.diamond} aria-hidden />
-}
-
 function Hop({ column, captionOnLink }: { column: FlowColumn; captionOnLink: boolean }) {
   const { locale } = useLocale()
   const regions = new Intl.DisplayNames([locale], { type: 'region' })
   return (
-    <div className={styles.hop}>
+    <div className={styles.hop} data-exit={column.key === 'exit'}>
       <span className={styles.hopTitle}>{column.title}</span>
-      {column.groups.map((group) => (
-        <div key={group.key} className={styles.group}>
-          {(group.title || group.code) && (
-            <span className={styles.groupTitle}>
-              {group.code && <strong>{/^[A-Z]{2}$/.test(group.code) ? regions.of(group.code) : group.code}</strong>}
-              {group.title}
-            </span>
-          )}
-          {group.balancer && (
-            <span className={styles.balancer}>
-              <Diamond />
-              {group.balancer}
-            </span>
-          )}
-          <ul className={styles.nodes}>
-            {group.nodes.map((node) => (
-              <li key={node.key} className={styles.node}>
-                <span className={styles.nodeLine}>
-                  {group.nodes.length > 1 && <span className={node.dot === 'down' || node.dot === 'failed' ? styles.branchDead : styles.branch} aria-hidden />}
+      <div className={styles.groups}>
+        {column.groups.map((group) => (
+          <div key={group.key} className={styles.group}>
+            {(group.title || group.code || group.balancer) && (
+              <div className={styles.groupLabel}>
+                {(group.title || group.code) && (
+                  <span className={styles.groupTitle}>
+                    {group.code && <strong>{/^[A-Z]{2}$/.test(group.code) ? regions.of(group.code) : group.code}</strong>}
+                    {group.title}
+                  </span>
+                )}
+                {group.balancer && <span className={styles.balancer}>{group.balancer}</span>}
+              </div>
+            )}
+            <ul className={styles.nodes}>
+              {group.nodes.map((node) => (
+                <li key={node.key} className={styles.node} data-failed={node.dot === 'down' || node.dot === 'failed'}>
                   <span className={`${styles.dot} ${DOT[node.dot]}`} aria-hidden />
-                  {node.country && <Flag code={node.country} />}
-                  <span className={node.dot === 'empty' ? styles.nameEmpty : styles.name}>{node.name}</span>
-                </span>
-                {node.address && <span className={styles.address}>{node.address}</span>}
-                {node.note && <span className={node.dot === 'failed' || node.dot === 'down' ? styles.noteDanger : styles.note}>{node.note}{node.dot === 'ok' && column.key !== 'exit' && node.version ? ', ' + node.version : ''}</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+                  <div className={styles.nodeDetails}>
+                    <span className={styles.nodeLine}>
+                      {node.country && <Flag code={node.country} />}
+                      <span className={node.dot === 'empty' ? styles.nameEmpty : styles.name}>{node.name}</span>
+                    </span>
+                    {node.address && <span className={styles.address}>{node.address}</span>}
+                    {node.note && (
+                      <span className={node.dot === 'failed' || node.dot === 'down' ? styles.noteDanger : styles.note}>
+                        {node.note}{node.dot === 'ok' && column.key !== 'exit' && node.version ? ', ' + node.version : ''}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
       {column.caption && !captionOnLink && (
         <span className={styles.caption}>
-          {column.diamond && <Diamond />}
           {column.caption}
         </span>
       )}
@@ -102,26 +104,44 @@ function Hop({ column, captionOnLink }: { column: FlowColumn; captionOnLink: boo
 
 /** The cascade as one reading from left to right: the main thing on every cascade screen. */
 export function CascadeFlow({ label, columns, links, legend }: CascadeFlowProps) {
+  const diagram = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const track = diagram.current!
+    const paint = () => drawWires(track, columns, links)
+    paint()
+    const observer = new ResizeObserver(paint)
+    observer.observe(track)
+    return () => observer.disconnect()
+  }, [columns, links])
+
   return (
     <figure className={styles.flow} aria-label={label}>
       {legend && <figcaption className={styles.accessibleLegend}>{legend}</figcaption>}
-      <div className={styles.line}>
-        {columns.map((column, i) => {
-          const link = links[i]
-          const forkCaption = columns[i + 1]?.key === 'exit' ? columns[i + 1]?.caption : undefined
-          return (
-            <Fragment key={column.key}>
-              <Hop column={column} captionOnLink={column.key === 'exit' && i > 0 && Boolean(links[i - 1])} />
-              {link && (
-                <div className={link.tone === 'danger' ? styles.linkDanger : link.tone === 'pending' ? styles.linkPending : styles.link}>
-                  <span className={styles.over}>{link.over}</span>
-                  <span className={styles.wire} aria-hidden>{columns[i + 1]?.diamond && <Diamond />}</span>
-                  <span className={styles.under} title={forkCaption ? link.under : undefined}>{forkCaption ?? link.under}</span>
-                </div>
-              )}
-            </Fragment>
-          )
-        })}
+      <div className={styles.line} tabIndex={0}>
+        <div ref={diagram} className={styles.track}>
+          <svg className={styles.wires} aria-hidden="true">
+            <path />
+            <path className={styles.failedWire} />
+            <path className={styles.pendingWire} />
+            <path className={styles.dangerWire} />
+            <path className={styles.diamond} />
+          </svg>
+          {columns.map((column, i) => {
+            const link = links[i]
+            const forkCaption = columns[i + 1]?.key === 'exit' ? columns[i + 1]?.caption : undefined
+            return (
+              <Fragment key={column.key}>
+                <Hop column={column} captionOnLink={column.key === 'exit' && i > 0 && Boolean(links[i - 1])} />
+                {link && (
+                  <div className={styles.link} data-tone={link.tone}>
+                    <span className={styles.over}>{link.over}</span>
+                    <span className={styles.under} title={forkCaption ? link.under : undefined}>{forkCaption ?? link.under}</span>
+                  </div>
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
       </div>
     </figure>
   )

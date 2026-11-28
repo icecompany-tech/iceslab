@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => ({
             { name: 'query', test: /\/node_modules\/@tanstack\// },
             screenGroup('panel-words', [...network, ...traffic, ...admin, 'users', 'profiles', 'squads', 'insights', 'overview', 'audit'], true),
             { name: 'overlays', test: /\/(?:ui\/(?:Dialog|Confirm|Popover|Menu)\/|useDialogPortal\.ts$)/ },
-            { name: 'registry-ui', test: /\/ui\/(?:Check|Flag|Meter|StatCard|Chip)\// },
+            { name: 'registry-ui', test: /\/ui\/(?:Check|Flag|Meter|StatCard|Chip|RegistryIcon|Segmented|Switch|Step|HopMeter|CascadeFlow)\// },
             // Calendar and squad picker share the lazy accessibility controls.
             { name: 'aria-controls', test: /\/node_modules\/(?:@internationalized|@react-aria|@react-stately|react-aria-components|react-aria|react-stately)\// },
             {
