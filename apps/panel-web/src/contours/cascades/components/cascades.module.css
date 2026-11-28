@@ -24,6 +24,7 @@
   font-size: var(--text-xl);
   font-weight: var(--font-weight-semibold);
   line-height: var(--leading-xl);
+  overflow-wrap: anywhere;
 }
 
 .search {
@@ -114,6 +115,7 @@
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .cardName:hover {
@@ -353,11 +355,36 @@
 .table tr[data-enabled=false] .tableName::before { background: var(--color-text-muted); }
 .tableMeter { display: inline-flex; }
 .formPage { gap: var(--spacing-5); }
+.page:where(.formPage, .registry) {
+  container-type: inline-size;
+}
+
+main > div:has(> .formPage) {
+  max-width: none;
+}
+
+main:has(+ aside button[aria-expanded=true]) .page:where(.formPage, .registry) {
+  margin-inline-end: calc(var(--size-panel) - var(--size-rail));
+}
+
 .formPage .pageTitle { font-size: var(--text-profile-heading); line-height: var(--size-row); }
 .formPage .columns { display: flex; flex-wrap: wrap; gap: var(--spacing-5); }
 .formPage .left { flex: 1 1 min(100%,var(--size-state-description)); }
-.formPage .right { flex: 0 1 var(--size-host-details); max-width: 100%; }
+.formPage .right { flex: 1 1 var(--size-host-details); }
 .formPage .left, .formPage .right { gap: var(--spacing-5); }
+
+/* Left minimum 460px, summary 372px, and the existing 20px gutter. */
+@container (min-width: 852px) {
+  .formPage .right { flex: 0 0 var(--size-host-details); }
+}
+
+.formPage .toolbar > .chips { flex: 1 1 0; min-width: min(100%, var(--size-state-description)); }
+.formPage .actions { min-width: 0; margin-inline-start: auto; justify-content: flex-end; }
+.formPage .actions > button { max-width: 100%; white-space: normal; }
+.formPage { overflow-wrap: anywhere; }
+.registrySearch { max-width: 100%; }
+.registrySearch .search { max-width: 100%; }
+.formPage .listRow { overflow-wrap: anywhere; }
 .formPage .panel { padding: var(--spacing-5) var(--spacing-6); gap: var(--spacing-3-5); }
 .formPage h2, .formPage .panelTitle { font-size: var(--text-title); line-height: var(--leading-xl); margin: 0; }
 .formPage small { font-size: var(--text-xs); color: var(--color-text-muted); }
@@ -365,6 +392,7 @@
 .scheme, .chainSteps { background: var(--color-surface); border: var(--border-hairline) solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; }
 .scheme { padding: var(--spacing-4) var(--spacing-5) var(--spacing-5); }
 .scheme > header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--spacing-3-5); padding-bottom: var(--spacing-4); }
+.scheme > header > span { min-width: 0; flex-wrap: wrap; white-space: normal; }
 .scheme > header small { margin-left: auto; }
 .chainSteps > header { padding: var(--spacing-5) var(--spacing-6) var(--spacing-4); }
 .chainSteps > section { border: 0; border-top: var(--border-hairline) solid var(--color-border); border-radius: 0; }
