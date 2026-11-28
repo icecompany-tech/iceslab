@@ -10,6 +10,7 @@ export interface PopoverProps {
    * field (ui/Popover/срок): 5 under a column filter, the deeper shadow.
    */
   look?: 'menu' | 'sheet' | 'field'
+  fitViewport?: boolean
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
@@ -24,7 +25,7 @@ const inNestedLayer = (target: Element) => target.closest('[data-trigger]') !== 
  * Open under its trigger and out of any scrolling parent: `fixed`, the place set on the
  * element, since the page's CSP refuses style attributes. Esc and a click outside close it.
  */
-export function Popover({ trigger, align = 'start', look = 'menu', children }: PopoverProps) {
+export function Popover({ trigger, align = 'start', look = 'menu', fitViewport, children }: PopoverProps) {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLSpanElement>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -38,9 +39,19 @@ export function Popover({ trigger, align = 'start', look = 'menu', children }: P
     const gap = GAPS[look]
     const below = box.bottom + gap
     const fits = below + place.height <= window.innerHeight - MARGIN
+    if (fitViewport) {
+      const roomBelow = window.innerHeight - MARGIN - below
+      const roomAbove = box.top - gap - MARGIN
+      const above = !fits && roomAbove > roomBelow
+      const height = Math.min(place.height, Math.max(0, above ? roomAbove : roomBelow))
+      el.style.maxHeight = `${height}px`
+      el.style.left = `${Math.max(MARGIN, Math.min(left, window.innerWidth - MARGIN - place.width))}px`
+      el.style.top = `${above ? box.top - gap - height : below}px`
+      return
+    }
     el.style.left = `${Math.max(MARGIN, left)}px`
     el.style.top = `${fits ? below : Math.max(MARGIN, box.top - gap - place.height)}px`
-  }, [open, align, look])
+  }, [open, align, fitViewport, look])
 
   useEffect(() => {
     if (!open) return
@@ -53,13 +64,24 @@ export function Popover({ trigger, align = 'start', look = 'menu', children }: P
       // An Esc a nested calendar already took closes only it.
       if (event.key === 'Escape' && !event.defaultPrevented) setOpen(false)
     }
+    const onResize = () => setOpen(false)
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Node && panel.current?.contains(event.target)) return
+      setOpen(false)
+    }
+    if (fitViewport) {
+      window.addEventListener('scroll', onScroll, true)
+      window.addEventListener('resize', onResize)
+    }
     document.addEventListener('pointerdown', onPointer)
     document.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
       document.removeEventListener('pointerdown', onPointer)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open])
+  }, [open, fitViewport])
 
   return (
     <span ref={anchor} className={styles.anchor}>

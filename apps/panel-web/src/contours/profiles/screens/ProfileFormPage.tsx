@@ -70,6 +70,18 @@ const TILES: readonly Tile[] = [
   { key: 'shadowtls', label: 'ShadowTLS', protocol: 'shadowtls', engine: 'native' },
 ]
 
+function forTile(tile: Tile, values: FormValues): FormValues {
+  const keepXray = values.protocol === 'xray' && tile.protocol === 'xray' &&
+    !isPlainSubprotocol(values.xraySubprotocol) && !isPlainSubprotocol(tile.subprotocol)
+  const next = settleXrayFields({
+    ...(keepXray ? values : defaults(null)),
+    name: values.name, description: values.description, enabled: values.enabled,
+    protocol: tile.protocol, engine: keepXray && tile.subprotocol !== 'vmess' ? values.engine : tile.engine ?? 'native',
+    xraySubprotocol: tile.subprotocol ?? 'vless',
+  })
+  return { ...next, ...singboxXrayPatch(next) }
+}
+
 const tileOf = (values: Pick<FormValues, 'protocol' | 'xraySubprotocol'>) => TILES.find((t) => t.protocol === values.protocol && (t.protocol !== 'xray' || t.subprotocol === values.xraySubprotocol))
 
 function destWords(row: TestConnectResult, words: { destRefused: (why: string) => string; destRecord: (b: number, l: number) => string }) {
@@ -160,14 +172,18 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
   const completedWrite = useRef(false)
   const [leave, setLeave] = useState<{ go: () => void } | null>(null)
   const isEdit = profile !== null
-  const [initial, setInitial] = useState<FormValues>(() => settleXrayFields(defaults(profile)))
+  const [initial, setInitial] = useState<FormValues>(() => {
+    const base = defaults(profile)
+    const selected = !profile && TILES.find(tile => tile.key === search.get('type'))
+    return selected ? forTile(selected, base) : settleXrayFields(base)
+  })
   const [values, setValues] = useState<FormValues>(initial)
   const hysteria = isNativeHysteria(values)
   const canConsole = hysteria || supportsConsole(values)
   const tile = tileOf(values)
   const exampleKey = (tile?.key ?? '') + (values.engine === 'singbox' ? '/singbox' : '')
-  const examples: Record<string, { file: string; engine: string; text: string }> = import.meta.env.MODE === 'paper-review' && reviewConsole ? paperExamples : {}
-  const example = hysteria ? undefined : examples[exampleKey]
+  const examples: Record<string, { file: string; engine: string; text: string }> = reviewConsole ? paperExamples : {}
+  const example = !hysteria ? examples[exampleKey] : undefined
   const storedDocument = reviewConsole && profile && 'reviewDocument' in profile ? profile.reviewDocument : null
   const exampleInitial = isObject(storedDocument) && storedDocument.key === exampleKey && typeof storedDocument.text === 'string' ? storedDocument.text : example?.text
   const [exampleDrafts, setExampleDrafts] = useState<Record<string, string>>({})
@@ -177,7 +193,9 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
   const [consoleState, setConsoleState] = useState(() => ({
     base: fromForm(initial), raw: isObject(storedInbound) ? storedInbound : fromForm(initial),
   }))
-  const [draft, setDraft] = useState<string | null>(null)
+  const textFor = (next: FormValues) =>
+    isNativeHysteria(next) ? printHysteria(next) : supportsConsole(next) ? printInbound(fromForm(next)) : null
+  const [draft, setDraft] = useState(() => !isEdit && search.get('mode') === 'console' ? textFor(initial) : null)
   const [editorError, setEditorError] = useState<ProfileError | null>(null)
   const [switchTo, setSwitchTo] = useState<Tile | null>(null)
   const currentRaw = () => rebase(consoleState.base, fromForm(values), consoleState.raw)
@@ -337,13 +355,6 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
   const configTouched = !profile || JSON.stringify(profileConfigOf(values)) !== JSON.stringify(profileConfigOf(initial))
   const blocked = problems.name !== undefined || (configTouched && Object.keys(problems).length > 0)
   const kindKey = profileKindKey(values.protocol, values.engine, values.xraySubprotocol)
-  const pickTile = (next: Tile) => {
-    if (next.key === tile?.key) return
-    if (canConsole && JSON.stringify(consoleState.raw) !== JSON.stringify(consoleState.base)) { setSwitchTo(next); return }
-    const fresh = settleXrayFields({ ...defaults(null), name: values.name, description: values.description, enabled: values.enabled, protocol: next.protocol, engine: next.engine ?? 'native', ...(next.subprotocol ? { xraySubprotocol: next.subprotocol } : {}) })
-    setOpenSteps(['protocol'])
-    setValues({ ...fresh, ...singboxXrayPatch(fresh) })
-  }
   const setEngine = (engine: FormValues['engine']) => {
     const next = { ...values, engine }
     setValues({ ...next, ...singboxXrayPatch(next) })
@@ -395,7 +406,10 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
     }
     if (!inConsole && blocked) return
     setRefusal(null)
-    const extra = example && (showingExample || exampleText !== exampleInitial) ? { reviewDocument: { key: exampleKey, text: exampleText } } : reviewConsole && supportsConsole(values) ? { reviewInbound: parsed.raw } : reviewConsole && isObject(storedInbound) ? { reviewInbound: null } : {}
+    const extra = example && (showingExample || exampleText !== exampleInitial)
+      ? { reviewDocument: { key: exampleKey, text: exampleText } }
+      : reviewConsole && supportsConsole(values) ? { reviewInbound: parsed.raw }
+      : reviewConsole && isObject(storedInbound) ? { reviewInbound: null } : {}
     const revisionSource: RevisionSource = inConsole ? 'console' : 'form'
     const onError = (err: unknown) => setRefusal(failureText(err, locale))
     if (profile) {
@@ -418,22 +432,40 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
     }
   }
 
-  const switchProtocol = (tile: Tile) => {
-    const fresh = settleXrayFields({ ...defaults(null), name: values.name, description: values.description, enabled: values.enabled,
-      protocol: tile.protocol, engine: tile.engine ?? 'native', xraySubprotocol: tile.subprotocol ?? 'vless' })
+  const opensNew = (target: Tile) => isEdit && (target.protocol !== profile.protocol || isPlainSubprotocol(target.subprotocol))
+  const switchProtocol = (target: Tile) => {
+    let transferable = values
+    if (draft !== null && supportsConsole(values) && target.protocol === 'xray') {
+      try { transferable = readInbound(draft, values).values } catch { /* Keep the last valid form values. */ }
+    }
+    const fresh = forTile(target, transferable)
     const raw = fromForm(fresh)
+    const text = inConsole ? textFor(fresh) : null
     setValues(fresh)
     setConsoleState({ base: raw, raw })
-    setExampleOpen(inConsole && !supportsConsole(fresh) && !isNativeHysteria(fresh))
-    setDraft(!inConsole ? null : isNativeHysteria(fresh) ? printHysteria(fresh) : supportsConsole(fresh) ? printInbound(raw) : null)
+    setExampleOpen(inConsole && text === null)
+    setDraft(text)
+    setOpenSteps(['protocol'])
     setEditorError(null)
+    setRefusal(null)
+    setDestError(null)
     setSwitchTo(null)
   }
+  const pickTile = (target: Tile) => {
+    if (target.key === tile?.key || revisions.preview) return
+    if (opensNew(target)) {
+      guardedLeave(() => void navigate('/profiles/new?type=' + target.key + '&mode=console'))
+    } else if (
+      (draft !== null && draft !== currentText()) ||
+      JSON.stringify(consoleState.raw) !== JSON.stringify(consoleState.base) ||
+      exampleText !== (exampleInitial ?? '')
+    ) {
+      setSwitchTo(target)
+    } else switchProtocol(target)
+  }
   const chooseInConsole = (label: string) => {
-    const target = TILES.find((item) => item.label === label)
-    if (!target || target.key === tile?.key) return
-    if (example ? exampleText !== exampleInitial : draft !== currentText() || JSON.stringify(consoleState.raw) !== JSON.stringify(consoleState.base)) setSwitchTo(target)
-    else switchProtocol(target)
+    const target = TILES.find(item => item.label === label)
+    if (target) pickTile(target)
   }
 
   const updateInConsole = (next: FormValues, raw: ReturnType<typeof fromForm>) => {
@@ -543,8 +575,8 @@ function ProfileForm({ profile, onDone, reviewConsole, reload }: { reviewConsole
             <CreateConsole key={hysteria ? hysteriaFile.file : example?.file ?? 'inbound'} text={showingExample ? exampleText : draft ?? ''} original={showingExample ? exampleInitial ?? '' : currentText()} error={showingExample ? null : editorError} session={{ isEdit, historyButton: revisions.button, revision: revisions.preview }} protocol={{ label: tile?.label ?? values.protocol, file: hysteria ? hysteriaFile : showingExample ? example : undefined, preview: showingExample }}
               choices={[...TILES.filter((one) => !['mtproto','socks5','http'].includes(one.key)), ...TILES.filter((one) => ['mtproto','socks5','http'].includes(one.key))].map((one) => ({
                 label: one.label, engine: ['vless','trojan'].includes(one.key) ? 'xray, sing-box' : one.key === 'vmess' ? 'xray' : one.key === 'hysteria' ? 'hysteria' : words.formMode,
-                available: !isEdit || (supportsConsole(values) && ['vless','vmess','trojan'].includes(one.key)) || one.key === tile?.key,
-              })).concat([{ label: 'WEB', engine: 'tproxy-server', available: false }])}
+                newDraft: one.key !== tile?.key && opensNew(one),
+              })).concat([{ label: 'WEB', engine: words.webUnavailable, newDraft: false }])}
               actions={{ onProtocol: chooseInConsole, onEdit: showingExample ? (text) => setExampleDrafts(previous => ({ ...previous, [exampleKey]: text })) : editText, onSecurity: suggestSecurity, onGenerate: generateInConsole }} />
           ) : revisions.preview ? <section className={styles.panel}>
             {revisions.preview.body}
@@ -680,7 +712,7 @@ export default function ProfileFormPage() {
   const { locale } = useLocale()
   const navigate = useNavigate()
   const list = useProfilesList()
-  const reviewConsole = import.meta.env.MODE === 'paper-review' && list.data !== undefined && 'reviewConsole' in list.data && list.data.reviewConsole === true
+  const reviewConsole = list.data !== undefined && 'reviewConsole' in list.data && list.data.reviewConsole === true
   if (!id) return <ProfileForm reviewConsole={reviewConsole} profile={null} onDone={(saved) => void navigate(`/profiles/${saved.id}`, { replace: true })} />
   if (list.isPending) return <QueryLoading label={words.loading} />
   if (list.isError && !list.data) return <QueryFailed title={words.failedTitle} body={failureText(list.error, locale)} retryLabel={words.retry} onRetry={() => void list.refetch()} />

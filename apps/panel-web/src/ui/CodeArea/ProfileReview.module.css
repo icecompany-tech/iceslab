@@ -437,8 +437,6 @@ h2.sideTitle {
 
 .consoleChoices {
   min-width: var(--size-popover-list);
-  max-height: min(60vh, var(--size-columns-height));
-  overflow: auto;
   display: grid;
   gap: var(--spacing-1);
 }

@@ -3,7 +3,8 @@ import { Icon } from '@/ui/Icon/Icon'
 import { Popover } from '@/ui/Popover/Popover'
 import { Editor } from '@/ui/CodeArea/Editor'
 import { Diff } from '@/ui/CodeArea/Diff'
-import { useLocale } from '@/lib/i18n'
+import { useDict, useLocale } from '@/lib/i18n'
+import { DICT } from '@/contours/profiles/dict'
 import { Button } from '@/ui/Button/Button'
 import type { ProfileError } from '@/ui/CodeArea/text'
 import styles from '@/ui/CodeArea/ProfileReview.module.css'
@@ -14,7 +15,7 @@ interface Props {
   error: ProfileError | null
   session: { isEdit: boolean; historyButton?: ReactNode; revision?: { body: ReactNode; footer: ReactNode } }
   protocol: { label: string; preview?: boolean; file?: { file: string; engine: string } }
-  choices: readonly { label: string; engine: string; available: boolean }[]
+  choices: readonly { label: string; engine: string; newDraft: boolean }[]
   actions: {
     onProtocol: (value: string) => void
     onSecurity: (value: "reality" | "tls" | "none") => void
@@ -26,6 +27,8 @@ interface Props {
 export function CreateConsole({ text, original, error, session: { isEdit, historyButton, revision }, protocol: { label: protocol, file, preview }, actions, choices }: Props) {
   const { onProtocol, onEdit, onSecurity, onGenerate } = actions
   const area = useRef<HTMLDivElement>(null)
+  const triggerButton = useRef<HTMLButtonElement>(null)
+  const words = useDict(DICT)
   const [message, setMessage] = useState('')
   const [compare, setCompare] = useState(false)
   const { locale } = useLocale()
@@ -76,15 +79,22 @@ export function CreateConsole({ text, original, error, session: { isEdit, histor
     }}
     onKeyDown={(event) => { if (event.ctrlKey && event.code === 'Space') { event.preventDefault(); suggest(event.target) } }}>
     <div className={styles.tools}>
-      <span>Конфиг для</span>
-      <Popover trigger={(props) => <button type="button" aria-label="Выбор протокола" {...props}>{protocol}<Icon name="chevronDown" size="sm" /></button>}>
-        {(close) => <div className={styles.consoleChoices}>{choices.map(({ label, engine, available }) =>
-          <div key={label}>
-            {label === 'MTProto' && <small>Для Telegram</small>}
-            <button type="button" disabled={!available} aria-pressed={protocol === label} onClick={() => { close(); onProtocol(label) }}>{label}<small>{engine}</small></button>
-          </div>)}</div>}
+      <span>{words.configFor}</span>
+      <Popover fitViewport trigger={(props) => <button ref={triggerButton} type="button" disabled={!!revision} aria-label={words.consoleProtocol} {...props}>{protocol}<Icon name="chevronDown" size="sm" /></button>}>
+        {(close) => {
+          const dismiss = () => { close(); triggerButton.current?.focus() }
+          return <div className={styles.consoleChoices} onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.preventDefault(); dismiss() }
+          }}>{choices.map(({ label, engine, newDraft }) =>
+            <div key={label}>
+              {label === 'MTProto' && <small>{locale === 'ru' ? 'Для Telegram' : 'For Telegram'}</small>}
+              <button type="button" disabled={label === 'WEB'} aria-pressed={protocol === label} onClick={() => { dismiss(); onProtocol(label) }}>
+                {label}<small>{newDraft ? words.draftAction : engine}</small>
+              </button>
+            </div>)}</div>
+        }}
       </Popover>
-      <span>на ядре</span><b>{file?.engine ?? 'xray'}</b><span className={styles.space} /><code>{file?.file ?? 'config.json'}</code>
+      <span>{words.coreOn}</span><b>{file?.engine ?? 'xray'}</b><span className={styles.space} /><code>{file?.file ?? 'config.json'}</code>
       {historyButton}
       <button type="button" disabled={!!revision} aria-label="Копировать конфиг" onClick={() => void copy()}><Icon name="copy" /></button>
       <button type="button" aria-label="Во весь экран" onClick={() => void fullscreen()}><Icon name="fullscreen" /></button>
