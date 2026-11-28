@@ -19,14 +19,12 @@ import type { ProtocolName } from '@/lib/old/protocols';
 import { profileKindKey, type PreviewKindKey } from '@/contours/profiles/lib/profileKinds';
 import { randomInt, randomToken } from '@/contours/profiles/lib/secureRandom';
 import { RECIPE_SCHEMA_VERSION, RECIPE_SOURCE_BUILTIN, RECIPE_SOURCE_MINE } from '@iceslab/shared';
-import snapshot from '@iceslab/shared/recipes.snapshot.json';
 import type {
   Recipe as WireRecipe,
   RecipeEngine,
   RecipeRandomize,
   RecipeRandomizeKind,
   RecipeSaved,
-  RecipeSnapshot,
   RecipeSourceProblem,
   RecipeSourceStatus,
 } from '@iceslab/shared';
@@ -246,19 +244,6 @@ export function recipeFitsForm(r: Pick<Recipe, 'protocol' | 'engine' | 'subproto
   return recipeTile(r) === kindKey && (r.protocol !== 'xray' || r.subprotocol === undefined || r.subprotocol === subprotocol);
 }
 
-/**
- * Снимок реестра, который панель носит с собой (32b5719): те же рецепты, что
- * сервер отдаёт как sourceId `builtin`. Экран берёт рецепты из ответа
- * реестра; снимок здесь нужен только как словарь полей для экспорта
- * (RECIPE_APPLY_KEYS) и тестам.
- */
-// JSON types its union fields as plain strings; shared's own test holds the file to the schema.
-const SNAPSHOT_JSON: unknown = snapshot;
-
-export const SNAPSHOT_RECIPES: Recipe[] = (SNAPSHOT_JSON as RecipeSnapshot).recipes.map((w) =>
-  fromWireRecipe({ ...w, sourceId: RECIPE_SOURCE_BUILTIN }),
-);
-
 const SHORT_ID_COUNT = 6;
 const SHORT_ID_BYTES = 8;
 
@@ -414,22 +399,29 @@ export function duplicateRecipeIds(recipes: readonly { id: string }[]): string[]
 // ───── Export (author your own recipe from the current form) ─────
 
 /**
- * Which ProfileForm fields are protocol-specific, derived from what the
- * snapshot's recipes actually set. Doubles as the export allowlist: exporting
- * the current config as a recipe pulls exactly these keys, never common
- * fields like name/enabled.
+ * Allowed fields for importing and exporting profile recipes. The registry
+ * supplies the recipes over the API. recipes.test.ts checks that these
+ * fields and their order match the pinned snapshot.
  */
-export const RECIPE_APPLY_KEYS: Record<string, string[]> = (() => {
-  const acc: Record<string, Set<string>> = {};
-  for (const r of SNAPSHOT_RECIPES) {
-    const set = (acc[r.protocol] ??= new Set<string>());
-    for (const k of Object.keys(r.apply)) set.add(k);
-    for (const rz of r.randomize ?? []) set.add(rz.field);
-  }
-  const out: Record<string, string[]> = {};
-  for (const [proto, set] of Object.entries(acc)) out[proto] = [...set];
-  return out;
-})();
+export const RECIPE_APPLY_KEYS: Record<string, readonly string[]> = {
+  amneziawg: [
+    'awgPreset', 'awgJc', 'awgJmin', 'awgJmax', 'awgS1', 'awgS2', 'awgS3', 'awgS4',
+    'awgSubnet', 'awgH1', 'awgH2', 'awgH3', 'awgH4',
+  ],
+  xray: [
+    'xraySubprotocol', 'xrayFlow', 'xrayNetwork', 'xrayDest', 'xrayServerNames',
+    'xrayFingerprint', 'xrayServiceName', 'xrayPath', 'xraySecurity',
+  ],
+  hysteria: ['hyObfsPassword', 'hyMasqueradeUrl', 'hyPortHopStart', 'hyPortHopEnd', 'hyBrutalUp', 'hyBrutalDown'],
+  mieru: ['mieruMtu'],
+  mtproto: ['mtgDomain'],
+  naive: ['naiveMasquerade'],
+  shadowsocks: ['ssMethod'],
+  telegramweb: ['webHostname', 'webBasePath', 'webCarrier'],
+  anytls: ['anytlsServerName'],
+  shadowtls: ['shadowtlsHandshake', 'shadowtlsSsMethod'],
+  tuic: ['tuicCongestion'],
+};
 
 /**
  * Key material: form fields (and the config names the form never shows) that

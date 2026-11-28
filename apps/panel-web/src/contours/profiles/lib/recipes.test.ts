@@ -1,9 +1,10 @@
+import { RECIPE_SOURCE_BUILTIN, type RecipeSnapshot } from '@iceslab/shared';
+import snapshot from '@iceslab/shared/recipes.snapshot.json';
 import { describe, expect, it } from 'vitest';
 import { PREVIEW_KINDS, PROFILE_KINDS } from '@/contours/profiles/lib/profileKinds';
 import { defaults } from '@/contours/profiles/lib/profileDefaults';
 import {
   buildExportRecipe,
-  SNAPSHOT_RECIPES,
   RECIPE_COMMON_FIELDS,
   RECIPES_REPO_DEFAULT,
   duplicateRecipeIds,
@@ -33,11 +34,25 @@ import {
 import { isPlainSubprotocol } from '@/contours/profiles/lib/plainSubprotocol';
 import { DICT } from '@/contours/profiles/recipesDict';
 
-// Снимок реестра, который панель носит с собой (32b5719), как его отдаёт
-// сервер (sourceId builtin). Панель своих рецептов в коде не держит.
+// The server supplies these built-in recipes through the registry API.
+const SNAPSHOT_RECIPES = (snapshot as unknown as RecipeSnapshot).recipes.map((recipe) =>
+  fromWireRecipe({ ...recipe, sourceId: RECIPE_SOURCE_BUILTIN }),
+);
 const onTile = (key: string) => recipesOnTile(SNAPSHOT_RECIPES, key);
 
 describe('рецепты снимка у каждой плитки', () => {
+  it('сохраняет имена и порядок полей для импорта и экспорта снимка', () => {
+    const byProtocol: Record<string, Set<string>> = {};
+    for (const recipe of SNAPSHOT_RECIPES) {
+      const fields = (byProtocol[recipe.protocol] ??= new Set());
+      for (const field of Object.keys(recipe.apply)) fields.add(field);
+      for (const rule of recipe.randomize ?? []) fields.add(rule.field);
+    }
+    expect(RECIPE_APPLY_KEYS).toEqual(Object.fromEntries(
+      Object.entries(byProtocol).map(([protocol, fields]) => [protocol, [...fields]]),
+    ));
+  });
+
   it('снимок: 22 рецепта, id не повторяются, все помечены как встроенные', () => {
     expect(SNAPSHOT_RECIPES).toHaveLength(22);
     expect(duplicateRecipeIds(SNAPSHOT_RECIPES)).toEqual([]);
