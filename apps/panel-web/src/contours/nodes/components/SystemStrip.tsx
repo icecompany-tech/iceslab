@@ -4,7 +4,7 @@ import { nodeHealth, useOverview } from '@/lib/domain/overview'
 import { fmtBytes, fmtDuration, fmtPercent } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
 import type { Node } from '@/lib/old/nodes'
-import { Flag } from '@/ui/Flag/Flag'
+import { NodeUserCount } from '@/contours/nodes/components/NodeUserCount'
 import { Meter } from '@/ui/Meter/Meter'
 import { meterTone } from '@/ui/Meter/tone'
 
@@ -16,10 +16,10 @@ export function SystemStrip({ node }: { node: Node }) {
   const live = overview.data?.nodes.find((n) => n.id === node.id)
   const metrics = live?.metrics ?? null
   const health = nodeHealth(node.status)
-  const line = (label: string, percent: number | undefined) => (
+  const bytes = (used: number, total: number) => fmtBytes(used, locale) + ' / ' + fmtBytes(total, locale)
+  const line = (label: string, percent: number | undefined, fact?: string) => (
     <div className={styles.stripMetric}>
-      <span className={styles.metricLabel}>{label}</span>
-      {percent === undefined ? '-' : fmtPercent(percent, locale)}
+      <div className={styles.metricHead}><span>{label} <small className={styles.muted}>{fact}</small></span><b>{percent === undefined ? '—' : fmtPercent(percent, locale)}</b></div>
       {percent !== undefined && <Meter size="table" percent={percent} tone={meterTone(percent)} />}
     </div>
   )
@@ -27,24 +27,24 @@ export function SystemStrip({ node }: { node: Node }) {
     <section className={styles.strip} aria-label={words.system}>
       <div className={styles.stripTop}>
         <span className={styles.nameCell}>
+          <b>{words.system}</b>
           <span className={`${styles.dot} ${styles[`dot_${health}`]}`} />
-          <Flag code={node.countryCode} />
-          <b>{node.name}</b>
-          <span className={health === 'problem' ? styles.danger : styles.muted}>{words.statusWord[node.status] ?? node.status}</span>
+          <span className={health === 'problem' ? styles.danger : styles.muted}>{words.statusWord[node.status] ?? node.status}{metrics && ' · ' + fmtDuration(metrics.uptimeSeconds, locale)}</span>
         </span>
         <span className={styles.stripFacts}>
           <span>
-            {words.today}: {live ? fmtBytes(live.todayBytes, locale) : words.metricsUnknown}
+            {words.today}: {live && (health !== 'unverified' || live.todayBytes > 0) ? fmtBytes(live.todayBytes, locale) : words.metricsUnknown}
           </span>
           <span>
-            {words.uptime}: {metrics ? fmtDuration(metrics.uptimeSeconds, locale) : words.metricsUnknown}
+            {words.usersColumn}: <NodeUserCount id={node.id} />
           </span>
+          <span>{words.unassignedOnline}: {words.metricsUnknown}</span>
         </span>
       </div>
       <div className={styles.stripMetrics}>
-        {line(words.cpu, metrics?.cpu.usagePercent)}
-        {line(words.ram, metrics?.memory.usedPercent)}
-        {line(words.disk, metrics?.disk.usedPercent)}
+        {line(words.cpu, metrics?.cpu.usagePercent, metrics && String(metrics.cpu.cores) || undefined)}
+        {line(words.ram, metrics?.memory.usedPercent, metrics ? bytes(metrics.memory.usedBytes, metrics.memory.totalBytes) : undefined)}
+        {line(words.disk, metrics?.disk.usedPercent, metrics ? bytes(metrics.disk.usedBytes, metrics.disk.totalBytes) : undefined)}
       </div>
     </section>
   )

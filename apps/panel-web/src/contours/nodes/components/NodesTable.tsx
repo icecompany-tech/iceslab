@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { NodeUserCount } from '@/contours/nodes/components/NodeUserCount'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { certTerm } from '@/contours/nodes/lib/nodeCert'
@@ -49,7 +50,7 @@ export function NodesTable({ rows, readings, memberships, hostCounts, regionName
         if (!engines) return '?'
         return engines.length ? <CoreChips engines={engines} tone={nodeHealth(node.status)==='problem'?'danger':'accent'} /> : words.agentOnly
       }
-      case 'usersColumn': return <span title={words.usersUnknownHint}>?</span>
+      case 'usersColumn': return <NodeUserCount id={node.id} />
       case 'hostsColumn': return hostCounts ? (hostCounts.get(node.id) ?? 0) : '?'
       case 'today': return live && node.status !== 'unknown' ? fmtBytes(live.todayBytes,locale) : '-'
       case 'cpu': return metrics ? fmtPercent(metrics.cpu.usagePercent,locale) : '-'
@@ -78,7 +79,7 @@ export function NodesTable({ rows, readings, memberships, hostCounts, regionName
     </div></div>
     <div className={styles.tableScroll}><table className={styles.table} data-dense={dense||undefined} data-extended={active.length>11||undefined}>
       <colgroup>{active.map(key=><col key={key} data-col={key}/>)}</colgroup>
-      <thead><tr>{active.map(key=><th key={key} scope="col" title={key==='usersColumn'?words.usersUnknownHint:undefined}>{words[key]}</th>)}</tr></thead>
+      <thead><tr>{active.map(key=><th key={key} scope="col" title={key==='usersColumn'?words.lastNodeUsers:undefined}>{words[key]}</th>)}</tr></thead>
       <tbody>{rows.map(node=><tr key={node.id} className={styles.row} data-health={nodeHealth(node.status)} onClick={()=>open(node)}>
         {active.map(key=><td key={key} data-col={key}>{cell(key,node)}</td>)}
       </tr>)}</tbody>

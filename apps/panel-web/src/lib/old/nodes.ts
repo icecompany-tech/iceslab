@@ -273,6 +273,7 @@ export interface BootstrapInfo {
    * Absent on an older server: read as false (`isPayloadOnly`).
    */
   payloadOnly?: boolean;
+  payloadDownloadAvailable?: boolean;
 }
 
 /** The create response carries the one-time payload + a bootstrap token. */

@@ -98,3 +98,8 @@ export function countryName(code: string | null | undefined): string {
   const upper = code.toUpperCase();
   return COUNTRIES.find((x) => x.code === upper)?.name ?? upper;
 }
+
+export function localizedCountries(locale: string) {
+  const regions = new Intl.DisplayNames([locale], { type: 'region' });
+  return COUNTRIES.map(({ code, name }) => ({ value: code, label: regions.of(code) ?? name }));
+}

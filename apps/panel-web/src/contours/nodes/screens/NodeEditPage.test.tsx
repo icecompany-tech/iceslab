@@ -101,8 +101,8 @@ describe('NodeEditPage', () => {
     const s = server(node({ coreVersions: {} }), { 'PUT /api/nodes/n1': { status: 400, body: { error: 'CORE_VERSION_NOT_LISTED', problems: ['xray 0.0.1 is not in the manifest'] } } })
     page()
     await userEvent.click(await screen.findByRole('button', { name: /Ядра/ }))
-    const picker = await screen.findByRole('combobox', { name: 'xray' })
-    fireEvent.change(picker, { target: { value: pin?.value } })
+    const picker = await screen.findByRole('radio', { name: new RegExp('Закрепить ' + pin?.value) })
+    await userEvent.click(picker)
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(s.writes()[0]?.body).toEqual({ coreVersions: { xray: pin?.value } }))
     await screen.findByText('xray 0.0.1 is not in the manifest')
@@ -178,7 +178,7 @@ describe('NodeEditPage', () => {
     expect(s.writes()).toEqual([])
   })
 
-  it('F-16, Bk-159: a reissue promises no revoked token and offers no new payload', async () => {
+  it('F-16, Bk-159: a legacy reissue promises no revoked token and offers no new payload', async () => {
     const s = server(node(), { 'POST /api/nodes/n1/bootstrap': { body: { token: 't', expiresAt: '2026-11-06T13:00:00Z', command: 'bash install --payload-file x', payloadOnly: true } } })
     page()
     await userEvent.click(await screen.findByRole('button', { name: 'Обслуживание' }))
@@ -186,7 +186,7 @@ describe('NodeEditPage', () => {
     const ask = await screen.findByRole('dialog')
     expect(ask.textContent).toMatch(/не подтверждает, что прежние токены отозваны/)
     await userEvent.click(within(ask).getByRole('button', { name: 'Новая команда' }))
-    await screen.findByText(/Новый файл со страницы ноды в этой версии получить нельзя/)
+    await screen.findByText(/сохранённый при создании файл, если адрес ноды прежний/)
     expect(screen.queryByRole('button', { name: /Скачать/ })).toBeNull()
     expect(s.writes()).toHaveLength(1)
   })

@@ -1,21 +1,23 @@
-import { coreRemoveCommand, type ConnLogTraceResponse } from '@iceslab/shared'
-import { useState } from 'react'
+import { coreInstallCommand, coreRemoveCommand, type ConnLogTraceResponse, type NodeCoreVersions } from '@iceslab/shared'
+import { useState, type ReactNode } from 'react'
+import { CorePicker } from '@/contours/nodes/components/CorePicker'
 import { Link } from 'react-router-dom'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
-import { useClearConnLog, useConnLog, useExposure, useNodeBindings, useNodeConnectTest, useNodeHosts, useNodePolicies, useReissueBootstrap, useRotateCert, useRotateHysteriaTls, useWarp } from '@/contours/nodes/hooks/useNodes'
+import { fetchNodeInstallFile, useClearConnLog, useConnLog, useExposure, useNodeBindings, useNodeConnectTest, useNodeHosts, useNodePolicies, useProfilesList, useReissueBootstrap, useRotateCert, useRotateHysteriaTls, useWarp } from '@/contours/nodes/hooks/useNodes'
 import { connLogView } from '@/contours/nodes/lib/connLogView'
 import { coreEngine, coreRemoveFacts, coreRowsInManifestOrder, firstRowOfEngine } from '@/contours/nodes/lib/coreRemove'
 import { exposureView } from '@/contours/nodes/lib/exposureView'
 import { canRotateHysteriaTls, isNativeHysteria } from '@/contours/nodes/lib/hysteriaTls'
 import { certPageView, certRotateRefusal, certTerm } from '@/contours/nodes/lib/nodeCert'
 import { egressOf } from '@/contours/nodes/lib/nodeEditForm'
-import { isPayloadOnly } from '@/contours/nodes/lib/payloadInstall'
+import { isPayloadOnly, savePayload } from '@/contours/nodes/lib/payloadInstall'
 import { policyCoverage } from '@/contours/nodes/lib/policyReach'
 import { useNow } from '@/lib/clock'
-import { engineLabel } from '@/lib/domain/engines'
-import { fmtDate, fmtDateTime } from '@/lib/format'
+import { engineLabel, isEngine } from '@/lib/domain/engines'
+import { fmtDate, fmtDateTime, fmtNumber } from '@/lib/format'
 import { useDict, useLocale } from '@/lib/i18n'
+import { isApiError } from '@/lib/net/errors'
 import { failureText } from '@/lib/net/messages'
 import { coreNeed, coreVersionFacts, type CoreVersionLine } from '@/lib/old/coreVersions'
 import type { BootstrapInfo, Node, NodeCore } from '@/lib/old/nodes'
@@ -64,7 +66,7 @@ function CoreRow({ core, node, showRemove }: { core: NodeCore; node: Node; showR
   )
 }
 
-export function CoresStep({ node }: { node: Node }) {
+export function CoresStep({ node, versions, children }: { node: Node; versions: NodeCoreVersions; children: (engine: string) => ReactNode }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
   const toast = useToast()
@@ -72,20 +74,35 @@ export function CoresStep({ node }: { node: Node }) {
   const [asking, setAsking] = useState(false)
   const reported = node.cores?.cores ? coreRowsInManifestOrder(node.cores.cores) : null
   const hasNative = reported?.some(isNativeHysteria) ?? false
+  const [install, setInstall] = useState<string | null>(null)
   return (
     <>
       <p className={styles.note}>{words.coresKeep}</p>
-      {reported === null ? (
-        <div className={styles.note}>
-          {(node.intendedEngines ?? []).map(engineLabel).join(', ') || '-'}, {words.coresUnknown}
-        </div>
-      ) : (
-        <ul className={styles.coreList}>
-          {reported.map((core, i) => (
-            <CoreRow key={`${core.name}-${core.engine ?? ''}`} core={core} node={node} showRemove={firstRowOfEngine(reported, i)} />
-          ))}
-        </ul>
-      )}
+      <CorePicker versions={versions} first={reported?.[0] ? coreEngine(reported[0]) ?? reported[0].name : node.intendedEngines?.[0]}
+        extra={[...new Set((reported ?? []).filter(core => !coreEngine(core)).map(core => core.name))]}
+        state={engine => {
+          const rows = reported?.filter(core => (coreEngine(core) ?? core.name) === engine) ?? []
+          if (rows.some(core => core.installed === false && coreNeed(core).brokenForHosts)) return 'danger'
+          const installed = rows.filter(core => core.installed !== false)
+          if (installed.some(core => coreVersionFacts(core, node.cores?.arch, node.coreVersions ?? {}).some(line => line.command))) return 'amber'
+          if (installed.length) return installed.some(core => (core.neededBy ?? 0) > 0) ? 'active' : 'idle'
+        }}>
+        {engine => {
+          const rows = reported?.filter(core => (coreEngine(core) ?? core.name) === engine) ?? []
+          return <>
+            {rows.length ? <ul className={styles.coreList}>{rows.map((core, i) =>
+              <CoreRow key={core.name} core={core} node={node} showRemove={firstRowOfEngine(rows, i)} />)}</ul>
+              : <p className={styles.note}>{engine === 'tproxy-server' ? words.webUnavailable : (isEngine(engine) && node.intendedEngines?.includes(engine) ? engineLabel(engine) + ', ' : '') + words.coresUnknown}</p>}
+            {engine === 'amneziawg' && rows.some(core => core.awgGenerations?.length) &&
+              <p className={styles.note}>AWG {rows.flatMap(core => core.awgGenerations ?? []).map(value => value === 3 ? '3.1' : '1.x').join(', ')}</p>}
+            {children(engine)}
+            {isEngine(engine) && rows.length > 0 && rows.every(core => core.installed === false) &&
+              <Button onClick={() => setInstall(install === engine ? null : engine)}>{words.coreHowInstall}</Button>}
+            {isEngine(engine) && install === engine && rows.every(core => core.installed === false) &&
+              <Command text={coreInstallCommand(engine, node.coreVersions, node.cores?.arch).command} copyLabel={words.copy} copiedLabel={words.copied} />}
+          </>
+        }}
+      </CorePicker>
       {hasNative && canRotateHysteriaTls(node) && (
         <div className={styles.serviceRow}>
           <span>{words.hysteriaTls}</span>
@@ -326,9 +343,26 @@ function ConnLogRow({ node }: { node: Node }) {
 function ReissueRow({ node }: { node: Node }) {
   const words = useDict(DICT)
   const { locale } = useLocale()
-  const reissue = useReissueBootstrap(node.id)
   const [asking, setAsking] = useState(false)
   const [issued, setIssued] = useState<BootstrapInfo | null>(null)
+  const reissue = useReissueBootstrap(node.id, info => { setIssued(info); setAsking(false) })
+  const [download, setDownload] = useState<'busy' | 'done' | 403 | 404 | 409 | 410 | 'failed' | null>(null)
+  const file = isPayloadOnly(issued)
+  const canDownload = file && issued?.payloadDownloadAvailable === true && Boolean(issued.token)
+  const issueAgain = () => { setIssued(null); setDownload(null); setAsking(true) }
+  const downloadFile = async () => {
+    if (!issued?.token || download === 'busy') return
+    setDownload('busy')
+    try {
+      savePayload('iceslab-node.payload', await fetchNodeInstallFile(node.id, issued.token))
+      setDownload('done')
+    } catch (error) {
+      const code = isApiError(error) ? error.status : 0
+      setDownload(code === 403 || code === 404 || code === 409 || code === 410 ? code : 'failed')
+    }
+  }
+  const close = () => { if (download !== 'busy') { setIssued(null); setDownload(null) } }
+
   return (
     <div className={styles.serviceRow}>
       <span>{words.reissue}</span>
@@ -339,21 +373,21 @@ function ReissueRow({ node }: { node: Node }) {
           labels={{ confirm: words.reissueRun, cancel: words.cancel }}
           state={{ busy: reissue.isPending, error: reissue.error ? failureText(reissue.error, locale) : null }}
           onClose={() => setAsking(false)}
-          onConfirm={() =>
-            reissue.mutate(undefined, {
-              onSuccess: (info) => {
-                setAsking(false)
-                setIssued(info)
-              },
-            })
-          }
+          onConfirm={() => reissue.mutate()}
         >
           {words.reissueBody}
         </Confirm>
       )}
       {issued && (
-        <Dialog title={isPayloadOnly(issued) ? words.payloadOnlyTitle : words.reissueTokenTitle} closeLabel={words.close} onClose={() => setIssued(null)} footer={<Button onClick={() => setIssued(null)}>{words.close}</Button>}>
-          <p>{isPayloadOnly(issued) ? words.payloadOnlyBody : words.reissueTokenBody}</p>
+        <Dialog title={file ? words.payloadOnlyTitle : words.reissueTokenTitle} closeLabel={words.close} onClose={close}
+          footer={<><Button onClick={close} disabled={download === 'busy'}>{words.close}</Button>
+            {canDownload && (download === 'done' || download === 409 || download === 410
+              ? <Button onClick={issueAgain}>{words.reissueRun}</Button>
+              : <Button variant="primary" loading={download === 'busy'} disabled={!issued.token || download === 403 || download === 404} onClick={() => void downloadFile()}>{words.downloadPayload}</Button>)}
+          </>}>
+          <p>{file ? (canDownload ? words.payloadOnlyBody : words.legacyPayload) : words.reissueTokenBody}</p>
+          {download === 'done' && <p role="status">{words.downloaded}</p>}
+          {download !== null && download !== 'busy' && download !== 'done' && <p role="alert">{words.payloadRefused[download]}</p>}
           <Command text={issued.command} copyLabel={words.copy} copiedLabel={words.copied} />
         </Dialog>
       )}
@@ -375,28 +409,39 @@ export function ServiceStep({ node }: { node: Node }) {
 
 export function HostsBlock({ node }: { node: Node }) {
   const words = useDict(DICT)
+  const { locale } = useLocale()
   const hosts = useNodeHosts(node.id)
+  const bindings = useNodeBindings(node.id)
+  const profiles = useProfilesList()
   const list = hosts.data?.hosts ?? []
   return (
     <section className={styles.panel}>
-      <h2 className={styles.panelTitle}>{words.hostsOnNode}</h2>
+      <div className={styles.toolbar}>
+        <h2 className={styles.panelTitle}>{words.hostsOnNode}</h2>
+        <Link className={styles.linkPlain} to="/hosts/new">{words.newHost}</Link>
+      </div>
       {hosts.isPending && <QueryLoading label={words.loading} />}
       {hosts.isError && (
-        <QueryFailedLine retryLabel={words.retry} onRetry={() => void hosts.refetch()}>
-          {words.hostsFailed}
-        </QueryFailedLine>
+        <QueryFailedLine retryLabel={words.retry} onRetry={() => void hosts.refetch()}>{words.hostsFailed}</QueryFailedLine>
       )}
       {hosts.data && list.length === 0 && <p className={styles.note}>{words.hostsEmpty}</p>}
       {list.length > 0 && (
-        <ul className={styles.plainList}>
-          {list.map((host) => (
-            <li key={host.id}>
-              <Link className={styles.linkPlain} to={`/hosts/${host.id}`}>
+        <ul className={styles.hostRows}>
+          {list.map(host => {
+            const binding = bindings.data?.bindings.find(item => item.id === host.bindingId)
+            const profile = profiles.data?.profiles.find(item => item.id === binding?.profileId)
+            const config = profile?.config
+            const protocol = config && 'subprotocol' in config ? config.subprotocol ?? profile?.protocol : profile?.protocol
+            return <li key={host.id}>
+              <Link className={styles.linkPlain} to={'/hosts/' + host.id}>
                 {host.remark}
+                {host.hiddenByCascade && <span className={styles.muted}> · {words.hostHidden(host.hiddenByCascade.cascadeName)}</span>}
               </Link>
-              {host.hiddenByCascade && <span className={styles.muted}> · {words.hostHidden(host.hiddenByCascade.cascadeName)}</span>}
+              <span>{profile ? profile.name + ', ' + protocol : '—'}</span>
+              <span>{binding ? [binding.port, binding.transport].filter(Boolean).join('/') : '—'}</span>
+              <span title={words.usersColumn}>{host.reach ? fmtNumber(host.reach.users, locale) : '—'}</span>
             </li>
-          ))}
+          })}
         </ul>
       )}
     </section>

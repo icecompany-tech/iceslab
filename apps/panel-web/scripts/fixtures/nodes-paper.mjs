@@ -35,18 +35,33 @@ export function newNodesReview(empty = false) {
     nodes.push({ ...base('/api/nodes').nodes[0], id:name, name, address, countryCode:name.slice(0,2).toUpperCase(), engines, status, lastStatusMessage:message,
       lastStatusChange:new Date(now-240000).toISOString(), regionId:name.startsWith('kz-') ? 'as' : 'eu',
       agentCanRotate:name !== 'ru-msk-01', certNotAfter:status === 'unknown' ? null : new Date(now+((days[name] ?? 140)+0.5)*day).toISOString(),
-      consumptionMultiplier:name === 'de-fra-03' ? 0.5 : 1, inboundCount:engines.length, todayBytes:today*gib,
+      coreVersions: name === 'kz-ala-01' ? undefined : {}, consumptionMultiplier:name === 'de-fra-03' ? 0.5 : 1, inboundCount:engines.length, todayBytes:today*gib,
       metrics:status==='unknown'||status==='unreachable' ? null : {cpu:{usagePercent:cpu,cores:2},memory:{usedPercent:ram,totalBytes:4*gib,usedBytes:4*gib*ram/100},disk:{usedPercent:disk,totalBytes:50*gib,usedBytes:50*gib*disk/100},uptimeSeconds:uptime*86400} })
-    const bindingId = 'nodes-demo-' + name
-    bindings.push({...base('/api/bindings').bindings[0],id:bindingId,nodeId:name})
-    for(let i=0;i<hostCount;i++) hosts.push({...base('/api/hosts').hosts[0],id:bindingId+'-'+i,bindingId})
+    for (let i = 0; i < hostCount; i++) {
+      const bindingId = 'nodes-demo-' + name + '-' + i
+      const names = ['Amsterdam', 'Amsterdam mobile', 'Amsterdam CDN']
+      const amsterdam = name === 'nl-ams-01'
+      bindings.push({ ...base('/api/bindings').bindings[0], id: bindingId, nodeId: name,
+        port: amsterdam ? [443, 51820, 8443][i] : 443 + i, transport: amsterdam && i === 1 ? 'udp' : 'tcp',
+        ...(amsterdam ? { profileId: ['ru-reality', 'awg-mobile', 'ru-reality'][i] } : {}) })
+      hosts.push({ ...base('/api/hosts').hosts[0], id: bindingId, bindingId,
+        remark: amsterdam ? names[i] : name + ' / ' + (i + 1), ...(amsterdam ? { reach: { squads: 1, users: [1204, 612, 248][i] } } : {}) })
+    }
+    if (name === 'nl-ams-01') {
+      nodes.at(-1).cores = { observedAt: new Date(now).toISOString(), arch: 'amd64', cores: [
+        { name: 'xray', engine: 'xray', version: '26.3.27', installed: true, rendersPolicy: true, neededBy: 2 },
+        { name: 'hysteria', engine: 'hysteria', version: '2.12.3', installed: true, neededBy: 0 },
+        { name: 'amneziawg', engine: 'amneziawg', installed: false, neededBy: 1 },
+        { name: 'xray', engine: 'singbox', version: '1.12.0', installed: true, neededBy: 1 },
+      ] }
+    }
   }
   const example = base('/api/cascades').cascades[0]
   const cascades = empty ? [] : [['a4-test','ru-msk-01',['nl-ams-03','se-sto-01','se-sto-02']],['ru-de','nl-ams-05',['de-fra-02']],['kz-relay','kz-ala-01',['nl-ams-06']]].map(([id,entry,exits])=>({...example,id,name:id,enabled:true,hops:[],positions:[{...example.positions[0],position:0,nodeIds:[entry]}],directions:[{...example.directions[0],id:id+'-exit',nodeIds:exits}]}))
   return {nodes,bindings,hosts,cascades,install:'https',pendingReports:new Map()}
 }
 
-export function nodesReviewReply(scene, path) {
+export function nodesReviewReply(scene, path, search = new URLSearchParams()) {
   if (path === '/api/nodes') {
     for (const node of scene.nodes) {
       const due = scene.pendingReports.get(node.id)
@@ -60,8 +75,21 @@ export function nodesReviewReply(scene, path) {
     return {nodes:scene.nodes,total:scene.nodes.length}
   }
   if(path==='/api/regions') return {regions:[{id:'eu',name:'Europe',code:'EU'},{id:'as',name:'Asia',code:'AS'}]}
-  if(path==='/api/hosts') return {hosts:scene.hosts}
-  if(path==='/api/bindings') return {bindings:scene.bindings}
+  const nodeId = search.get('nodeId')
+  const bindings = nodeId ? scene.bindings.filter(binding => binding.nodeId === nodeId) : scene.bindings
+  if(path==='/api/hosts') {
+    const bindingIds = new Set(bindings.map(binding => binding.id))
+    return { hosts: scene.hosts.filter(host => bindingIds.has(host.bindingId)) }
+  }
+  if(path==='/api/bindings') return { bindings }
+  const sync = /^\/api\/nodes\/([\w-]+)\/sync-status$/.exec(path)
+  if (sync) {
+    const node = scene.nodes.find(item => item.id === sync[1])
+    if (node) {
+      const online = node.status === 'online'
+      return { applied: online, online, lastInboundSyncAt: online ? node.lastStatusChange : null, configChangedAt: node.lastStatusChange }
+    }
+  }
   if(path==='/api/cascades') return {cascades:scene.cascades}
   if(path==='/api/dashboard/overview') return {...base(path),nodes:scene.nodes,system:{totalNodeCount:scene.nodes.length,onlineNodeCount:scene.nodes.filter(n=>n.status==='online').length}}
 }

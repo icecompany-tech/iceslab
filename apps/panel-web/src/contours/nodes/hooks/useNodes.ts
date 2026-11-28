@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { requestTextFile } from '@/lib/net/client'
 import { listCascades } from '@/lib/old/cascades'
 import { clearConnLog, getConnLog } from '@/lib/old/connLog'
 import { listHosts } from '@/lib/old/hosts'
 import { getPolicyDrawing, listNodePolicies } from '@/lib/old/nodePolicies'
-import { createNode, deleteNode, disableNodeWarp, findNode, getNodeExposure, getNodeSyncStatus, listAllNodes, listRegions, refreshNodeBootstrap, registerNodeWarp, rotateHysteriaTls, rotateNodeCert, updateNode, type CreateNodeInput, type UpdateNodeInput } from '@/lib/old/nodes'
+import { createNode, deleteNode, disableNodeWarp, findNode, getNodeExposure, getNodeSyncStatus, listAllNodes, listRegions, refreshNodeBootstrap, registerNodeWarp, rotateHysteriaTls, rotateNodeCert, updateNode, type BootstrapInfo, type CreateNodeInput, type UpdateNodeInput } from '@/lib/old/nodes'
 import { listBindings, listProfiles, testConnectProfile } from '@/lib/old/profiles'
 import { listRoutePolicies } from '@/lib/old/routePolicies'
 import { listSquads } from '@/lib/old/squads'
@@ -81,8 +82,12 @@ export function useRotateHysteriaTls(id: string) {
   return useMutation({ mutationFn: () => rotateHysteriaTls(id), onSuccess: refresh })
 }
 
-export function useReissueBootstrap(id: string) {
-  return useMutation({ mutationFn: () => refreshNodeBootstrap(id) })
+export function useReissueBootstrap(id: string, onIssue: (info: BootstrapInfo) => void) {
+  return useMutation({ mutationFn: async () => { onIssue(await refreshNodeBootstrap(id)) } })
+}
+
+export function fetchNodeInstallFile(id: string, token: string) {
+  return requestTextFile('/api/nodes/' + id + '/bootstrap/payload', { token })
 }
 
 export const useExposure = (id: string) => useMutation({ mutationFn: () => getNodeExposure(id) })

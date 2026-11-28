@@ -124,6 +124,10 @@
   --size-host-details: 372px;
   --size-host-card: 352px;
   --size-node-search: 148px;
+  --size-node-port: 130px;
+  --size-core-picker-list: 236px;
+  --size-core-picker-height: 502px;
+  --size-core-picker-row: 50px;
   --size-cascade-table-row: 56px;
   --size-cascade-name: 140px;
   --size-cascade-hops: 76px;

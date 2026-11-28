@@ -74,11 +74,12 @@ describe('NodesPage', () => {
     expect(screen.getByText('se-01')).toBeTruthy()
   })
 
-  it('the list says the server does not count users per node', async () => {
-    server()
+  it('the list counts users by last observed activity and shows a known zero', async () => {
+    server({ 'GET /api/users': { body: { total: 0 } } })
     renderApp(<NodesPage />, { route: '/nodes' })
     await screen.findByText('de-01')
     await userEvent.click(screen.getByRole('radio', { name: 'Список' }))
-    expect(screen.getByRole('columnheader', { name: 'Юзеры' }).title).toMatch(/не считает/)
+    expect(screen.getByRole('columnheader', { name: 'Юзеры' }).title).toMatch(/последняя активность/)
+    expect(await screen.findAllByRole('cell', { name: '0' })).toHaveLength(3)
   })
 })

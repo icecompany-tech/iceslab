@@ -1,11 +1,3 @@
-/**
- * A-295: installing a node from the payload file, the only way on a panel
- * without https. The installer redeems a bootstrap token over https only, so
- * such a panel answers `payloadOnly: true` and a --payload-file command. The
- * payload itself leaves the panel once, in the answer to node create: the
- * panel keeps no node key to issue it again.
- */
-
 /** Whether the answer says «install from the payload». Only a true is a yes. */
 export function isPayloadOnly(info: { payloadOnly?: unknown } | null | undefined): boolean {
   return info?.payloadOnly === true;
@@ -32,4 +24,13 @@ export function payloadFileName(nodeName: string): string {
 export function scpCommand(nodeName: string, address: string, target: string): string {
   const host = address.replace(/:\d+$/, '');
   return `scp ./${payloadFileName(nodeName)} root@${host}:${target}`;
+}
+
+export function savePayload(name: string, payload: Blob) {
+  const url = URL.createObjectURL(payload)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

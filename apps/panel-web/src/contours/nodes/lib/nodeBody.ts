@@ -42,6 +42,13 @@ export function draftOfNode(node: Node): NodeDraft {
   }
 }
 
+export function validNodePort(input: string): boolean {
+  const value = input.trim()
+  return value === '' || (/^[0-9]{1,5}$/.test(value) && Number(value) >= 1 && Number(value) <= 65535)
+}
+
+export const validCountryCode = (value: string) => value === '' || /^[A-Z]{2}$/.test(value)
+
 export const addressOf = (draft: Pick<NodeDraft, 'host' | 'port'>) => `${draft.host.trim()}:${draft.port.trim() || DEFAULT_NODE_PORT}`
 
 export function nodeUpdateBody(initial: NodeDraft, draft: NodeDraft, stored: Pick<Node, 'domain' | 'coreVersions'>): UpdateNodeInput {
@@ -61,12 +68,12 @@ export function nodeUpdateBody(initial: NodeDraft, draft: NodeDraft, stored: Pic
   return body
 }
 
-export function draftErrors(draft: NodeDraft): { name?: true; host?: true; port?: true; domain?: true; multiplier?: true; maxUsers?: true } {
-  const port = Number(draft.port)
+export function draftErrors(draft: NodeDraft): { name?: true; host?: true; port?: true; country?: true; domain?: true; multiplier?: true; maxUsers?: true } {
   return {
     ...(draft.name.trim() === '' ? { name: true as const } : {}),
     ...(draft.host.trim() === '' ? { host: true as const } : {}),
-    ...(draft.port.trim() !== '' && (!Number.isInteger(port) || port < 1 || port > 65535) ? { port: true as const } : {}),
+    ...(!validNodePort(draft.port) ? { port: true as const } : {}),
+    ...(!validCountryCode(draft.countryCode) ? { country: true as const } : {}),
     ...(domainOk(draft.domain) ? {} : { domain: true as const }),
     ...(parseMultiplier(draft.multiplier).ok ? {} : { multiplier: true as const }),
     ...(parseMaxUsers(draft.maxUsers).ok ? {} : { maxUsers: true as const }),

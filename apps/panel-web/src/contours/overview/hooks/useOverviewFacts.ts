@@ -22,16 +22,6 @@ export function useExpiringSoon() {
   })
 }
 
-/** Users whose latest connection was through this node, across all user statuses. */
-export function useLastNodeCount(nodeId: string) {
-  return useQuery({
-    queryKey: ['users', 'last-node-count', nodeId],
-    queryFn: () => request('/api/users', parseTotal, { params: { nodeId, limit: 1 } }).then(r => r.total),
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-  })
-}
-
 export function useHealth() {
   return useQuery({ queryKey: ['health'], queryFn: () => request('/health', parseHealth), refetchInterval: 30_000 })
 }

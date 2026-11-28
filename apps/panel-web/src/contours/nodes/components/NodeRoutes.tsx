@@ -9,8 +9,8 @@ import { failureText } from '@/lib/net/messages'
 import { cascadeExitWords, cascadeMemberships } from '@/lib/old/cascadeMembership'
 import type { Node } from '@/lib/old/nodes'
 import type { RoutePolicy } from '@/lib/old/routePolicies'
-import { QueryFailedLine } from '@/ui/QueryState/QueryState'
-import { Select } from '@/ui/Select/Select'
+import { QueryFailedLine, QueryLoading } from '@/ui/QueryState/QueryState'
+import { Segmented } from '@/ui/Segmented/Segmented'
 
 function Row({ match, action, why, tone }: { match: string; action: string; why: string; tone?: 'muted' | 'amber' }) {
   return (
@@ -53,6 +53,7 @@ export function NodeRoutes({ node }: { node: Node }) {
     return [...bySource.values()].sort((a, b) => a.policy.ordinal - b.policy.ordinal)
   }, [isBalancerEntry, bindings.data, squads.data, routePolicies.data])
 
+  if (cascades.isPending) return <QueryLoading label={words.loading} />
   if (cascades.isError) {
     return (
       <QueryFailedLine retryLabel={words.retry} onRetry={() => void cascades.refetch()}>
@@ -60,6 +61,8 @@ export function NodeRoutes({ node }: { node: Node }) {
       </QueryFailedLine>
     )
   }
+  const failedCatalogs = [bindings, squads, routePolicies].filter(query => query.isError)
+  const firstFailed = failedCatalogs[0]
   const load = policyDrawingLoad(drawingQuery, say)
   const nodePolicy = nodePolicyBand(node.policyId, policies, load.kind === 'ready' ? load.drawing : null, say)
   const active = isBalancerEntry ? (reachable.find((p) => p.policy.ordinal === tag) ?? null) : null
@@ -125,12 +128,16 @@ export function NodeRoutes({ node }: { node: Node }) {
 
   return (
     <section className={styles.panel}>
+      <h2 className={styles.panelTitle}>{words.tabs.routes}</h2>
       {isBalancerEntry && (
         <div className={styles.routesFor}>
-          <Select look="filter" aria-label={words.routesFor} value={String(tag)} onChange={(e) => setTag(Number(e.target.value))} options={[{ value: '0', label: words.routesPlain }, ...reachable.map(({ policy }) => ({ value: String(policy.ordinal), label: policy.name }))]} />
+          <Segmented<string> label={words.routesFor} value={String(tag)} onChange={(value) => setTag(Number(value))} options={[{ value: '0', label: words.routesPlain }, ...reachable.map(({ policy }) => ({ value: String(policy.ordinal), label: policy.name + ' · ' + policy.ordinal }))]} />
         </div>
       )}
-      <table className={styles.table}>
+      {isBalancerEntry && firstFailed && <QueryFailedLine retryLabel={words.retry} onRetry={() => {
+        for (const query of failedCatalogs) void query.refetch()
+      }}>{say(firstFailed.error)}</QueryFailedLine>}
+      <table className={styles.table + ' ' + styles.routeTable}>
         <thead>
           <tr>
             <th scope="col">{words.routeMatch}</th>

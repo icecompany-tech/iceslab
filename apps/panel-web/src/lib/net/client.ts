@@ -93,3 +93,10 @@ export async function requestLoose(path: string, options: Send = {}): Promise<un
 export async function requestVoid(path: string, options: Send = {}): Promise<void> {
   await send(options, path)
 }
+
+/** An authenticated installation download. Reject a proxy HTML fallback. */
+export async function requestTextFile(path: string, body: unknown): Promise<Blob> {
+  const res = await send({ method: 'POST', body }, path)
+  if (!res.headers.get('content-type')?.startsWith('text/plain')) throw new ApiError({ status: res.status, code: 'BAD_RESPONSE' })
+  return res.blob()
+}

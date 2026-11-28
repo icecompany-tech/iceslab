@@ -66,7 +66,7 @@ export function createReviewServer(dist, publicPages, hostsEnabled = false, prof
     }
     const nodeCreate = session?.nodeScene && path === '/api/nodes' && req.method === 'POST'
     if (!fromHosts && session?.nodeScene && session.signedIn && req.method === 'GET') {
-      const result = (session.nodeScene.squads && readCascadeReview(session.nodeScene, path)) ?? nodesReviewReply(session.nodeScene, path)
+      const result = (session.nodeScene.squads && readCascadeReview(session.nodeScene, path)) ?? nodesReviewReply(session.nodeScene, path, url.searchParams)
       if (result) {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(result))
         return

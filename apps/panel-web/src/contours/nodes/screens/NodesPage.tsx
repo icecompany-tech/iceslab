@@ -16,7 +16,7 @@ import type { Node } from '@/lib/old/nodes'
 import { Button } from '@/ui/Button/Button'
 import { Chip } from '@/ui/Chip/Chip'
 import { Icon } from '@/ui/Icon/Icon'
-import { QueryFailed, QueryLoading } from '@/ui/QueryState/QueryState'
+import { QueryFailed, QueryFailedLine, QueryLoading } from '@/ui/QueryState/QueryState'
 import { Segmented } from '@/ui/Segmented/Segmented'
 import { Select } from '@/ui/Select/Select'
 
@@ -57,7 +57,10 @@ export default function NodesPage() {
   }, [hosts.data,bindings.data])
   const regionNames = new Map((regions.data?.regions ?? []).map(r=>[r.id,r.name]))
 
-  const memberships = useMemo(() => cascadeMemberships(cascades.data?.cascades ?? []), [cascades.data])
+  const membershipKnown = cascades.isSuccess
+  const memberships = useMemo(() => cascadeMemberships(membershipKnown ? cascades.data.cascades : []), [membershipKnown, cascades.data])
+  const grouped = view === 'cascades' && membershipKnown
+  const showCards = view === 'cards' || (view === 'cascades' && !membershipKnown)
   const live = useMemo(() => new Map((overview.data?.nodes ?? []).map((n) => [n.id, n])), [overview.data])
   const nodes = fleet.data?.nodes ?? []
   const count = (health: NodeHealth) => nodes.filter((n) => nodeHealth(n.status) === health).length
@@ -66,7 +69,7 @@ export default function NodesPage() {
     (n) =>
       (chip === 'all' || nodeHealth(n.status) === chip) &&
       (region === '' || n.regionId === region) &&
-      (cascadeFilter === 'all' || (cascadeFilter === 'in') === memberships.has(n.id)) &&
+      (!membershipKnown || cascadeFilter === 'all' || (cascadeFilter === 'in') === memberships.has(n.id)) &&
       (needle === '' || `${n.name} ${n.address}`.toLowerCase().includes(needle)),
   )
   const open = (node: Node) => void navigate(`/nodes/${node.id}`)
@@ -85,7 +88,7 @@ export default function NodesPage() {
     return { byCascade: [...byCascade.entries()], outside }
   }, [shown, memberships])
 
-  const hasGrid = view==='cards' && shown.length>0
+  const hasGrid = showCards && shown.length>0
   useLayoutEffect(() => {
     if (!hasGrid || !grid.current || typeof ResizeObserver==='undefined') return
     const el = grid.current
@@ -95,7 +98,7 @@ export default function NodesPage() {
     observer.observe(el)
     return () => observer.disconnect()
   }, [hasGrid])
-  const pageSize = perPage ?? (view==='cards' ? columns*3 : 10)
+  const pageSize = perPage ?? (showCards ? columns*3 : 10)
   const lastPage = Math.max(0,Math.ceil(shown.length/pageSize)-1)
   const currentPage = Math.min(pageIndex,lastPage)
   const offset = currentPage*pageSize
@@ -105,7 +108,7 @@ export default function NodesPage() {
   const footer = <footer className={styles.pager}>
     <span>{words.pageRange(offset+1,offset+visible.length,shown.length)}</span>
     <select aria-label={words.perPage} value={pageSize} onChange={e=>{setPerPage(Number(e.target.value));setPageIndex(0)}}>
-      {[...new Set([view==='cards'?columns*3:10,20,50])].map(size=><option key={size} value={size}>{size} · {words.perPage}</option>)}
+      {[...new Set([showCards?columns*3:10,20,50])].map(size=><option key={size} value={size}>{size} · {words.perPage}</option>)}
     </select>
     <button type="button" aria-label={words.prevPage} disabled={currentPage===0} onClick={()=>setPageIndex(currentPage-1)}><Icon name="chevronLeft"/></button>
     <button type="button" aria-label={words.nextPage} disabled={currentPage===lastPage} onClick={()=>setPageIndex(currentPage+1)}><Icon name="chevronRight"/></button>
@@ -124,7 +127,7 @@ export default function NodesPage() {
           <label className={styles.searchBox}><RegistryIcon name="search"/><input className={styles.search} aria-label={words.search} placeholder={words.search} value={search} onChange={e=>{setSearch(e.target.value);setPageIndex(0)}}/></label>
           <Popover align="end" trigger={props=><Button {...props} icon={<RegistryIcon name="filter"/>}>{words.filters}</Button>}>
             <div className={styles.filterMenu}>
-              <label>{words.cascadeFilter}<Select look="filter" aria-label={words.cascadeFilter} value={cascadeFilter} onChange={e=>{setCascadeFilter(e.target.value as CascadeFilter);setPageIndex(0)}} options={[{value:'all',label:words.cascadeAny},{value:'one',label:words.cascadeOne},{value:'in',label:words.cascadeIn}]}/></label>
+              <label>{words.cascadeFilter}<Select look="filter" aria-label={words.cascadeFilter} disabled={!membershipKnown} value={cascadeFilter} onChange={e=>{setCascadeFilter(e.target.value as CascadeFilter);setPageIndex(0)}} options={[{value:'all',label:words.cascadeAny},{value:'one',label:words.cascadeOne},{value:'in',label:words.cascadeIn}]}/></label>
               <label>{words.region}<Select look="filter" aria-label={words.region} value={region} onChange={e=>{setRegion(e.target.value);setPageIndex(0)}} options={[{value:'',label:words.anyRegion},...(regions.data?.regions ?? []).map(r=>({value:r.id,label:r.name}))]}/></label>
             </div>
           </Popover>
@@ -136,6 +139,7 @@ export default function NodesPage() {
           <Link className={styles.linkPrimary} to="/nodes/new"><Icon name="plus"/>{words.create}</Link>
         </div>
       </div>}
+      {fleet.data && nodes.length > 0 && cascades.isError && <QueryFailedLine retryLabel={words.retry} onRetry={() => void cascades.refetch()}>{words.cascadesUnknown}</QueryFailedLine>}
       {fleet.isPending && <QueryLoading label={words.loading} />}
       {fleet.isError && <QueryFailed title={words.failedTitle} body={failureText(fleet.error, locale)} retryLabel={words.retry} onRetry={() => void fleet.refetch()} />}
       {fleet.data && nodes.length === 0 && (
@@ -147,7 +151,7 @@ export default function NodesPage() {
       )}
       {fleet.data && nodes.length > 0 && shown.length === 0 && <div className={styles.empty}>{words.emptyFiltered}</div>}
 
-      {shown.length > 0 && view === 'cards' && (
+      {shown.length > 0 && showCards && (
         <div className={styles.cards} ref={grid}>
           {visible.map((node) => (
             <NodeCard key={node.id} node={node} hostCount={hostCounts ? hostCounts.get(node.id) ?? 0 : undefined} live={live.get(node.id)} membership={memberships.get(node.id)} onOpen={() => open(node)} />
@@ -157,7 +161,7 @@ export default function NodesPage() {
 
       {hasGrid && footer}
       {shown.length > 0 && view === 'list' && <NodesTable rows={visible} readings={live} memberships={memberships} hostCounts={hostCounts} regionNames={regionNames} open={open} footer={footer}/>}
-      {shown.length > 0 && view === 'cascades' && (
+      {shown.length > 0 && grouped && (
         <div className={styles.groups}>
           {groups.byCascade.map(([name, members]) => (
             <section key={name} className={styles.group}>

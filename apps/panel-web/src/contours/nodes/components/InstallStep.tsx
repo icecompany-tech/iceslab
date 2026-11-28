@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
-import { isPayloadOnly, payloadFileName, payloadFileOf, scpCommand } from '@/contours/nodes/lib/payloadInstall'
+import { isPayloadOnly, payloadFileName, payloadFileOf, savePayload, scpCommand } from '@/contours/nodes/lib/payloadInstall'
 import { useNow } from '@/lib/clock'
 import { useOverview } from '@/lib/domain/overview'
 import { engineLabel } from '@/lib/domain/engines'
@@ -17,15 +17,6 @@ import { Dialog } from '@/ui/Dialog/Dialog'
 import { Icon } from '@/ui/Icon/Icon'
 
 const POLL_MS = 5000
-
-function savePayload(name: string, payload: string) {
-  const url = URL.createObjectURL(new Blob([payload], { type: 'text/plain' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
-}
 
 export function InstallStep({ node }: { node: NodeWithPayload }) {
   const words = useDict(DICT)
@@ -55,7 +46,7 @@ export function InstallStep({ node }: { node: NodeWithPayload }) {
   }, [now, report])
 
   const save = () => {
-    savePayload(payloadFileName(node.name), node.payload)
+    savePayload(payloadFileName(node.name), new Blob([node.payload]))
     setDownloaded(true)
     setPending(null)
   }

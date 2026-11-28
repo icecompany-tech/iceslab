@@ -6,7 +6,7 @@ import type { CascadeForm } from '@/contours/cascades/hooks/useCascadeForm'
 import { directionLines, directionVia, entryChainNotes, outboundChainGaps, type DirectionDraft, type DirectionVia } from '@/contours/cascades/lib/cascadeForm'
 import { nextFreeKey, nextFreeTag } from '@/contours/cascades/lib/draft'
 import { useDict, useLocale } from '@/lib/i18n'
-import { COUNTRIES } from '@/lib/old/countries'
+import { localizedCountries } from '@/lib/old/countries'
 import { outboundAddress } from '@/lib/old/namedOutbounds'
 import { Banner } from '@/ui/Banner/Banner'
 import { Button } from '@/ui/Button/Button'
@@ -17,9 +17,8 @@ import { Segmented } from '@/ui/Segmented/Segmented'
 import { Select } from '@/ui/Select/Select'
 
 function countryOptions(current: string, words: typeof DICT.ru, locale: string) {
-  const regions = new Intl.DisplayNames([locale], { type: 'region' })
-  const list = COUNTRIES.map((c) => ({ value: c.code, label: regions.of(c.code) ?? c.name }))
-  return [{ value: '', label: words.countryPlaceholder }, ...(current && !COUNTRIES.some((c) => c.code === current) ? [{ value: current, label: current }] : []), ...list]
+  const list = localizedCountries(locale)
+  return [{ value: '', label: words.countryPlaceholder }, ...(current && !list.some((c) => c.value === current) ? [{ value: current, label: current }] : []), ...list]
 }
 
 function DirectionRow({ form, direction, index }: { form: CascadeForm; direction: DirectionDraft; index: number }) {

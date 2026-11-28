@@ -1,3 +1,4 @@
+import { NodeUserCount } from '@/contours/nodes/components/NodeUserCount'
 import styles from '@/contours/nodes/components/nodes.module.css'
 import { DICT } from '@/contours/nodes/dict'
 import { certAlarm, certTerm } from '@/contours/nodes/lib/nodeCert'
@@ -59,11 +60,11 @@ export function NodeCard({ node, live, hostCount, membership, onOpen }: { node: 
         <MetricLine label={words.disk} percent={metrics?.disk.usedPercent} unknown={words.metricsUnknown} />
       </span>
       <span className={styles.cardFacts}>
-        <span title={words.usersUnknownHint}><span className={styles.factLabel}>{words.usersColumn}</span>?</span>
+        <span><span className={styles.factLabel}>{words.usersColumn}</span><NodeUserCount id={node.id} /></span>
         <span><span className={styles.factLabel}>{words.hostsColumn}</span>{hostCount ?? '?'}</span>
         <span>
           <span className={styles.factLabel}>{words.today}</span>
-          {live ? fmtBytes(live.todayBytes, locale) : words.metricsUnknown}
+          {live && health !== 'unverified' ? fmtBytes(live.todayBytes, locale) : words.metricsUnknown}
         </span>
         <span>
           <span className={styles.factLabel}>{words.uptime}</span>
