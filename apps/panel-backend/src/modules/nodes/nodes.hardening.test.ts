@@ -310,10 +310,15 @@ describe('HardeningSchema (validation contract)', () => {
     ).toThrow();
   });
 
-  it('rejects a malformed allowlist entry', () => {
-    expect(() =>
-      HardeningSchema.parse({ sshAllowlist: ['not an ip!!'] }),
-    ).toThrow();
+  it.each(['192.0.2.1', '198.51.100.0/24', '2001:db8::1', '2001:db8::/64'])(
+    'accepts an SSH address or network: %s',
+    entry => expect(HardeningSchema.parse({ sshAllowlist: [entry] })?.sshAllowlist).toEqual([entry]),
+  );
+
+  it.each(['not an ip!!', '192.0.2.256', '192.0.2.1/33', '2001:db8::/129'])('rejects invalid SSH entry %s', entry => {
+    const result = HardeningSchema.safeParse({ sshAllowlist: ['192.0.2.1', entry] });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.path).toEqual(['sshAllowlist', 1]);
   });
 
   it('rejects an over-long allowlist (max 16)', () => {

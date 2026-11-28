@@ -15,7 +15,11 @@ const AddressSchema = z
   .regex(
     /^[a-zA-Z0-9.-]+(:\d{1,5})?$/,
     'Address must be host or host:port (IPv4 or DNS, no scheme)',
-  );
+  )
+  .refine((address) => {
+    const port = address.split(':')[1];
+    return port === undefined || (Number(port) >= 1 && Number(port) <= 65_535);
+  }, 'Address port must be between 1 and 65535');
 
 const CountryCodeSchema = z.string().length(2).regex(/^[A-Z]{2}$/);
 
@@ -33,11 +37,10 @@ const DomainSchema = z
 // migration; the install script + agent only read the flags they understand.
 // .strict() rejects unknown keys so a typo'd flag fails loud (400) instead of
 // silently persisting a no-op key.
-const SshAllowEntrySchema = z
-  .string()
-  .max(64)
-  // IPv4, IPv4/CIDR, or bare IPv6 - same shape the script feeds `ufw allow from`.
-  .regex(/^[0-9a-fA-F:.]+(\/\d{1,3})?$/, 'Must be an IP or CIDR');
+const SshAllowEntrySchema = z.union(
+  [z.ipv4(), z.ipv6(), z.cidrv4(), z.cidrv6()],
+  { error: 'Must be an IP or CIDR' },
+);
 
 export const HardeningSchema = z
   .object({
