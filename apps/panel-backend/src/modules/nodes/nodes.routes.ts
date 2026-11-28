@@ -21,6 +21,8 @@ import {
 } from '../node-policies/node-policies.service.js';
 import { cascadeXrayDrawingForNode } from '../inbounds/inbounds.queue.js';
 import { prisma } from '../../prisma.js';
+import { bootstrapUsable } from './node-payload.js';
+import { mapNodeToPublic } from './nodes.mapper.js';
 import * as bootstrap from './bootstrap.service.js';
 import { NodeCertRotationError, rotateNodeCert } from './node-cert-rotation.js';
 import { NodeConnLogError, clearNodeConnLog, readNodeConnLog } from './node-conn-log.js';
@@ -45,6 +47,7 @@ function publicUrlFromRequest(request: FastifyRequest): string {
 }
 
 const BootstrapTokenParam = z.object({ token: z.string().regex(/^bs_[A-Za-z0-9_-]+$/).max(64) });
+const BootstrapFileBody = z.object({ token: z.string().regex(bootstrap.BootstrapFileTokenPattern) });
 const auth = { onRequest: [requireAuth] };
 
 
@@ -185,27 +188,41 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/nodes/:id/bootstrap', auth, async (request, reply) => {
-    const params = NodeIdParamSchema.parse(request.params);
+    reply.header('Cache-Control', 'no-store');
+    const { id } = NodeIdParamSchema.parse(request.params);
+    const raw = await prisma.node.findFirst({ where: { id, deletedAt: null } });
+    if (!raw) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+    const panelUrl = publicUrlFromRequest(request);
+    const payloadOnly = !bootstrapUsable(panelUrl);
+    const tokenInfo = !payloadOnly
+      ? await bootstrap.issueBootstrapToken(id)
+      : await bootstrap.issueBootstrapFileToken(raw);
+    const node = mapNodeToPublic(raw);
+    return reply.code(201).send({
+      token: tokenInfo.token,
+      expiresAt: tokenInfo.expiresAt.toISOString(),
+      ...(payloadOnly && !request.apiToken ? { payloadDownloadAvailable: true } : {}),
+      ...(await nodesService.installOf(panelUrl, tokenInfo.token, node.address, node.hardening, node.intendedEngines)),
+    });
+  });
+
+  app.post('/api/nodes/:id/bootstrap/payload', auth, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    if (request.apiToken) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Sign in to the panel to download an installation file.' });
+    }
+    const { id } = NodeIdParamSchema.parse(request.params);
+    const { token } = BootstrapFileBody.parse(request.body);
     try {
-      const node = await nodesService.getNodeById(params.id);
-      const tokenInfo = await bootstrap.issueBootstrapToken(node.id);
-      // The command and its payload source are the service's (installOf), as
-      // on node create, so the two cannot drift (A-270 release pin, A-295
-      // payload-file on a panel without https).
-      return reply.code(201).send({
-        token: tokenInfo.token,
-        expiresAt: tokenInfo.expiresAt.toISOString(),
-        ...(await nodesService.installOf(
-          publicUrlFromRequest(request),
-          tokenInfo.token,
-          node.address,
-          node.hardening,
-          node.intendedEngines,
-        )),
-      });
+      const payload = await bootstrap.redeemBootstrapFileToken(id, token);
+      return reply
+        .header('Content-Disposition', 'attachment; filename="iceslab-node.payload"')
+        .type('text/plain')
+        .send(payload);
     } catch (err) {
-      if (err instanceof nodesService.NodeNotFoundError) {
-        return reply.code(404).send({ error: 'NOT_FOUND', message: err.message });
+      if (err instanceof bootstrap.BootstrapTokenError) {
+        return reply.code(err.httpStatus).send({ error: err.reason, message: err.message });
       }
       throw err;
     }

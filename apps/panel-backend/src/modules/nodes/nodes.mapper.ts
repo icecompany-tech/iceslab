@@ -312,10 +312,11 @@ export interface BootstrapInfo {
   /**
    * A-295: the panel URL is not https, and the installer redeems a token over
    * https only. `command` is then the --payload-file one, and the node is
-   * installed from the payload file, which the panel hands out only in the
-   * answer to node create.
+   * installed from the payload file. A file ticket from the node page is redeemed by the panel session.
    */
   payloadOnly: boolean;
+  /** An authenticated panel session can redeem this ticket for an installation file. */
+  payloadDownloadAvailable?: true;
 }
 
 export interface CreateNodeResponseDto extends PublicNodeDto {
